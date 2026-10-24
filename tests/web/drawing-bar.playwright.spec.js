@@ -20,50 +20,84 @@ const tabName = (page, drawingId) => page.evaluate(async (id) => (
 test.describe('390 px', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-  test('the drawing bar reaches every tab without horizontal page scroll and keeps the compact Editor', async ({ page }) => {
+  test('the phone layout shows one picker row and one pane at a time, switched by reveal, Generate and the Editor', async ({ page }) => {
     test.setTimeout(240_000);
     await openApp(page);
     expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
     const ids = await drawingIds(page);
     const shown = (await shownDrawing(page)).id;
-    const tabs = page.locator('.drawing-bar [role="tab"]');
-    await expect(tabs).toHaveCount(ids.length);
-    expect(await tabs.evaluateAll((elements) => elements.map((tab) => tab.dataset.drawingId)), 'tab order').toEqual(ids);
+    const other = ids.find((id) => id !== shown);
+    const picker = page.locator('.drawing-bar .drawing-picker');
+    const paneTab = (pane) => page.locator(`.phone-pane-tabs [role="tab"][data-phone-pane="${pane}"]`);
+    const settings = page.locator('#settings-sections');
+    const result = page.locator('#result-pane');
+    await expect(page.locator('.drawing-bar-tabs')).toBeHidden();
+    await expect(picker).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
-    // Every tab is in view and takes a tap; the keyboard reaches each one (manual activation).
-    for (const id of ids) {
-      const box = await drawingTab(page, id).evaluate((tab) => {
-        tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        const rect = tab.getBoundingClientRect();
-        return { left: rect.left, right: rect.right, hit: tab.contains(document.elementFromPoint(
-          rect.left + rect.width / 2, rect.top + rect.height / 2)) };
-      });
-      expect(box.left, id).toBeGreaterThanOrEqual(0);
-      expect(box.right, id).toBeLessThanOrEqual(390);
-      expect(box.hit, `${id} takes a tap`).toBe(true);
-    }
-    const other = ids.find((id) => id !== shown);
-    await drawingTab(page, shown).focus();
-    await page.keyboard.press(ids.indexOf(other) > ids.indexOf(shown) ? 'ArrowRight' : 'ArrowLeft');
-    await expect(drawingTab(page, other)).toBeFocused();
-    expect((await shownDrawing(page)).id, 'moving the focus does not switch').toBe(shown);
-    await page.keyboard.press('Enter');
+    // The picker names the shown drawing and lists every drawing in tab order; a tap shows another.
+    await picker.locator('summary').tap();
+    const items = picker.locator('.action-menu-item');
+    await expect(items).toHaveCount(ids.length);
+    await items.nth(ids.indexOf(other)).tap();
     await expect.poll(async () => (await shownDrawing(page)).id).toBe(other);
-    await expect(drawingTab(page, other)).toHaveAttribute('aria-selected', 'true');
-    await drawingTab(page, shown).tap();
+    // The keyboard reaches it too: Arrow Down opens the list on its first item.
+    await picker.locator('summary').focus();
+    await page.keyboard.press('ArrowDown');
+    for (let index = 0; index < ids.indexOf(shown); index += 1) await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
     await expect.poll(async () => (await shownDrawing(page)).id).toBe(shown);
+    const menuBox = await page.locator('.drawing-bar-menu').evaluate(async (menu) => {
+      menu.open = true;
+      await new Promise(requestAnimationFrame);
+      const box = menu.querySelector('.action-menu-items').getBoundingClientRect();
+      menu.open = false;
+      return { left: box.left, right: box.right };
+    });
+    expect(menuBox.left, 'the Drawing menu stays on screen').toBeGreaterThanOrEqual(0);
+    expect(menuBox.right).toBeLessThanOrEqual(390);
+
+    // Settings | Preview: one pane at a time, the ARIA tab pattern with manual activation.
+    await expect(paneTab('settings')).toHaveAttribute('aria-selected', 'true');
+    await expect(result).toBeHidden();
+    await paneTab('preview').tap();
+    await expect(settings).toBeHidden();
+    await expect(result).toBeVisible();
+    await paneTab('preview').focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(paneTab('settings')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(paneTab('settings')).toHaveAttribute('aria-selected', 'true');
+    await expect(settings).toBeVisible();
+
+    // A path that reveals a setting shows Settings; Generate and opening the Editor show the Preview.
+    await paneTab('preview').tap();
+    await page.evaluate(() => window.__GBDRAW_APP__.revealSettingsSection('input-genomes'));
+    await expect(paneTab('settings')).toHaveAttribute('aria-selected', 'true');
+    await expect(settings).toBeVisible();
+    await page.locator('.generate-bar button').click();
+    await expect(paneTab('preview')).toHaveAttribute('aria-selected', 'true');
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 180_000 });
+    await expect(page.getByRole('region', { name: 'Result Preview' })).toBeVisible();
+    // The approved images (Owner R17-10 A): the Result comes in with its workspace at the pane's top, and the
+    // canvas with the controls below it fills the pane; the Result header and the search lie above it.
+    const workspaceFit = () => page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      return { top: Math.round(box('.preview-workspace').top - box('#result-pane').top),
+        end: Math.round(box('#result-pane').bottom - box('.preview-controls').bottom) };
+    });
+    await expect.poll(workspaceFit).toEqual({ top: 0, end: 0 });
+    await paneTab('settings').tap();
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
+    await expect(paneTab('preview')).toHaveAttribute('aria-selected', 'true');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
     // PD-OI-038 at 390 x 844: with the Editor open, the canvas spans the Result card and shows at least
     // 200 px between the header and the Generate bar, the Editor docks under it, and its toggle takes a tap.
-    await page.locator('.drawer-toggle').click();
     await expect(page.locator('.right-drawer')).toBeVisible();
     const geometry = await page.getByRole('region', { name: 'Result Preview' }).evaluate(async (preview) => {
       await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => {})));
       const canvas = preview.querySelector('.preview-canvas');
-      canvas.scrollIntoView({ block: 'start' });
-      const header = document.querySelector('.app-header').getBoundingClientRect();
-      window.scrollBy(0, canvas.getBoundingClientRect().top - header.bottom);
       const box = (element) => element.getBoundingClientRect();
       const style = getComputedStyle(preview);
       const generate = document.querySelector('.generate-bar');
@@ -72,14 +106,23 @@ test.describe('390 px', () => {
       return {
         canvasLeft: box(canvas).left - box(preview).left - parseFloat(style.borderLeftWidth),
         canvasRight: box(preview).right - parseFloat(style.borderRightWidth) - box(canvas).right,
-        visibleHeight: Math.min(box(canvas).bottom, bottom) - Math.max(box(canvas).top, box(document.querySelector('.app-header')).bottom),
+        visibleHeight: Math.min(box(canvas).bottom, bottom) - Math.max(box(canvas).top, box(document.querySelector('.phone-pane-tabs')).bottom),
         drawerBelow: box(document.querySelector('.right-drawer')).top >= box(canvas).bottom - 0.5,
         toggleHit: document.querySelector('.drawer-toggle').contains(document.elementFromPoint(
           toggle.left + toggle.width / 2, toggle.top + toggle.height / 2)),
-        pageWidth: document.documentElement.scrollWidth
+        pageWidth: document.documentElement.scrollWidth,
+        // Opening the Editor brings the workspace to the pane's top: the canvas keeps 13rem, the whole dock
+        // ends above the Generate bar, and its feature rows start in view.
+        workspaceTop: Math.round(box(preview.querySelector('.preview-workspace')).top - box(document.querySelector('#result-pane')).top),
+        canvasHeight: Math.round(box(canvas).height),
+        dockAboveGenerate: box(document.querySelector('.right-drawer')).bottom <= bottom,
+        rowsInView: [...document.querySelectorAll('.right-drawer [data-feature-list-row]')]
+          .filter((row) => box(row).top >= box(canvas).bottom && box(row).bottom <= bottom).length
       };
     });
-    expect(geometry).toMatchObject({ canvasLeft: 0, canvasRight: 0, drawerBelow: true, toggleHit: true });
+    expect(geometry).toMatchObject({ canvasLeft: 0, canvasRight: 0, drawerBelow: true, toggleHit: true,
+      workspaceTop: 0, canvasHeight: 13 * 16, dockAboveGenerate: true });
+    expect(geometry.rowsInView).toBeGreaterThanOrEqual(2);
     expect(geometry.visibleHeight).toBeGreaterThanOrEqual(200);
     expect(geometry.pageWidth).toBeLessThanOrEqual(390);
   });

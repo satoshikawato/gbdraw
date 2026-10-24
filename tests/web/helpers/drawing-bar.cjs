@@ -36,9 +36,28 @@ const showDrawing = async (page, { kind, name }) => {
     return tab ? tab.id : null;
   }, { wantedKind: kind, wantedName: name });
   if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
-  await drawingTab(page, drawingId).click();
+  if (await drawingTab(page, drawingId).isVisible()) {
+    await drawingTab(page, drawingId).click();
+  } else {
+    // At <= 768 px the tabs give way to the picker: its list holds every drawing in tab order.
+    const picker = page.locator('.drawing-bar .drawing-picker');
+    await picker.locator('summary').click();
+    await picker.locator('.action-menu-item').nth((await drawingIds(page)).indexOf(drawingId)).click();
+  }
   await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
   return drawingId;
 };
 
-module.exports = { showDrawing, drawingTab, drawingIds, shownDrawing };
+/**
+ * Show the Settings or the Preview pane the way a phone user does: tap its pane tab. At > 768 px both panes show and
+ * the tabs are hidden, so this does nothing.
+ * @param {import('@playwright/test').Page} page @param {'settings' | 'preview'} pane
+ */
+const showPhonePane = async (page, pane) => {
+  const tab = page.locator(`.phone-pane-tabs [role="tab"][data-phone-pane="${pane}"]`);
+  if (!(await tab.isVisible())) return;
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+};
+
+module.exports = { showPhonePane, showDrawing, drawingTab, drawingIds, shownDrawing };

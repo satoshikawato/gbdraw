@@ -623,6 +623,11 @@
             border-radius: 0.375rem;
             background: #f8fafc;
         }
+        /* The phone layout's drawing picker and pane tabs; wider layouts never show them. */
+        .drawing-picker,
+        .phone-pane-tabs {
+            display: none;
+        }
         /* The drawing bar's tab menu opens over the panes, not inside the bar. */
         .drawing-bar-menu {
             position: relative;
@@ -1576,6 +1581,108 @@
                 padding: 0.25rem 0.5rem !important;
             }
 
+            /* One picker row and Settings | Preview tabs (PD-OI-090: the bar works at 390 px). */
+            .drawing-bar-tabs {
+                display: none !important;
+            }
+            .drawing-picker {
+                display: block;
+                position: relative;
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            .drawing-picker > .action-menu-toggle {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                padding: 0.3rem 0.6rem;
+                border: 1px solid #e2e8f0;
+                border-radius: 0.5rem;
+                background: #f1f5f9;
+                color: #2563eb;
+                font-size: 0.875rem;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            .drawing-picker > .action-menu-toggle > span {
+                flex: 1 1 auto;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .drawing-picker > .action-menu-items {
+                position: absolute;
+                z-index: 46;
+                left: 0;
+                right: 0;
+                background: #fff;
+                box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+            }
+            .drawing-picker .action-menu-item {
+                padding: 0.5rem 0.6rem;
+                font-size: 0.875rem;
+            }
+            /* The menu sits at the row's right end: it opens aligned to that edge. */
+            .drawing-bar-menu > .action-menu-items {
+                left: auto;
+                right: 0;
+            }
+            .phone-pane-tabs {
+                display: flex;
+                gap: 0.25rem;
+                padding: 0.25rem 0.5rem;
+                border-bottom: 1px solid #e2e8f0;
+                background: #fff;
+            }
+            .phone-pane-tabs > [role="tab"] {
+                flex: 1 1 0;
+                padding: 0.4rem 0;
+                border-radius: 0.375rem;
+                background: #f1f5f9;
+                color: #64748b;
+                font-size: 0.875rem;
+                font-weight: 700;
+            }
+            .phone-pane-tabs > [aria-selected="true"] {
+                background: #fff;
+                color: #2563eb;
+                box-shadow: 0 1px 3px rgb(15 23 42 / 0.15);
+                outline: 1px solid rgb(0 0 0 / 0.05);
+            }
+            .app-main[data-phone-pane="settings"] > .result-pane {
+                display: none !important;
+            }
+            /* The Preview pane takes the viewport below the tabs; the Generate bar stays, and the footer
+               lies below the viewport, reached by scrolling the page. */
+            #app:has(> .app-main[data-phone-pane="preview"]) {
+                height: 100dvh !important;
+                min-height: 0 !important;
+            }
+            #app:has(> .app-main[data-phone-pane="preview"]) > footer[data-app-footer] {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+            }
+            .app-main[data-phone-pane="preview"] {
+                flex: 1 1 0 !important;
+                min-height: 0 !important;
+                gap: 0 !important;
+            }
+            .app-main[data-phone-pane="preview"] > .settings-pane > :not(.generate-bar) {
+                display: none !important;
+            }
+            .app-main[data-phone-pane="preview"] > .settings-pane {
+                height: 0 !important;
+            }
+            .app-main[data-phone-pane="preview"] > .result-pane {
+                flex: 1 1 0 !important;
+                min-height: 0 !important;
+                overflow-y: auto !important;
+                container-type: size;
+            }
+
             .app-main {
                 flex-direction: column !important;
                 gap: 0.75rem !important;
@@ -1874,6 +1981,41 @@
                keeps 13rem and the dock still ends above the Generate bar. */
             .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
                 grid-template-rows: calc(13rem + var(--preview-search-space)) auto auto;
+            }
+            /* The phone layout's Preview pane (Owner R17-10 A): the workspace takes the pane's height, the
+               canvas with the controls below it, or the canvas (13rem) and the open Editor with the controls
+               after them. The Result header and the search lie above it, reached by scrolling the pane up.
+               The pane is the size container; the workspace's own content never sets its row. */
+            @media (max-width: 768px) {
+                .app-main[data-phone-pane="preview"] .preview-editor-layout {
+                    grid-template-rows: auto minmax(0, 1fr) auto;
+                }
+                /* Its rows end where this box ends; the items share the one column with it. */
+                .app-main[data-phone-pane="preview"] .preview-editor-layout::after {
+                    content: '';
+                    grid-area: 2 / 1 / 4;
+                    height: 100cqh;
+                    pointer-events: none;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout > * {
+                    grid-column: 1;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"])::after {
+                    grid-row: 2;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace {
+                    contain: size;
+                    grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) auto auto;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace:has(.alignment-review-panel) {
+                    grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) clamp(15rem, 29dvh, 18rem) auto;
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
+                    grid-template-rows: calc(13rem + var(--preview-search-space)) auto minmax(11rem, 1fr);
+                }
+                .app-main[data-phone-pane="preview"] .preview-workspace .right-drawer {
+                    max-height: none;
+                }
             }
             .preview-viewport {
                 position: relative;
@@ -2203,6 +2345,12 @@
          the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
          the focused drawing (manual activation). The tab menu acts on the shown drawing; each item is one History step. -->
     <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
+        <!-- At <= 768 px the tabs give way to one picker: the shown drawing's name, opening a list of every drawing. -->
+        <template v-for="tab in drawingBarTabs" :key="'picker-' + tab.id">
+            <action-menu v-if="tab.selected" :icon="tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler'" class="drawing-picker" close-on-run
+                         :label="tab.label" :aria-label="t('Shown drawing: {name}', { name: tab.label })" :title="drawingSwitchAvailable ? tab.label : drawingSwitchBusyReason"
+                         :items="drawingBarTabs.map((item) => ({ label: item.label, icon: item.selected ? 'ph-check' : (item.mode === 'circular' ? 'ph-circle' : 'ph-ruler'), disabled: !drawingSwitchAvailable, run: () => selectDrawing(item.id) }))"></action-menu>
+        </template>
         <div class="drawing-bar-tabs flex bg-slate-100 p-1 rounded-lg min-w-0 overflow-x-auto" role="tablist" :aria-label="t('Drawings')" @keydown="moveTabFocus">
             <button v-for="tab in drawingBarTabs" :key="tab.id" type="button" role="tab" data-history-ignore :data-drawing-id="tab.id"
                     :aria-selected="tab.selected ? 'true' : 'false'" :tabindex="tab.selected ? 0 : -1" @click="selectDrawing(tab.id)"
@@ -2223,9 +2371,16 @@
         </template>
     </div>
 
-    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden">
+    <!-- At <= 768 px one pane shows at a time (Settings | Preview); wider layouts show both and hide these tabs. -->
+    <div class="phone-pane-tabs" role="tablist" :aria-label="t('Shown pane')" @keydown="moveTabFocus">
+        <button v-for="pane in ['settings', 'preview']" :key="pane" type="button" role="tab" data-history-ignore :data-phone-pane="pane"
+                :aria-controls="pane === 'settings' ? 'settings-pane' : 'result-pane'" :aria-selected="settingsPane.pane === pane ? 'true' : 'false'"
+                :tabindex="settingsPane.pane === pane ? 0 : -1" @click="showPhonePane(pane)">{{ pane === 'settings' ? t('Settings') : t('Preview') }}</button>
+    </div>
 
-        <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0"
+    <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden" :data-phone-pane="settingsPane.pane">
+
+        <div class="settings-pane flex flex-col h-full overflow-hidden relative shrink-0" id="settings-pane"
              :data-settings-display="settingsPane.display" :data-settings-docked="settingsPane.docked"
              :style="{ '--settings-stacked-width': sidebarWidth + 'px' }">
 
@@ -5864,7 +6019,7 @@
              @mousedown.prevent="startResizing"
              :title="t('Drag to resize')"></div>
 
-        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1">
+        <div class="result-pane flex-1 space-y-4 flex flex-col h-full overflow-y-auto min-w-0 focus:outline-none" tabindex="-1" id="result-pane">
             <!-- The outcome of Load Session, Save Session, or a table import or export; warnings as a list -->
             <div v-if="notice.text" data-app-notice
                  :class="['app-notice', notice.tone === 'warning' ? 'is-warning' : 'is-info']">
