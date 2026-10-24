@@ -443,7 +443,6 @@ const featureEditorStatus = reactive({
   status: 'idle',
   generationId: 0,
   error: null,
-  summaryCount: 0,
   detailsCacheSize: 0
 });
 const featureExtractionPending = ref(false);
@@ -907,8 +906,9 @@ const featureListTopSpacerPx = computed(() => featureListRowTop(featureListStart
 const featureListBottomSpacerPx = computed(
   () => Math.max(0, featureListRowTop(filteredFeatures.value.length) - featureListRowTop(featureListEndIndex.value))
 );
+// The count is the shown drawing's: its `extractedFeatures` switch with it (the artifact slot, OV-1762).
 const featureEditorStatusText = computed(() => {
-  const count = Number(featureEditorStatus.summaryCount || extractedFeatures.value.length || 0);
+  const count = extractedFeatures.value.length;
   if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
     return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
