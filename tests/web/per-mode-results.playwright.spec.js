@@ -12,6 +12,7 @@ const { answerChoicePrompt, answerSessionTitle, evaluateWithRetainedPromise, exp
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -46,7 +47,7 @@ const generate = async (page, options) => {
 };
 
 const showMode = async (page, mode) => {
-  await page.getByRole('button', { name: MODE_NAMES[mode], exact: true }).click();
+  await showDrawing(page, { kind: mode });
   await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, mode);
   await settleLive(page);
 };

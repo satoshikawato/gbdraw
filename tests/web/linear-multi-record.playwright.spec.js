@@ -4,6 +4,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
@@ -347,7 +348,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   test.setTimeout(120000);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const lock = page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true });
   await expect(lock).toBeChecked();
   // PD-OI-024 revision 3: one text source feeds the help-tip and the
@@ -991,7 +992,7 @@ test('Linear records precede comparison pairs in DOM and keyboard order at narro
 
 test('Linear region controls do not overlap at supported sidebar widths', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
 
   const recordOptions = page.locator('details[data-linear-record-options]').first();
   await expect(recordOptions).toHaveCount(1);
@@ -1613,7 +1614,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   await installDiagramRequestObserver(page);
   await openApp(page);
 
-  await page.getByRole('button', { name: 'Linear' }).click();
+  await showDrawing(page, { kind: 'linear' });
   const sources = [
     {
       name: 'automatic-card-a.gbk',
@@ -3742,9 +3743,8 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
     };
   })).toEqual({ circular: true, linear: true });
   await page.evaluate(async (content) => {
-    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = bound(new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 }));
+    app.setCircularSourceFile('c_gb', new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
   }, makeComparisonGenbank('CircularA') + makeComparisonGenbank('CircularB'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);

@@ -418,18 +418,23 @@ export const setupWatchers = ({
     const isCurrent = () => cardFiles[key] === file && !semanticFileWatchersSuppressed.value
       && !state.sessionOperationAvailability?.();
     const previousError = errorLog.value;
+    // The card names its file by ref; the bytes are the store's. A failure
+    // unbinds the card, and the store may then release the file (OV-1674), so
+    // Retry keeps the file itself and binds it again.
+    const source = state.inputFiles.fileOf(file);
     // A Specific rules failure found on given inputs offers Retry while they
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
       auxiliaryImportFailure.value = { error: errorLog.value, key, selection: cardFiles[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          cardFiles[key] = file;
-          return startFileImport(key, file, previousFile);
+          const retried = state.inputFiles.registerFile(source);
+          if (!retried) return false;
+          cardFiles[key] = retried;
+          return startFileImport(key, retried, previousFile);
         } };
     };
-    // The card names its file by ref; the bytes are the store's.
-    const pending = readFileText(state.inputFiles.fileOf(file)).then((text) => {
+    const pending = readFileText(source).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
         if (!isCurrent()) return false;

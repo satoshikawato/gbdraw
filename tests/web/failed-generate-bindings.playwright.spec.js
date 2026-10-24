@@ -245,9 +245,8 @@ test('failed multi-record Generate retains a validated binding to the selected s
   await page.addInitScript(() => { window.__GBDRAW_TEST_HOOKS__ = {}; });
   await openApp(page);
   await page.evaluate(async content => {
-    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = bound(new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 }));
+    app.setCircularSourceFile('c_gb', new File([content], 'two-records.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
     const set = app.addAnnotationSet('s04');
     const annotation = app.addCoordinateAnnotation(set, { start: 1, end: 10 });

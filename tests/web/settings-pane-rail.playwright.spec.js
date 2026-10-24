@@ -9,6 +9,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // A click on a button that is not there fails at once instead of at the test's own limit.
 test.use({ actionTimeout: 20_000 });
@@ -38,7 +39,7 @@ const toRail = (page) => page.getByRole('button', { name: 'Collapse settings to 
 const toStacked = (page) => page.getByRole('button', { name: 'Expand settings', exact: true });
 const closeSection = (page) => page.getByRole('button', { name: 'Close section', exact: true });
 const generate = (page) => page.getByRole('button', { name: 'Generate Diagram', exact: true });
-const setMode = (page, mode) => page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+const setMode = (page, mode) => showDrawing(page, { kind: mode });
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
 
 const loadSession = async (page, name) => {

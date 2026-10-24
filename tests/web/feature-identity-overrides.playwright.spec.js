@@ -14,6 +14,7 @@ const {
 } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const records = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
   .map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
@@ -29,7 +30,7 @@ const SAME_COORDINATES = TESTA.replace(
 
 const openLinear = async (page, texts, configure) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (inputs) => {
     const app = window.__GBDRAW_APP__;

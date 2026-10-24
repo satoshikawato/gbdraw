@@ -13,6 +13,7 @@ const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { reveal, warmAppTest: test } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
 } = require('./helpers/live-generate-parity-steps.cjs');
@@ -1042,7 +1043,7 @@ const displayedResult = (page) => page.evaluate(async () => {
 });
 
 const switchTo = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: mode });
   await page.waitForFunction((wanted) => window.__GBDRAW_APP__?.mode === wanted, mode);
   await settleLive(page);
 };

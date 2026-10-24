@@ -123,3 +123,21 @@ test('a table card holds the ref of the file it imported', async () => {
   assert.equal(imports.wait(file), imports.wait(state.cardFiles.qualifier_priority));
   state.cardFiles.qualifier_priority = null;
 });
+
+// OV-1674: a failed import leaves the card unbound, so the store may release
+// the file (History's budget keeps only named and bound files); Retry still
+// imports the file the user chose.
+test('Retry imports the chosen rules file after the store released it', async () => {
+  const file = { name: 'rules.tsv', size: 1, text: async () => 'CDS\tproduct\tNADH\t#123456\tImported\n' };
+  state.cardFiles.t_color = null;
+  state.errorLog.value = null;
+  owner.outcome = false;
+  assert.equal(await importAuxiliaryTable('t_color', file), false);
+  assert.equal(state.cardFiles.t_color, null);
+  state.inputFiles.retainOnly(new Set());
+  owner.outcome = 1;
+  assert.equal(await retryAuxiliaryImportFailure(), true);
+  assert.deepEqual({ file: state.inputFiles.fileOf(state.cardFiles.t_color), error: state.errorLog.value },
+    { file, error: null });
+  state.cardFiles.t_color = null;
+});

@@ -51,7 +51,7 @@ import {
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
-import { createDrawingList } from './drawing-list.js';
+import { createDrawingBar, createDrawingList, moveTabFocus } from './drawing-list.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -4510,6 +4510,18 @@ export const createAppSetup = () => {
     runListStep: history.runListStep,
     showDrawingNow
   });
+  // The drawing bar: its tabs and the tab menu's Rename and Move (B4a-5).
+  const drawingBar = createDrawingBar({
+    renameDrawing: drawingList.renameDrawing,
+    moveDrawing: drawingList.moveDrawing,
+    drawingTabs: () => state.drawingTabs.value,
+    shownDrawingId: () => state.activeDrawingId.value,
+    modeOf: (drawingId) => state.drawingOf(drawingId).mode,
+    askText
+  });
+  const drawingBarTabs = computed(() => drawingBar.tabs());
+  // Why the tabs wait: the switch's own busy reason (R15).
+  const drawingSwitchBusyReason = computed(() => tm(drawingSwitchBusy()?.reason || ''));
   // Session Load (E1): the loaded Session's artifact slots, before its preview
   // mounts. `opening` is the other Result set's slot when the Session opens on
   // that set's mode; `stashed` waits in its mode. The stash starts again with
@@ -7039,7 +7051,11 @@ export const createAppSetup = () => {
     reloadAfterOperationError,
     selectDrawing,
     drawingList,
+    drawingBar,
+    drawingBarTabs,
+    moveTabFocus,
     drawingSwitchAvailable,
+    drawingSwitchBusyReason,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,

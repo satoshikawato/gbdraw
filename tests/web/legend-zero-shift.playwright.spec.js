@@ -12,6 +12,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = requi
 const { openWithGenBank, openFresh } = require('./helpers/audit-browser.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -151,7 +152,7 @@ const legendGeometry = (page) => page.evaluate(() => {
 
 const openLinear = async (page, fixture = FIXTURE, form = {}) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async ({ text, name, values }) => {
     const app = window.__GBDRAW_APP__;
