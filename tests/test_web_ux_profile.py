@@ -1,4 +1,5 @@
 from pathlib import Path
+from gbdraw.session_drawings import DRAWING_NAMES
 from tests.utils.web_markup import read_english_index
 
 
@@ -20,8 +21,20 @@ def test_circular_legend_selector_exposes_every_supported_corner() -> None:
 def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> None:
     index = read_english_index(WEB_INDEX)
 
-    assert 'aria-label="Circular" :aria-pressed="mode === \'circular\'"' in index
-    assert 'aria-label="Linear" :aria-pressed="mode === \'linear\'"' in index
+    # The drawing bar: tutorials select the first Circular drawing as the tab
+    # named by its default name (D-15-98), found by its drawing ID.
+    assert DRAWING_NAMES == {"circular": "Circular", "linear": "Linear"}
+    assert 'role="tablist" aria-label="Drawings"' in index
+    tab_start = index.index('<button v-for="tab in drawingBarTabs"')
+    tab = index[tab_start : index.index("</button>", tab_start)]
+    for attribute in (
+        'role="tab"',
+        ':data-drawing-id="tab.id"',
+        ":aria-selected=\"tab.selected ? 'true' : 'false'\"",
+        '@click="selectDrawing(tab.id)"',
+        "{{ tab.label }}",
+    ):
+        assert attribute in tab, attribute
     assert 'ref="input" :multiple="multiple"' in index
     assert (
         ':aria-label="$attrs[\'data-input-aria-label\'] || label" '

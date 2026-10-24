@@ -42,7 +42,7 @@ import { createImportedComparisonIntentState } from './services/imported-compari
 import { drawnLinearSequences } from './services/record-draw-selection.js';
 import { DEFAULT_SETTINGS_PANE_DISPLAY } from './services/settings-pane-state.js';
 import { toRaw } from './utils/vue-raw.js';
-import { computed as typedComputed, ref as typedRef } from './utils/reactivity.js';
+import { computed as typedComputed, ref as typedRef, shallowRef as typedShallowRef } from './utils/reactivity.js';
 import { CANVAS_SLICE } from './services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
@@ -1059,12 +1059,14 @@ const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circula
  * @typedef {Readonly<{ id: DrawingId, name: string }>} DrawingTab
  */
 /**
- * Every drawing by ID. Not reactive itself (a reactive Map would unwrap the
- * members' refs); `drawingTabs` holds the order and names, and only the store
- * writers below change either.
- * @type {Map<DrawingId, DrawingState>}
+ * Every drawing by ID: a read-only map that each store write below replaces, in
+ * a shallow ref (a reactive Map would unwrap the members' refs), so a reader
+ * of `drawingOf` or `activeDrawing()` follows a write that replaces a drawing
+ * under its ID (a Load commits new drawing states; OV-1778). `drawingTabs`
+ * holds the order and names, and only the store writers below change either.
+ * @type {import('./utils/reactivity.js').Ref<ReadonlyMap<DrawingId, DrawingState>>}
  */
-const drawings = new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d]));
+const drawings = typedShallowRef(new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d])));
 /** @param {readonly DrawingTab[]} tabs @returns {readonly DrawingTab[]} */
 const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.freeze({ id, name: String(name) })));
 /**
@@ -1072,7 +1074,7 @@ const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.fre
  * of `drawingList()` reacts to it.
  * @type {import('./utils/reactivity.js').Ref<readonly DrawingTab[]>}
  */
-const drawingTabs = typedRef(freezeTabs([...drawings.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d.mode, d.id) }))));
+const drawingTabs = typedRef(freezeTabs([...drawings.value.values()].map((d) => ({ id: d.id, name: defaultDrawingName(d.mode, d.id) }))));
 /** @returns {readonly DrawingState[]} Every drawing, in tab order. */
 const drawingList = () => drawingTabs.value.map((tab) => drawingOf(tab.id));
 /**
@@ -1081,7 +1083,7 @@ const drawingList = () => drawingTabs.value.map((tab) => drawingOf(tab.id));
  * @returns {DrawingState}
  */
 const drawingOf = (id) => {
-  const drawing = drawings.get(id);
+  const drawing = drawings.value.get(id);
   if (!drawing) throw new Error(`Unknown drawing: ${id}`);
   return drawing;
 };
@@ -1106,6 +1108,7 @@ const clampTabIndex = (index, length) => Math.max(0, Math.min(length, Math.trunc
  * @param {readonly DrawingState[]} list @param {readonly DrawingTab[]} tabs
  */
 const replaceDrawings = (list, tabs) => {
+  /** @type {Map<DrawingId, DrawingState>} */
   const byId = new Map();
   for (const drawing of list) {
     if (byId.has(drawing.id)) throw drawingStoreError('replaceDrawings', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
@@ -1121,14 +1124,13 @@ const replaceDrawings = (list, tabs) => {
   if (untabbed !== undefined || byId.size === 0) {
     throw drawingStoreError('replaceDrawings', 'UNKNOWN_DRAWING', { drawingId: untabbed ?? '' });
   }
-  drawings.clear();
-  byId.forEach((drawing, id) => drawings.set(id, drawing));
+  drawings.value = byId;
   drawingTabs.value = freezeTabs(tabs);
 };
 /** @param {DrawingState} drawing @param {string} name @param {number} index */
 const addDrawing = (drawing, name, index) => {
-  if (drawings.has(drawing.id)) throw drawingStoreError('addDrawing', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
-  drawings.set(drawing.id, drawing);
+  if (drawings.value.has(drawing.id)) throw drawingStoreError('addDrawing', 'DUPLICATE_DRAWING', { drawingId: drawing.id });
+  drawings.value = new Map([...drawings.value, [drawing.id, drawing]]);
   const tabs = [...drawingTabs.value];
   tabs.splice(clampTabIndex(index, tabs.length), 0, { id: drawing.id, name });
   drawingTabs.value = freezeTabs(tabs);
@@ -1147,7 +1149,7 @@ const removeDrawing = (id, slots) => {
   if (id === activeDrawingId.value) throw drawingStoreError('removeDrawing', 'SHOWN_DRAWING', { drawingId: id });
   const tabs = [...drawingTabs.value];
   tabs.splice(index, 1);
-  drawings.delete(id);
+  drawings.value = new Map([...drawings.value].filter(([key]) => key !== id));
   const slot = slots.takeSlot(id);
   drawingTabs.value = freezeTabs(tabs);
   return slot;
