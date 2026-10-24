@@ -556,8 +556,10 @@ test.describe('active Result Feature fill transaction', () => {
     const applied = await inspectState(page, inventory);
     expect(applied.history.undoCount).toBe(undoAfterAdd + 1);
     expectFillState(applied, inventory, AFTER_COLOR, nonTargetBaseline);
-    expect(applied.canonical.targetRules).toHaveLength(inventory.targets.length);
-    expect(applied.canonical.targetRules.every((rule) => rule.qual === 'hash' && rule.color === AFTER_COLOR)).toBe(true);
+    // A group color is Python's synthesized rule set (exact rules and a hash
+    // remainder), not one hash rule per target; the fills above pin what it colors.
+    expect(applied.canonical.targetRules.length).toBeGreaterThan(0);
+    expect(applied.canonical.targetRules.every((rule) => rule.color === AFTER_COLOR)).toBe(true);
     await assertNoUnexpectedErrors(page, diagnostics);
   });
 });

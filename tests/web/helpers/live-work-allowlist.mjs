@@ -214,11 +214,12 @@ export const WORK_ALLOWLIST = [
     requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
   },
   {
-    // P-1 (not decided): one rule per feature of the row, so their matches are
-    // a request. The two records' tRNAs have one hash, so the rule also
-    // renames Result 2's row, which Python draws again.
+    // Python writes the rules that carry the row's features under the new
+    // name (synthesizeColorRules), so their matches are a request. The rules
+    // also match Result 2's tRNAs, so Python draws that Result again.
     kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
-    requests: ['evaluateRules', 'evaluateRules', 'render'], run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
+    requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesizeColorRules'],
+    run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },
   // A delete, its Undo and a Restore also show the strokes: a deleted row's
   // stroke leaves its features (OV-293).
