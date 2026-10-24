@@ -305,7 +305,15 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
         matchingRegexRule = specificRule;
         legendSiblings = [featureB, hashOnlyFeature];
       }
-    }, clickedKeys]
+    }, clickedKeys],
+    // Review r1: Selected features writes Python's table, which Python verified,
+    // so it prepares only the saved rules before the synthesis, not a hash
+    // rule per selected feature that it no longer writes.
+    ['applyColorToSelectedFeatures', async () => {
+      await actions.applyColorToSelectedFeatures([featureA, featureB], '#13579b', 'Picked');
+      assert.deepEqual([featureA, featureB, hashOnlyFeature].map((feature) => firstMatchingRule(feature, manualSpecificRules)?.color),
+        ['#13579b', '#13579b', undefined], 'the selected features take the color, and no other feature does');
+    }, savedKeys]
   ];
   for (const [name, run, expected] of allowlist) {
     manualSpecificRules.splice(0, manualSpecificRules.length, ...savedRules);
@@ -1148,6 +1156,25 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     await fixture.renameActions.requestFeatureColorChange({ ...trna, product: 'Shared', legendCaption: legendName }, '#123456');
     assert.equal(fixture.errorLog.value, null, name);
     assert.deepEqual([fixture.scopeDialog.displayLabelOffered, fixture.scopeDialog.annotationLabelOffered], offered, name);
+  }
+
+  // Review r1 (OV-244): a group edit whose rule synthesis Python refuses shows
+  // the failure, on the Legend panel rename and on Selected features alike.
+  for (const [name, run] of [
+    ['the Legend panel rename', (fixture) => fixture.renameActions.renameLegendEntry(0, 'Leucine')],
+    ['Selected features', (fixture) => fixture.renameActions.applyColorToSelectedFeatures([{ ...trna, legendCaption: 'tRNA' }], '#123456', 'Leucine')]
+  ]) {
+    const synthesized = [];
+    const fixture = build({ entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }], order: ['tRNA'],
+      features: [{ ...trna, legendCaption: 'tRNA' }],
+      ruleOverrides: { groupColorRules: () => async () => {
+        synthesized.push(name);
+        throw new Error('The rule synthesis could not color the selected features.');
+      } } });
+    await run(fixture);
+    assert.deepEqual(synthesized, [name], `${name} asks Python for its rules`);
+    assert.notEqual(fixture.errorLog.value, null, `${name} reports the refused synthesis`);
+    assert.deepEqual(fixture.committed, [], `${name} writes no rules`);
   }
 
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the

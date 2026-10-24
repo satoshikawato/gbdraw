@@ -408,27 +408,32 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     if (busy) return busy;
     if (commitOptions.isCurrent?.() === false) return false;
     await rerenderIdle();
-    const current = drawing.manualSpecificRules;
-    /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
-    const revised = new Map();
-    const rules = await build(current, (row, patch) => {
-      const next = { ...row, ...patch };
-      revised.set(next, row);
-      return next;
-    });
-    // A build Python answers (`groupColorRules`) read the table at its turn; one
-    // that another owner replaced meanwhile (a History restore) writes nothing.
-    if (!rules || drawing.manualSpecificRules !== current) return false;
-    // The row each rule is written into, so a kept or revised row keeps its identity.
-    const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
     for (let attempt = 0; ; attempt += 1) {
+      // The table and the inputs the build reads. A build Python answers
+      // (`groupColorRules`) spans an await, and the table is one array that a
+      // History restore or a Load fills in place: a table changed meanwhile
+      // writes nothing, and changed inputs (a Generate replaced the catalog)
+      // build again, so no rule is verified against a catalog it does not color.
+      const current = [...drawing.manualSpecificRules];
+      const table = JSON.stringify(current);
+      const unchanged = () => drawing.manualSpecificRules.length === current.length
+        && current.every((row, index) => drawing.manualSpecificRules[index] === row)
+        && JSON.stringify(drawing.manualSpecificRules) === table;
       const results = state.results.value;
-      const table = JSON.stringify(drawing.manualSpecificRules);
       const inputs = rulePreparation.snapshot();
-      const outcome = await commitOnce(drawing, rules, sourceRows, label, commitOptions);
+      /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
+      const revised = new Map();
+      const rules = await build(current, (row, patch) => {
+        const next = { ...row, ...patch };
+        revised.set(next, row);
+        return next;
+      });
+      if (!rules || !unchanged()) return false;
+      // The row each rule is written into, so a kept or revised row keeps its identity.
+      const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
+      const outcome = rulePreparation.isCurrent(inputs) && await commitOnce(drawing, rules, sourceRows, label, commitOptions);
       const stale = state.results.value !== results || !rulePreparation.isCurrent(inputs);
-      if (outcome || attempt === 2 || !stale
-        || JSON.stringify(drawing.manualSpecificRules) !== table
+      if (outcome || attempt === 2 || !stale || !unchanged()
         || commitOptions.isCurrent?.() === false
         || state.sessionOperationAvailability?.()) return outcome;
       await rerenderIdle();

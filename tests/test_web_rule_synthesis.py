@@ -69,7 +69,6 @@ def test_a_whole_product_group_becomes_one_exact_rule():
     answer = _synthesize(features, [0, 1, 3])
     assert answer["table"] == [{"feat": "CDS", "qual": "product", "val": "^hypothetical protein$",
                                 "color": COLOR, "cap": "Group"}]
-    assert (answer["exactRules"], answer["hashRules"], answer["declined"]) == (1, 0, [])
 
 
 def test_a_feature_colored_by_itself_takes_a_hash_rule_in_place_of_its_own():
@@ -159,7 +158,7 @@ def test_a_feature_without_hash_or_condition_is_declined():
     feature = _payload(_cds(0), "rec")
     feature["selector"]["hash"] = None
     answer = _synthesize([feature], [0])
-    assert (answer["table"], answer["declined"]) == ([], [0])
+    assert answer == {"table": []}
 
 
 def test_a_malformed_request_is_refused():
@@ -186,3 +185,18 @@ def test_every_hypothetical_protein_of_a_genome_becomes_one_rule(path, count):
                          caption="hypothetical protein")
     assert answer["table"] == [{"feat": "CDS", "qual": "product", "val": "^hypothetical protein$",
                                 "color": COLOR, "cap": "hypothetical protein"}]
+
+
+@pytest.mark.parametrize("scope", ["features", "group"])
+def test_a_new_hash_rule_goes_before_a_broader_old_hash_rule_that_colors_the_feature(scope):
+    # Review case: a broader `hash` row before the feature's own `hash` row
+    # colors it, so the new row cannot take the own row's place.
+    seqs = [_cds(0, product="kinase"), _cds(1, product="kinase")]
+    features = [_payload(f, "rec") for f in seqs]
+    features[0]["selector"]["hash"], features[1]["selector"]["hash"] = "aaa1", "zzz9"
+    current = [dict(feat="CDS", qual="hash", val="aaa1|zzz9", color="#0000ff", cap="both"),
+               dict(feat="CDS", qual="hash", val="aaa1", color="#00ff00", cap="one")]
+    answer = _synthesize(features, [0], rules=current, labels=[["kinase"]], scope=scope)
+    table = _next_table(answer, current)
+    assert _colors(features, table) == [COLOR, "#0000ff"]
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": "aaa1", "color": COLOR, "cap": "Group"}, 0]

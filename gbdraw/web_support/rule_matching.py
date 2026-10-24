@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Literal, Sequence, TypedDict, is_typeddict
+from typing import Callable, Literal, Sequence, TypedDict, is_typeddict
 
 from types import SimpleNamespace
 
@@ -11,7 +11,7 @@ from pandas import DataFrame
 
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape, violations
 from gbdraw.features.colors import build_specific_color_rules
-from gbdraw.features.selector_values import iter_specific_color_rules
+from gbdraw.features.selector_values import ColorRuleList, iter_specific_color_rules
 from gbdraw.features.visibility import (
     _first_matching_visibility_rule,
     compile_feature_visibility_rules,
@@ -89,16 +89,13 @@ class SynthesizeColorRulesRequest(TypedDict):
 
 class SynthesizedColorRules(TypedDict):
     """The next rule table: a number keeps that row of the request's `rules`, an
-    object is a new row. `declined` lists the selected features no rule can
-    color (no exact condition and no hash)."""
+    object is a new row. A selected feature without a hash and without an exact
+    condition takes no rule."""
 
     table: list[int | ColorRuleRow]
-    exactRules: int
-    hashRules: int
-    declined: list[int]
 
 
-def describe_rule_synthesis() -> dict[str, Any]:
+def describe_rule_synthesis() -> dict[str, dict[str, Shape]]:
     """The request and the answer of :func:`synthesize_color_rules_json` as named
     shapes of :mod:`gbdraw.contract_shapes` (tools/generate_web_contracts.py)."""
 
@@ -117,7 +114,10 @@ def describe_rule_synthesis() -> dict[str, Any]:
     return {"types": types_}
 
 
-def _indexed_color_rules(rules: Sequence[ColorRuleCondition]) -> dict:
+IndexedColorRules = dict[str, dict[str, ColorRuleList]]
+
+
+def _indexed_color_rules(rules: Sequence[ColorRuleCondition]) -> IndexedColorRules:
     """The rules compiled as Generate compiles the color table, each colored by its index."""
     return build_specific_color_rules(DataFrame([
         dict(feature_type=r["feat"], qualifier_key=r["qual"], value=r["val"], color=str(i), caption="")
@@ -125,7 +125,7 @@ def _indexed_color_rules(rules: Sequence[ColorRuleCondition]) -> dict:
     ]))
 
 
-def _color_rule_ranks(item: RuleFeaturePayload, color_rules: dict) -> dict[int, int]:
+def _color_rule_ranks(item: RuleFeaturePayload, color_rules: IndexedColorRules) -> dict[int, int]:
     """The indexes of the rules a feature matches in precedence order (the first
     one colors it), each with its first rank."""
     feature = SimpleNamespace(type=item["type"], qualifiers=item["qualifiers"])
@@ -229,11 +229,13 @@ def _next_table(
 ) -> list[int | ColorRuleRow]:
     """The next table: the kept rows in order (by index); a condition before the
     first kept row of its type and qualifier, so it precedes them, its old rows
-    of the same condition removed; a target's `hash` row in the place of its own
-    old `hash` row (`retired`), else before the old `hash` row that matched it
-    first (`anchors`), else last."""
+    of the same condition removed; a target's `hash` row before the old `hash`
+    row that matched it first (`anchors`) when that row comes before its own old
+    `hash` row (a broader pattern would still color it), else in the place of
+    its own old `hash` row (`retired`), else last."""
     same_condition = {(row["feat"], row["qual"], row["val"]) for row in conditions}
-    retired_at = {retired[key][0]: key for key in hash_rows if retired.get(key)}
+    retired_at = {retired[key][0]: key for key in hash_rows
+                  if retired.get(key) and anchors.get(key, len(rules)) > retired[key][0]}
     dropped = {position for rows in retired.values() for position in rows}
     placed_hashes = set(retired_at.values())
     table: list[int | ColorRuleRow] = []
@@ -338,12 +340,7 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
         forced |= missed
     else:
         raise ValueError("The rule synthesis could not color the selected features.")
-    return SynthesizedColorRules(
-        table=table,
-        exactRules=len([row for row in table if not isinstance(row, int) and row["qual"] != "hash"]),
-        hashRules=len([row for row in table if not isinstance(row, int) and row["qual"] == "hash"]),
-        declined=sorted(set(request["selected"]) & declined),
-    )
+    return SynthesizedColorRules(table=table)
 
 
 def synthesize_color_rules_json(request_json: str) -> str:

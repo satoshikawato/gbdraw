@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
-import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
@@ -29,9 +29,10 @@ const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); }
  * @param {typeof evaluatePythonRules} [evaluate]
  * @param {{ createHistory?: ((state: Record<string, any>) => Record<string, any>) | null } & Record<string, any>} [options]
  *   `createHistory`: the History manager the rule owner commits through (a recorder of its steps by default);
+ *   `synthesize`: the rule preparation's synthesis helper (Python's by default);
  *   the other options go to the rule owner (`askChoice`).
  */
-const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = null, ...options } = {}) => {
+const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = null, synthesize = synthesizePythonColorRules, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -55,7 +56,7 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   const transactions = [], transactionScopes = [];
   // `linear`: a second drawing; `state.mode.value` picks the shown one.
   const view = linear ? withModeDrawings(Object.assign(state, { mode: { value: 'circular' } }), { circular: state, linear }) : withDrawings(state);
-  const preparation = createRulePreparation({state: view, evaluate, synthesize: synthesizePythonColorRules});
+  const preparation = createRulePreparation({state: view, evaluate, synthesize});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let lastRekeyed = null;
@@ -1530,4 +1531,57 @@ test('a rules file loaded in one mode leaves a preset of the drawing not shown a
   const listed = JSON.stringify([s.state.manualSpecificRules, s.state.legendEntries.value]);
   assert.equal(await s.actions.removeImportedSpecificRules(s.state), true);
   assert.equal(JSON.stringify([s.state.manualSpecificRules, s.state.legendEntries.value]), listed);
+});
+
+// Review r1 (OV-244): a group build runs across Python's synthesis; a synthesis
+// that waits until the test releases it, so the test can change what it read.
+const heldSynthesis = () => {
+  /** @type {(() => void) | null} */
+  let release = null;
+  let calls = 0;
+  /** @type {(value?: unknown) => void} */
+  let started = () => {};
+  const running = new Promise((resolve) => { started = resolve; });
+  /** @param {unknown} request */
+  const synthesize = async (request) => {
+    calls += 1;
+    if (calls === 1) {
+      started();
+      await new Promise((resolve) => { release = () => resolve(undefined); });
+    }
+    return synthesizePythonColorRules(request);
+  };
+  return { synthesize, running, release: () => release?.(), calls: () => calls };
+};
+
+test('a group edit whose table another owner replaced in place during the synthesis writes nothing', async () => {
+  const held = heldSynthesis();
+  const s = setup(evaluatePythonRules, { synthesize: held.synthesize });
+  assert.equal(await s.actions.commitSpecificRules(() => rules), true);
+  const [feature] = s.state.extractedFeatures.value;
+  const pending = s.actions.commitSpecificRules(s.actions.groupColorRules([feature], '#ff0000', 'Picked', 'group'));
+  await held.running;
+  // An Undo or a Session Load installs its table into the same array (`install`).
+  const restored = { feat: 'CDS', qual: 'gene', val: 'b', color: '#778899', cap: 'Restored' };
+  s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, restored);
+  held.release();
+  assert.equal(await pending, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(s.state.manualSpecificRules)), [restored]);
+});
+
+test('a group edit whose catalog changed during the synthesis is synthesized again over the new catalog', async () => {
+  const held = heldSynthesis();
+  const s = setup(evaluatePythonRules, { synthesize: held.synthesize });
+  const [feature, other] = s.state.extractedFeatures.value;
+  const pending = s.actions.commitSpecificRules(s.actions.groupColorRules([feature], '#ff0000', 'Picked', 'group'));
+  await held.running;
+  // A source-replacing Generate adds a feature that the exact gene rule would also color.
+  const added = { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['a'] } };
+  s.state.extractedFeatures.value = [feature, other, added];
+  held.release();
+  assert.equal(await pending, true);
+  assert.equal(held.calls(), 2);
+  assert.deepEqual(s.state.manualSpecificRules.map((rule) => [rule.qual, rule.color]), [['hash', '#ff0000']]);
+  const { winners } = await evaluatePythonRules({ kind: 'color', features: [feature, other, added].map((item) => ruleFeaturePayload(item)), rules: s.state.manualSpecificRules });
+  assert.deepEqual(winners, [0, -1, -1]);
 });

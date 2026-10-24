@@ -381,8 +381,11 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
  * @typedef {{ listed: LegendRowColorOf, deleted: LegendRowColorOf }} LegendRowColors
  */
 /**
- * The composition root's reader of `displayedLegendRowColors` for a drawing: the one reader of the
- * color a Legend row shows for the owners that compare, offer or restore it.
+ * The composition root's reader of the colors a drawing's Legend rows show: the one reader of the
+ * color a Legend row shows for the owners that compare, offer or restore it. Only the shown drawing
+ * has a displayed Result, so only its rows can show a palette color (`displayedLegendRowColors`, the
+ * cached computed of the Legend panel); the rows of a drawing that is not shown read the colors they
+ * record (`RECORDED_LEGEND_ROW_COLORS`).
  * @typedef {(drawing: DrawingState) => LegendRowColors} ReadLegendRowColorsPort
  */
 
@@ -408,13 +411,15 @@ export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
     dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
     paletteColors: appliedFeatureColors(state), drawnTracks
   }) : { listed: new Map(), deleted: new Map() };
-  /** @param {Map<PythonLegendKey, SwatchColor>} derived @returns {LegendRowColorOf} */
-  const shownColor = (derived) => (entry) => (
-    // A row's `color` is the color it records (`RecordedLegendColor`, services/drawing/paint.js).
-    entry ? derived.get(legendEntryKey(entry)) || /** @type {RecordedLegendColor | undefined} */ (entry.color) : undefined
-  );
   return { listed: shownColor(colors.listed), deleted: shownColor(colors.deleted) };
 };
+/** @param {ReadonlyMap<PythonLegendKey, SwatchColor>} derived @returns {LegendRowColorOf} */
+const shownColor = (derived) => (entry) => (
+  // A row's `color` is the color it records (`RecordedLegendColor`, services/drawing/paint.js).
+  entry ? derived.get(legendEntryKey(entry)) || /** @type {RecordedLegendColor | undefined} */ (entry.color) : undefined
+);
+/** The colors the rows of a drawing without a displayed Result show: the colors they record. */
+export const RECORDED_LEGEND_ROW_COLORS = Object.freeze({ listed: shownColor(new Map()), deleted: shownColor(new Map()) });
 
 // Python's fill of a feature type (gbdraw/features/colors.py
 // `default_color_map.get(feature.type, "#d3d3d3")`): the palette has no

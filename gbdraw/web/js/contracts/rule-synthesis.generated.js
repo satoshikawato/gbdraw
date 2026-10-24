@@ -36,9 +36,6 @@
 /**
  * @typedef {object} SynthesizedColorRules
  * @property {(number | ColorRuleRow)[]} table
- * @property {number} exactRules
- * @property {number} hashRules
- * @property {number[]} declined
  */
 /**
  * @typedef {object} ColorRuleRow

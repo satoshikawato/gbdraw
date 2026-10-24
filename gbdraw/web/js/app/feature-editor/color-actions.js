@@ -1790,7 +1790,9 @@ export const createFeatureColorActions = ({
     requestFeatureColorChange: colorAction(requestFeatureColorChange, { targetRules: false }),
     joinLegendGroup: colorAction(joinLegendGroup, { targetRules: false }),
     handleResetColorChoice: colorAction(handleResetColorChoice),
-    applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
+    // Its rules are Python's synthesis, which Python verified and the commit
+    // prepares; a hash rule per selected feature would be matched for nothing.
+    applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures, { targetRules: false }),
     applyStrokeToSelectedFeatures: strokeAction(applyStrokeToSelectedFeatures),
     resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor, { targetRules: false }),
     resetClickedFeatureStroke: strokeAction(resetClickedFeatureStroke),
