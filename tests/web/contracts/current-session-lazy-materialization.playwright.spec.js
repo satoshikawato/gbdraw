@@ -5,6 +5,7 @@ const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
   CURRENT_SESSION_VERSION,
+  NEWEST_READ_SESSION_VERSION,
   evaluateWithRetainedPromise,
   expectNoLoadRepairDialog,
   getDiagramWorkerActivity,
@@ -210,7 +211,7 @@ const probeSnapshot = (page) => page.evaluate(() => ({
 }));
 
 const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedPromise(page,
-  async ({ filename, requestedVariant }) => {
+  async ({ filename, requestedVariant, tooNewVersion }) => {
     const response = await fetch(`/gbdraw/web/gallery/sessions/${filename}`);
     if (!response.ok) throw new Error(`Could not load ${filename}: ${response.status}`);
     const session = await response.json();
@@ -226,9 +227,9 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
     };
     const recordResourceId = session.renderRequest.records[0].source.resourceId;
     if (requestedVariant === 'newer-version') {
-      // A Session version no writer has written yet is refused (receipt 〔拒否〕);
+      // A Session version newer than any the app reads is refused (receipt 〔拒否〕);
       // a resource that nothing names is dropped, so its size no longer refuses a Load.
-      session.version += 1;
+      session.version = tooNewVersion;
     } else if (requestedVariant === 'invalid-base64') {
       session.resources[recordResourceId].data = '%%%';
     }
@@ -249,7 +250,7 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       message: String(result?.error?.summary || '')
     };
   },
-  { filename: syntheticSourceName, requestedVariant: variant }
+  { filename: syntheticSourceName, requestedVariant: variant, tooNewVersion: NEWEST_READ_SESSION_VERSION + 1 }
 );
 
 const openInstrumentedApp = async (page) => {
