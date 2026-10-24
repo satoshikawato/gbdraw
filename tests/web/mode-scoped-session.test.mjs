@@ -868,3 +868,32 @@ test('session-authority reads `otherModeResult` only in the Result set enumerati
     .filter((line) => !/^\s*otherModeResult: \{ authority:|positionalArrays:/.test(line));
   assert.deepEqual(outside.filter((line) => /\botherModeResult\b/.test(line)), []);
 });
+
+// OV-1786: Load restores every Session 49 drawing through its own request
+// projection, so a drawing gets the same settings whichever drawing opens
+// (DESIGN `drawingViewOf`).
+test('a Session 49 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
+  const session = v49Session('drawings-circular-linear');
+  // The drawing's settings (its draft's form and adv) and its other settings
+  // a request can carry.
+  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides'];
+  const settingsOf = (id) => {
+    const drawing = state.drawingOf(id);
+    return JSON.parse(JSON.stringify(Object.fromEntries(SETTINGS.map((name) => [name, drawing[name] ?? null]))));
+  };
+  const loads = [];
+  for (const opened of session.drawings.map((entry) => entry.id)) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    loads.push(Object.fromEntries(session.drawings.map((entry) => [entry.id, settingsOf(entry.id)])));
+  }
+  const [first, ...rest] = loads;
+  const differs = rest.flatMap((other) => session.drawings.flatMap(({ id }) => SETTINGS.flatMap((name) => {
+    const [a, b] = [first[id][name] ?? {}, other[id][name] ?? {}];
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+      .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key])).map((key) => `${id}.${name}.${key}`);
+  })));
+  assert.deepEqual(differs, []);
+});

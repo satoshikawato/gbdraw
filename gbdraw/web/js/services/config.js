@@ -1390,6 +1390,38 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
   return config;
 };
 
+/**
+ * A drawing's draft as Load restores it over its request's projection
+ * (`overlayModeSliceConfig`): a saved omission of
+ * `keep_definition_left_aligned` means historical OFF, independently of
+ * fresh/reset defaults. One rule for every drawing Load projects.
+ * @param {ReturnType<typeof overlayModeSliceConfig> | null | undefined} config
+ * @returns {ReturnType<typeof overlayModeSliceConfig>}
+ */
+const withSavedDefinitionAlignment = (config) => ({
+  ...config,
+  form: { keep_definition_left_aligned: false, ...config?.form }
+});
+
+/**
+ * The unmanaged config overrides Load restores for a drawing it projects
+ * (PD-OI-009): its draft's when the draft holds them, else its request's.
+ * @param {DiagramMode} mode
+ * @param {unknown} storedConfig The drawing's current-writer draft, else null.
+ * @param {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>> | null | undefined} storedRequest
+ * @returns {UnmanagedOverrideCheck}
+ */
+const unmanagedConfigValidationOf = (mode, storedConfig, storedRequest) => (
+  isPlainObject(storedConfig) && Object.hasOwn(storedConfig, 'unmanagedConfigOverrides')
+    ? { mode, configOverrides: storedConfig.unmanagedConfigOverrides, source: 'draft' }
+    : {
+        mode,
+        config: storedRequest?.diagramOptions?.config ?? null,
+        configOverrides: storedRequest?.diagramOptions?.configOverrides ?? {},
+        source: 'storedRequest'
+      }
+);
+
 // Installs one drawing's slice over the projection of its mode's committed
 // request (`projectedConfig`, or none); the drawing holds its mode's defaults
 // before. `ui` keys apply as Session Load reads them: the pending palette
@@ -2341,11 +2373,16 @@ const drawingProjectionInputOf = (view, {
  * (B2d-3a-2): the input files of its request and bindings, read from its
  * one-drawing view as the projected drawing's are (`projectCanonicalSessionRequest`,
  * or its bindings alone without a request), the classification of its
- * comparisons, and its input type.
+ * comparisons, its input type, and its settings as the projected drawing's
+ * are restored (OV-1786): its draft over its request's projection.
  * @typedef {object} StoredDrawingInputs
  * @property {Record<string, unknown>} files The restored file slots `applyFiles` reads.
  * @property {ImportedComparisonIntent | null} comparisonClassification Null: the drawing holds no request.
  * @property {string} inputType
+ * @property {ReturnType<typeof overlayModeSliceConfig> | null} restoredConfig Null: the drawing holds no
+ *   request, and its draft installs over its mode's defaults.
+ * @property {UnmanagedOverrideCheck | null} requestOverrides Its request's unmanaged overrides, checked
+ *   when its draft holds none (the editor-draft loop reads a draft's).
  */
 /**
  * @param {Session49} document
@@ -2361,26 +2398,38 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
   const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
   if (!isPlainObject(request)) {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
-    return { files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null) };
+    return {
+      files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
+      restoredConfig: null, requestOverrides: null
+    };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
     renderRequest: request, resources: view.resources
   }));
   const config = /** @type {UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>} */ (view.modes)?.[mode]?.config;
   const hasStoredDraft = isPlainObject(config);
+  // The draft as the opened drawing's is read (preflight's `runtimeStoredConfig`).
+  const storedConfig = hasStoredDraft
+    ? migrateImportedLinearTrackSlots(migrateImportedCircularTrackSlots(config), document.version) : null;
   const projection = projectCanonicalSessionRequest(drawingProjectionInputOf(view, {
     sourceSessionVersion: document.version,
     drawingsBand: true,
     currentSession: true,
     comparisonClassification,
-    storedConfig: hasStoredDraft ? config : null,
+    storedConfig,
     hasStoredDraft,
     // A Session 49 holds each table of a drawing without a draft as its card's file (DESIGN §6).
     cardRowsAreFileRows: true,
     sessionResourceTable
   }));
   const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
-  return { files: projection.files, comparisonClassification, inputType };
+  const overrides = unmanagedConfigValidationOf(projection.mode, storedConfig,
+    /** @type {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (request));
+  return {
+    files: projection.files, comparisonClassification, inputType,
+    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
+    requestOverrides: overrides.source === 'storedRequest' ? overrides : null
+  };
 };
 
 /**
@@ -2680,31 +2729,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
   }
-  // Saved omission means historical OFF, independently of fresh/reset defaults.
-  restoredConfig = {
-    ...restoredConfig,
-    form: { keep_definition_left_aligned: false, ...restoredConfig?.form }
-  };
-  const hasCurrentStoredUnmanagedOverrides = currentSession && hasStoredDraft
-    && isPlainObject(runtimeStoredConfig)
-    && Object.prototype.hasOwnProperty.call(
-      runtimeStoredConfig,
-      'unmanagedConfigOverrides'
-    );
+  restoredConfig = withSavedDefinitionAlignment(restoredConfig);
   const unmanagedConfigValidation = canonicalProjection
-    ? hasCurrentStoredUnmanagedOverrides
-      ? {
-          mode: canonicalProjection.mode,
-          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
-          source: /** @type {const} */ ('draft')
-        }
-      : {
-          mode: canonicalProjection.mode,
-          config: storedRequest?.diagramOptions?.config ?? null,
-          configOverrides:
-            storedRequest?.diagramOptions?.configOverrides ?? {},
-          source: /** @type {const} */ ('storedRequest')
-        }
+    ? unmanagedConfigValidationOf(canonicalProjection.mode, currentSession && hasStoredDraft ? runtimeStoredConfig : null, storedRequest)
     : null;
   if (currentSession) recordSessionLifecycleEvent('artifact-projection-start');
   const projectionResult = canonicalProjection
@@ -5864,6 +5891,11 @@ const importSessionDocument = async (e, options = {}) => {
           ? `modes.${unmanagedConfigValidation.mode}.config.unmanagedConfigOverrides` : 'config.unmanagedConfigOverrides', repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
+    for (const inputs of storedDrawingInputs.values()) {
+      if (inputs.restoredConfig && inputs.requestOverrides) {
+        inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
+      }
+    }
     const canonicalSession = projectionResult !== null;
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
@@ -5910,9 +5942,18 @@ const importSessionDocument = async (e, options = {}) => {
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
-    // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
+    /**
+     * The restored settings of a drawing Load projects, by drawing ID: the
+     * committed set's (`restoredConfig`) and each other Session 49 drawing
+     * that holds a request (`storedDrawingInputs`, OV-1786); else null.
+     * @param {DrawingId} drawingId
+     */
+    const projectedConfigOf = (drawingId) => (drawingId === committedSetDrawingId
+      ? (committedSliceProjected ? restoredConfig : null)
+      : storedDrawingInputs.get(drawingId)?.restoredConfig ?? null);
+    // Any other Session 46-48 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
-    const isStoredSlice = (drawingId) => modeScopedSession && !(drawingId === committedSetDrawingId && committedSliceProjected);
+    const isStoredSlice = (drawingId) => modeScopedSession && projectedConfigOf(drawingId) === null;
     // The 49 document of a Session 46-49 (preflight read each drawing's part
     // of the file as its own entry, found by drawing ID, and where the file
     // holds its saved Result set, `setSources`).
@@ -5953,11 +5994,15 @@ const importSessionDocument = async (e, options = {}) => {
     }
     /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
     const draftPartOf = (drawingId) => /** @type {LoadedDraftPart} */ (draftParts.get(drawingId));
+    /**
+     * A Session 46-49 drawing's draft config: its restored settings when Load
+     * projects it (`projectedConfigOf`), else its slice over its mode's defaults.
+     * @param {DrawingId} drawingId
+     */
+    const sliceDraftConfigOf = (drawingId) => projectedConfigOf(drawingId)
+      ?? overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config);
     /** @param {DrawingId} drawingId @returns {Record<string, any> | null} */
-    const draftConfigOf = (drawingId) => (modeScopedSession
-      ? (drawingId === committedSetDrawingId && committedSliceProjected
-        ? restoredConfig : overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config))
-      : restoredConfig);
+    const draftConfigOf = (drawingId) => (modeScopedSession ? sliceDraftConfigOf(drawingId) : restoredConfig);
     // Each mode's input type (OV-594): the stored one, else its request's
     // (which wins without a row over a stored value of no type), else GenBank.
     // (A settings-only Session's projection holds its own `ui` type.)
@@ -6488,7 +6533,7 @@ const importSessionDocument = async (e, options = {}) => {
       const committed = id === committedSetDrawingId;
       /** @type {Record<string, any>} */
       let config = modeScopedSession
-        ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, slice.config))
+        ? sliceDraftConfigOf(id)
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, slice.config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
