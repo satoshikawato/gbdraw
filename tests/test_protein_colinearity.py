@@ -1412,17 +1412,17 @@ def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colin
     }
 
 
-def _assert_hsp_baseline(hits, protein_map):
+def _assert_hsp_baseline(hits, protein_map, *, rejected=False):
+    from gbdraw.exceptions import ParseError
     from tests.prototypes.hsp_aggregation import aggregate_hsps_baseline
 
     before = None if hits is None else hits.copy(deep=True)
-    try:
-        expected = aggregate_hsps_baseline(hits, protein_map)
-    except (ValueError, TypeError, OverflowError, KeyError) as exc:
-        with pytest.raises(type(exc)) as caught:
+    if rejected:
+        # The aggregator takes finite numerics only, as the coercion step leaves them.
+        with pytest.raises(ParseError, match="non-numeric outfmt 6"):
             protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
-        assert str(caught.value) == str(exc)
     else:
+        expected = aggregate_hsps_baseline(hits, protein_map)
         actual = protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
         pd.testing.assert_frame_equal(actual, expected, check_exact=True)
     if hits is not None:
@@ -1456,7 +1456,7 @@ def test_hsp_private_boundary_and_public_numeric_rejection(column, value):
 
     pm = _protein_map_for_lengths({"q": 100, "s": 100})
     hits = pd.DataFrame([_hit_row("q", "s"), _hit_row("q", "s") | {column: value}])
-    _assert_hsp_baseline(hits, pm)
+    _assert_hsp_baseline(hits, pm, rejected=True)
     for limit in (None, 1):
         with pytest.raises(ParseError, match="non-numeric outfmt 6"):
             select_rbh_orthogroup_edges_from_directional_hits(
@@ -1527,12 +1527,12 @@ def test_hsp_adjacent_reverse_clamped_union_and_all_selected_hsps(monkeypatch):
 
 
 @pytest.mark.parametrize("first_error,later_error", [(float("nan"), float("inf")), (float("inf"), float("nan"))])
-def test_hsp_errors_follow_pair_appearance_not_interleaved_error_row(first_error, later_error):
+def test_hsp_rejects_a_nonfinite_value_in_any_pair(first_error, later_error):
     pm = _protein_map_for_lengths({"q": 100, "s": 100, "t": 100})
     hits = pd.DataFrame([_hit_row("q", "s"),
         _hit_row("q", "t", alignment_length=later_error),
         _hit_row("q", "s", alignment_length=first_error)])
-    _assert_hsp_baseline(hits, pm)
+    _assert_hsp_baseline(hits, pm, rejected=True)
 
 
 @pytest.mark.parametrize("identifiers", [[1, 2.0], [1, 1.0], [True, 1], ["", "nan"], [None, pd.NaT]])
@@ -1543,7 +1543,7 @@ def test_hsp_group_key_coercion_matches_pandas(identifiers):
     _assert_hsp_baseline(hits, pm)
 
 
-def test_hsp_aggregation_iterates_table_once_without_pair_dataframes(monkeypatch):
+def test_hsp_aggregation_reads_columns_without_row_or_pair_iteration(monkeypatch):
     from tools.benchmark_protein_comparison import synthetic, SEED
 
     pc = protein_colinearity_module
@@ -1560,7 +1560,7 @@ def test_hsp_aggregation_iterates_table_once_without_pair_dataframes(monkeypatch
     monkeypatch.setattr(pd.DataFrame, "itertuples", iterate)
     monkeypatch.setattr(FrameSplitter, "_chop", grouped)
     result = pc._aggregate_hsps_by_protein_pair(hits, pm)
-    assert seen == [3000]
+    assert seen == []
     assert result["hsp_count"].tolist() == [3] * 1000
 
 
@@ -1620,7 +1620,7 @@ def test_overlapping_hsps_do_not_double_count_coverage() -> None:
 
 
 @pytest.mark.linear
-def test_invalid_hsp_coordinates_do_not_inflate_aggregate_coverage() -> None:
+def test_invalid_hsp_coordinates_are_rejected_before_coverage() -> None:
     protein_map = _protein_map_for_lengths({"q": 1000, "s": 1000})
     hits = pd.DataFrame.from_records(
         [
@@ -1630,17 +1630,7 @@ def test_invalid_hsp_coordinates_do_not_inflate_aggregate_coverage() -> None:
         columns=COMPARISON_COLUMNS,
     )
 
-    aggregated = protein_colinearity_module._aggregate_hsps_by_protein_pair(
-        hits,
-        protein_map,
-    )
-
-    row = aggregated.iloc[0]
-    assert row["hsp_count"] == 2
-    assert row["bitscore"] == 500
-    assert row["query_covered_length"] == 200
-    assert row["subject_covered_length"] == 200
-    assert row["min_coverage"] == pytest.approx(0.2)
+    _assert_hsp_baseline(hits, protein_map, rejected=True)
 
 
 @pytest.mark.linear

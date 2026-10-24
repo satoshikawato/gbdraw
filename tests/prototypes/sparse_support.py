@@ -1,13 +1,92 @@
-"""S04 test-only scans frozen from d7695a62 (tree equal to a66237f4)."""
+"""S04 test-only scans frozen from d7695a62 (tree equal to a66237f4).
+
+The row readers and the evidence and candidate records they fill are frozen
+here too; the live inference reads precomputed directed-hit records instead.
+"""
 from __future__ import annotations
+from dataclasses import dataclass
+import math
 from typing import Mapping, Sequence
 from gbdraw.analysis.protein_colinearity import (
-    CdsProtein, OrthogroupResult, _BestCoreEvidence, _CoreSupportCandidate,
-    _LocalThreshold, OrthologEdgeKind, _normalized_score_from_row,
-    _anchor_core_hit_rank, _row_supports_membership, _row_min_coverage,
-    _row_domain_only, _protein_sort_key, _RECORD_LOCAL_CORE_COMPETITION_RATIO,
-    _MIN_MEMBERSHIP_MIN_COVERAGE,
+    CdsProtein, OrthogroupResult, _LocalThreshold, OrthologEdgeKind,
+    _protein_sort_key, _RECORD_LOCAL_CORE_COMPETITION_RATIO,
+    _MIN_MEMBERSHIP_MIN_COVERAGE, _DOMAIN_ONLY_MAX_MIN_COVERAGE,
 )
+
+
+@dataclass(frozen=True)
+class _CoreSupportCandidate:
+    group_id: str
+    support: float
+    diagnostic_score: float
+    same_record_score: float
+    cross_record_score: float
+    evidence_row: object
+    evidence_query_id: str
+    evidence_subject_id: str
+    relation_kind: OrthologEdgeKind
+    min_coverage: float
+    domain_only: bool
+    high_confidence_pass: bool
+    low_confidence_pass: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class _BestCoreEvidence:
+    support_score: float
+    support_row: object | None
+    support_query_id: str
+    support_subject_id: str
+    diagnostic_score: float
+    diagnostic_row: object | None
+    diagnostic_query_id: str
+    diagnostic_subject_id: str
+
+
+def _row_float(row: object, column: str, default: float = 0.0) -> float:
+    try:
+        return float(getattr(row, column))
+    except (TypeError, ValueError, AttributeError):
+        return float(default)
+
+
+def _normalized_score_from_row(row: object) -> float:
+    score = _row_float(row, "normalized_score", 0.0)
+    return score if math.isfinite(score) and score > 0.0 else 0.0
+
+
+def _anchor_core_hit_rank(
+    row: object,
+    protein_map: Mapping[str, CdsProtein],
+) -> tuple[float, float, float, float, int, int, str, int, str]:
+    query_id = str(getattr(row, "query", ""))
+    subject_id = str(getattr(row, "subject", ""))
+    query_record_index = int(protein_map[query_id].record_index) if query_id in protein_map else 0
+    subject_record_index = int(protein_map[subject_id].record_index) if subject_id in protein_map else 0
+    return (
+        -_normalized_score_from_row(row),
+        _row_float(row, "evalue", float("inf")),
+        -_row_float(row, "min_coverage", 0.0),
+        -_row_float(row, "identity", 0.0),
+        -int(_row_float(row, "alignment_length", 0.0)),
+        query_record_index,
+        query_id,
+        subject_record_index,
+        subject_id,
+    )
+
+
+def _row_min_coverage(row: object) -> float:
+    return _row_float(row, "min_coverage", 0.0)
+
+
+def _row_domain_only(row: object) -> bool:
+    return bool(getattr(row, "domain_only", False)) or _row_min_coverage(row) <= _DOMAIN_ONLY_MAX_MIN_COVERAGE
+
+
+def _row_supports_membership(row: object) -> bool:
+    return _row_min_coverage(row) >= _MIN_MEMBERSHIP_MIN_COVERAGE and not _row_domain_only(row)
 
 
 def _record_local_component_has_competing_core_support(
