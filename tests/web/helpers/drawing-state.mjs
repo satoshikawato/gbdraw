@@ -211,6 +211,8 @@ const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   ...storeProperties(fixture, fixture),
   ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
+  // The project's five card files (state.cardFiles), empty unless the fixture lists them.
+  ...(Object.hasOwn(fixture, 'cardFiles') ? {} : { cardFiles: { value: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null }, configurable: true, writable: true } }),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 

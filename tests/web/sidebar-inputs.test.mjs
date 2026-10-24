@@ -68,8 +68,8 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
   const { withModeDrawings } = await import(pathToFileURL(join(process.cwd(), 'tests/web/helpers/drawing-state.mjs')));
   const ref = (value) => ({ value });
   const rows = [{ uid: 'row-a', gb: { name: 'a.gb' }, fasta: null, region_record_id: '' }];
-  const state = withModeDrawings({ mode: ref('linear'), lInputType: ref('gb') }, {
-    circular: {}, linear: { id: 'linear', mode: 'linear', linearSeqs: rows }
+  const state = withModeDrawings({ mode: ref('linear') }, {
+    circular: {}, linear: { id: 'linear', mode: 'linear', inputType: ref('gb'), linearSeqs: rows }
   });
   let resolveRead;
   const controller = createLinearRecordSelector({
@@ -82,7 +82,7 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
     { value: '', label: 'Not inspected', synthetic: false }
   ]);
   // A read in progress still says so.
-  const refresh = controller.refresh();
+  const refresh = controller.refresh(state.activeDrawing());
   assert.equal(controller.optionsFor(rows[0])[0].label, 'Loading records...');
   resolveRead([{ selector: '#1', recordId: 'Rec', recordLength: 9 }]);
   await refresh;
