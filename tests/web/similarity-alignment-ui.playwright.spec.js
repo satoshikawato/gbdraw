@@ -4,6 +4,7 @@ const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -1443,6 +1444,8 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   await expect(dialog.locator('#alignment-direction-record-2')).toHaveText(/Current right-facing; after Align left-facing\./);
   await dialog.screenshot({ path: testInfo.outputPath('direction-review-desktop.png') });
   await page.setViewportSize({ width: 390, height: 740 });
+  // The review is docked in the Result: a phone shows it in the Preview pane.
+  await showPhonePane(page, 'preview');
   await direction.scrollIntoViewIfNeeded();
   await expect(direction).toBeVisible();
   const bounds = await dialog.boundingBox();
