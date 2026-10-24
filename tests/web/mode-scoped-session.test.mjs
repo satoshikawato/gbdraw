@@ -290,10 +290,13 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   }
   const loaded = await load(saved);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(drawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
+  // A Load makes new drawing states (B2d-2): read the loaded drawing again.
+  let loadedDrawing = modeDrawing(state, 'circular');
+  assert.notEqual(loadedDrawing, drawing);
+  assert.deepEqual(loadedDrawing.legendEntries.value.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['GC', 'GC content'], ['GC', 'GC skew']]);
-  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
-  assert.deepEqual({ ...drawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
+  assert.deepEqual({ ...loadedDrawing.legendColorOverrides }, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
+  assert.deepEqual({ ...loadedDrawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
 
   // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
   const older = structuredClone(saved);
@@ -309,8 +312,9 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   };
   const loadedOlder = await load(older);
   assert.equal(loadedOlder.status, 'ok', JSON.stringify(loadedOlder.error));
-  assert.deepEqual({ ...drawing.legendColorOverrides }, { 'GC content': '#ff0000' });
-  assert.deepEqual(Object.keys(drawing.legendStrokeOverrides), ['GC skew']);
+  loadedDrawing = modeDrawing(state, 'circular');
+  assert.deepEqual({ ...loadedDrawing.legendColorOverrides }, { 'GC content': '#ff0000' });
+  assert.deepEqual(Object.keys(loadedDrawing.legendStrokeOverrides), ['GC skew']);
 });
 
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it
@@ -493,4 +497,83 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   assert.equal(fileImports.withoutImportedBlacklistWords(drawing.manualBlacklist.value, drawing.fileImports.blacklist), 'hypothetical, mine');
   const colors = fileImports.withoutImportedDefaultColors(drawing.currentColors.value, drawing.fileImports.d_color, { CDS: '#aaaaaa', tRNA: '#bbbbbb' });
   assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
+});
+
+// B2d-2: Load builds one drawing per drawing of the Session (its 49 document)
+// and commits them at once; the fast path reads 46-48 without Python.
+const fixtureSession = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.gbdraw-session.json.gz`, import.meta.url))));
+const drawingsVector = (name) => JSON.parse(readFileSync(new URL('../fixtures/sessions/drawings-vectors.json', import.meta.url)))
+  .upgrades.find((entry) => entry.name === name);
+// Every message the session-import Worker receives: a file to read, or an ack.
+const workerMessages = () => {
+  const messages = [];
+  const { postMessage } = globalThis.Worker.prototype;
+  globalThis.Worker.prototype.postMessage = function record(message) {
+    messages.push(message);
+    return postMessage.call(this, message);
+  };
+  return { messages, restore: () => { globalThis.Worker.prototype.postMessage = postMessage; } };
+};
+
+test('Load of a two-mode Session 48 makes its drawings in the order and with the shown drawing the fast path names', async () => {
+  const vector = drawingsVector('two-mode-linear-shown.v48');
+  resetDrawings();
+  installShownDrawing('circular');
+  const before = state.drawingList();
+  const worker = workerMessages();
+  let loaded;
+  try {
+    loaded = await load(fixtureSession('two-mode-linear-shown.v48'));
+  } finally {
+    worker.restore();
+  }
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), vector.drawings.map((drawing) => drawing.id));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), vector.drawings.map((drawing) => drawing.mode));
+  assert.equal(state.activeDrawing().id, vector.activeDrawingId);
+  // Each drawing is a new drawing state, not the one shown before the Load.
+  for (const drawing of state.drawingList()) assert.equal(before.includes(drawing), false, drawing.id);
+  // The Worker read the file and ran nothing else (no Python helper operation).
+  assert.ok(worker.messages.length > 0);
+  for (const message of worker.messages) {
+    assert.deepEqual(Object.keys(message).filter((key) => !['operationId', 'file', 'ack'].includes(key)), [], JSON.stringify(Object.keys(message)));
+  }
+});
+
+test('a Load that fails in its commit leaves the drawings, their order and the shown drawing as they were', async () => {
+  resetDrawings();
+  installShownDrawing('linear');
+  modeDrawing(state, 'linear').adv.label_font_size = 11;
+  const before = state.drawingList();
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(fixtureSession('two-mode-linear-shown.v48'))], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    afterLoad: async () => { throw new Error('install failed'); }
+  });
+  assert.equal(loaded.status, 'error');
+  assert.equal(state.drawingList().length, before.length);
+  state.drawingList().forEach((drawing, index) => assert.equal(drawing, before[index], drawing.id));
+  assert.equal(state.activeDrawing().id, 'linear');
+  assert.equal(modeDrawing(state, 'linear').adv.label_font_size, 11);
+});
+
+test('a Load of a Session with a drawing of one mode keeps a new drawing of the other mode for the mode buttons (T-1)', async () => {
+  const vector = drawingsVector('file-card-imports-circular.v48');
+  assert.deepEqual(vector.drawings.map((drawing) => drawing.mode), ['circular']);
+  resetDrawings();
+  modeDrawing(state, 'linear').adv.label_font_size = 9;
+  const before = state.drawingList();
+  const loaded = await load(fixtureSession('file-card-imports-circular.v48'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
+  const linear = modeDrawing(state, 'linear');
+  assert.equal(before.includes(linear), false);
+  // At its mode's defaults as a Load installs them (the Session's unused
+  // Linear part, as 0.14.0 did): the pre-Load edit is gone.
+  assert.deepEqual({ ...linear.form }, createDefaultForm());
+  assert.equal(linear.adv.label_font_size, createDefaultAdv('linear').label_font_size);
+  installShownDrawing(linear.id);
+  assert.equal(state.activeDrawing(), linear);
+  installShownDrawing('circular');
 });

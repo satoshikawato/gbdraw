@@ -1180,7 +1180,7 @@ const mergeStoredSettings = (target, source, at, defaults) => {
  *   losat: { blastp: Record<string, unknown> }, circularConservation: Record<string, unknown> }} SettingsContainers
  */
 /**
- * A drawing's settings as Load resets it (`resetSessionBaseline`).
+ * A drawing's settings as a new drawing state has them (`createDrawingState`).
  * @param {'circular' | 'linear'} mode
  * @returns {SettingsContainers}
  */

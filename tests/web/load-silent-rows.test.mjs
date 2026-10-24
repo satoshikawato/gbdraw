@@ -174,7 +174,8 @@ test('K14: record display drafts of no list are listed before the dialog and app
       assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${path}`], label);
       assert.deepEqual(dialogs, [describeLoadRepairs(loaded.repairs)?.items], label);
       assert.ok(dialogs[0].some((line) => line.includes(`(${path})`)), `${label}: ${dialogs[0]}`);
-      assert.deepEqual([...drawing.recordDisplayDrafts], [], label);
+      // A Session Load makes new drawing states; a configuration file keeps the drawing.
+      assert.deepEqual([...modeDrawing(state, mode).recordDisplayDrafts], [], label);
     }
   }
   await saved();

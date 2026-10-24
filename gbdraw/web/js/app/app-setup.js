@@ -3722,8 +3722,10 @@ export const createAppSetup = () => {
     t('Load Session'), () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
-  // The Circular ring settings as the Load found them (`beforeImport`).
-  let ringSettingsBeforeImport = ringSettingsOf(state.drawingOfMode('circular'));
+  // Each Circular drawing's ring settings as the Load found them (`beforeImport`), by drawing ID.
+  const circularDrawings = () => state.drawingList().filter((drawing) => drawing.mode === 'circular');
+  const captureRingSettings = () => new Map(circularDrawings().map((drawing) => [drawing.id, ringSettingsOf(drawing)]));
+  let ringSettingsBeforeImport = captureRingSettings();
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
   // Load dialog before.
@@ -3741,8 +3743,9 @@ export const createAppSetup = () => {
     // Load the user canceled changed nothing, the notice included.
     if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
     if (result?.status === 'ok') {
-      // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94).
-      depthTrackUiCounts.circular = Math.max(1, state.drawingOfMode('circular').adv.depth_tracks.length);
+      // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94);
+      // the count is the Circular mode's until it is kept per drawing.
+      depthTrackUiCounts.circular = Math.max(1, ...circularDrawings().map((drawing) => drawing.adv.depth_tracks.length));
       showNotice({ text: name ? t('Session loaded: {file}', { file: name }) : t('Session loaded.'), items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
@@ -3764,7 +3767,7 @@ export const createAppSetup = () => {
     },
     transformLegacyResultSvg,
     beforeImport: async () => {
-      ringSettingsBeforeImport = ringSettingsOf(state.drawingOfMode('circular'));
+      ringSettingsBeforeImport = captureRingSettings();
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
@@ -3809,10 +3812,13 @@ export const createAppSetup = () => {
         // The comparison rings read from the loaded files and series (an older
         // Session's series names included), before the History baseline. A
         // legacy config import keeps the ring files, so it reconciles only when
-        // it changed the source or the series names.
-        const circularDrawing = state.drawingOfMode('circular');
-        if (result.status === 'ok') reconcileCircularConservation(circularDrawing);
-        else reconcileChangedRingSettings(circularDrawing, ringSettingsBeforeImport);
+        // it changed the source or the series names; a drawing the Load made
+        // reconciles.
+        for (const drawing of circularDrawings()) {
+          const before = ringSettingsBeforeImport.get(drawing.id);
+          if (result.status === 'ok' || !before) reconcileCircularConservation(drawing);
+          else reconcileChangedRingSettings(drawing, before);
+        }
         // The loaded draft's live values wait for their next change or Generate (6.7).
         discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
@@ -3826,6 +3832,9 @@ export const createAppSetup = () => {
         previewFeatureSearch.resetModeSearches();
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
+        // A loaded Session's drawings are new drawing states: each gets an
+        // empty History before the baseline (a legacy config keeps the drawings).
+        if (result.status === 'ok') history.replaceMembers(state.drawingList().map((drawing) => drawing.id));
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
