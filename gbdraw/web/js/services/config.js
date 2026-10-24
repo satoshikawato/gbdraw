@@ -5100,11 +5100,12 @@ export const applyRunStateData = (runState = {}) => {
   state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
 };
 
+// The shown drawing's feature-editor status from its restored features; a Load
+// writes it every time (OV-1766), and a legacy recovery plan then overrides it.
 const synchronizeRestoredFeatureSummaryStatus = () => {
-  if (state.extractedFeatures.value.length === 0) return false;
-  state.featureExtractionPending.value = false;
-  state.setFeatureEditorStatus('summary-ready');
-  return true;
+  const ready = state.extractedFeatures.value.length > 0;
+  if (ready) state.featureExtractionPending.value = false;
+  state.setFeatureEditorStatus(ready ? 'summary-ready' : 'idle');
 };
 
 /**
@@ -6599,8 +6600,8 @@ const importSessionDocument = async (e, options = {}) => {
       ? shownUi.selectedFeatureRecordIdx : 0;
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
-      synchronizeRestoredFeatureSummaryStatus();
     }
+    synchronizeRestoredFeatureSummaryStatus();
     state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
       ...restoredFileSequenceSources

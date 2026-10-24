@@ -637,6 +637,24 @@ test('an older Session whose feature information cannot be restored lists it (B5
   assert.match(state.featureEditorStatus.value.error, /does not include embedded GenBank inputs/);
 });
 
+// OV-1766: every Load writes the shown drawing's feature-editor status; a Load
+// whose shown drawing has no features does not keep an earlier Load's failure.
+test('a Load without features does not keep the previous Load\'s "Feature editor unavailable" (OV-1766)', async () => {
+  const failed = fixture('hash-color-rule-linear-rc.v30.gbdraw-session.json.gz');
+  failed.features.extractedFeatures = [];
+  Object.keys(failed.files).forEach((key) => { failed.files[key] = null; });
+  const confirmLoadRepairs = async () => true;
+  assert.equal((await importSession(input(failed), { transformLegacyResultSvg, confirmLoadRepairs })).status, 'ok');
+  assert.equal(state.featureEditorStatusText.value, 'Feature editor unavailable');
+  const next = await importSession(input(fixture('file-card-imports-circular.v48.gbdraw-session.json.gz')), {
+    transformLegacyResultSvg, confirmLoadRepairs
+  });
+  assert.equal(next.status, 'ok', JSON.stringify(next.error));
+  assert.equal(state.extractedFeatures.value.length, 0);
+  assert.deepEqual({ ...state.featureEditorStatus.value }, { status: 'idle', error: null });
+  assert.equal(state.featureEditorStatusText.value, 'No features ready');
+});
+
 // OV-712: the sequences of the saved comparison matches that cannot be read
 // again (here: a malformed GenBank input) are listed, not only reported as
 // `degradedRecovery`.
