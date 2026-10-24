@@ -30,7 +30,7 @@ const bind = (file) => state.inputFiles.registerFile(genbank(file));
 const blast = bind('a-to-c.tsv');
 
 installShownDrawing('linear');
-state.lInputType.value = 'gb';
+modeDrawing(state, 'linear').inputType.value = 'gb';
 const drawing = modeDrawing(state, 'linear');
 modeDrawing(state, 'linear').linearSeqs.splice(0, Infinity, ...['a', 'b', 'c'].map((uid) => ({
   uid, gb: bind(`${uid}.gb`), gff: null, fasta: null, depth: null, losat_gencode: 1, definition: '',

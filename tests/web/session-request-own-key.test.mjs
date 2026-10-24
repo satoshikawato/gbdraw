@@ -36,7 +36,7 @@ const drawing = modeDrawing(state, 'circular');
 // Every case starts from one Circular GenBank file and its own form values.
 const circularState = (form) => {
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, 'c_gb', genbank);
   drawing.circularRecordList.value = [];
   Object.assign(drawing.form, {

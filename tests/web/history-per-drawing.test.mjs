@@ -26,7 +26,6 @@ globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
-const { inputTypeKeyOf } = await import('../../gbdraw/web/js/services/drawing-view.js');
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 
@@ -37,7 +36,7 @@ const hashOf = (id) => {
   const slices = Object.fromEntries(Object.entries(DRAWING_SLICES)
     .map(([name, slice]) => [name, slice.capture(drawing.slices[name])]));
   return createHash('sha256').update(JSON.stringify({
-    slices, inputType: state[inputTypeKeyOf(drawing)].value
+    slices, inputType: drawing.inputType.value
   })).digest('hex');
 };
 
@@ -71,7 +70,7 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
   assert.equal(hashOf('circular'), circularAfterEdit, 'Redo in Linear leaves Circular unchanged');
 
   // A checkpoint step and a Generate step of Linear walk the same way.
-  await history.runUndoableCheckpoint('Linear checkpoint', () => { state.lInputType.value = 'gff'; linear.form.prefix = 'linear-checkpoint'; return true; });
+  await history.runUndoableCheckpoint('Linear checkpoint', () => { modeDrawing(state, 'linear').inputType.value = 'gff'; linear.form.prefix = 'linear-checkpoint'; return true; });
   const linearAfterCheckpoint = hashOf('linear');
   assert.notEqual(linearAfterCheckpoint, linearAfterEdit);
   await history.runUndoableArtifactReplacement('Generate diagram', () => {
@@ -95,7 +94,7 @@ test('Undo walks the shown drawing\'s History and never changes the other drawin
   await app.undoHistory();
   assert.equal(circular.unmanagedConfigOverrides['objects.circular.a'], 1, 'Undo restores the Circular edit');
   assert.equal(hashOf('linear'), linearAfterCheckpoint, 'Undo in Circular leaves Linear unchanged');
-  assert.equal(state.lInputType.value, 'gff', 'and its input type');
+  assert.equal(modeDrawing(state, 'linear').inputType.value, 'gff', 'and its input type');
 });
 
 test('Reset all drawings is one project step: one Undo restores every drawing', async () => {
@@ -215,7 +214,7 @@ test('a Circular step older than the Session edits is undone after them and keep
   const history = window.__GBDRAW_HISTORY__;
   const circular = modeDrawing(state, 'circular');
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const before = circular.form.prefix;
   const title = state.sessionTitle.value;
   const reflowBefore = state.autoLabelReflowEnabled.value;
@@ -223,7 +222,7 @@ test('a Circular step older than the Session edits is undone after them and keep
   assert.equal(circular.form.prefix, 'checkpoint-prefix');
 
   assert.deepEqual(app.selectDrawing('linear'), { status: 'ok' });
-  await history.runUndoable('Linear input type', () => { state.lInputType.value = 'gff'; });
+  await history.runUndoable('Linear input type', () => { modeDrawing(state, 'linear').inputType.value = 'gff'; });
   await history.runUndoable('Rename Session', () => { state.sessionTitle.value = 'title set in Linear'; });
   await history.runUndoable('Auto Reflow', () => { state.autoLabelReflowEnabled.value = !reflowBefore; });
 
@@ -236,7 +235,7 @@ test('a Circular step older than the Session edits is undone after them and keep
   assert.equal(circular.form.prefix, 'checkpoint-prefix');
   await app.undoHistory();
   assert.equal(circular.form.prefix, before, 'then the Circular step');
-  assert.equal(state.lInputType.value, 'gff', 'the Linear input type stays');
+  assert.equal(modeDrawing(state, 'linear').inputType.value, 'gff', 'the Linear input type stays');
   assert.equal(state.sessionTitle.value, title);
 });
 

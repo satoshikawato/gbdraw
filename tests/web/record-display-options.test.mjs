@@ -174,8 +174,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
-    lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
+  const state = { mode: { value: linear ? 'linear' : 'circular' }, inputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [], inputFiles,
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
     circularRecordList: { value: discovered ? components.map(({ resourceId }, i) => ({
@@ -551,10 +550,10 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
   const source = {};
-  const drawing = { files: { c_gb: source },
+  const drawing = { inputType: { value: 'gb' }, files: { c_gb: source },
     circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
     circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
-  const discovery = (inputType) => circularDiscoveryForInput(inputType, drawing);
+  const discovery = (inputType) => { drawing.inputType.value = inputType; return circularDiscoveryForInput(drawing); };
   assert.equal(discovery('gb').status, 'ready');
   assert.equal(discovery('gb').records.length, 1);
   drawing.files.c_gb = {};
@@ -595,7 +594,7 @@ test('an alignment checkpoint holds a draft that its own capture moves onto its 
   const committed = { resources, renderRequest: { mode: 'linear', records: [{ recordKey: 'record-1', cardinality: 'exactly_one',
     source: { kind: 'genbank', resourceId: 'both' }, selector: { kind: 'recordId', value: 'second' } }] } };
   const inputFiles = createInputFileStore();
-  const state = { mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
+  const state = { mode: { value: 'linear' }, inputType: { value: 'gb' }, files: { c_gb: null }, inputFiles,
     linearSeqs: [{ uid: 'record-1', gb: inputFiles.registerFile(createSessionResourceFileView(table, 'both')), region_record_id: 'second', region_reverse: false }],
     form: createDefaultForm(), adv: createDefaultAdv('linear'),
     recordDisplayDrafts: [{ sourceUid: 'record-1', selector: '#1', recordId: 'second', topologyOverride: null,
@@ -668,7 +667,7 @@ const sourceControls = () => {
     files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
-  const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
+  const state = withModeDrawings({ mode: { value: 'linear' }, inputType: { value: 'gb' },
     featureCatalog: { value: null }, inputFiles },
   { circular, linear });
   withSourceDrawings(state);
@@ -695,7 +694,7 @@ test('a replaced Linear source drops its own drafts only, in its transition (A2 
   controls.changeRecordSources(state.drawingOf('linear'), () => { linear.linearSeqs[0].gb = new Blob(['x']); });
   assert.deepEqual(uids(linear), ['record-2']);
   assert.deepEqual(uids(circular), ['circular']);
-  controls.changeRecordSources(state.drawingOf('circular'), () => { state.cInputType.value = 'gff'; });
+  controls.changeRecordSources(state.drawingOf('circular'), () => { state.drawingOf('circular').inputType.value = 'gff'; });
   assert.deepEqual(uids(circular), [], 'the input type switch replaced the Circular source');
   assert.deepEqual(uids(linear), ['record-2']);
 });

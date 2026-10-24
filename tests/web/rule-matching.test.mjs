@@ -113,12 +113,12 @@ test('a candidate keeps every caption as written, asks Python only for matches, 
   assert.deepEqual(Object.keys(candidate).sort(), ['rules', 'snapshot'], 'a candidate reports no caption change');
 });
 
-for (const replace of [s => { s.cardFiles.t_color = {}; }, s => { s.results.value = [{ name: 'replacement', content: '<svg/>' }]; }, s => { s.legendEntries.value = [{caption:'Manual'}]; }, s => { s.linearSeqs.push({gb:{}}); }, s => { s.linearSeqs[0].gff = {}; }, s => { s.cInputType.value='gff'; }]) {
+for (const replace of [s => { s.cardFiles.t_color = {}; }, s => { s.results.value = [{ name: 'replacement', content: '<svg/>' }]; }, s => { s.legendEntries.value = [{caption:'Manual'}]; }, s => { s.linearSeqs.push({gb:{}}); }, s => { s.linearSeqs[0].gff = {}; }, s => { s.inputType.value='gff'; }]) {
   test('a candidate preparation rejects replaced source, Result and legend snapshots', async () => {
     const { state } = setup();
     state.cardFiles = { t_color: null };
     state.linearSeqs = [{gb:null,gff:null,fasta:null}];
-    state.cInputType = {value:'gbk'};
+    state.inputType = {value:'gbk'};
     state.results = { value: [] };
     state.legendEntries = { value: [] };
     let release;

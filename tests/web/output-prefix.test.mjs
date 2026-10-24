@@ -47,7 +47,7 @@ const circularPrefix = ({ prefix = '', recordId = 'FL10.1' } = {}) => {
   Object.assign(drawing.form, createDefaultForm(), { prefix });
   Object.assign(drawing.adv, createDefaultAdv('circular'));
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   drawing.circularRecordList.value = [{ record_id: recordId, record_length: 40 }];
   const canonical = buildCanonicalRenderRequest({
     state, drawing, filesData: { c_gb: genbank(recordId), linearSeqs: [] }, comparisonPlanSnapshot: null

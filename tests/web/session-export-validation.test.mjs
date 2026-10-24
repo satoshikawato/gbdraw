@@ -47,7 +47,7 @@ const { exportSession } = callerSession(sessionConfig, state);
 
 let inputReads = 0;
 installShownDrawing('circular');
-state.cInputType.value = 'gb';
+modeDrawing(state, 'circular').inputType.value = 'gb';
 // The bindings hold the store's refs, as the app's writers bind them.
 bindDrawingInputFile(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'c_gb', {
   name: 'legacy.gbk',

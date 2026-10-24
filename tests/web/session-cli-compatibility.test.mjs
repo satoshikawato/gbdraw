@@ -128,7 +128,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         const result = await load(bytes);
         assert.equal(result.status, 'ok', result.error?.stack);
         assert.equal(state.mode.value, mode);
-        assert.equal((mode === 'circular' ? state.cInputType : state.lInputType).value, label === 'gff' ? 'gff' : 'gb');
+        assert.equal(modeDrawing(state, mode).inputType.value, label === 'gff' ? 'gff' : 'gb');
+        assert.equal(modeDrawing(state, mode === 'circular' ? 'linear' : 'circular').inputType.value, 'gb', 'the other mode drawing keeps its input type');
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
         assert.ok(state.results.value.length > 0);

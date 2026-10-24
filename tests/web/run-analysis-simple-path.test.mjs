@@ -628,7 +628,7 @@ test('a rerender admits the Results it draws again under their kept names (OV-13
 /** @param {AuditFile} primary @param {AuditInactiveFile} inactive */
 const installSimpleCircularInput = (primary, inactive) => {
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   modeDrawing(state, 'circular').files.c_gb = bound(primary);
   modeDrawing(state, 'circular').files.c_gff = bound(null);
   modeDrawing(state, 'circular').files.c_fasta = bound(null);
@@ -1621,7 +1621,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   }
 
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   state.activeDrawing().form.prefix = 'lazy-circular';
   state.activeDrawing().form.show_depth = false;
   state.activeDrawing().form.multi_record_canvas = false;
@@ -1920,7 +1920,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const middleView = createSessionResourceFileView(linearTable, 'middle');
     const thirdView = createSessionResourceFileView(linearTable, 'third');
     installShownDrawing('linear');
-    state.lInputType.value = 'gb';
+    modeDrawing(state, 'linear').inputType.value = 'gb';
     state.activeDrawing().form.prefix = 'lazy-linear';
     state.activeDrawing().form.show_depth = false;
     state.activeDrawing().form.linear_track_layout = 'middle';
@@ -2606,7 +2606,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // GFF3 resource as the record's GFF3 file and the FASTA resource as its FASTA file, in that order.
     const gffFile = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'pair.gff');
     const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
-    state.lInputType.value = 'gff';
+    modeDrawing(state, 'linear').inputType.value = 'gff';
     state.activeDrawing().losatProgram.value = 'blastn';
     state.activeDrawing().linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
     const pairResult = result('gff-pair.svg', 'gff-pair');
@@ -2669,7 +2669,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
     assert.deepEqual([...new Set(searched.map((fasta) => fasta.split('\n')[0]))].sort(), ['>G1', '>G2']);
-    state.lInputType.value = 'gb';
+    modeDrawing(state, 'linear').inputType.value = 'gb';
   } finally {
     state.similarityAlignmentPlan.value = null;
     state.linearRecordTranslations.value = [];
@@ -2777,7 +2777,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
         role, new AuditFile([Buffer.from(data, 'base64')], `ring-subject-${index}-${role}`)
       ]));
       const gff = Boolean(files.fasta);
-      state.cInputType.value = gff ? 'gff' : 'gb';
+      modeDrawing(state, 'circular').inputType.value = gff ? 'gff' : 'gb';
       Object.assign(modeDrawing(state, 'circular').files, boundFiles({
         c_gb: gff ? null : files.source, c_gff: gff ? files.source : null, c_fasta: gff ? files.fasta : null
       }));
@@ -2876,7 +2876,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const staleCanonical = new AuditInactiveFile(['unused canonical'], 'stale-canonical.tsv');
 
   installShownDrawing('linear');
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   state.activeDrawing().form.prefix = 'linear-none';
   state.activeDrawing().form.show_depth = true;
   state.activeDrawing().form.multi_record_canvas = false;
@@ -3499,7 +3499,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   const genbank = new AuditFile(['LOCUS rowheight\nORIGIN\n        1 acgtacgt\n//\n'], 'row-height.gb');
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `row-height-depth-${n}.tsv`);
   installShownDrawing('linear');
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'row-height';
   drawing.form.show_depth = true;
@@ -3579,7 +3579,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
 test('Circular Generate gives a Depth series without settings its default color', async () => {
   const depthFile = (n) => new AuditFile([`position\tdepth\n1\t${n}\n`], `circular-series-${n}.tsv`);
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   const drawing = state.activeDrawing();
   drawing.form.prefix = 'circular-series';
   drawing.form.show_depth = true;
@@ -3653,7 +3653,7 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
   state.addDrawing(second, 'Circular 2', 2);
   try {
     installShownDrawing(second.id);
-    state.cInputType.value = 'gb';
+    modeDrawing(state, 'circular').inputType.value = 'gb';
     second.files.c_gb = bound(new AuditFile(['LOCUS refresh 10 bp DNA circular\n//\n'], 'refresh-owner.gb'));
     second.circularRecordList.value = [];
     Object.assign(second.circularRecordDiscovery, {

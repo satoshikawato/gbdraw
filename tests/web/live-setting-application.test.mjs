@@ -47,8 +47,8 @@ const genbank = (ids) => {
 const generate = (mode) => {
   const drawing = modeDrawing(state, mode);
   config.installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   const filesData = mode === 'circular'
     ? { c_gb: genbank(['LIVE1', 'LIVE2', 'LIVE3']), linearSeqs: [] }
     : {

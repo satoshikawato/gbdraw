@@ -75,8 +75,8 @@ const compactActiveIntentSnapshot = () => ({
   modeAndInput: {
     mode: state.mode.value,
     inputType: state.mode.value === 'circular'
-      ? state.cInputType.value
-      : state.lInputType.value
+      ? modeDrawing(state, 'circular').inputType.value
+      : modeDrawing(state, 'linear').inputType.value
   },
   palette: {
     selected: state.activeDrawing().selectedPalette.value,

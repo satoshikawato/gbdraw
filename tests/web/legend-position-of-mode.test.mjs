@@ -190,8 +190,8 @@ const genbank = () => ({
 // The request of `mode` from `drawing` (default: that mode's drawing), as Generate builds it.
 const requestLegend = (mode, drawing = modeDrawing(state, mode)) => {
   installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
     ? { c_gb: genbank(), linearSeqs: [] }

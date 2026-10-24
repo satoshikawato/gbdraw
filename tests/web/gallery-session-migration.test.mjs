@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -206,7 +207,7 @@ const cliEditorProjection = projectCanonicalSessionRequest({
   storedConfig: promotedSyntheticCli.config
 });
 installShownDrawing('linear');
-webState.lInputType.value = cliEditorProjection.inputType;
+modeDrawing(webState, 'linear').inputType.value = cliEditorProjection.inputType;
 applyCapturedConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
   plan: webState.activeDrawing().linearComparisonPlan,

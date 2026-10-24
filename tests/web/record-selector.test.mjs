@@ -159,14 +159,14 @@ const ref = (value) => ({ value });
 // One drawing per mode, as in state.js: the shown drawing follows `mode` and
 // holds the fixture's rows (`fixture.linearSeqs` is that drawing's array).
 const withShownDrawing = (fixture) => {
-  const shown = () => ({ id: fixture.mode.value, mode: fixture.mode.value, linearSeqs: fixture.linearSeqs });
+  const shown = () => ({ id: fixture.mode.value, mode: fixture.mode.value, inputType: fixture.inputType, linearSeqs: fixture.linearSeqs });
   return Object.assign(fixture, { activeDrawing: shown, drawingList: () => [shown()] });
 };
 const fileA = { name: 'a.gb' };
 const fileB = { name: 'b.gb' };
 const state = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'row-a', gb: fileA, fasta: null, region_record_id: '' }]
 };
 const pending = new Map();
@@ -218,7 +218,7 @@ assert.equal(Object.hasOwn(controller.selectorStateByUid, 'row-a'), true);
 
 const errorState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'error-row', gb: null, fasta: null, region_record_id: 'LegacyRec' }]
 };
 const loggedErrors = [];
@@ -244,7 +244,7 @@ assert.equal(loggedErrors.length, 1);
 
 const lazyState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'lazy-row', gb: fileA, fasta: null, region_record_id: '' }]
 };
 let lazyReaderCalls = 0;
@@ -264,7 +264,7 @@ assert.equal(lazyController.optionsFor(lazyState.linearSeqs[0])[1].value, 'Lazy'
 
 const rollbackState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   semanticFileWatchersSuppressed: ref(false),
   sessionImportRollbackInProgress: ref(false),
   linearSeqs: [{
@@ -304,7 +304,7 @@ rollbackState.semanticFileWatchersSuppressed.value = false;
 const reuseFiles = { gff: { name: 'm23.gff3' }, fasta: { name: 'mismatch.fasta' } };
 const reuseState = {
   mode: ref('linear'),
-  lInputType: ref('gff'),
+  inputType: ref('gff'),
   linearSeqs: [{ uid: 'reuse-a', gff: reuseFiles.gff, fasta: reuseFiles.fasta, region_record_id: '' }]
 };
 const reuseReads = [];
@@ -380,7 +380,7 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
   const fileA = genbank('RecA');
   const fileB = genbank('RecB');
   const tripState = {
-    lInputType: { value: 'gb' }, mode: { value: 'linear' },
+    inputType: { value: 'gb' }, mode: { value: 'linear' },
     linearSeqs: [{ uid: 'trip-a', gb: fileA }, { uid: 'trip-b', gb: fileB }]
   };
   const trip = createLinearRecordSelector({
@@ -466,10 +466,10 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
 {
   let shownId = 'linear';
   const pinState = {
-    mode: ref('linear'), lInputType: ref('gb'),
+    mode: ref('linear'), inputType: ref('gb'),
     linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
   };
-  pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', linearSeqs: pinState.linearSeqs });
+  pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', inputType: pinState.inputType, linearSeqs: pinState.linearSeqs });
   pinState.drawingList = () => [pinState.activeDrawing()];
   /** @type {((records: unknown[]) => void)[]} */
   const reads = [];

@@ -508,8 +508,8 @@ for (const modeName of ['circular', 'linear']) {
   installShownDrawing(modeName);
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
+  modeDrawing(state, 'linear').inputType.value = 'gb';
   circularDrawing.circularRecordList.value = [];
   state.activeDrawing().linearRecordLayoutEnabled.value = false;
   if (modeName === 'linear') {
@@ -631,7 +631,7 @@ assert.equal(
   installShownDrawing('circular');
   Object.assign(state.activeDrawing().form, createDefaultForm());
   Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
-  state.cInputType.value = 'gb';
+  modeDrawing(state, 'circular').inputType.value = 'gb';
   for (const [stored, flag] of [[-5, null], [0, null], [250, '250']]) {
     const loaded = structuredClone(buildConfigData(state.activeDrawing()));
     loaded.adv.scale_interval = stored;

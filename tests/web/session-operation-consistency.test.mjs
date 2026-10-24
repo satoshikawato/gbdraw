@@ -270,7 +270,7 @@ test('late source discovery cannot expand the live source set during Session', a
   const file = {};
   const source = { uid: 'source', gb: file, region_record_id: '' };
   const selector = createLinearRecordSelector({
-    state: withModeDrawings({ mode: { value: 'linear' }, lInputType: { value: 'gb' }, sessionOperationAvailability }, {
+    state: withModeDrawings({ mode: { value: 'linear' }, cardFiles: {}, sessionOperationAvailability }, {
       circular: {}, linear: { id: 'linear', mode: 'linear', linearSeqs: [source] }
     }),
     reactive: value => value, recordReader: () => read.promise,
@@ -293,7 +293,7 @@ test('late rule helper replies cannot publish cache entries while Session is pen
   const feature = { type: 'CDS', record: 'record', id: 'gene', qualifiers: {} };
   const rule = { feat: '*', qual: 'product', val: 'gene' };
   const owner = createRulePreparation({
-    state: withDrawings({ extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
+    state: withDrawings({ cardFiles: {}, extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
     evaluate: () => reply.promise
   });
   const pending = owner.prepare([rule]);
