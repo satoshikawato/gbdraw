@@ -43,6 +43,7 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
 const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state);
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
@@ -58,7 +59,7 @@ const loadedState = () => JSON.stringify({
   mode: state.mode.value,
   title: state.sessionTitle.value,
   results: state.results.value.map((result) => result.content),
-  files: Object.keys(state.files),
+  files: [...Object.keys(state.cardFiles), ...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
   drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
     const drawing = modeDrawing(state, mode);
     return [mode, {
@@ -1480,7 +1481,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
       adv[`${stackKey}_enabled`] = true;
       adv[stackKey].push(structuredClone(manualRow));
       if (mode === 'linear') modeDrawing(state, 'linear').linearSeqs.forEach((seq) => { seq.depth = structuredClone(cleared); });
-      else state.files.c_depth = structuredClone(cleared);
+      else bindDrawingInputFileTree(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'c_depth', structuredClone(cleared));
       // No Generate since: no committed request and no Result.
       canonicalRenderArtifactOwner.restore(null);
       state.results.value = [];
@@ -1698,7 +1699,7 @@ test('a Session 39 with a protein table of a reversed record installs the conver
     const committed = getCommittedCanonicalSession();
     assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
     assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
-    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
+    const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
     assert.equal(await state.inputFiles.fileOf(draft.file).text(), converted, 'the Linear draft holds the converted bytes');
   } finally {
     setStoredProteinResultFrameConverter(null);
@@ -1726,7 +1727,7 @@ test('a Collinear Session 47 with a reversed record installs the converted bytes
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => assert.fail('no row') });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
     assert.deepEqual(calls, [{ version: 47, resources: Object.keys(session.resources).sort() }]);
-    const draft = state.files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
+    const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'collinearityResult');
     assert.equal(await readSessionResourceText(state.inputFiles.fileOf(draft.file)), converted, 'the Linear draft holds the converted bytes');
     const saved = await savedSession('collinear rc');
     assert.equal(resourceText(saved.resources[COLLINEARITY_ID]), converted, 'Save writes the converted bytes');

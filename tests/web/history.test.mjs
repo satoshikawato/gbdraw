@@ -1077,13 +1077,9 @@ const createLayoutPreferences = () => ({
           pairs: [],
           settings: { alignOrthogroupFeature: 'feature-anchor' }
         }
-      ],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      ]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [
       { uid: 'record-a', gb: null, gff: null, fasta: null, depth: null },
       { uid: 'record-b', gb: null, gff: null, fasta: null, depth: null }
@@ -1375,13 +1371,9 @@ const createLayoutPreferences = () => ({
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
-      c_conservation_fastas: [],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      c_conservation_fastas: []
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [],
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -1551,13 +1543,9 @@ const createLayoutPreferences = () => ({
       c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
       c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
-      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([{ name: 'large.svg', content: '<svg>' + 'x'.repeat(100_000) + '</svg>' }]),
@@ -1744,13 +1732,9 @@ const createLayoutPreferences = () => ({
         { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
         { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },
         { kind: 'collinearityResult', file: ref(canonicalCollinearity) }
-      ],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      ]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [{
       uid: 'linear-a',
       gb: ref(linearPrimary),
@@ -1803,6 +1787,7 @@ const createLayoutPreferences = () => ({
     form: {},
     adv: {},
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([]),
@@ -1919,6 +1904,7 @@ const createLayoutPreferences = () => ({
   }];
   const state = {
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     mode: ref('circular'),
@@ -3428,6 +3414,7 @@ for (const previousSuppressed of [false, true]) {
     form: {},
     adv: {},
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([]),
@@ -3680,7 +3667,7 @@ for (const previousSuppressed of [false, true]) {
   const linear = drawingFixture('linear');
   const state = withModeDrawings({
     mode: ref('linear'), results: ref([]), generatedMode: ref(null), semanticFileWatchersSuppressed: ref(false),
-    files: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
+    files: {}, cardFiles: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
   const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), nextTick: async () => {} });
   const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };

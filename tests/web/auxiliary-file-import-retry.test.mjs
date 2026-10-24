@@ -76,7 +76,7 @@ test('a rules import the owner gave up on keeps Retry through later input change
 
   owner.outcome = 1;
   assert.equal(await retryAuxiliaryImportFailure(), true);
-  assert.deepEqual({ calls: owner.calls, selected: state.files.t_color, error: state.errorLog.value },
+  assert.deepEqual({ calls: owner.calls, selected: state.cardFiles.t_color, error: state.errorLog.value },
     { calls: 2, selected: ref, error: null });
 });
 
@@ -87,9 +87,9 @@ test('a Specific rules removal the rule owner refuses brings the card back and r
   const file = state.inputFiles.registerFile({ name: 'rules.tsv', size: 1, text: async () => '' });
   owner.removal = async () => { throw { code: 'LEGEND_ROW_CONFLICT' }; };
   state.errorLog.value = null;
-  state.files.t_color = file;
+  state.cardFiles.t_color = file;
   assert.equal(await importAuxiliaryTable('t_color', null), false);
-  assert.deepEqual({ selected: state.files.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
+  assert.deepEqual({ selected: state.cardFiles.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
     { selected: file, operation: 'evaluateRules', pending: false });
   owner.removal = async () => true;
 });
@@ -106,9 +106,9 @@ test('a Specific rules removal the shown drawing refuses never changes the drawi
     removed.push(drawing);
     return drawing !== shown;
   };
-  state.files.t_color = file;
+  state.cardFiles.t_color = file;
   assert.equal(await importAuxiliaryTable('t_color', null), false);
-  assert.deepEqual({ removed, selected: state.files.t_color }, { removed: [shown], selected: file });
+  assert.deepEqual({ removed, selected: state.cardFiles.t_color }, { removed: [shown], selected: file });
   owner.removal = async () => true;
 });
 
@@ -118,8 +118,8 @@ test('a table card holds the ref of the file it imported', async () => {
   const file = { name: 'priority.tsv', size: 1, text: async () => '' };
   state.errorLog.value = null;
   await importAuxiliaryTable('qualifier_priority', file);
-  assert.equal(state.files.qualifier_priority, state.inputFiles.registerFile(file));
-  assert.equal(state.inputFiles.fileOf(state.files.qualifier_priority), file);
-  assert.equal(imports.wait(file), imports.wait(state.files.qualifier_priority));
-  state.files.qualifier_priority = null;
+  assert.equal(state.cardFiles.qualifier_priority, state.inputFiles.registerFile(file));
+  assert.equal(state.inputFiles.fileOf(state.cardFiles.qualifier_priority), file);
+  assert.equal(imports.wait(file), imports.wait(state.cardFiles.qualifier_priority));
+  state.cardFiles.qualifier_priority = null;
 });

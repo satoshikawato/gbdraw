@@ -41,13 +41,15 @@ const { buildCanonicalRenderRequest } = await import(
   '../../gbdraw/web/js/services/session-request.js'
 );
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const circularFiles = modeDrawing(state, 'circular').files;
 const { exportSession } = callerSession(sessionConfig, state);
 
 let inputReads = 0;
 installShownDrawing('circular');
 state.cInputType.value = 'gb';
 // The bindings hold the store's refs, as the app's writers bind them.
-state.files.c_gb = state.inputFiles.registerFile({
+bindDrawingInputFile(state.inputFiles, modeDrawing(state, 'circular').slices.inputs, 'c_gb', {
   name: 'legacy.gbk',
   type: 'application/genbank',
   size: 12,
@@ -106,7 +108,7 @@ const committed = buildCanonicalRenderRequest({
     }
   }
 });
-adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true });
+adoptCanonicalRenderArtifacts(committed, { adoptOwnedRequest: true, drawing: modeDrawing(state, 'circular') });
 state.activeDrawing().adv.circular_track_slots[0].width = '16px';
 
 const retainedRef = (name) => state.inputFiles.registerFile({ name, size: 1 });
@@ -115,10 +117,10 @@ const retainedCircularFiles = {
   fastas: [retainedRef('retained-subject.fa')],
   sources: [retainedRef('retained-source.fa')]
 };
-state.files.c_conservation_blasts = retainedCircularFiles.blasts;
-state.files.c_conservation_fastas = retainedCircularFiles.fastas;
-state.files.c_conservation_sequence_sources = retainedCircularFiles.sources;
-state.files.c_conservation_blasts_source = 'upload';
+circularFiles.c_conservation_blasts = retainedCircularFiles.blasts;
+circularFiles.c_conservation_fastas = retainedCircularFiles.fastas;
+circularFiles.c_conservation_sequence_sources = retainedCircularFiles.sources;
+circularFiles.c_conservation_blasts_source = 'upload';
 Object.assign(state.activeDrawing().circularConservation, {
   enabled: false,
   source: 'upload',
@@ -153,24 +155,24 @@ failedAdoption.webFiles = {
   conservationBlastSource: 'losat-cache'
 };
 assert.throws(
-  () => adoptCanonicalRenderArtifacts(failedAdoption),
+  () => adoptCanonicalRenderArtifacts(failedAdoption, { drawing: modeDrawing(state, 'circular') }),
   /Invalid character/
 );
-assert.equal(state.files.c_conservation_blasts, retainedCircularFiles.blasts);
-assert.equal(state.files.c_conservation_fastas, retainedCircularFiles.fastas);
+assert.equal(circularFiles.c_conservation_blasts, retainedCircularFiles.blasts);
+assert.equal(circularFiles.c_conservation_fastas, retainedCircularFiles.fastas);
 assert.equal(
-  state.files.c_conservation_sequence_sources,
+  circularFiles.c_conservation_sequence_sources,
   retainedCircularFiles.sources
 );
-assert.equal(state.files.c_conservation_blasts_source, 'upload');
+assert.equal(circularFiles.c_conservation_blasts_source, 'upload');
 assert.deepEqual(state.activeDrawing().circularConservation.series, [{
   label: 'Retained',
   sourceIndex: 0
 }]);
-state.files.c_conservation_blasts = [];
-state.files.c_conservation_fastas = [];
-state.files.c_conservation_sequence_sources = [];
-state.files.c_conservation_blasts_source = null;
+circularFiles.c_conservation_blasts = [];
+circularFiles.c_conservation_fastas = [];
+circularFiles.c_conservation_sequence_sources = [];
+circularFiles.c_conservation_blasts_source = null;
 
 let downloadedBlobs = 0;
 let downloadedBlob = null;

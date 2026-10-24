@@ -1,4 +1,5 @@
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -512,7 +513,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(result.comparisonDisposition, 'DECISION_REQUIRED');
   assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'DECISION_REQUIRED');
   assert.equal(state.activeDrawing().importedComparisonIntent.action, null);
-  assert.deepEqual(state.files.linearCanonicalComparisons, []);
+  assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
   assert.equal(state.activeDrawing().linearComparisonPlan.edges.length, 0);
   // The held comparisons are kept; the promotion moves only the alignment target.
   const { alignOrthogroupFeature: _target, ...promotedSettings } = generatedProteinComparison.settings;
@@ -530,12 +531,12 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(state.activeDrawing().losat.blastp.maxHits, 1);
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 
-  state.files.linearCanonicalComparisons = [];
+  modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
   // Generate adopts what Load committed: the request of schema 9.
-  adoptCanonicalRenderArtifacts({ renderRequest: getCommittedCanonicalSession().renderRequest, resources });
+  adoptCanonicalRenderArtifacts({ renderRequest: getCommittedCanonicalSession().renderRequest, resources }, { drawing: modeDrawing(state, 'linear') });
   const collinearityReencodesBefore = resourceReencodesByName.get('collinearity.json') || 0;
   assert.deepEqual(
-    state.files.linearCanonicalComparisons.map((comparison) => comparison.kind),
+    modeDrawing(state, 'linear').files.linearCanonicalComparisons.map((comparison) => comparison.kind),
     [
       'precomputedProteinComparison',
       'orthogroupResult',
@@ -967,14 +968,14 @@ ORIGIN
       conservationBlastSource: 'losat-cache',
       conservationLosatFastaSources: [null, 'fasta']
     }
-  });
+  }, { drawing: modeDrawing(state, 'circular') });
 
-  assert.equal(state.files.c_conservation_blasts_source, 'losat-cache');
-  assert.equal(state.files.c_conservation_blasts.length, 2);
-  assert.equal(state.files.c_conservation_blasts[0].size, 0);
-  assert.equal(state.files.c_conservation_fastas.length, 2);
-  assert.equal(state.files.c_conservation_fastas[0], null);
-  assert.equal(state.files.c_conservation_fastas[1].name, 'comparison.fna');
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts_source, 'losat-cache');
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts.length, 2);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_blasts[0].size, 0);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas.length, 2);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[0], null);
+  assert.equal(modeDrawing(state, 'circular').files.c_conservation_fastas[1].name, 'comparison.fna');
   assert.equal(state.activeDrawing().circularConservation.source, 'losat');
   assert.deepEqual(
     {

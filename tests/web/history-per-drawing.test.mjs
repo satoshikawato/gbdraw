@@ -27,6 +27,7 @@ globalThis.File = File;
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { inputTypeKeyOf } = await import('../../gbdraw/web/js/services/drawing-view.js');
+const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');
 
 // A3 review Low 5: every slice of the drawing and its input type.
@@ -263,18 +264,20 @@ test('Reset Settings leaves the multi-record layout of a new drawing', async () 
 test('Reset Settings re-derives the comparison rings from the kept ring files', async () => {
   const app = createAppSetup();
   if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
-  const rings = modeDrawing(state, 'circular').circularConservation;
+  const circular = modeDrawing(state, 'circular');
+  const rings = circular.circularConservation;
+  const ringFiles = (files) => bindDrawingInputFileTree(state.inputFiles, circular.slices.inputs, 'c_conservation_fastas', files);
   const ringsOf = () => JSON.parse(JSON.stringify({ enabled: rings.enabled, series: rings.series }));
-  state.files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
+  ringFiles([new File(['>r\nACGT\n'], 'ring.fa')]);
   app.changeCircularConservationSource();
   const uploaded = ringsOf();
   assert.equal(uploaded.enabled, true);
   assert.equal(uploaded.series.length, 1);
   rings.series[0].label = 'renamed ring';
   await app.resetSettings();
-  assert.equal(state.files.c_conservation_fastas.length, 1, 'the ring file stays');
+  assert.equal(circular.files.c_conservation_fastas.length, 1, 'the ring file stays');
   assert.deepEqual(ringsOf(), uploaded);
-  state.files.c_conservation_fastas = [];
+  ringFiles([]);
   app.changeCircularConservationSource();
 });
 

@@ -170,7 +170,7 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
 
 test('a Circular live apply writes the plot title font override and the grid layout as Generate does', () => {
   const drawing = modeDrawing(state, 'circular');
-  state.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
+  drawing.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
   drawing.form.multi_record_canvas = true;
   drawing.recordsOff.splice(0, drawing.recordsOff.length, '#2');
   drawing.adv.multi_record_positions = [{ selector: '#1', row: 1 }, { selector: '#2', row: 1 }, { selector: '#3', row: 1 }];
@@ -240,7 +240,7 @@ test('Lock Definition Column applies only to a Linear Result', () => {
 // its request key; a live Row for record maps `#N` as Generate does.
 test('a live Row for record of a grid of one maps the record selector as Generate does', () => {
   const drawing = modeDrawing(state, 'circular');
-  state.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
+  drawing.circularRecordList.value = ['LIVE1', 'LIVE2', 'LIVE3'].map((id, index) => ({ selector: `#${index + 1}`, record_id: id }));
   drawing.form.multi_record_canvas = true;
   drawing.recordsOff.splice(0, drawing.recordsOff.length, '#1', '#2');
   drawing.adv.multi_record_positions = [{ selector: '#3', row: 1 }];

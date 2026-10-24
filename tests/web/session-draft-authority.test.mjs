@@ -594,7 +594,7 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   hasCommittedComparison: true
 });
 assert.equal(state.results.value.length, divergentSession.results.length);
-assert.deepEqual(state.files.linearCanonicalComparisons, []);
+assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
   mode: 'adjacent',
@@ -1118,16 +1118,17 @@ state.matchSequenceRegistry.reset([{
   recordIndex: 0,
   sourceIndex: null
 }]);
-state.circularRecordList.value = [{
+const circularDrawing = modeDrawing(state, 'circular');
+circularDrawing.circularRecordList.value = [{
   selector: '#1',
   record_id: 'KEEP.1',
   record_length: 8
 }];
-Object.assign(state.circularRecordDiscovery, {
+Object.assign(circularDrawing.circularRecordDiscovery, {
   status: 'ready',
   error: '',
   inputType: 'gb',
-  primaryFile: state.files.c_gb,
+  primaryFile: circularDrawing.files.c_gb,
   pairedFile: null
 });
 const diagramElement = { id: 'keep-diagram-element' };
@@ -1227,8 +1228,8 @@ const rollbackState = () => ({
   featureExtractionError: state.featureExtractionError.value,
   featureEditorStatus: structuredClone(state.featureEditorStatus),
   matchSequenceSources: structuredClone(state.matchSequenceRegistry.values()),
-  circularRecordList: structuredClone(state.circularRecordList.value),
-  circularRecordDiscovery: { ...state.circularRecordDiscovery },
+  circularRecordList: structuredClone(circularDrawing.circularRecordList.value),
+  circularRecordDiscovery: { ...circularDrawing.circularRecordDiscovery },
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
   diagramElementOriginalTransforms: [...state.diagramElementOriginalTransforms.value],

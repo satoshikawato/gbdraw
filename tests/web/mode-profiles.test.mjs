@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { bindDrawingInputFile } from '../../gbdraw/web/js/services/drawing/inputs.js';
 
 const repoRoot = process.cwd();
 const semanticParity = JSON.parse(await readFile(
@@ -307,7 +308,7 @@ assert.deepEqual(
     }
   );
   const retainedFile = { name: 'retained.gb' };
-  state.files.c_gb = retainedFile;
+  const retainedRef = bindDrawingInputFile(state.inputFiles, circularDrawing.slices.inputs, 'c_gb', retainedFile);
   const retainedComparisonFile = { name: 'retained-comparison.tsv' };
   state.activeDrawing().linearComparisonPlan.mode = 'selected';
   state.activeDrawing().linearComparisonPlan.defaultSource = 'upload';
@@ -391,7 +392,7 @@ assert.deepEqual(
     state.activeDrawing().adv.linear_track_slots_axis_index,
     resetAdvDefaults.linear_track_slots_axis_index
   );
-  assert.equal(state.files.c_gb, retainedFile);
+  assert.equal(circularDrawing.files.c_gb, retainedRef);
   assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
   assert.equal(state.activeDrawing().linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
@@ -509,7 +510,7 @@ for (const modeName of ['circular', 'linear']) {
   Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
-  state.circularRecordList.value = [];
+  circularDrawing.circularRecordList.value = [];
   state.activeDrawing().linearRecordLayoutEnabled.value = false;
   if (modeName === 'linear') {
     state.activeDrawing().linearComparisonPlan.mode = 'adjacent';

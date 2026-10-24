@@ -505,6 +505,7 @@ test('alignment intent changes only its target direction and preserves pending d
 // alignment checkpoint is of the Linear drawing's drafts.
 test('an alignment checkpoint restores the Linear drafts and leaves the Circular drawing as it is', () => {
   const model = compositeControls({ linear: true });
+  const inputFiles = createInputFileStore();
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), featurePlacementOverrides: {},
     // Not yet on its record's row (OV-278): only an edit of the Circular drawing moves it.
     recordDisplayDrafts: [{ sourceUid: 'circular', selector: '#1', recordId: 'second', topologyOverride: null,
@@ -550,24 +551,24 @@ test('fresh loaded alignment binds canonical sources before discovery and restor
 
 test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
   const source = {};
-  const state = { cInputType: { value: 'gb' }, files: { c_gb: source },
+  const drawing = { files: { c_gb: source },
     circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
     circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
-  assert.equal(circularDiscoveryForInput(state).status, 'ready');
-  assert.equal(circularDiscoveryForInput(state).records.length, 1);
-  state.files.c_gb = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
-  state.files.c_gb = source;
-  state.circularRecordDiscovery.status = 'deferred';
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
-  state.cInputType.value = 'gff';
-  state.files.c_gff = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'idle');
-  state.files.c_fasta = {};
-  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
-  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  const discovery = (inputType) => circularDiscoveryForInput(inputType, drawing);
+  assert.equal(discovery('gb').status, 'ready');
+  assert.equal(discovery('gb').records.length, 1);
+  drawing.files.c_gb = {};
+  assert.equal(discovery('gb').status, 'deferred');
+  assert.deepEqual(discovery('gb').records, []);
+  drawing.files.c_gb = source;
+  drawing.circularRecordDiscovery.status = 'deferred';
+  assert.equal(discovery('gb').status, 'deferred');
+  assert.deepEqual(discovery('gb').records, []);
+  drawing.files.c_gff = {};
+  assert.equal(discovery('gff').status, 'idle');
+  drawing.files.c_fasta = {};
+  assert.equal(discovery('gff').status, 'deferred');
+  assert.deepEqual(discovery('gff').records, []);
 });
 
 // OV-278: Load of a Session without a Web draft writes a draft selected by
@@ -662,13 +663,13 @@ const sourceControls = () => {
   const callbacks = [];
   const draft = (sourceUid) => ({ sourceUid, selector: '#1', recordId: sourceUid, topologyOverride: 'linear',
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
-  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
   const inputFiles = createInputFileStore();
+  const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')],
+    files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] } };
   const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
     linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
   const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
-    files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
-    inputFiles },
+    featureCatalog: { value: null }, inputFiles },
   { circular, linear });
   withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
@@ -704,7 +705,7 @@ test('a replaced Linear source drops its own drafts only, in its transition (A2 
 // the Linear drawing is shown (the shown drawing's form answered before).
 test('the Circular rows carry the Circular drawing crop and orientation while Linear is shown', () => {
   const { state, controls, circular } = sourceControls();
-  state.circularRecordList.value = [{ record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
+  circular.circularRecordList.value = [{ record_id: 'c1', record_length: 100, selector: '#1', detectedTopology: 'circular' }];
   Object.assign(circular.form, { circular_reverse: true, multi_record_canvas: false, circular_region_start: 1, circular_region_end: 50 });
   const [row] = controls.allRows.value.filter((entry) => entry.scope === 'circular');
   assert.equal(row.drawingId, 'circular');

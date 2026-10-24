@@ -11,7 +11,7 @@ const setup = (evaluate = evaluatePythonRules) => {
   const features = ['NADH', 'β-lactamase', 'ı', 'other'].map((product, i) => ({
     type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [product] }
   }));
-  const state = { extractedFeatures: { value: features }, manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
+  const state = { extractedFeatures: { value: features }, cardFiles: { t_color: null }, manualSpecificRules: [], svgResultIdentity: { value: 'one' } };
   return { state, features, preparation: createRulePreparation({ state: withDrawings(state), evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });
@@ -113,10 +113,10 @@ test('a candidate keeps every caption as written, asks Python only for matches, 
   assert.deepEqual(Object.keys(candidate).sort(), ['rules', 'snapshot'], 'a candidate reports no caption change');
 });
 
-for (const replace of [s => { s.files.t_color = {}; }, s => { s.results.value = [{ name: 'replacement', content: '<svg/>' }]; }, s => { s.legendEntries.value = [{caption:'Manual'}]; }, s => { s.linearSeqs.push({gb:{}}); }, s => { s.linearSeqs[0].gff = {}; }, s => { s.cInputType.value='gff'; }]) {
+for (const replace of [s => { s.cardFiles.t_color = {}; }, s => { s.results.value = [{ name: 'replacement', content: '<svg/>' }]; }, s => { s.legendEntries.value = [{caption:'Manual'}]; }, s => { s.linearSeqs.push({gb:{}}); }, s => { s.linearSeqs[0].gff = {}; }, s => { s.cInputType.value='gff'; }]) {
   test('a candidate preparation rejects replaced source, Result and legend snapshots', async () => {
     const { state } = setup();
-    state.files = { t_color: null };
+    state.cardFiles = { t_color: null };
     state.linearSeqs = [{gb:null,gff:null,fasta:null}];
     state.cInputType = {value:'gbk'};
     state.results = { value: [] };
@@ -165,7 +165,7 @@ test('derived comparison cache invalidation keeps prepared colors current while 
     await gate;
     return evaluatePythonRules(payload);
   });
-  state.files = { c_gb: {}, t_color: null, linearCanonicalComparisons: [] };
+  state.files = { c_gb: {}, linearCanonicalComparisons: [] };
   const pending = preparation.prepareCandidate([{ ...rule('NADH'), color: '#112233', cap: 'NADH' }]);
   state.files.linearCanonicalComparisons = [];
   release();
@@ -190,7 +190,7 @@ for (const replace of [
       await gate;
       return { rules: payload.rules };
     });
-    state.files = { c_gb: original, c_conservation_fastas: [original], t_color: null };
+    state.files = { c_gb: original, c_conservation_fastas: [original] };
     state.linearSeqs = [{ gb: original, gff: null, fasta: null }];
     const catalog = state.extractedFeatures.value;
     const pending = preparation.prepareCandidate(TWO_COLORS);

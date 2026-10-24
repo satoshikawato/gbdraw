@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -37,9 +38,10 @@ const imported = await importSession({
 });
 
 assert.equal(imported.status, 'ok');
-assert.equal(state.files.c_gb instanceof File, false);
-assert.equal(typeof state.files.c_gb.arrayBuffer, 'undefined');
-assert.ok(Object.isFrozen(state.files.c_gb));
+const circularGenome = modeDrawing(state, 'circular').files.c_gb;
+assert.equal(circularGenome instanceof File, false);
+assert.equal(typeof circularGenome.arrayBuffer, 'undefined');
+assert.ok(Object.isFrozen(circularGenome));
 assert.ok(state.extractedFeatures.value.length > 0);
 assert.equal(state.featureEditorStatus.status, 'summary-ready');
 assert.equal(state.featureEditorStatus.summaryCount, state.extractedFeatures.value.length);

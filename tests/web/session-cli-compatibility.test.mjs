@@ -155,7 +155,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
         const projectedFiles = mode === 'linear' ? modeDrawing(state, 'linear').linearSeqs.map(seq => seq.gb)
-          : label === 'gff' ? [] : [state.files.c_gb];
+          : label === 'gff' ? [] : [modeDrawing(state, 'circular').files.c_gb];
         const sources = projectedFiles.filter(Boolean).flatMap(ref => {
           const source = getSessionResourceSource(state.inputFiles.fileOf(ref));
           return source.descriptors || [source];
@@ -166,8 +166,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
-          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(state.files.c_gff))), hash(await readFile(args[1])));
-          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(state.files.c_fasta))), hash(await readFile(args[3])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_gff))), hash(await readFile(args[1])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_fasta))), hash(await readFile(args[3])));
         }
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.

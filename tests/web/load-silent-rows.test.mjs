@@ -304,8 +304,8 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
     'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
   ]);
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
 });
 
 // OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
@@ -324,14 +324,14 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   ]);
   assert.ok(dialogs.some((line) => line.includes('"comparison-c"')), JSON.stringify(dialogs));
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_blasts),
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_blasts),
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
   const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
-  assert.deepEqual(orderedConservationSources(state.files.c_conservation_blasts, conservation)
-    .map(({ label, file, sourceIndex }) => [label, file.name, state.files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+  assert.deepEqual(orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, conservation)
+    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex]?.name]), [
     ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
     ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
   ]);
@@ -348,7 +348,7 @@ test('a comparison file entry of an older Session that cannot be read is listed'
     'file-entry-dropped files.c_conservation_fastas[0]',
     'file-entry-dropped files.c_conservation_sequence_sources[0]'
   ]);
-  assert.deepEqual(state.files.c_conservation_fastas, [null, null]);
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [null, null]);
 });
 
 // OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,
@@ -363,7 +363,7 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
     session.config.circularConservation.labels = 'a,b';
     return session;
   };
-  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
+  const drawn = () => orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
     .map(({ label, file }) => [label, file.name]);
   for (const entry of [5, null, {}]) {
     const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
@@ -398,7 +398,7 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
   assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
     [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
   const conservation = modeDrawing(state, 'circular').circularConservation;
-  assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
+  assert.deepEqual([conservation.series.length, modeDrawing(state, 'circular').files.c_conservation_blasts.length], [0, 0]);
   assert.equal(conservation.enabled, false);
 });
 

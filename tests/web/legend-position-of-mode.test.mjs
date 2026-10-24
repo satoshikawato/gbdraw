@@ -192,7 +192,7 @@ const requestLegend = (mode, drawing = modeDrawing(state, mode)) => {
   installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
-  state.circularRecordList.value = [];
+  drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
     ? { c_gb: genbank(), linearSeqs: [] }
     : {
