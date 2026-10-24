@@ -218,15 +218,18 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
-  drawingSetIndex,
   drawingSetPath,
+  openedDrawingOf,
   readDrawingResultSetParts,
   readSessionAuthorityParts,
   readSessionDocument,
   readSessionInput,
   restoresNothing,
   settingsOnlySessionCandidate,
-  validateSessionAuthorityInventory
+  storedRequestSchemas,
+  storedResultSets,
+  validateSessionAuthorityInventory,
+  withStoredResultSet
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
 import {
@@ -277,7 +280,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
-  drawingViewOf, openedDrawingOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
+  drawingViewOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
 } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -345,7 +348,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
+/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
@@ -2051,91 +2054,6 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
-/**
- * One committed Result set of a Session as the file holds it: `at` is where
- * (the prefix of its paths, so its rows keep the file's own paths), and
- * `projected` says it is the set Load projects (the top-level set of a
- * Session 27-48) rather than a stored set, which loads only as saved.
- * @typedef {{ at: ResultSetPath, projected: boolean, set: SessionInput }} StoredResultSet
- */
-/**
- * The project fields a Result set's readers read beside the set.
- * @typedef {{ resources: unknown, orthogroupState?: unknown }} StoredSetProject
- */
-/**
- * The committed Result sets of a Session, the projected one first: a Session
- * 27-48's top-level set and a Session 46-48's `otherModeResult`; each Session
- * 49 drawing that holds a request, the one it opens (`openedDrawingOf`)
- * projected (a drawing is found by its ID). The one place Load names where a
- * file holds a set; each set reader below reads one.
- * @param {SessionInput} data
- * @returns {StoredResultSet[]}
- */
-const storedResultSets = (data) => {
-  if (isDrawingsBand(/** @type {SessionChecked} */ (data))) {
-    const document = /** @type {Session49} */ (/** @type {unknown} */ (data));
-    // A Session 49 whose every drawing was dropped holds no set (R4, `restoresNothing`).
-    const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
-    /** @type {StoredResultSet[]} */
-    const sets = document.drawings.flatMap((entry, index) => (entry.renderRequest == null ? [] : [{
-      at: drawingSetPath(index),
-      projected: entry.id === openedId,
-      set: /** @type {SessionInput} */ (/** @type {unknown} */ (entry))
-    }]));
-    return [...sets.filter(({ projected }) => projected), ...sets.filter(({ projected }) => !projected)];
-  }
-  return [
-    { at: '', projected: true, set: data },
-    ...(isPlainObject(data.otherModeResult)
-      ? [{ at: /** @type {ResultSetPath} */ ('otherModeResult.'), projected: false, set: /** @type {SessionInput} */ (data.otherModeResult) }]
-      : [])
-  ];
-};
-
-/**
- * `data` with its set at `at` replaced by `set`; a null `set` leaves a stored
- * set out (the projected set of a Session 27-48 is never left out). A Session
- * 49 drawing whose set is left out stays, without its set: no request, no
- * Results, and none of the set's catalog, run metadata or invocation.
- * @template {SessionInput} T
- * @param {T} data @param {ResultSetPath} at @param {SessionInput | null} set
- * @returns {T}
- */
-const withStoredResultSet = (data, at, set) => {
-  const drawingIndex = drawingSetIndex(at);
-  if (drawingIndex !== null) {
-    const entries = [.../** @type {SessionInput[]} */ (/** @type {Record<string, unknown>} */ (data).drawings)];
-    if (set !== null) {
-      entries[drawingIndex] = set;
-    } else {
-      const { runMetadata: _runMetadata, cliInvocation: _cliInvocation, ...drawing } = entries[drawingIndex];
-      const { featureCatalog: _catalog, ...editorState } = isPlainObject(drawing.editorState) ? drawing.editorState : {};
-      entries[drawingIndex] = {
-        ...drawing, renderRequest: null, results: [],
-        ...(Object.hasOwn(drawing, 'editorState') ? { editorState } : {})
-      };
-    }
-    return { ...data, drawings: entries };
-  }
-  if (at === '') {
-    if (set === null) throw new Error('The projected Result set is never left out.');
-    return /** @type {T} */ (set);
-  }
-  if (set !== null) return { ...data, otherModeResult: set };
-  const { otherModeResult: _dropped, ...kept } = data;
-  return /** @type {T} */ (kept);
-};
-
-/**
- * The request schemas the file stored (RK-1), under the key of where it
- * holds each set.
- * @param {readonly StoredResultSet[]} sets
- * @returns {StoredRequestSchemas}
- */
-const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, projected, set }) => [
-  projected ? 'renderRequest' : at === 'otherModeResult.' ? 'otherModeResult' : at,
-  /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema
-]));
 
 /**
  * `data` after `read` read each of its committed Result sets, in
