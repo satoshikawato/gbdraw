@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
@@ -86,6 +87,8 @@ for (const mode of ['circular', 'linear']) for (const width of [1600, 390]) {
     await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.openRightDrawerTab('features'); a.closeRightDrawer(); a.openRightDrawerTab('features'); });
     await expect(field).toHaveValue('😀[PRIVATE_PATTERN_SENTINEL');
     await page.evaluate(() => window.__GBDRAW_APP__.closeRightDrawer());
+    // Opening the Editor showed the Preview pane on a phone; the rule is in Settings.
+    await showPhonePane(page, 'settings');
     const revert = status(page).getByRole('button', { name: 'Revert', exact: true });
     await revert.scrollIntoViewIfNeeded(); await revert.focus(); await revert.press('Enter');
     await expect(field).toBeFocused();

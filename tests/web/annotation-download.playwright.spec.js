@@ -4,6 +4,7 @@ const { execFileSync } = require('node:child_process');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 // The card's own summary; each annotation row has a Style disclosure with a summary too.
@@ -211,6 +212,8 @@ for (const width of [1440, 390]) {
     expect(await getDiagramWorkerActivity(page)).toEqual(workerBeforeControl);
     const rows = await effectiveRows(page);
     await generateAndWaitForResult(page);
+    // Generate shows the Preview pane on a phone; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     const controlSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
     const workerBefore = await getDiagramWorkerActivity(page);
     await upload(good.table);
@@ -240,6 +243,7 @@ for (const width of [1440, 390]) {
     const native = execFileSync('python', ['tests/web/helpers/annotation-roundtrip.py', tsvPath, expectedPath], { encoding: 'utf8' });
     await writeFile(testInfo.outputPath('python-reader.txt'), native);
     await generateAndWaitForResult(page);
+    await showPhonePane(page, 'settings');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
     // All malformed inputs must leave the complete prior artifact and draft
     // intact; the panel notice names the error, without a browser alert (FL-14).
