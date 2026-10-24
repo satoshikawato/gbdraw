@@ -396,6 +396,30 @@ const withoutFields = (container, drop) => (isPlainObject(container) && Object.k
   ? /** @type {T} */ (Object.fromEntries(Object.entries(container).filter(([field]) => !drop(field)))) : container);
 
 /**
+ * A Result set holder's Web-only artifact fields (a Session 40+'s top level,
+ * a Session 49 drawing): a development-branch feature field is dropped with
+ * a row (J3), the derived orthogroup `groups` with none (A7c).
+ * @template {Record<string, unknown>} T
+ * @param {T} holder
+ * @param {string} at Where the holder is in the file (`''`: the top level; else ending in `.`).
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {T} `holder` itself when it holds none.
+ */
+const withoutArtifactWebOnlyFields = (holder, at, repairs) => {
+  const features = isPlainObject(holder.features) ? holder.features : {};
+  CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field)).forEach((field) => repairs.push(
+    loadRepair({ code: 'session-field-dropped', path: `${at}features.${field}`, effect: 'dropped' })
+  ));
+  const kept = {
+    features: withoutFields(holder.features, (field) => CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.includes(field)),
+    orthogroupState: withoutFields(holder.orthogroupState, (field) => field === 'groups')
+  };
+  return kept.features === holder.features && kept.orthogroupState === holder.orthogroupState ? holder
+    : /** @type {T} */ ({ ...holder, ...(Object.hasOwn(holder, 'features') ? { features: kept.features } : {}),
+      ...(Object.hasOwn(holder, 'orthogroupState') ? { orthogroupState: kept.orthogroupState } : {}) });
+};
+
+/**
  * The Web-only part of the band reader: what the description leaves open
  * that no writer of the version wrote. A Session 27-39 key no writer of its
  * version wrote is dropped with a row; a Session 46's retired homes, whose
@@ -416,12 +440,7 @@ const readWebOnlyFields = (document, repairs) => {
     unread.forEach((path) => repairs.push(loadRepair({ code: 'session-field-dropped', path, effect: 'dropped' })));
     next = withoutFields(next, (key) => unread.includes(key));
   } else {
-    const features = isPlainObject(next.features) ? next.features : {};
-    CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.filter((field) => Object.hasOwn(features, field)).forEach((field) => repairs.push(
-      loadRepair({ code: 'session-field-dropped', path: `features.${field}`, effect: 'dropped' })
-    ));
-    set('features', withoutFields(next.features, (field) => CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS.includes(field)));
-    set('orthogroupState', withoutFields(next.orthogroupState, (field) => field === 'groups'));
+    next = withoutArtifactWebOnlyFields(next, '', repairs);
   }
   if (isModeScopedBand(document)) {
     RETIRED_MODE_SCOPED_FIELDS.forEach(([domain, fields]) => {
@@ -436,47 +455,33 @@ const readWebOnlyFields = (document, repairs) => {
 };
 
 /**
- * The input files of a Session as the app reads them (A8, A6b): a resource
- * whose descriptor cannot be read is dropped, with a row when a binding or
- * a request names it, and so is each
- * binding that names a resource the Session does not hold (the slot it
- * filled is named), or that cannot be read; an inventory that is no object or
- * of a schema no writer wrote is dropped whole. The request's references to a
- * dropped resource are its reader's (`readSessionRequests`).
- * @param {SessionChecked} document
+ * One input inventory as the app reads it (A8, A6b): each binding that names
+ * a resource the Session does not hold (the slot it filled is named), or that
+ * cannot be read, is dropped with a row; an inventory that is no object or of
+ * a schema no writer wrote is dropped whole.
+ * @param {unknown} webFiles The `webFiles` that holds the inventory.
+ * @param {unknown} resources The Session's resources, as read.
+ * @param {'c_gb' | 'linearSeqs'} inputSlot The input slot schema 2 holds (`webBindingInputSlot`).
+ * @param {string} at Where `webFiles` is in the file.
  * @param {LoadRepair[]} repairs Collects the rows.
- * @returns {SessionChecked}
+ * @returns {unknown} `webFiles` itself when nothing is dropped.
  */
-const readSessionInputs = (document, repairs) => {
-  /** @type {Record<string, unknown>} */
-  let next = document;
-  const resources = readSessionResources(next.resources);
-  // A resource nothing names is dropped with no row (E-OD06, A15).
-  // Each Result set's request names its resources: a Session 27-48's top-level
-  // set and `otherModeResult`, a Session 49's drawings (their bindings: B2d-3a-2).
-  const drawings = Array.isArray(next.drawings) ? /** @type {UnvalidatedFields<'renderRequest'>[]} */ (next.drawings) : [];
-  const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
-    ...drawings.map((drawing) => drawing?.renderRequest), /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles)?.bindings]);
-  resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
-    loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
-  ));
-  if (resources.value !== next.resources) next = { ...next, resources: resources.value };
-  const webFiles = /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles);
-  const faults = webFileBindingFaults(webFiles,
-    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (next.resources));
-  if (!faults.length || !isPlainObject(webFiles)) return /** @type {SessionChecked} */ (next);
-  if (faults.some(({ at }) => at === null)) {
-    repairs.push(loadRepair({ code: 'session-field-dropped', path: 'webFiles.bindings', effect: 'dropped' }));
+const readWebFileBindings = (webFiles, resources, inputSlot, at, repairs) => {
+  const faults = webFileBindingFaults(/** @type {UnvalidatedFields<'bindings'>} */ (webFiles),
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (resources), inputSlot);
+  if (!faults.length || !isPlainObject(webFiles)) return webFiles;
+  if (faults.some(({ at: keys }) => keys === null)) {
+    repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}.bindings`, effect: 'dropped' }));
     const { bindings: _dropped, ...kept } = webFiles;
-    return /** @type {SessionChecked} */ ({ ...next, webFiles: kept }); // the inventory is optional in every band
+    return kept; // the inventory is optional in every band
   }
   // `webFileBindingFaults` found an object inventory.
   const bindings = /** @type {Record<string, unknown>} */ (JSON.parse(JSON.stringify(webFiles.bindings)));
   /** @type {Map<unknown[], Set<number>>} */
   const removed = new Map();
-  faults.forEach(({ at, field }) => {
-    const keys = /** @type {ReadonlyArray<string | number>} */ (at); // no inventory fault is left
-    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `webFiles.bindings.${webFileBindingPath(keys)}`, effect: 'dropped' }));
+  faults.forEach(({ at: place, field }) => {
+    const keys = /** @type {ReadonlyArray<string | number>} */ (place); // no inventory fault is left
+    repairs.push(loadRepair({ code: field ? 'session-field-dropped' : 'file-entry-dropped', path: `${at}.bindings.${webFileBindingPath(keys)}`, effect: 'dropped' }));
     const last = /** @type {string | number} */ (keys.at(-1));
     // `webFileBindingFaults` reached the binding through these keys: each one holds an object or a list.
     /** @type {unknown} */
@@ -489,7 +494,49 @@ const readSessionInputs = (document, repairs) => {
   removed.forEach((indices, list) => {
     [...indices].sort((a, b) => b - a).forEach((index) => list.splice(index, 1));
   });
-  return /** @type {SessionChecked} */ ({ ...next, webFiles: { ...webFiles, bindings } }); // bindings read as above
+  return { ...webFiles, bindings }; // bindings read as above
+};
+
+/**
+ * The input files of a Session as the app reads them (A8, A6b): a resource
+ * whose descriptor cannot be read is dropped, with a row when a binding or
+ * a request names it, and each input inventory is read
+ * (`readWebFileBindings`): a Session 27-48's one, each Session 49 drawing's
+ * own (B2d-3a-2). The request's references to a dropped resource are its
+ * reader's (`readSessionRequests`).
+ * @param {SessionChecked} document
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @returns {SessionChecked}
+ */
+const readSessionInputs = (document, repairs) => {
+  /** @type {Record<string, unknown>} */
+  let next = document;
+  const resources = readSessionResources(next.resources);
+  // A resource nothing names is dropped with no row (E-OD06, A15).
+  // Each Result set's request names its resources (a Session 27-48's
+  // top-level set and `otherModeResult`, a Session 49's entries), and so
+  // does each inventory.
+  const entries = isDrawingsBand(document) && Array.isArray(next.drawings)
+    ? /** @type {UnvalidatedFields<'renderRequest' | 'webFiles' | 'mode'>[]} */ (next.drawings) : [];
+  const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
+    ...entries.map((drawing) => drawing?.renderRequest),
+    ...[next, ...entries].map((holder) => /** @type {UnvalidatedFields<'bindings'>} */ (holder?.webFiles)?.bindings)]);
+  resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
+    loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
+  ));
+  if (resources.value !== next.resources) next = { ...next, resources: resources.value };
+  const webFiles = readWebFileBindings(next.webFiles, next.resources, 'c_gb', 'webFiles', repairs);
+  if (webFiles !== next.webFiles) next = { ...next, webFiles };
+  if (entries.length) {
+    const read = entries.map((drawing, index) => {
+      if (!isPlainObject(drawing) || !Object.hasOwn(drawing, 'webFiles')) return drawing;
+      const drawingFiles = readWebFileBindings(drawing.webFiles, next.resources,
+        webBindingInputSlot(true, drawing.mode), `${drawingSetPath(index)}webFiles`, repairs);
+      return drawingFiles === drawing.webFiles ? drawing : { ...drawing, webFiles: drawingFiles };
+    });
+    if (read.some((drawing, index) => drawing !== entries[index])) next = { ...next, drawings: read };
+  }
+  return /** @type {SessionChecked} */ (next); // the inventories read as above
 };
 
 /**
@@ -522,7 +569,12 @@ export const readSessionDocument = (value) => {
   // reads (R2).
   if (isDrawingsBand(checked)) {
     if (!drawingIdsAreUnique(checked)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
-    return { value: readSessionInputs(checked, repairs), repairs };
+    // Each drawing's Web-only artifact fields are read as a Session 40-48's top level's.
+    const entries = /** @type {Record<string, unknown>[]} */ (/** @type {Record<string, unknown>} */ (checked).drawings);
+    const read = entries.map((entry, index) => (isPlainObject(entry) ? withoutArtifactWebOnlyFields(entry, drawingSetPath(index), repairs) : entry));
+    const document = read.some((entry, index) => entry !== entries[index])
+      ? /** @type {SessionChecked} */ ({ ...checked, drawings: read }) : checked;
+    return { value: readSessionInputs(document, repairs), repairs };
   }
   return {
     value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(withNullRequestAsMissing(checked), repairs), repairs), repairs),
