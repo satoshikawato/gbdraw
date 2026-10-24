@@ -4515,8 +4515,7 @@ const captureSessionImportTransientState = () => ({
   clickedLabel: state.clickedLabel.value,
   settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
-  featureExtractionError: state.featureExtractionError.value,
-  featureEditorStatus: cloneJsonData(state.featureEditorStatus),
+  featureEditorStatus: state.featureEditorStatus.value,
   matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
@@ -4575,8 +4574,7 @@ const restoreSessionImportTransientState = (snapshot) => {
   if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
   else returnSettingsSection(state);
   state.featureExtractionPending.value = snapshot.featureExtractionPending;
-  state.featureExtractionError.value = snapshot.featureExtractionError;
-  Object.assign(state.featureEditorStatus, cloneJsonData(snapshot.featureEditorStatus));
+  state.featureEditorStatus.value = snapshot.featureEditorStatus;
   state.matchSequenceRegistry?.reset?.(cloneJsonData(snapshot.matchSequenceSources));
   state.diagramElements.value = [...snapshot.diagramElements];
   state.diagramElementIds.value = [...snapshot.diagramElementIds];
@@ -5102,28 +5100,10 @@ export const applyRunStateData = (runState = {}) => {
   state.pairwiseMatchFactors.value = cloneJsonObject(runState.pairwiseMatchFactors);
 };
 
-/**
- * @param {{ status?: string, generationId?: string, error?: string | null, detailsCacheSize?: number }} [updates]
- */
-const setFeatureEditorStatusData = (updates = {}) => {
-  if (!state.featureEditorStatus || typeof state.featureEditorStatus !== 'object') return;
-  Object.assign(state.featureEditorStatus, {
-    status: updates.status ?? state.featureEditorStatus.status,
-    generationId: updates.generationId ?? state.featureEditorStatus.generationId,
-    error: updates.error === undefined ? state.featureEditorStatus.error : updates.error,
-    detailsCacheSize: updates.detailsCacheSize ?? state.featureEditorStatus.detailsCacheSize
-  });
-};
-
-const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load' } = {}) => {
+const synchronizeRestoredFeatureSummaryStatus = () => {
   if (state.extractedFeatures.value.length === 0) return false;
   state.featureExtractionPending.value = false;
-  state.featureExtractionError.value = null;
-  setFeatureEditorStatusData({
-    status: 'summary-ready',
-    generationId,
-    error: null
-  });
+  state.setFeatureEditorStatus('summary-ready');
   return true;
 };
 
@@ -5134,9 +5114,8 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
  *   warningParts?: readonly ErrorTextPart[] } | null | undefined} plan
  *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds:
  *   its warning is a normalized failure, `warningParts`).
- * @param {{ generationId?: string }} [options]
  */
-const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
+const applySessionFeatureRecoveryPlan = (drawing, plan) => {
   state.featureExtractionPending.value = false;
   // A plan's warning is a marked text (`msg`) or the parts of a normalized failure.
   const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
@@ -5144,27 +5123,17 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   if (plan?.status === 'recovered' || plan?.status === 'aligned') {
     if (plan.recoveredFeatureState) applyFeatureStateData(drawing, plan.recoveredFeatureState);
     if (plan.migratedEditorState) applyEditorStateData(drawing, plan.migratedEditorState);
-    state.featureExtractionError.value = null;
-    setFeatureEditorStatusData({
-      status: 'summary-ready',
-      generationId,
-      error: shownWarning
-    });
+    state.setFeatureEditorStatus('summary-ready', shownWarning);
     return;
   }
 
   if (plan?.status === 'unrecoverable' || plan?.status === 'failed') {
     const warning = shownWarning || t('Feature metadata recovery failed. The SVG preview remains available.');
-    state.featureExtractionError.value = { summary: warning, details: [] };
-    setFeatureEditorStatusData({
-      status: 'failed',
-      generationId,
-      error: warning
-    });
+    state.setFeatureEditorStatus('failed', warning);
     return;
   }
 
-  synchronizeRestoredFeatureSummaryStatus({ generationId });
+  synchronizeRestoredFeatureSummaryStatus();
 };
 
 // E1: one drawing's generated artifact as Save reads it: the installed
@@ -6630,7 +6599,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? shownUi.selectedFeatureRecordIdx : 0;
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
-      synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
+      synchronizeRestoredFeatureSummaryStatus();
     }
     state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
@@ -6648,7 +6617,7 @@ const importSessionDocument = async (e, options = {}) => {
     );
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(committedDrawing, legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+      applySessionFeatureRecoveryPlan(committedDrawing, legacyFeatureRecoveryPlan);
     }
 
     let desiredResultIndex = (

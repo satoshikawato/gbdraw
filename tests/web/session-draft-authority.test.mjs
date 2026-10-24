@@ -1098,13 +1098,7 @@ state.clickedLabel.value = clickedLabel;
 // The popup of a settings section is a popup of the Result too: a failed load leaves it open where it was.
 floatSettingsSection(state, 'titles', { x: 31, y: 32, maxHeight: 0 });
 state.featureExtractionPending.value = true;
-state.featureExtractionError.value = { summary: 'keep extraction error' };
-Object.assign(state.featureEditorStatus, {
-  status: 'summary-ready',
-  generationId: 'keep-generation',
-  error: null,
-  detailsCacheSize: 2
-});
+state.setFeatureEditorStatus('failed', 'keep extraction error');
 state.matchSequenceRegistry.reset([{
   key: 'keep-sequence',
   recordId: 'KEEP.1',
@@ -1221,8 +1215,7 @@ const rollbackState = () => ({
   clickedLabel: state.clickedLabel.value,
   settingsPopup: structuredClone(state.settingsPopup.value),
   featureExtractionPending: state.featureExtractionPending.value,
-  featureExtractionError: state.featureExtractionError.value,
-  featureEditorStatus: structuredClone(state.featureEditorStatus),
+  featureEditorStatus: structuredClone(state.featureEditorStatus.value),
   matchSequenceSources: structuredClone(state.matchSequenceRegistry.values()),
   circularRecordList: structuredClone(circularDrawing.circularRecordList.value),
   circularRecordDiscovery: { ...circularDrawing.circularRecordDiscovery },

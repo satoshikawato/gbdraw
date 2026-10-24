@@ -891,7 +891,7 @@ def _run_browser_contract(contract: str) -> None:
             () => {
               const app = window.__GBDRAW_APP__;
               if (!app) return false;
-              return Boolean(app.featureExtractionError) ||
+              return app.featureEditorStatus?.status === 'failed' ||
                 (Array.isArray(app.extractedFeatures) && app.extractedFeatures.length > 0);
             }
             """,
@@ -901,7 +901,7 @@ def _run_browser_contract(contract: str) -> None:
             () => {
               const app = window.__GBDRAW_APP__;
               return {
-                featureExtractionError: app?.featureExtractionError || '',
+                featureEditorFailure: app?.featureEditorStatus?.status === 'failed' ? app.featureEditorStatus.error : '',
                 extractedFeatureCount: Array.isArray(app?.extractedFeatures)
                   ? app.extractedFeatures.length
                   : 0,
@@ -913,17 +913,19 @@ def _run_browser_contract(contract: str) -> None:
         feature_extraction_state = page.evaluate(
             """
             () => ({
-              featureExtractionError: window.__GBDRAW_APP__.featureExtractionError,
+              featureEditorFailure: window.__GBDRAW_APP__.featureEditorStatus.status === 'failed'
+                ? window.__GBDRAW_APP__.featureEditorStatus.error || 'Feature editor unavailable'
+                : null,
               extractedFeatureCount: Array.isArray(window.__GBDRAW_APP__.extractedFeatures)
                 ? window.__GBDRAW_APP__.extractedFeatures.length
                 : 0
             })
             """
         )
-        if feature_extraction_state["featureExtractionError"]:
+        if feature_extraction_state["featureEditorFailure"]:
             raise RuntimeError(
                 "Circular feature extraction failed offline:\n"
-                f"{feature_extraction_state['featureExtractionError']}"
+                f"{feature_extraction_state['featureEditorFailure']}"
             )
         if feature_extraction_state["extractedFeatureCount"] < 1:
             raise RuntimeError("Circular feature extraction produced no editable features.")
@@ -960,7 +962,7 @@ def _run_browser_contract(contract: str) -> None:
               };
               const waitForExtractedFeatures = async () => {
                 for (let attempt = 0; attempt < 240; attempt += 1) {
-                  if (app.featureExtractionError) return false;
+                  if (app.featureEditorStatus?.status === 'failed') return false;
                   if (Array.isArray(app.extractedFeatures) && app.extractedFeatures.length > 0) {
                     return true;
                   }

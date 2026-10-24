@@ -43,9 +43,8 @@ assert.equal(circularGenome instanceof File, false);
 assert.equal(typeof circularGenome.arrayBuffer, 'undefined');
 assert.ok(Object.isFrozen(circularGenome));
 assert.ok(state.extractedFeatures.value.length > 0);
-assert.equal(state.featureEditorStatus.status, 'summary-ready');
+assert.deepEqual(state.featureEditorStatus.value, { status: 'summary-ready', error: null });
 assert.equal(state.featureExtractionPending.value, false);
-assert.equal(state.featureExtractionError.value, null);
 const loadedFeatureCount = state.extractedFeatures.value.length;
 assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
 

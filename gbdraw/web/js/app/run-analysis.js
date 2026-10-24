@@ -1595,9 +1595,8 @@ export const createRunAnalysis = ({
     biologicalFeatures,
     featureCatalog,
     featureEditRemovalCount,
-    featureEditorStatus,
+    setFeatureEditorStatus,
     featureExtractionPending,
-    featureExtractionError,
     selectedFeatureRecordIdx,
     labelReflowProcessing,
     labelReflowLastError,
@@ -1704,7 +1703,6 @@ export const createRunAnalysis = ({
   // iteration starts.
   /** @type {Promise<void> | null} */
   let activeReflowRun = null;
-  let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
   // Each drawing's Circular discovery: its read generation and the read still running.
@@ -2028,17 +2026,6 @@ export const createRunAnalysis = ({
       orthogroupNameOverrides: next.names,
       orthogroupDescriptionOverrides: next.descriptions,
       orthogroupDormantOverrides: next.dormant
-    });
-  };
-
-  /** @param {{ status?: string, generationId?: number, error?: unknown, detailsCacheSize?: number }} [updates] */
-  const setFeatureEditorStatus = (updates = {}) => {
-    if (!featureEditorStatus || typeof featureEditorStatus !== 'object') return;
-    Object.assign(featureEditorStatus, {
-      status: updates.status ?? featureEditorStatus.status,
-      generationId: updates.generationId ?? featureEditorStatus.generationId,
-      error: updates.error === undefined ? featureEditorStatus.error : updates.error,
-      detailsCacheSize: updates.detailsCacheSize ?? featureEditorStatus.detailsCacheSize
     });
   };
 
@@ -2794,7 +2781,6 @@ export const createRunAnalysis = ({
     /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
     let pendingLosatCacheCommit = null;
 
-    featureExtractionRequestId += 1;
     processingStatus.value = t('Preparing input files...');
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
@@ -5264,18 +5250,12 @@ export const createRunAnalysis = ({
       }
       selectedOrthogroupId.value = workingSelectedOrthogroupId;
       featureExtractionPending.value = false;
-      featureExtractionError.value = null;
       // The compiler keeps the edits that hold a color (`normalizedFeatureColorOverrides`).
       replaceFeatureFills(drawing.slices.paint, /** @type {Record<string, FeatureFill>} */ (cloneJsonValue(candidateCommit.featureColorOverrides, {})));
       // Feature strokes stay in the draft when this Result does not draw their
       // feature (the other mode's, or one this request leaves out); the next
       // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
-      setFeatureEditorStatus({
-        status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
-        generationId: featureExtractionRequestId,
-        error: null,
-        detailsCacheSize: 0
-      });
+      setFeatureEditorStatus(candidateExtractedFeatures.length ? 'summary-ready' : 'idle');
       resultPanelTab.value = 'preview';
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport({ resetZoom: true });
@@ -5743,13 +5723,7 @@ export const createRunAnalysis = ({
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
       featureExtractionPending.value = false;
-      featureExtractionError.value = null;
-      setFeatureEditorStatus({
-        status: candidateOwnerSet.extractedFeatures.length ? 'summary-ready' : 'idle',
-        generationId: featureExtractionRequestId,
-        error: null,
-        detailsCacheSize: 0
-      });
+      setFeatureEditorStatus(candidateOwnerSet.extractedFeatures.length ? 'summary-ready' : 'idle');
       resultPanelTab.value = 'preview';
       acceptedReadyReceipt = await candidatePreviewReadiness.promise;
       if (generationToken !== latestGenerationToken || generationCancelRequested.value) {

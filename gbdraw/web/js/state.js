@@ -54,6 +54,8 @@ import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
 import { defaultDrawingName, drawingIdOfMode } from './services/drawing-view.js';
+import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
+/** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
 import { diagnosticError } from './utils/error-normalization.js';
 import {
   DEFAULT_PNG_DPI,
@@ -329,14 +331,18 @@ const selectedFeatures = computed(() => {
     .filter(Boolean);
 });
 const hasFeatureSelection = computed(() => selectedFeatureCount.value > 0);
-const featureEditorStatus = reactive({
-  status: 'idle',
-  generationId: 0,
-  error: null,
-  detailsCacheSize: 0
-});
+// The shown drawing's feature-editor status: a field of its artifact slot, so a drawing switch swaps it
+// with the drawing's `extractedFeatures` (OV-1764). Never saved in a Session.
+const featureEditorStatus = ref(FEATURE_EDITOR_STATUS_IDLE);
+/**
+ * The one writer of the feature-editor status (Generate and Load).
+ * @param {FeatureEditorStatus['status']} status
+ * @param {string | null} [error] The failure, or the warning of a recovered Load (the Editor header's title).
+ */
+const setFeatureEditorStatus = (status, error = null) => {
+  featureEditorStatus.value = Object.freeze({ status, error });
+};
 const featureExtractionPending = ref(false);
-const featureExtractionError = ref(null);
 const featureRecordIds = ref([]); // Record IDs for multi-record files
 const selectedFeatureRecordIdx = ref(0); // Currently selected record index
 const resultGenerationKey = ref(0);
@@ -800,10 +806,10 @@ const featureListBottomSpacerPx = computed(
 // The count is the shown drawing's: its `extractedFeatures` switch with it (the artifact slot, OV-1762).
 const featureEditorStatusText = computed(() => {
   const count = extractedFeatures.value.length;
-  if (featureEditorStatus.status === 'pending-summary' || featureExtractionPending.value) {
+  if (featureExtractionPending.value) {
     return count > 0 ? tn(count, '{count} feature updating...', '{count} features updating...', { count: count.toLocaleString('en-US') }) : t('Preparing features...');
   }
-  if (featureEditorStatus.status === 'failed' || featureExtractionError.value) {
+  if (featureEditorStatus.value.status === 'failed') {
     return t('Feature editor unavailable');
   }
   if (count > 0) return tn(count, '{count} feature ready', '{count} features ready', { count: count.toLocaleString('en-US') });
@@ -1270,9 +1276,9 @@ export const state = Object.freeze({
   selectedFeatures,
   hasFeatureSelection,
   featureEditorStatus,
+  setFeatureEditorStatus,
   featureEditorStatusText,
   featureExtractionPending,
-  featureExtractionError,
   featureRecordIds,
   selectedFeatureRecordIdx,
   resultGenerationKey,

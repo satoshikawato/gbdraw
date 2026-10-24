@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { ArtifactSlot } from './artifact-slot.js' */
+/** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
@@ -24,7 +24,7 @@ import {
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
-  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot, createArtifactSlotStore
+  ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
 } from './artifact-slot.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
@@ -143,7 +143,7 @@ const editedIntentPartOf = (path, value) => (
  * The presentation values a generated artifact handle keeps with its intent.
  * @typedef {{
  *   resultGenerationKey?: unknown, resultPanelTab?: unknown, errorLog?: unknown, labelTextScopeDialog?: unknown,
- *   featureEditorStatus?: unknown, featureExtractionPending?: unknown, featureExtractionError?: unknown
+ *   featureEditorStatus?: FeatureEditorStatus, featureExtractionPending?: unknown
  * }} PresentationData
  */
 /**
@@ -1506,11 +1506,10 @@ export const createHistorySnapshotService = ({
         resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
         errorLog: cloneJsonData(getGeneratedArtifactRef(state.errorLog, null)),
         labelTextScopeDialog: cloneJsonData(state.labelTextScopeDialog || {}) || {},
-        featureEditorStatus: cloneJsonData(state.featureEditorStatus || {}) || {},
+        featureEditorStatus: getGeneratedArtifactRef(state.featureEditorStatus, FEATURE_EDITOR_STATUS_IDLE),
         featureExtractionPending: Boolean(
           getGeneratedArtifactRef(state.featureExtractionPending, false)
-        ),
-        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null)
+        )
       })
     });
     const runtimeState = generatedArtifactRuntimeOwner?.capture?.() || null;
@@ -1626,19 +1625,10 @@ export const createHistorySnapshotService = ({
           cloneJsonData(presentation.labelTextScopeDialog) || {}
         );
       }
-      if (state.featureEditorStatus) {
-        Object.assign(
-          state.featureEditorStatus,
-          cloneJsonData(presentation.featureEditorStatus) || {}
-        );
-      }
+      setGeneratedArtifactRef(state.featureEditorStatus, presentation.featureEditorStatus ?? FEATURE_EDITOR_STATUS_IDLE);
       setGeneratedArtifactRef(
         state.featureExtractionPending,
         Boolean(presentation.featureExtractionPending)
-      );
-      setGeneratedArtifactRef(
-        state.featureExtractionError,
-        presentation.featureExtractionError ?? null
       );
 
       // A Generate step restores no Session-level value (R15-23).

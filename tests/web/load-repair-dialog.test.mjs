@@ -616,7 +616,25 @@ test('an older Session whose feature information cannot be restored lists it (B5
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [['Features: the feature information of the saved diagram could not be restored from this file;'
     + ' the SVG preview stays, and the next Generate restores it.']]);
-  assert.match(state.featureExtractionError.value.summary, /does not include embedded GenBank inputs/);
+  assert.match(state.featureEditorStatus.value.error, /does not include embedded GenBank inputs/);
+
+  // OV-1764: the failure is the shown drawing's. The other drawing, with a Result, shows its own
+  // count; switching back shows the failure again (the status switches with the artifact slot).
+  assert.equal(state.featureEditorStatusText.value, 'Feature editor unavailable');
+  const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+  const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+  const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+  const slots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+  const failedSlot = slots.captureArtifactSlot();
+  const circular = modeDrawing(state, 'circular');
+  const rows = [{ svg_id: 'f1' }, { svg_id: 'f2' }, { svg_id: 'f3' }];
+  slots.installArtifactSlot(createArtifactSlot({
+    drawing: circular, values: { results: [{ name: 'c.svg', content: '<svg/>' }], extractedFeatures: rows }
+  }), { drawing: circular });
+  assert.equal(state.featureEditorStatusText.value, '3 features ready', 'the Circular drawing has its own Result');
+  slots.installArtifactSlot(failedSlot, { drawing: modeDrawing(state, 'linear') });
+  assert.equal(state.featureEditorStatusText.value, 'Feature editor unavailable');
+  assert.match(state.featureEditorStatus.value.error, /does not include embedded GenBank inputs/);
 });
 
 // OV-712: the sequences of the saved comparison matches that cannot be read

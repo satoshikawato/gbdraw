@@ -6,10 +6,20 @@
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 
 /**
+ * A drawing's feature-editor status, a runtime field of its artifact slot (never saved in a Session).
+ * `state.setFeatureEditorStatus` writes it; the Editor header reads it (`featureEditorStatusText`).
+ * @typedef {object} FeatureEditorStatus
+ * @property {'idle' | 'summary-ready' | 'failed'} status `failed`: Load could not recover the feature metadata.
+ * @property {string | null} error The failure, or the warning of a recovered Load (the Editor header's title).
+ */
+/** @type {Readonly<FeatureEditorStatus>} */
+export const FEATURE_EDITOR_STATUS_IDLE = Object.freeze({ status: 'idle', error: null });
+
+/**
  * E1: the generated artifact of one drawing, which each drawing keeps while
  * another is shown. The state ref of every key and the value an empty slot
  * installs, given the mode of the slot's drawing and the current value: the displayed-Result
- * part of the owner set, the selected Result, the generated Legend colors and
+ * part of the owner set, the selected Result, the feature-editor status, the generated Legend colors and
  * stroke defaults, and the alignment Reset receipt (it binds the
  * committed Linear Session). Draft and project state stays shared: the specific
  * color rules, the file Legend captions, the Linear record orientations, the
@@ -22,6 +32,7 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   selectedResultIndex: () => 0,
   featureCatalog: () => null,
   extractedFeatures: () => [],
+  featureEditorStatus: () => FEATURE_EDITOR_STATUS_IDLE,
   biologicalFeatures: () => [],
   featureRecordIds: () => [],
   orthogroups: () => [],

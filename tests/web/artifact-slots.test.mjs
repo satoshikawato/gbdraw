@@ -26,7 +26,7 @@ snapshots.setGeneratedArtifactRuntimeOwner({
 });
 
 const SWAPPED = [
-  'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'biologicalFeatures',
+  'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'featureEditorStatus', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
   'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'lastRunInfo', 'pairwiseMatchFactors',
   'editableLabels', 'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas',
@@ -51,6 +51,7 @@ const fillCircularArtifact = async () => {
   const values = {
     results: [{ name: 'a.svg', content: '<svg id="a"/>' }, { name: 'b.svg', content: '<svg id="b"/>' }],
     selectedResultIndex: 1, featureCatalog: { schema: 5, items: [] }, extractedFeatures: [{ id: 'f1' }],
+    featureEditorStatus: { status: 'failed', error: 'recovery failed' },
     biologicalFeatures: [{ id: 'b1' }], featureRecordIds: ['r1'], orthogroups: [{ id: 'og1' }],
     featureOrthogroupIndex: new Map([['f1', 'og1']]), collinearGroups: [{ id: 'c1' }],
     trackSlotResolvedGeometry: { slots: [] }, annotationWarnings: [{ code: 'w' }],
