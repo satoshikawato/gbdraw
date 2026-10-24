@@ -133,3 +133,31 @@ test('replacing the members clears the project stream and every History', async 
   await router.undo();
   assert.equal(values['linear-2'], '');
 });
+
+// OV-1769: a Load replaces the members before its History baseline; when the
+// Load fails or is canceled after that, its rollback puts the members it found
+// back, each History with its steps, and the project stream with its steps.
+test('restoring captured members gives back every History and the project stream a replacement cleared', async () => {
+  const { router, shown, values } = makeRouter({ drawingIds: ['circular', 'linear'], shownId: 'circular' });
+  await router.captureBaseline();
+  await router.runProjectStep('Reset all drawings', () => { values.circular = 'r'; values.linear = 'r'; });
+  await router.runUndoable('Circular edit', () => { values.circular = 'c'; });
+  await router.undo();
+  assert.deepEqual([router.getUndoCount(), router.getRedoCount()], [1, 1]);
+
+  const members = router.captureMembers();
+  router.replaceMembers(['circular-2', 'linear-2']);
+  shown.value = 'circular-2';
+  assert.deepEqual([router.getUndoCount(), router.getRedoCount()], [0, 0]);
+
+  shown.value = 'circular';
+  router.restoreMembers(members);
+  assert.throws(() => router.managerOf('circular-2'), refusal('UNKNOWN_DRAWING'));
+  assert.deepEqual([router.getUndoCount(), router.getRedoCount()], [1, 1], 'the shown History and the project stream are back');
+  assert.equal(router.redoLabel(), 'Circular edit');
+  await router.redo();
+  assert.equal(values.circular, 'c');
+  await router.undo();
+  await router.undo();
+  assert.deepEqual([values.circular, values.linear], ['', ''], 'the project step undoes in both drawings');
+});

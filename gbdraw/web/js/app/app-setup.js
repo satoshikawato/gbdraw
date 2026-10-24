@@ -347,10 +347,13 @@ const loadExportService = () => {
   return exportServicePromise;
 };
 
+/** @typedef {ReturnType<typeof createHistoryRouter>} HistoryRouter */
 /**
  * @typedef {object} SessionImportRollbackOptions
  * @property {ArtifactSlotStore} artifactSlots
  *   The kept generated artifacts of the drawings not shown (E1), held by reference.
+ * @property {{ captureMembers: HistoryRouter['captureMembers'], restoreMembers: HistoryRouter['restoreMembers'] }} historyMembers
+ *   The History router: a Load replaces its members before the baseline (OV-1769).
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
@@ -367,6 +370,7 @@ const loadExportService = () => {
  * What `capture` holds for `restore`.
  * @typedef {object} SessionImportRollbackSnapshot
  * @property {ArtifactSlotSnapshot} artifactSlots
+ * @property {ReturnType<HistoryRouter['captureMembers']>} historyMembers
  * @property {Readonly<ArtifactSlot>} displayedArtifact
  * @property {number} circularDepthTrackUiCount
  * @property {number} featureListScrollTop
@@ -377,6 +381,7 @@ const loadExportService = () => {
 /** @param {SessionImportRollbackOptions} options */
 export const createSessionImportRollbackState = ({
   artifactSlots,
+  historyMembers,
   captureDisplayedArtifact,
   installDisplayedArtifact,
   depthTrackUiCounts,
@@ -388,6 +393,7 @@ export const createSessionImportRollbackState = ({
 }) => ({
   capture: () => ({
     artifactSlots: artifactSlots.snapshot(),
+    historyMembers: historyMembers.captureMembers(),
     // The displayed artifact's parts outside state: its transport identity,
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
@@ -397,6 +403,8 @@ export const createSessionImportRollbackState = ({
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
+    // The previous drawings' Histories, which the Load replaced (`replaceMembers`).
+    historyMembers.restoreMembers(snapshot.historyMembers);
     artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
     // The restored document holds each drawing's Depth series (OV-1165).
@@ -3801,6 +3809,7 @@ export const createAppSetup = () => {
     },
     rollbackState: createSessionImportRollbackState({
       artifactSlots,
+      historyMembers: history,
       captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
       // The rollback restored the pan already; the install keeps it.
       installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {

@@ -1159,8 +1159,15 @@ const artifactSlots = createArtifactSlotStore();
 artifactSlots.replaceLoaded([stashedLinearArtifact]);
 const displayedArtifact = Object.freeze({ drawingId: 'circular' });
 const installedArtifacts = [];
+// OV-1769: the History router's members as the Load found them come back.
+const historyMembersBefore = Object.freeze({ histories: [] });
+const restoredHistoryMembers = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
+  historyMembers: {
+    captureMembers: () => historyMembersBefore,
+    restoreMembers: (members) => restoredHistoryMembers.push(members)
+  },
   captureDisplayedArtifact: () => displayedArtifact,
   installDisplayedArtifact: (slot) => installedArtifacts.push(slot),
   depthTrackUiCounts,
@@ -1316,6 +1323,8 @@ assert.equal(failedImport.status, 'error');
 assert.equal(failedImport.error.code, 'INPUT_INVALID');
 assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
+assert.deepEqual(restoredHistoryMembers, [historyMembersBefore]);
+assert.strictEqual(restoredHistoryMembers[0], historyMembersBefore);
 assert.deepEqual(artifactSlots.kept(), [stashedLinearArtifact]);
 assert.strictEqual(artifactSlots.kept()[0], stashedLinearArtifact);
 assert.deepEqual(installedArtifacts, [displayedArtifact]);

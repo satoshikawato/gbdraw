@@ -2507,7 +2507,14 @@ export const createHistoryRouter = ({
   /** @param {string} drawingId */
   const projectPartsOf = (drawingId) => projectEntries()
     .flatMap((entry) => entry.parts.filter((part) => part.drawingId === drawingId).map((part) => part.entry));
-  /** @type {{ undo: ProjectEntry | null, redo: ProjectEntry | null }} */
+  /**
+   * @typedef {{ undo: ProjectEntry | null, redo: ProjectEntry | null }} ProjectSavePoint
+   * @typedef {Readonly<{ histories: readonly HeldHistory[], undo: readonly ProjectEntry[], redo: readonly ProjectEntry[],
+   *   savePoint: ProjectSavePoint, session: SessionMark }>} CapturedMembers
+   *   Every member's History with its budget members, and the project stream
+   *   with its save point and Session-level values (`captureMembers`).
+   */
+  /** @type {ProjectSavePoint} */
   let projectSavePoint = { undo: null, redo: null };
   const resetProjectStream = () => {
     projectUndo.length = 0;
@@ -2697,6 +2704,30 @@ export const createHistoryRouter = ({
       managers.clear();
       drawingIds.forEach(installMember);
       resetProjectStream();
+    },
+    // OV-1769: the members and the project stream as a Load found them, which
+    // its rollback gives back after `replaceMembers` (`restoreMembers`).
+    /** @returns {CapturedMembers} */
+    captureMembers: () => Object.freeze({
+      histories: Object.freeze([...managers].map(([drawingId, history]) => Object.freeze({
+        drawingId, history,
+        budgetMembers: [...memberStreams].filter(([, stream]) => stream === drawingId).map(([member]) => member)
+      }))),
+      undo: Object.freeze([...projectUndo]),
+      redo: Object.freeze([...projectRedo]),
+      savePoint: projectSavePoint,
+      session: sessionCurrent
+    }),
+    /** @param {CapturedMembers} members */
+    restoreMembers: (members) => {
+      [...managers.keys()].forEach(leaveBudget);
+      managers.clear();
+      members.histories.forEach(reinstate);
+      projectUndo.splice(0, projectUndo.length, ...members.undo);
+      projectRedo.splice(0, projectRedo.length, ...members.redo);
+      projectSavePoint = members.savePoint;
+      sessionCurrent = members.session;
+      touchProject();
     },
     mutationPending: () => every().some((manager) => manager.mutationPending()),
     traversalPending: () => projectTraversals.value > 0 || every().some((manager) => manager.traversalPending())
