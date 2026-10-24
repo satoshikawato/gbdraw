@@ -33,6 +33,7 @@ class CircularLegendEntryLayout:
 class CircularCompactGradientEntryLayout:
     key: LegendRowKey
     properties: Mapping[str, object]
+    label_x: float
     label_y: float
     bar_y: float
 
@@ -45,20 +46,22 @@ class CircularSingleGradientEntryLayout:
     title_y: float
     bar_x: float
     bar_y: float
-    min_label_x: float
-    max_label_x: float
-    scale_label_y: float
 
 
 @dataclass(frozen=True)
 class CircularGradientLegendLayout:
+    """A gradient block: its entries, and the one scale (minimum and 100%
+    labels) below the bars that every form draws."""
+
     compact: bool
     width: float
     height: float
     bar_width: float
     bar_x: float
     min_label_text: str
-    scale_y: float
+    min_label_x: float
+    max_label_x: float
+    scale_label_y: float
     compact_entries: tuple[CircularCompactGradientEntryLayout, ...]
     single_entries: tuple[CircularSingleGradientEntryLayout, ...]
 
@@ -165,13 +168,14 @@ def _build_gradient_layout(
     if len(gradient_entries) > 1:
         label_width = max(entry.text_width for entry in gradient_entries)
         bar_x = label_width + color_rect_size
-        scale_y = color_rect_size + ((len(gradient_entries) - 1) * row_height) + 2
+        scale_label_y = color_rect_size + ((len(gradient_entries) - 1) * row_height) + 2
         # The scale labels share one line box, whatever their digits.
         _, label_height = drawn_text_box("100%", font_family, font_size)
         compact_entries = tuple(
             CircularCompactGradientEntryLayout(
                 key=entry.key,
                 properties=entry.properties,
+                label_x=0.0,
                 label_y=(color_rect_size / 2) + (idx * row_height),
                 bar_y=(color_rect_size / 2) + (idx * row_height),
             )
@@ -180,11 +184,13 @@ def _build_gradient_layout(
         return CircularGradientLegendLayout(
             compact=True,
             width=bar_x + bar_width,
-            height=scale_y + float(label_height),
+            height=scale_label_y + float(label_height),
             bar_width=bar_width,
             bar_x=bar_x,
             min_label_text=first_min_label,
-            scale_y=scale_y,
+            min_label_x=bar_x,
+            max_label_x=bar_x + bar_width,
+            scale_label_y=scale_label_y,
             compact_entries=compact_entries,
             single_entries=(),
         )
@@ -215,9 +221,6 @@ def _build_gradient_layout(
         title_y=0.0,
         bar_x=bar_x,
         bar_y=bar_y,
-        min_label_x=bar_x,
-        max_label_x=bar_x + bar_width,
-        scale_label_y=scale_label_y,
     )
     return CircularGradientLegendLayout(
         compact=False,
@@ -226,7 +229,9 @@ def _build_gradient_layout(
         bar_width=bar_width,
         bar_x=bar_x,
         min_label_text=min_gradient_label_text(entry.properties.get("min_value", 0)),
-        scale_y=scale_label_y,
+        min_label_x=bar_x,
+        max_label_x=bar_x + bar_width,
+        scale_label_y=scale_label_y,
         compact_entries=(),
         single_entries=(single_entry,),
     )

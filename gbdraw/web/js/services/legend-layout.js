@@ -611,12 +611,13 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @typedef {object} CircularCompactGradientEntryLayout
  * @property {string} key
  * @property {LegendLayoutRow} row
+ * @property {number} labelX
  * @property {number} labelY
  * @property {number} barY
  */
 
 /**
- * The entry of a one-gradient block: its centred title, bar, and scale labels.
+ * The entry of a one-gradient block: its centred title and its bar.
  * @typedef {object} CircularSingleGradientEntryLayout
  * @property {string} key
  * @property {LegendLayoutRow} row
@@ -624,12 +625,11 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} titleY
  * @property {number} barX
  * @property {number} barY
- * @property {number} minLabelX
- * @property {number} maxLabelX
- * @property {number} scaleLabelY
  */
 
 /**
+ * A gradient block: its entries, and the one scale (minimum and 100% labels)
+ * below the bars that every form draws.
  * @typedef {object} CircularGradientLayout
  * @property {boolean} compact
  * @property {number} width
@@ -637,7 +637,9 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} barWidth
  * @property {number} barX
  * @property {string} minLabelText
- * @property {number} scaleY
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
  * @property {CircularCompactGradientEntryLayout[]} compactEntries
  * @property {CircularSingleGradientEntryLayout[]} singleEntries
  */
@@ -677,19 +679,22 @@ const circularGradientLayout = (gradients, measure, rect) => {
   if (gradients.length > 1) {
     const labelWidth = Math.max(...gradients.map((entry) => entry.textWidth));
     const barX = labelWidth + rect;
-    const scaleY = rect + ((gradients.length - 1) * rowHeight) + 2;
+    const scaleLabelY = rect + ((gradients.length - 1) * rowHeight) + 2;
     // The scale labels share one line box, whatever their digits.
     const labelHeight = measure('100%').height;
     return {
       compact: true,
       width: barX + barWidth,
-      height: scaleY + labelHeight,
+      height: scaleLabelY + labelHeight,
       barWidth,
       barX,
       minLabelText: firstMinLabel,
-      scaleY,
+      minLabelX: barX,
+      maxLabelX: barX + barWidth,
+      scaleLabelY,
       compactEntries: gradients.map((entry, index) => ({
-        key: entry.key, row: entry.row, labelY: (rect / 2) + (index * rowHeight), barY: (rect / 2) + (index * rowHeight)
+        key: entry.key, row: entry.row, labelX: 0.0,
+        labelY: (rect / 2) + (index * rowHeight), barY: (rect / 2) + (index * rowHeight)
       })),
       singleEntries: []
     };
@@ -708,12 +713,11 @@ const circularGradientLayout = (gradients, measure, rect) => {
     barWidth,
     barX,
     minLabelText: minGradientLabelText(entry.row.minValue ?? 0),
-    scaleY: scaleLabelY,
+    minLabelX: barX,
+    maxLabelX: barX + barWidth,
+    scaleLabelY,
     compactEntries: [],
-    singleEntries: [{
-      key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY,
-      minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
-    }]
+    singleEntries: [{ key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY }]
   };
 };
 

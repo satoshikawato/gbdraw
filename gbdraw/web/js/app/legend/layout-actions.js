@@ -119,8 +119,9 @@ const placeEntries = (entries, layouts) => {
 };
 
 /**
- * Where a gradient block's parts go, in the block's own coordinates, as
- * Python's Legend writers place them (render/groups/{circular,linear}/legend.py).
+ * Where a gradient block's parts go, in the block's own coordinates: the
+ * positions Python's Legend layout gives them (legend/{circular,linear}_layout.py),
+ * which its Legend writers draw.
  * @typedef {object} GradientPlacement
  * @property {boolean} compact Several gradients: one label column, one scale below the bars.
  * @property {Array<{ key: string, titleX: number, titleY: number, barX: number, barY: number }>} entries
@@ -140,33 +141,21 @@ const linearGradientPlacement = (gradient) => ({
 });
 
 /**
- * Python's Circular writer: a compact block puts each label at x 0 and each
- * bar at the block's `barX`, its scale under the bars' ends; a single block
- * places its entry's parts as laid out.
+ * A compact entry's label is its title, and its bar sits at the block's `barX`.
  * @param {CircularGradientLayout} gradient
  * @returns {GradientPlacement}
  */
-const circularGradientPlacement = (gradient) => {
-  if (gradient.compact) {
-    return {
-      compact: true,
-      entries: gradient.compactEntries.map((entry) => ({
-        key: entry.key, titleX: 0, titleY: entry.labelY, barX: gradient.barX, barY: entry.barY
-      })),
-      minLabelX: gradient.barX,
-      maxLabelX: gradient.barX + gradient.barWidth,
-      scaleLabelY: gradient.scaleY
-    };
-  }
-  const [entry] = gradient.singleEntries;
-  return {
-    compact: false,
-    entries: gradient.singleEntries,
-    minLabelX: entry.minLabelX,
-    maxLabelX: entry.maxLabelX,
-    scaleLabelY: entry.scaleLabelY
-  };
-};
+const circularGradientPlacement = (gradient) => ({
+  compact: gradient.compact,
+  entries: gradient.compact
+    ? gradient.compactEntries.map((entry) => ({
+      key: entry.key, titleX: entry.labelX, titleY: entry.labelY, barX: gradient.barX, barY: entry.barY
+    }))
+    : gradient.singleEntries,
+  minLabelX: gradient.minLabelX,
+  maxLabelX: gradient.maxLabelX,
+  scaleLabelY: gradient.scaleLabelY
+});
 
 /**
  * Write a gradient block's parts (OV-1741): each entry's title and bar, and

@@ -95,11 +95,11 @@ const circularResult = (layout) => ({
     barWidth: layout.gradient.barWidth,
     barX: layout.gradient.barX,
     minLabelText: layout.gradient.minLabelText,
-    scaleY: layout.gradient.scaleY,
-    compactEntries: layout.gradient.compactEntries.map(({ key, labelY, barY }) => ({ key, labelY, barY })),
-    singleEntries: layout.gradient.singleEntries.map(({ key, titleX, titleY, barX, barY, minLabelX, maxLabelX, scaleLabelY }) => (
-      { key, titleX, titleY, barX, barY, minLabelX, maxLabelX, scaleLabelY }
-    ))
+    minLabelX: layout.gradient.minLabelX,
+    maxLabelX: layout.gradient.maxLabelX,
+    scaleLabelY: layout.gradient.scaleLabelY,
+    compactEntries: layout.gradient.compactEntries.map(({ key, labelX, labelY, barY }) => ({ key, labelX, labelY, barY })),
+    singleEntries: layout.gradient.singleEntries.map(({ key, titleX, titleY, barX, barY }) => ({ key, titleX, titleY, barX, barY }))
   },
   gradientX: layout.gradientX,
   gradientY: layout.gradientY

@@ -74,6 +74,14 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
       original.forEach((entry) => { if (!used.has(entry)) entry.remove(); });
       next.forEach((entry) => group.appendChild(entry));
     };
+    // Rename the gradient titles of one comparison group to `keys`, in order.
+    const renameGradients = (group, keys) => {
+      entriesOf(group).forEach((entry, index) => {
+        if (keys[index] === undefined || entry.getAttribute('data-legend-key') === keys[index]) return;
+        entry.setAttribute('data-legend-key', keys[index]);
+        entry.querySelector('text').textContent = keys[index];
+      });
+    };
     const mismatches = [];
     let numbers = 0;
     const same = (actual, expected, path) => {
@@ -93,6 +101,8 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
       if (vector.mode === 'linear') {
         editRows(legend.querySelector('#feature_legend_h'), keys);
         editRows(legend.querySelector('#feature_legend_v'), keys);
+        const gradientKeys = vector.rows.filter((row) => row.type === 'gradient').map((row) => row.key);
+        legend.querySelectorAll('[data-gbdraw-role="comparison-legend"]').forEach((group) => renameGradients(group, gradientKeys));
         // OV-1741: the gradient parts of an earlier version's Result sit elsewhere; the layout places them.
         legend.querySelectorAll('[data-gbdraw-role="comparison-legend"] text, [data-gbdraw-role="comparison-legend"] path')
           .forEach((part) => part.setAttribute('transform', 'translate(7, -3)'));
