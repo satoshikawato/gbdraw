@@ -36,7 +36,14 @@ const showDrawing = async (page, { kind, name }) => {
     return tab ? tab.id : null;
   }, { wantedKind: kind, wantedName: name });
   if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
-  await drawingTab(page, drawingId).click();
+  if (await drawingTab(page, drawingId).isVisible()) {
+    await drawingTab(page, drawingId).click();
+  } else {
+    // At <= 768 px the tabs give way to the picker: its list holds every drawing in tab order.
+    const picker = page.locator('.drawing-bar .drawing-picker');
+    await picker.locator('summary').click();
+    await picker.locator('.action-menu-item').nth((await drawingIds(page)).indexOf(drawingId)).click();
+  }
   await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
   return drawingId;
 };

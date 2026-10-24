@@ -2041,6 +2041,7 @@ export const createAppSetup = () => {
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch, computed,
     onClose: featureActions.suspendSpecificRulePatternDrafts,
+    onOpen: () => settingsPaneActions.showPhonePane('preview'),
     focusReturn: {
       isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
       focusToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('.drawer-toggle'))?.focus()
@@ -4881,6 +4882,8 @@ export const createAppSetup = () => {
 
   const runAnalysis = () => {
     const drawing = state.activeDrawing();
+    // The phone layout shows the Preview, where the run's progress, Result or error appears.
+    settingsPaneActions.showPhonePane('preview');
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {
@@ -7096,6 +7099,7 @@ export const createAppSetup = () => {
     sidebarWidth,
     startResizing,
     settingsPane: settingsPaneActions.settingsPane,
+    showPhonePane: settingsPaneActions.showPhonePane,
     revealSetting: settingsPaneActions.revealSetting,
     revealSettingsSection: settingsPaneActions.revealSettingsSection,
     closeSettingsPopup: settingsPaneActions.closeSettingsPopup,
