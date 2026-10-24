@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.core.numeric import compensated_sum
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,11 +55,9 @@ def test_legend_layout_vectors_cover_gallery_edits_and_branches() -> None:
 
 
 @pytest.mark.parametrize("index", [0, 40, 100, 200])
-def test_measurement_vectors_are_calculate_bbox_dimensions(index: int) -> None:
+def test_measurement_vectors_are_drawn_text_box(index: int) -> None:
     vector = json.loads(VECTORS.read_text(encoding="utf-8"))["measurement"][index]
-    width, height = calculate_bbox_dimensions(
-        vector["text"], vector["fontFamily"], vector["fontSize"], vector["dpi"]
-    )
+    width, height = drawn_text_box(vector["text"], vector["fontFamily"], vector["fontSize"])
     assert vector["expected"] == {"width": width, "height": height}
 
 

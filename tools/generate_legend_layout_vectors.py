@@ -4,7 +4,7 @@
 ``tests/fixtures/legend_layout_vectors.json`` holds inputs and Python's own
 results for:
 
-- text measurement (``calculate_bbox_dimensions``);
+- text measurement (``drawn_text_box``);
 - the Legend of every Gallery Session Result, and edited copies of it (rows
   renamed, deleted, added, reordered; Circular Legends moved to each side);
 - synthetic Legends for the branches the Gallery does not reach (conservation
@@ -41,7 +41,7 @@ from gbdraw.configurators.legend import (  # noqa: E402
     _linear_legend_local_bounds,
 )
 from gbdraw.core.fonts import resolve_font_face  # noqa: E402
-from gbdraw.core.text import calculate_bbox_dimensions  # noqa: E402
+from gbdraw.core.text import drawn_text_box  # noqa: E402
 from gbdraw.layout.composition import (  # noqa: E402
     OVERLAY_CANDIDATE_SCORE_ORDER,
     OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER,
@@ -58,8 +58,9 @@ from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
 NUMBER = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
-DPI = 96
 LONG_CAPTION = "A much longer Legend caption for this row"
+# A gradient title wider than its bar: the bar and scale move under it.
+LONG_GRADIENT_TITLE = "Pairwise match identity of every compared genome pair"
 OVERLAY_POLICY = {
     "candidateScoreOrder": list(OVERLAY_CANDIDATE_SCORE_ORDER),
     "canvasGrowthCandidateOrder": list(OVERLAY_CANVAS_GROWTH_CANDIDATE_ORDER),
@@ -191,12 +192,12 @@ def _gallery_cases() -> list[dict[str, Any]]:
                                      f"is not the face of {family!r}")
                 recorded = reflow["primaryLocalBounds"]
                 primary = [recorded["minX"], recorded["minY"], recorded["maxX"], recorded["maxY"]]
-                wrap_width, size, dpi = reflow["wrapWidth"], reflow["fontSize"], reflow["dpi"]
+                wrap_width, size = reflow["wrapWidth"], reflow["fontSize"]
             else:
                 # A Result written before Python recorded them: the Web's fallbacks.
                 primary = [final["x"] - auto[0], final["y"] - auto[1]]
                 primary += [primary[0] + final["width"], primary[1] + final["height"]]
-                wrap_width, dpi = final["width"], DPI
+                wrap_width = final["width"]
             title = meta.get("title")
             cases.append({
                 "name": f"{path.name.split('.gbdraw')[0]}#{index}",
@@ -205,7 +206,7 @@ def _gallery_cases() -> list[dict[str, Any]]:
                 "rows": solids + gradients,
                 "options": {
                     "side": meta["legendSide"], "wrapWidth": wrap_width, "fontFile": _font_file(family),
-                    "fontFamily": family, "fontSize": size, "dpi": dpi,
+                    "fontFamily": family, "fontSize": size,
                     "colorRectSize": reflow["colorRectSize"],
                 },
                 "composition": {
@@ -225,6 +226,7 @@ def _gallery_cases() -> list[dict[str, Any]]:
 def _edited(case: dict[str, Any]) -> list[dict[str, Any]]:
     rows = case["rows"]
     solids = [row for row in rows if row["type"] == "solid"]
+    gradients = [row for row in rows if row["type"] == "gradient"]
     variants: list[tuple[str, list[dict[str, Any]], str]] = []
     side = case["options"]["side"]
 
@@ -244,6 +246,8 @@ def _edited(case: dict[str, Any]) -> list[dict[str, Any]]:
         variants.append(("add a row", rows + [added], side))
         another = {**added, "key": "Another manually added row with a long name"}
         variants.append(("add two rows", rows + [added, another], side))
+    if case["mode"] == "linear" and len(gradients) == 1:
+        variants.append(("rename the gradient title", renamed(gradients[0]["key"], LONG_GRADIENT_TITLE), side))
     if case["mode"] == "circular":
         variants += [(f"move the Legend to {other}", rows, other) for other in ("top", "bottom", "left", "right") if other != side]
     return [
@@ -288,31 +292,27 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
     return cases
 
 
-def build_inputs() -> dict[str, Any]:
-    gallery = _gallery_cases()
+def _layout_cases(gallery: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each Gallery Legend, its edited copies, then the synthetic Legends."""
     layout = []
     for case in gallery:
         layout.append(case)
         layout.extend(_edited(case))
     circular_template = next(case for case in gallery if case["mode"] == "circular")
     layout.extend(_synthetic(circular_template))
+    return layout
+
+
+def build_inputs() -> dict[str, Any]:
+    layout = _layout_cases(_gallery_cases())
     measurement = []
     for family in MEASUREMENT_FAMILIES:
         for size in (14.0, 20.0, 16.5):
             for caption in MEASUREMENT_TEXTS:
                 measurement.append({
                     "text": caption, "fontFamily": family, "fontFile": _font_file(family),
-                    "fontSize": size, "dpi": DPI,
+                    "fontSize": size,
                 })
-    # A Result laid out at another dpi (`legendReflow.dpi`) measures its rows,
-    # an added row too, at that dpi.
-    for dpi in (72, 150):
-        for caption in ("Added legend entry", "GC skew (+)", "To Ty Ye"):
-            family = MEASUREMENT_FAMILIES[0]
-            measurement.append({
-                "text": caption, "fontFamily": family, "fontFile": _font_file(family),
-                "fontSize": 20.0, "dpi": dpi,
-            })
     return {"overlayPolicy": OVERLAY_POLICY, "measurement": measurement, "layout": layout}
 
 
@@ -349,7 +349,7 @@ def _linear_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
     options = case["options"]
     layout = build_linear_legend_layout(
         _table(case["rows"]), legend_position=options["side"], canvas_width=options["wrapWidth"],
-        font_family=options["fontFamily"], font_size=options["fontSize"], dpi=options["dpi"],
+        font_family=options["fontFamily"], font_size=options["fontSize"],
         color_rect_size=options["colorRectSize"],
     )
 
@@ -386,7 +386,7 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
     options = case["options"]
     layout = build_circular_legend_layout(
         _table(case["rows"]), legend_position=options["side"], canvas_width=options["wrapWidth"],
-        font_family=options["fontFamily"], font_size=options["fontSize"], dpi=options["dpi"],
+        font_family=options["fontFamily"], font_size=options["fontSize"],
         color_rect_size=options["colorRectSize"],
     )
     gradient = layout.gradient
@@ -400,15 +400,16 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
         "gradient": None if gradient is None else {
             "compact": gradient.compact, "width": gradient.width, "height": gradient.height,
             "barWidth": gradient.bar_width, "barX": gradient.bar_x, "minLabelText": gradient.min_label_text,
-            "scaleY": gradient.scale_y,
+            "minLabelX": gradient.min_label_x, "maxLabelX": gradient.max_label_x,
+            "scaleLabelY": gradient.scale_label_y,
             "compactEntries": [
-                {"key": entry.key, "labelY": entry.label_y, "barY": entry.bar_y} for entry in gradient.compact_entries
+                {"key": entry.key, "labelX": entry.label_x, "labelY": entry.label_y, "barY": entry.bar_y}
+                for entry in gradient.compact_entries
             ],
             "singleEntries": [
                 {
                     "key": entry.key, "titleX": entry.title_x, "titleY": entry.title_y, "barX": entry.bar_x,
-                    "barY": entry.bar_y, "minLabelX": entry.min_label_x, "maxLabelX": entry.max_label_x,
-                    "scaleLabelY": entry.scale_label_y,
+                    "barY": entry.bar_y,
                 }
                 for entry in gradient.single_entries
             ],
@@ -449,7 +450,7 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
 def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
     measurement = []
     for case in inputs["measurement"]:
-        width, height = calculate_bbox_dimensions(case["text"], case["fontFamily"], case["fontSize"], case["dpi"])
+        width, height = drawn_text_box(case["text"], case["fontFamily"], case["fontSize"])
         measurement.append({**case, "expected": {"width": width, "height": height}})
     layout = []
     for case in inputs["layout"]:
@@ -470,12 +471,18 @@ def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def _stored_inputs() -> dict[str, Any]:
+    # The stored Gallery Legends stay as read; their edits and the synthetic
+    # Legends are derived again, so a new edit needs no Gallery rebuild.
     stored = json.loads(TARGET.read_text(encoding="utf-8"))
     strip = lambda cases: [{key: value for key, value in case.items() if key != "expected"} for case in cases]  # noqa: E731
+    gallery = [
+        case for case in strip(stored["layout"])
+        if case["edit"] == "none" and not case["name"].startswith("synthetic")
+    ]
     return {
         "overlayPolicy": stored["overlayPolicy"],
         "measurement": strip(stored["measurement"]),
-        "layout": strip(stored["layout"]),
+        "layout": _layout_cases(gallery),
     }
 
 

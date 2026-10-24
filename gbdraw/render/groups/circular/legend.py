@@ -90,7 +90,7 @@ class LegendGroup:
                     dominant_baseline="central",
                     text_anchor="start",
                 )
-                label_path.translate(0, compact_entry.label_y)
+                label_path.translate(compact_entry.label_x, compact_entry.label_y)
                 entry_group.add(label_path)
 
                 grad_rect = Path(
@@ -114,7 +114,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="start",
             )
-            min_label.translate(layout.bar_x, layout.scale_y)
+            min_label.translate(layout.min_label_x, layout.scale_label_y)
             group.add(min_label)
 
             max_label = generate_text_path(
@@ -128,7 +128,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="end",
             )
-            max_label.translate(layout.bar_x + layout.bar_width, layout.scale_y)
+            max_label.translate(layout.max_label_x, layout.scale_label_y)
             group.add(max_label)
             return group
 
@@ -177,7 +177,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="start",
             )
-            min_label.translate(entry.min_label_x, entry.scale_label_y)
+            min_label.translate(layout.min_label_x, layout.scale_label_y)
             entry_group.add(min_label)
             max_label = generate_text_path(
                 "100%",
@@ -190,7 +190,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="end",
             )
-            max_label.translate(entry.max_label_x, entry.scale_label_y)
+            max_label.translate(layout.max_label_x, layout.scale_label_y)
             entry_group.add(max_label)
             group.add(entry_group)
 

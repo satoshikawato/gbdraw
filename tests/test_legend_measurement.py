@@ -14,7 +14,7 @@ from gbdraw.config.models import (
 )
 from gbdraw.config.toml import load_config_toml
 from gbdraw.api.config import apply_config_overrides
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.configurators import LegendDrawingConfigurator, LegendMeasurement
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.layout.spatial import Aabb, union_aabbs
@@ -241,9 +241,7 @@ def test_single_gradient_title_wider_than_its_bar_stays_inside_the_legend(
     measurement = measure_legend(
         configurator, table, placement=canvas_config.legend_position, wrap_width=canvas_config.total_width
     )
-    title_width = calculate_bbox_dimensions(
-        "Pairwise match identity", configurator.font_family, font_size, configurator.dpi
-    )[0]
+    title_width = drawn_text_box("Pairwise match identity", configurator.font_family, font_size)[0]
     if measurement.circular_layout is not None:
         gradient = measurement.circular_layout.gradient
         assert gradient is not None

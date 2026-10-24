@@ -7,7 +7,7 @@ import math
 from dataclasses import dataclass
 from typing import Mapping, cast
 
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from ..core.numeric import compensated_sum
 from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
 from .table import DrawnLegendName, LegendRowKey, as_legend_table
@@ -33,6 +33,7 @@ class CircularLegendEntryLayout:
 class CircularCompactGradientEntryLayout:
     key: LegendRowKey
     properties: Mapping[str, object]
+    label_x: float
     label_y: float
     bar_y: float
 
@@ -45,20 +46,22 @@ class CircularSingleGradientEntryLayout:
     title_y: float
     bar_x: float
     bar_y: float
-    min_label_x: float
-    max_label_x: float
-    scale_label_y: float
 
 
 @dataclass(frozen=True)
 class CircularGradientLegendLayout:
+    """A gradient block: its entries, and the one scale (minimum and 100%
+    labels) below the bars that every form draws."""
+
     compact: bool
     width: float
     height: float
     bar_width: float
     bar_x: float
     min_label_text: str
-    scale_y: float
+    min_label_x: float
+    max_label_x: float
+    scale_label_y: float
     compact_entries: tuple[CircularCompactGradientEntryLayout, ...]
     single_entries: tuple[CircularSingleGradientEntryLayout, ...]
 
@@ -105,7 +108,6 @@ def _measure_entries(
     *,
     font_family: str,
     font_size: float,
-    dpi: int,
     x_margin: float,
 ) -> tuple[tuple[_MeasuredLegendEntry, ...], tuple[_MeasuredLegendEntry, ...]]:
     solid_entries: list[_MeasuredLegendEntry] = []
@@ -114,11 +116,10 @@ def _measure_entries(
     drawn_names = table.names()
     for key, properties in table.items():
         text = drawn_names[key].drawn
-        text_width, _ = calculate_bbox_dimensions(
+        text_width, _ = drawn_text_box(
             text,
             font_family,
             font_size,
-            dpi,
         )
         measured = _MeasuredLegendEntry(
             key=key,
@@ -154,7 +155,6 @@ def _build_gradient_layout(
     *,
     font_family: str,
     font_size: float,
-    dpi: int,
     color_rect_size: float,
 ) -> CircularGradientLegendLayout | None:
     if not gradient_entries:
@@ -168,23 +168,15 @@ def _build_gradient_layout(
     if len(gradient_entries) > 1:
         label_width = max(entry.text_width for entry in gradient_entries)
         bar_x = label_width + color_rect_size
-        scale_y = color_rect_size + ((len(gradient_entries) - 1) * row_height) + 2
-        _, min_label_height = calculate_bbox_dimensions(
-            first_min_label,
-            font_family,
-            font_size,
-            dpi,
-        )
-        _, max_label_height = calculate_bbox_dimensions(
-            "100%",
-            font_family,
-            font_size,
-            dpi,
-        )
+        scale_label_y = color_rect_size + ((len(gradient_entries) - 1) * row_height) + 2
+        # The scale labels share one line box, whatever their digits.
+        _, label_height = drawn_text_box("100%", font_family, font_size)
         compact_entries = tuple(
             CircularCompactGradientEntryLayout(
                 key=entry.key,
                 properties=entry.properties,
+                # The block's left edge; an int keeps the drawn translate(0,y).
+                label_x=0,
                 label_y=(color_rect_size / 2) + (idx * row_height),
                 bar_y=(color_rect_size / 2) + (idx * row_height),
             )
@@ -193,29 +185,29 @@ def _build_gradient_layout(
         return CircularGradientLegendLayout(
             compact=True,
             width=bar_x + bar_width,
-            height=scale_y + max(float(min_label_height), float(max_label_height)),
+            height=scale_label_y + float(label_height),
             bar_width=bar_width,
             bar_x=bar_x,
             min_label_text=first_min_label,
-            scale_y=scale_y,
+            min_label_x=bar_x,
+            max_label_x=bar_x + bar_width,
+            scale_label_y=scale_label_y,
             compact_entries=compact_entries,
             single_entries=(),
         )
 
     entry = gradient_entries[0]
-    title_width, title_height = calculate_bbox_dimensions(
+    title_width, title_height = drawn_text_box(
         entry.text,
         font_family,
         font_size,
-        dpi,
     )
     bar_y = float(title_height) + (color_rect_size / 2)
     scale_label_y = bar_y + (color_rect_size / 2) + 2
-    _, label_height = calculate_bbox_dimensions(
+    _, label_height = drawn_text_box(
         "100%",
         font_family,
         font_size,
-        dpi,
     )
     height = (
         scale_label_y
@@ -230,9 +222,6 @@ def _build_gradient_layout(
         title_y=0.0,
         bar_x=bar_x,
         bar_y=bar_y,
-        min_label_x=bar_x,
-        max_label_x=bar_x + bar_width,
-        scale_label_y=scale_label_y,
     )
     return CircularGradientLegendLayout(
         compact=False,
@@ -241,7 +230,9 @@ def _build_gradient_layout(
         bar_width=bar_width,
         bar_x=bar_x,
         min_label_text=min_gradient_label_text(entry.properties.get("min_value", 0)),
-        scale_y=scale_label_y,
+        min_label_x=bar_x,
+        max_label_x=bar_x + bar_width,
+        scale_label_y=scale_label_y,
         compact_entries=(),
         single_entries=(single_entry,),
     )
@@ -382,7 +373,6 @@ def build_circular_legend_layout(
     canvas_width: float,
     font_family: str,
     font_size: float,
-    dpi: int,
     color_rect_size: float,
     legend_width: float | None = None,
     pairwise_legend_width: float | None = None,
@@ -393,14 +383,12 @@ def build_circular_legend_layout(
         legend_table,
         font_family=font_family,
         font_size=font_size,
-        dpi=dpi,
         x_margin=x_margin,
     )
     gradient_layout = _build_gradient_layout(
         gradient_entries,
         font_family=font_family,
         font_size=font_size,
-        dpi=dpi,
         color_rect_size=float(color_rect_size),
     )
     resolved_pairwise_width = (
