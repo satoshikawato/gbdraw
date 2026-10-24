@@ -109,14 +109,16 @@ const MODE_DRAWING_NAMES = Object.freeze({ circular: 'Circular', linear: 'Linear
  * for a second drawing of the mode (`linear-2` is "Linear 2"). Python's
  * `gbdraw.session_drawings.allocate_session_drawing` takes the same rule; both
  * read the `names.defaults` vectors of
- * `tests/fixtures/sessions/drawings-vectors.json`.
+ * `tests/fixtures/sessions/drawings-vectors.json`. The drawing bar passes
+ * `modeName` in the UI language to show a default name (`app/drawing-list.js`).
  * @param {ModeProfileName} mode
  * @param {DrawingId} drawingId
+ * @param {string} [modeName] the mode's name, by default as a Session stores it
  * @returns {string}
  */
-export const defaultDrawingName = (mode, drawingId) => {
+export const defaultDrawingName = (mode, drawingId, modeName = MODE_DRAWING_NAMES[mode]) => {
   const number = String(drawingId).slice(String(mode).length + 1);
-  return MODE_DRAWING_NAMES[mode] + (number ? ` ${number}` : '');
+  return modeName + (number ? ` ${number}` : '');
 };
 
 /**

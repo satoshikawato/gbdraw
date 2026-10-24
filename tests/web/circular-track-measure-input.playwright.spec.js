@@ -599,8 +599,8 @@ for (const continuation of ['disabled', 'inactive biological']) {
       expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
         // The saved mode has no Result, so the Session opens on the mode that has one.
-        await expect(fresh.getByRole('button', { name: 'Circular', exact: true }))
-          .toHaveAttribute('aria-pressed', 'true');
+        await expect(fresh.getByRole('tab', { name: 'Circular', exact: true }))
+          .toHaveAttribute('aria-selected', 'true');
       }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');

@@ -860,8 +860,8 @@ def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
     assert len(waits) == 1
     assert "processing" in waits[0].replace("labelReflowProcessing", "")
     # After the redraw, History can stay busy for many seconds (OV-1700); the replay's next
-    # step needs the mode buttons, so Reset also waits until they are enabled.
-    switch_waits = [event for event in events[3:] if ".app-mode-button" in event]
+    # step needs the drawing tabs, so Reset also waits until they are enabled.
+    switch_waits = [event for event in events[3:] if ".drawing-bar [role=" in event]
     assert len(switch_waits) == 1 and "disabled" in switch_waits[0]
 
 

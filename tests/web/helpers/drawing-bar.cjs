@@ -1,10 +1,8 @@
-// The one place the specs switch the shown drawing (B4t). Today the control is
-// the mode button of the drawing's kind; the drawing bar replaces it by
-// changing only this file. `drawingIds` reads the store's order, so a spec
-// never reads a tab or a button to learn a drawing.
+// The one place the specs switch the shown drawing (B4t): a click on the
+// drawing's tab in the drawing bar, found by its drawing ID (never by the
+// tab's text, which a rename or the UI language changes). `drawingIds` reads
+// the store's order, so a spec never reads a tab to learn a drawing.
 const { expect } = require('@playwright/test');
-
-const KIND_LABEL = { circular: 'Circular', linear: 'Linear' };
 
 /** @param {import('@playwright/test').Page} page */
 const shownDrawing = (page) => page.evaluate(async () => {
@@ -18,21 +16,29 @@ const drawingIds = (page) => page.evaluate(async () =>
   (await import('./js/state.js')).state.drawingList().map((drawing) => drawing.id));
 
 /**
- * Show a drawing and wait until the app shows one of that kind.
+ * The tab of a drawing in the drawing bar.
+ * @param {import('@playwright/test').Page} page @param {string} drawingId
+ */
+const drawingTab = (page, drawingId) => page.locator(`.drawing-bar [role="tab"][data-drawing-id="${drawingId}"]`);
+
+/**
+ * Show a drawing and wait until the app shows it. `kind` names the first
+ * drawing of that kind in tab order, `name` the drawing with that stored name.
  * @param {import('@playwright/test').Page} page
  * @param {{ kind?: 'circular' | 'linear', name?: string }} target
  * @returns {Promise<string>} the shown DrawingId
  */
 const showDrawing = async (page, { kind, name }) => {
-  const wanted = kind || await page.evaluate(async (tabName) => {
+  const drawingId = await page.evaluate(async ({ wantedKind, wantedName }) => {
     const { state } = await import('./js/state.js');
-    const tab = state.drawingTabs.value.find((item) => item.name === tabName);
-    return tab ? state.drawingOf(tab.id).mode : null;
-  }, name);
-  if (!KIND_LABEL[wanted]) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
-  await page.getByRole('button', { name: KIND_LABEL[wanted], exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(wanted);
-  return (await shownDrawing(page)).id;
+    const tab = state.drawingTabs.value.find((item) => (
+      wantedName === undefined ? state.drawingOf(item.id).mode === wantedKind : item.name === wantedName));
+    return tab ? tab.id : null;
+  }, { wantedKind: kind, wantedName: name });
+  if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
+  await drawingTab(page, drawingId).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
+  return drawingId;
 };
 
-module.exports = { showDrawing, drawingIds, shownDrawing };
+module.exports = { showDrawing, drawingTab, drawingIds, shownDrawing };

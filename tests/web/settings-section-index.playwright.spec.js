@@ -317,7 +317,7 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await entry(page, 'Layout').focus();
   await page.keyboard.press('Shift+Tab');
   await expect(tip(page)).toBeVisible();
-  await page.getByRole('button', { name: 'Linear', exact: true }).focus();
+  await page.getByRole('tab', { name: 'Linear', exact: true }).focus();
   await expect(tip(page)).toBeHidden();
   // A mode change (Undo, a loaded Session) that removes the focused entry removes its text.
   await entry(page, 'Input Genomes').focus();

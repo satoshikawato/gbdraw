@@ -156,8 +156,7 @@ const auditStateNames = async (page) => {
   const stamped = await page.evaluate(() => {
     const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
     const buttons = Array.from(document.querySelectorAll('button[aria-expanded], button[aria-pressed]'))
-      .filter((button) => visible(button) && !button.disabled && !button.closest('.help-tip, .app-mode-button')
-        && !button.classList.contains('app-mode-button'));
+      .filter((button) => visible(button) && !button.disabled && !button.closest('.help-tip'));
     buttons.forEach((button, index) => button.setAttribute('data-name-probe', String(index)));
     return buttons.length;
   });
