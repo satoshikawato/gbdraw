@@ -740,3 +740,74 @@ test('a Session 49 without its drawings or its resources is refused as no Sessio
     assert.equal(outcome.error.context?.reason, 'SESSION_FORMAT', `${field}: ${JSON.stringify(outcome.error)}`);
   }
 });
+
+// B2d-3a-2: each drawing of a Session 49 takes its own files, bindings, LOSAT
+// entries and comparison intent by its drawing ID, opened or not.
+// A Circular drawing and two Linear ones, each with files of its own; the
+// Circular drawing's resources are renamed so the two fixtures share none.
+const threeDrawingSession = () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const circularOnly = v49Session('drawings-circular-only');
+  const rename = (value) => JSON.parse(JSON.stringify(value).replaceAll('"record-1-genbank"', '"circular-record-1"'));
+  session.resources['circular-record-1'] = rename(circularOnly.resources['record-1-genbank']);
+  session.drawings.unshift(rename(circularOnly.drawings[0]));
+  const second = session.drawings.find((entry) => entry.id === 'linear-2');
+  second.webFiles.bindings.linearSeqs[0].gb.name = 'R2c-second.gb';
+  return session;
+};
+const filesOfDrawings = () => Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
+  c_gb: drawing.files.c_gb?.name ?? null,
+  linearSeqs: drawing.linearSeqs.map((seq) => seq.gb?.name ?? null)
+}]));
+
+test('a Session 49 gives each drawing its own files by drawing ID, the ones it does not open too', async () => {
+  for (const opened of ['linear', 'linear-2', 'circular']) {
+    const session = threeDrawingSession();
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const outcome = await loadKeepingSlots(session);
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    const files = filesOfDrawings();
+    assert.equal(files.circular.c_gb, 'cli-web-mito.gb', opened);
+    assert.deepEqual(files.linear.linearSeqs, ['R2c.gb', 'R3c.gb'], opened);
+    assert.deepEqual(files['linear-2'].linearSeqs, ['R2c-second.gb', 'R3c.gb'], opened);
+  }
+});
+
+test('a Session 49 resource that only a drawing it does not open binds keeps its row when it cannot be read', async () => {
+  const session = v49Session('drawings-per-drawing-cards');
+  session.ui.activeDrawingId = 'circular-2';
+  session.resources['resource-0001'] = 5;
+  resetDrawings();
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.ok(loaded.repairs.some((row) => row.code === 'file-entry-dropped' && row.path === 'resources.resource-0001'),
+    JSON.stringify(loaded.repairs));
+});
+
+test('a Session 49 whose Linear drawings hold different LOSAT entries keeps each drawing\'s entries', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  const entry = structuredClone(first.losatCache.entries[0]);
+  second.losatCache.entries = [{ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' }];
+  for (const opened of [first.id, second.id]) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual([...state.losatCache.value.keys()].sort(), [entry.key, `${entry.key}-second`].sort(), opened);
+  }
+});
+
+test('a Session 49 without a Linear drawing gives the Linear drawing the app adds the Linear defaults', async () => {
+  const session = v49Session('drawings-circular-only');
+  resetDrawings();
+  modeDrawing(state, 'linear').form.plot_title = 'left over';
+  modeDrawing(state, 'linear').adv.linear_track_layout = 'below';
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const linear = state.drawingList().find((drawing) => drawing.mode === 'linear');
+  assert.ok(linear, 'the app shows a Linear drawing');
+  assert.equal(linear.form.plot_title, createDefaultForm().plot_title);
+  assert.equal(linear.adv.linear_track_layout, createDefaultAdv('linear').linear_track_layout);
+});
