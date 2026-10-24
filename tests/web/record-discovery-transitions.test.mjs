@@ -67,6 +67,26 @@ test('the input type change and a Circular Remove discover that drawing again', 
   assert.deepEqual(recordIds(circular), []);
 });
 
+// OV-1669: the idle record has one owner, so a History restore that runs the
+// discovery again leaves the record it captured.
+test('a discovery with nothing to read leaves the idle record of a new drawing', async () => {
+  const { INPUTS_SLICE } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const recordOf = (slice) => INPUTS_SLICE.capture(slice).circularRecordDiscovery;
+  const idle = recordOf(INPUTS_SLICE.create().handle);
+  app.selectDrawing('circular');
+  app.setCircularSourceFile('c_gb', genbank('c.gb', ['C1', 40]));
+  await settle();
+  assert.equal(circular.circularRecordDiscovery.status, 'ready');
+  app.setCircularInputType('gff');
+  await settle();
+  assert.deepEqual(recordOf(circular.slices.inputs), idle, 'GFF without its pair');
+  app.setCircularInputType('gb');
+  await settle();
+  app.setCircularSourceFile('c_gb', null);
+  await settle();
+  assert.deepEqual(recordOf(circular.slices.inputs), idle, 'no file');
+});
+
 test('a Linear card upload, add, and input type change discover the Linear drawing', async () => {
   app.selectDrawing('linear');
   app.addLinearSeq();

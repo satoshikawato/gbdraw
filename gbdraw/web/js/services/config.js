@@ -16,7 +16,8 @@ import {
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import {
   INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
-  bindLoadedInputs, collapseEmptyLinearSeqList, normalizeLinearSeqList, setConservationBlastsSource
+  bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
+  setConservationBlastsSource
 } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
@@ -4197,14 +4198,7 @@ const applyFiles = (filesData, {
   adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files'
 }) => {
   targetState.circularRecordList.value = [];
-  Object.assign(targetState.circularRecordDiscovery, {
-    status: 'idle',
-    error: '',
-    inputType: '',
-    primaryFile: null,
-    pairedFile: null,
-    canonicalRecordIdentities: []
-  });
+  Object.assign(targetState.circularRecordDiscovery, idleCircularRecordDiscovery());
   targetState.files.c_gb = null;
   targetState.files.c_gff = null;
   targetState.files.c_fasta = null;
