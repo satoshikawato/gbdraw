@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout, RegisteredLegendFace } from '../../services/legend-layout.js' */
+/** @import { CircularGradientLayout, LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout, LinearGradientLayout, RegisteredLegendFace } from '../../services/legend-layout.js' */
 import {
   buildCircularLegendLayout,
   buildLinearLegendLayout,
@@ -62,6 +62,14 @@ const readSolidRows = (group) => {
 };
 
 /**
+ * The bar of a gradient entry: the path Python fills with the gradient.
+ * @param {Element} entry
+ * @returns {Element | null}
+ */
+const gradientBar = (entry) => Array.from(entry.children)
+  .find((child) => child.localName === 'path' && String(child.getAttribute('fill') || '').startsWith('url(')) || null;
+
+/**
  * The gradient rows of a comparison or conservation Legend: their keys, bar
  * strokes, and the lowest identity its scale shows.
  * @param {Element | null} group
@@ -74,8 +82,7 @@ const readGradientRows = (group) => {
   const minLabel = labels.find((label) => /^-?\d+(?:\.\d+)?%$/.test(label) && label !== '100%');
   const minValue = minLabel ? Number(minLabel.slice(0, -1)) : 0;
   return entryGroupsOf(group).map((entry) => {
-    const bar = Array.from(entry.querySelectorAll('path'))
-      .find((path) => String(path.getAttribute('fill') || '').startsWith('url(')) || entry.querySelector('path');
+    const bar = gradientBar(entry);
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
       name: drawnLegendRowName(entry),
@@ -109,6 +116,79 @@ const placeEntries = (entries, layouts) => {
     const layout = byKey.get(pythonLegendKey(entry));
     if (layout) placeEntry(entry, layout);
   });
+};
+
+/**
+ * Where a gradient block's parts go, in the block's own coordinates, as
+ * Python's Legend writers place them (render/groups/{circular,linear}/legend.py).
+ * @typedef {object} GradientPlacement
+ * @property {boolean} compact Several gradients: one label column, one scale below the bars.
+ * @property {Array<{ key: string, titleX: number, titleY: number, barX: number, barY: number }>} entries
+ *   Each entry's title (a compact block's label) and bar.
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
+ */
+
+/** @param {LinearGradientLayout} gradient @returns {GradientPlacement} */
+const linearGradientPlacement = (gradient) => ({
+  compact: gradient.compact,
+  entries: gradient.entries,
+  minLabelX: gradient.minLabelX,
+  maxLabelX: gradient.maxLabelX,
+  scaleLabelY: gradient.scaleLabelY
+});
+
+/**
+ * Python's Circular writer: a compact block puts each label at x 0 and each
+ * bar at the block's `barX`, its scale under the bars' ends; a single block
+ * places its entry's parts as laid out.
+ * @param {CircularGradientLayout} gradient
+ * @returns {GradientPlacement}
+ */
+const circularGradientPlacement = (gradient) => {
+  if (gradient.compact) {
+    return {
+      compact: true,
+      entries: gradient.compactEntries.map((entry) => ({
+        key: entry.key, titleX: 0, titleY: entry.labelY, barX: gradient.barX, barY: entry.barY
+      })),
+      minLabelX: gradient.barX,
+      maxLabelX: gradient.barX + gradient.barWidth,
+      scaleLabelY: gradient.scaleY
+    };
+  }
+  const [entry] = gradient.singleEntries;
+  return {
+    compact: false,
+    entries: gradient.singleEntries,
+    minLabelX: entry.minLabelX,
+    maxLabelX: entry.maxLabelX,
+    scaleLabelY: entry.scaleLabelY
+  };
+};
+
+/**
+ * Write a gradient block's parts (OV-1741): each entry's title and bar, and
+ * the scale labels, which Python writes after a compact block's entries, or
+ * after the title and bar of a single entry, minimum first, then 100%.
+ * @param {Element} group
+ * @param {GradientPlacement} placement
+ */
+const placeGradient = (group, placement) => {
+  const entries = entryGroupsOf(group);
+  const byKey = new Map(placement.entries.map((layout) => [layout.key, layout]));
+  entries.forEach((entry) => {
+    const layout = byKey.get(pythonLegendKey(entry));
+    if (!layout) return;
+    setTranslate(Array.from(entry.children).find((child) => child.localName === 'text') || null, layout.titleX, layout.titleY);
+    setTranslate(gradientBar(entry), layout.barX, layout.barY);
+  });
+  const scaleParent = placement.compact ? group : entries[0];
+  const texts = Array.from(scaleParent?.children || []).filter((child) => child.localName === 'text');
+  const [minLabel, maxLabel] = placement.compact ? texts : texts.slice(1);
+  setTranslate(minLabel || null, placement.minLabelX, placement.scaleLabelY);
+  setTranslate(maxLabel || null, placement.maxLabelX, placement.scaleLabelY);
 };
 
 // Python's Legend, laid out in the Web (zero shift): the rows the Legend holds
@@ -216,6 +296,7 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
           comparison.setAttribute('transform', suffix === 'h'
             ? `translate(${orientation.gradientX}, 0)${orientation.gradientY ? ` translate(0, ${orientation.gradientY})` : ''}`
             : `translate(0, ${orientation.gradientY})`);
+          placeGradient(comparison, linearGradientPlacement(orientation.gradient));
         }
       });
       return linearLegendLocalBounds(layout, options.colorRectSize);
@@ -228,7 +309,10 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
       .find((child) => child.localName === 'path' && child.getAttribute('fill') === 'none');
     outline?.setAttribute('d', `M 0,${-0.5 * rect} L ${layout.width},${-0.5 * rect} `
       + `L ${layout.width},${layout.height - 0.5 * rect} L 0,${layout.height - 0.5 * rect} z`);
-    if (gradientGroup && layout.gradient) setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
+    if (gradientGroup && layout.gradient) {
+      setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
+      placeGradient(gradientGroup, circularGradientPlacement(layout.gradient));
+    }
     return circularLegendLocalBounds(layout, rect);
   };
 

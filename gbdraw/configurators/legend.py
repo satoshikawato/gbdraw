@@ -63,8 +63,10 @@ class LegendMeasurement:
     def reflow_metrics(self) -> dict[str, object]:
         """Return Python-owned constraints and layout inputs for browser legend editing.
 
-        ``fontFile``, ``fontSize``, ``dpi`` and ``wrapWidth`` are the exact
-        values the layout measured and wrapped the captions with.
+        ``fontFile``, ``fontSize`` and ``wrapWidth`` are the exact values the
+        layout measured and wrapped the captions with. ``dpi`` is still written
+        but no layout reads it, until the point-mode text measurement that
+        uses it is retired.
         """
 
         return {

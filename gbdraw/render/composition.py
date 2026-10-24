@@ -329,8 +329,9 @@ def _validate_legend_reflow_metrics(
 ) -> dict[str, object] | None:
     """Validate the Legend layout inputs written as ``legendReflow``.
 
-    ``fontFile``, ``fontSize`` and ``dpi`` are what the Legend layout measured
-    captions with, and ``wrapWidth`` the exact width it wrapped rows in.
+    ``fontFile`` and ``fontSize`` are what the Legend layout measured captions
+    with, and ``wrapWidth`` the exact width it wrapped rows in. ``dpi`` is still
+    written and validated, but no Legend layout reads it.
     """
     if value is None:
         if required:

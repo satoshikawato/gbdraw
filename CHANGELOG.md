@@ -29,9 +29,11 @@ write-up of a release.
   API, and the Web app alike. A Legend whose captions are in a monospace or
   other wide face no longer cuts off their last characters at the canvas edge
   (OV-1740); most Legends, and the canvases they set, become a few pixels
-  narrower (about 40 px with the Japanese captions we measured). Saved Results are not
-  migrated: a Result saved by an earlier version keeps its Legend until its
-  first Legend edit, which lays it out again, and Generate redraws it (OV-165).
+  narrower (about 40 px with the Japanese captions we measured). A corner
+  Legend that now fits beside the records no longer grows the canvas above or
+  below them. Saved Results are not migrated: a Result saved by an earlier version keeps its Legend until its
+  first Legend edit, which lays it out again, gradient scales included
+  (OV-1741), and Generate redraws it (OV-165).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

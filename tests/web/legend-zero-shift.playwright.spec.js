@@ -93,6 +93,9 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
       if (vector.mode === 'linear') {
         editRows(legend.querySelector('#feature_legend_h'), keys);
         editRows(legend.querySelector('#feature_legend_v'), keys);
+        // OV-1741: the gradient parts of an earlier version's Result sit elsewhere; the layout places them.
+        legend.querySelectorAll('[data-gbdraw-role="comparison-legend"] text, [data-gbdraw-role="comparison-legend"] path')
+          .forEach((part) => part.setAttribute('transform', 'translate(7, -3)'));
       } else {
         editRows(legend.querySelector('#feature_legend') || legend, keys);
       }
@@ -116,7 +119,20 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
           checkEntries(group.querySelector(`#feature_legend_${suffix}`), orientation.feature.entries, `${label} ${name}`);
           same(translateOf(group.querySelector(`#feature_legend_${suffix}`)), [orientation.featureX, orientation.featureY], `${label} ${name} feature group`);
           const comparison = group.querySelector('[data-gbdraw-role="comparison-legend"]');
-          if (orientation.gradient) same(translateOf(comparison), [orientation.gradientX, orientation.gradientY], `${label} ${name} comparison group`);
+          if (orientation.gradient) {
+            same(translateOf(comparison), [orientation.gradientX, orientation.gradientY], `${label} ${name} comparison group`);
+            const gradient = orientation.gradient;
+            const parts = entriesOf(comparison);
+            gradient.entries.forEach((entry, entryIndex) => {
+              same(translateOf(parts[entryIndex].querySelector('text')), [entry.titleX, entry.titleY], `${label} ${name} gradient title ${entryIndex}`);
+              same(translateOf(parts[entryIndex].querySelector('path[fill^="url("]')), [entry.barX, entry.barY], `${label} ${name} gradient bar ${entryIndex}`);
+            });
+            const scaleParent = gradient.compact ? comparison : parts[0];
+            const texts = Array.from(scaleParent.children).filter((child) => child.localName === 'text');
+            const [minLabel, maxLabel] = gradient.compact ? texts : texts.slice(1);
+            same(translateOf(minLabel), [gradient.minLabelX, gradient.scaleLabelY], `${label} ${name} minimum label`);
+            same(translateOf(maxLabel), [gradient.maxLabelX, gradient.scaleLabelY], `${label} ${name} 100% label`);
+          }
         }
       } else {
         checkEntries(legend.querySelector('#feature_legend') || legend, expected.entries, label);
@@ -147,6 +163,27 @@ const legendGeometry = (page) => page.evaluate(() => {
       Array.from(entry.querySelectorAll('path')).flatMap((path) => numbers(path.getAttribute('transform')))
     ])
   };
+});
+
+// The Legend captions the browser paints past the Legend box Python recorded
+// (`composition.legend.localBounds`): each shown `<text>` from its start to its
+// start plus `getComputedTextLength()`, in the Legend's own coordinates.
+const legendTextOverflow = (page) => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const legend = svg.getElementById('legend');
+  const { x, width } = JSON.parse(svg.getAttribute('data-gbdraw-composition')).legend.localBounds;
+  const toLegend = legend.getCTM().inverse();
+  return Array.from(legend.querySelectorAll('text'))
+    .filter((text) => !text.closest('[display="none"]'))
+    .flatMap((text) => {
+      const box = text.getBBox();
+      const matrix = toLegend.multiply(text.getCTM());
+      const start = new DOMPoint(box.x, box.y).matrixTransform(matrix).x;
+      const end = new DOMPoint(box.x + text.getComputedTextLength(), box.y).matrixTransform(matrix).x;
+      return start < x - 0.01 || end > x + width + 0.01
+        ? [`${JSON.stringify(text.textContent)}: ${start}..${end} outside ${x}..${x + width}`]
+        : [];
+    });
 });
 
 const openLinear = async (page, fixture = FIXTURE, form = {}) => {
@@ -183,6 +220,7 @@ for (const [mode, fontFamily] of [['linear', null], ['circular', null], ['circul
       const fontFile = await page.evaluate(() => JSON.parse(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
         .getAttribute('data-gbdraw-composition')).legendReflow.fontFile);
       expect(fontFile, 'the Legend is measured in the monospace face').toBe('LiberationMono-Regular');
+      expect(await legendTextOverflow(page), 'every caption the browser draws fits the Legend box').toEqual([]);
     }
     const unedited = await legendGeometry(page);
     // An editor row from a Session (R15-2 retired Add legend item).
@@ -207,6 +245,7 @@ for (const [mode, fontFamily] of [['linear', null], ['circular', null], ['circul
       await page.waitForTimeout(150);
       await settleLive(page);
       const live = await legendGeometry(page);
+      if (fontFamily) expect(await legendTextOverflow(page), `${mode}: ${name}: live captions fit the Legend box`).toEqual([]);
       await generate(page);
       const generated = await legendGeometry(page);
       expect(generated, `${mode}: ${name}`).toEqual(live);

@@ -78,6 +78,11 @@ const matchesChain = (element, chain, index = chain.length - 1) => {
 
 const matchesSelector = (element, selector) => matchesChain(element, selectorChain(selector));
 
+const decodeEntities = (value) => String(value || '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+  .replace(/&amp;/g, '&');
+
 class FakeSvgElement {
   constructor(source) {
     const tagName = String(source || '').match(/^<\s*([\w:-]+)/)?.[1] || '';
@@ -86,6 +91,7 @@ class FakeSvgElement {
     this.attributes = parseAttributes(source);
     this.children = [];
     this.parentElement = null;
+    this.ownText = '';
     this.style = {
       removeProperty: (name) => {
         const declarations = String(this.getAttribute('style') || '')
@@ -101,6 +107,18 @@ class FakeSvgElement {
 
   get id() {
     return this.getAttribute('id') || '';
+  }
+
+  // The text the element and its descendants hold, entities decoded; setting
+  // it replaces the children, as the DOM does.
+  get textContent() {
+    return decodeEntities(this.ownText) + this.children.map((child) => child.textContent).join('');
+  }
+
+  set textContent(value) {
+    this.children.forEach((child) => { child.parentElement = null; });
+    this.children = [];
+    this.ownText = String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
   }
 
   getAttribute(name) {
@@ -192,8 +210,12 @@ class FakeSvgRoot extends FakeSvgElement {
   #parseChildren() {
     const stack = [];
     const tagPattern = /<\/?([\w:-]+)\b[^>]*>/g;
+    let textStart = 0;
     for (const match of this.content.matchAll(tagPattern)) {
       const token = match[0];
+      const text = this.content.slice(textStart, match.index);
+      textStart = match.index + token.length;
+      if (text && stack.length > 0) stack[stack.length - 1].ownText += text;
       const tagName = match[1].toLowerCase().replace(/^.*:/, '');
       if (token.startsWith('</')) {
         if (stack.length > 0) stack.pop();

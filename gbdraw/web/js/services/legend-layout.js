@@ -607,17 +607,26 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 // ---- Circular (gbdraw/legend/circular_layout.py) ----
 
 /**
- * @typedef {object} CircularGradientEntryLayout
+ * An entry of a compact block: its label, and its bar at the block's `barX`.
+ * @typedef {object} CircularCompactGradientEntryLayout
  * @property {string} key
  * @property {LegendLayoutRow} row
+ * @property {number} labelY
  * @property {number} barY
- * @property {number} [labelY] Compact entries.
- * @property {number} [titleX] Single entries.
- * @property {number} [titleY]
- * @property {number} [barX]
- * @property {number} [minLabelX]
- * @property {number} [maxLabelX]
- * @property {number} [scaleLabelY]
+ */
+
+/**
+ * The entry of a one-gradient block: its centred title, bar, and scale labels.
+ * @typedef {object} CircularSingleGradientEntryLayout
+ * @property {string} key
+ * @property {LegendLayoutRow} row
+ * @property {number} titleX
+ * @property {number} titleY
+ * @property {number} barX
+ * @property {number} barY
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
  */
 
 /**
@@ -629,8 +638,8 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} barX
  * @property {string} minLabelText
  * @property {number} scaleY
- * @property {CircularGradientEntryLayout[]} compactEntries
- * @property {CircularGradientEntryLayout[]} singleEntries
+ * @property {CircularCompactGradientEntryLayout[]} compactEntries
+ * @property {CircularSingleGradientEntryLayout[]} singleEntries
  */
 
 /**
