@@ -266,12 +266,13 @@ import {
 } from '../contracts/schema.generated.js';
 import {
   SLICE_MODES,
+  modeSliceFieldsOf,
   sessionDepthSourceWidths,
   splitDraftIntoModes,
   unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
-import { sessionLegendEditsByRowKey, upgradeModeScopedSession } from './session-drawings-upgrade.js';
+import { sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
@@ -322,7 +323,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
-/** @import { Session49 } from './session-drawings-upgrade.js' */
+/** @import { Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { BoundCanonicalComparison, BoundFileValue, CardInputFiles, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
@@ -4717,6 +4718,40 @@ const loadedDrawingPlan = (document) => Object.freeze({
   activeDrawingId: /** @type {DrawingId} */ (document.ui.activeDrawingId)
 });
 /**
+ * A new drawing of each mode `drawings` have none of, which a Load keeps for
+ * the mode buttons until B4 removes them (D-15-93).
+ * @param {readonly LoadedDrawing[]} drawings
+ * @returns {LoadedDrawing[]}
+ */
+const unusedDrawingsOf = (drawings) => SLICE_MODES.filter((mode) => !drawings.some((drawing) => drawing.mode === mode))
+  .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))));
+/**
+ * One drawing's part of a Session file that its draft reads: `slice` holds
+ * its `config`, `features`, `editorState` and `ui` as stored, `at` the place
+ * the file holds them (the dialog's paths; '' for a Session 27-44 split).
+ * @typedef {Readonly<{ slice: Readonly<Record<string, any>>, at: string }>} LoadedDraftPart
+ */
+/**
+ * One drawing's draft as Load read it: its settings and its editor edits.
+ * @typedef {Readonly<{ config: ReturnType<typeof overlayModeSliceConfig>, editorState: ReturnType<typeof normalizeEditorStateData> }>} LoadedDraft
+ */
+/**
+ * A drawing's draft part of its Session 49 entry: its `config` and
+ * `features`, and the slice fields of its `editorState` and `ui` (the entry
+ * also holds its Result set's there, which its slot reads).
+ * @param {SessionDrawing49} entry
+ * @returns {Record<string, unknown>}
+ */
+const drawingDraftPartOf = (entry) => {
+  /** @type {Record<string, unknown>} */
+  const slice = {};
+  for (const field of /** @type {const} */ (['config', 'features', 'editorState', 'ui'])) {
+    if (!Object.hasOwn(entry, field)) continue;
+    slice[field] = field === 'config' || field === 'features' ? entry[field] : modeSliceFieldsOf(entry[field], field);
+  }
+  return slice;
+};
+/**
  * A Session 27-44 until the Worker gives its 49 document (B2d-4): a drawing
  * of each mode, the one that opens first (R17-7).
  * @param {DiagramMode} openingMode
@@ -4743,8 +4778,7 @@ const legacyDrawingPlan = (openingMode) => {
  */
 const commitLoadedDrawings = (plan) => {
   const loaded = plan.drawings.map(({ id, mode }) => createDrawingState(id, mode));
-  const unusedTabs = SLICE_MODES.filter((mode) => !plan.drawings.some((drawing) => drawing.mode === mode))
-    .map((mode) => firstDrawingOfMode(/** @type {DiagramMode} */ (mode)));
+  const unusedTabs = unusedDrawingsOf(plan.drawings);
   const unused = unusedTabs.map(({ id, mode }) => createDrawingState(id, mode));
   state.replaceDrawings([...loaded, ...unused], [...plan.drawings, ...unusedTabs].map(({ id, name }) => ({ id, name })));
   return Object.freeze([...loaded, ...unused]);
@@ -5695,14 +5729,54 @@ const importSessionDocument = async (e, options = {}) => {
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
     // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
-    /** @param {'circular' | 'linear'} mode */
-    const isStoredSlice = (mode) => modeScopedSession && !(mode === generatedMode && committedSliceProjected);
-    /** @param {'circular' | 'linear'} mode @returns {Record<string, any> | null} */
-    const draftConfigOf = (mode) => (modeScopedSession
-      ? (mode === generatedMode && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, data.modes?.[mode]?.config))
+    /** @param {DrawingId} drawingId */
+    const isStoredSlice = (drawingId) => modeScopedSession && !(drawingId === committedSetDrawingId && committedSliceProjected);
+    // The 49 document of a Session 46-48 (the fast path, DESIGN §4.2; its
+    // Legend edits were read by row key in preflight): each drawing's part
+    // of the file is its own entry, found by drawing ID.
+    const upgraded = modeScopedSession
+      ? upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion).document
+      : null;
+    /**
+     * The drawing that takes a Session 27-48's part of `mode` (the file holds
+     * one per mode): its 49 document's drawing of that mode, else the new
+     * drawing of it a Load makes (`legacyDrawingPlan`, `unusedDrawingsOf`).
+     * The one place a Load maps the file's modes to drawing IDs.
+     * @param {DiagramMode} mode @returns {DrawingId}
+     */
+    const fileDrawingIdOf = (mode) => /** @type {DrawingId} */ (
+      upgraded?.drawings.find((entry) => entry.mode === mode)?.id ?? firstDrawingOfMode(mode).id);
+    // The drawing of the committed set (the top-level set of a Session 27-48,
+    // whose request Load projects), and the drawings that take the file's one
+    // Linear part (its record layout, comparisons, LOSAT caches and group
+    // names) and its one Circular part (its conservation rows).
+    const committedSetDrawingId = fileDrawingIdOf(generatedMode);
+    const linearPartDrawingId = fileDrawingIdOf('linear');
+    const circularPartDrawingId = fileDrawingIdOf('circular');
+    /**
+     * Each drawing's draft part of a Session 46-48, by drawing ID: its entry's
+     * (`drawingDraftPartOf`); a drawing the document has none of takes the
+     * file's slice of its mode (D-15-103, D-15-105: until B2d-3 gives it its
+     * mode's defaults). A Session 27-44's parts come from its split, below.
+     * @type {Map<DrawingId, LoadedDraftPart>}
+     */
+    const draftParts = new Map();
+    if (upgraded) {
+      upgraded.drawings.forEach((entry) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
+        slice: drawingDraftPartOf(entry), at: `modes.${entry.mode}`
+      }));
+      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
+      unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
+        slice: isPlainObject(modes?.[mode]) ? modes[mode] : {}, at: `modes.${mode}`
+      }));
+    }
+    /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
+    const draftPartOf = (drawingId) => /** @type {LoadedDraftPart} */ (draftParts.get(drawingId));
+    /** @param {DrawingId} drawingId @returns {Record<string, any> | null} */
+    const draftConfigOf = (drawingId) => (modeScopedSession
+      ? (drawingId === committedSetDrawingId && committedSliceProjected
+        ? restoredConfig : overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config))
       : restoredConfig);
-    const linearDraftConfig = draftConfigOf('linear');
-    const circularDraftConfig = draftConfigOf('circular');
     // Each mode's input type (OV-594): the stored one, else its request's
     // (which wins without a row over a stored value of no type), else GenBank.
     // (A settings-only Session's projection holds its own `ui` type.)
@@ -5720,8 +5794,8 @@ const importSessionDocument = async (e, options = {}) => {
     // its own until the Load commits it. Read as the drawing reads them (a
     // list of another kind failed the Load).
     const candidateLayout = SETTINGS_SLICE.create({
-      linearRecordRows: readLinearRecordRows(linearDraftConfig?.linearRecordLayout?.rows).value,
-      linearComparisonPlan: normalizeLinearComparisonPlan(linearDraftConfig?.linearComparisonPlan)
+      linearRecordRows: readLinearRecordRows(draftConfigOf(linearPartDrawingId)?.linearRecordLayout?.rows).value,
+      linearComparisonPlan: normalizeLinearComparisonPlan(draftConfigOf(linearPartDrawingId)?.linearComparisonPlan)
     });
     const candidateFiles = {
       // `applyFiles` fills the file slots.
@@ -5797,7 +5871,7 @@ const importSessionDocument = async (e, options = {}) => {
       lInputType: inputTypes.lInputType,
       files: candidateFiles.files,
       linearSeqs: candidateLinearSeqs,
-      circularConservation: circularDraftConfig?.circularConservation || {}
+      circularConservation: draftConfigOf(circularPartDrawingId)?.circularConservation || {}
     };
     const { restored: restoredFileSequenceSources, error: currentRecoveryError } = await restoreLoadedSetSequenceSources({
       ...setSequenceSourceOptions,
@@ -5895,7 +5969,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
     const committedSavedEdits = savedResultEdits(
-      data, generatedMode, data.editorState, sourceSessionVersion, draftConfigOf(generatedMode)?.rules
+      data, generatedMode, data.editorState, sourceSessionVersion, draftConfigOf(committedSetDrawingId)?.rules
     );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
@@ -5912,17 +5986,13 @@ const importSessionDocument = async (e, options = {}) => {
     // document's (the fast path, R17-1/R17-2/R17-7); a Session 27-44, which
     // holds one Result set, opens on its shown mode unless only the Result's
     // mode has a Result, until the Worker gives its 49 document (B2d-4).
-    const upgraded = modeScopedSession
-      ? upgradeModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion).document
-      : null;
     const plan = upgraded
       ? loadedDrawingPlan(upgraded)
       : legacyDrawingPlan(committedImportedResults.length === 0 ? candidateMode : generatedMode);
     /** @type {DiagramMode} The mode of the drawing the Load opens. */
     const shownMode = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.id === plan.activeDrawingId)).mode;
-    // The drawing of the committed set: the top-level set of a Session 27-48,
-    // whose request Load projects (one per mode in that file).
-    const committedSetDrawing = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.mode === generatedMode));
+    // Every drawing the Load commits: the plan's, then a new one of each mode the plan has none of.
+    const loadedDrawings = [...plan.drawings, ...unusedDrawingsOf(plan.drawings)];
     // Every other drawing with a saved Result set, read from its own entry of
     // the 49 document: its request, Results, editor state, `ui` and run
     // metadata. A Session 46-48 holds at most one (`otherModeResult` in the
@@ -5932,7 +6002,7 @@ const importSessionDocument = async (e, options = {}) => {
     const storedSets = [];
     (storedSetCatalog && upgraded ? upgraded.drawings : []).forEach((entry) => {
       const { renderRequest } = entry;
-      if (entry.id === committedSetDrawing.id || !renderRequest || entry.results.length === 0) return;
+      if (entry.id === committedSetDrawingId || !renderRequest || entry.results.length === 0) return;
       // Each Result is read as a stored one (`normalizeLogicalResults`).
       const results = /** @type {Record<string, unknown>[]} */ (entry.results);
       const set = { renderRequest, results, editorState: entry.editorState, ui: entry.ui, runMetadata: entry.runMetadata };
@@ -5952,14 +6022,14 @@ const importSessionDocument = async (e, options = {}) => {
       resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles
     };
     /** @type {Map<DrawingId, SavedResultEdits>} Each drawing's saved Result edits, by drawing ID. */
-    const savedEditsOf = new Map([[committedSetDrawing.id, committedSavedEdits]]);
+    const savedEditsOf = new Map([[committedSetDrawingId, committedSavedEdits]]);
     /** @type {ArtifactSlot[]} */
     const storedSetSlots = [];
     for (const { drawing, mode, set } of storedSets) {
       if (!storedSetCatalog) break; // storedSets is empty without it
       /** @type {ResultSetPath} */
       const at = 'otherModeResult.';
-      const savedEdits = savedResultEdits(data, mode, set.editorState, sourceSessionVersion, draftConfigOf(mode)?.rules);
+      const savedEdits = savedResultEdits(data, mode, set.editorState, sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
       savedEditsOf.set(drawing.id, savedEdits);
       const sequenceSources = await restoreLoadedSetSequenceSources({
         ...setSequenceSourceOptions, mode, catalog: storedSetCatalog, renderRequest: set.renderRequest
@@ -5982,14 +6052,9 @@ const importSessionDocument = async (e, options = {}) => {
     }
     // The rule rows of each drawing whose keys the reading of its saved
     // captions changes (F2): its Result set's, else over no generated rows.
-    // The draft slices are still read by mode (one per mode in a Session
-    // 27-48): a mode's rows take its drawing's set's, if the plan has one.
-    /** @param {DiagramMode} mode @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
-    const legendRekeysOf = (mode) => {
-      const drawing = plan.drawings.find((loaded) => loaded.mode === mode);
-      const savedEdits = drawing ? savedEditsOf.get(drawing.id) : undefined;
-      return savedEdits?.legendRekeys ?? savedLegendRekeys(draftConfigOf(mode)?.rules, { originalOrder: [], originalColors: {} });
-    };
+    /** @param {DrawingId} drawingId @returns {ReadonlyMap<PythonLegendKey, PythonLegendKey>} */
+    const legendRekeysOf = (drawingId) => savedEditsOf.get(drawingId)?.legendRekeys
+      ?? savedLegendRekeys(draftConfigOf(drawingId)?.rules, { originalOrder: [], originalColors: {} });
     // The slot the Load opens: the shown drawing's set when it is not the committed one.
     const openingSlot = storedSetSlots.find((slot) => slot.drawingId === plan.activeDrawingId) ?? null;
     // The Linear drawing's committed request owns its alignment plan and
@@ -6107,21 +6172,13 @@ const importSessionDocument = async (e, options = {}) => {
     // written without a draft (CLI, Python) splits only what its migrations
     // wrote, and its committed mode keeps its request's projection.
     const hasFlatDraft = !modeScopedSession && isPlainObject(data.config);
-    /** @type {Record<'circular' | 'linear', Record<string, any>>} */
-    let modeSlices = { circular: {}, linear: {} };
     /** @type {Record<string, any>} */
     let appUi = modeScopedSession && isPlainObject(data.ui) ? data.ui : {};
     let sessionCliOptions = modeScopedSession ? data.cliOptions : undefined;
     // The stored draft a Session 27-44's drawings both read.
     /** @type {unknown} */
     let flatDraft = null;
-    if (modeScopedSession) {
-      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
-      modeSlices = {
-        circular: isPlainObject(modes?.circular) ? modes.circular : {},
-        linear: isPlainObject(modes?.linear) ? modes.linear : {}
-      };
-    } else {
+    if (!modeScopedSession) {
       const flatConfig = hasFlatDraft
         ? restoredConfig
         : migratedAnnotationTargetCount > 0 && restoredConfig ? { annotationSets: restoredConfig.annotationSets } : {};
@@ -6174,37 +6231,38 @@ const importSessionDocument = async (e, options = {}) => {
       // The shared migration vectors read the split as Load made it
       // (tests/web/mode-split-vectors.test.mjs).
       recordSessionLifecycleEvent('session-draft-split', { split });
-      modeSlices = split.modes || modeSlices;
+      // Each drawing takes the split's part of its mode.
+      SLICE_MODES.forEach((mode) => draftParts.set(fileDrawingIdOf(mode), { slice: split.modes?.[mode] ?? {}, at: '' }));
       appUi = split.ui || {};
       sessionCliOptions = split.cliOptions;
     }
-    // The draft each drawing installs: its slice over its committed projection.
-    /** @type {Record<'circular' | 'linear', Record<string, any>>} */
-    const modeConfigs = {
-      circular: {}, linear: {}
-    };
-    // Each drawing's editor edits, read here so what they lose is listed.
-    /** @type {Record<'circular' | 'linear', ReturnType<typeof normalizeEditorStateData>>} */
-    const modeEditorStates = {
-      circular: normalizeEditorStateData({}), linear: normalizeEditorStateData({})
-    };
+    // Each drawing's draft, by drawing ID: its settings (its part over its
+    // committed projection) and its editor edits, read here so what they
+    // lose is listed.
+    /** @type {Map<DrawingId, LoadedDraft>} */
+    const drafts = new Map();
+    /** @param {DrawingId} drawingId @returns {LoadedDraft} */
+    const draftOf = (drawingId) => /** @type {LoadedDraft} */ (drafts.get(drawingId));
     // The layout of the committed request (a Session 46 slice without its
     // own slot takes it).
     const projectedLayout = canonicalSession ? canonicalProjection?.layoutPreferences : null;
-    /** @type {Record<'circular' | 'linear', SettingsContainers>} */
-    const installedSettings = { circular: defaultSettingsContainers('circular'), linear: defaultSettingsContainers('linear') };
+    /** @type {Map<DrawingId, SettingsContainers>} */
+    const installedSettings = new Map();
     // The legend positions of the drafts' layouts: a Session 46 slice holds
     // its mode's slot; a Session 27-44 keeps one set in `ui` (OV-652).
     if (modeScopedSession) {
-      SLICE_MODES.forEach((mode) => repairs.push(...storedLegendPositionRepairs(modeSlices[mode].ui, `modes.${mode}.ui`, {
-        slotOf: mode, projected: mode === generatedMode && Boolean(projectedLayout)
+      loadedDrawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
+        slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
       })));
     } else {
       repairs.push(...storedLegendPositionRepairs(ui, 'ui'));
     }
-    for (const mode of SLICE_MODES) {
-      const storedEditorState = modeSlices[mode].editorState;
-      const editorPath = modeScopedSession ? `modes.${mode}.editorState` : 'editorState';
+    /** @param {string} at @param {string} field */
+    const pathIn = (at, field) => (at ? `${at}.${field}` : field);
+    for (const { id, mode } of loadedDrawings) {
+      const { slice, at } = draftPartOf(id);
+      const storedEditorState = slice.editorState;
+      const editorPath = pathIn(at, 'editorState');
       const editorState = normalizeEditorStateData(isPlainObject(storedEditorState) ? storedEditorState : {}, {
         repairs, path: editorPath, sessionVersion: sourceSessionVersion
       });
@@ -6213,52 +6271,54 @@ const importSessionDocument = async (e, options = {}) => {
       // new key already has is kept, and the moved one is listed (B39).
       /** @type {DroppedLegendRecord[]} */
       const droppedLegendRecords = [];
-      modeEditorStates[mode] = {
-        ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeysOf(mode), droppedLegendRecords)
+      const loadedEditorState = {
+        ...editorState, legend: rekeyLegendRecords(editorState.legend, legendRekeysOf(id), droppedLegendRecords)
       };
       droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
         code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
       })));
-      const committed = mode === generatedMode;
-      modeConfigs[mode] = modeScopedSession
-        ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, modeSlices[mode].config))
-        : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
+      const committed = id === committedSetDrawingId;
+      /** @type {Record<string, any>} */
+      let config = modeScopedSession
+        ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, slice.config))
+        : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, slice.config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
-      if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
-      if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateLinearSeqs);
-      if (mode === 'circular') {
-        modeConfigs.circular = withoutUnreadConservationSeries(modeConfigs.circular, candidateFiles.files, {
-          seriesAt: `${modeScopedSession ? 'modes.circular.config' : 'config'}.circularConservation.series`,
+      if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
+      // The file's Linear part holds the record rows, its Circular part the conservation rows.
+      if (id === linearPartDrawingId) config = withBoundLinearRecordsOff(config, candidateLinearSeqs);
+      if (id === circularPartDrawingId) {
+        config = withoutUnreadConservationSeries(config, candidateFiles.files, {
+          seriesAt: `${pathIn(at, 'config')}.circularConservation.series`,
           filesAt,
           stored: canonicalSession ? null : /** @type {UnvalidatedFields<'c_conservation_blasts'>} */ (data.files)?.c_conservation_blasts
         }, repairs);
       }
       // The form's legend position is the drawing's layout slot (state.js), which reads it in its mode.
-      if (isPlainObject(modeConfigs[mode].form)) {
-        repairs.push(...readLegendPositionOfMode(modeConfigs[mode].form.legend, mode,
-          `${modeScopedSession ? `modes.${mode}.config` : 'config'}.form.legend`).repairs);
+      if (isPlainObject(config.form)) {
+        repairs.push(...readLegendPositionOfMode(config.form.legend, mode, `${pathIn(at, 'config')}.form.legend`).repairs);
       }
       // What the settings' readers cannot restore of the stored draft (B37,
       // B43), installed as `applyModeSliceData` installs it over the drawing
       // Load resets; and of the drawing's `ui` and feature edits.
-      installedSettings[mode] = defaultSettingsContainers(mode);
+      const settings = defaultSettingsContainers(mode);
+      installedSettings.set(id, settings);
       // What `applyModeSliceData` installs.
-      const installedConfig = overlayModeSliceConfig(null, modeConfigs[mode]);
-      repairs.push(...configFieldRepairs(installedSettings[mode], installedConfig,
-        modeScopedSession ? `modes.${mode}.config` : 'config', {
-          stored: modeSlices[mode].config, mode, resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode)
-        }));
-      repairs.push(...unreadFieldRepairs(modeScopedSession ? modeSlices[mode].config : flatDraft,
-        modeScopedSession ? `modes.${mode}.config` : 'config', mode, { slice: modeScopedSession }));
+      const installedConfig = overlayModeSliceConfig(null, config);
+      repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
+        stored: slice.config, mode, resolveTrackPlacements: !settingsOnly && !isStoredSlice(id)
+      }));
+      repairs.push(...unreadFieldRepairs(modeScopedSession ? slice.config : flatDraft,
+        pathIn(at, 'config'), mode, { slice: modeScopedSession }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
-      repairs.push(...sliceFieldRepairs(modeSlices[mode], modeScopedSession ? `modes.${mode}` : '', mode));
+      repairs.push(...sliceFieldRepairs(slice, at, mode));
       // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
-      const savedOverrides = modeSlices[mode].config?.unmanagedConfigOverrides;
+      const savedOverrides = slice.config?.unmanagedConfigOverrides;
       if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
-        modeConfigs[mode].unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
+        config.unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
           mode, configOverrides: savedOverrides, source: 'draft'
-        }, `${modeScopedSession ? `modes.${mode}.config` : 'config'}.unmanagedConfigOverrides`, repairs);
+        }, `${pathIn(at, 'config')}.unmanagedConfigOverrides`, repairs);
       }
+      drafts.set(id, { config, editorState: loadedEditorState });
     }
     // What each drawing's Depth fit drops (B45): it runs on the restored files.
     if (!settingsOnly) {
@@ -6266,9 +6326,10 @@ const importSessionDocument = async (e, options = {}) => {
       const linearRows = candidateLinearSeqs.map((seq) => depthFileSlotsFromValue(/** @type {DepthFileSlots} */ (seq.depth)));
       // `applyFiles` restored the bound Circular Depth slots (by record, or one row).
       const circularFiles = /** @type {DepthFileSlots | DepthFileSlots[]} */ (/** @type {{ c_depth?: unknown }} */ (candidateFiles.files).c_depth);
-      SLICE_MODES.forEach((mode) => repairs.push(...depthFitRepairs(mode, installedSettings[mode], modeSlices[mode].config?.adv, {
-        at: `${modeScopedSession ? `modes.${mode}.config` : 'config'}.adv`,
-        resolveTrackPlacements: !isStoredSlice(mode),
+      loadedDrawings.forEach(({ id, mode }) => repairs.push(...depthFitRepairs(mode,
+        /** @type {SettingsContainers} */ (installedSettings.get(id)), draftPartOf(id).slice.config?.adv, {
+        at: `${pathIn(draftPartOf(id).at, 'config')}.adv`,
+        resolveTrackPlacements: !isStoredSlice(id),
         circularFiles,
         linearRows
       })));
@@ -6278,7 +6339,7 @@ const importSessionDocument = async (e, options = {}) => {
     // SLICE_MODES order, each over the Instant Preview the one before left.
     // A boolean Instant Preview of an older draft wins over `ui`'s.
     const draftInstantPreview = (appUi !== ui && typeof appUi.paletteInstantPreviewEnabled === 'boolean')
-      || SLICE_MODES.some((mode) => typeof modeConfigs[mode].paletteInstantPreviewEnabled === 'boolean');
+      || loadedDrawings.some(({ id }) => typeof draftOf(id).config.paletteInstantPreviewEnabled === 'boolean');
     repairs.push(
       ...sessionUiFieldRepairs({
         ...ui,
@@ -6291,15 +6352,17 @@ const importSessionDocument = async (e, options = {}) => {
     );
     let instantPreview = Boolean(typeof appUi.paletteInstantPreviewEnabled === 'boolean'
       ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled);
-    for (const mode of SLICE_MODES) {
-      if (typeof modeConfigs[mode].paletteInstantPreviewEnabled === 'boolean') instantPreview = modeConfigs[mode].paletteInstantPreviewEnabled;
-      const pendingPalette = pendingPaletteName(modeSlices[mode].ui);
-      const pendingPath = `${modeScopedSession ? `modes.${mode}.ui` : 'ui'}`;
+    for (const { id } of loadedDrawings) {
+      const { config } = draftOf(id);
+      const { slice, at } = draftPartOf(id);
+      if (typeof config.paletteInstantPreviewEnabled === 'boolean') instantPreview = config.paletteInstantPreviewEnabled;
+      const pendingPalette = pendingPaletteName(slice.ui);
+      const pendingPath = pathIn(at, 'ui');
       if (pendingPalette && instantPreview) {
         repairs.push(loadRepair({ code: 'pending-palette-dropped', path: `${pendingPath}.pendingPaletteName`, effect: 'dropped', label: pendingPalette }));
       } else if (pendingPalette) {
         // The pending palette's colors apply with it.
-        repairs.push(...valueRepairs(readPaletteColors, modeSlices[mode].ui.pendingPaletteColors, `${pendingPath}.pendingPaletteColors`));
+        repairs.push(...valueRepairs(readPaletteColors, slice.ui.pendingPaletteColors, `${pendingPath}.pendingPaletteColors`));
       }
     }
     // The similarity groups' state Load installs; a name or description edit
@@ -6308,8 +6371,8 @@ const importSessionDocument = async (e, options = {}) => {
       ? {
           ...projectionResult.artifactState.orthogroupState,
           ...(modeScopedSession ? {
-            orthogroupNameOverrides: modeConfigs.linear.webEdits?.orthogroupNameOverrides || {},
-            orthogroupDescriptionOverrides: modeConfigs.linear.webEdits?.orthogroupDescriptionOverrides || {}
+            orthogroupNameOverrides: draftOf(linearPartDrawingId).config.webEdits?.orthogroupNameOverrides || {},
+            orthogroupDescriptionOverrides: draftOf(linearPartDrawingId).config.webEdits?.orthogroupDescriptionOverrides || {}
           } : {}),
           ...(currentCatalogFeatureState
             ? { groups: currentCatalogFeatureState.orthogroups }
@@ -6380,7 +6443,7 @@ const importSessionDocument = async (e, options = {}) => {
           retainedBytes: topSetCharacters * 2,
           repairs: null,
           at: '',
-          drawing: committedSetDrawing
+          drawing: { id: committedSetDrawingId, mode: generatedMode }
         })
       : null;
     // The saved Result's editor edits: a Session 39 or older is read here,
@@ -6407,7 +6470,8 @@ const importSessionDocument = async (e, options = {}) => {
     // It asks after the repair list, so a Cancel there loads no font either.
     /** @type {SessionFontConfirmation | undefined} */
     const confirmSessionFonts = options.confirmSessionFonts;
-    if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.map((mode) => modeConfigs[mode]?.adv?.font_family))) {
+    // The fonts are asked in the file's mode order (Circular, then Linear), as 0.14.0 asked them.
+    if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.map((mode) => draftOf(fileDrawingIdOf(mode)).config.adv?.font_family))) {
       return { status: 'canceled' };
     }
     // The admitted candidate is still private. Let the browser handle input
@@ -6427,7 +6491,7 @@ const importSessionDocument = async (e, options = {}) => {
     // its part of the file installs over them; the shown artifact takes the
     // shown drawing's palette (the Results are cleared above).
     const shownDrawing = installShownDrawing(plan.activeDrawingId);
-    const committedDrawing = state.drawingOf(committedSetDrawing.id);
+    const committedDrawing = state.drawingOf(committedSetDrawingId);
     committed.filter((drawing) => drawing !== shownDrawing).forEach((drawing) => resetDrawingSettings(state, drawing));
     const artifact = resetDrawingSettings(state, shownDrawing);
     state.appliedPaletteName.value = artifact.appliedPaletteName;
@@ -6462,16 +6526,15 @@ const importSessionDocument = async (e, options = {}) => {
     // slice without its mode's request projection is stored settings: its track
     // stacks install as saved, unset axis indexes included (R11).
     for (const drawing of committed) {
-      const { mode } = drawing;
-      // The committed mode's slice takes its request's per-feature edits where
+      const { id, mode } = drawing;
+      const { slice } = draftPartOf(id);
+      // The committed set's drawing takes its request's per-feature edits where
       // it has none (OV-220).
-      const features = mode === generatedMode && canonicalSession && !settingsOnly
-        ? { features: featureEditsOverProjection(modeSlices[mode].features, projectionResult.renderState) } : {};
-      applyModeSliceData(drawing, mode, {
-        ...modeSlices[mode], ...features, config: modeConfigs[mode], editorState: modeEditorStates[mode]
-      }, {
-        resolveTrackPlacements: !settingsOnly && !isStoredSlice(mode),
-        applyCanvasPadding: mode !== shownMode
+      const features = id === committedSetDrawingId && canonicalSession && !settingsOnly
+        ? { features: featureEditsOverProjection(slice.features, projectionResult.renderState) } : {};
+      applyModeSliceData(drawing, mode, { ...slice, ...features, ...draftOf(id) }, {
+        resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
+        applyCanvasPadding: id !== plan.activeDrawingId
       });
     }
     // App-level settings: LOSAT execution (after the drafts, whose request
@@ -6495,7 +6558,7 @@ const importSessionDocument = async (e, options = {}) => {
     // committed mode's request sets it when the slice has none); a Session
     // 27-44 keeps one set, read once, which both drawings take.
     if (modeScopedSession) {
-      if (projectedLayout && !isPlainObject(modeSlices[generatedMode].ui?.layoutPreferences)) {
+      if (projectedLayout && !isPlainObject(draftPartOf(committedSetDrawingId).slice.ui?.layoutPreferences)) {
         const drawingOfCommit = committedDrawing;
         SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
           ...cloneJsonData(drawingOfCommit.layoutPreferences),
@@ -6515,9 +6578,8 @@ const importSessionDocument = async (e, options = {}) => {
       linearComparisonPlan: candidateFiles.linearComparisonPlan
     }, committed);
     // A Session 27-48 holds one Linear part (its comparisons, LOSAT caches
-    // and Similarity group names): the plan's Linear drawing, else the
-    // unused one, takes it until each drawing's part is read (B2d-3).
-    const linearDrawing = /** @type {DrawingState} */ (committed.find((drawing) => drawing.mode === 'linear'));
+    // and Similarity group names), which its drawing takes.
+    const linearDrawing = state.drawingOf(linearPartDrawingId);
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
       state.linearFoldedSources, groupLinearSourceRecords(linearDrawing.linearSeqs),
@@ -6527,7 +6589,7 @@ const importSessionDocument = async (e, options = {}) => {
     restoreImportedComparisonIntent(
       linearDrawing.importedComparisonIntent,
       comparisonClassification,
-      linearDraftConfig?.importedComparisonResolution
+      draftConfigOf(linearPartDrawingId)?.importedComparisonResolution
     );
     if (!settingsOnly) {
       // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
@@ -6574,8 +6636,9 @@ const importSessionDocument = async (e, options = {}) => {
 
     // The drawings hold their edits; the Result's catalog features are artifacts.
     applyFeatureArtifactData(features);
-    state.selectedFeatureRecordIdx.value = Number.isInteger(modeSlices[shownMode].ui?.selectedFeatureRecordIdx)
-      ? modeSlices[shownMode].ui.selectedFeatureRecordIdx : 0;
+    const shownUi = draftPartOf(plan.activeDrawingId).slice.ui;
+    state.selectedFeatureRecordIdx.value = Number.isInteger(shownUi?.selectedFeatureRecordIdx)
+      ? shownUi.selectedFeatureRecordIdx : 0;
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
@@ -6594,7 +6657,7 @@ const importSessionDocument = async (e, options = {}) => {
         catalogFeatureState: currentCatalogFeatureState
       }
     );
-    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(generatedMode)) });
+    applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
       applySessionFeatureRecoveryPlan(committedDrawing, legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
@@ -6652,7 +6715,7 @@ const importSessionDocument = async (e, options = {}) => {
       await options.afterLoad({ data, ui });
     }
 
-    const shownPadding = modeSlices[shownMode].ui?.canvasPadding;
+    const shownPadding = shownUi?.canvasPadding;
     if (shownPadding !== undefined) {
       CANVAS_SLICE.install(shownDrawing.slices.canvas, { canvasPadding: readCanvasPadding(shownPadding).value });
     }

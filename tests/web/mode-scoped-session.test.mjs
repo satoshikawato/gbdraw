@@ -590,3 +590,19 @@ test('Load reads each drawing\'s saved Result set from its own entry of the 49 d
     assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
   }
 });
+
+test('Load reads each drawing\'s draft from its own part of the file by drawing ID, not from mode-keyed slices', () => {
+  // A Session 46-48 drawing's settings, per-feature edits, editor edits and
+  // `ui` come from its entry of the 49 document; a Session 27-44 split is
+  // keyed by its drawings' IDs. The file's one Linear part (comparisons,
+  // LOSAT caches, group names) is the drawing the file names for it.
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const body = source.slice(source.indexOf('const importSessionDocument = async'), source.indexOf('export const importSession ='));
+  assert.ok(body.length > 1000);
+  for (const name of ['modeSlices', 'modeConfigs', 'modeEditorStates', 'linearDraftConfig', 'circularDraftConfig']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
+  }
+  assert.equal(/draftConfigOf\((?:'linear'|'circular'|mode|generatedMode)\)/.test(body), false, 'draftConfigOf by mode');
+  assert.equal(/legendRekeysOf\((?:mode|generatedMode)\)/.test(body), false, 'legendRekeysOf by mode');
+  assert.equal(/committed\.find\(\(drawing\) => drawing\.mode === 'linear'\)/.test(body), false, 'the Linear drawing by mode');
+});

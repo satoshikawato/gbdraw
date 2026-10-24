@@ -537,11 +537,25 @@ const drawingOf = (view) => {
  * @param {number} version The admitted source version.
  * @returns {{ document: Session49, sourceFacts: SourceFacts }}
  */
-export const upgradeModeScopedSession = (checked, version) => {
+export const upgradeModeScopedSession = (checked, version) => upgradeRowKeyedModeScopedSession(
+  /** @type {SessionChecked46} */ (/** @type {unknown} */ (sessionLegendEditsByRowKey(/** @type {Fields} */ (checked), version).session)),
+  version
+);
+
+/**
+ * `upgradeModeScopedSession` of a Session 46-48 whose Legend edits are keyed
+ * by row key already: Load reads them so before it plans (its preflight runs
+ * `sessionLegendEditsByRowKey` and lists what that drops), and the reading
+ * is not run twice.
+ * @param {SessionChecked46} checked
+ * @param {number} version The admitted source version.
+ * @returns {{ document: Session49, sourceFacts: SourceFacts }}
+ */
+export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   if (!Number.isInteger(version) || version < MODE_SCOPED_SESSION_VERSION || version >= LAYOUT.version) {
     throw layoutInvalid();
   }
-  const { session: source } = sessionLegendEditsByRowKey(/** @type {Fields} */ (checked), version);
+  const source = /** @type {Fields} */ (/** @type {unknown} */ (checked));
   const committed = committedViews(source);
   if (!committed.size) throw layoutInvalid();
   const order = migratedDrawingModes(source, committed);

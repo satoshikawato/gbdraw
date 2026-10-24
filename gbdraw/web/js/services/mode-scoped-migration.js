@@ -71,6 +71,25 @@ export const modeSliceFieldViolations = (value, container = '') => {
     return Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer) ? modeSliceFieldViolations(child, childContainer) : [];
   });
 };
+/**
+ * The registry fields of `value` read as the slice `container` (its nested
+ * containers the same way; a value of another kind is kept for its reader):
+ * what a drawing's draft takes of its Session 49 entry's `editorState` and
+ * `ui`, which also hold its Result set's fields.
+ * @param {unknown} value
+ * @param {string} container
+ * @returns {unknown}
+ */
+export const modeSliceFieldsOf = (value, container) => {
+  if (!isObject(value)) return value;
+  const allowed = MODE_SLICE_CONTAINERS[container];
+  return Object.fromEntries(Object.entries(/** @type {Record<string, unknown>} */ (value))
+    .filter(([field]) => allowed.has(field))
+    .map(([field, child]) => {
+      const childContainer = container ? `${container}.${field}` : field;
+      return [field, Object.hasOwn(MODE_SLICE_CONTAINERS, childContainer) ? modeSliceFieldsOf(child, childContainer) : child];
+    }));
+};
 /** Save: a slice holds only registry fields. @param {unknown} value */
 export const validateModeSliceFields = (value) => {
   if (modeSliceFieldViolations(value).length) throw fieldsError();
