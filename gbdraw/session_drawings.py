@@ -1100,6 +1100,67 @@ def drawings_document_from_mode_scoped(
     return cast(GbdrawSession49, document), facts
 
 
+class SessionDrawingsLayout(TypedDict):
+    """:func:`describe_session_drawings_layout`: the generated ``SESSION_DRAWINGS_LAYOUT``."""
+
+    version: int
+    drawingNames: dict[str, str]
+    setFields: list[str]
+    setEditorFields: list[str]
+    projectFields: list[str]
+    projectUiFields: list[str]
+    projectWebFilesFields: list[str]
+    drawingFields: list[str]
+    viewFields: list[str]
+    drawingWebFileKeys: list[str]
+    drawingWebFilesFields: dict[str, list[str]]
+    inputTypeFields: dict[str, str]
+    bindingCardSlots: list[str]
+    bindingModeSlots: dict[str, list[str]]
+    resourceReferenceFields: list[str]
+    resourceIdListFields: list[str]
+    drawingResourceFields: list[str]
+
+
+def describe_session_drawings_layout() -> SessionDrawingsLayout:
+    """The field sets of the move of a Session 46-48 to drawings, for the Web.
+
+    The Web's twin of :func:`drawings_document_from_mode_scoped`
+    (``upgradeModeScopedSession``, ``gbdraw/web/js/services/session-drawings-upgrade.js``)
+    reads them from the generated ``SESSION_DRAWINGS_LAYOUT``; this module and
+    :mod:`gbdraw.session_resources` stay their owners. Sets are sorted lists.
+    """
+
+    from gbdraw.session_resources import (
+        _DRAWING_RESOURCE_FIELDS,
+        _RESOURCE_ID_LIST_FIELDS,
+        _RESOURCE_REFERENCE_FIELDS,
+    )
+
+    def per_mode(fields: Mapping[str, frozenset[str]]) -> dict[str, list[str]]:
+        return {mode: sorted(fields[mode]) for mode in DRAWING_NAMES}
+
+    return {
+        "version": DRAWINGS_SESSION_MIN_VERSION,
+        "drawingNames": dict(DRAWING_NAMES),
+        "setFields": sorted(_SET_FIELDS),
+        "setEditorFields": sorted(_SET_EDITOR_FIELDS),
+        "projectFields": sorted(PROJECT_FIELDS),
+        "projectUiFields": sorted(PROJECT_UI_FIELDS),
+        "projectWebFilesFields": sorted(PROJECT_WEB_FILES_FIELDS),
+        "drawingFields": sorted(_DRAWING_FIELDS),
+        "viewFields": sorted(_VIEW_FIELDS),
+        "drawingWebFileKeys": sorted(_DRAWING_WEB_FILE_KEYS),
+        "drawingWebFilesFields": per_mode(_DRAWING_WEB_FILES_FIELDS),
+        "inputTypeFields": dict(_INPUT_TYPE_FIELDS),
+        "bindingCardSlots": sorted(WEB_BINDING_CARD_SLOTS),
+        "bindingModeSlots": per_mode(WEB_BINDING_MODE_SLOTS),
+        "resourceReferenceFields": sorted(_RESOURCE_REFERENCE_FIELDS),
+        "resourceIdListFields": list(_RESOURCE_ID_LIST_FIELDS),
+        "drawingResourceFields": list(_DRAWING_RESOURCE_FIELDS),
+    }
+
+
 __all__ = [
     "DRAWING_NAMES",
     "PROJECT_FIELDS",
@@ -1112,7 +1173,9 @@ __all__ = [
     "allocate_drawing_id",
     "allocate_session_drawing",
     "ModeScopedSourceFacts",
+    "SessionDrawingsLayout",
     "checked_drawing_views",
+    "describe_session_drawings_layout",
     "drawing_draft_config",
     "drawings_document_from_mode_scoped",
     "read_session_drawings",

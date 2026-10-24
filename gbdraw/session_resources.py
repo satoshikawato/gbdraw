@@ -49,6 +49,8 @@ def canonical_resource_ids(value: object) -> set[str]:
 
 # The ``webFiles`` keys that list the resource IDs of conservation inputs.
 _RESOURCE_ID_LIST_FIELDS = ("conservationLosatFastaSources", "conservationSequenceSources")
+# The parts of a drawing that name resources (:func:`drawing_resource_ids`).
+_DRAWING_RESOURCE_FIELDS = ("renderRequest", "webFiles", "results")
 
 
 def drawing_resource_ids(fields: Mapping[str, Any]) -> set[str]:
@@ -59,7 +61,7 @@ def drawing_resource_ids(fields: Mapping[str, Any]) -> set[str]:
     """
 
     found = set()
-    for field_name in ("renderRequest", "webFiles", "results"):
+    for field_name in _DRAWING_RESOURCE_FIELDS:
         found |= canonical_resource_ids(fields.get(field_name))
     web_files = fields.get("webFiles")
     for field_name in _RESOURCE_ID_LIST_FIELDS:
