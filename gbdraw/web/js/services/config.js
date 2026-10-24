@@ -6752,7 +6752,8 @@ export const disposeSessionOperations = () => {
 // both drawings' sources, on which Save writes their drafts;
 // `options.readKeptArtifacts` returns the artifact slots the root keeps for
 // the drawings not shown (E1), `options.beforeExport` learns whether Save projects
-// the draft request, and `options.onSaved` runs once the download is handed off.
+// the draft request, `options.onSaved` runs once the download is handed off,
+// and `options.onSettled` runs once the Save ends, after its pending state clears.
 /**
  * What the composition root passes to `exportSession`.
  * @typedef {object} SessionSaveOptions
@@ -6766,6 +6767,7 @@ export const disposeSessionOperations = () => {
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
  * @property {(result: Extract<SessionSaveResult, { status: 'saved' }>) => void} [onSaved]
  * @property {(error: UserFacingError | null) => void} [onError]
+ * @property {() => void} [onSettled]
  */
 
 /**
@@ -6871,6 +6873,7 @@ export const exportSession = (titleOverride = null, options) => {
       sessionSaveInFlight = null;
     }
     recordSessionLifecycleEvent('session-save-pending-cleared');
+    options.onSettled?.();
   });
   sessionSaveInFlight = operation;
   return operation.promise;
