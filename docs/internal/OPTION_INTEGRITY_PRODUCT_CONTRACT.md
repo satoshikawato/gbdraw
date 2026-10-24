@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `84`
+- Contract revision: `85`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2970,6 +2970,32 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that warn on the definition text over a track are in
     the same pull request, and the Review is `REQUIRED`.
+- Revision 85 change: the `Normative outcome` and `Compatibility` fields in
+  the header of `PD-OI-052` gain one sentence each that states scenario
+  revision `2`, already approved in the Revision 83 entry. This is a wording
+  change that makes the record's header match its scenario revision `2`
+  receipt. No outcome changes, the scenario revision stays `2`, and the
+  scenario revision `1` and `2` receipts and their SHA-256 values are
+  unchanged. It comes from two replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-24` in the Claude Code session that finished
+  the Linear scale bounds. Each reply is quoted as written.
+  - Reply 1. The session's final report said:
+    「PD-OI-052 の見出しの欄(Normative outcome の要約など)は revision 1 の文のままです。直すかどうかは Owner の判断です。」
+    The Owner replied: 「質問して。」
+  - Reply 2. The session asked whether to align the `PD-OI-052` header
+    fields with scenario revision `2` by appending the two sentences below to
+    the Normative outcome and the Compatibility fields, without changing the
+    scenario revision `1` and `2` receipts or any other field, in a
+    Contract-only pull request that the Owner merges (A), or to leave them
+    (B). The Owner selected 「A 2 つの欄に足す (Recommended)」.
+  - Sentence appended to Normative outcome, after 「。」:
+    「scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。」
+  - Sentence appended to Compatibility, after 「。」:
+    「scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。」
+  - No other field or record is amended or retired.
+  - This is a Contract-only change on the authority-only route: no runtime,
+    test, or documentation changes with it, the Review is `REQUIRED`, and the
+    Owner merges it.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5175,7 +5201,7 @@ Decision date: 2026-09-27
 - Scenario revision: `2`
 - Status: `ACCEPTED`
 - Selected outcome: `A2 / CARRY-DELTAS-AND-GROW-CANVAS`
-- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate
+- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate。scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。
 - Discoverability/accessibility / immediate feedback: 通常は自動継承。対応不能の理由・対象・Reset/修正を keyboard/touch から到達可能に表示
 - Canonical state update: Result SVG を差分の正本とし、transaction-local snapshot を candidate に適用。UI refs は同期値。latent/global map なし
 - Undo/Redo: Generate は継承を含む1 replacement。保存 Result を復元し delta を再加算しない
@@ -5186,7 +5212,7 @@ Decision date: 2026-09-27
 - Scientific-output: 装飾位置のみ。recordTranslations/active alignment の record delta を二重加算しない
 - Cache/provenance: 既存 validated identity/digest 使用。raw search/cache key に delta を追加しない。candidate と保存Resultを一致
 - Performance: 非ゼロ対象のみ。候補の既存parse/serialize共用、batch旧SVGは必要分のみ、zero fast path維持
-- Compatibility: writer/readerを維持。照合できない保存図は明示回復
+- Compatibility: writer/readerを維持。照合できない保存図は明示回復。scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。
 - Decision source (scenario revision `1`): the complete Choice A outcome and nine-field receipt in
   [DECISION_01_COMPOSITION_CONTINUITY.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_01_COMPOSITION_CONTINUITY.md)
   at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
