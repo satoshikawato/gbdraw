@@ -210,8 +210,7 @@ back at the same place. Every setting keeps its value through these switches;
 they are not Undo steps and are not saved in a Session. A link that leads to a
 setting, such as **Show in Comparison** or **Show in settings**, shows the
 section of that setting first. Beside the column alone the Generate button
-reads **Generate**, and a layout warning becomes a mark above it that opens
-the warning text. A column taller than the window scrolls. At phone width the
+reads **Generate**. A column taller than the window scrolls. At phone width the
 settings always show in full.
 
 ### Save and Load Sessions

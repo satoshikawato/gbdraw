@@ -15,7 +15,6 @@ const deepFreeze = (value) => {
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
     "circularSlots": {
-      "axisRadiusPx": 390.0,
       "gapPx": 3.9,
       "presetNumericRowSides": {
         "middle": {
@@ -183,6 +182,18 @@ export const MODE_PROFILE_DATA = deepFreeze({
         ]
       ]
     }
+  },
+  "circularTrackPresets": {
+    "featureLaneDirection": {
+      "middle": "split",
+      "spreadout": "outside",
+      "tuckin": "inside"
+    },
+    "presets": [
+      "tuckin",
+      "middle",
+      "spreadout"
+    ]
   },
   "comparisonDomains": {
     "alignmentLength": {

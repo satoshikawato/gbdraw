@@ -9,6 +9,7 @@ import { normalizeOptionalText } from './track-slot-display.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, parseOptionalCircularScalar, parseOptionalPixel } from './track-slot-validation.js';
 import { isUnsetValue, noteReplacedLeaf } from '../utils/field-reading.js';
 import { diagnosticError } from '../utils/error-normalization.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 
 /** @import { TrackSlotRow } from './track-slot-validation.js' */
 /** @import { FieldLeaf } from '../utils/field-reading.js' */
@@ -94,7 +95,12 @@ const OBSOLETE_CIRCULAR_TRACK_SLOT_KEYS = new Set([
   'compress',
   'reserve'
 ]);
-export const CIRCULAR_TRACK_PRESETS = ['tuckin', 'middle', 'spreadout'];
+// The presets in menu order and the feature lane direction of each
+// (gbdraw/diagrams/circular/presets.py, through mode-profiles.generated.js).
+/** @type {readonly string[]} */
+export const CIRCULAR_TRACK_PRESETS = MODE_PROFILE_DATA.circularTrackPresets.presets;
+/** @type {Readonly<Record<string, string>>} */
+const FEATURE_LANE_DIRECTION_BY_PRESET = MODE_PROFILE_DATA.circularTrackPresets.featureLaneDirection;
 
 /**
  * @param {unknown} value
@@ -107,12 +113,8 @@ export const normalizeCircularTrackPreset = (value, fallback = 'tuckin') => {
 };
 
 /** @param {unknown} preset */
-export const laneDirectionForPreset = (preset) => {
-  const normalized = normalizeCircularTrackPreset(preset);
-  if (normalized === 'middle') return 'split';
-  if (normalized === 'spreadout') return 'outside';
-  return 'inside';
-};
+export const laneDirectionForPreset = (preset) =>
+  FEATURE_LANE_DIRECTION_BY_PRESET[normalizeCircularTrackPreset(preset)];
 
 /**
  * @param {unknown} value
