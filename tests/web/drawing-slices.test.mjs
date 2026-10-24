@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
-import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, UNJOINED_DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
+import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
@@ -64,8 +64,7 @@ const SLICES = Object.entries(DRAWING_SLICES);
 
 test('each slice view holds its members, every drawing shows it, and no member is in two slices', async () => {
   const sliceOf = new Map();
-  const unjoined = Object.entries(UNJOINED_DRAWING_SLICES);
-  for (const [name, slice] of [...SLICES, ...unjoined]) {
+  for (const [name, slice] of SLICES) {
     const { handle, view } = slice.create();
     assert.ok(Object.isFrozen(handle) && Object.isFrozen(view), `${name}: the handle and the view are frozen`);
     assert.deepEqual(Object.keys(view), [...slice.members], `${name}: the view holds the slice's members`);
@@ -78,14 +77,9 @@ test('each slice view holds its members, every drawing shows it, and no member i
   const exported = await Promise.all(modules.map((file) => import(join(SLICE_DIRECTORY, file))));
   const descriptors = new Set(exported.flatMap((module) => Object.values(module)
     .filter((value) => value && typeof value === 'object' && Array.isArray(value.members))));
-  assert.deepEqual(new Set([...SLICES, ...unjoined].map(([, slice]) => slice)), descriptors,
-    'DRAWING_SLICES (or the unjoined list) names each slice module once');
+  assert.deepEqual(new Set(SLICES.map(([, slice]) => slice)), descriptors, 'DRAWING_SLICES names each slice module once');
   for (const mode of MODES) {
     const drawing = modeDrawing(state, mode);
-    for (const [name, slice] of unjoined) {
-      assert.ok(!(name in drawing.slices) && slice.members.every((member) => !(member in drawing)),
-        `${mode}: the unjoined ${name} slice has no handle or member on the drawing`);
-    }
     assert.deepEqual(Object.keys(drawing.slices), SLICES.map(([name]) => name), `${mode}: one handle per slice`);
     for (const [name, slice] of SLICES) {
       const captured = slice.capture(drawing.slices[name]);
@@ -348,12 +342,17 @@ const saveSession = async () => {
   return new Blob([gunzipSync(Buffer.from(await saved.blob.arrayBuffer()))], { type: 'application/json' });
 };
 
+// The inputs slice is not in this round trip until Session 49: a Session 48
+// holds one set of record rows (the Linear drawing's), and its reset changes
+// nothing until the card files join it (D-15-91 S-2 A). drawing-inputs.test.mjs
+// pins its install, capture, and writers; the flip (B2d-3) adds its sample.
+const ROUND_TRIP_SLICES = SLICES.filter(([name]) => name !== 'inputs');
 test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', async () => {
-  assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
+  assert.deepEqual(Object.keys(SAMPLES).sort(), ROUND_TRIP_SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
-    for (const [name, slice] of SLICES) {
+    for (const [name, slice] of ROUND_TRIP_SLICES) {
       const drawing = modeDrawing(state, mode);
       const loaded = JSON.stringify(slice.capture(drawing.slices[name]));
       const sample = SAMPLES[name](mode);

@@ -180,7 +180,6 @@ export const setupWatchers = ({
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
-    linearSeqs,
     linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
@@ -550,7 +549,8 @@ export const setupWatchers = ({
       state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
-      ...linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
+      // Every drawing's cards: the discovery runs for the shown one.
+      ...state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs).flatMap((/** @type {LinearSeq} */ seq) => [
         seq.uid,
         lInputType.value === 'gff' ? seq.gff : seq.gb,
         lInputType.value === 'gff' ? seq.fasta : null

@@ -334,7 +334,6 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * @property {{ value: boolean }} showRightDrawer
  * @property {{ value: string }} rightDrawerTab
  * @property {{ value: HTMLElement | null }} svgContainer
- * @property {Record<string, any>[]} linearSeqs
  * @property {{ value: Record<string, any>[] }} extractedFeatures
  * @property {{ value: Record<string, any>[] }} biologicalFeatures
  * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
@@ -345,7 +344,11 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * The group names of a drawing (`DrawingState` of state.js), and the handle their writers take.
  * @typedef {GroupNamesView & { readonly slices: { readonly groupNames: GroupNamesSlice } }} OrthogroupEditorDrawing
  */
-/** @typedef {OrthogroupEditorDrawing & { readonly mode: string }} OrthogroupEditorShownDrawing */
+/** @import { LinearSeq } from '../state.js' */
+/**
+ * The shown drawing: its group names, its mode, and its record rows.
+ * @typedef {OrthogroupEditorDrawing & { readonly mode: string, readonly linearSeqs: readonly LinearSeq[] }} OrthogroupEditorShownDrawing
+ */
 
 /**
  * @typedef {() => { records?: { recordKey?: unknown }[] } | null} CommittedRequestPort
@@ -365,7 +368,6 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     showRightDrawer,
     rightDrawerTab,
     svgContainer,
-    linearSeqs,
     extractedFeatures,
     biologicalFeatures
   } = state;
@@ -732,6 +734,9 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
   /** @param {unknown} members */
   const groupOrthogroupMembersByRecord = (members) => {
     const requestRecords = getCommittedRequest()?.records || [];
+    // The cards of the shown Linear drawing, whose Result this is.
+    const drawing = shownLinearDrawing();
+    const linearSeqs = drawing === null ? [] : drawing.linearSeqs;
     /** @param {number} recordIndex */
     const cardOf = (recordIndex) => {
       const uid = String(requestRecords[recordIndex]?.recordKey ?? '');

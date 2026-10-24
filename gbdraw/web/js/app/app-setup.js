@@ -103,6 +103,7 @@ import {
   createLinearSeq,
   normalizeLinearSeqList,
   registerInputFiles,
+  replaceLinearSeqs,
   retainHistoryAndBoundFiles
 } from '../services/drawing/inputs.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
@@ -486,7 +487,6 @@ export const createAppSetup = () => {
     lInputType,
     files,
     selectedAnnotation,
-    linearSeqs,
     losatCacheInfo,
     losatThreadingStatus,
     orthogroups,
@@ -611,6 +611,13 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return drawing.mode === drawingMode ? drawing : null;
   };
+  // The record rows of the shown Linear drawing, none when another drawing is
+  // shown: the File cards and the record names its panel lists.
+  /** @returns {readonly LinearSeq[]} */
+  const shownLinearSeqs = () => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing === null ? [] : drawing.linearSeqs;
+  };
   /**
    * A mode panel's mutating handler: the session operation's busy result
    * first, then nothing when the shown drawing is not of `drawingMode`, else
@@ -723,7 +730,7 @@ export const createAppSetup = () => {
     const before = drawing.linearComparisonResolution.value.edges;
     /** @type {readonly ResolvedEdge[]} */
     const after = resolveLinearComparisonPlan({
-      plan: normalized, sequences: linearSeqs, layout: effectiveLinearComparisonLayout(drawing),
+      plan: normalized, sequences: drawing.linearSeqs, layout: effectiveLinearComparisonLayout(drawing),
       losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat.blastp?.mode
     }).edges;
     if (!after.some(pending)) return false;
@@ -771,7 +778,7 @@ export const createAppSetup = () => {
 
   /** @param {DrawingState} drawing */
   const syncLinearComparisonRecords = (drawing, { invalidate = true } = {}) => {
-    const next = reconcileLinearComparisonPlan(drawing.linearComparisonPlan, linearSeqs);
+    const next = reconcileLinearComparisonPlan(drawing.linearComparisonPlan, drawing.linearSeqs);
     const currentEdges = drawing.linearComparisonPlan.edges;
     const unchanged = (
       next.mode === drawing.linearComparisonPlan.mode &&
@@ -786,7 +793,7 @@ export const createAppSetup = () => {
   const syncLinearRecordLayout = ({ preserveLosatCacheInfo = false } = {}) => {
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
-    const next = reconcileLinearRecordLayout(linearSeqs, drawing.linearRecordRows);
+    const next = reconcileLinearRecordLayout(drawing.linearSeqs, drawing.linearRecordRows);
     const rowsUnchanged = next.length === drawing.linearRecordRows.length && next.every((entry, index) => (
       entry.uid === drawing.linearRecordRows[index]?.uid && entry.row === drawing.linearRecordRows[index]?.row
     ));
@@ -813,11 +820,11 @@ export const createAppSetup = () => {
     drawing.linearRecordLayoutEnabled.value = nextEnabled;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
-    if (nextEnabled) return materializeAutomaticLinearRecords();
+    if (nextEnabled) return materializeAutomaticLinearRecords(drawing);
   });
   /** @param {string} uid @param {number} direction */
   const moveLinearRecordWithinRow = (uid, direction) => shownAction('linear', (drawing) => {
-    const next = moveLinearRecordInRow(linearSeqs, drawing.linearRecordRows, uid, direction);
+    const next = moveLinearRecordInRow(drawing.linearSeqs, drawing.linearRecordRows, uid, direction);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...next);
     syncLinearComparisonRecords(drawing, { invalidate: false });
     invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo: true });
@@ -856,7 +863,7 @@ export const createAppSetup = () => {
   });
 
   /** @type {{ readonly value: LinearSourceGroup[] }} */
-  const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
+  const linearSourceGroups = computed(() => groupLinearSourceRecords(shownLinearSeqs()));
   const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
   const linearSourceRemovalReturnFocus = ref(null);
   const linearSourceRemovalTarget = computed(() => (
@@ -905,7 +912,7 @@ export const createAppSetup = () => {
   const linearComparisonTimeline = computed(() => {
     const drawing = state.activeDrawing();
     return buildLinearComparisonTimeline({
-      sequences: linearSeqs,
+      sequences: drawing.linearSeqs,
       recordsOff: drawing.recordsOff,
       layout: effectiveLinearComparisonLayout(drawing),
       plan: drawing.linearComparisonPlan,
@@ -921,7 +928,7 @@ export const createAppSetup = () => {
     return null;
   };
   // Every panel names a record the same way (OV-436).
-  const linearRecordNameMap = computed(() => linearRecordNames(linearSeqs));
+  const linearRecordNameMap = computed(() => linearRecordNames(shownLinearSeqs()));
   /** @param {string} uid */
   const linearComparisonRecordLabel = (uid) => linearRecordNameMap.value.get(uid)?.label || t('Record');
   // The parts <record-name> lays out: the name shrinks, the accession stays whole.
@@ -1372,7 +1379,7 @@ export const createAppSetup = () => {
     const drawing = state.activeDrawing();
     return (
       drawing.linearRecordLayoutEnabled.value
-        ? linearRecordPositionTokens(linearSeqs, drawing.linearRecordRows)
+        ? linearRecordPositionTokens(drawing.linearSeqs, drawing.linearRecordRows)
         : []
     );
   });
@@ -1408,9 +1415,9 @@ export const createAppSetup = () => {
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
     const namesOfThisFile = pendingLinearRecordExpansions.get(uid);
     pendingLinearRecordExpansions.delete(uid);
-    const index = linearSeqs.findIndex((seq) => seq.uid === uid);
+    const index = drawing.linearSeqs.findIndex((seq) => seq.uid === uid);
     if (index < 0) return;
-    const source = linearSeqs[index];
+    const source = drawing.linearSeqs[index];
     if (namesOfThisFile === undefined || records.length < 2 || source.region_record_id) {
       if (inferDefinitions) {
         source.inferred_definition = inferredDefinitionForRecord(records, source.region_record_id);
@@ -1436,7 +1443,7 @@ export const createAppSetup = () => {
       region_record_id: record.value
     }));
     applyLinearSeqMutation(drawing, [
-      ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
+      ...drawing.linearSeqs.slice(0, index), ...expanded, ...drawing.linearSeqs.slice(index + 1)
     ], { alignmentMutation: msg('record selector changed.') });
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
@@ -1470,11 +1477,12 @@ export const createAppSetup = () => {
     pendingCircularUpload = null;
     requestRecordListAfterUpload('circular', 'circular', recordCount);
   };
-  const materializeAutomaticLinearRecords = async () => {
-    if (mode.value !== 'linear') return;
+  /** @param {DrawingState} drawing */
+  const materializeAutomaticLinearRecords = async (drawing) => {
+    if (drawing.mode !== 'linear') return;
     // A row that already waits for its discovery keeps what its writer said
     // about its names (a replacing file does not own the row's record name).
-    linearSeqs.forEach((seq) => {
+    drawing.linearSeqs.forEach((seq) => {
       if (!seq.region_record_id && !pendingLinearRecordExpansions.has(seq.uid)) {
         pendingLinearRecordExpansions.set(seq.uid, true);
       }
@@ -1554,7 +1562,7 @@ export const createAppSetup = () => {
     };
     const linearSources = () => {
       const recordsOff = new Set(drawing.recordsOff);
-      return linearSourcesOverride || linearSeqs.map((seq) => linearAnnotationSource(seq, !recordsOff.has(seq.uid)));
+      return linearSourcesOverride || drawing.linearSeqs.map((seq) => linearAnnotationSource(seq, !recordsOff.has(seq.uid)));
     };
     return buildAnnotationRecordCatalog(/** @type {any} */ (drawing.mode === 'linear'
       ? { mode: 'linear', linearSources: linearSources() }
@@ -1604,7 +1612,6 @@ export const createAppSetup = () => {
     state,
     fileStore: state.inputFiles,
     nextTick,
-    normalizeLinearSeqList,
     buildConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
@@ -2170,7 +2177,7 @@ export const createAppSetup = () => {
         annotationSets: drawing.annotationSets,
         depthTracks: drawing.adv.depth_tracks,
         ...(mode.value === 'linear'
-          ? { depthSlots: drawing.adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows()) }
+          ? { depthSlots: drawing.adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows(drawing)) }
           : {
               depthSlots: drawing.adv.circular_track_slots,
               sourcedDepthTrackIndexes: circularDepthRepresentatives()
@@ -2272,12 +2279,12 @@ export const createAppSetup = () => {
     return tn(count, '{count} TSV', '{count} TSVs');
   };
   const hasCircularDepthFiles = computed(() => depthFileCount(files.c_depth) > 0);
-  const hasAnyLinearDepthFiles = computed(() => (
-    linearSeqs.some((seq) => depthFileCount(seq?.depth) > 0)
-  ));
-  const canShowDepthTrack = computed(() => (
-    mode.value === 'linear' ? hasAnyLinearDepthFiles.value : hasCircularDepthFiles.value
-  ));
+  /** @param {DrawingState} drawing */
+  const linearDrawingHasDepthFiles = (drawing) => drawing.linearSeqs.some((seq) => depthFileCount(seq.depth) > 0);
+  const canShowDepthTrack = computed(() => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'linear' ? linearDrawingHasDepthFiles(drawing) : hasCircularDepthFiles.value;
+  });
   const enabledOptionClass = 'text-slate-700 cursor-pointer';
   const disabledOptionClass = 'text-slate-400 cursor-not-allowed opacity-60';
   const depthToggleOptionClass = computed(() => (
@@ -2322,13 +2329,17 @@ export const createAppSetup = () => {
       config: drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
     }));
   };
-  const linearDepthRows = () => linearSeqs.map((seq) => depthFileSlotsFromValue(seq?.depth));
-  const linearDepthLogicalWidth = () => depthTrackMatrixWidth(linearDepthRows());
-  const linearDepthTrackUiCount = () => Math.max(1, linearDepthLogicalWidth());
-  /** @param {number} width */
-  const padLinearDepthRows = (width) => {
+  // A Linear drawing's Depth files, row by row (each record row holds its own).
+  /** @param {DrawingState} drawing */
+  const linearDepthRows = (drawing) => drawing.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+  /** @param {DrawingState} drawing */
+  const linearDepthLogicalWidth = (drawing) => depthTrackMatrixWidth(linearDepthRows(drawing));
+  /** @param {DrawingState} drawing */
+  const linearDepthTrackUiCount = (drawing) => Math.max(1, linearDepthLogicalWidth(drawing));
+  /** @param {DrawingState} drawing @param {number} width */
+  const padLinearDepthRows = (drawing, width) => {
     const targetWidth = Math.max(0, Number(width) || 0);
-    linearSeqs.forEach((seq) => {
+    drawing.linearSeqs.forEach((seq) => {
       seq.depth = padDepthFileSlots(seq.depth, targetWidth);
     });
   };
@@ -2346,15 +2357,15 @@ export const createAppSetup = () => {
     const text = String(value ?? '').trim();
     target[key] = text === '' ? null : numeric ? Number(text) : text;
   };
-  /** @param {'circular' | 'linear'} [drawingMode] */
-  const activeDepthTrackCount = (drawingMode = mode.value) => {
-    if (drawingMode === 'linear') {
-      return linearDepthTrackUiCount();
+  /** @param {DrawingState} drawing */
+  const activeDepthTrackCount = (drawing) => {
+    if (drawing.mode === 'linear') {
+      return linearDepthTrackUiCount(drawing);
     }
     return sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
   };
   /** @param {DrawingState} drawing */
-  const ensureDepthTrackConfigCount = (drawing, count = activeDepthTrackCount()) => {
+  const ensureDepthTrackConfigCount = (drawing, count = activeDepthTrackCount(drawing)) => {
     const targetCount = Math.max(1, Number(count) || 1);
     const normalized = ensureDepthTrackConfigCountEntries(
       drawing.adv.depth_tracks,
@@ -2374,7 +2385,7 @@ export const createAppSetup = () => {
   const linearDepthTrackRows = () => {
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return [];
-    return rowsForDepthTrackCount(drawing, linearDepthTrackUiCount());
+    return rowsForDepthTrackCount(drawing, linearDepthTrackUiCount(drawing));
   };
   /** @param {LinearSourceGroup} source */
   const linearSourceDepthRows = (source) => linearDepthTrackRows().map((track) => ({
@@ -2404,21 +2415,29 @@ export const createAppSetup = () => {
   const linearSourceGencodeRequired = (source) => source.records.some(({ sequence }) => linearRecordGencodeRequired(sequence));
   const depthTrackRows = computed(() => {
     const drawing = state.activeDrawing();
-    return rowsForDepthTrackCount(drawing, activeDepthTrackCount());
+    return rowsForDepthTrackCount(drawing, activeDepthTrackCount(drawing));
   });
-  /** @param {number} trackIndex */
-  const linearDepthTrackCoverageLabel = (trackIndex) => {
-    const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
-    const total = linearSeqs.length;
+  /** @param {DrawingState} drawing @param {number} trackIndex */
+  const linearDepthTrackCoverageLabelOf = (drawing, trackIndex) => {
+    const covered = depthTrackCoverageCount(linearDepthRows(drawing), trackIndex);
+    const total = drawing.linearSeqs.length;
     return tn(total, '{covered}/{count} record', '{covered}/{count} records', { covered });
   };
+  // The shown Linear drawing's Depth series, for its panel.
+  /** @param {number} trackIndex */
+  const linearDepthTrackCoverageLabel = (trackIndex) => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing ? linearDepthTrackCoverageLabelOf(drawing, trackIndex) : '';
+  };
   const linearDepthTrackIndexOptions = () => {
-    const rows = linearDepthRows();
+    const drawing = shownDrawingOfMode('linear');
+    if (!drawing) return [];
+    const rows = linearDepthRows(drawing);
     const active = new Set(activeDepthTrackIndices(rows));
-    return Array.from({ length: linearDepthLogicalWidth() }, (_, trackIndex) => ({
+    return Array.from({ length: linearDepthLogicalWidth(drawing) }, (_, trackIndex) => ({
       trackIndex,
       label: depthSeriesName(trackIndex),
-      coverage: linearDepthTrackCoverageLabel(trackIndex),
+      coverage: linearDepthTrackCoverageLabelOf(drawing, trackIndex),
       disabled: !active.has(trackIndex)
     }));
   };
@@ -2577,7 +2596,7 @@ export const createAppSetup = () => {
   const depthTrackConfigForIndex = (drawing, index) => {
     if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
     return depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackEditDefaults(drawing.adv)
+      drawing.adv.depth_tracks, index, activeDepthTrackCount(drawing), depthTrackEditDefaults(drawing.adv)
     );
   };
   // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
@@ -2594,7 +2613,7 @@ export const createAppSetup = () => {
   // without a label, among the series the request draws (OV-1508). Figure
   // text: English in every UI language.
   /** @param {number} index */
-  const depthSeriesDefaultName = (index) => defaultDepthSeriesLabel(index, activeDepthTrackCount());
+  const depthSeriesDefaultName = (index) => defaultDepthSeriesLabel(index, activeDepthTrackCount(state.activeDrawing()));
   // The name of Depth series `index`: its label, else the default name.
   /** @param {number} index */
   const depthSeriesName = (index) => getDepthTrackLabel(index) || depthSeriesDefaultName(index);
@@ -2673,7 +2692,7 @@ export const createAppSetup = () => {
     if (!slot || slot.renderer !== 'depth') return;
     const trackIndex = normalizeDepthSlotTrackIndex(slot);
     const hasSource = mode.value === 'linear'
-      ? activeDepthTrackIndices(linearDepthRows()).includes(trackIndex)
+      ? activeDepthTrackIndices(linearDepthRows(drawing)).includes(trackIndex)
       : Boolean(circularDepthRepresentatives()[trackIndex]);
     if (hasSource) delete slot.depth_binding_error;
     syncDepthTrackSlotLabelsForTrack(drawing, trackIndex);
@@ -2754,8 +2773,8 @@ export const createAppSetup = () => {
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
     const ref = state.inputFiles.registerFile(file);
-    const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
-    padLinearDepthRows(logicalWidth);
+    const logicalWidth = Math.max(linearDepthLogicalWidth(drawing), idx + 1);
+    padLinearDepthRows(drawing, logicalWidth);
     ensureDepthTrackConfigCount(drawing, logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
     retireLegendStylesOfUnnamedCaptions(() => {
@@ -2800,10 +2819,10 @@ export const createAppSetup = () => {
     retireLegendStylesOfUnnamedCaptions(() => { if (hasCircularDepthFiles.value) drawing.form.show_depth = true; });
   });
   const addLinearDepthTrack = () => shownAction('linear', (drawing) => {
-    const nextCount = linearDepthTrackUiCount() + 1;
-    padLinearDepthRows(nextCount);
+    const nextCount = linearDepthTrackUiCount(drawing) + 1;
+    padLinearDepthRows(drawing, nextCount);
     ensureDepthTrackConfigCount(drawing, nextCount);
-    retireLegendStylesOfUnnamedCaptions(() => { if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true; });
+    retireLegendStylesOfUnnamedCaptions(() => { if (linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
   });
   /** @param {number} index */
   const removeCircularDepthTrack = (index) => shownAction('circular', (drawing) => {
@@ -2820,7 +2839,7 @@ export const createAppSetup = () => {
       if (!hasCircularDepthFiles.value) drawing.form.show_depth = false;
       depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(), idx);
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('circular'));
+      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
       const activeFileCount = circularDepthRepresentatives().length;
       // The removed series' rows before the Axis lower its index, as in Linear,
       // so no other row crosses the Axis (R10).
@@ -2848,19 +2867,19 @@ export const createAppSetup = () => {
   const removeLinearDepthTrack = (index) => shownAction('linear', (drawing) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
-    const logicalWidth = linearDepthLogicalWidth();
+    const logicalWidth = linearDepthLogicalWidth(drawing);
     if (idx >= logicalWidth) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(() => {
-      const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
-      linearSeqs.forEach((seq, recordIndex) => {
+      const nextRows = removeDepthTrackColumnAt(linearDepthRows(drawing), idx);
+      drawing.linearSeqs.forEach((seq, recordIndex) => {
         seq.depth = nextRows[recordIndex] || [];
       });
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       // Show Depth goes off with the drawing's last Depth source (OV-82).
-      if (!hasAnyLinearDepthFiles.value) drawing.form.show_depth = false;
+      if (!linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = false;
       depthTrackAutoLabels.splice(idx, 1);
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
+      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
       const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
       const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
         ? drawing.adv.linear_track_slots.reduce((/** @type {number} */ count, /** @type {LinearTrackSlot} */ slot, /** @type {number} */ slotIndex) => {
@@ -2894,7 +2913,7 @@ export const createAppSetup = () => {
   // drawing itself; Load and History restore install the saved or captured
   // series (OV-1164).
   const fitDepthSeriesToSources = () => {
-    state.drawingList().forEach((drawing) => ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing.mode)));
+    state.drawingList().forEach((drawing) => ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing)));
   };
   fitDepthSeriesToSources();
   /** @param {DrawingState} drawing */
@@ -3630,8 +3649,9 @@ export const createAppSetup = () => {
     // failure about those inputs, as the Circular discovery does.
     refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
       const outcome = await linearRecordSelector.refresh(options);
-      const read = linearSeqs.every((/** @type {Record<string, any>} */ seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)));
-      if (read) releaseSourceInputFailure(state.drawingOfMode('linear'));
+      const linearDrawing = state.drawingOfMode('linear');
+      const read = linearDrawing.linearSeqs.every((seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)));
+      if (read) releaseSourceInputFailure(linearDrawing);
       return outcome;
     },
     resetPreviewViewport,
@@ -4747,7 +4767,7 @@ export const createAppSetup = () => {
   async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
-    const hasAutomaticSequence = linearSeqs.some((sequence) => {
+    const hasAutomaticSequence = drawing.linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
       const primary = lInputType.value === 'gff' ? sequence?.gff : sequence?.gb;
       return Boolean(primary && (lInputType.value !== 'gff' || sequence?.fasta));
@@ -4760,7 +4780,7 @@ export const createAppSetup = () => {
     }
     if (privateCandidate) {
       const linearRecordsOff = new Set(drawing.recordsOff);
-      const sources = await Promise.all(linearSeqs.map(async (seq) => {
+      const sources = await Promise.all(drawing.linearSeqs.map(async (seq) => {
         const drawn = !linearRecordsOff.has(seq.uid);
         const inputType = lInputType.value;
         const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
@@ -4803,7 +4823,7 @@ export const createAppSetup = () => {
       prepareGenerate: async () => {
         if (mode.value === 'linear') {
           if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-            await materializeAutomaticLinearRecords();
+            await materializeAutomaticLinearRecords(drawing);
           } else {
             await linearRecordSelector.refresh();
           }
@@ -5423,7 +5443,7 @@ export const createAppSetup = () => {
       // Linear records return to their File defaults and inferred definitions;
       // Files, record selections, File defaults, and depth stay. The mutation
       // also clears the alignment plan (D-15).
-      applyLinearSeqMutation(drawing, linearSeqs.map((sequence) => ({
+      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((sequence) => ({
         ...sequence,
         definition: '',
         record_subtitle: '',
@@ -6375,7 +6395,7 @@ export const createAppSetup = () => {
   ) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
-    const depthWidth = linearDepthLogicalWidth();
+    const depthWidth = linearDepthLogicalWidth(drawing);
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
       next.forEach((seq) => {
@@ -6384,7 +6404,7 @@ export const createAppSetup = () => {
     }
     // Removing a File can remove the last source of a Depth series.
     retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
-      changeRecordSources(drawing, () => linearSeqs.splice(0, linearSeqs.length, ...next));
+      changeRecordSources(drawing, () => replaceLinearSeqs(drawing.slices.inputs, next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((_, uid) => {
@@ -6393,7 +6413,7 @@ export const createAppSetup = () => {
     pendingLinearUploads.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearUploads.delete(uid);
     });
-    const nextRows = reconcileLinearRecordLayout(linearSeqs, layoutEntries);
+    const nextRows = reconcileLinearRecordLayout(drawing.linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
     // A card that stays but now reads another file (`retiredRecordKeys`) is ON.
     const retired = new Set(retiredRecordKeys);
@@ -6401,14 +6421,14 @@ export const createAppSetup = () => {
     if (recordsOff.length !== drawing.recordsOff.length) drawing.recordsOff.splice(0, Infinity, ...recordsOff);
     replaceLinearComparisonPlan(
       drawing,
-      reconcileLinearComparisonPlan(drawing.linearComparisonPlan, linearSeqs),
+      reconcileLinearComparisonPlan(drawing.linearComparisonPlan, drawing.linearSeqs),
       { invalidate: false }
     );
     invalidateLinearComparisonArtifacts(drawing, { preserveLosatCacheInfo });
     linearReorderNotice.value = '';
     if (alignmentMutation === 'stable-reorder') {
       similarityAlignmentActions?.retainForStableReorder?.(
-        linearSeqs.map((sequence) => sequence.uid)
+        drawing.linearSeqs.map((sequence) => sequence.uid)
       );
     } else {
       similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
@@ -6417,7 +6437,7 @@ export const createAppSetup = () => {
   };
 
   const addLinearSeq = () => shownAction('linear', (drawing) => {
-    return applyLinearSeqMutation(drawing, [...linearSeqs, createLinearSeq()]);
+    return applyLinearSeqMutation(drawing, [...drawing.linearSeqs, createLinearSeq()]);
   });
 
   const restoreLinearSourceRemovalFocus = async () => {
@@ -6503,7 +6523,7 @@ export const createAppSetup = () => {
     if (!drawing) return false;
     if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
     const plan = planLinearSourceRemoval({
-      sequences: linearSeqs,
+      sequences: drawing.linearSeqs,
       sourceUid: linearSourceRemovalDialog.sourceUid,
       intent
     });
@@ -6543,13 +6563,13 @@ export const createAppSetup = () => {
   /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
   const setLinearSeqPrimaryFile = (index, field, value) => shownAction('linear', (drawing) => {
     const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.linearSeqs.length) return;
     if (!['gb', 'gff', 'fasta'].includes(field)) return;
 
     const nextValue = state.inputFiles.registerFile(value);
-    const seq = linearSeqs[idx];
+    const seq = drawing.linearSeqs[idx];
     if (seq[field] === nextValue) return;
-    // `groupLinearSourceRecords` puts every record card of `linearSeqs` in a group, and `seq` is one of them.
+    // `groupLinearSourceRecords` puts every record card of the drawing in a group, and `seq` is one of them.
     const group = /** @type {LinearSourceGroup} */ (linearSourceGroups.value.find((entry) => (
       entry.records.some(({ sequence }) => sequence.uid === seq.uid)
     )));
@@ -6563,7 +6583,7 @@ export const createAppSetup = () => {
       }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
-    applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
+    applyLinearSeqMutation(drawing, drawing.linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
     )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
@@ -6664,10 +6684,10 @@ export const createAppSetup = () => {
     const deleted = new Set(keys);
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners().filter((owner) => deleted.has(owner.key))
-      : linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
+      : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
     retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
     if (listMode === 'linear') {
-      applyLinearSeqMutation(drawing, linearSeqs.map((seq) => (
+      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((seq) => (
         deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
       )), { alignmentMutation: msg('record settings deleted.') });
     }
@@ -6691,7 +6711,7 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
     const intent = linearSourceGroups.value.length > 1 ? 'delete' : 'clear';
-    const plan = planLinearSourceRemoval({ sequences: linearSeqs, sourceUid: sourceKey, intent });
+    const plan = planLinearSourceRemoval({ sequences: drawing.linearSeqs, sourceUid: sourceKey, intent });
     return plan.allowed ? removeLinearSource(drawing, plan, intent) : false;
   };
   const recordSelection = createRecordSelection({
@@ -6750,7 +6770,7 @@ export const createAppSetup = () => {
   const moveLinearSource = (sourceIndex, direction) => shownAction('linear', (drawing) => {
     const plan = linearSourceMovePlan(drawing, sourceIndex, direction);
     if (!plan.allowed) return;
-    const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
+    const next = moveLinearSourceGroup(drawing.linearSeqs, sourceIndex, direction);
     return history.runUndoable(msg('Move File'), () => {
       applyLinearSeqMutation(drawing, next, {
         preserveLosatCacheInfo: true,
@@ -6876,7 +6896,7 @@ export const createAppSetup = () => {
     const circular = mode.value === 'circular';
     if (circular ? !drawing.form.suppress_gc : drawing.form.show_gc) drawn.add('gc_content');
     if (circular ? !drawing.form.suppress_skew : drawing.form.show_skew) ['skew_high', 'skew_low'].forEach((key) => drawn.add(key));
-    if (!circular && state.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
+    if (!circular && drawing.linearSeqs.length > 1 && linearComparisonGlobalAction.value !== 'none') {
       COMPARISON_COLOR_KEYS.forEach((key) => drawn.add(key));
     }
     resultsManager.userDefaultColorRows(drawing, toRaw(colors)).forEach(([key]) => drawn.add(key));
@@ -7074,7 +7094,7 @@ export const createAppSetup = () => {
     setLinearDepthFile,
     setLinearSourceDepthFile,
     clearLinearSourceDepthFile,
-    linearSeqs,
+    linearSeqs: drawingMember('linearSeqs'),
     linearSourceGroups,
     linearCardFileLine,
     linearCardHoldsInput,

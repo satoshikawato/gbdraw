@@ -123,20 +123,18 @@ export const collapseEmptyLinearSeqList = (items) => {
 
 /**
  * A drawing's bindings, as the retention walk reads them: its uploaded
- * comparison files and, from the inputs slice, its input fields and record
- * rows. The slice is not on every drawing until its join, so those two may be
- * missing; the join makes them required.
+ * comparison files and, from the inputs slice, its record rows and (until
+ * they join the slice) its input fields.
  * @typedef {object} BoundDrawingInputs
  * @property {{ readonly edges?: readonly { readonly file?: unknown }[] } | null} [linearComparisonPlan]
  * @property {Readonly<Record<string, unknown>>} [files]
- * @property {readonly Readonly<Record<string, unknown>>[]} [linearSeqs]
+ * @property {readonly Readonly<Record<string, unknown>>[]} linearSeqs
  */
 /**
- * The bindings that name stored files: the project's input fields and Linear
- * record rows, and every drawing's bindings.
+ * The bindings that name stored files: the project's input fields and every
+ * drawing's bindings.
  * @typedef {object} InputBindings
  * @property {Readonly<Record<string, unknown>>} files
- * @property {readonly Readonly<Record<string, unknown>>[]} linearSeqs
  * @property {() => readonly BoundDrawingInputs[]} drawingList
  */
 
@@ -255,9 +253,9 @@ export const boundInputFileIds = (bindings) => {
       .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
     linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
   };
-  addInputs(bindings.files, bindings.linearSeqs);
+  addInputs(bindings.files, []);
   bindings.drawingList().forEach((drawing) => {
-    addInputs(drawing.files ?? {}, drawing.linearSeqs ?? []);
+    addInputs(drawing.files ?? {}, drawing.linearSeqs);
     (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));
   });
   return fileIds;
@@ -402,7 +400,13 @@ export const bindLoadedInputs = (store, loaded) => {
  * @property {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} circularRecordList
  * @property {CircularRecordDiscovery} circularRecordDiscovery
  */
-/** @typedef {Readonly<InputsMembers>} InputsView */
+/**
+ * The members a drawing holds now: each joins in the step that deletes its
+ * project key (`JOINED_MEMBERS`, below).
+ * @typedef {'linearSeqs'} JoinedInputsMember
+ */
+/** @typedef {Readonly<Pick<InputsMembers, JoinedInputsMember>>} InputsView */
+/** What `capture` returns: the joined members' data. @typedef {Pick<InputsData, JoinedInputsMember>} JoinedInputsData */
 /** @typedef {SliceHandle<'inputs'>} InputsSlice The handle a writer takes. */
 
 /** @returns {DrawingInputFiles} */
@@ -443,41 +447,84 @@ const copyFiles = (files) => ({
 /** @param {LinearSeq} seq @returns {LinearSeq} */
 const copyRow = (seq) => ({ ...seq, depth: copyBound(seq.depth) });
 
+// Each member's build, copy, and write. A member joins the drawing (it is in
+// `INPUTS_SLICE.members`) in the step that deletes its project key and moves
+// every reader and writer of it, so no member has two owners (D-15-80); the
+// slice builds, captures, and installs only the joined members.
+/** @typedef {keyof InputsMembers} InputsMember */
+const MEMBER_OPS = Object.freeze({
+  files: {
+    create: () => /** @type {DrawingInputFiles} */ (reactive(emptyDrawingInputFiles())),
+    /** @param {InputsMembers} members */
+    capture: (members) => copyFiles(members.files),
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => {
+      const files = copyFiles({ ...emptyDrawingInputFiles(), ...data.files });
+      DRAWING_FILE_KEYS.forEach((key) => { /** @type {Record<string, unknown>} */ (members.files)[key] = files[key]; });
+    }
+  },
+  linearSeqs: {
+    create: () => /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([]))),
+    /** @param {InputsMembers} members */
+    capture: (members) => members.linearSeqs.map(copyRow),
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => {
+      members.linearSeqs.splice(0, members.linearSeqs.length, ...data.linearSeqs.map(copyRow));
+    }
+  },
+  inputType: {
+    create: () => /** @type {import('../../utils/reactivity.js').Ref<InputType>} */ (ref('gb')),
+    /** @param {InputsMembers} members */
+    capture: (members) => members.inputType.value,
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => { members.inputType.value = data.inputType; }
+  },
+  circularRecordList: {
+    create: () => /** @type {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} */ (ref([])),
+    /** @param {InputsMembers} members */
+    capture: (members) => members.circularRecordList.value.map((entry) => ({ ...entry })),
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => { members.circularRecordList.value = data.circularRecordList.map((entry) => ({ ...entry })); }
+  },
+  circularRecordDiscovery: {
+    create: () => /** @type {CircularRecordDiscovery} */ (reactive(idleRecordDiscovery())),
+    /** @param {InputsMembers} members */
+    capture: (members) => ({
+      ...members.circularRecordDiscovery,
+      canonicalRecordIdentities: members.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+    }),
+    /** @param {InputsMembers} members @param {InputsData} data */
+    install: (members, data) => {
+      Object.assign(members.circularRecordDiscovery, idleRecordDiscovery(), data.circularRecordDiscovery, {
+        canonicalRecordIdentities: data.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
+      });
+    }
+  }
+});
+/** @type {readonly JoinedInputsMember[]} */
+const JOINED_MEMBERS = Object.freeze(['linearSeqs']);
+
 /**
  * A new slice, or one over a drawing's existing members (a test fixture).
  * @param {Partial<InputsMembers>} [members]
  * @returns {{ handle: InputsSlice, view: InputsView }}
  */
 const create = (members = {}) => {
-  /** @type {InputsMembers} */
-  const data = {
-    files: members.files ?? /** @type {DrawingInputFiles} */ (reactive(emptyDrawingInputFiles())),
-    linearSeqs: members.linearSeqs ?? /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([]))),
-    inputType: members.inputType ?? /** @type {import('../../utils/reactivity.js').Ref<InputType>} */ (ref('gb')),
-    circularRecordList: members.circularRecordList
-      ?? /** @type {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} */ (ref([])),
-    circularRecordDiscovery: members.circularRecordDiscovery
-      ?? /** @type {CircularRecordDiscovery} */ (reactive(idleRecordDiscovery()))
-  };
+  const data = /** @type {Pick<InputsMembers, JoinedInputsMember>} */ (Object.fromEntries(JOINED_MEMBERS.map((member) => (
+    [member, members[member] ?? MEMBER_OPS[member].create()]
+  ))));
   return { handle: createSliceHandle('inputs', data), view: Object.freeze({ ...data }) };
 };
 
 /**
  * @param {InputsSlice} slice
- * @returns {InputsData}
+ * @returns {JoinedInputsData}
  */
 const capture = (slice) => {
   const members = membersOf(slice);
-  return {
-    files: copyFiles(members.files),
-    linearSeqs: members.linearSeqs.map(copyRow),
-    inputType: members.inputType.value,
-    circularRecordList: members.circularRecordList.value.map((entry) => ({ ...entry })),
-    circularRecordDiscovery: {
-      ...members.circularRecordDiscovery,
-      canonicalRecordIdentities: members.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
-    }
-  };
+  return /** @type {JoinedInputsData} */ (Object.fromEntries(JOINED_MEMBERS.map((member) => (
+    [member, MEMBER_OPS[member].capture(members)]
+  ))));
 };
 
 // Writes each member `data` holds; a member it leaves out stays. The rows are
@@ -488,18 +535,9 @@ const capture = (slice) => {
  */
 const install = (slice, data) => {
   const members = membersOf(slice);
-  if (data.files) {
-    const files = copyFiles({ ...emptyDrawingInputFiles(), ...data.files });
-    DRAWING_FILE_KEYS.forEach((key) => { /** @type {Record<string, unknown>} */ (members.files)[key] = files[key]; });
-  }
-  if (data.linearSeqs) members.linearSeqs.splice(0, members.linearSeqs.length, ...data.linearSeqs.map(copyRow));
-  if (data.inputType) members.inputType.value = data.inputType;
-  if (data.circularRecordList) members.circularRecordList.value = data.circularRecordList.map((entry) => ({ ...entry }));
-  if (data.circularRecordDiscovery) {
-    Object.assign(members.circularRecordDiscovery, idleRecordDiscovery(), data.circularRecordDiscovery, {
-      canonicalRecordIdentities: data.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
-    });
-  }
+  JOINED_MEMBERS.forEach((member) => {
+    if (data[member]) MEMBER_OPS[member].install(members, /** @type {InputsData} */ (data));
+  });
 };
 
 // Reset keeps every input binding, the chosen records, and the Depth
@@ -645,6 +683,6 @@ export const replaceLinearSeqs = (slice, rows) => {
 };
 
 export const INPUTS_SLICE = Object.freeze({
-  members: Object.freeze(['files', 'linearSeqs', 'inputType', 'circularRecordList', 'circularRecordDiscovery']),
+  members: JOINED_MEMBERS,
   create, capture, install, reset
 });

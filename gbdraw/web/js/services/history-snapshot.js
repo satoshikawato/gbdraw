@@ -4,7 +4,7 @@
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
-import { boundInputFileIds, registerInputFileTree } from './drawing/inputs.js';
+import { boundInputFileIds, normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
 /** @import { BoundFileValue, InputBindings, LoadedFileValue } from './drawing/inputs.js' */
@@ -769,7 +769,7 @@ const buildIntentFilesData = (state, drawing) => {
   }
   return {
     ...shared,
-    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
+    linearSeqs: drawing.linearSeqs.map((seq) => ({
       uid: seq.uid,
       gb: refsOf(seq.gb),
       gff: refsOf(seq.gff),
@@ -824,16 +824,15 @@ const buildFilesData = (state, drawing) => {
  * @param {HistorySnapshotState} state
  * @returns {InputBindings}
  */
-const inputBindingsOf = (state) => ({ files: state.files, linearSeqs: state.linearSeqs, drawingList: state.drawingList });
+const inputBindingsOf = (state) => ({ files: state.files, drawingList: state.drawingList });
 
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @param {FilesData} filesData
  * @param {HistorySnapshotFileStore} fileStore
- * @param {HistorySnapshotServiceOptions['normalizeLinearSeqList']} [normalizeLinearSeqList]
  */
-const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeqList = null) => {
+const applyFilesData = (state, drawing, filesData, fileStore) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
   // A binding holds the step's refs, which History keeps stored (a ref whose
@@ -874,7 +873,6 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
       : [];
   }
 
-  if (!state.linearSeqs || typeof state.linearSeqs.splice !== 'function') return;
   const rows = Array.isArray(filesData?.linearSeqs)
     ? filesData.linearSeqs.map((seq) => ({
         uid: seq.uid,
@@ -894,10 +892,8 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
         region_reverse: Boolean(seq.region_reverse)
       }))
     : [];
-  const normalized = typeof normalizeLinearSeqList === 'function'
-    ? normalizeLinearSeqList(rows)
-    : rows;
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...normalized);
+  // The drawing's rows, normalized as every row writer leaves them.
+  replaceLinearSeqs(drawing.slices.inputs, normalizeLinearSeqList(rows));
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
       (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
@@ -942,8 +938,6 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {HistorySnapshotFileStore} fileStore
  *   The file store that holds the files an intent and a checkpoint name.
  * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
- * @property {((rows: HistorySnapshotData[]) => HistorySnapshotData[]) | null} [normalizeLinearSeqList]
- *   The Linear record rows' normalization after a files restore.
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
  * @property {((drawing: D, config: HistorySnapshotData, options: { resolveTrackPlacements: boolean, applyAlignment?: boolean }) => unknown) | null} [applyConfigData]
  *   The Settings restore.
@@ -986,7 +980,6 @@ export const createHistorySnapshotService = ({
   state,
   fileStore,
   nextTick = async () => {},
-  normalizeLinearSeqList = null,
   buildConfigData = null,
   applyConfigData = null,
   buildUiStateData = null,
@@ -1060,24 +1053,26 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
-  const captureLinearRecordOrientations = () => (
-    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).map((sequence) => ({
+  // The orientations of the cards of `drawing`, the drawing a step captures.
+  /** @param {D} drawing */
+  const captureLinearRecordOrientations = (drawing) => (
+    drawing.linearSeqs.map((sequence) => ({
       recordKey: String(sequence?.uid || ''),
       reverseComplement: Boolean(sequence?.region_reverse)
     })).filter(({ recordKey }) => recordKey)
   );
 
-  /** @param {unknown} orientations */
-  const installLinearRecordOrientations = (orientations) => {
+  /** @param {D} drawing @param {unknown} orientations */
+  const installLinearRecordOrientations = (drawing, orientations) => {
     const byRecord = new Map(
       (Array.isArray(orientations) ? orientations : []).map((entry) => [
         String(entry?.recordKey || ''),
         Boolean(entry?.reverseComplement)
       ])
     );
-    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
-      const recordKey = String(sequence?.uid || '');
-      if (byRecord.has(recordKey)) sequence.region_reverse = byRecord.get(recordKey);
+    drawing.linearSeqs.forEach((sequence) => {
+      const reverse = byRecord.get(String(sequence?.uid || ''));
+      if (reverse !== undefined) sequence.region_reverse = reverse;
     });
   };
 
@@ -1110,7 +1105,7 @@ export const createHistorySnapshotService = ({
       linearRecordTranslations: toRaw(
         getGeneratedArtifactRef(state.linearRecordTranslations, null)
       ),
-      linearRecordOrientations: toRaw(captureLinearRecordOrientations()),
+      linearRecordOrientations: toRaw(captureLinearRecordOrientations(drawing)),
       annotationWarnings: toRaw(getGeneratedArtifactRef(state.annotationWarnings, null)),
       featureIdentityNotices: toRaw(
         getGeneratedArtifactRef(state.featureIdentityNotices, null)
@@ -1207,7 +1202,7 @@ export const createHistorySnapshotService = ({
       state.linearRecordTranslations,
       ownerSet.linearRecordTranslations || []
     );
-    installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    installLinearRecordOrientations(drawing, ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
     setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
@@ -1499,7 +1494,7 @@ export const createHistorySnapshotService = ({
         recordTranslations: cloneJsonData(
           getGeneratedArtifactRef(state.linearRecordTranslations, [])
         ) || [],
-        recordOrientations: captureLinearRecordOrientations()
+        recordOrientations: captureLinearRecordOrientations(drawing)
       }),
       presentation: Object.freeze({
         resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
@@ -1963,7 +1958,7 @@ export const createHistorySnapshotService = ({
       }
 
       if (domains.has('files')) {
-        applyFilesData(state, drawing, intent.files || {}, fileStore, normalizeLinearSeqList);
+        applyFilesData(state, drawing, intent.files || {}, fileStore);
       }
       if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState, drawingId);
       if (domains.has('features')) applyFeatureIntentData(state, drawing, intent.features || {});
@@ -2033,7 +2028,7 @@ export const createHistorySnapshotService = ({
       }
       await nextTick();
 
-      applyFilesData(state, drawing, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, drawing, snapshot.files || {}, fileStore);
       if (Object.hasOwn(snapshot, 'alignmentState')) installAlignmentState(snapshot.alignmentState, drawingId);
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;

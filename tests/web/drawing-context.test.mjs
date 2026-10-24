@@ -91,12 +91,12 @@ test('only the drawings hold the drawing keys, one drawing per mode', () => {
 });
 
 // `state.<key>`, `state?.<key>`, and `{ <key> } = state`, with comments removed.
-const stateReads = (source) => {
+const stateReads = (source, readKeys = DRAWING_KEYS) => {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
-  const keys = DRAWING_KEYS.join('|');
+  const keys = readKeys.join('|');
   const reads = [...code.matchAll(new RegExp(`\\bstate\\s*\\??\\.\\s*(${keys})\\b`, 'g'))].map((match) => match[1]);
   for (const [, names] of code.matchAll(/\{([^{}]*)\}\s*=\s*state\b/g)) {
-    reads.push(...names.split(',').map((name) => name.trim().split(/[\s:=]/)[0]).filter((name) => DRAWING_KEYS.includes(name)));
+    reads.push(...names.split(',').map((name) => name.trim().split(/[\s:=]/)[0]).filter((name) => readKeys.includes(name)));
   }
   return reads;
 };
@@ -115,6 +115,19 @@ test('no module reads a drawing key from state', () => {
     if (reads.length) found[module] = [...new Set(reads)].sort();
   }
   assert.deepEqual(found, {}, 'read these keys from the drawing of the action');
+});
+
+// The project input keys the inputs slice replaced (multi-drawing B, DESIGN
+// §2): each is gone from `state`, and no module reads it from `state`.
+const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs']);
+test('no module reads a project input key the drawing\'s inputs replaced', () => {
+  assert.deepEqual(MOVED_INPUT_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a moved input key is on state');
+  const found = {};
+  for (const path of modules(JS)) {
+    const reads = stateReads(readFileSync(path, 'utf8'), MOVED_INPUT_KEYS);
+    if (reads.length) found[relative(JS, path)] = [...new Set(reads)].sort();
+  }
+  assert.deepEqual(found, {}, 'read the record rows from the drawing of the action (drawing.linearSeqs)');
 });
 
 test('the drawing-key scan finds each read form', () => {

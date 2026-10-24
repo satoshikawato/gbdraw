@@ -663,12 +663,12 @@ const sourceControls = () => {
   const draft = (sourceUid) => ({ sourceUid, selector: '#1', recordId: sourceUid, topologyOverride: 'linear',
     startCoordinate: null, reverseComplementOverride: null, anchorIntent: null });
   const circular = { form: createDefaultForm(), adv: createDefaultAdv('circular'), recordDisplayDrafts: [draft('circular')] };
-  const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')] };
   const inputFiles = createInputFileStore();
+  const linear = { form: createDefaultForm(), adv: createDefaultAdv('linear'), recordDisplayDrafts: [draft('record-1'), draft('record-2')],
+    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) };
   const state = withModeDrawings({ mode: { value: 'linear' }, cInputType: { value: 'gb' }, lInputType: { value: 'gb' },
     files: { c_gb: inputFiles.registerFile(new File(['c'], 'c.gb')) }, circularRecordList: { value: [] }, featureCatalog: { value: null },
-    inputFiles,
-    linearSeqs: ['record-1', 'record-2'].map((uid) => ({ uid, gb: inputFiles.registerFile(new File([uid], `${uid}.gb`)), region_record_id: '', region_reverse: false })) },
+    inputFiles },
   { circular, linear });
   withSourceDrawings(state);
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
@@ -682,7 +682,7 @@ const sourceControls = () => {
 test('no watcher of the record sources drops drafts (A2 W5)', () => {
   const { state, callbacks, circular, linear, uids } = sourceControls();
   const tuple = (uid, source) => ({ scope: 'linear', sourceUid: uid, source, paired: null });
-  const previous = [tuple('record-1', state.linearSeqs[0].gb), tuple('record-2', state.linearSeqs[1].gb)];
+  const previous = [tuple('record-1', linear.linearSeqs[0].gb), tuple('record-2', linear.linearSeqs[1].gb)];
   const current = [tuple('record-1', new Blob(['x'])), previous[1]];
   callbacks.forEach((callback) => callback(current, previous));
   assert.deepEqual(uids(linear), ['record-1', 'record-2']);
@@ -691,7 +691,7 @@ test('no watcher of the record sources drops drafts (A2 W5)', () => {
 
 test('a replaced Linear source drops its own drafts only, in its transition (A2 W5)', () => {
   const { state, controls, circular, linear, uids } = sourceControls();
-  controls.changeRecordSources(state.drawingOf('linear'), () => { state.linearSeqs[0].gb = new Blob(['x']); });
+  controls.changeRecordSources(state.drawingOf('linear'), () => { linear.linearSeqs[0].gb = new Blob(['x']); });
   assert.deepEqual(uids(linear), ['record-2']);
   assert.deepEqual(uids(circular), ['circular']);
   controls.changeRecordSources(state.drawingOf('circular'), () => { state.cInputType.value = 'gff'; });

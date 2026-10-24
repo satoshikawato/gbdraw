@@ -1595,8 +1595,6 @@ export const createRunAnalysis = ({
     circularRecordDiscovery,
     files,
     inputFiles,
-    // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
-    linearSeqs: allLinearSeqs,
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
@@ -2595,7 +2593,7 @@ export const createRunAnalysis = ({
           forceEmptyComparison
             ? resolveLinearComparisonPlan({
                 plan: { mode: 'none', defaultSource: 'losat', edges: [] },
-                sequences: allLinearSeqs,
+                sequences: drawing.linearSeqs,
                 recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
@@ -2603,7 +2601,7 @@ export const createRunAnalysis = ({
               })
             : comparisonPlanSnapshot || resolveLinearComparisonPlan({
                 plan: drawing.linearComparisonPlan,
-                sequences: allLinearSeqs,
+                sequences: drawing.linearSeqs,
                 recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
@@ -3580,7 +3578,7 @@ export const createRunAnalysis = ({
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
-          const bounds = resolveLinearRegionBounds(seq, allLinearSeqs.indexOf(seq));
+          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(seq));
 
           recordSelectors.push(recordIdRaw || '');
 
@@ -3603,7 +3601,7 @@ export const createRunAnalysis = ({
         // LOSAT reads the drawn records, then the OFF records of the same
         // files, which stay in the searched databases (D-07); an index below
         // `losatSearch.drawnCount` is a position in the drawn list.
-        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
+        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? drawing.linearSeqs : linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
         /**
          * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).

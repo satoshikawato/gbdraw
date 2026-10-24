@@ -16,6 +16,7 @@
 /** @import { ColorRulesSlice, ColorRulesView } from './drawing/color-rules.js' */
 /** @import { FeatureEditsSlice, FeatureEditsView } from './drawing/feature-edits.js' */
 /** @import { GroupNamesSlice, GroupNamesView } from './drawing/group-names.js' */
+/** @import { InputsSlice, InputsView } from './drawing/inputs.js' */
 /** @import { LabelTablesSlice, LabelTablesView } from './drawing/label-tables.js' */
 /** @import { PaintSlice, PaintView } from './drawing/paint.js' */
 /** @import { PaletteSlice, PaletteView } from './drawing/palette.js' */
@@ -49,7 +50,8 @@
  *   readonly canvas: CanvasSlice,
  *   readonly featureEdits: FeatureEditsSlice,
  *   readonly paint: PaintSlice,
- *   readonly settings: SettingsSlice
+ *   readonly settings: SettingsSlice,
+ *   readonly inputs: InputsSlice
  * }} DrawingSlices
  */
 
@@ -70,7 +72,7 @@
 
 /**
  * @typedef {DrawingIdentity & VisibilityRulesView & ColorRulesView & PaletteView & LabelTablesView & AnnotationSetsView
- *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings
+ *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings & InputsView
  *   & { readonly slices: DrawingSlices }} DrawingView
  */
 

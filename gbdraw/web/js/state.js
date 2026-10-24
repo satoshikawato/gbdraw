@@ -20,7 +20,7 @@ import {
 } from './services/layout-preferences.js';
 import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import { createInputFileStore } from './services/history-files.js';
-import { normalizeLinearSeqList } from './services/drawing/inputs.js';
+import { INPUTS_SLICE } from './services/drawing/inputs.js';
 import { sessionResourceSource } from './services/session-resource-backing.js';
 import {
   createDefaultLinearComparisonPlan,
@@ -147,7 +147,6 @@ const files = /** @type {InputFiles} */ (reactive({
   qualifier_priority: null
 }));
 
-const linearSeqs = /** @type {LinearSeq[]} */ (reactive(normalizeLinearSeqList([])));
 const selectedAnnotation = ref(null);
 
 export const createDefaultFeatureShapes = () => createDefaultFeatureRenderings();
@@ -949,6 +948,10 @@ export const createDrawingState = (id, drawingMode) => {
   // (services/record-draw-selection.js).
   /** @type {string[]} */
   const recordsOff = reactive(initial.recordsOff);
+  // The drawing's inputs (DESIGN §2): its Linear record rows, which its
+  // cards, Load, and History write through the slice's row writers.
+  const inputs = INPUTS_SLICE.create();
+  const { linearSeqs } = inputs.view;
   const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
     plan: linearComparisonPlan,
     sequences: linearSeqs,
@@ -996,6 +999,8 @@ export const createDrawingState = (id, drawingMode) => {
     mode: drawingMode,
     // Settings
     ...settings.view,
+    // Inputs
+    ...inputs.view,
     // Editor edits, slice by slice (services/drawing/): the visibility and
     // color rules, the palette, the label tables, the annotation sets, the
     // Similarity group names and dormant names keyed by member set (D-21), the
@@ -1014,8 +1019,7 @@ export const createDrawingState = (id, drawingMode) => {
     ...paint.view,
     // Derived from the members above
     activeLayoutPreferences,
-    // The Linear record cards a Generate draws, in file order (read-only; the
-    // cards are project inputs that both drawings read).
+    // The Linear record cards a Generate draws, in file order (read-only).
     // Frozen: a reader never edits the drawn list (the cards are `linearSeqs`).
     drawnLinearSeqs: typedComputed(() => Object.freeze(drawnLinearSequences(linearSeqs, recordsOff))),
     linearComparisonResolution,
@@ -1031,7 +1035,7 @@ export const createDrawingState = (id, drawingMode) => {
     // The handles a slice's writers take.
     slices: Object.freeze({
       visibilityRules: visibilityRules.handle, colorRules: colorRules.handle, palette: palette.handle, labelTables: labelTables.handle, annotationSets: annotationSets.handle, groupNames: groupNames.handle, canvas: canvas.handle,
-      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle })
+      featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle, inputs: inputs.handle })
   });
 };
 const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
@@ -1210,7 +1214,6 @@ export const state = Object.freeze({
   lInputType,
   files,
   selectedAnnotation,
-  linearSeqs,
   losatCacheInfo,
   losatThreadingStatus,
   inputFiles,

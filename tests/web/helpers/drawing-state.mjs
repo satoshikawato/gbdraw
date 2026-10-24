@@ -25,14 +25,8 @@ export const DRAWING_SLICES = Object.freeze({
   visibilityRules: VISIBILITY_RULES_SLICE, colorRules: COLOR_RULES_SLICE, palette: PALETTE_SLICE, labelTables: LABEL_TABLES_SLICE,
   annotationSets: ANNOTATION_SETS_SLICE,
   groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE, paint: PAINT_SLICE,
-  settings: SETTINGS_SLICE
+  settings: SETTINGS_SLICE, inputs: INPUTS_SLICE
 });
-
-// The slices built but not yet joined: no drawing holds their handle or
-// members (tests/web/drawing-slices.test.mjs checks it). The inputs slice
-// joins in its own step (multi-drawing B, DESIGN §2), which moves it into
-// `DRAWING_SLICES` and empties this list.
-export const UNJOINED_DRAWING_SLICES = Object.freeze({ inputs: INPUTS_SLICE });
 
 // The calls of a slice module that only read or build a value: each slice's
 // `capture`, under the name its module exports the slice by, and the exports
@@ -51,11 +45,13 @@ export const SLICE_READERS = Object.freeze([
   'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
 
-// The members of a drawing, as its slices name them: the settings (the draft
-// keys) and the editor slices' members, in the order the drawing spreads them.
-export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;
+// The members of a drawing, as its slices name them: the members its controls
+// write (the draft keys: the settings, then the inputs) and the editor slices'
+// members, which only their slice writes, in the order the drawing spreads them.
+const CONTROL_WRITTEN_SLICES = Object.freeze(['settings', 'inputs']);
+export const DRAWING_DRAFT_KEYS = Object.freeze(CONTROL_WRITTEN_SLICES.flatMap((name) => DRAWING_SLICES[name].members));
 export const DRAWING_EDITOR_KEYS = Object.freeze(Object.entries(DRAWING_SLICES)
-  .filter(([name]) => name !== 'settings').flatMap(([, slice]) => slice.members));
+  .filter(([name]) => !CONTROL_WRITTEN_SLICES.includes(name)).flatMap(([, slice]) => slice.members));
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([
@@ -89,7 +85,7 @@ export const ARTIFACT_KEYS = Object.freeze([
 
 // Inputs and caches that every drawing shares.
 export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'files', 'linearSeqs', 'cInputType', 'lInputType', 'circularRecordList',
+  'sessionTitle', 'files', 'cInputType', 'lInputType', 'circularRecordList',
   'circularRecordDiscovery', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
@@ -159,6 +155,12 @@ export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object
 // its members; a drawing that has handles keeps them.
 const withSliceHandles = (drawing) => {
   if (!drawing || typeof drawing !== 'object' || 'slices' in drawing || Object.isFrozen(drawing)) return drawing;
+  // Every drawing holds its inputs (its record rows: one empty row by
+  // default); a fixture that names none gets the default, not enumerable.
+  const inputs = INPUTS_SLICE.create().view;
+  INPUTS_SLICE.members.filter((key) => !(key in drawing)).forEach((key) => {
+    Object.defineProperty(drawing, key, { value: inputs[key], configurable: true, writable: true });
+  });
   const handles = {};
   const slices = {};
   for (const [name, slice] of Object.entries(DRAWING_SLICES)) {

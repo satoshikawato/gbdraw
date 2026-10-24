@@ -82,15 +82,14 @@ const ANNOTATION_MARK_OPTIONS = Object.freeze([
   'highlight'
 ]);
 
-/** @param {{ linearSeqs?: { depth?: DepthFileSlots }[] } | null | undefined} state */
-export const linearAvailableDepthTrackCountForState = (state) => {
-  const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  return depthTrackMatrixWidth(seqs.map((seq) => seq?.depth));
-};
+/** The Depth series a Linear drawing's rows hold. @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
+const linearAvailableDepthTrackCountForDrawing = (drawing) => (
+  depthTrackMatrixWidth(drawing.linearSeqs.map((seq) => seq.depth))
+);
 
-/** @param {{ linearSeqs?: { depth?: DepthFileSlots }[] } | null | undefined} state */
-const linearSourcedDepthTrackIndexesForState = (state) => (
-  activeDepthTrackIndices((Array.isArray(state?.linearSeqs) ? state.linearSeqs : []).map((seq) => seq?.depth))
+/** @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
+const linearSourcedDepthTrackIndexesForDrawing = (drawing) => (
+  activeDepthTrackIndices(drawing.linearSeqs.map((seq) => seq.depth))
 );
 
 /** @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots @param {unknown} renderer */
@@ -262,8 +261,8 @@ export const createLinearTrackSlotEditor = ({
     slots: drawing.adv.linear_track_slots,
     axisIndex: drawing.adv.linear_track_slots_axis_index,
     trackType: drawing.form.linear_track_layout,
-    depthTrackCount: linearAvailableDepthTrackCountForState(state),
-    depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForState(state),
+    depthTrackCount: linearAvailableDepthTrackCountForDrawing(drawing),
+    depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForDrawing(drawing),
     annotationSetIds: annotationSetIds(drawing),
     conservationSeries: []
   });
@@ -368,7 +367,7 @@ export const createLinearTrackSlotEditor = ({
     return trackAddBlockReason(normalizedRenderer, {
       supported: true,
       annotationSetCount: annotationSetIds(drawing).length,
-      depthSeriesCount: linearAvailableDepthTrackCountForState(state),
+      depthSeriesCount: linearAvailableDepthTrackCountForDrawing(drawing),
       featuresRowEnabled: drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
         slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
       ))
@@ -395,7 +394,7 @@ export const createLinearTrackSlotEditor = ({
     const renderer = normalizeRenderer(slot.renderer);
     if (renderer === 'features') return false;
     if (renderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (renderer === 'depth') return linearAvailableDepthTrackCountForState(state) > 0;
+    if (renderer === 'depth') return linearAvailableDepthTrackCountForDrawing(drawing) > 0;
     return true;
   };
 
@@ -507,7 +506,7 @@ export const createLinearTrackSlotEditor = ({
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
-    const depthTrackCount = linearAvailableDepthTrackCountForState(state);
+    const depthTrackCount = linearAvailableDepthTrackCountForDrawing(drawing);
     const slots = createDefaultLinearTrackSlots({
       showDepth: depthTrackCount > 0,
       depthTrackCount,
@@ -559,7 +558,7 @@ export const createLinearTrackSlotEditor = ({
         : {}
     });
     if (normalizedRenderer === 'depth') {
-      const available = linearAvailableDepthTrackCountForState(state);
+      const available = linearAvailableDepthTrackCountForDrawing(drawing);
       const claimed = new Set(
         drawing.adv.linear_track_slots
           .filter((/** @type {OptionalLinearSlot} */ candidate) => candidate?.enabled !== false && normalizeRenderer(candidate?.renderer) === 'depth')
@@ -886,7 +885,7 @@ export const createLinearTrackSlotEditor = ({
     const { slots: nextSlots, additions } = reconcileManagedDepthSlots(/** @type {any} */ ({
       slots,
       previousSourced,
-      sourced: linearSourcedDepthTrackIndexesForState(state),
+      sourced: linearSourcedDepthTrackIndexesForDrawing(drawing),
       managedPredicate: (/** @type {OptionalLinearSlot} */ slot) => isDefaultManagedLinearSlot(slot, 'depth')
     }));
     if (additions.length === 0 && nextSlots.length === slots.length) return;
@@ -897,7 +896,7 @@ export const createLinearTrackSlotEditor = ({
         .filter((/** @type {typeof nextSlots[number]} */ slot) => !nextSlots.includes(slot)).length;
       drawing.adv.linear_track_slots_axis_index = previousAxisIndex - removedBeforeAxis;
     }
-    const seriesCount = linearAvailableDepthTrackCountForState(state);
+    const seriesCount = linearAvailableDepthTrackCountForDrawing(drawing);
     /** @type {{ id?: unknown }[]} */
     const takenSlots = [...nextSlots];
     const newSlots = additions.map((trackIndex) => {
@@ -915,10 +914,10 @@ export const createLinearTrackSlotEditor = ({
   // source; the other mode's drawing is not touched (OV-82, OV-101).
   /** @param {DrawingState} drawing @param {() => unknown} mutate */
   const changeLinearDepthSources = (drawing, mutate) => {
-    const previousSourced = linearSourcedDepthTrackIndexesForState(state);
+    const previousSourced = linearSourcedDepthTrackIndexesForDrawing(drawing);
     mutate();
     reconcileLinearDepthSlots(drawing, previousSourced);
-    if (previousSourced.length > 0 && linearSourcedDepthTrackIndexesForState(state).length === 0) drawing.form.show_depth = false;
+    if (previousSourced.length > 0 && linearSourcedDepthTrackIndexesForDrawing(drawing).length === 0) drawing.form.show_depth = false;
   };
 
   const linearTrackStackEntries = () => {
@@ -1122,7 +1121,7 @@ export const createLinearTrackSlotEditor = ({
     if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
     // A row whose series the drawing does not have keeps its own height only (TK-03).
     const config = depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForState(state), depthTrackEditDefaults(drawing.adv)
+      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForDrawing(drawing), depthTrackEditDefaults(drawing.adv)
     );
     if (!config) return;
     try {

@@ -112,8 +112,10 @@ const sanitizePathSegment = (value) =>
  * @typedef {object} LinearRecordSelectorState
  * @property {{ value: string }} lInputType
  * @property {{ value: DiagramMode }} mode
- * @property {() => Pick<DrawingState, 'id' | 'mode'>} activeDrawing the shown drawing, which a discovery runs for
- * @property {LinearSeq[]} linearSeqs
+ * @property {() => Pick<DrawingState, 'id' | 'mode' | 'linearSeqs'>} activeDrawing the shown drawing, which a
+ *   discovery runs for, over its record rows
+ * @property {() => readonly Pick<DrawingState, 'linearSeqs'>[]} drawingList every drawing, whose rows keep their
+ *   selector state
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
  * @property {{ value: boolean }} [sessionImportRollbackInProgress]
  * @property {() => SessionBusy | null} [sessionOperationAvailability]
@@ -214,18 +216,21 @@ export const createLinearRecordSelector = ({
     )) || null;
 
   const purgeInactiveState = () => {
-    const activeUids = new Set(state.linearSeqs.map(uidFor).filter(Boolean));
+    const activeUids = new Set(state.drawingList().flatMap((drawing) => drawing.linearSeqs).map(uidFor).filter(Boolean));
     Object.keys(selectorStateByUid).forEach((uid) => {
       if (!activeUids.has(uid)) delete selectorStateByUid[uid];
     });
   };
 
-  /** @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request */
-  const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
+  /**
+   * @param {Pick<DrawingState, 'linearSeqs'>} drawing the drawing the discovery runs for
+   * @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request
+   */
+  const isCurrentRequest = (drawing, { generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
     if (recordDiscoverySuppressed()) return false;
     if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
-    const currentSeq = state.linearSeqs.find((seq) => uidFor(seq) === uid);
+    const currentSeq = drawing.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
     const currentFiles = sourceFilesFor(currentSeq, inputType);
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
@@ -236,7 +241,7 @@ export const createLinearRecordSelector = ({
     Boolean(suppress || recordDiscoverySuppressed()),
     state.mode.value,
     state.lInputType.value,
-    ...state.linearSeqs.flatMap((seq) => {
+    ...state.activeDrawing().linearSeqs.flatMap((seq) => {
       const { primaryFile, pairedFile } = sourceFilesFor(seq);
       return [uidFor(seq), primaryFile, pairedFile];
     })
@@ -267,7 +272,7 @@ export const createLinearRecordSelector = ({
     const inputType = state.lInputType.value;
     /** @type {{ uid: string, primaryFile: InputFileRef, pairedFile: InputFileRef | null }[]} */
     const targets = [];
-    for (const seq of state.linearSeqs) {
+    for (const seq of drawing.linearSeqs) {
       const uid = uidFor(seq);
       if (!uid) continue;
       const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
@@ -295,7 +300,7 @@ export const createLinearRecordSelector = ({
           pairedFile,
           temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
-        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
           replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
@@ -306,7 +311,7 @@ export const createLinearRecordSelector = ({
         });
         if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
       } catch (error) {
-        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
           replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });

@@ -185,8 +185,9 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * allocated through the same content-deduplicating allocator, so equal bytes
  * share one resource and a positional ID that names different bytes in the
  * two requests gets a new ID; each request's references are rewritten.
- * `state` holds the Files and the Linear records; `drawing` holds the Linear
- * comparison plan, whose uploaded comparison files the Session also binds.
+ * `state` holds the Files; `drawing`, the Linear drawing, holds the Linear
+ * records and the Linear comparison plan, whose uploaded comparison files the
+ * Session also binds.
  * @param {Record<string, any>} state
  * @param {Record<string, any> | null} committedRequest
  * @param {Record<string, any>} [drawing]
@@ -195,7 +196,7 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
 export const buildSessionResources = async (state, committedRequest, drawing, otherCommittedRequest = null) => {
   if (
     committedRequest === null
-      ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
+      ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: drawing?.linearSeqs })
         || Boolean(state?.results?.value?.length)
       : (!committedRequest
         || typeof committedRequest !== 'object'
@@ -479,7 +480,7 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   };
 
   const files = state?.files || {};
-  const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
+  const linearSeqs = Array.isArray(drawing?.linearSeqs) ? drawing.linearSeqs : [];
   const linearComparisons = Array.isArray(drawing?.linearComparisonPlan?.edges)
     ? drawing.linearComparisonPlan.edges
     : [];

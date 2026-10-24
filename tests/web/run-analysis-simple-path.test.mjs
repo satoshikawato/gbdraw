@@ -255,7 +255,7 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { createDrawingState, state } = await import('../../gbdraw/web/js/state.js');
-const { normalizeLinearSeqList, registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A binding holds refs of the project's file store, as the app's writers bind them.
 const bound = (value) => registerInputFileTree(state.inputFiles, value);
 const BOUND_FIELDS = ['c_gb', 'c_gff', 'c_fasta', 'c_depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'];
@@ -269,7 +269,6 @@ const artifactSnapshots = createHistorySnapshotService({
   state,
   fileStore: createInputFileStore(),
   nextTick: window.Vue.nextTick,
-  normalizeLinearSeqList,
   buildUiStateData,
   applyUiStateData,
   buildFeatureStateData,

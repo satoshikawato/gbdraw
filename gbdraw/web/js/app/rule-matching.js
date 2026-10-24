@@ -10,6 +10,7 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { DrawingState, LinearSeq } from '../state.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -265,7 +266,10 @@ export const createRulePreparation = ({
     mode: state.mode?.value,
     inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
     file: state.files?.t_color,
-    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
+    // Every drawing's cards, in tab order: the same invalidation as the
+    // project's rows had.
+    linearFiles: state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs)
+      .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
     resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
     selectedResult: state.selectedResultIndex?.value,
     ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),

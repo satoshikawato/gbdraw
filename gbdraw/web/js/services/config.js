@@ -15,7 +15,8 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import {
-  bindCanonicalComparisons, bindLoadedInputs, collapseEmptyLinearSeqList, normalizeLinearSeqList, registerInputFiles
+  bindCanonicalComparisons, bindLoadedInputs, collapseEmptyLinearSeqList, normalizeLinearSeqList,
+  registerInputFiles, replaceLinearSeqs
 } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -1804,8 +1805,13 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   if (isPlainObject(migrated.form)) {
     repairs.push(...readLegendPositionOfMode(/** @type {Record<string, unknown>} */ (migrated.form).legend, mode, 'form.legend').repairs);
   }
-  return { value: mode === 'linear' ? withBoundLinearRecordsOff(migrated, state.linearSeqs) : migrated, repairs };
+  return { value: mode === 'linear' ? withBoundLinearRecordsOff(migrated, drawing.linearSeqs) : migrated, repairs };
 };
+
+// The record rows of every drawing, in tab order: what a Session holds when it
+// asks whether any input is loaded.
+/** @returns {LinearSeq[]} */
+const everyDrawingsLinearSeqs = () => state.drawingList().flatMap((drawing) => drawing.linearSeqs);
 
 /**
  * A Linear drawing turns OFF only records it has: a card uid it does not have
@@ -3203,7 +3209,7 @@ const restoredLosatCacheInfoIdentity = (drawing, entry) => {
 
   // Indexes of the committed request: positions in the drawn list.
   const indexByUid = new Map(
-    drawnLinearSequences(state.linearSeqs, drawing.recordsOff)
+    drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff)
       .map((sequence, index) => [String(sequence?.uid || ''), index])
   );
   const queryIndex = indexByUid.get(queryUid);
@@ -3560,8 +3566,8 @@ export const applyOrthogroupStateData = (
 /**
  * The one check that a drawing has its biological inputs; Generate and Save
  * from the draft both use it, so both explain the same missing input. The
- * caller passes the drawing it resolved.
- * @param {{ readonly mode: string, readonly recordsOff: readonly string[] }} drawing
+ * caller passes the drawing it resolved, whose record rows it checks.
+ * @param {{ readonly mode: string, readonly recordsOff: readonly string[], readonly linearSeqs: readonly LinearSeq[] }} drawing
  */
 export const assertDrawingInputs = (drawing, sourceState = state) => {
   const files = sourceState.files || {};
@@ -3572,7 +3578,7 @@ export const assertDrawingInputs = (drawing, sourceState = state) => {
     return;
   }
   const gff = sourceState.lInputType?.value === 'gff';
-  const sequences = Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : [];
+  const sequences = drawing.linearSeqs;
   sequences.forEach((seq, index) => {
     if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
     if (gff && !seq?.fasta) throw diagnosticError('FASTA_REQUIRED', { inputOrdinal: index + 1 });
@@ -3631,7 +3637,7 @@ export const materializeLinearRecordFiles = (
 /**
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project inputs (`state`).
- * @param {DrawingState} drawing The drawing whose settings choose the inputs.
+ * @param {DrawingState} drawing The drawing whose settings choose the inputs, and whose record rows it serializes.
  * @param {Record<string, any> | null} [comparisonPlanOrOptions]
  */
 export const serializeActiveRenderFiles = async (
@@ -3648,7 +3654,7 @@ export const serializeActiveRenderFiles = async (
   const store = sourceState.inputFiles;
   // The request holds the drawn records only (record-selection D-02).
   const normalizedLinearSeqs = mode === 'linear'
-    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
+    ? normalizeLinearSeqList(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff))
     : [];
   const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
   const serializedLinearSeqs = await Promise.all(
@@ -3684,12 +3690,12 @@ export const serializeActiveRenderFiles = async (
   const linearSeqs = materializeLinearRecordFiles(
     serializedLinearSeqs,
     optionBag?.linearRecordCatalog ?? null,
-    { cards: Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : [] }
+    { cards: drawing.linearSeqs }
   );
   const resolvedComparisonPlan = mode === 'linear'
     ? suppliedComparisonPlan || resolveLinearComparisonPlan({
         plan: drawing.linearComparisonPlan,
-        sequences: normalizeLinearSeqList(sourceState.linearSeqs),
+        sequences: normalizeLinearSeqList(drawing.linearSeqs),
         recordsOff: drawing.recordsOff,
         layout: drawing.linearRecordLayoutEnabled?.value
           ? drawing.linearRecordRows
@@ -4162,7 +4168,9 @@ const readFileList = (stored, path, repairs) => (Array.isArray(stored) ? stored 
 
 /**
  * `targetDrawing` holds the Linear record layout and comparison plan that the
- * Files reconcile: a drawing, or the Load candidate.
+ * Files reconcile: a drawing, or the Load candidate. The Linear record rows
+ * the Files hold are returned (`linearSeqs`): the caller installs them in the
+ * Linear drawing, or keeps them in the Load candidate.
  * @param {Record<string, any> | null} filesData
  * @param {{
  *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
@@ -4197,12 +4205,12 @@ const applyFiles = (filesData, {
   targetState.linearReorderNotice.value = '';
 
   if (!filesData) {
-    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
+    const linearSeqs = normalizeLinearSeqList([]);
     SETTINGS_SLICE.install(targetDrawing.slices.settings, {
       linearRecordRows: [],
-      linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs))
+      linearComparisonPlan: normalizeLinearComparisonPlan(reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs))
     });
-    return { collapsedLinearSeqs: false };
+    return { collapsedLinearSeqs: false, linearSeqs };
   }
 
   /** @param {string} slot */
@@ -4282,12 +4290,11 @@ const applyFiles = (filesData, {
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
-    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
       // A saved row, unvalidated (OV-568): the lines below test each field they keep.
       const rowByUid = new Map(targetDrawing.linearRecordRows.map((/** @type {UnvalidatedFields<keyof LinearRecordRow>} */ entry) => [String(entry?.uid || ''), entry]));
       SETTINGS_SLICE.install(targetDrawing.slices.settings, {
-        linearRecordRows: targetState.linearSeqs.map((/** @type {LinearSeq} */ seq, /** @type {number} */ index) => {
+        linearRecordRows: collapsed.map((seq, /** @type {number} */ index) => {
           const saved = rowByUid.get(seq.uid);
           const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
             ? Number(saved.row) : index + 1;
@@ -4319,13 +4326,13 @@ const applyFiles = (filesData, {
       if (file) edge.file = file;
       else setComparisonEdgeFile(edge, null);
     });
-    installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs));
-    return { collapsedLinearSeqs };
+    installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(planWithFiles, collapsed));
+    return { collapsedLinearSeqs, linearSeqs: collapsed };
   }
 
-  targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-  installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs));
-  return { collapsedLinearSeqs: false };
+  const linearSeqs = normalizeLinearSeqList([]);
+  installComparisonPlan(targetDrawing, reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, linearSeqs));
+  return { collapsedLinearSeqs: false, linearSeqs };
 };
 
 // What the Depth fit of a loaded drawing turns off (B45), read before the
@@ -4369,20 +4376,23 @@ const depthFitRepairs = (mode, installed, storedAdv, { at, resolveTrackPlacement
 
 // A loaded drawing's Depth series fit its own mode's Depth sources (plan 4.2
 // `depth`): each drawing runs this once with its mode. Load listed what the
-// fit drops before the commit (`depthFitRepairs`).
+// fit drops before the commit (`depthFitRepairs`). The Linear sources are the
+// record rows of the Linear drawing (`linearRows`), which a Session 48 holds
+// once for both drawings.
 /**
  * @param {DrawingState} drawing
  * @param {'circular' | 'linear'} mode
+ * @param {readonly LinearSeq[]} linearRows
  */
-const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
+const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows) => {
   const fit = fitDepthStateToSources({
     mode,
     adv: drawing.adv,
     circularFiles: state.files.c_depth,
-    linearRows: state.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth))
+    linearRows: linearRows.map((seq) => depthFileSlotsFromValue(seq.depth))
   });
   if (fit.linearRowWidth) {
-    state.linearSeqs.forEach((/** @type {LinearSeq} */ seq) => {
+    linearRows.forEach((seq) => {
       seq.depth = padDepthFileSlots(seq.depth, fit.linearRowWidth);
     });
   }
@@ -4409,6 +4419,8 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode) => {
   );
 };
 
+// The project inputs and the Linear drawing's (`drawing`) record rows, layout,
+// and comparison plan.
 /** @param {DrawingState} drawing */
 const cloneLiveFileState = (drawing) => ({
   files: {
@@ -4434,7 +4446,7 @@ const cloneLiveFileState = (drawing) => ({
   },
   circularRecordList: cloneJsonData(state.circularRecordList.value),
   circularRecordDiscovery: { ...state.circularRecordDiscovery },
-  linearSeqs: state.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({
+  linearSeqs: drawing.linearSeqs.map((seq) => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
@@ -4458,7 +4470,7 @@ const restoreLiveFileState = (drawing, snapshot) => {
   });
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
   Object.assign(state.circularRecordDiscovery, bound.circularRecordDiscovery);
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...bound.linearSeqs);
+  replaceLinearSeqs(drawing.slices.inputs, bound.linearSeqs);
   SETTINGS_SLICE.install(drawing.slices.settings, {
     linearRecordRows: snapshot.linearRecordRows,
     linearComparisonPlan: normalizeLinearComparisonPlan(bound.linearComparisonPlan)
@@ -4735,7 +4747,9 @@ const resetSessionBaseline = () => {
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
-  applyFiles(null, { targetDrawing: state.drawingOfMode('linear') });
+  const linearDrawing = state.drawingOfMode('linear');
+  replaceLinearSeqs(linearDrawing.slices.inputs, normalizeLinearSeqList([]));
+  applyFiles(null, { targetDrawing: linearDrawing });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
@@ -5355,7 +5369,7 @@ const exportSessionDocument = async (
     ? artifact.committedCanonicalSession
     : cloneCanonicalSession(artifact.committedCanonicalSession);
   const settingsOnly = !artifact.committedCanonicalSession && logicalResults.length === 0
-    && !hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs });
+    && !hasBiologicalSessionInputs({ ...state.files, linearSeqs: everyDrawingsLinearSeqs() });
   if (committed) {
     try {
       const adoptedCommitted = isAdoptedCanonicalSession(committed);
@@ -5378,7 +5392,7 @@ const exportSessionDocument = async (
     const comparisonPlanSnapshot = state.mode.value === 'linear'
       ? resolveLinearComparisonPlan({
           plan: drawing.linearComparisonPlan,
-          sequences: normalizeLinearSeqList(state.linearSeqs),
+          sequences: normalizeLinearSeqList(drawing.linearSeqs),
           recordsOff: drawing.recordsOff,
           layout: drawing.linearRecordLayoutEnabled?.value
             ? drawing.linearRecordRows
@@ -5691,7 +5705,7 @@ const importSessionDocument = async (e, options = {}) => {
     });
     const candidateFiles = {
       // `applyFiles` fills the file slots.
-      files: /** @type {Record<string, unknown>} */ ({}), linearSeqs: [], circularRecordList: { value: [] },
+      files: /** @type {Record<string, unknown>} */ ({}), circularRecordList: { value: [] },
       circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
       cInputType: { value: inputTypes.cInputType },
       linearRecordRows: candidateLayout.view.linearRecordRows,
@@ -5699,7 +5713,9 @@ const importSessionDocument = async (e, options = {}) => {
       slices: { settings: candidateLayout.handle }
     };
     recordSessionLifecycleEvent('session-candidate-files-start');
-    const { collapsedLinearSeqs } = applyFiles(
+    // The Linear record rows the Files hold, which the Load commits to the
+    // Linear drawing.
+    const { collapsedLinearSeqs, linearSeqs: candidateLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files,
       {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
@@ -5760,7 +5776,7 @@ const importSessionDocument = async (e, options = {}) => {
       cInputType: candidateFiles.cInputType.value,
       lInputType: inputTypes.lInputType,
       files: candidateFiles.files,
-      linearSeqs: candidateFiles.linearSeqs,
+      linearSeqs: candidateLinearSeqs,
       circularConservation: circularDraftConfig?.circularConservation || {}
     };
     const { restored: restoredFileSequenceSources, error: currentRecoveryError } = await restoreLoadedSetSequenceSources({
@@ -5946,7 +5962,7 @@ const importSessionDocument = async (e, options = {}) => {
     const legacyFeatureSnapshot = {
       mode: generatedMode, cInputType: candidateFiles.cInputType.value,
       lInputType: inputTypes.lInputType, files: candidateFiles.files,
-      linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
+      linearSeqs: candidateLinearSeqs, results: committedImportedResults,
       selectedResultIndex: ui.selectedResultIndex || 0,
       featureState: features, editorState: restoredEditorState
     };
@@ -6007,7 +6023,7 @@ const importSessionDocument = async (e, options = {}) => {
       // request: its Linear cards give the records.
       if (hashColorRules && restoredConfig) {
         const ruleRecords = data.renderRequest?.records
-          ?? (generatedMode === 'linear' ? legacyLinearRequestRecords(candidateFiles.linearSeqs) : undefined);
+          ?? (generatedMode === 'linear' ? legacyLinearRequestRecords(candidateLinearSeqs) : undefined);
         const hashRules = migrateSessionHashRules({
           rules: restoredConfig.rules,
           mode: sessionMode,
@@ -6110,7 +6126,7 @@ const importSessionDocument = async (e, options = {}) => {
       }, {
         committedMode: generatedMode,
         depthSources: sessionDepthSourceWidths({
-          c_depth: candidateFiles.files.c_depth, linearSeqs: candidateFiles.linearSeqs
+          c_depth: candidateFiles.files.c_depth, linearSeqs: candidateLinearSeqs
         }),
         paletteColors: paletteColorsFromDefinitions(String(flatConfig?.palette || '').trim() || 'default')
       });
@@ -6168,7 +6184,7 @@ const importSessionDocument = async (e, options = {}) => {
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, modeSlices[mode].config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(modeConfigs[mode].rules)) modeConfigs[mode].rules = savedSpecificRules(modeConfigs[mode].rules);
-      if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateFiles.linearSeqs);
+      if (mode === 'linear') modeConfigs.linear = withBoundLinearRecordsOff(modeConfigs.linear, candidateLinearSeqs);
       if (mode === 'circular') {
         modeConfigs.circular = withoutUnreadConservationSeries(modeConfigs.circular, candidateFiles.files, {
           seriesAt: `${modeScopedSession ? 'modes.circular.config' : 'config'}.circularConservation.series`,
@@ -6205,7 +6221,8 @@ const importSessionDocument = async (e, options = {}) => {
     }
     // What each drawing's Depth fit drops (B45): it runs on the restored files.
     if (!settingsOnly) {
-      const linearRows = candidateFiles.linearSeqs.map((/** @type {LinearSeq} */ seq) => depthFileSlotsFromValue(seq.depth));
+      // A loaded row's Depth value is the deserialized file list, read as its slots.
+      const linearRows = candidateLinearSeqs.map((seq) => depthFileSlotsFromValue(/** @type {DepthFileSlots} */ (seq.depth)));
       // `applyFiles` restored the bound Circular Depth slots (by record, or one row).
       const circularFiles = /** @type {DepthFileSlots | DepthFileSlots[]} */ (/** @type {{ c_depth?: unknown }} */ (candidateFiles.files).c_depth);
       SLICE_MODES.forEach((mode) => repairs.push(...depthFitRepairs(mode, installedSettings[mode], modeSlices[mode].config?.adv, {
@@ -6436,9 +6453,10 @@ const importSessionDocument = async (e, options = {}) => {
       state.drawingList().forEach((drawing) => restoreLayoutPreferences(drawing, ui, { projected: projectedLayout }));
     }
 
-    restoreLiveFileState(state.drawingOfMode('linear'), {
+    const linearDrawing = state.drawingOfMode('linear');
+    restoreLiveFileState(linearDrawing, {
       files: candidateFiles.files,
-      linearSeqs: candidateFiles.linearSeqs,
+      linearSeqs: candidateLinearSeqs,
       circularRecordList: candidateFiles.circularRecordList.value,
       circularRecordDiscovery: candidateFiles.circularRecordDiscovery,
       linearRecordRows: candidateFiles.linearRecordRows,
@@ -6446,17 +6464,17 @@ const importSessionDocument = async (e, options = {}) => {
     });
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
-      state.linearFoldedSources, groupLinearSourceRecords(/** @type {LinearSeq[]} */ (state.linearSeqs)),
+      state.linearFoldedSources, groupLinearSourceRecords(linearDrawing.linearSeqs),
       state.lInputType.value
     );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(
-      state.drawingOfMode('linear').importedComparisonIntent,
+      linearDrawing.importedComparisonIntent,
       comparisonClassification,
       linearDraftConfig?.importedComparisonResolution
     );
     if (!settingsOnly) {
-      state.drawingList().forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(drawing, drawing.mode));
+      state.drawingList().forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(drawing, drawing.mode, linearDrawing.linearSeqs));
     }
     if (canonicalSession) {
       applyLosatCache(
@@ -6479,7 +6497,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        state.drawingOfMode('linear'),
+        linearDrawing,
         /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries,
         legacyArtifacts?.proteinRawCandidates
       );
@@ -6776,7 +6794,7 @@ export const exportSession = (titleOverride = null, options) => {
     const readArtifacts = () => chooseSessionArtifacts(options?.readKeptArtifacts?.() ?? []);
     let { artifact, otherArtifact } = readArtifacts();
     if (!artifact.committedCanonicalSession
-      && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
+      && hasBiologicalSessionInputs({ ...state.files, linearSeqs: everyDrawingsLinearSeqs() })) {
       assertDrawingInputs(drawing);
     }
     const artifactUi = artifactUiState(artifact);
