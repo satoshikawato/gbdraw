@@ -2031,14 +2031,13 @@ export const createRunAnalysis = ({
     });
   };
 
-  /** @param {{ status?: string, generationId?: number, error?: unknown, summaryCount?: number, detailsCacheSize?: number }} [updates] */
+  /** @param {{ status?: string, generationId?: number, error?: unknown, detailsCacheSize?: number }} [updates] */
   const setFeatureEditorStatus = (updates = {}) => {
     if (!featureEditorStatus || typeof featureEditorStatus !== 'object') return;
     Object.assign(featureEditorStatus, {
       status: updates.status ?? featureEditorStatus.status,
       generationId: updates.generationId ?? featureEditorStatus.generationId,
       error: updates.error === undefined ? featureEditorStatus.error : updates.error,
-      summaryCount: updates.summaryCount ?? featureEditorStatus.summaryCount,
       detailsCacheSize: updates.detailsCacheSize ?? featureEditorStatus.detailsCacheSize
     });
   };
@@ -5275,7 +5274,6 @@ export const createRunAnalysis = ({
         status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
         generationId: featureExtractionRequestId,
         error: null,
-        summaryCount: candidateExtractedFeatures.length,
         detailsCacheSize: 0
       });
       resultPanelTab.value = 'preview';
@@ -5750,7 +5748,6 @@ export const createRunAnalysis = ({
         status: candidateOwnerSet.extractedFeatures.length ? 'summary-ready' : 'idle',
         generationId: featureExtractionRequestId,
         error: null,
-        summaryCount: candidateOwnerSet.extractedFeatures.length,
         detailsCacheSize: 0
       });
       resultPanelTab.value = 'preview';

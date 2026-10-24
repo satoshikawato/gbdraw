@@ -44,9 +44,21 @@ assert.equal(typeof circularGenome.arrayBuffer, 'undefined');
 assert.ok(Object.isFrozen(circularGenome));
 assert.ok(state.extractedFeatures.value.length > 0);
 assert.equal(state.featureEditorStatus.status, 'summary-ready');
-assert.equal(state.featureEditorStatus.summaryCount, state.extractedFeatures.value.length);
 assert.equal(state.featureExtractionPending.value, false);
 assert.equal(state.featureExtractionError.value, null);
+const loadedFeatureCount = state.extractedFeatures.value.length;
+assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
+
+// OV-1762: the Editor's feature count is the shown drawing's (its `extractedFeatures`), not the count the
+// last Load or Generate in any drawing wrote. A drawing switch swaps the artifact slots.
+const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const slotSnapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+const circularSlot = slotSnapshots.captureArtifactSlot();
+slotSnapshots.installArtifactSlot(null, { drawing: modeDrawing(state, 'linear') });
+assert.equal(state.featureEditorStatusText.value, 'No features ready', 'the Linear drawing has no Result');
+slotSnapshots.installArtifactSlot(circularSlot, { drawing: modeDrawing(state, 'circular') });
+assert.equal(state.featureEditorStatusText.value, `${loadedFeatureCount} features ready`);
 
 // The Legend edits are the Circular drawing's (Session 46 `modes.circular`).
 const maliciousLegendSession = JSON.parse(session);

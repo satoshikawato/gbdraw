@@ -5103,8 +5103,7 @@ export const applyRunStateData = (runState = {}) => {
 };
 
 /**
- * @param {{ status?: string, generationId?: string, error?: string | null, summaryCount?: number,
- *   detailsCacheSize?: number }} [updates]
+ * @param {{ status?: string, generationId?: string, error?: string | null, detailsCacheSize?: number }} [updates]
  */
 const setFeatureEditorStatusData = (updates = {}) => {
   if (!state.featureEditorStatus || typeof state.featureEditorStatus !== 'object') return;
@@ -5112,23 +5111,18 @@ const setFeatureEditorStatusData = (updates = {}) => {
     status: updates.status ?? state.featureEditorStatus.status,
     generationId: updates.generationId ?? state.featureEditorStatus.generationId,
     error: updates.error === undefined ? state.featureEditorStatus.error : updates.error,
-    summaryCount: updates.summaryCount ?? state.featureEditorStatus.summaryCount,
     detailsCacheSize: updates.detailsCacheSize ?? state.featureEditorStatus.detailsCacheSize
   });
 };
 
 const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load' } = {}) => {
-  const summaryCount = Array.isArray(state.extractedFeatures.value)
-    ? state.extractedFeatures.value.length
-    : 0;
-  if (summaryCount === 0) return false;
+  if (state.extractedFeatures.value.length === 0) return false;
   state.featureExtractionPending.value = false;
   state.featureExtractionError.value = null;
   setFeatureEditorStatusData({
     status: 'summary-ready',
     generationId,
-    error: null,
-    summaryCount
+    error: null
   });
   return true;
 };
@@ -5154,11 +5148,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'summary-ready',
       generationId,
-      error: shownWarning,
-      // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
-      summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
-        ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
-        : state.extractedFeatures.value.length
+      error: shownWarning
     });
     return;
   }
@@ -5169,8 +5159,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'failed',
       generationId,
-      error: warning,
-      summaryCount: 0
+      error: warning
     });
     return;
   }

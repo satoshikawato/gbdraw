@@ -731,6 +731,30 @@ test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch
   }
 });
 
+// OV-1762: the Editor's feature count is the shown drawing's, across a Generate in the other drawing and a switch.
+test('OV-1762: the Editor feature count follows the shown drawing after a Generate in the other one', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openCircular(page);
+  await switchMode(page, 'linear');
+  await setLinearFile(page, 'tests/fixtures/regex_rules.gb');
+  await switchMode(page, 'circular');
+  const editorCount = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return { text: app.featureEditorStatusText, features: app.extractedFeatures.length };
+  });
+  await generate(page);
+  const circular = await editorCount();
+  expect(circular.text).toBe(`${circular.features} features ready`);
+  await switchMode(page, 'linear');
+  expect(await editorCount(), 'Linear before its Generate').toEqual({ text: 'No features ready', features: 0 });
+  await generate(page);
+  const linear = await editorCount();
+  expect(linear.text).toBe(`${linear.features} features ready`);
+  expect(linear.features, 'the two files have different feature counts').not.toBe(circular.features);
+  await switchMode(page, 'circular');
+  expect(await editorCount(), 'Circular shown again').toEqual(circular);
+});
+
 // OV-1249: Reset resets settings, not the loaded records.
 test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', async ({ page }) => {
   test.setTimeout(120_000);

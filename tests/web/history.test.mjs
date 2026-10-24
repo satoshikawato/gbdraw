@@ -1954,7 +1954,7 @@ const createLayoutPreferences = () => ({
     errorLog: ref(null),
     editableLabels: ref([]),
     labelTextScopeDialog: {},
-    featureEditorStatus: { status: 'summary-ready', summaryCount: 1 },
+    featureEditorStatus: { status: 'summary-ready' },
     featureExtractionPending: ref(false),
     featureExtractionError: ref(null),
     proteinIdentityManifest: ref(proteinIdentityManifestA),

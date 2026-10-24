@@ -1103,7 +1103,6 @@ Object.assign(state.featureEditorStatus, {
   status: 'summary-ready',
   generationId: 'keep-generation',
   error: null,
-  summaryCount: 3,
   detailsCacheSize: 2
 });
 state.matchSequenceRegistry.reset([{
