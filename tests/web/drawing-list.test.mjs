@@ -91,3 +91,24 @@ test('Reset all gives a second Circular drawing its Record Order rows and compar
   assert.equal(second.circularConservation.series.length, 1);
   assert.equal(second.files.c_conservation_fastas.length, 1, 'the ring file stays');
 });
+
+// A search belongs to the drawing it was typed in, not to its mode: a second
+// Linear drawing starts without the first one's search.
+test('a search typed in one Linear drawing is not shown in a second Linear drawing', () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const second = createDrawingState('linear-2', 'linear');
+  state.addDrawing(second, 'Linear 2', 3);
+  history.addMember('linear-2');
+  app.selectDrawing('linear');
+  app.previewFeatureSearchInput.value = 'dnaA';
+  app.applyPreviewFeatureSearch();
+  assert.equal(app.previewFeatureSearchQuery.value, 'dnaA');
+
+  app.selectDrawing('linear-2');
+  assert.equal(app.previewFeatureSearchQuery.value, '', 'the second drawing has no search');
+  assert.equal(app.previewFeatureSearchInput.value, '');
+
+  app.selectDrawing('linear');
+  assert.equal(app.previewFeatureSearchQuery.value, 'dnaA', 'the first drawing keeps its own search');
+});

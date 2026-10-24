@@ -1968,17 +1968,17 @@ export const createAppSetup = () => {
   // outside opens, retargets or closes a popup. The one predicate of that hold: the figure's
   // gestures read it, and the preview's `preview-reviewing` class (the hint and the hand cursor
   // of a drawn element) is bound to the same computed.
-  // `figure` is the identity of the Result of the review's mode (`mode`) that the review last
+  // `figure` is the identity of the Result of the review's drawing (`drawingId`) that the review last
   // showed its draft on.
   // `drawerTab` is the Editor tab the review closed: Apply's new Result can leave a tab
   // unavailable for a while, which moves the shown tab (OV-1255).
-  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, mode: 'circular' | 'linear', figure: string } | null} */ (null));
-  // The hold belongs to the review's mode (OV-1089): while the other mode is shown, its figure
+  const similarityAlignmentTakeover = shallowRef(/** @type {{ drawerOpen: boolean, drawerTab: string, popup: unknown, drawingId: DrawingId, figure: string } | null} */ (null));
+  // The hold belongs to the review's drawing (OV-1089): while another drawing is shown, its figure
   // is not the held one, so the end of the review does not give it the held view and its
   // captures keep its own view.
   const similarityAlignmentHoldShown = () => {
     const takeover = similarityAlignmentTakeover.value;
-    return !takeover || takeover.mode === (mode.value === 'circular' ? 'circular' : 'linear');
+    return !takeover || takeover.drawingId === state.activeDrawingId.value;
   };
   // The Session writer and the artifact checkpoint save the view the pan/zoom owner holds for
   // the shown mode. The departing mode's slot is captured before a switch changes `mode`.
@@ -4459,11 +4459,15 @@ export const createAppSetup = () => {
     // departing drawing's Result, and the notice the departing drawing's work.
     history.adoptSessionReset(resetModeTransientUi);
     noticeBanner.dismiss();
-    previewFeatureSearch.switchModeSearch(departing.mode, arriving.mode);
+    previewFeatureSearch.switchDrawingSearch(departing.id, arriving.id);
     failedGeneratePreservedResult.value = false;
     // OV-372: an operation error belongs to the drawing it was raised in,
-    // except one that names the arriving drawing's Result (PD-OI-079).
-    if (errorLog.value && normalizeUserFacingError(errorLog.value)?.context?.diagramMode !== arriving.mode) {
+    // except one that names the arriving drawing's Result (PD-OI-079). A
+    // producer that still names only a mode (the Save errors of config.js,
+    // until B2d-3) names that mode's drawing.
+    const errorContext = errorLog.value ? normalizeUserFacingError(errorLog.value)?.context : undefined;
+    if (errorLog.value && !(errorContext?.drawingId === arriving.id
+      || (errorContext?.drawingId === undefined && errorContext?.diagramMode === arriving.mode))) {
       errorLog.value = null;
     }
     // The arriving drawing's annotations, over its mode's record catalog.
@@ -4883,6 +4887,7 @@ export const createAppSetup = () => {
           : [];
         if (missingBlastTsvPairs.length) {
           missingBlastTsvDialog.pairs = missingBlastTsvPairs;
+          missingBlastTsvDialog.drawingId = state.activeDrawingId.value;
           missingBlastTsvDialog.show = true;
           return { status: 'blocked', reason: 'missing-blast-tsv' };
         }
@@ -4912,9 +4917,11 @@ export const createAppSetup = () => {
   // legacy Result kept in that mode) offers Generate there: the action shows
   // that mode first.
   const generateFromError = () => {
-    const target = errorLog.value?.context?.diagramMode;
-    if ((target === 'circular' || target === 'linear') && target !== mode.value) {
-      const switched = selectDrawing(state.drawingOfMode(target).id);
+    const context = errorLog.value?.context;
+    const target = context?.drawingId !== undefined ? context.drawingId
+      : (context?.diagramMode === 'circular' || context?.diagramMode === 'linear' ? state.drawingOfMode(context.diagramMode).id : undefined);
+    if (target !== undefined && target !== state.activeDrawingId.value) {
+      const switched = selectDrawing(target);
       if (switched && switched.status === 'busy') return switched;
     }
     return runAnalysis();
@@ -5027,14 +5034,14 @@ export const createAppSetup = () => {
   // Generate asks about Upload pairs without a file: each pair's row
   // takes its own file; Skip sets the pairs still without one to No comparison
   // in one History step, then Generates.
-  /** @type {{ show: boolean, pairs: ReturnType<typeof missingUploadPairsToResolve> }} */
-  const missingBlastTsvDialog = reactive({ show: false, pairs: [] });
+  /** @type {{ show: boolean, drawingId: DrawingId, pairs: ReturnType<typeof missingUploadPairsToResolve> }} */
+  const missingBlastTsvDialog = reactive({ show: false, drawingId: state.activeDrawingId.value, pairs: [] });
   const closeMissingBlastTsvDialog = () => { missingBlastTsvDialog.show = false; };
   const setMissingBlastTsvPairsToNone = dialogChoice.withHistory(
     () => msg('Set pairs to No comparison'),
     () => {
       // The pairs as they are now: Undo may have changed them while the dialog was open.
-      const drawing = state.drawingOfMode('linear');
+      const drawing = state.drawingOf(missingBlastTsvDialog.drawingId);
       const pairs = missingUploadPairsToResolve(drawing.linearComparisonResolution.value);
       if (pairs.length) omitLinearComparisonPairs(drawing, pairs.map((entry) => entry.edgeKey));
       dialogChoice.closeAfterChoice(closeMissingBlastTsvDialog);
@@ -5044,7 +5051,7 @@ export const createAppSetup = () => {
   );
   // The dialog's rows: the pairs it opened with, each with its file as it is now.
   const missingBlastTsvRows = computed(() => {
-    const missing = new Set(/** @type {readonly LinearComparisonIssue[]} */ (state.drawingOfMode('linear').linearComparisonResolution.value?.errors || [])
+    const missing = new Set(/** @type {readonly LinearComparisonIssue[]} */ (state.drawingOf(missingBlastTsvDialog.drawingId).linearComparisonResolution.value?.errors || [])
       .filter((issue) => issue.code === 'missing-upload').map((issue) => issue.edgeKey));
     return missingBlastTsvDialog.pairs.map((pair) => {
       const found = linearComparisonPairForEdgeKey(pair.edgeKey);
@@ -5097,9 +5104,9 @@ export const createAppSetup = () => {
   // meanwhile keeps that view. While Apply runs, the ending waits for its outcome, and its new
   // Result is the review's own.
   let similarityAlignmentApplying = false;
-  // The identity of the selected Result of the review's mode, shown or kept in its slot.
-  /** @param {'circular' | 'linear'} reviewMode */
-  const reviewModeFigure = (reviewMode) => previewRuntime.getResultIdentity(artifactSlots.readOfDrawing(state.drawingOfMode(reviewMode).id,
+  // The identity of the selected Result of the review's drawing, shown or kept in its slot.
+  /** @param {DrawingId} reviewDrawingId */
+  const reviewDrawingFigure = (reviewDrawingId) => previewRuntime.getResultIdentity(artifactSlots.readOfDrawing(reviewDrawingId,
     state.activeDrawingId.value, () => results.value[Number(selectedResultIndex.value) || 0],
     (slot) => slot.values.results[slot.values.selectedResultIndex]));
   // The draft no longer matches the figure. Another Result of the review's mode replaced it (a
@@ -5108,7 +5115,7 @@ export const createAppSetup = () => {
   // own Result, kept in its slot or shown again, leaves the hold, so the end gives the view back.
   const dropSimilarityAlignmentView = () => {
     const takeover = similarityAlignmentTakeover.value;
-    if (!takeover || similarityAlignmentApplying || reviewModeFigure(takeover.mode) === takeover.figure) return;
+    if (!takeover || similarityAlignmentApplying || reviewDrawingFigure(takeover.drawingId) === takeover.figure) return;
     takeover.drawerOpen = false;
     releasePreviewViewport({ restore: false });
   };
@@ -5132,7 +5139,7 @@ export const createAppSetup = () => {
       return;
     }
     // A live rerender of the draft's records draws a new Result of the same figure (PD-OI-102).
-    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewModeFigure(similarityAlignmentTakeover.value.mode);
+    if (similarityAlignmentTakeover.value) similarityAlignmentTakeover.value.figure = reviewDrawingFigure(similarityAlignmentTakeover.value.drawingId);
     // Without a mounted preview (the Run info tab) nothing is measured: the strips keep the
     // geometry of the same Result.
     similarityAlignmentGeometry.value = featureActions.showAlignmentOverlay({
@@ -5191,9 +5198,9 @@ export const createAppSetup = () => {
       return;
     }
     // A review shown again while an Apply is pending keeps what the first one took.
-    const reviewMode = mode.value === 'circular' ? 'circular' : 'linear';
+    const reviewDrawingId = state.activeDrawingId.value;
     similarityAlignmentTakeover.value ??= { drawerOpen: showRightDrawer.value, drawerTab: rightDrawerTab.value, popup: clickedFeature.value,
-      mode: reviewMode, figure: reviewModeFigure(reviewMode) };
+      drawingId: reviewDrawingId, figure: reviewDrawingFigure(reviewDrawingId) };
     // The figure is fitted again only while it shows the draft.
     holdPreviewViewport(similarityAlignmentActions.isDraftArtifactCurrent);
     rightDrawerActions.closeRightDrawer();
@@ -7389,9 +7396,9 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    // Similarity groups are the Linear drawing's.
-    orthogroupNameOverrides: state.drawingOfMode('linear').orthogroupNameOverrides,
-    orthogroupDescriptionOverrides: state.drawingOfMode('linear').orthogroupDescriptionOverrides,
+    // Similarity groups are the shown drawing's.
+    orthogroupNameOverrides: computed(() => state.activeDrawing().orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: computed(() => state.activeDrawing().orthogroupDescriptionOverrides),
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,
