@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from gbdraw.session import load_session_document, materialize_session, render_session
+from gbdraw import session_drawings
 from gbdraw.session_io import DRAWINGS_SESSION_MIN_VERSION, SessionDraftMigration
 from gbdraw.session_migration import session_draft_migration_repairs
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
@@ -82,6 +83,37 @@ def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: 
         assert drawing["webFiles"]["bindings"]["c_gb"]["resourceId"] in document["resources"]
     # Every stored Result, byte for byte.
     assert json.dumps(stored, sort_keys=True) == json.dumps(source["results"], sort_keys=True)
+
+
+@pytest.mark.parametrize(
+    ("name", "result_mode", "shown_mode"),
+    [
+        ("mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz", "circular", "linear"),
+        ("mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz", "linear", "circular"),
+    ],
+)
+@pytest.mark.parametrize("settings_used", [True, False], ids=["settings-used", "settings-at-default"])
+def test_a_legacy_session_keeps_its_shown_mode_and_opens_its_stored_result(
+    name: str, result_mode: str, shown_mode: str, settings_used: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The mode shown at Save gets a drawing; with no Result of its own, the
+    # drawing with the stored Result opens and comes first.
+    # Being shown is a use on its own: rule d (other-mode settings) need not
+    # hold for it (OV-1666).
+    if not settings_used:
+        monkeypatch.setattr(session_drawings, "_used_by_settings", lambda *_args: False)
+    payload = json.loads(legacy_session_to_drawings_json(_text(name)))
+    assert set(payload) == {"document", "storedResults", "warnings"}, payload.get("error")
+    document = payload["document"]
+    assert [(drawing["id"], drawing["mode"]) for drawing in document["drawings"]] == [
+        (result_mode, result_mode),
+        (shown_mode, shown_mode),
+    ]
+    assert document["ui"]["activeDrawingId"] == result_mode
+    assert set(payload["storedResults"]) == {result_mode}
+    shown = document["drawings"][1]
+    assert shown["renderRequest"] is None
+    assert shown["results"] == []
 
 
 def test_a_document_that_is_not_json_is_refused_in_the_error_shape() -> None:

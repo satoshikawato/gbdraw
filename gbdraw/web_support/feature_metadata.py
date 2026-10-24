@@ -19,10 +19,9 @@ from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash,
-    compute_feature_hash_from_location_parts,
     make_linear_rendered_feature_id,
     shared_source_feature_hashes,
-    source_feature_location_parts,
+    source_feature_hash_and_parts,
 )
 from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
@@ -184,12 +183,10 @@ def _biological_selector_values(
         "location": str(selector.get("location") or "") or None,
         "recordLocation": str(selector.get("record_location") or "") or None,
     }
-    parts = source_feature_location_parts(feature, record)
-    stable_feature_id = compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record.id,
+    source_hash, parts = source_feature_hash_and_parts(
+        feature, record, record_id=record.id
     )
+    stable_feature_id = source_hash or ""
     selector["hash"] = stable_feature_id
     if parts:
         start = min(part[0] for part in parts)

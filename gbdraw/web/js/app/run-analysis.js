@@ -152,6 +152,7 @@ import {
   readOncePerFile,
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
+import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -2372,16 +2373,19 @@ export const createRunAnalysis = ({
             .forEach((value) => preservedRecordKeys.set(value, recordKey));
         });
     }
-    Object.assign(drawing.circularRecordDiscovery, {
-      status: hasCompleteInput ? 'loading' : 'idle',
+    // Without its complete input the drawing holds the idle record a new
+    // drawing holds, so a History restore that runs this again leaves the
+    // record it captured (OV-1669).
+    Object.assign(drawing.circularRecordDiscovery, hasCompleteInput ? {
+      status: 'loading',
       error: '',
       inputType,
-      primaryFile: primaryFile || null,
-      pairedFile: pairedFile || null,
+      primaryFile,
+      pairedFile,
       canonicalRecordIdentities: preserveCanonicalRecordKeys
         ? drawing.circularRecordDiscovery.canonicalRecordIdentities
         : []
-    });
+    } : idleCircularRecordDiscovery());
     drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);

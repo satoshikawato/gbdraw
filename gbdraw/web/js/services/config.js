@@ -16,7 +16,8 @@ import {
 import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
 import {
   INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
-  bindLoadedInputs, collapseEmptyLinearSeqList, normalizeLinearSeqList, setConservationBlastsSource
+  bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
+  setConservationBlastsSource
 } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
@@ -4197,14 +4198,7 @@ const applyFiles = (filesData, {
   adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState, targetDrawing, repairs = null, at = 'files'
 }) => {
   targetState.circularRecordList.value = [];
-  Object.assign(targetState.circularRecordDiscovery, {
-    status: 'idle',
-    error: '',
-    inputType: '',
-    primaryFile: null,
-    pairedFile: null,
-    canonicalRecordIdentities: []
-  });
+  Object.assign(targetState.circularRecordDiscovery, idleCircularRecordDiscovery());
   targetState.files.c_gb = null;
   targetState.files.c_gff = null;
   targetState.files.c_fasta = null;
@@ -6763,7 +6757,8 @@ export const disposeSessionOperations = () => {
 // both drawings' sources, on which Save writes their drafts;
 // `options.readKeptArtifacts` returns the artifact slots the root keeps for
 // the drawings not shown (E1), `options.beforeExport` learns whether Save projects
-// the draft request, and `options.onSaved` runs once the download is handed off.
+// the draft request, `options.onSaved` runs once the download is handed off,
+// and `options.onSettled` runs once the Save ends, after its pending state clears.
 /**
  * What the composition root passes to `exportSession`.
  * @typedef {object} SessionSaveOptions
@@ -6777,6 +6772,7 @@ export const disposeSessionOperations = () => {
  *   'linearRecordCatalog' | 'omittedAnnotationRecordKeys'>>} [beforeExport]
  * @property {(result: Extract<SessionSaveResult, { status: 'saved' }>) => void} [onSaved]
  * @property {(error: UserFacingError | null) => void} [onError]
+ * @property {() => void} [onSettled]
  */
 
 /**
@@ -6882,6 +6878,7 @@ export const exportSession = (titleOverride = null, options) => {
       sessionSaveInFlight = null;
     }
     recordSessionLifecycleEvent('session-save-pending-cleared');
+    options.onSettled?.();
   });
   sessionSaveInFlight = operation;
   return operation.promise;

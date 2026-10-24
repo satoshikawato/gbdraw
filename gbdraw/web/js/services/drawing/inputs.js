@@ -396,8 +396,12 @@ const emptyDrawingInputFiles = () => ({
 });
 const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.keys(emptyDrawingInputFiles()));
 
-/** @returns {CircularRecordDiscovery} */
-const idleRecordDiscovery = () => ({
+/**
+ * The record of a drawing with nothing to read: a new drawing, Load before it
+ * binds files, and a discovery without its complete input all write this one.
+ * @returns {CircularRecordDiscovery}
+ */
+export const idleCircularRecordDiscovery = () => ({
   status: 'idle', error: '', inputType: '', primaryFile: null, pairedFile: null, canonicalRecordIdentities: []
 });
 
@@ -463,7 +467,7 @@ const MEMBER_OPS = Object.freeze({
     install: (members, data) => { members.circularRecordList.value = data.circularRecordList.map((entry) => ({ ...entry })); }
   },
   circularRecordDiscovery: {
-    create: () => /** @type {CircularRecordDiscovery} */ (reactive(idleRecordDiscovery())),
+    create: () => /** @type {CircularRecordDiscovery} */ (reactive(idleCircularRecordDiscovery())),
     /** @param {InputsMembers} members */
     capture: (members) => ({
       ...members.circularRecordDiscovery,
@@ -471,7 +475,7 @@ const MEMBER_OPS = Object.freeze({
     }),
     /** @param {InputsMembers} members @param {InputsData} data */
     install: (members, data) => {
-      Object.assign(members.circularRecordDiscovery, idleRecordDiscovery(), data.circularRecordDiscovery, {
+      Object.assign(members.circularRecordDiscovery, idleCircularRecordDiscovery(), data.circularRecordDiscovery, {
         canonicalRecordIdentities: data.circularRecordDiscovery.canonicalRecordIdentities.map((entry) => ({ ...entry }))
       });
     }

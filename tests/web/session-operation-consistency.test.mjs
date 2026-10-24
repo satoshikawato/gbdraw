@@ -269,21 +269,22 @@ test('late source discovery cannot expand the live source set during Session', a
   let expanded = 0;
   const file = {};
   const source = { uid: 'source', gb: file, region_record_id: '' };
+  const linear = { id: 'linear', mode: 'linear', inputType: { value: 'gb' }, linearSeqs: [source] };
   const selector = createLinearRecordSelector({
     state: withModeDrawings({ mode: { value: 'linear' }, cardFiles: {}, sessionOperationAvailability }, {
-      circular: {}, linear: { id: 'linear', mode: 'linear', linearSeqs: [source] }
+      circular: {}, linear
     }),
     reactive: value => value, recordReader: () => read.promise,
     onRecordsDiscovered: () => { expanded += 1; }
   });
-  const pending = selector.refresh();
+  const pending = selector.refresh(linear);
   state.sessionSavePending.value = true;
   read.release([{ selector: '#1', recordId: 'first', recordLength: 100 }]);
   assert.deepEqual(await pending, saving);
   assert.equal(expanded, 0);
   assert.equal(selector.statusFor(source), 'deferred');
   state.sessionSavePending.value = false;
-  await selector.refresh();
+  await selector.refresh(linear);
   assert.equal(selector.statusFor(source), 'ready');
   assert.equal(expanded, 1);
 });

@@ -240,6 +240,39 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   paralogLinksDefault: 2
 });
 
+// gbdraw/session_drawings.py: describe_session_drawings_layout()
+export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
+  version: 49,
+  drawingNames: Object.freeze({
+    circular: 'Circular',
+    linear: 'Linear'
+  }),
+  setFields: Object.freeze(['cliInvocation', 'renderRequest', 'results', 'runMetadata']),
+  setEditorFields: Object.freeze(['alignmentResetReceipt', 'featureCatalog', 'originalSvgStroke']),
+  projectFields: Object.freeze(['createdAt', 'format', 'legacyArtifacts', 'resources', 'title', 'version']),
+  projectUiFields: Object.freeze(['autoLabelReflow', 'downloadDpi', 'featurePanelTab', 'losatExecution', 'paletteInstantPreviewEnabled', 'richFeaturePopup']),
+  projectWebFilesFields: Object.freeze(['resourceOriginalNames']),
+  drawingFields: Object.freeze(['cliInvocation', 'cliOptions', 'losatCache', 'losatDerivedCache', 'orthogroupState', 'proteinIdentityManifest', 'renderRequest', 'results', 'runMetadata']),
+  viewFields: Object.freeze(['cliInvocation', 'cliOptions', 'createdAt', 'editorState', 'format', 'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState', 'otherModeResult', 'proteinIdentityManifest', 'renderRequest', 'resources', 'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles']),
+  drawingWebFileKeys: Object.freeze(['bindings', 'circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources', 'linearRecordMetadata', 'resourceOriginalNames']),
+  drawingWebFilesFields: Object.freeze({
+    circular: Object.freeze(['circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources']),
+    linear: Object.freeze(['linearRecordMetadata'])
+  }),
+  inputTypeFields: Object.freeze({
+    circular: 'cInputType',
+    linear: 'lInputType'
+  }),
+  bindingCardSlots: Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']),
+  bindingModeSlots: Object.freeze({
+    circular: Object.freeze(['c_conservation_blasts', 'c_conservation_blasts_source', 'c_conservation_fastas', 'c_conservation_sequence_sources', 'c_depth', 'c_fasta', 'c_gb', 'c_gff']),
+    linear: Object.freeze(['linearComparisons', 'linearSeqs'])
+  }),
+  resourceReferenceFields: Object.freeze(['fastaResourceId', 'gffResourceId', 'resourceId']),
+  resourceIdListFields: Object.freeze(['conservationLosatFastaSources', 'conservationSequenceSources']),
+  drawingResourceFields: Object.freeze(['renderRequest', 'webFiles', 'results'])
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({

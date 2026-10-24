@@ -3,18 +3,34 @@
 // 46-48 fast path, DESIGN §4.2; Python twin `drawings_document_from_mode_scoped`
 // in gbdraw/session_drawings.py, pinned by
 // tests/fixtures/sessions/drawings-vectors.json). A state-free module: every
-// function reads only the document it is given.
+// function reads only the document it is given and two generated modules,
+// `SESSION_DRAWINGS_LAYOUT` (the Python layout's field sets,
+// tools/generate_web_contracts.py) and `MODE_SLICE_DEFAULTS` (the Web's
+// packaged per-mode defaults, tools/generate_mode_slice_defaults.mjs).
 //
 // It owns the Session 46 Legend rekey (Session 47 keys a Legend's edits by
 // row key): `legendEditsByRowKey` and `sessionLegendEditsByRowKey`, twins of
 // `legend_edits_by_row_key` and `session_legend_edits_by_row_key`
 // (gbdraw/session_io.py), pinned by
 // tests/fixtures/sessions/legend-row-key-vectors.json.
-import { ROW_KEYED_LEGEND_SESSION_VERSION } from '../contracts/schema.generated.js';
+import {
+  FILE_IMPORT_ORIGIN_SESSION_VERSION,
+  MODE_SCOPED_SESSION_VERSION,
+  OTHER_MODE_RESULT_EDITOR_FIELDS,
+  OTHER_MODE_RESULT_LEGEND_FIELDS,
+  OTHER_MODE_RESULT_UI_FIELDS,
+  ROW_KEYED_LEGEND_SESSION_VERSION,
+  SESSION_DRAWINGS_LAYOUT
+} from '../contracts/schema.generated.js';
+import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
+import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
 import { legendEntryKey } from './drawing/paint.js';
+import { withoutUnarrangedEntries } from './linear-record-layout.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
 /** @import { LegendEditsUnread } from './style-overrides.js' */
+/** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 
 /** @param {unknown} value */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -170,5 +186,381 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
       ]))
     },
     outcomes
+  };
+};
+
+// ---------------------------------------------------------------------------
+// The move of a Session 46-48 to drawings: `upgradeModeScopedSession`, the
+// twin of `drawings_document_from_mode_scoped` (gbdraw/session_drawings.py),
+// function by function as named below.
+
+/** @typedef {'circular' | 'linear'} DrawingMode */
+/** @typedef {Record<string, unknown>} Fields */
+/**
+ * What only the source version says (DESIGN §4.2): Session 48 card rows are
+ * file rows when it has no Web draft; Sessions 46-47 keep protein Results in
+ * the drawn frame. No other reader compares source versions.
+ * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean }} SourceFacts
+ */
+/**
+ * One drawing of a Session 49 (`SessionDrawing`, gbdraw/session_contract.py).
+ * @typedef {{
+ *   id: string,
+ *   name: string,
+ *   mode: DrawingMode,
+ *   renderRequest: Fields | null,
+ *   results: unknown[],
+ *   runMetadata?: Fields,
+ *   cliInvocation?: Fields,
+ *   cliOptions?: Fields,
+ *   orthogroupState?: Fields,
+ *   losatCache?: Fields,
+ *   losatDerivedCache?: Fields,
+ *   proteinIdentityManifest?: Fields,
+ *   config?: Fields,
+ *   features?: Fields,
+ *   editorState?: Fields,
+ *   ui: Fields,
+ *   webFiles?: Fields
+ * }} SessionDrawing49
+ */
+/**
+ * A Session 49 (`GbdrawSession49`, gbdraw/session_contract.py; DESIGN §1).
+ * @typedef {{
+ *   format: 'gbdraw-session',
+ *   version: number,
+ *   createdAt: string,
+ *   title?: string,
+ *   resources: Fields,
+ *   legacyArtifacts?: Fields,
+ *   ui: Fields & { activeDrawingId: string },
+ *   webFiles?: { resourceOriginalNames?: Fields },
+ *   drawings: SessionDrawing49[]
+ * }} Session49
+ */
+
+const LAYOUT = SESSION_DRAWINGS_LAYOUT;
+const DRAWING_MODES = /** @type {readonly DrawingMode[]} */ (Object.keys(LAYOUT.drawingNames));
+/** @param {readonly string[]} fields @param {...string} extra */
+const fieldSet = (fields, ...extra) => new Set([...fields, ...extra]);
+const SET_FIELDS = fieldSet(LAYOUT.setFields);
+const SET_EDITOR_FIELDS = fieldSet(LAYOUT.setEditorFields);
+const RESULT_EDITOR_FIELDS = fieldSet(OTHER_MODE_RESULT_EDITOR_FIELDS);
+const RESULT_LEGEND_FIELDS = fieldSet(OTHER_MODE_RESULT_LEGEND_FIELDS);
+const RESULT_UI_FIELDS = fieldSet(OTHER_MODE_RESULT_UI_FIELDS);
+const PROJECT_FIELDS = fieldSet(LAYOUT.projectFields);
+const PROJECT_UI_FIELDS = fieldSet(LAYOUT.projectUiFields);
+const PROJECT_WEB_FILES_FIELDS = fieldSet(LAYOUT.projectWebFilesFields);
+const DRAWING_FIELDS = fieldSet(LAYOUT.drawingFields);
+const VIEW_FIELDS = fieldSet(LAYOUT.viewFields);
+const DRAWING_WEB_FILE_KEYS = fieldSet(LAYOUT.drawingWebFileKeys);
+const RESOURCE_REFERENCE_FIELDS = fieldSet(LAYOUT.resourceReferenceFields);
+const DRAWING_UI_DROPPED = fieldSet(LAYOUT.projectUiFields, 'mode', 'activeDrawingId', ...Object.values(LAYOUT.inputTypeFields));
+const LEGEND = new Set(['legend']);
+const SLICE_DRAFT = new Set(['config', 'features']);
+const ABSENT = Symbol('absent');
+const layoutInvalid = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+
+/** @param {unknown} value @returns {Fields} */
+const mapping = (value) => (isObject(value) ? /** @type {Fields} */ (value) : {});
+/** @param {Fields} source @param {ReadonlySet<string>} fields @returns {Fields} */
+const only = (source, fields) => Object.fromEntries(Object.entries(source).filter(([key]) => fields.has(key)));
+/** @param {Fields} source @param {ReadonlySet<string>} fields @returns {Fields} */
+const without = (source, fields) => Object.fromEntries(Object.entries(source).filter(([key]) => !fields.has(key)));
+/** `_with_key`. @param {Fields} target @param {string} key @param {Fields} value @param {boolean} present */
+const withKey = (target, key, value, present) => {
+  if (present || Object.keys(value).length) target[key] = { ...value };
+};
+/** @param {unknown} mode @returns {mode is DrawingMode} */
+const isDrawingMode = (mode) => typeof mode === 'string' && Object.hasOwn(LAYOUT.drawingNames, mode);
+/** `_request_mode`. @param {Fields} view @returns {DrawingMode | null} */
+const requestMode = (view) => {
+  const mode = isObject(view.renderRequest) ? mapping(view.renderRequest).mode : null;
+  return isDrawingMode(mode) ? mode : null;
+};
+/** `_view_mode`. @param {Fields} view @returns {DrawingMode} */
+const viewMode = (view) => {
+  const mode = requestMode(view) || mapping(view.ui).mode;
+  if (!isDrawingMode(mode)) throw layoutInvalid();
+  return mode;
+};
+
+/** `_shared`: a one-drawing view outside its committed Result set. @param {Fields} view @returns {Fields} */
+const sharedOf = (view) => {
+  const editor = mapping(view.editorState);
+  const shared = without(view, new Set([...SET_FIELDS, 'otherModeResult']));
+  shared.editorState = {
+    ...without(editor, RESULT_EDITOR_FIELDS),
+    legend: without(mapping(editor.legend), RESULT_LEGEND_FIELDS)
+  };
+  shared.ui = without(mapping(view.ui), RESULT_UI_FIELDS);
+  return shared;
+};
+
+/** `_view`: the shared fields with one committed Result set. @param {Fields} shared @param {Fields} resultSet @returns {Fields} */
+const viewOf = (shared, resultSet) => {
+  const sharedEditor = mapping(shared.editorState);
+  const setEditor = mapping(resultSet.editorState);
+  return {
+    ...without(shared, new Set(['editorState', 'ui'])),
+    ...only(resultSet, SET_FIELDS),
+    editorState: {
+      ...without(sharedEditor, LEGEND),
+      ...only(setEditor, SET_EDITOR_FIELDS),
+      legend: { ...mapping(sharedEditor.legend), ...only(mapping(setEditor.legend), RESULT_LEGEND_FIELDS) }
+    },
+    ui: { ...mapping(shared.ui), ...only(mapping(resultSet.ui), RESULT_UI_FIELDS) }
+  };
+};
+
+/**
+ * Each mode's committed one-drawing view of a Session 46-48, in document
+ * order (`read_session_drawings`, the 46-48 branch).
+ * @param {Fields} source
+ * @returns {Map<DrawingMode, Fields>}
+ */
+const committedViews = (source) => {
+  /** @type {Map<DrawingMode, Fields>} */
+  const committed = new Map();
+  if (source.renderRequest === null || source.renderRequest === undefined) {
+    const shown = mapping(source.ui).mode;
+    if (isDrawingMode(shown)) committed.set(shown, source);
+    return committed;
+  }
+  const topMode = requestMode(source);
+  if (!topMode) return committed;
+  committed.set(topMode, without(source, new Set(['otherModeResult'])));
+  if (isObject(source.otherModeResult)) {
+    const view = viewOf(sharedOf(source), mapping(source.otherModeResult));
+    const otherMode = requestMode(view);
+    if (otherMode) committed.set(otherMode, view);
+  }
+  return committed;
+};
+
+/** `_undrawn_view`: the view of `mode` in a Session 46-48 with no Result of it. @param {Fields} source @param {DrawingMode} mode @returns {Fields} */
+const undrawnView = (source, mode) => {
+  const view = sharedOf(source);
+  return {
+    ...view,
+    renderRequest: null,
+    results: [],
+    editorState: { ...mapping(view.editorState), featureCatalog: null },
+    ui: { ...mapping(view.ui), mode }
+  };
+};
+
+/** `canonical_resource_ids` (gbdraw/session_resources.py). @param {unknown} value @returns {Set<string>} */
+const resourceIdsOf = (value) => {
+  /** @type {Set<string>} */
+  const found = new Set();
+  const pending = [value];
+  while (pending.length) {
+    const item = pending.pop();
+    if (Array.isArray(item)) pending.push(...item);
+    else if (isObject(item)) {
+      Object.entries(/** @type {Fields} */ (item)).forEach(([key, child]) => {
+        if (RESOURCE_REFERENCE_FIELDS.has(key) && typeof child === 'string' && child.trim()) found.add(child);
+        else pending.push(child);
+      });
+    }
+  }
+  return found;
+};
+
+/** `drawing_resource_ids` (gbdraw/session_resources.py). @param {Fields} drawing @returns {Set<string>} */
+const drawingResourceIds = (drawing) => {
+  const found = new Set(LAYOUT.drawingResourceFields.flatMap((field) => [...resourceIdsOf(drawing[field])]));
+  const webFiles = mapping(drawing.webFiles);
+  LAYOUT.resourceIdListFields.forEach((field) => {
+    const ids = webFiles[field];
+    if (Array.isArray(ids)) ids.forEach((id) => { if (typeof id === 'string') found.add(id); });
+  });
+  return found;
+};
+
+/** `_binds_input`, rule c: a binding of `mode`'s input slots names a file. @param {Fields} bindings @param {DrawingMode} mode */
+const bindsInput = (bindings, mode) => LAYOUT.bindingModeSlots[mode].some((slot) => resourceIdsOf(bindings[slot]).size > 0);
+
+/** @typedef {{ domain: string, path: string, modes: string, key: string | null }} RegistryRow */
+
+/** `_canonical`: JSON with sorted keys. @param {unknown} value @returns {string} */
+const canonical = (value) => JSON.stringify(value, (_key, item) => (
+  isObject(item)
+    ? Object.fromEntries(Object.entries(/** @type {Fields} */ (item)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    : item
+));
+
+/** `_row_value`: a row's value in a mode slice, normalized; ABSENT when the slice leaves it out. @param {Fields} modeSlice @param {RegistryRow} row @returns {unknown} */
+const rowValue = (modeSlice, row) => {
+  /** @type {unknown} */
+  let holder = modeSlice;
+  for (const part of row.domain.split('.')) holder = isObject(holder) && Object.hasOwn(mapping(holder), part) ? mapping(holder)[part] : ABSENT;
+  if (!isObject(holder) || !Object.hasOwn(mapping(holder), row.path)) return ABSENT;
+  return withoutUnarrangedEntries(MODE_SLICE_DEFAULTS.normalize, row, mapping(holder)[row.path]);
+};
+
+/** `_default_value`: the packaged default of a row in `mode`; ABSENT when Save leaves it out. @param {DrawingMode} mode @param {RegistryRow} row @returns {unknown} */
+const defaultValue = (mode, row) => {
+  const held = MODE_SLICE_DEFAULTS.defaults[mode].find(({ domain, path }) => domain === row.domain && path === row.path);
+  return held && Object.hasOwn(held, 'value') ? held.value : ABSENT;
+};
+
+/** `_keyed_entries`: a keyed row's entries, canonical, by entry key. @param {unknown} value @param {string} key @returns {Map<string, string>} */
+const keyedEntries = (value, key) => {
+  if (isObject(value)) return new Map(Object.entries(mapping(value)).map(([entryKey, entry]) => [entryKey, canonical(entry)]));
+  const fields = key.startsWith('JSON[') ? key.slice('JSON['.length, -1).split(',') : [key];
+  return new Map((Array.isArray(value) ? value : []).map((entry) => {
+    const identity = isObject(entry)
+      ? fields.map((field) => (Object.hasOwn(mapping(entry), field) ? mapping(entry)[field] : null))
+      : [entry];
+    return [canonical(identity), canonical(entry)];
+  }));
+};
+
+/**
+ * `_used_by_settings`, rule d: a registry row of `mode`'s slice that differs
+ * from `mode`'s packaged default and, unless the row is `mode`'s alone, from
+ * `other`'s value (entry by entry for a keyed row).
+ * @param {Fields} slices
+ * @param {DrawingMode} mode
+ * @param {DrawingMode} other
+ */
+const usedBySettings = (slices, mode, other) => {
+  const own = mapping(slices[mode]);
+  const shown = mapping(slices[other]);
+  return /** @type {readonly RegistryRow[]} */ (MODE_SCOPED_SETTINGS.rows).some((row) => {
+    if (row.modes !== 'both' && row.modes !== mode) return false;
+    const value = rowValue(own, row);
+    if (value === ABSENT) return false;
+    const fallback = defaultValue(mode, row);
+    if (fallback !== ABSENT && canonical(value) === canonical(fallback)) return false;
+    if (row.modes === mode) return true;
+    const shownValue = rowValue(shown, row);
+    if (shownValue === ABSENT) return true;
+    if (row.key === null) return canonical(value) !== canonical(shownValue);
+    const shownEntries = keyedEntries(shownValue, row.key);
+    return [...keyedEntries(value, row.key)].some(([entryKey, entry]) => shownEntries.get(entryKey) !== entry);
+  });
+};
+
+/**
+ * `_migrated_drawing_modes` with its evidence: the modes of the migrated
+ * drawings, the drawing that opens first. The mode shown at Save (`ui.mode`,
+ * else the first committed mode) always gets a drawing; the other mode gets
+ * one only when it is used: a Result, a non-null input binding of its mode
+ * (rule c), or a registry row that differs from its default and from the
+ * shown mode's (rule d). The shown drawing opens unless it has no stored
+ * Result and the other has one: then the drawing with the Result opens
+ * (the figure the released app showed), and the drawing that opens comes first.
+ * @param {Fields} source
+ * @param {Map<DrawingMode, Fields>} committed
+ * @returns {DrawingMode[]}
+ */
+const migratedDrawingModes = (source, committed) => {
+  const shownMode = mapping(source.ui).mode;
+  const shown = isDrawingMode(shownMode) ? shownMode : [...committed.keys()][0];
+  const other = DRAWING_MODES.find((mode) => mode !== shown) || shown;
+  /** @param {DrawingMode} mode */
+  const hasResult = (mode) => mapping(committed.get(mode)).renderRequest != null;
+  const slices = mapping(source.modes);
+  const used = committed.has(other)
+    || bindsInput(mapping(mapping(source.webFiles).bindings), other)
+    || (Object.hasOwn(slices, other) && usedBySettings(slices, other, shown));
+  if (!used) return [shown];
+  return hasResult(other) && !hasResult(shown) ? [other, shown] : [shown, other];
+};
+
+/** `_project_of_view`: the Session 49 project fields of a view. @param {Fields} view @returns {Fields} */
+const projectOf = (view) => {
+  const project = { ...only(view, PROJECT_FIELDS), ui: only(mapping(view.ui), PROJECT_UI_FIELDS) };
+  withKey(project, 'webFiles', only(mapping(view.webFiles), PROJECT_WEB_FILES_FIELDS), false);
+  return project;
+};
+
+/**
+ * `_drawing_of_view`: one Session 49 drawing from its one-drawing view; it
+ * keeps its own mode's slice, input slots and request metadata. Its ID and
+ * name are its mode's.
+ * @param {Fields} view
+ * @returns {SessionDrawing49}
+ */
+const drawingOf = (view) => {
+  const mode = viewMode(view);
+  const webFiles = mapping(view.webFiles);
+  const unplaced = Object.keys(view).some((key) => !VIEW_FIELDS.has(key))
+    || Object.keys(webFiles).some((key) => !DRAWING_WEB_FILE_KEYS.has(key));
+  if (unplaced) throw layoutInvalid();
+  const drawingSlice = mapping(mapping(view.modes)[mode]);
+  /** @type {Fields} */
+  const drawing = {
+    id: mode,
+    name: LAYOUT.drawingNames[mode],
+    mode,
+    ...only(view, DRAWING_FIELDS),
+    ...only(drawingSlice, SLICE_DRAFT)
+  };
+  const editor = mapping(view.editorState);
+  const sliceEditor = mapping(drawingSlice.editorState);
+  if (Object.hasOwn(view, 'editorState') || Object.hasOwn(drawingSlice, 'editorState')) {
+    const merged = { ...without(editor, LEGEND), ...without(sliceEditor, LEGEND) };
+    withKey(merged, 'legend', { ...mapping(editor.legend), ...mapping(sliceEditor.legend) },
+      Object.hasOwn(editor, 'legend') || Object.hasOwn(sliceEditor, 'legend'));
+    drawing.editorState = merged;
+  }
+  const viewUi = mapping(view.ui);
+  const ui = { ...without(viewUi, DRAWING_UI_DROPPED), ...mapping(drawingSlice.ui) };
+  const inputTypeField = LAYOUT.inputTypeFields[mode];
+  if (Object.hasOwn(viewUi, inputTypeField)) ui.inputType = viewUi[inputTypeField];
+  drawing.ui = ui;
+  const drawingWebFiles = only(webFiles, fieldSet(LAYOUT.drawingWebFilesFields[mode]));
+  if (Object.hasOwn(webFiles, 'bindings')) {
+    drawingWebFiles.bindings = only(
+      mapping(webFiles.bindings),
+      fieldSet(LAYOUT.bindingCardSlots, 'schema', ...LAYOUT.bindingModeSlots[mode])
+    );
+  }
+  withKey(drawing, 'webFiles', drawingWebFiles, false);
+  return /** @type {SessionDrawing49} */ (drawing);
+};
+
+/**
+ * The Session 49 of an admitted Session 46-48, and what only the source says
+ * (`drawings_document_from_mode_scoped`, gbdraw/session_drawings.py). Each
+ * mode's committed set goes to its mode's drawing; the drawings, their
+ * order and the one that opens are `migratedDrawingModes`'s. Each drawing keeps its own mode's slice, input
+ * bindings, request metadata, the file cards' bindings and a copy of the
+ * LOSAT artifacts; IDs and names are the modes'. A Session 46 gets its Legend
+ * edits keyed by row key first (`sessionLegendEditsByRowKey`). Resources no
+ * drawing names are left out.
+ * @param {SessionChecked46} checked
+ * @param {number} version The admitted source version.
+ * @returns {{ document: Session49, sourceFacts: SourceFacts }}
+ */
+export const upgradeModeScopedSession = (checked, version) => {
+  if (!Number.isInteger(version) || version < MODE_SCOPED_SESSION_VERSION || version >= LAYOUT.version) {
+    throw layoutInvalid();
+  }
+  const { session: source } = sessionLegendEditsByRowKey(/** @type {Fields} */ (checked), version);
+  const committed = committedViews(source);
+  if (!committed.size) throw layoutInvalid();
+  const order = migratedDrawingModes(source, committed);
+  const views = order.map((mode) => committed.get(mode) || undrawnView(source, mode));
+  // The views share their project fields by construction (one source), so
+  // the first gives them (`_drawings_document`'s `project_views`).
+  const project = projectOf(views[0]);
+  const migrated = views.map(drawingOf);
+  const referenced = new Set(migrated.flatMap((drawing) => [...drawingResourceIds(drawing)]));
+  project.resources = only(mapping(project.resources), new Set(Object.keys(mapping(project.resources)).filter((id) => referenced.has(id))));
+  project.version = LAYOUT.version;
+  project.ui = { ...mapping(project.ui), activeDrawingId: migrated[0].id };
+  project.drawings = migrated;
+  const hasDraft = Object.values(mapping(source.modes)).some((value) => isObject(mapping(value).config));
+  return {
+    document: /** @type {Session49} */ (/** @type {unknown} */ (project)),
+    sourceFacts: {
+      cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
+      proteinResultsInDrawnFrame: version < FILE_IMPORT_ORIGIN_SESSION_VERSION
+    }
   };
 };

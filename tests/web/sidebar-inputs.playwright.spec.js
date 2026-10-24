@@ -260,7 +260,7 @@ test('a color from a Default colors file leaves More colors', async ({ page }) =
   });
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    await app.waitForAuxiliaryFileImport(app.files.d_color);
+    await app.waitForAuxiliaryFileImport(app.cardFiles.d_color);
   });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.currentColors.tmRNA)).toBe('#ff0000');
   await expect(more.getByLabel('tmRNA feature color mode')).toHaveCount(0);

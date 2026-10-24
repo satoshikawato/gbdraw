@@ -27,7 +27,7 @@ const inspectNow = page => page.evaluate(async () => {
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
     names:names(result), mountedNames:names(root),
-    svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name};
+    svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.cardFiles.t_color?.name};
 });
 const reveal = async locator => {
   for(const details of await locator.locator('xpath=ancestor::details').all()) {
@@ -66,7 +66,7 @@ for(const width of [1440,390]) {
       const chooser=page.waitForEvent('filechooser');
       await picker.press('Enter');
       await (await chooser).setFiles({name:'multicolor.tsv',mimeType:'text/plain',buffer:Buffer.from(source.text)});
-      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.waitForAuxiliaryFileImport(a.files.t_color);});
+      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.waitForAuxiliaryFileImport(a.cardFiles.t_color);});
       const live=await inspect(page);
       // PD-OI-042 scenario revision 2: the rules keep their caption; each color has
       // its own row (the keys below, never drawn), and the Legend numbers the names.
@@ -132,7 +132,7 @@ for(const width of [1440,390]) {
       expect(tsv).toContain('\tPrimary complex\n');
       expect(tsv).toContain('\t#445566\tColor group\n');
       expect(tsv).not.toContain(' [#');
-      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');const {state}=await import('./js/state.js');return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color));})).toBe(source.text);
+      expect(await page.evaluate(async()=>{const {readFileText}=await import('./js/services/file-content-cache.js');const {state}=await import('./js/state.js');return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.cardFiles.t_color));})).toBe(source.text);
       expect(final.fileName).toBe('multicolor.tsv');
       const sessionPath=testInfo.outputPath('canonical.gbdraw-session.json.gz');
       await download(page,'Save Session',sessionPath);
@@ -162,7 +162,7 @@ with materialize_session(sys.argv[1],output_directory=sys.argv[2]) as session:
       for(const entry of final.result.filter(e=>e.caption==='Primary complex'||e.caption.startsWith('Color group'))) expect(native.captions[entry.caption]).toBe(entry.color);
       await fs.writeFile(testInfo.outputPath('caption-evidence.json'),JSON.stringify({source,live: {...live,svg:undefined},final:{...final,svg:undefined},native},null,2));
       await input.setInputFiles({name:'multicolor-reimport.tsv',mimeType:'text/plain',buffer:Buffer.from(source.text)});
-      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.waitForAuxiliaryFileImport(a.files.t_color);});
+      await page.evaluate(async()=>{const a=window.__GBDRAW_APP__;await a.waitForAuxiliaryFileImport(a.cardFiles.t_color);});
       const reimported=await inspect(page);
       expect(reimported.rules.find(r=>r.val===source.ids[0] && !r.fromFile).cap).toBe('Primary complex');
       expect(reimported.result.some(e=>e.caption==='Color group [#112233]')).toBe(false);

@@ -502,7 +502,6 @@ def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
         async ({ leftText, rightText }) => {
           const app = window.__GBDRAW_APP__;
           app.selectDrawing('linear');
-          app.lInputType = 'gb';
           if (app.linearSeqs.length < 2) {
             app.addLinearSeq();
           }
@@ -588,7 +587,7 @@ def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
             appMounted: true,
             run: window.__GBDRAW_OFFLINE_CONTRACT_RUN__ || null,
             mode: app.mode,
-            inputType: app.lInputType,
+            inputType: app.inputType,
             errorLog: app.errorLog,
             resultCount: Array.isArray(app.results) ? app.results.length : 0,
             losatCacheEntries: Array.isArray(app.losatCacheInfo)
@@ -799,11 +798,11 @@ def _run_browser_contract(contract: str) -> None:
         ).read_text(encoding="utf-8")
         page.evaluate(
             """
-            ({ gbText }) => {
+            async ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
               app.selectDrawing('circular');
-              app.cInputType = 'gb';
-              app.files.c_gb = new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' });
+              const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+              app.files.c_gb = bound(new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' }));
               app.files.c_gff = null;
               app.files.c_fasta = null;
               const run = { status: 'running', error: '' };

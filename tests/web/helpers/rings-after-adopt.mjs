@@ -37,7 +37,7 @@ const { state } = await import(at('../../../gbdraw/web/js/state.js'));
 const { createAppSetup } = await import(at('../../../gbdraw/web/js/app/app-setup.js'));
 createAppSetup();
 const rings = modeDrawing(state, 'circular').circularConservation;
-state.files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
+modeDrawing(state, 'circular').files.c_conservation_fastas = [new File(['>r\nACGT\n'], 'ring.fa')];
 rings.source = 'losat'; rings.labels = ''; rings.enabled = false; rings.series.splice(0);
 const before = { enabled: rings.enabled, series: rings.series.length };
 ports.adoptCanonicalRenderArtifacts({ renderRequest: { mode: 'linear', records: [] }, resources: {} }, { adoptOwnedRequest: false });

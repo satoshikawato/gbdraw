@@ -198,8 +198,9 @@ def main():
             load_session(page,ROOT / 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')
             created=page.evaluate("""async () => {
               const a=window.__GBDRAW_APP__, {readFileText}=await import('./js/services/file-content-cache.js'),
-                text=await readFileText(a.files.c_gb);
-              a.files.c_gb=new File([text,'\\n',text], 'batch.gb', {type:'text/plain'});
+                {state}=await import('./js/state.js'),
+                text=await readFileText(state.inputFiles.fileOf(a.files.c_gb));
+              a.files.c_gb=state.inputFiles.registerFile(new File([text,'\\n',text], 'batch.gb', {type:'text/plain'}));
               a.adv.circular_grouping_intent='batch'; a.form.multi_record_canvas=false;
               a.form.circular_record_selector=''; a.form.plot_title='Batch continuity';
               a.adv.plot_title_position='top'; await a.refreshCircularRecordOrder();

@@ -964,8 +964,21 @@ def _row_value(mode_slice: Mapping[str, object], row: ModeScopedSetting) -> obje
     return value if value is _ABSENT else _normalized(row, value)
 
 
+def _json_number(value: object) -> object:
+    """``value`` with each integral float as an int: JSON numbers have one
+    kind, so ``1.0`` a Python writer wrote is the Web's ``1`` (OV-1668)."""
+
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, Mapping):
+        return {key: _json_number(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_number(item) for item in value]
+    return value
+
+
 def _canonical(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return json.dumps(_json_number(value), sort_keys=True, separators=(",", ":"))
 
 
 def _keyed_entries(value: object, key: str) -> dict[str, str]:
@@ -1038,19 +1051,47 @@ def _undrawn_view(data: Mapping[str, Any], mode: DrawingMode) -> dict[str, Any]:
     return view
 
 
+def _migrated_drawing_modes(
+    shown: DrawingMode,
+    other: DrawingMode,
+    *,
+    other_used: bool,
+    result_modes: frozenset[DrawingMode],
+) -> list[DrawingMode]:
+    """The modes of a migrated Session's drawings, the drawing that opens first.
+
+    The mode shown at Save always gets a drawing; ``other`` gets one when it
+    is used. The shown drawing opens unless it has no stored Result and the
+    other drawing has one: then the drawing with the Result opens (the
+    figure the released app showed), and the drawing that opens comes
+    first. The Web's ``migratedDrawingModes`` is the twin.
+    """
+
+    if not other_used:
+        return [shown]
+    if other in result_modes and shown not in result_modes:
+        return [other, shown]
+    return [shown, other]
+
+
 def drawings_document_from_mode_scoped(
     data: Mapping[str, object],
+    *,
+    stored_result_modes: frozenset[str] = frozenset(),
 ) -> tuple[GbdrawSession49, ModeScopedSourceFacts]:
     """The Session 49 of a validated Session 46-48, and what only the source says.
 
     The rules of the Product Contract (PD-OI-090, the move of an earlier
     Session) as the design lists them: each mode's committed set goes to its
     mode's drawing (:func:`read_session_drawings`); the drawing of ``ui.mode``
-    comes first and is the active one; the other mode's drawing is made only
+    always gets a drawing; the other mode's drawing is made only
     when it is used: it has a Result, a non-null input binding of its mode,
     or a registry row that differs from its default and from the shown
     mode's value (:func:`_used_by_settings`, with the Web's packaged
-    defaults). Each drawing keeps its own mode's slice, input
+    defaults). ``stored_result_modes`` names the modes whose Results the
+    caller set aside (Web Load of a Session 27-39): they count as Results.
+    The order and the drawing that opens are :func:`_migrated_drawing_modes`'s.
+    Each drawing keeps its own mode's slice, input
     bindings, request metadata and the file cards' bindings, and a copy of
     the LOSAT artifacts (:func:`_drawing_of_view`); the IDs and names are the
     modes'. A Session 46 gets its Legend edits keyed by row key first
@@ -1076,14 +1117,19 @@ def drawings_document_from_mode_scoped(
     shown = cast(DrawingMode, shown_mode) if shown_mode in DRAWING_NAMES else next(iter(committed))
     other: DrawingMode = "linear" if shown == "circular" else "circular"
     slices = _mapping(source.get("modes"))
-    views = [committed.get(shown) or _undrawn_view(source, shown)]
-    if other in committed:
-        views.append(committed[other])
-    elif _binds_input(_mapping(_mapping(source.get("webFiles")).get("bindings")), other) or (
-        other in slices and _used_by_settings(slices, other, shown)
-    ):
-        views.append(_undrawn_view(source, other))
-    modes = [_view_mode(view) for view in views]
+    result_modes = frozenset(
+        mode
+        for mode in (shown, other)
+        if mode in stored_result_modes or _mapping(committed.get(mode)).get("renderRequest") is not None
+    )
+    other_used = (
+        other in committed
+        or other in result_modes
+        or _binds_input(_mapping(_mapping(source.get("webFiles")).get("bindings")), other)
+        or (other in slices and _used_by_settings(slices, other, shown))
+    )
+    modes = _migrated_drawing_modes(shown, other, other_used=other_used, result_modes=result_modes)
+    views = [committed.get(mode) or _undrawn_view(source, mode) for mode in modes]
     document = _drawings_document(
         views,
         ids=modes,
@@ -1100,6 +1146,67 @@ def drawings_document_from_mode_scoped(
     return cast(GbdrawSession49, document), facts
 
 
+class SessionDrawingsLayout(TypedDict):
+    """:func:`describe_session_drawings_layout`: the generated ``SESSION_DRAWINGS_LAYOUT``."""
+
+    version: int
+    drawingNames: dict[str, str]
+    setFields: list[str]
+    setEditorFields: list[str]
+    projectFields: list[str]
+    projectUiFields: list[str]
+    projectWebFilesFields: list[str]
+    drawingFields: list[str]
+    viewFields: list[str]
+    drawingWebFileKeys: list[str]
+    drawingWebFilesFields: dict[str, list[str]]
+    inputTypeFields: dict[str, str]
+    bindingCardSlots: list[str]
+    bindingModeSlots: dict[str, list[str]]
+    resourceReferenceFields: list[str]
+    resourceIdListFields: list[str]
+    drawingResourceFields: list[str]
+
+
+def describe_session_drawings_layout() -> SessionDrawingsLayout:
+    """The field sets of the move of a Session 46-48 to drawings, for the Web.
+
+    The Web's twin of :func:`drawings_document_from_mode_scoped`
+    (``upgradeModeScopedSession``, ``gbdraw/web/js/services/session-drawings-upgrade.js``)
+    reads them from the generated ``SESSION_DRAWINGS_LAYOUT``; this module and
+    :mod:`gbdraw.session_resources` stay their owners. Sets are sorted lists.
+    """
+
+    from gbdraw.session_resources import (
+        _DRAWING_RESOURCE_FIELDS,
+        _RESOURCE_ID_LIST_FIELDS,
+        _RESOURCE_REFERENCE_FIELDS,
+    )
+
+    def per_mode(fields: Mapping[str, frozenset[str]]) -> dict[str, list[str]]:
+        return {mode: sorted(fields[mode]) for mode in DRAWING_NAMES}
+
+    return {
+        "version": DRAWINGS_SESSION_MIN_VERSION,
+        "drawingNames": dict(DRAWING_NAMES),
+        "setFields": sorted(_SET_FIELDS),
+        "setEditorFields": sorted(_SET_EDITOR_FIELDS),
+        "projectFields": sorted(PROJECT_FIELDS),
+        "projectUiFields": sorted(PROJECT_UI_FIELDS),
+        "projectWebFilesFields": sorted(PROJECT_WEB_FILES_FIELDS),
+        "drawingFields": sorted(_DRAWING_FIELDS),
+        "viewFields": sorted(_VIEW_FIELDS),
+        "drawingWebFileKeys": sorted(_DRAWING_WEB_FILE_KEYS),
+        "drawingWebFilesFields": per_mode(_DRAWING_WEB_FILES_FIELDS),
+        "inputTypeFields": dict(_INPUT_TYPE_FIELDS),
+        "bindingCardSlots": sorted(WEB_BINDING_CARD_SLOTS),
+        "bindingModeSlots": per_mode(WEB_BINDING_MODE_SLOTS),
+        "resourceReferenceFields": sorted(_RESOURCE_REFERENCE_FIELDS),
+        "resourceIdListFields": list(_RESOURCE_ID_LIST_FIELDS),
+        "drawingResourceFields": list(_DRAWING_RESOURCE_FIELDS),
+    }
+
+
 __all__ = [
     "DRAWING_NAMES",
     "PROJECT_FIELDS",
@@ -1112,7 +1219,9 @@ __all__ = [
     "allocate_drawing_id",
     "allocate_session_drawing",
     "ModeScopedSourceFacts",
+    "SessionDrawingsLayout",
     "checked_drawing_views",
+    "describe_session_drawings_layout",
     "drawing_draft_config",
     "drawings_document_from_mode_scoped",
     "read_session_drawings",

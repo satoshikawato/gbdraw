@@ -71,8 +71,10 @@ const snapshot = page => page.evaluate(async () => {
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
   const drawing = state.activeDrawing();
-  const files = drawing.mode === 'linear' ? drawing.linearSeqs.map(seq => seq.gb)
+  // The drawing names its files by ref; the store holds the files.
+  const refs = drawing.mode === 'linear' ? drawing.linearSeqs.map(seq => seq.gb)
     : drawing.inputType.value === 'gff' ? [drawing.files.c_gff, drawing.files.c_fasta] : [drawing.files.c_gb];
+  const files = refs.map(ref => state.inputFiles.fileOf(ref));
   const session = getCommittedCanonicalSession();
   return {
     mode: state.mode.value, request: session.renderRequest,

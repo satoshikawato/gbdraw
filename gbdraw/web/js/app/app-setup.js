@@ -5994,8 +5994,11 @@ export const createAppSetup = () => {
     return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; });
   };
 
-  const exportShownSession = () => exportSession(null, {
+  const saveSessionWithTitle = () => exportSession(null, {
     shownDrawing: state.activeDrawing,
+    // A record read that finished while the Save was pending was deferred: the
+    // end of the Save calls each drawing's discovery again (R10).
+    onSettled: () => state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); }),
     availability: sessionSaveLoadAvailability,
     askChoice,
     recordDisplayRows: recordDisplayControls.allRows,
@@ -6063,15 +6066,6 @@ export const createAppSetup = () => {
       });
     }
   });
-  // A record read that finished while the Save was pending was deferred: the
-  // end of the Save calls each drawing's discovery again (R10).
-  const saveSessionWithTitle = async () => {
-    try {
-      return await exportShownSession();
-    } finally {
-      state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); });
-    }
-  };
 
   // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer
   // and the toggle on the drawer's edge (OV-505). Without an event the popup

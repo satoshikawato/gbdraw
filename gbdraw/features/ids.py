@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
     _iter_source_features,
@@ -15,7 +16,16 @@ from gbdraw.exceptions import ValidationError
 
 import hashlib
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, NewType
+
+# Frame-tagged feature hashes. Both are plain strings at run time; the types
+# keep the two frames from being mixed (OV-412). A SOURCE hash is the hash of
+# the feature in its source record: the SVG ID base, the catalog's stable
+# feature ID, and what a `hash` selector matches. A DRAWN hash is the hash of
+# the processed (cropped, reversed) location, which only comparison rows
+# (`*_view_feature_svg_id`) and Session <= 44 readers name a feature by.
+SourceFeatureHash = NewType("SourceFeatureHash", str)
+DrawnFeatureHash = NewType("DrawnFeatureHash", str)
 
 _SAFE_SVG_ID_FRAGMENT_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -132,14 +142,25 @@ def _feature_object_coordinate_parts(feature_object: Any) -> list[tuple[int, int
     return parts
 
 
-def compute_feature_hash(feature: Any, record_id: str | None = None) -> str:
+def parse_source_feature_hash(raw: str) -> SourceFeatureHash | None:
+    """Tag a stable feature ID read from an SVG attribute or a JSON payload.
+
+    ``raw`` is already normalized by the reader; an empty string is no ID.
+    """
+
+    return SourceFeatureHash(raw) if raw else None
+
+
+def compute_feature_hash(feature: Any, record_id: str | None = None) -> DrawnFeatureHash:
     """Compute the stable data-gbdraw-feature-id for a BioPython feature."""
 
     parts = _location_parts(feature.location)
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record_id,
+    return DrawnFeatureHash(
+        compute_feature_hash_from_location_parts(
+            str(getattr(feature, "type", "") or ""),
+            parts,
+            record_id=record_id,
+        )
     )
 
 
@@ -162,12 +183,39 @@ def source_feature_location_parts(
     )
 
 
+def source_feature_hash_and_parts(
+    feature: SeqFeature,
+    record: SeqRecord | None = None,
+    *,
+    record_id: str | None = None,
+) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
+    """The feature hash and the source location parts it hashes.
+
+    The hash is None when the feature has no source parts. ``record_id``
+    defaults to the record's ID.
+    """
+
+    parts = source_feature_location_parts(feature, record)
+    if not parts:
+        return None, parts
+    return (
+        SourceFeatureHash(
+            compute_feature_hash_from_location_parts(
+                str(getattr(feature, "type", "") or ""),
+                parts,
+                record_id=record_id if record_id is not None else getattr(record, "id", None),
+            )
+        ),
+        parts,
+    )
+
+
 def compute_source_feature_hash(
     feature: Any,
     record: Any = None,
     *,
     record_id: str | None = None,
-) -> str | None:
+) -> SourceFeatureHash | None:
     """The feature hash: the catalog's stable feature ID, the base of every
     SVG ID drawn for the feature, and the value a `hash` selector matches,
     whatever crop or reverse complement its record has (OV-401, OV-412).
@@ -175,17 +223,10 @@ def compute_source_feature_hash(
     ``record_id`` defaults to the record's ID.
     """
 
-    parts = source_feature_location_parts(feature, record)
-    if not parts:
-        return None
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record_id if record_id is not None else getattr(record, "id", None),
-    )
+    return source_feature_hash_and_parts(feature, record, record_id=record_id)[0]
 
 
-def shared_source_feature_hashes(record: SeqRecord) -> frozenset[str]:
+def shared_source_feature_hashes(record: SeqRecord) -> frozenset[SourceFeatureHash]:
     """The source hashes that more than one feature of ``record`` has.
 
     Identical features (the same type and location) share their hash; the
@@ -207,7 +248,7 @@ def shared_source_feature_hashes(record: SeqRecord) -> frozenset[str]:
 def compute_feature_object_hash(
     feature_object: Any,
     record_id: str | None = None,
-) -> str | None:
+) -> DrawnFeatureHash | None:
     """The hash of a FeatureObject's drawn location.
 
     Only comparison rows name a drawn feature by it (`*_view_feature_svg_id`,
@@ -223,10 +264,12 @@ def compute_feature_object_hash(
         or getattr(feature_object, "type", "")
         or ""
     )
-    return compute_feature_hash_from_location_parts(
-        feature_type,
-        parts,
-        record_id=record_id if record_id is not None else getattr(feature_object, "record_id", None),
+    return DrawnFeatureHash(
+        compute_feature_hash_from_location_parts(
+            feature_type,
+            parts,
+            record_id=record_id if record_id is not None else getattr(feature_object, "record_id", None),
+        )
     )
 
 
