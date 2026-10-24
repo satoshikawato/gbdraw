@@ -28,26 +28,28 @@ def test_frozen_source_identity_and_isolation():
                 assert fn is not getattr(live, node.name, None)
                 assert fn.__globals__ is vars(module)
             elif isinstance(node, ast.ClassDef) and node.name.startswith('_'):
-                assert getattr(module, node.name) is not getattr(live, node.name)
+                assert getattr(module, node.name) is not getattr(live, node.name, None)
 
 
 @pytest.mark.parametrize('interleaved_error', [False, True])
 @pytest.mark.parametrize('column', ['bitscore', 'evalue', 'identity', 'alignment_length', 'qstart', 'qend', 'sstart', 'send'])
-@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf'), 'bad', None, pd.NA, -0.5, 0.5, '2.5'])
-def test_hsp_exact_private_errors_values_and_all_columns(column, value, interleaved_error):
+@pytest.mark.parametrize('value,finite', [(float('nan'), False), (float('inf'), False), (-float('inf'), False),
+                                          ('bad', False), (None, False), (pd.NA, False),
+                                          (-0.5, True), (0.5, True), ('2.5', True)])
+def test_hsp_exact_private_errors_values_and_all_columns(column, value, finite, interleaved_error):
+    from gbdraw.exceptions import ParseError
     pm = _protein_map_for_lengths({'q': 100, 's': 100, 't': 100})
     hits = pd.DataFrame([_hit_row('q', 's'), _hit_row('q', 't', alignment_length=float('inf') if interleaved_error else 10),
                          _hit_row('q', 's') | {column: value}])
     hits['extra column'] = ['first', 'second', 'third']
     hits.index = [9, 9, 1]
-    try:
-        expected = frozen._aggregate_hsps_by_protein_pair(hits, pm)
-    except Exception as error:
-        with pytest.raises(type(error)) as caught:
+    if interleaved_error or not finite:
+        # The aggregator takes finite numerics only, as the coercion step leaves them.
+        with pytest.raises(ParseError, match='non-numeric outfmt 6'):
             pc._aggregate_hsps_by_protein_pair(hits, pm)
-        assert str(caught.value) == str(error)
-    else:
-        pd.testing.assert_frame_equal(pc._aggregate_hsps_by_protein_pair(hits, pm), expected, check_exact=True)
+        return
+    expected = frozen._aggregate_hsps_by_protein_pair(hits, pm)
+    pd.testing.assert_frame_equal(pc._aggregate_hsps_by_protein_pair(hits, pm), expected, check_exact=True)
 
 
 @pytest.mark.parametrize('mode', ['auto', 'cds', 'locus', 'invalid'])
@@ -57,7 +59,7 @@ def test_complete_unit_index_s077(mode, caplog):
            _observe(frozen_units.build_collinearity_unit_index, ex, caplog, mode=mode)
 
 
-def test_stateful_scalar_reuse_counterexample():
+def test_hsp_reads_each_numeric_value_once():
     class Scalar:
         def __init__(self):
             self.calls = 0
@@ -65,16 +67,13 @@ def test_stateful_scalar_reuse_counterexample():
             self.calls += 1
             return float(10 * self.calls)
     pm = _protein_map_for_lengths({'q': 100, 's': 100})
-    results = []
-    for module in (frozen, pc):
-        value = Scalar()
-        hits = pd.DataFrame([_hit_row('q', 's', alignment_length=value)])
-        result = module._aggregate_hsps_by_protein_pair(hits, pm)
-        assert value.calls == 3
-        assert result.iloc[0].total_hsp_alignment_length == 20
-        assert result.iloc[0].representative_alignment_length == 30
-        results.append(result.drop(columns='alignment_length'))
-    pd.testing.assert_frame_equal(*results, check_exact=True)
+    value = Scalar()
+    hits = pd.DataFrame([_hit_row('q', 's', alignment_length=value)])
+    result = pc._aggregate_hsps_by_protein_pair(hits, pm)
+    assert value.calls == 1
+    assert result.iloc[0].total_hsp_alignment_length == 10
+    assert result.iloc[0].representative_alignment_length == 10
+    assert result.iloc[0].alignment_length is value
 
 
 def test_hsp_avoids_copying_asdict():
@@ -102,7 +101,8 @@ def test_aliases_remain_ordered_for_large_collapsed_locus(mode, caplog):
 
 
 @pytest.mark.parametrize('scenario', ['sparse-2', 'dense-4', 'support-edges'])
-@pytest.mark.parametrize('limit', [0, 1, 200])
+# A limit that is not an int counts as its int() for both related and display edges.
+@pytest.mark.parametrize('limit', [0, 1, 1.5, '2', 200])
 def test_related_limits_complete_s077_result(scenario, limit):
     from gbdraw.exceptions import ValidationError
     from tests.test_protein_comparison_benchmark import benchmark
@@ -112,9 +112,9 @@ def test_related_limits_complete_s077_result(scenario, limit):
             result = module.select_rbh_orthogroup_edges_from_directional_hits(
                 tables, pm, record_count=3, max_related_edges_per_orthogroup=limit)
         except ValidationError as error:
-            assert limit == 0
+            assert int(limit) == 0
             return type(error), str(error)
-        assert limit > 0
+        assert int(limit) > 0
         return benchmark.canonical(result)
     assert run(pc) == run(frozen)
 

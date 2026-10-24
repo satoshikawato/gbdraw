@@ -163,9 +163,10 @@ def frame(rows):
 
 
 def safe_call(fn):
+    from gbdraw.exceptions import ParseError
     try:
         return fn()
-    except (ValueError, TypeError, OverflowError, KeyError) as exc:
+    except (ValueError, TypeError, OverflowError, KeyError, ParseError) as exc:
         return {"observedException": type(exc).__name__, "message": str(exc)}
 
 
@@ -506,8 +507,11 @@ def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stage
         pm.update({f"u{i}": protein(pc, f"u{i}", 1, i) for i in range(200)})
         groups = {f"og_{i}": {f"m{i}"} for i in range(size)}
         mapping = {pid: group for group, members in groups.items() for pid in members}
-        best = {(f"m{i}", f"u{i}"): next(pd.DataFrame([hit(f"m{i}", f"u{i}", normalized_score=1.0, min_coverage=1.0)]).itertuples(index=False))
-                for i in range(200)}
+        rows = [hit(f"m{i}", f"u{i}", normalized_score=1.0, min_coverage=1.0, domain_only=False) for i in range(200)]
+        # Directed-hit records replaced normalized rows as the support input.
+        records = hasattr(pc, "_directed_hits_from_tables")
+        best = (pc._directed_hits_from_tables({(0, 1): pd.DataFrame(rows)}, pm) if records else
+                {(row["query"], row["subject"]): next(pd.DataFrame([row]).itertuples(index=False)) for row in rows})
         def support_scan():
             index = pc._index_core_support_evidence(best, mapping) if hasattr(pc, "_index_core_support_evidence") else None
             result = {}
@@ -515,7 +519,8 @@ def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stage
                 pid = f"u{i}"
                 candidates = []
                 for group, evidence in (index.get(pid, {}) if index is not None else groups).items():
-                    candidate = (pc._build_core_support_candidate(pid, group, evidence, {}, pm)
+                    candidate = (pc._build_core_support_candidate(pid, group, evidence, {}) if records else
+                                 pc._build_core_support_candidate(pid, group, evidence, {}, pm)
                                  if index is not None else
                                  pc._build_core_support_candidate(pid, group, sorted(evidence), best, {}, pm))
                     if candidate is not None:
@@ -523,7 +528,7 @@ def build_case(root, pc, cc, name, seed, path_representation="graph", unit_stage
                 result[pid] = sorted(candidates, key=pc._core_support_sort_key)
             return result
         return {"groups": size, "unassigned": 200, "evidence": len(best), "seed": seed,
-                "inputSha256": digest(json_bytes(canonical((pm, groups, best)))),
+                "inputSha256": digest(json_bytes(canonical((pm, groups, rows)))),
                 "boundary": "support candidate stage with precomputed membership; includes index construction"}, {"support_scan": support_scan}
     if name == "render-gallery":
         from gbdraw.api import load_session_document, materialize_session, render_session
@@ -829,7 +834,8 @@ def operation_probe(pc, cc, fn):
         original_best = pc._best_evidence_between_protein_and_members
         def best_visits(*args, **kwargs):
             legacy = "same_record" in kwargs
-            counters["support.memberVisits" if legacy else "support.evidenceVisits"] += len(args[1])
+            # The current reducer takes the evidence alone; older ones took the protein first.
+            counters["support.memberVisits" if legacy else "support.evidenceVisits"] += len(args[0] if len(args) == 1 else args[1])
             counters["support.reductionCalls"] += 1
             return original_best(*args, **kwargs)
         stack.enter_context(patch.object(pc, "_best_evidence_between_protein_and_members", best_visits))
@@ -876,6 +882,8 @@ def operation_probe(pc, cc, fn):
             (pc, "_build_ortholog_path_indexes" if hasattr(pc, "_build_ortholog_path_indexes") else "_build_ortholog_paths", None),
             (cc, "_lossless_conflicts_between_clusters", lambda a, k: len(a[2])),
         ):
+            if not hasattr(module, name):
+                continue
             original = getattr(module, name)
             def counted(*args, _name=name, _original=original, _amount=amount, **kwargs):
                 nonlocal aggregate_depth
