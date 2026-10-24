@@ -6,6 +6,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, generateAndWaitForResult, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const root = process.cwd();
 const mito = path.join(root, 'tests/fixtures/sessions/cli-web-mito.gb');
@@ -115,7 +116,11 @@ const load = async (browser, file, viewport, requirePreview = true) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending)).toBe(true);
-  if (requirePreview) await expect(page.locator('.origin-top svg')).toBeVisible();
+  if (requirePreview) {
+    // On a phone a Load keeps the Settings pane; the Result shows in the Preview pane (R17-10).
+    await showPhonePane(page, 'preview');
+    await expect(page.locator('.origin-top svg')).toBeVisible();
+  }
   return { context, page, external, errors, dialogs };
 };
 
