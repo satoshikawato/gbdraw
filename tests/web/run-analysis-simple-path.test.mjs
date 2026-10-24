@@ -3679,6 +3679,6 @@ test('the Circular record refresh writes the drawing it reads and keys its read 
     await pinned;
   } finally {
     installShownDrawing('circular');
-    state.removeDrawing(second.id, { deleteSlot: () => {} });
+    state.removeDrawing(second.id, { takeSlot: () => null });
   }
 });

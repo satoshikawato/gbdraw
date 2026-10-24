@@ -50,7 +50,7 @@ import {
   createFeatureRecordRotationAction,
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
-import { createDrawingState, state, sessionOperationAvailability } from '../state.js';
+import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
 import { createDrawingList } from './drawing-list.js';
 import {
   adoptCanonicalRenderArtifacts,
@@ -107,7 +107,8 @@ import {
   createLinearSeq,
   normalizeLinearSeqList,
   replaceLinearSeqs,
-  retainHistoryAndBoundFiles
+  retainHistoryAndBoundFiles,
+  boundInputFileIds
 } from '../services/drawing/inputs.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import {
@@ -3197,9 +3198,10 @@ export const createAppSetup = () => {
   ].map(previewRuntime.getResultIdentity);
   // The Results of one drawing: the shown one's, or those its slot keeps.
   /** @param {DrawingId} drawingId */
-  const resultIdentitiesOf = (drawingId) => (artifactSlots.readOfDrawing(drawingId, state.activeDrawingId.value,
-    () => results.value, (slot) => slot.values.results) || []
-  ).map(previewRuntime.getResultIdentity);
+  const resultsOf = (drawingId) => artifactSlots.readOfDrawing(drawingId, state.activeDrawingId.value,
+    () => results.value, (slot) => slot.values.results) || [];
+  /** @param {DrawingId} drawingId */
+  const resultIdentitiesOf = (drawingId) => resultsOf(drawingId).map(previewRuntime.getResultIdentity);
   // R13: a moved record clears the alignment plan and keeps the aligned record
   // positions. The alignment owner runs its candidate through Generate, which
   // reads this layout owner, so the root registers both ports once the
@@ -4491,12 +4493,18 @@ export const createAppSetup = () => {
     drawingTabs: () => state.drawingTabs.value,
     shownDrawingId: () => state.activeDrawingId.value,
     switchBusy: drawingSwitchBusy,
+    drawingOf: state.drawingOf,
+    drawingHasResult: (drawingId) => resultsOf(drawingId).length > 0,
+    drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
+    boundFileIdsOf: (drawingId) => boundInputFileIds({ cardFiles: null, drawingList: () => [state.drawingOf(drawingId)] }),
     createDrawing: createDrawingState,
     addDrawing: state.addDrawing,
     removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
+    putSlot: artifactSlots.putSlot,
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
     addDrawingHistory: history.addMember,
+    removeDrawingHistory: history.removeMember,
     runListStep: history.runListStep,
     showDrawingNow
   });

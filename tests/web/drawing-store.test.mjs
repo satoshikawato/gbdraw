@@ -46,7 +46,7 @@ test('the store writers keep drawingList() in tab order and refuse bad IDs', () 
     assert.equal(slots.kept().length, 1);
     assert.throws(() => state.removeDrawing(state.activeDrawingId.value, slots), refusal('SHOWN_DRAWING'));
     assert.throws(() => state.removeDrawing('nope', slots), refusal('UNKNOWN_DRAWING'));
-    state.removeDrawing('linear-2', slots);
+    assert.equal(state.removeDrawing('linear-2', slots)?.drawingId, 'linear-2', 'it hands its slot to the caller');
     assert.deepEqual(ids(), ['circular', 'linear']);
     assert.equal(slots.kept().length, 0, 'the removed drawing loses its slot');
     assert.throws(() => state.drawingOf('linear-2'));

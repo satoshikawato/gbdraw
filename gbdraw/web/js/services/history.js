@@ -2134,6 +2134,8 @@ export const createHistoryManager = ({
  * @property {() => void} [apply] The first application, which gives a new drawing its History; `redo` when absent.
  * @property {() => void} redo
  * @property {() => void} undo
+ * @property {() => Iterable<string>} [fileIds] After `apply`: the files a drawing it takes out binds, which
+ *   the step keeps stored until it is evicted (R11, R16-3).
  * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[] }} ProjectListPart
  *   A list step with the drawings it gave a History (`addMember`) and took one
  *   from (`removeMember`) when it was applied.
@@ -2275,12 +2277,14 @@ export const createHistoryRouter = ({
   /**
    * @param {string} label @param {number} stamp @param {ProjectPart[]} parts @param {IntentEntry | null} session
    * @param {HeldHistory[]} [held] @param {ProjectListPart | null} [list]
+   * @param {Iterable<string>} [heldFileIds] The files of the drawings a list step took out.
    */
-  const recordProjectStep = (label, stamp, parts, session, held = [], list = null) => {
+  const recordProjectStep = (label, stamp, parts, session, held = [], list = null, heldFileIds = []) => {
     if (!session && parts.length === 0 && held.length === 0 && !list) return;
     /** @type {Set<string>} */
     const fileIds = new Set();
     parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
+    for (const id of heldFileIds) fileIds.add(id);
     /** @type {ProjectEntry} */
     const entry = {
       type: 'project', label, sequence: stamp, parts, session, list, fileIds,
@@ -2620,7 +2624,7 @@ export const createHistoryRouter = ({
       const added = [...managers.keys()].filter((drawingId) => !before.has(drawingId));
       recordProjectStep(label, ++sequence, [], sessionStep(label), removed, {
         redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId)
-      });
+      }, step.fileIds?.() ?? []);
     },
     markSavePoint: () => {
       every().forEach((manager) => manager.markSavePoint());

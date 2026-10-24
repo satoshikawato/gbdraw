@@ -1008,11 +1008,16 @@ export const createHistorySnapshotService = ({
    * @returns {D}
    */
   const drawingOfGeneratedMode = (generatedMode) => state.drawingOfMode(generatedMode === 'linear' ? 'linear' : 'circular');
-  // The drawing the displayed artifact belongs to: the drawing of its mode
-  // (`generatedMode`). It differs from the shown drawing after a Load of a
-  // Session with no Result whose request mode is not its `ui.mode`. Every
-  // capture of the displayed artifact names its drawing so.
-  const displayedArtifactDrawing = () => drawingOfGeneratedMode(getGeneratedArtifactRef(state.generatedMode, null));
+  // The drawing the displayed artifact belongs to: the shown drawing when it
+  // is of the artifact's mode (`generatedMode`), else the drawing of that mode
+  // (after a Load of a Session with no Result whose request mode is not its
+  // `ui.mode`). A second drawing of a mode keeps its own artifact (OV-1672).
+  // Every capture of the displayed artifact names its drawing so.
+  const displayedArtifactDrawing = () => {
+    const ofMode = drawingOfGeneratedMode(getGeneratedArtifactRef(state.generatedMode, null));
+    return state.drawingList().find((drawing) => drawing.id === state.activeDrawingId?.value && drawing.mode === ofMode.mode)
+      ?? ofMode;
+  };
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;

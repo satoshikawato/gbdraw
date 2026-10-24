@@ -135,7 +135,9 @@ export const collapseEmptyLinearSeqList = (items) => {
  * The bindings that name stored files: the project's card files and every
  * drawing's bindings.
  * @typedef {object} InputBindings
- * @property {Readonly<CardInputFiles>} cardFiles
+ * @property {Readonly<CardInputFiles> | null} cardFiles null: the bindings of
+ *   the drawings alone (a deleted drawing's, which the step that holds it keeps
+ *   stored, R11).
  * @property {() => readonly BoundDrawingInputs[]} drawingList
  */
 
@@ -238,7 +240,7 @@ export const boundInputFileIds = (bindings) => {
       .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
     linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
   };
-  addInputs(bindings.cardFiles, []);
+  if (bindings.cardFiles) addInputs(bindings.cardFiles, []);
   bindings.drawingList().forEach((drawing) => {
     addInputs(drawing.files, drawing.linearSeqs);
     (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));

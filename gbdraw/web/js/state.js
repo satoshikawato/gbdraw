@@ -49,7 +49,7 @@ import { ANNOTATION_SETS_SLICE } from './services/drawing/annotation-sets.js';
 import { VISIBILITY_RULES_SLICE } from './services/drawing/visibility-rules.js';
 import { COLOR_RULES_SLICE } from './services/drawing/color-rules.js';
 import { PALETTE_SLICE } from './services/drawing/palette.js';
-import { LABEL_TABLES_SLICE } from './services/drawing/label-tables.js';
+import { LABEL_TABLES_SLICE, labelTextEditsData } from './services/drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
@@ -1019,6 +1019,33 @@ export const createDrawingState = (id, drawingMode) => {
       featureEdits: featureEdits.handle, paint: paint.handle, settings: settings.handle, inputs: inputs.handle })
   });
 };
+/**
+ * The edits of a drawing that its settings and inputs do not give (R17-6;
+ * the items PD-OI-090 〔作成〕 does not copy): its feature edits and Feature
+ * placements, its paint (feature fills and strokes, Legend edits), its
+ * annotation sets, its label bulk edits, and its group names.
+ * @param {DrawingState} drawing
+ * @returns {readonly unknown[]}
+ */
+const editsOf = (drawing) => [
+  FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits),
+  PAINT_SLICE.capture(drawing.slices.paint),
+  ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
+  labelTextEditsData(drawing.slices.labelTables),
+  GROUP_NAMES_SLICE.capture(drawing.slices.groupNames)
+];
+/** @param {unknown} value The edits as JSON text (a Set or Map as its entries). */
+const editsText = (value) => JSON.stringify(value, (_key, item) => (
+  item instanceof Set || item instanceof Map ? [...item] : item
+));
+/**
+ * Whether a drawing has edits: those a new drawing of its mode does not have
+ * (R17-6: Delete asks first for a drawing with a Result or edits).
+ * @param {DrawingState} drawing
+ */
+export const drawingHasEdits = (drawing) => (
+  editsText(editsOf(drawing)) !== editsText(editsOf(createDrawingState(drawing.id, drawing.mode)))
+);
 const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
 /** @typedef {typeof circularDrawing} DrawingState */
 /**
@@ -1102,9 +1129,11 @@ const addDrawing = (drawing, name, index) => {
 };
 /**
  * Removes a drawing that is not shown and not the last one (the caller
- * switches first through `installShownDrawing`), with its artifact slot.
+ * switches first through `installShownDrawing`), with its artifact slot,
+ * which it returns for the step that holds the drawing (R16-3).
  * @param {DrawingId} id
- * @param {Pick<import('./services/artifact-slot.js').ArtifactSlotStore, 'deleteSlot'>} slots
+ * @param {Pick<import('./services/artifact-slot.js').ArtifactSlotStore, 'takeSlot'>} slots
+ * @returns {Readonly<import('./services/artifact-slot.js').ArtifactSlot> | null}
  */
 const removeDrawing = (id, slots) => {
   const index = requireDrawingTab('removeDrawing', id);
@@ -1113,8 +1142,9 @@ const removeDrawing = (id, slots) => {
   const tabs = [...drawingTabs.value];
   tabs.splice(index, 1);
   drawings.delete(id);
-  slots.deleteSlot(id);
+  const slot = slots.takeSlot(id);
   drawingTabs.value = freezeTabs(tabs);
+  return slot;
 };
 /** @param {DrawingId} id @param {number} index */
 const moveDrawing = (id, index) => {

@@ -196,3 +196,106 @@ test('Rename refuses a blank or repeated name; a rename and a move are one step 
   await history.undo();
   assert.equal(state.activeDrawingId.value, shown, 'neither step switches the shown drawing');
 });
+
+// Delete (R16-2, R16-3, R17-6): one project step that holds the drawing, its
+// Result slot, its History, and the files only it binds until it is evicted.
+const { FEATURE_EDITS_SLICE } = await import('../../gbdraw/web/js/services/drawing/feature-edits.js');
+/** @param {string} name */
+const resultOf = (name) => ({ name, content: `<svg id="${name}"/>` });
+
+test('Delete shows the next tab, else the previous; its Undo restores the drawing and shows it', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: first } = app.drawingList.newDrawing('circular');
+  const { drawingId: second } = app.drawingList.newDrawing('linear');
+  assert.deepEqual(app.selectDrawing(first), { status: 'ok' });
+  const drawing = state.drawingOf(first);
+  await history.runUndoable('Plot title', () => { drawing.form.plot_title = 'Deleted title'; });
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: { 'feature-1': { visible: false } } });
+  state.results.value = [resultOf('first.svg')];
+  const order = tabIds();
+  const name = tabNameOf(first);
+
+  assert.deepEqual(app.drawingList.deleteDrawing(first), { status: 'ok', drawingId: first });
+  assert.equal(state.activeDrawingId.value, second, 'deleting the shown drawing shows the next tab');
+  assert.deepEqual(tabIds(), order.filter((id) => id !== first));
+  assert.throws(() => state.drawingOf(first));
+  assert.throws(() => history.managerOf(first), 'its History is held by the step');
+  assert.equal(history.undoLabel(), 'Delete drawing');
+
+  await history.undo();
+  assert.deepEqual(tabIds(), order, 'Undo puts its tab back where it was');
+  assert.equal(tabNameOf(first), name);
+  assert.equal(state.activeDrawingId.value, first, 'Undo shows the deleted drawing');
+  assert.equal(state.drawingOf(first), drawing, 'with its settings and edits');
+  assert.equal(drawing.form.plot_title, 'Deleted title');
+  assert.deepEqual(Object.keys(drawing.featureOverrides), ['feature-1']);
+  assert.deepEqual(state.results.value.map((result) => result.name), ['first.svg'], 'and its Result');
+  assert.equal(history.managerOf(first).getUndoCount(), 1, 'and its History');
+
+  await history.redo();
+  assert.equal(state.activeDrawingId.value, second, 'Redo deletes it again and shows the drawing shown after');
+  assert.deepEqual(tabIds(), order.filter((id) => id !== first));
+
+  // The last tab has no next one: the previous tab is shown.
+  const previous = tabIds()[tabIds().indexOf(second) - 1];
+  app.drawingList.deleteDrawing(second);
+  assert.equal(state.activeDrawingId.value, previous, 'deleting the last tab shows the previous one');
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, second);
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, first, 'each Undo restores its own drawing');
+  assert.deepEqual(state.results.value.map((result) => result.name), ['first.svg']);
+});
+
+test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(drawingId);
+  bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', [new File(['>r\nACGT\n'], 'only-here.fa')]);
+  const { fileId } = drawing.files.c_conservation_fastas[0];
+  app.drawingList.deleteDrawing(drawingId);
+  const kept = state.activeDrawingId.value;
+  assert.equal(state.inputFiles.has(fileId), true, 'the held drawing keeps its file');
+
+  // The step-count window evicts the Delete step after 30 newer project steps.
+  for (let step = 0; step < 29; step += 1) app.drawingList.renameDrawing(kept, `Kept ${step}`);
+  assert.equal(state.inputFiles.has(fileId), true, 'the file stays while the step is held');
+  app.drawingList.renameDrawing(kept, 'Kept last');
+  assert.equal(state.inputFiles.has(fileId), false, 'evicting the step releases the file');
+  while (history.canUndo()) {
+    assert.notEqual(history.undoLabel(), 'Delete drawing');
+    await history.undo();
+  }
+  assert.equal(tabIds().includes(drawingId), false, 'no Undo brings the deleted drawing back');
+});
+
+test('the last drawing cannot be deleted; Delete asks first only for a drawing with a Result or edits', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(drawingId);
+  assert.equal(app.drawingList.needsDeleteConfirmation(drawingId), false, 'a new drawing');
+  drawing.form.plot_title = 'Changed setting';
+  bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', [new File(['>r\nACGT\n'], 'ring.fa')]);
+  assert.equal(app.drawingList.needsDeleteConfirmation(drawingId), false, 'files and changed settings only');
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: { 'feature-1': { visible: false } } });
+  assert.equal(app.drawingList.needsDeleteConfirmation(drawingId), true, 'an edit');
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: {} });
+  state.results.value = [resultOf('shown.svg')];
+  assert.equal(app.drawingList.needsDeleteConfirmation(drawingId), true, 'a Result, shown');
+  app.selectDrawing('circular');
+  assert.equal(app.drawingList.needsDeleteConfirmation(drawingId), true, 'a Result, kept in its slot');
+  assert.throws(() => app.drawingList.needsDeleteConfirmation('no-such-drawing'), listRefusal('UNKNOWN_DRAWING'));
+
+  const tabs = state.drawingTabs.value;
+  const drawings = state.drawingList();
+  state.replaceDrawings([state.drawingOf('circular')], [{ id: 'circular', name: 'Only' }]);
+  history.replaceMembers(['circular']);
+  assert.throws(() => app.drawingList.deleteDrawing('circular'), listRefusal('LAST_DRAWING'));
+  assert.deepEqual(tabIds(), ['circular'], 'a refused Delete changes nothing');
+  assert.equal(history.canUndo(), false, 'and records nothing');
+  state.replaceDrawings(drawings, tabs);
+  history.replaceMembers(drawings.map((each) => each.id));
+});

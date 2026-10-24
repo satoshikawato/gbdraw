@@ -1,8 +1,10 @@
 // @ts-check
-// The operations on the drawing list (PD-OI-090, R11): New, Rename, and Move.
-// Each is one project step of the History router (`runListStep`), and these
-// are the only callers of the drawing store's list writers. A step that adds
-// a drawing shows it, and its Undo shows the drawing shown before (R16-2).
+// The operations on the drawing list (PD-OI-090, R11): New, Rename, Move, and
+// Delete. Each is one project step of the History router (`runListStep`), and
+// these are the only callers of the drawing store's list writers. A step that
+// adds or deletes a drawing shows the drawing shown after it, and its Undo the
+// drawing shown before (R16-2). A step that takes a drawing out holds it, its
+// Result slot, and (through the router) its History, for its Undo (R16-3).
 import { allocateDrawingId, defaultDrawingName, drawingNamesProblem } from '../services/drawing-view.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -10,17 +12,26 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
+/** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 
 /**
  * @typedef {() => readonly DrawingTab[]} ReadDrawingTabs The drawings' IDs and names, in tab order.
  * @typedef {() => DrawingId} ReadShownDrawingId
  * @typedef {() => unknown} ReadSwitchBusy Why a drawing switch waits now, or a falsy value (R15).
  * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingState} CreateDrawing A new drawing at its defaults.
+ * @typedef {(drawingId: DrawingId) => DrawingState} ReadDrawing A drawing the store holds.
+ * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
- * @typedef {(drawingId: DrawingId) => void} RemoveDrawingFromStore Removes a drawing that is not shown, with its slot.
+ * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
+ *   Removes a drawing that is not shown, and hands over its slot.
+ * @typedef {(slot: Readonly<ArtifactSlot>) => void} PutSlot A held slot back, with its drawing.
+ * @typedef {(drawingId: DrawingId) => boolean} ReadDrawingHas Whether a drawing has a Result, or edits.
+ * @typedef {(drawingId: DrawingId) => Iterable<string>} ReadBoundFileIds The files a drawing binds.
  * @typedef {(drawingId: DrawingId, name: string) => void} RenameDrawingInStore
  * @typedef {(drawingId: DrawingId, index: number) => void} MoveDrawingInStore
  * @typedef {(drawingId: DrawingId) => void} AddDrawingHistory An empty History for a drawing the store holds (R11).
+ * @typedef {(drawingId: DrawingId) => void} RemoveDrawingHistory
+ *   Hands a drawing's History to the open list step, which holds it (R16-3).
  * @typedef {(label: string, step: ProjectListStep) => void} RunListStep One project step: applies the step now.
  * @typedef {(drawingId: DrawingId) => void} ShowDrawingNow The drawing switch's work, without its gate.
  * @typedef {{ status: 'ok', drawingId: DrawingId } | { status: 'busy', reason: unknown }} DrawingListOutcome
@@ -32,20 +43,27 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {ReadDrawingTabs} drawingTabs
  * @property {ReadShownDrawingId} shownDrawingId
  * @property {ReadSwitchBusy} switchBusy
+ * @property {ReadDrawing} drawingOf
+ * @property {ReadDrawingHas} drawingHasResult
+ * @property {ReadDrawingHas} drawingHasEdits
+ * @property {ReadBoundFileIds} boundFileIdsOf
  * @property {CreateDrawing} createDrawing
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
+ * @property {PutSlot} putSlot
  * @property {RenameDrawingInStore} renameDrawing
  * @property {MoveDrawingInStore} moveDrawing
  * @property {AddDrawingHistory} addDrawingHistory
+ * @property {RemoveDrawingHistory} removeDrawingHistory
  * @property {RunListStep} runListStep
  * @property {ShowDrawingNow} showDrawingNow
  */
 
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
-  drawingTabs, shownDrawingId, switchBusy, createDrawing, addDrawing, removeDrawing, renameDrawing: renameInStore,
-  moveDrawing: moveInStore, addDrawingHistory, runListStep, showDrawingNow
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, addDrawing,
+  removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
+  removeDrawingHistory, runListStep, showDrawingNow
 }) => {
   /** @param {string} operation @param {string} reason @param {DrawingId} drawingId */
   const listError = (operation, reason, drawingId) => diagnosticError(
@@ -78,7 +96,10 @@ export const createDrawingList = ({
     const drawingId = allocateDrawingId(mode, drawingTabs().map((tab) => tab.id));
     const drawing = createDrawing(drawingId, mode);
     const name = defaultDrawingName(mode, drawingId);
-    // Redo gets the drawing's History back from the router, which holds it.
+    // Redo gets the drawing's History back from the router, which holds it,
+    // and its slot (a Result it got before the Undo) from this step.
+    /** @type {HeldSlot} */
+    let slot = null;
     runListStep('New drawing', {
       apply: () => {
         addDrawing(drawing, name, drawingTabs().length);
@@ -87,11 +108,12 @@ export const createDrawingList = ({
       },
       redo: () => {
         addDrawing(drawing, name, drawingTabs().length);
+        if (slot) putSlot(slot);
         showDrawingNow(drawingId);
       },
       undo: () => {
         showDrawingNow(before);
-        removeDrawing(drawingId);
+        slot = removeDrawing(drawingId);
       }
     });
     return drawingId;
@@ -135,5 +157,57 @@ export const createDrawingList = ({
     });
   };
 
-  return { newDrawing, renameDrawing, moveDrawing };
+  /**
+   * Deletes a drawing, as one project step that holds it with its settings,
+   * edits, Result slot, and History until the step is evicted (R16-3). The
+   * last drawing cannot be deleted (R11). Deleting the shown drawing first
+   * shows the next tab, else the previous (R16-2).
+   * @param {DrawingId} drawingId @returns {DrawingListOutcome}
+   */
+  const deleteDrawing = (drawingId) => {
+    const tabs = drawingTabs();
+    const index = tabIndexOf('deleteDrawing', drawingId);
+    if (tabs.length <= 1) throw listError('deleteDrawing', 'LAST_DRAWING', drawingId);
+    return unlessBusy(() => {
+      const before = shownDrawingId();
+      const after = before === drawingId ? tabs[index + 1 < tabs.length ? index + 1 : index - 1].id : before;
+      const drawing = drawingOf(drawingId);
+      const { name } = tabs[index];
+      /** @type {HeldSlot} */
+      let slot = null;
+      // The step keeps the files only this drawing binds until it is evicted.
+      const fileIds = [...boundFileIdsOf(drawingId)];
+      // The switch settles the drawing's open step while its History is still a member.
+      runListStep('Delete drawing', {
+        fileIds: () => fileIds,
+        apply: () => {
+          showDrawingNow(after);
+          removeDrawingHistory(drawingId);
+          slot = removeDrawing(drawingId);
+        },
+        redo: () => {
+          showDrawingNow(after);
+          slot = removeDrawing(drawingId);
+        },
+        undo: () => {
+          addDrawing(drawing, name, index);
+          if (slot) putSlot(slot);
+          showDrawingNow(before);
+        }
+      });
+      return drawingId;
+    });
+  };
+
+  /**
+   * Whether Delete asks first: only for a drawing with a Result or edits, as
+   * its Undo restores any deleted drawing (R17-6).
+   * @param {DrawingId} drawingId
+   */
+  const needsDeleteConfirmation = (drawingId) => {
+    tabIndexOf('needsDeleteConfirmation', drawingId);
+    return drawingHasResult(drawingId) || drawingHasEdits(drawingId);
+  };
+
+  return { newDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
 };

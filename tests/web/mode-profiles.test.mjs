@@ -261,7 +261,7 @@ assert.deepEqual(
 );
 
 {
-  const { resetSettings } = await import(
+  const { resetProject, resetSettings } = await import(
     pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
   );
   installShownDrawing('circular');
@@ -352,7 +352,9 @@ assert.deepEqual(
   state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
   state.activeDrawing().unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
-  resetSettings(state);
+  // Reset all: the one-per-Session values, then every drawing.
+  resetProject(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   assert.equal(state.activeDrawing().form.multi_record_canvas, true);
   assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, true);
 
