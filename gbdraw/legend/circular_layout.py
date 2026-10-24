@@ -175,7 +175,8 @@ def _build_gradient_layout(
             CircularCompactGradientEntryLayout(
                 key=entry.key,
                 properties=entry.properties,
-                label_x=0.0,
+                # The block's left edge; an int keeps the drawn translate(0,y).
+                label_x=0,
                 label_y=(color_rect_size / 2) + (idx * row_height),
                 bar_y=(color_rect_size / 2) + (idx * row_height),
             )
