@@ -87,6 +87,9 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   pairwise match no longer opens that popup.
 - A Legend offset that nothing names is released with its Result, and a reflow
   lands in its own Result's drawing.
+- A record name inferred from a *Candidatus* organism reads
+  `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics and
+  the name upright, as nomenclature requires.
 
 ## Documentation
 
@@ -95,6 +98,12 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   preview of every stage.
 - The Vibrio harveyi group collinear tutorial says that the Linear ruler keeps
   each record's own coordinates.
+- The hepatoplasmataceae_collinear Gallery tutorial also generates after each
+  step, and its figure and Session come from a fresh upload. The card command
+  of a Gallery figure saved in the web app declares the record names and the
+  axis colour that its Session draws, and a published Session keeps the File
+  card rows that Save writes, so **Reset Settings** keeps an inferred record
+  name.
 
 ## Added
 
