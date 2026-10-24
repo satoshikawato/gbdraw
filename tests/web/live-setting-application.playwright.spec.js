@@ -7,6 +7,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal, settleLive } = require('./helpers/app-lifecycle.cjs');
 const { load } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot } = require('./helpers/live-generate-parity.cjs');
 const { open, addColorRule, addVisibilityRule } = require('./helpers/live-generate-parity-steps.cjs');
 
@@ -849,8 +850,7 @@ test('a live change in a mode without a Result applies nothing until that mode h
   try {
     await generateNow(page);
     const circular = await facts(page);
-    await page.locator('button[aria-label="Linear"][aria-pressed]').click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+    await showDrawing(page, { kind: 'linear' });
     await settleLive(page);
     const linear = await facts(page);
     expect(linear.resultCount).toBe(0);
@@ -860,8 +860,7 @@ test('a live change in a mode without a Result applies nothing until that mode h
     expect(after.reflowing).toBe(false);
     expect(after.resultCount).toBe(0);
     expect(after.generationKey).toBe(linear.generationKey);
-    await page.locator('button[aria-label="Circular"][aria-pressed]').click();
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+    await showDrawing(page, { kind: 'circular' });
     await settleLive(page);
     const back = await facts(page);
     expect(back.content).toBe(circular.content);

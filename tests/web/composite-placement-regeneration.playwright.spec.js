@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
@@ -139,10 +140,7 @@ for (const composite of [false, true]) {
         expect((await check('P5-loaded')).placements).toEqual(edited.placements);
         await generate();
         expect((await check('P5-generated')).placements).toEqual(edited.placements);
-        for (const mode of ['Linear', 'Circular']) {
-          await page.getByRole('button', { name: mode, exact: true }).click();
-          await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode.toLowerCase());
-        }
+        for (const kind of ['linear', 'circular']) await showDrawing(page, { kind });
         expect((await check('P6-returned')).placements).toEqual(edited.placements);
         await generate();
         expect((await check('P6-generated')).placements).toEqual(edited.placements);
