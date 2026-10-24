@@ -14,7 +14,8 @@
 // A value the Web fills from run-time identities cannot be a constant
 // default. `NORMALIZE` names each such row field and how a reader normalizes
 // it before comparing; Python (`gbdraw.session_drawings._normalized`) and the
-// Web fast path read the rules from the file. The only rule: a Linear record
+// Web (`withoutUnarrangedEntries`, services/linear-record-layout.js) evaluate
+// the rules of the file. The only rule: a Linear record
 // layout that arranges nothing (each sequence row in its own layout row, in
 // order, as `reconcileLinearRecordLayout` writes it from no saved entries, for
 // example the empty sequence row of a new project with its run-time uid) has
@@ -41,19 +42,10 @@ const { MODE_SCOPED_SETTINGS } = await import('../gbdraw/web/js/mode-scoped-sett
 const { buildModeSliceData } = await import('../gbdraw/web/js/services/config.js');
 const { createDrawingState } = await import('../gbdraw/web/js/state.js');
 const { createPaletteLoader } = await import('../gbdraw/web/js/app/palettes.js');
-const { reconcileLinearRecordLayout } = await import('../gbdraw/web/js/services/linear-record-layout.js');
+const { reconcileLinearRecordLayout, withoutUnarrangedEntries } = await import('../gbdraw/web/js/services/linear-record-layout.js');
 
-/**
- * A row field whose list a reader empties when it arranges nothing: every
- * entry holds exactly `entryKeys`, and its `positionKey` is its 1-based
- * position in the list.
- * @typedef {{
- *   domain: string, path: string, field: string,
- *   emptyWhenUnarranged: { entryKeys: string[], positionKey: string },
- *   reason: string
- * }} NormalizeRule
- */
-/** @type {NormalizeRule[]} */
+/** @import { UnarrangedFieldRule } from '../gbdraw/web/js/services/linear-record-layout.js' */
+/** @type {UnarrangedFieldRule[]} */
 const NORMALIZE = [
   {
     domain: 'config',
@@ -65,25 +57,10 @@ const NORMALIZE = [
 ];
 
 /**
- * @param {NormalizeRule} rule
- * @param {unknown} entries
- */
-const unarranged = (rule, entries) => Array.isArray(entries) && entries.every((entry, index) => (
-  entry && typeof entry === 'object'
-  && Object.keys(entry).sort().join('\0') === [...rule.emptyWhenUnarranged.entryKeys].sort().join('\0')
-  && entry[rule.emptyWhenUnarranged.positionKey] === index + 1
-));
-
-/**
  * @param {{ domain: string, path: string }} row
  * @param {unknown} value
  */
-const normalized = (row, value) => NORMALIZE
-  .filter((rule) => rule.domain === row.domain && rule.path === row.path)
-  .reduce((current, rule) => {
-    const holder = /** @type {Record<string, unknown>} */ (current);
-    return unarranged(rule, holder[rule.field]) ? { ...holder, [rule.field]: [] } : holder;
-  }, value);
+const normalized = (row, value) => /** @type {Record<string, unknown[]>} */ (withoutUnarrangedEntries(NORMALIZE, row, value));
 
 // The rule against its Web owner: what the layout writes from no saved
 // entries is unarranged; one row holding two records is not.

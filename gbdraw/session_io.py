@@ -3380,7 +3380,7 @@ def _js_key_order(record: Mapping[Any, Any]) -> list[Any]:
 def _session_46_legend_rows(legend: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
     """The rows a Session 46 Legend's edits reach, by the caption each shows,
     and the keys of the renamed rows; the twin of ``session46LegendRows`` in
-    the Web ``services/mode-scoped-migration.js``.
+    the Web ``services/session-drawings-upgrade.js``.
 
     As Session 46 Load read the rows (an entry with a caption and a usable
     color, the first of each caption in its list) and as its compile found
@@ -3447,7 +3447,7 @@ def legend_edits_by_row_key(legend: Mapping[str, Any]) -> tuple[dict[str, Any], 
     ``None`` when dropped). Other fields are kept as they are.
 
     The twin of ``legendEditsByRowKey`` in the Web
-    ``services/mode-scoped-migration.js``;
+    ``services/session-drawings-upgrade.js``;
     ``tests/fixtures/sessions/legend-row-key-vectors.json`` pins both.
     """
 

@@ -267,11 +267,11 @@ import {
 import {
   SLICE_MODES,
   sessionDepthSourceWidths,
-  sessionLegendEditsByRowKey,
   splitDraftIntoModes,
   unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
+import { sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';

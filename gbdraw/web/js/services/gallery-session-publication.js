@@ -3,7 +3,8 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
-import { sessionLegendEditsByRowKey, splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
