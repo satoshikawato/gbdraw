@@ -513,13 +513,12 @@ const readSessionInputs = (document, repairs) => {
   let next = document;
   const resources = readSessionResources(next.resources);
   // A resource nothing names is dropped with no row (E-OD06, A15).
-  // Each Result set's request names its resources (a Session 27-48's
-  // top-level set and `otherModeResult`, a Session 49's entries), and so
-  // does each inventory.
+  // Each Result set's request names its resources (`storedResultSets`), and
+  // so does each inventory.
   const entries = isDrawingsBand(document) && Array.isArray(next.drawings)
     ? /** @type {UnvalidatedFields<'renderRequest' | 'webFiles' | 'mode'>[]} */ (next.drawings) : [];
-  const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
-    ...entries.map((drawing) => drawing?.renderRequest),
+  const named = collectCanonicalResourceIds([
+    ...storedResultSets(/** @type {SessionInput} */ (next)).map(({ set }) => set.renderRequest),
     ...[next, ...entries].map((holder) => /** @type {UnvalidatedFields<'bindings'>} */ (holder?.webFiles)?.bindings)]);
   resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
     loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
@@ -633,9 +632,10 @@ const withNullRequestAsMissing = (document) => {
 export const restoresNothing = (stored, repairs) => {
   const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
   if (requestDropped && !hasSettingsOnlyForm(stored)) return true;
-  // The other mode's set dropped for its request is the part `otherModeResult`.
+  // A Session 46-48's stored set dropped for its request is its top-level
+  // part (a Session 49 drawing stays without its set).
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
-    .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
+    .map(({ code, path }) => (code === 'other-result-set-dropped' ? topLevelKey(path) : path)));
   // A Session 49 restores nothing when every drawing it holds was dropped.
   const storedDrawings = /** @type {{ drawings?: unknown }} */ (/** @type {unknown} */ (stored)).drawings;
   if (stored.version >= SESSION_DRAWINGS_LAYOUT.version && Array.isArray(storedDrawings)) {
@@ -920,10 +920,10 @@ export const hasSettingsOnlyForm = (data) => data != null && isSettingsOnlySessi
 /**
  * The request schemas a file stored, read before Load promoted its requests:
  * a check that depends on what the writer wrote reads them (RK-1).
- * Keyed by where the file holds each set: the projected set's under
- * `renderRequest`, a Session 46-48's other mode's under `otherModeResult`,
- * a Session 49's other drawings' under their `drawingSetPath`.
- * @typedef {{ renderRequest?: unknown, otherModeResult?: unknown } & { [at: DrawingSetPath]: unknown }} StoredRequestSchemas
+ * Keyed by set path (`ResultSetPath`, `storedResultSets`): the projected
+ * set's under `''`, where its view holds it (a Session 49's opened drawing
+ * too), every stored set's under its own path.
+ * @typedef {{ [at in ResultSetPath]?: unknown }} StoredRequestSchemas
  */
 
 /** The Web input inventory of a Session that binds no input. */
@@ -943,8 +943,12 @@ const EMPTY_WEB_BINDINGS = Object.freeze({
  * @returns {SessionEnvelope}
  */
 export const settingsOnlySessionCandidate = (session) => {
-  const candidate = JSON.parse(JSON.stringify(session));
-  const { otherModeResult: _other, cliInvocation: _cli, legacyArtifacts: _legacy, files: _files, ...kept } = candidate;
+  let candidate = JSON.parse(JSON.stringify(session));
+  // A Session 42-48 (the versions with a settings-only form) keeps only its projected set.
+  for (const { at } of storedResultSets(candidate).filter(({ projected }) => !projected)) {
+    candidate = withStoredResultSet(candidate, at, null);
+  }
+  const { cliInvocation: _cli, legacyArtifacts: _legacy, files: _files, ...kept } = candidate;
   const editorState = { ...(isPlainObject(kept.editorState) ? kept.editorState : {}), featureCatalog: null };
   delete editorState.alignmentResetReceipt;
   /** @param {unknown} cache */
@@ -1295,18 +1299,19 @@ const validateCommittedResultSet = (set, version, storedSchema = storedRequestSc
 // top-level set. It needs a committed top-level request of the other mode, at
 // least one Result, and resources in the top-level table.
 /**
- * What the other mode's Result set holds that it cannot be restored with:
- * `set` and `request` faults come first; `set` faults of its committed Result
- * set follow (`committedResultSetFaults`). Run notices are read by
+ * What a stored Result set of a Session 46-48 (`storedResultSets`, the other
+ * mode's) holds that it cannot be restored with: `set` and `request` faults
+ * come first; `set` faults of its committed Result set follow
+ * (`committedResultSetFaults`). Run notices are read by
  * `readSessionAuthorityParts`.
- * @param {SessionInput} sessionData
+ * @param {StoredResultSet} stored A stored set (an object: Load's band reader dropped one that is not, `session-part-dropped`).
+ * @param {SessionInput} sessionData The Session that holds it: its projected request and its resources.
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
  * @returns {{ kind: 'set' | 'request' | ResultSetFault['kind'] }[]}
  */
-const otherModeResultFaults = (sessionData, version, storedSchemas) => {
-  const other = sessionData.otherModeResult;
-  if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
+const storedSetFaults = ({ at, set: other }, sessionData, version, storedSchemas) => {
+  if (Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.includes(key))) {
     return [{ kind: 'set' }];
   }
   const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
@@ -1314,7 +1319,7 @@ const otherModeResultFaults = (sessionData, version, storedSchemas) => {
     || !(/** @type {readonly unknown[]} */ (['circular', 'linear'])).includes(mode) || mode === sessionData.renderRequest.mode) {
     return [{ kind: 'request' }];
   }
-  const setFaults = committedResultSetFaults(other, version, storedSchemas.otherModeResult ?? storedRequestSchema(other));
+  const setFaults = committedResultSetFaults(other, version, storedSchemas[at] ?? storedRequestSchema(other));
   if (setFaults.some(({ kind }) => kind === 'results' || kind === 'editorState')) return setFaults;
   /** @type {{ kind: 'set' | ResultSetFault['kind'] }[]} */
   const faults = [...setFaults];
@@ -1342,15 +1347,17 @@ const otherModeResultFaults = (sessionData, version, storedSchemas) => {
 };
 
 /**
- * Save: the other mode's Result set (E1).
+ * Save: the stored Result sets of a Session 46-48 (E1).
  * @param {SessionInput} sessionData
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
  */
-const validateOtherModeResult = (sessionData, version, storedSchemas) => {
-  refuseFirstFault(otherModeResultFaults(sessionData, version, storedSchemas));
-  // The check above proved the set an object.
-  validateRunNotices(/** @type {SessionInput} */ (sessionData.otherModeResult));
+const validateStoredResultSets = (sessionData, version, storedSchemas) => {
+  for (const stored of storedResultSets(sessionData).filter(({ projected }) => !projected)) {
+    refuseFirstFault(storedSetFaults(stored, sessionData, version, storedSchemas));
+    // The check above proved the set an object.
+    validateRunNotices(stored.set);
+  }
 };
 
 /**
@@ -1429,29 +1436,28 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
   const uncomposed = (at) => (uncomposedSets.includes(at) ? [{ kind: 'results' }] : []);
   // A Session 27-39 holds no committed Result set Save checks: only Load's own fault.
   const topFaults = version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
-    ? committedResultSetFaults(sessionData, version, storedSchemas.renderRequest ?? storedRequestSchema(sessionData)) : [];
+    ? committedResultSetFaults(sessionData, version, storedSchemas[''] ?? storedRequestSchema(sessionData)) : [];
   /** @type {SessionInput} */
   let data = readCommittedResultSet(sessionData, [...topFaults, ...uncomposed('')], '', repairs);
   if (version < CANONICAL_SESSION_MIN_VERSION) return /** @type {T} */ (data);
-  if (Object.hasOwn(data, 'otherModeResult')) {
-    const faults = [...otherModeResultFaults(data, version, storedSchemas), ...uncomposed('otherModeResult.')];
-    const { otherModeResult: other, ...rest } = data;
+  for (const stored of storedResultSets(data).filter(({ projected }) => !projected)) {
+    const { at, set } = stored;
+    const faults = [...storedSetFaults(stored, data, version, storedSchemas), ...uncomposed(at)];
     if (faults.some(({ kind }) => kind === 'request')) {
-      const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (other)?.renderRequest?.mode;
+      const mode = /** @type {UnvalidatedFields<'renderRequest', UnvalidatedFields<'mode'>>} */ (set)?.renderRequest?.mode;
       repairs.push(loadRepair({
-        code: 'other-result-set-dropped', path: 'otherModeResult.renderRequest', effect: 'dropped',
+        code: 'other-result-set-dropped', path: `${at}renderRequest`, effect: 'dropped',
         ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
-      data = rest;
+      data = withStoredResultSet(data, at, null);
     } else if (faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {
-      repairs.push(loadRepair({ code: 'session-part-dropped', path: 'otherModeResult', effect: 'dropped' }));
-      data = rest;
+      repairs.push(loadRepair({ code: 'session-part-dropped', path: at.slice(0, -1), effect: 'dropped' }));
+      data = withStoredResultSet(data, at, null);
     } else {
-      // `otherModeResultFaults` found no `set` fault: the set is an object.
+      // `storedSetFaults` found no `set` fault: the set is an object.
       // Without `set` and `request` faults, the rest are the set's own (`committedResultSetFaults`).
       const setFaults = /** @type {ResultSetFault[]} */ (faults.filter(({ kind }) => kind !== 'set' && kind !== 'request'));
-      const kept = withReadRunNotices(readCommittedResultSet(/** @type {SessionInput} */ (other), setFaults, 'otherModeResult.', repairs));
-      data = { ...data, otherModeResult: kept };
+      data = withStoredResultSet(data, at, withReadRunNotices(readCommittedResultSet(set, setFaults, at, repairs)));
     }
   }
   return /** @type {T} */ (withReadRunNotices(data));
@@ -1521,7 +1527,10 @@ const validateModeScopedFields = (sessionData) => {
  */
 const validateBandFields = (sessionData, version) => {
   if (Number(version) < MODE_SCOPED_SESSION_VERSION) {
-    for (const field of ['otherModeResult', 'modes', 'cliOptions']) {
+    // The stored Result sets (`storedResultSets`) are named by their path.
+    const fields = [...storedResultSets(sessionData).filter(({ projected }) => !projected).map(({ at }) => at.slice(0, -1)),
+      ...MODE_SCOPED_TOP_LEVEL_KEYS];
+    for (const field of fields) {
       if (Object.hasOwn(sessionData, field)) {
         throw new Error(`Session version ${String(version)} cannot contain ${field}.`);
       }
@@ -1620,10 +1629,10 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
     // keeps Results whose catalog it dropped, which Save refuses.
     if (!load) {
       validateCommittedResultSet(sessionData, version,
-        storedSchemas.renderRequest ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
+        storedSchemas[''] ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
     }
   }
-  if (!load && Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version, storedSchemas);
+  if (!load) validateStoredResultSets(sessionData, version, storedSchemas);
   // Load read the run notices (`readSessionAuthorityParts`). A Session 31-39
   // reaches these checks with `results` unvalidated: they read it by index only.
   if (!load) validateRunNotices(sessionData);
@@ -1725,17 +1734,20 @@ export const projectDocumentMetadata = (sessionData) => ({
   title: typeof sessionData?.title === 'string' ? sessionData.title : ''
 });
 
-/** @import { Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
+/** @import { Session49 } from './session-drawings-upgrade.js' */
 /**
  * The drawing a Session 49 opens (`_opened_drawing`, gbdraw/session_drawings.py):
- * the one `ui.activeDrawingId` names, else the first. The one place the Web
+ * the one `ui.activeDrawingId` names, else the first; a `ui` that is no
+ * object names none (the band reader admits any `ui`). The one place the Web
  * reads which drawing a Session 49 opens.
- * @param {Session49} document
- * @returns {SessionDrawing49}
+ * @template {{ id: string }} D
+ * @param {{ ui?: unknown, drawings: readonly D[] }} document
+ * @returns {D}
  */
 export const openedDrawingOf = (document) => {
   const [first] = document.drawings;
-  return document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) ?? first;
+  const activeId = isPlainObject(document.ui) ? document.ui.activeDrawingId : undefined;
+  return document.drawings.find((entry) => entry.id === activeId) ?? first;
 };
 
 /**
@@ -1820,6 +1832,6 @@ export const withStoredResultSet = (data, at, set) => {
  * @returns {StoredRequestSchemas}
  */
 export const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, projected, set }) => [
-  projected ? 'renderRequest' : at === 'otherModeResult.' ? 'otherModeResult' : at,
+  projected ? '' : at,
   /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema
 ]));

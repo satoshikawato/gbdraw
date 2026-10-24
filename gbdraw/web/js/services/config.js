@@ -348,7 +348,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
+/** @import { ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
@@ -2437,7 +2437,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
   const authorityData = drawingsBand
     ? await readEachResultSet(requestData, async (entry) => readDrawingResultSetParts(entry, sourceSessionVersion,
-      requestRead.storedSchemas[entry.projected ? 'renderRequest' : /** @type {DrawingSetPath} */ (entry.at)],
+      requestRead.storedSchemas[entry.projected ? '' : entry.at],
       repairs, uncomposedSets))
     : readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
   /** @type {StoredSetProject} */
@@ -2516,7 +2516,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // its promotion from the request its reader read.
   const promotedData = !currentSession && (
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(requestRead.storedSchemas.renderRequest) === 2
+    Number(requestRead.storedSchemas['']) === 2
   )
     ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;

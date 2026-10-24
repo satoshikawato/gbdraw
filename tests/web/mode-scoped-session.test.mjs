@@ -849,3 +849,22 @@ test('a Session 49 drawing Load does not open keeps its dormant Similarity group
     assert.deepEqual({ ...state.drawingOf(first.id).orthogroupDormantOverrides }, first.config.webEdits.orthogroupDormantOverrides, opened);
   }
 });
+
+// B2d-3a-3a Part 2: session-authority lists a file's Result sets only
+// through `storedResultSets` (the one place that names where a Session
+// 27-49 file holds a set); its readers key the stored request schemas by
+// set path.
+test('session-authority reads `otherModeResult` only in the Result set enumeration owner', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/session-authority.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const start = source.indexOf(`export const ${name} = `);
+    assert.ok(start >= 0, name);
+    return source.slice(start, source.indexOf('\n};\n', start));
+  };
+  const owners = ['storedResultSets', 'withStoredResultSet'].map(bodyOf);
+  const outside = owners.reduce((text, body) => text.replace(body, ''), source)
+    .split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line))
+    // The field registries name the key; they read no set.
+    .filter((line) => !/^\s*otherModeResult: \{ authority:|positionalArrays:/.test(line));
+  assert.deepEqual(outside.filter((line) => /\botherModeResult\b/.test(line)), []);
+});
