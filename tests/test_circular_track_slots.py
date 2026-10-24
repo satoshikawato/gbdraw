@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1009,6 +1011,69 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
     assert by_id["gc_content"].packing_band_px.center_px > by_id["gc_skew"].packing_band_px.center_px
     assert by_id["gc_content"].reserved_band_px.outer_px <= by_id["ticks"].reserved_band_px.inner_px + 1e-6
     assert by_id["gc_skew"].reserved_band_px.outer_px <= by_id["gc_content"].reserved_band_px.inner_px + 1e-6
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("added_rows", "keeps_lanes"),
+    [
+        ((), True),
+        (
+            (
+                CircularTrackSlot(
+                    id="conservation_1",
+                    renderer="sequence_conservation",
+                    side="inside",
+                    params={"track_index": 1, "source_index": 0},
+                ),
+            ),
+            True,
+        ),
+        ((CircularTrackSlot(id="depth_2", renderer="depth", params={"track_index": 1}),), True),
+        ((CircularTrackSlot(id="a_skew_2", renderer="dinucleotide_skew", params={"nt": "AT"}),), False),
+        (
+            (CircularTrackSlot(id="regions", renderer="annotations", side="inside", params={"set_id": "regions"}),),
+            False,
+        ),
+    ],
+    ids=["preset_rows", "comparison_ring", "second_depth_series", "at_skew_row", "annotation_slot"],
+)
+def test_only_a_stack_of_the_presets_rows_keeps_the_preset_lanes(
+    added_rows: tuple[CircularTrackSlot, ...],
+    keeps_lanes: bool,
+) -> None:
+    # OV-1711: a stack with an inside row the preset does not have packs from
+    # the feature track. Depth series and comparison rings follow the inputs,
+    # so the default stack keeps its lanes with them; a second depth file adds
+    # the row `depth_2` after the preset's `depth`.
+    from gbdraw.canvas import CircularCanvasConfigurator
+    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
+    from gbdraw.diagrams.circular.presets import CircularPresetContext, circular_track_slots_from_preset_order
+
+    record = _load_record()
+    show_depth = any(slot.renderer == "depth" for slot in added_rows)
+    cfg = GbdrawConfig.from_dict(_base_config(track_type="middle"))
+    canvas_config = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record)
+    context = CircularPresetContext(
+        cfg=cfg,
+        geometry=canvas_config.geometry(),
+        total_length=len(record.seq),
+        strandedness=bool(cfg.canvas.strandedness),
+        show_features=True,
+        show_ticks=True,
+        show_depth=show_depth,
+        show_gc=True,
+        show_skew=True,
+        track_ids=tuple(canvas_config.track_ids.items()),
+    )
+
+    plan = circular_track_slots_from_preset_order(
+        [*default_circular_track_slots(show_depth=show_depth, show_gc=True, show_skew=True), *added_rows],
+        "middle",
+        context,
+    )
+
+    assert plan.preferred_anchor_slot_ids == (frozenset({"gc_content", "gc_skew"}) if keeps_lanes else frozenset())
 
 
 @pytest.mark.circular
@@ -2762,7 +2827,9 @@ def test_a_definition_that_needs_more_room_still_bounds_the_gallery_stack(
     assert error.value.diagnostic["reason"] == "CENTER_RESERVED"
 
 
-def _titled_gallery_session_drawing(plot_title: str | None) -> tuple[dict[str, object], str]:
+def _gallery_session_drawing(*edits: Callable[[dict[str, Any]], None]) -> tuple[dict[str, Any], str]:
+    """The HmmtDNA_ATskew Gallery session drawn after ``edits``: its slot geometry and SVG."""
+
     import json
     from tempfile import TemporaryDirectory
 
@@ -2772,10 +2839,9 @@ def _titled_gallery_session_drawing(plot_title: str | None) -> tuple[dict[str, o
 
     source = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "HmmtDNA_ATskew.gbdraw-session.json"
     session = json.loads(source.read_text(encoding="utf-8"))
-    options = session["renderRequest"]["diagramOptions"]
-    options["plotTitle"] = plot_title
-    options["output"]["plotTitlePosition"] = "none" if plot_title is None else "top"
-    with TemporaryDirectory(prefix="gbdraw-ov1710-") as output_dir:
+    for edit in edits:
+        edit(session)
+    with TemporaryDirectory(prefix="gbdraw-gallery-stack-") as output_dir:
         session_path = Path(output_dir) / "session.gbdraw-session.json"
         session_path.write_text(json.dumps(session), encoding="utf-8")
         document = load_session_document(session_path)
@@ -2786,6 +2852,52 @@ def _titled_gallery_session_drawing(plot_title: str | None) -> tuple[dict[str, o
             )
     geometry = getattr(prepared.drawing, "_gbdraw_track_slot_geometry")
     return geometry, prepared.drawing.tostring()
+
+
+def _with_plot_title(plot_title: str) -> Callable[[dict[str, Any]], None]:
+    def edit(session: dict[str, Any]) -> None:
+        options = session["renderRequest"]["diagramOptions"]
+        options["plotTitle"] = plot_title
+        options["output"]["plotTitlePosition"] = "top"
+
+    return edit
+
+
+def _on_a_two_record_canvas(session: dict[str, Any]) -> None:
+    """The session's record twice, side by side on one Multi-Record Canvas: each draws the record summary."""
+
+    import copy
+
+    request = session["renderRequest"]
+    first = request["records"][0]
+    second = copy.deepcopy(first)
+    second["recordKey"] = "record-2"
+    second["source"]["resourceId"] = "record-2-genbank"
+    session["resources"]["record-2-genbank"] = {
+        **session["resources"][first["source"]["resourceId"]],
+        "name": "record-2-genbank-HmmtDNA.gbk",
+    }
+    request["records"] = [first, second]
+    request["grouping"] = "grid"
+    request["layout"] = {
+        "multiRecordSizeMode": "auto",
+        "multiRecordMinRadiusRatio": 0.55,
+        "multiRecordColumnGapRatio": 0.1,
+        "multiRecordRowGapRatio": 0.05,
+        "multiRecordPositions": ["#1@1", "#2@1"],
+    }
+
+
+def _with_auto_widths(session: dict[str, Any]) -> None:
+    for slot in session["renderRequest"]["diagramOptions"]["tracks"]["circularTrackSlots"]:
+        if slot["renderer"] in {"dinucleotide_content", "dinucleotide_skew"}:
+            slot["width"] = None
+
+
+def _with_default_stack(session: dict[str, Any]) -> None:
+    tracks = session["renderRequest"]["diagramOptions"]["tracks"]
+    tracks["circularTrackSlots"] = None
+    tracks["circularTrackAxisIndex"] = None
 
 
 def _tick_label_arcs(svg: str) -> list[tuple[float, float, float, str]]:
@@ -2825,8 +2937,8 @@ def test_a_plot_title_keeps_the_gallery_session_slots_and_readable_tick_labels()
     # rows far from the features and the 1 kbp labels running together.
     import math
 
-    untitled, _svg = _titled_gallery_session_drawing(None)
-    titled, titled_svg = _titled_gallery_session_drawing("Human mitochondrial genome")
+    untitled, _svg = _gallery_session_drawing()
+    titled, titled_svg = _gallery_session_drawing(_with_plot_title("Human mitochondrial genome"))
 
     assert titled["records"][0]["slots"] == untitled["records"][0]["slots"]
     labels = _tick_label_arcs(titled_svg)
@@ -2835,3 +2947,33 @@ def test_a_plot_title_keeps_the_gallery_session_slots_and_readable_tick_labels()
     for (angle_a, half_a, space, text_a), (angle_b, half_b, _space, text_b) in zip(labels, labels[1:] + labels[:1]):
         gap = (angle_b - angle_a) % (2.0 * math.pi)
         assert gap - (half_a + half_b) >= space, (text_a, text_b)
+
+
+@pytest.mark.parametrize(
+    "stack_edits",
+    [(), (_with_auto_widths,)],
+    ids=["explicit_width", "auto_width"],
+)
+def test_a_multi_record_canvas_draws_the_gallery_stack_as_the_single_record_figure(
+    stack_edits: tuple[Callable[[dict[str, Any]], None], ...],
+) -> None:
+    # OV-1711: each record of a Multi-Record Canvas draws only the record
+    # summary. The stack, which adds an AT skew row, used to switch to the
+    # preset lanes (explicit widths) or widen its Auto rows toward the center
+    # around the smaller definition, so the tick labels ran together.
+    single, _svg = _gallery_session_drawing(*stack_edits)
+    canvas, _canvas_svg = _gallery_session_drawing(*stack_edits, _on_a_two_record_canvas)
+
+    expected = single["records"][0]["slots"]
+    assert [record["slots"] for record in canvas["records"]] == [expected, expected]
+
+
+def test_the_default_stack_keeps_its_preset_lanes_on_a_multi_record_canvas() -> None:
+    # OV-1711: only rows that pack follow the full definition; the preset's own
+    # stack keeps its lanes around the drawn record summary (Vnig Gallery figure).
+    canvas, _svg = _gallery_session_drawing(_with_default_stack, _on_a_two_record_canvas)
+
+    for record in canvas["records"]:
+        lanes = {slot["slotId"]: slot["radiusFactor"] for slot in record["slots"] if slot["side"] == "inside"}
+        assert lanes["gc_content"] == pytest.approx(0.75)
+        assert lanes["gc_skew"] == pytest.approx(0.55)
