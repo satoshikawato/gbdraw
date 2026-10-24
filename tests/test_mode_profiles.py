@@ -587,3 +587,20 @@ def test_fresh_cli_rejects_removed_track_flags(cli_module, legacy_args) -> None:
 def test_root_layouts_validate_eagerly(layout: object) -> None:
     with pytest.raises(ValidationError):
         layout()
+
+
+def test_web_circular_track_presets_follow_the_python_lane_owner() -> None:
+    from typing import get_args
+
+    from gbdraw.diagrams.circular.presets import (
+        CircularTrackPreset,
+        circular_feature_lane_direction_for_preset,
+    )
+    from gbdraw.mode_profiles import mode_profiles_payload
+
+    table = mode_profiles_payload()["circularTrackPresets"]  # type: ignore[index]
+    assert table["presets"] == list(get_args(CircularTrackPreset))
+    assert table["featureLaneDirection"] == {
+        preset: circular_feature_lane_direction_for_preset(preset)
+        for preset in get_args(CircularTrackPreset)
+    }

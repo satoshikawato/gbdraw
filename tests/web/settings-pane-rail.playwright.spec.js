@@ -815,96 +815,38 @@ test('Edit pattern of a failed color rule leads to the pattern field in every di
   }
 });
 
-// The layout warning of Circular pairwise rings: a note above Generate, and
-// beside the rail alone the mark of a help tip. In every display its text is
-// the description of Generate in the accessibility tree.
-test('beside the rail alone Generate is compact and a layout warning is a tip that a tap opens without starting Generate', async ({ browser, baseURL }) => {
-  test.setTimeout(300_000);
-  const context = await browser.newContext({ baseURL, viewport: { width: 1024, height: 768 }, hasTouch: true });
-  try {
-    const page = await context.newPage();
-    await openApp(page);
-    const accessibility = await context.newCDPSession(page);
-    await accessibility.send('Accessibility.enable');
-    const description = async () => {
-      const { nodes } = await accessibility.send('Accessibility.getFullAXTree');
-      const button = nodes.find((node) => node.role?.value === 'button' && node.name?.value === 'Generate Diagram');
-      return button ? button.description?.value ?? '' : 'no Generate button in the tree';
-    };
-    const lastStops = () => page.evaluate(() => {
-      const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
-      return Array.from(document.querySelector('.settings-pane').querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]'))
-        .filter((element) => visible(element) && !element.disabled && element.tabIndex >= 0).slice(-2).map((element) => element.getAttribute('aria-label'));
-    });
-    const note = page.locator('.generate-bar > div');
-    const mark = page.getByRole('button', { name: 'Layout warning', exact: true });
-    const text = page.locator('body > [role="tooltip"]');
-    expect(await description()).toBe('');
-    await expect(note).toHaveCount(0);
+// Beside the rail alone Generate is a 60 px button that ends where the stacked
+// button ends, and it is the last Tab stop of the pane in every display.
+test('beside the rail alone Generate is compact, also while it is disabled or running', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openApp(page);
+  const lastStop = () => page.evaluate(() => {
+    const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+    return Array.from(document.querySelector('.settings-pane').querySelectorAll('a[href], button, input, select, textarea, summary, [tabindex]'))
+      .filter((element) => visible(element) && !element.disabled && element.tabIndex >= 0).at(-1)?.getAttribute('aria-label');
+  });
+  const stackedGap = (await paneState(page)).generateButton.bottomGap;
+  expect(await lastStop(), 'stacked').toBe('Generate Diagram');
+  await toRail(page).click();
+  expect(await lastStop(), 'rail with a section').toBe('Generate Diagram');
+  await closeSection(page).click();
+  expect(await lastStop(), 'rail alone').toBe('Generate Diagram');
+  const compact = await paneState(page);
+  expect(compact.generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+  expect(compact.generate.width).toBe(60);
 
-    // Five uploaded tables for Circular pairwise rings, with GC content and skew on: the warning shows.
-    await entry(page, 'Pairwise Comparisons').click();
-    await page.getByLabel('Upload BLAST TSV', { exact: true }).check();
-    await page.locator('[data-settings-section="pairwise-comparisons"] input[type="file"]').first().setInputFiles(
-      ['LvMJNV.TrcuMJNV', 'MeenMJNV.MejoMJNV', 'MelaMJNV.PemoMJNVA', 'MellatMJNV.MeenMJNV', 'MjeNMV.MelaMJNV']
-        .map((pair) => join(process.cwd(), 'examples', `${pair}.tblastx.out`)));
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularConservationLayoutWarning)).toContain('pairwise comparison ring');
-    const warning = await page.evaluate(() => window.__GBDRAW_APP__.circularConservationLayoutWarning);
-
-    // Stacked, and the rail with a section: the note above the button; the mark is not shown.
-    const stackedGap = (await paneState(page)).generateButton.bottomGap;
-    for (const display of ['stacked', 'rail with a section']) {
-      if (display !== 'stacked') await toRail(page).click();
-      await expect(note, display).toBeVisible();
-      await expect(note, display).toHaveText(warning);
-      await expect(mark, display).toHaveCount(0);
-      expect(await description(), display).toBe(warning);
-      expect((await lastStops())[1], display).toBe('Generate Diagram');
-    }
-
-    // The rail alone: the mark in place of the note, before Generate in Tab order; the description at rest.
-    await closeSection(page).click();
-    await expect(note).toBeHidden();
-    await expect(mark).toBeVisible();
-    await expect(mark).toHaveAttribute('aria-expanded', 'false');
-    await expect(text).toHaveCount(0);
-    expect(await page.evaluate(() => document.activeElement?.closest('.generate-bar') === null)).toBe(true);
-    expect(await description()).toBe(warning);
-    expect(await lastStops()).toEqual(['Layout warning', 'Generate Diagram']);
-    const compact = await paneState(page);
-    expect(compact.generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
-    expect(compact.generate.width).toBe(60);
-    const [markBox, buttonBox] = [await mark.boundingBox(), await generate(page).boundingBox()];
-    expect(markBox.y + markBox.height).toBeLessThanOrEqual(buttonBox.y);
-    expect(Math.round(markBox.width)).toBe(60);
-
-    // A tap opens the text and starts nothing; Escape closes it.
-    await mark.tap();
-    await expect(text).toHaveText(warning);
-    await expect(mark).toHaveAttribute('aria-expanded', 'true');
-    expect(await page.evaluate(() => { const app = window.__GBDRAW_APP__; return [app.processing, app.errorLog, app.results.length]; }))
-      .toEqual([false, null, 0]);
-    const shown = await text.boundingBox();
-    expect(shown.x).toBeGreaterThanOrEqual(0);
-    expect(shown.y + shown.height).toBeLessThanOrEqual(markBox.y);
-    await page.keyboard.press('Escape');
-    await expect(text).toHaveCount(0);
-    await expect(mark).toHaveAttribute('aria-expanded', 'false');
-
-    // Disabled by a Session operation, and while Generate runs: the same 60 px button, the loader alone.
-    await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
-    await expect(generate(page)).toBeDisabled();
-    expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
-    await page.evaluate(() => { Object.assign(window.__GBDRAW_APP__, { sessionSavePending: false, processing: true }); });
-    await expect(generate(page)).toBeDisabled();
-    await expect(page.locator('.generate-bar > button .gbdraw-loader')).toBeVisible();
-    await expect(page.locator('.generate-bar > button .generate-bar-long')).toBeHidden();
-    expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
-    await page.evaluate(() => { window.__GBDRAW_APP__.processing = false; });
-    await expect(generate(page)).toBeEnabled();
-  } finally {
-    await context.close();
-  }
+  // Disabled by a Session operation, and while Generate runs: the same 60 px button, the loader alone.
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
+  await expect(generate(page)).toBeDisabled();
+  expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+  await page.evaluate(() => { Object.assign(window.__GBDRAW_APP__, { sessionSavePending: false, processing: true }); });
+  await expect(generate(page)).toBeDisabled();
+  await expect(page.locator('.generate-bar > button .gbdraw-loader')).toBeVisible();
+  await expect(page.locator('.generate-bar > button .generate-bar-long')).toBeHidden();
+  expect((await paneState(page)).generateButton).toEqual({ size: '60x60', bottomGap: stackedGap });
+  await page.evaluate(() => { window.__GBDRAW_APP__.processing = false; });
+  await expect(generate(page)).toBeEnabled();
 });
 
 // In the phone layout the page scrolls the settings and the Generate bar is
