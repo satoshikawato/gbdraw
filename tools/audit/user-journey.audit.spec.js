@@ -284,10 +284,14 @@ const historyDepth = (page) => page.evaluate(() => ({
 
 const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
   const { state } = await import('/gbdraw/web/js/state.js');
+  const { drawingIdOfMode } = await import('/gbdraw/web/js/services/drawing-view.js');
   const unwrap = (value) => (value && typeof value === 'object' && value.__v_isRef ? value.value : value);
   const at = (drawing, path) => path.split('.').reduce((value, key) => unwrap(value)?.[key], drawing);
-  const pick = (drawing) => Object.fromEntries(fieldPaths.map((path) => [path, JSON.parse(JSON.stringify(at(drawing, path) ?? null))]));
-  return { mode: state.mode.value, circular: pick(state.drawings.circular), linear: pick(state.drawings.linear) };
+  const pick = (mode) => {
+    const drawing = state.drawingOf(drawingIdOfMode(mode));
+    return Object.fromEntries(fieldPaths.map((path) => [path, JSON.parse(JSON.stringify(at(drawing, path) ?? null))]));
+  };
+  return { mode: state.mode.value, circular: pick('circular'), linear: pick('linear') };
 }, paths);
 
 const showMode = async (page, mode) => {

@@ -1,9 +1,33 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-10-23
+Last updated: 2026-10-24
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Progressive hepatoplasmataceae_collinear tutorial and fresh-upload Session (2026-10-24)
+
+The tutorial now starts from the Web defaults and Generates four times: the
+defaults, LOSATP collinear blocks (the only LOSAT run; its settings come before
+it), Orientation + identity, and the layout. The Gallery Session was saved from
+a fresh upload of the five pinned files (`tutorial-data/`) followed by these
+steps, then published with `tools/refresh_gallery_sessions.py`, so the Session,
+figure, captures, and a reader's run show the inferred organism name lines
+(`<i>Ca.</i> Tyloplasma litorale Fukuoka2020`, OV-1698, OV-1720). Publication
+now keeps the File card rows that Save writes (`webFiles.bindings.linearSeqs`),
+so a loaded Session holds each name as inferred, not typed, and **Reset
+Settings** keeps it (OV-1701). The steps therefore replay from the Session
+alone, with no file chosen again. The four replayed previews match the
+fresh-upload run element for element.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `hepatoplasmataceae_collinear` | `manual-04-01-default-preview.webp`, `manual-05-04-collinear-preview.webp`, `manual-06-02-identity-preview.webp`, `manual-07-03-collinear-overview.webp` | Add (the last replaces `manual-06-01-collinear-overview.webp`) | Replay through steps 4, 5, 6, 7; SVG at 1370 px in a 1900x1000 viewport; name lines visible | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-03-01-add-sequence.webp` | Add | Replay through step 3 (Session alone); the File 5 card (NZ_CP006932.gb) and **Add sequence**, clipped together | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-05-01-open-pairwise.webp`, `manual-05-02-collinear-reduction.webp`, `manual-05-03-runtime-reproducibility.webp`, `manual-06-01-orientation-identity.webp`, `manual-07-01-layout-gc-skew-ruler.webp`, `manual-07-02-layout-overview.webp`, `manual-08-01-collinear-block-popup.webp` | Recapture; renamed from `manual-03-01`, `04-01`, `03-02`, `04-02`, `05-01`, `05-02`, `07-01` (the step numbers moved) | Session alone, as before | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-02-01-upload-row-context.webp` | Recapture | Replay through step 2 (Session alone); File 1's card found by its record uid; empty name fields with the inferred name as placeholder | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-01-01-linear-mode.webp`, `post-01-01-feature-popup.webp` | Recapture | Session alone, as before | Captured at DSF 3; accepted |
+| `hepatoplasmataceae_collinear` | `manual-04-03-advanced-collinear.webp` | Delete | None: it showed Web defaults (Diagonal drift 0, Merge conflicts 1), now named in the step 7 note | Deleted |
 
 ## Progressive HmmtDNA_ATskew, tobacco-chloroplast, and Vnig_TUMSAT-TG-2018 tutorials (2026-10-23)
 

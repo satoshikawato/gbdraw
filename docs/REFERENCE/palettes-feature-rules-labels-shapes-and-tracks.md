@@ -63,11 +63,18 @@ The exact surface controls are listed in the [Web app](web-app.md),
 Circular slots use side, radius or width, gaps, z-order, and renderer
 parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
-and blank means Auto. An inside `gc_content`, `gc_skew`, or `depth` row with a
-blank Radius is placed as in the default stack of the selected preset: at the
-preset's radius for that row when it fits, otherwise packed below the row
-above it, so a custom stack that repeats the default stack draws the same
-figure. A slot with a radius is drawn at that radius, and the
+and blank means Auto. In a stack with only the preset's rows (in any order;
+depth series and comparison rings count as the preset's), an inside
+`gc_content`, `gc_skew`, or `depth` row with a blank Radius is placed as in the
+default stack of the selected preset:
+at the preset's radius for that row when it fits, otherwise packed below the
+row above it, so a custom stack that repeats the default stack draws the same
+figure. A stack that adds an inside row the preset does not have, such as an AT
+skew row or an inside annotation slot, packs its inside rows from the feature
+track toward the center. The Auto widths of such a stack follow the
+full definition the record draws alone, so a record draws these rows in the
+same place on a Multi-Record Canvas, where it shows only the record summary, or
+with a plot title. A slot with a radius is drawn at that radius, and the
 other rows on its side keep the stack order around it: rows before it are
 placed farther from the center, rows after it closer. When the inside rows do
 not fit, numeric rows with an Auto width are compressed together as in an Auto

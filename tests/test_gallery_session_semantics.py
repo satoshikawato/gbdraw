@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import base64
+import json
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from functools import cache
 import math
 from pathlib import Path
 import re
+import shlex
 from tempfile import TemporaryDirectory
 from typing import Any
 from xml.etree import ElementTree as ET
@@ -20,7 +25,12 @@ from gbdraw.api import (
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
+from tools.prepare_interactive_gallery_assets import (
+    EXAMPLES,
+    SESSION_CONFIG_FLAGS,
+    GallerySessionExample,
+    _example_command,
+)
 
 
 pytestmark = pytest.mark.gallery
@@ -460,6 +470,79 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
             assert all(line.get("text-anchor") == "start" for line in lines)
             assert all(line.get("font-size") == "20.0" for line in lines[2:])
             assert all(line.get("fill") == "#7b7c7d" for line in lines[2:])
+
+
+def _declared_values(command: str, flag: str) -> list[str]:
+    args = shlex.split(command)
+    return [args[index + 1] for index, arg in enumerate(args) if arg == flag]
+
+
+@pytest.mark.parametrize(
+    "example_id",
+    [example.id for example in EXAMPLES if example.command and not example.session_from_command],
+)
+def test_web_saved_gallery_names_are_declared_in_the_card_command(
+    example_id: str,
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+) -> None:
+    """A Web-saved Gallery Session draws the record names the Web wrote into its request;
+    the CLI draws names only from --record_label and --record_subtitle, so the card command
+    declares the same values in record order (OV-1698, OV-1702). The Session owns them: the
+    command is built from it, and the hand-written declaration repeats none of them."""
+
+    example, session = gallery_sessions[example_id]
+    if "cliInvocation" in session:
+        pytest.skip("CLI-made Session: its names come from its own recorded command")
+    presentations = [record["presentation"] for record in _request(session)["records"]]
+    command = _example_command(example, session)
+    for key, flag in (("label", "--record_label"), ("subtitle", "--record_subtitle")):
+        values = [presentation[key] for presentation in presentations]
+        assert _declared_values(command, flag) == ([] if not any(values) else values), (example_id, flag)
+        assert _declared_values(example.command, flag) == [], (example_id, flag)
+    # The settings the Web stores as configuration overrides and the CLI reads from a flag (OV-1703).
+    overrides = _request(session)["diagramOptions"].get("configOverrides") or {}
+    for key_template, flag in SESSION_CONFIG_FLAGS:
+        value = overrides.get(key_template.format(mode=_request(session)["mode"]))
+        assert _declared_values(command, flag) == ([] if value is None else [str(value)]), (example_id, flag)
+        assert _declared_values(example.command, flag) == [], (example_id, flag)
+
+
+@pytest.mark.parametrize("mode", ["linear", "circular"])
+def test_session_config_flags_set_the_configuration_key_they_are_read_from(mode: str, tmp_path: Path) -> None:
+    """Each flag that a card command takes from a Web-saved Session's configuration sets, in the CLI,
+    the same configuration key, as the CLI records it in its own Session."""
+
+    values = {flag: f"#1234{index:02d}" for index, (_, flag) in enumerate(SESSION_CONFIG_FLAGS)}
+    session_path = tmp_path / "cli.gbdraw-session.json"
+    args = [mode, "--gbk", str(Path("tests/test_inputs/NC_001416.gb").resolve()), "-o", "cli", "-f", "svg",
+            "--session_output", str(session_path)]
+    for flag, value in values.items():
+        args += [flag, value]
+    subprocess.run([sys.executable, "-m", "gbdraw.cli", *args], cwd=tmp_path, check=True, capture_output=True,
+                   env={**os.environ, "PYTHONPATH": str(Path.cwd())}, timeout=600)
+    config = json.loads(session_path.read_text(encoding="utf-8"))["renderRequest"]["diagramOptions"]["config"]
+    for key_template, flag in SESSION_CONFIG_FLAGS:
+        node: Any = config
+        for part in key_template.format(mode=mode).split("."):
+            node = node[part]
+        assert node == values[flag], (mode, flag)
+
+
+def test_hepatoplasmataceae_collinear_session_is_a_fresh_upload_with_name_lines(
+    gallery_sessions: dict[str, tuple[GallerySessionExample, dict[str, object]]],
+) -> None:
+    """The Gallery figure shows the name lines a reader's upload shows (OV-1698, TV-D20)."""
+
+    _example, session = gallery_sessions["hepatoplasmataceae_collinear"]
+    assert "cliInvocation" not in session
+    labels = [record["presentation"]["label"] for record in _request(session)["records"]]
+    assert labels == [
+        "<i>Ca.</i> Tyloplasma litorale Fukuoka2020",
+        "<i>Ca.</i> Hepatoplasma vulgare Av-JP",
+        "<i>Ca.</i> Hepatoplasma scabrum Ps-JP",
+        "<i>Ca.</i> Hepatoplasma crinochetorum Tokyo2021",
+        "<i>Ca.</i> Hepatoplasma crinochetorum Av",
+    ]
 
 
 def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(

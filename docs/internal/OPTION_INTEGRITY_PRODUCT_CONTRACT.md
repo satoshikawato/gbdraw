@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `84`
+- Contract revision: `86`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -2970,6 +2970,59 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that warn on the definition text over a track are in
     the same pull request, and the Review is `REQUIRED`.
+- Revision 85 change: the `Normative outcome` and `Compatibility` fields in
+  the header of `PD-OI-052` gain one sentence each that states scenario
+  revision `2`, already approved in the Revision 83 entry. This is a wording
+  change that makes the record's header match its scenario revision `2`
+  receipt. No outcome changes, the scenario revision stays `2`, and the
+  scenario revision `1` and `2` receipts and their SHA-256 values are
+  unchanged. It comes from two replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-24` in the Claude Code session that finished
+  the Linear scale bounds. Each reply is quoted as written.
+  - Reply 1. The session's final report said:
+    「PD-OI-052 の見出しの欄(Normative outcome の要約など)は revision 1 の文のままです。直すかどうかは Owner の判断です。」
+    The Owner replied: 「質問して。」
+  - Reply 2. The session asked whether to align the `PD-OI-052` header
+    fields with scenario revision `2` by appending the two sentences below to
+    the Normative outcome and the Compatibility fields, without changing the
+    scenario revision `1` and `2` receipts or any other field, in a
+    Contract-only pull request that the Owner merges (A), or to leave them
+    (B). The Owner selected 「A 2 つの欄に足す (Recommended)」.
+  - Sentence appended to Normative outcome, after 「。」:
+    「scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。」
+  - Sentence appended to Compatibility, after 「。」:
+    「scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。」
+  - No other field or record is amended or retired.
+  - This is a Contract-only change on the authority-only route: no runtime,
+    test, or documentation changes with it, the Review is `REQUIRED`, and the
+    Owner merges it.
+- Revision 86 change: `PD-OI-067` gains scenario revision `3` (concern
+  `web.linear.file-default-definition`; the outcome
+  `B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く`).
+  A record name inferred from a GenBank organism that starts with
+  *Candidatus* (or `Ca.`) is written `<i>Ca.</i>` followed by the name in
+  roman. It comes from three replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-24` in the Claude Code session of the tutorial
+  video campaign (`OV-1720`), given to reports and a question the session
+  relayed because the choices are the Product Decision Owner's. Each reply is
+  quoted as written.
+  - Reply 1. The session reported that an inferred *Candidatus* name such as
+    `Candidatus <i>Tyloplasma litorale</i> Fukuoka2020` sets the word
+    *Candidatus* upright and the genus and species in italics, the reverse of
+    the nomenclature rule. The Owner replied: 「直してください。」
+  - Reply 2. The Owner then wrote: 「あと、CandidatusはCa.に略して」
+  - Reply 3. The session asked the Owner to approve the scenario revision `3`
+    receipt recorded in `PD-OI-067`, shown in full. The Owner replied:
+    「承認」. It approves the text as recorded.
+  - The receipt and JSON in `PD-OI-067` reproduce the approved fields without
+    translation or additional terms. The scenario revision `1` and `2`
+    receipts and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-067` scenario revision `3`
+    `88affcc65dc746deeb51944da38dfd607ef2fffce764fe7137024484a422bca1`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that write the inferred *Candidatus* name as
+    `<i>Ca.</i>` are in the same pull request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -5175,7 +5228,7 @@ Decision date: 2026-09-27
 - Scenario revision: `2`
 - Status: `ACCEPTED`
 - Selected outcome: `A2 / CARRY-DELTAS-AND-GROW-CANVAS`
-- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate
+- Normative outcome: 同じ図の legend/title/Linear scale の delta を新 automatic 配置へ1回加算。mode/grouping、validated source/region、record identity で照合。prefix/配列順/DOM順を使わず、batchの各出力も別々に対応。非ゼロ target の消失・未知対応は候補を公開せず、旧 Result を保持して対象 Reset または設定修正を案内。zero/fresh は自動 Generate。scenario revision 2: 動かした legend/title/Linear scale が自動のキャンバスの外に出るときは、置く操作（drop、Generate と再描画、Reset、Undo/Redo）でキャンバスを広げて収める。自動のキャンバスより小さくせず、canvas padding は 1 回だけ加え、Reset Layout で自動のキャンバスに戻す。図全体のドラッグでは広げない。通常の load と保存 Result の表示では Result を変えない。
 - Discoverability/accessibility / immediate feedback: 通常は自動継承。対応不能の理由・対象・Reset/修正を keyboard/touch から到達可能に表示
 - Canonical state update: Result SVG を差分の正本とし、transaction-local snapshot を candidate に適用。UI refs は同期値。latent/global map なし
 - Undo/Redo: Generate は継承を含む1 replacement。保存 Result を復元し delta を再加算しない
@@ -5186,7 +5239,7 @@ Decision date: 2026-09-27
 - Scientific-output: 装飾位置のみ。recordTranslations/active alignment の record delta を二重加算しない
 - Cache/provenance: 既存 validated identity/digest 使用。raw search/cache key に delta を追加しない。candidate と保存Resultを一致
 - Performance: 非ゼロ対象のみ。候補の既存parse/serialize共用、batch旧SVGは必要分のみ、zero fast path維持
-- Compatibility: writer/readerを維持。照合できない保存図は明示回復
+- Compatibility: writer/readerを維持。照合できない保存図は明示回復。scenario revision 2: composition metadata に Linear scale の大きさ（lengthBar）を加える。それより前に保存した Result の scale は、次の Generate までキャンバスを広げない。
 - Decision source (scenario revision `1`): the complete Choice A outcome and nine-field receipt in
   [DECISION_01_COMPOSITION_CONTINUITY.md](https://github.com/satoshikawato/gbdraw/blob/bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08/docs/internal/issue-599-preview-layout-20260926/DECISION_01_COMPOSITION_CONTINUITY.md)
   at published planning commit `bcc4e0aa5ffcf4bdf9a12952caa8bf5de2cfee08`.
@@ -6266,18 +6319,23 @@ Decision date: 2026-10-18
 ### PD-OI-067: Per-record inferred Linear definitions
 
 - Concern key: `web.linear.file-default-definition`
-- Scenario revision: `2`
+- Scenario revision: `3`
 - Supersedes: `PD-OI-067`, scenario revision `1`
   (`B / PER-RECORD-INFERRED-DEFINITION`), only for the names area of the
   card of a File with one record; every scenario-1 term stays in force.
+  Scenario revision `3` supersedes scenario revisions `1` and `2` only for
+  how an inferred name writes a *Candidatus* organism; every other term of
+  both stays in force.
 - Status: `ACCEPTED`
 - Selected outcomes: `B / PER-RECORD-INFERRED-DEFINITION` (scenario revision
   `1`) and
   `B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`
-  (scenario revision `2`)
-- Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
+  (scenario revision `2`) and
+  `B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く`
+  (scenario revision `3`)
+- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below, read together, and the Owner
-  selection of `2026-10-12` recorded below them.
+  selection of `2026-10-12` recorded after the scenario revision `2` receipt.
 - Decision source (scenario revision `1`): the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
@@ -6295,6 +6353,13 @@ Decision date: 2026-10-18
   it (static Product Contract co-change).
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
   `93b14a1df028f81ff573dc9c1a60f312b8160e6a7416fe14d0bce8c85be67ee2`.
+- Decision source (scenario revision `3`): the Owner replies of `2026-10-24`
+  quoted in the Revision 86 entry above. The third receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change).
+- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
+  `88affcc65dc746deeb51944da38dfd607ef2fffce764fe7137024484a422bca1`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -6363,6 +6428,36 @@ Revision 41 entry above; not a receipt field):
   question 「A か B か」, whose rule the question gave as
   「カードに出す名前のブロックは常に 1 つ。File の名前があるあいだは dev と同じカード（File のブロックがカード、レコードの欄は Record options の中）で、File の名前が空ならレコードの欄をカードに出す。」
   In it `dev` is the Web app before this change.
+
+Scenario revision `3` receipt (approved by `satoshikawato` on `2026-10-24`;
+Reply 3 of the Revision 86 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 3
+Choice: B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く
+Rationale: 推定した生物名の表記を命名規約に合わせる。GenBank の organism が Candidatus（または Ca.）で始まるとき、推定名は「<i>Ca.</i> Tyloplasma litorale Fukuoka2020」のように Ca. を斜体、名前を立体で書く。
+Must preserve: scenario revision 1 と 2 のすべての項目（定義の優先順位、Reset で推定値に戻ること、Session の往復）。Candidatus 以外の生物名の推定表記（属名と種小名を斜体）。利用者が入力した Definition はそのまま描く。
+May retire: Candidatus を立体で書き、属名と種小名を斜体にする現在の推定表記。
+Accepted residual risk: すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。
+Owner: satoshikawato
+Decision date: 2026-10-24
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 3,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く",
+  "rationale": "推定した生物名の表記を命名規約に合わせる。GenBank の organism が Candidatus（または Ca.）で始まるとき、推定名は「<i>Ca.</i> Tyloplasma litorale Fukuoka2020」のように Ca. を斜体、名前を立体で書く。",
+  "mustPreserve": "scenario revision 1 と 2 のすべての項目（定義の優先順位、Reset で推定値に戻ること、Session の往復）。Candidatus 以外の生物名の推定表記（属名と種小名を斜体）。利用者が入力した Definition はそのまま描く。",
+  "mayRetire": "Candidatus を立体で書き、属名と種小名を斜体にする現在の推定表記。",
+  "acceptedResidualRisk": "すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-24"
+}
+```
 
 ### PD-OI-068: GFF3+FASTA record universe
 

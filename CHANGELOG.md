@@ -22,6 +22,18 @@ write-up of a release.
   tutorials start from the Web defaults and generate after each change, with a
   preview of every stage; each now lists every setting the Gallery figure needs
   (Multi-Record Canvas off, outline colors, `rep_origin`, label spacing).
+- Gallery: like the other Gallery tutorials, hepatoplasmataceae_collinear now
+  generates after each step (defaults, LOSATP collinear blocks, identity
+  colors, layout), and its figure and Session now come from a fresh upload, so
+  they show the organism name lines a reader's own upload shows. The card
+  command of a Gallery figure saved in the Web app now declares the record
+  names (`--record_label`, `--record_subtitle`) and the axis colour
+  (`--axis_stroke_color`) that its Session draws, so the command draws the
+  Gallery figure; the BGC0000708-BGC0000713 command lacked its gray axis
+  (OV-1703, #1334).
+- Gallery: a published Session made in the Web app keeps the File card rows
+  that Save writes, so Load restores an inferred record name as inferred and
+  **Reset Settings** no longer clears it (OV-1701, #1334).
 - Web app: work repeated on unchanged inputs was removed (redundant-work audit).
   - **Generate Diagram** encodes a newly added file in milliseconds instead of
     about 0.5 s per 12 MB, **Save Session** no longer re-reads or re-hashes the
@@ -110,6 +122,17 @@ write-up of a release.
   untitled layout and the tick labels no longer run together. In 0.14.0 the
   shorter definition let the rings jump to the preset's lanes. Figures without
   a plot title are unchanged (OV-1710, #1329).
+- Fixed: a Circular custom track stack that adds an inside row the preset does
+  not have (an AT skew row, an inside annotation slot) packs its rows from the
+  feature ring toward the center again, as in 0.13.0, and takes its Auto
+  widths from the full definition the record draws alone. In 0.14.0 it
+  moved to the preset's lanes whenever the center definition left room, so a
+  Multi-Record Canvas, where each record draws its record summary, moved the GC
+  content, skew, and tick rings and could run the tick labels together. The
+  default stack, a stack with only the preset's rows (comparison rings and
+  depth series count as the preset's), and the Gallery figures are
+  unchanged; the H-CLI-02, H-CLI-09, and H-CLI-10 recipe figures are
+  regenerated (OV-1711, #1336).
 - Added: when the center definition text of a Circular record touches what an
   inner track draws (GC content or GC skew, a feature block, or the axis
   circle), gbdraw warns through the label-fit warning and offers a smaller
@@ -156,6 +179,10 @@ write-up of a release.
   than English (#1312). The Run info text that Generate builds stays English.
 - Fixed: panning the Result from blank space and releasing over a feature or a
   pairwise match no longer opens that popup (OV-1537, #1308).
+- Web app: a record name inferred from a *Candidatus* organism now reads
+  `<i>Ca.</i> Tyloplasma litorale Fukuoka2020`: the abbreviation in italics
+  and the name upright, as nomenclature requires. It read `Candidatus
+  <i>Tyloplasma litorale</i> Fukuoka2020` (OV-1720, #1334).
 - Documentation: the Vibrio harveyi group collinear tutorial says that the
   Linear ruler keeps each record's own coordinates (#1303).
 

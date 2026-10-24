@@ -121,8 +121,10 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   const rawOrganism = String(organism || '').trim();
   const rawStrain = String(strain || '').trim();
 
-  const isCandidatus = /^Candidatus\s+/i.test(rawOrganism);
-  const nameWithoutCand = isCandidatus ? rawOrganism.replace(/^Candidatus\s+/i, '').trim() : rawOrganism;
+  // "Candidatus" or an already abbreviated "Ca.", then any whitespace.
+  const candidatusPrefix = /^(?:candidatus|ca\.)\s+/i;
+  const isCandidatus = candidatusPrefix.test(rawOrganism);
+  const nameWithoutCand = isCandidatus ? rawOrganism.replace(candidatusPrefix, '').trim() : rawOrganism;
   if (!nameWithoutCand || NON_ORGANISM_PATTERN.test(nameWithoutCand)) {
     return rawStrain;
   }
@@ -132,12 +134,15 @@ export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}
   let speciesPart = '';
   let rest = '';
 
+  // A Candidatus name is upright after an italic "Ca." (OV-1720).
+  /** @param {string} name */
+  const italic = (name) => (isCandidatus ? name : `<i>${name}</i>`);
+  const prefix = isCandidatus ? '<i>Ca.</i> ' : '';
   if (words.length >= 2) {
-    const binomial = `${words[0]} ${words[1]}`;
-    speciesPart = `${isCandidatus ? 'Candidatus ' : ''}<i>${binomial}</i>`;
+    speciesPart = `${prefix}${italic(`${words[0]} ${words[1]}`)}`;
     rest = words.slice(2).join(' ');
   } else if (words.length === 1) {
-    speciesPart = `${isCandidatus ? 'Candidatus ' : ''}<i>${words[0]}</i>`;
+    speciesPart = `${prefix}${italic(words[0])}`;
   } else {
     speciesPart = rawOrganism;
   }

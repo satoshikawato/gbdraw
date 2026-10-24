@@ -193,6 +193,14 @@ BGC_COMMAND = (
     "-l bottom -o BGC0000708-BGC0000713"
 )
 
+HEPATOPLASMATACEAE_COLLINEAR_COMMAND = (
+    "gbdraw linear --losat_threads 32 --losat losatp --losatp_mode collinear -f interactive_svg "
+    "--gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb "
+    "--align_center --separate_strands --pairwise_match_style curve --scale_style ruler "
+    "--gc --skew --palette ajisai --collinear_color_mode orientation_identity "
+    "-o hepatoplasmataceae_collinear"
+)
+
 MAJANIVIRUS_COMMAND = (
     "gbdraw linear --separate_strands --losat_threads 32 --losat losatp "
     "--losatp_mode similarity_groups --definition_font_size 18 --block_stroke_width 1 "
@@ -200,15 +208,6 @@ MAJANIVIRUS_COMMAND = (
     "-d modified_default_colors.tsv -t majani_custom_color_table.tsv --align_center "
     "--bitscore 100 --evalue 1e-3 --identity 20 --hide_length -f interactive_svg "
     "--pairwise_match_style curve --keep_definition_left_aligned --comparison_height 25 "
-    "--record_label 'Marsupenaeus japonicus endogenous nimavirus' "
-    "--record_label 'Melicertus latisulcatus majanivirus' "
-    "--record_label 'Penaeus monodon majanivirus A' "
-    "--record_label 'Penaeus semisulcatus majanivirus' "
-    "--record_label 'Penaeus monodon majanivirus B' "
-    "--record_label 'Litopenaeus vannamei majanivirus' "
-    "--record_label 'Trachysalambria curvirostris majanivirus' "
-    "--record_label 'Metapenaeus ensis majanivirus' "
-    "--record_label 'Metapenaeus joyneri majanivirus' "
     "--gbk MjeNMV.gb MelaMJNV.gb PemoMJNVA.gb PeseMJNV.gb PemoMJNVB.gb LvMJNV.gb "
     "TrcuMJNV.gb MeenMJNV.gb MejoMJNV.gb "
     "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
@@ -365,6 +364,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         display_order=60,
         command_kind="runnable",
         command_note="Download the five accession-pinned GenBank inputs from Files. The command runs LOSATP locally.",
+        command=HEPATOPLASMATACEAE_COLLINEAR_COMMAND,
         compressed_session=True,
         source_note=GZIP_SESSION_SOURCE_NOTE,
     ),
@@ -525,12 +525,62 @@ def _session_command(session: dict[str, Any]) -> str:
     return shlex.join(["gbdraw", mode, "--session", "session.gbdraw-session.json"])
 
 
+# Settings a Web-saved Session stores as configuration overrides (key, with the Session's mode) and the CLI
+# reads from a flag. The card command takes them from the Session; a test ties each pair to the CLI.
+SESSION_CONFIG_FLAGS: tuple[tuple[str, str], ...] = (("objects.axis.{mode}.stroke_color", "--axis_stroke_color"),)
+
+
+def _with_session_values(command: str, session: dict[str, Any]) -> str:
+    """Add the values a Web-saved Session owns to its card command.
+
+    The Web writes each record's name and subtitle into the Session's request; the CLI draws names
+    only from --record_label and --record_subtitle (OV-1698), so they follow the --gbk files. The
+    settings of SESSION_CONFIG_FLAGS follow them from the Session's configuration overrides (OV-1703).
+    The Session is the one owner of these values, so the declared command never repeats them by hand.
+    A CLI-made Session draws its own command's values.
+    """
+
+    if _session_cli_invocation(session):
+        return command
+    render_request = session.get("renderRequest")
+    request = render_request if isinstance(render_request, dict) else {}
+    records = request.get("records")
+    presentations = [
+        record.get("presentation") if isinstance(record, dict) and isinstance(record.get("presentation"), dict) else {}
+        for record in (records if isinstance(records, list) else [])
+    ]
+    names: list[str] = []
+    for key, flag in (("label", "--record_label"), ("subtitle", "--record_subtitle")):
+        values = [str(presentation.get(key) or "") for presentation in presentations]
+        if any(values):
+            names.extend(f"{flag} {shlex.quote(value)}" for value in values)
+    diagram_options = request.get("diagramOptions")
+    overrides = diagram_options.get("configOverrides") if isinstance(diagram_options, dict) else None
+    settings = [
+        f"{flag} {shlex.quote(str(overrides[key]))}"
+        for key, flag in ((template.format(mode=request.get("mode")), flag) for template, flag in SESSION_CONFIG_FLAGS)
+        if isinstance(overrides, dict) and overrides.get(key) is not None
+    ]
+    tokens = command.split(" ")
+    if names:
+        if "--gbk" not in tokens:
+            raise ValueError("A Web-saved Gallery command with record names must declare its --gbk files.")
+        end = tokens.index("--gbk") + 1
+        while end < len(tokens) and not tokens[end].startswith("-"):
+            end += 1
+        tokens = [*tokens[:end], *names, *tokens[end:]]
+    if settings:
+        # Before the output prefix, which every card command declares last.
+        end = tokens.index("-o") if "-o" in tokens else len(tokens)
+        tokens = [*tokens[:end], *settings, *tokens[end:]]
+    return " ".join(tokens)
+
+
 def _example_command(example: GallerySessionExample, session: dict[str, Any]) -> str:
     command = example.command or _session_command(session)
-    command = command.replace("interactive-svg", "interactive_svg")
-    if example.id == "hepatoplasmataceae_collinear":
-        command = command.replace("--losat_threads 32 --losat losatp --losatp_mode collinear --losat_threads 32", "--losat_threads 32 --losat losatp --losatp_mode collinear")
-    return command
+    if example.command and not example.session_from_command:
+        command = _with_session_values(command, session)
+    return command.replace("interactive-svg", "interactive_svg")
 
 
 def _session_feature_sources(session: dict[str, Any]) -> list[str]:
