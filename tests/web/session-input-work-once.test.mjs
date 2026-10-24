@@ -10,7 +10,7 @@ import { webcrypto } from 'node:crypto';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
-import { boundState } from './helpers/input-files.mjs';
+import { bindingDrawings, boundState } from './helpers/input-files.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 
@@ -50,7 +50,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
   const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
-  const encoded = (await serializeActiveRenderFiles('circular', sourceState, modeDrawing(state, 'circular'))).c_gb;
+  const encoded = (await serializeActiveRenderFiles('circular', sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -70,7 +70,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   assert.equal(reads, 1);
   for (const save of [1, 2]) {
     metrics.length = 0;
-    const saved = await buildSessionResources(sourceState, committed, modeDrawing(state, 'circular'));
+    const saved = await buildSessionResources(sourceState, committed, bindingDrawings(sourceState));
     assert.deepEqual({
       reads,
       hashes: count('resourceIdentityHashCount'),
@@ -85,11 +85,12 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   // A File the committed request does not name keeps the payload Generate encoded.
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
-  await serializeActiveRenderFiles('circular', boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles), modeDrawing(state, 'circular'));
+  const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
+  await serializeActiveRenderFiles('circular', otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
   const saved = await buildSessionResources({
-    inputFiles: state.inputFiles, files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }, linearSeqs: []
-  }, committed, modeDrawing(state, 'circular'));
+    inputFiles: state.inputFiles, cardFiles: { d_color: state.inputFiles.registerFile(other) }
+  }, committed, bindingDrawings({ files: { c_gb: state.inputFiles.registerFile(file) } }));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');
   assert.deepEqual(saved.resources[otherId], {

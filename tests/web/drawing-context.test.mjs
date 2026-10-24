@@ -119,15 +119,21 @@ test('no module reads a drawing key from state', () => {
 
 // The project input keys the inputs slice replaced (multi-drawing B, DESIGN
 // §2): each is gone from `state`, and no module reads it from `state`.
-const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs']);
+const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs', 'circularRecordList', 'circularRecordDiscovery']);
+// The project's `state.cardFiles` holds only the five card files (D-15-91
+// S-2 A, D-15-92); the other fields are each drawing's (`drawing.files`, a
+// drawing key that the drawing-key guard above keeps off `state`).
+const CARD_FILE_KEYS = Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']);
 test('no module reads a project input key the drawing\'s inputs replaced', () => {
   assert.deepEqual(MOVED_INPUT_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a moved input key is on state');
+  assert.deepEqual(Object.keys(state.cardFiles).sort(), CARD_FILE_KEYS, 'the project holds only the card files');
   const found = {};
   for (const path of modules(JS)) {
-    const reads = stateReads(readFileSync(path, 'utf8'), MOVED_INPUT_KEYS);
+    const source = readFileSync(path, 'utf8');
+    const reads = stateReads(source, MOVED_INPUT_KEYS);
     if (reads.length) found[relative(JS, path)] = [...new Set(reads)].sort();
   }
-  assert.deepEqual(found, {}, 'read the record rows from the drawing of the action (drawing.linearSeqs)');
+  assert.deepEqual(found, {}, 'read the inputs from the drawing of the action (drawing.files, drawing.linearSeqs, ...)');
 });
 
 test('the drawing-key scan finds each read form', () => {

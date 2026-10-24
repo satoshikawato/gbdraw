@@ -176,7 +176,7 @@ export const setupWatchers = ({
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
-    files,
+    cardFiles,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
@@ -292,7 +292,7 @@ export const setupWatchers = ({
   const auxiliaryImportFailure = ref(null);
   const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
     && errorLog.value === auxiliaryImportFailure.value.error
-    && files[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
+    && cardFiles[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
     && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
   const retryAuxiliaryImportFailure = () => {
     const busy = state.sessionOperationAvailability?.();
@@ -384,7 +384,7 @@ export const setupWatchers = ({
   /**
    * Reads `file` and applies it to the drawing shown now; a rejected file
    * gives the input its previous file back.
-   * @param {string} key The `files` member of the auxiliary table.
+   * @param {string} key The `cardFiles` member of the auxiliary table.
    * @param {InputFileRef | null} file
    * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean> | undefined}
@@ -428,7 +428,7 @@ export const setupWatchers = ({
         // is reported as the import's would be (REVIEW-1 N1).
         errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       }
-      if (files[key] === null) files[key] = file;
+      if (cardFiles[key] === null) cardFiles[key] = file;
       return false;
     });
     fileImportApplications = pending.catch(() => {});
@@ -448,16 +448,16 @@ export const setupWatchers = ({
     // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
     // the rules on the inputs current when it runs; one it gives up on comes
     // back as false with no error, and is reported here with Retry.
-    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+    const isCurrent = () => cardFiles[key] === file && !semanticFileWatchersSuppressed.value
       && !state.sessionOperationAvailability?.();
     const previousError = errorLog.value;
     // A Specific rules failure found on given inputs offers Retry while they
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
-      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
+      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: cardFiles[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          files[key] = file;
+          cardFiles[key] = file;
           return startFileImport(key, file, previousFile);
         } };
     };
@@ -472,10 +472,10 @@ export const setupWatchers = ({
             errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
               { operation: 'evaluateRules', stage: 'rule-validation' }));
           }
-          files[key] = previousFile;
+          cardFiles[key] = previousFile;
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
-        } else if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+        } else if (cardFiles[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
           errorLog.value = null;
           auxiliaryImportFailure.value = null;
         }
@@ -486,7 +486,7 @@ export const setupWatchers = ({
     }).catch((error) => {
       if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
-        files[key] = previousFile;
+        cardFiles[key] = previousFile;
         retainFailure();
       }
       return false;
@@ -498,15 +498,15 @@ export const setupWatchers = ({
   // Priority, Whitelist, Blacklist): it stores the file and imports it into
   // the shown drawing. The `file-uploader` owns its History step and waits
   // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
-  // restore sets `files` without importing. The card holds the file's ref.
+  // restore sets `cardFiles` without importing. The card holds the file's ref.
   /**
    * @param {string} key
    * @param {InputFileCandidate} file
    */
   const importAuxiliaryTable = (key, file) => {
-    const previousFile = files[key];
+    const previousFile = cardFiles[key];
     const ref = state.inputFiles.registerFile(file);
-    files[key] = ref;
+    cardFiles[key] = ref;
     return applyFileImport(key, ref, previousFile);
   };
 
@@ -528,9 +528,10 @@ export const setupWatchers = ({
       state.sessionImportPending?.value,
       mode.value,
       cInputType.value,
-      files.c_gb,
-      files.c_gff,
-      files.c_fasta
+      // The shown drawing's files: the discovery runs for the shown one.
+      state.activeDrawing().files.c_gb,
+      state.activeDrawing().files.c_gff,
+      state.activeDrawing().files.c_fasta
     ],
     async () => {
       if (typeof refreshCircularRecordOrder !== 'function') return;

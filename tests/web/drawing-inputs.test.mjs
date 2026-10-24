@@ -11,7 +11,7 @@ globalThis.window = { Vue: {
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
 const {
-  bindInputFile, bindInputFileList, bindLoadedInputs, boundInputFileIds, registerInputFiles, retainHistoryAndBoundFiles
+  bindInputFile, bindLoadedInputs, boundInputFileIds, registerInputFiles, retainHistoryAndBoundFiles
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 
@@ -26,9 +26,9 @@ test('a bound file that no History step names survives the release and keeps its
   const seqRef = store.registerFile(boundSeq);
   const releasedRef = store.registerFile(released);
   const rows = state.drawingOfMode('linear').linearSeqs;
-  const previous = { d_color: state.files.d_color, gb: rows[0].gb };
+  const previous = { d_color: state.cardFiles.d_color, gb: rows[0].gb };
   try {
-    state.files.d_color = boundRef;
+    state.cardFiles.d_color = boundRef;
     rows[0].gb = seqRef;
     retainHistoryAndBoundFiles(state, store)([]);
     assert.equal(store.fileOf(boundRef), bound, 'the bound card file stays stored');
@@ -37,7 +37,7 @@ test('a bound file that no History step names survives the release and keeps its
     assert.equal(store.fileOf(releasedRef), null, 'a file nothing names is released');
     assert.equal(store.has(releasedRef.fileId), false);
   } finally {
-    state.files.d_color = previous.d_color;
+    state.cardFiles.d_color = previous.d_color;
     rows[0].gb = previous.gb;
   }
 });
@@ -61,7 +61,7 @@ test('registering one File twice gives one frozen ref, and a ref is not a Blob',
 
 test('the binding writers store each file once and hold refs, dropping places without a file', () => {
   const store = state.inputFiles;
-  const files = { d_color: null, c_conservation_blasts: [], c_conservation_fastas: [] };
+  const files = { d_color: null };
   const colors = fileNamed('colors.tsv');
   const ref = bindInputFile(store, files, 'd_color', colors);
   assert.equal(files.d_color, ref);
@@ -70,11 +70,12 @@ test('the binding writers store each file once and hold refs, dropping places wi
   assert.equal(files.d_color, null);
   const first = fileNamed('a.tsv');
   const second = fileNamed('b.tsv');
-  const refs = bindInputFileList(store, files, 'c_conservation_blasts', [first, null, second]);
+  const { handle, view } = INPUTS_SLICE.create();
+  const refs = bindDrawingInputFileList(store, handle, 'c_conservation_blasts', [first, null, second]);
   assert.deepEqual(refs.map((entry) => entry.name), ['a.tsv', 'b.tsv']);
-  assert.equal(files.c_conservation_blasts, refs);
+  assert.deepEqual(view.files.c_conservation_blasts, refs);
   assert.deepEqual(registerInputFiles(store, [first, null]).map((entry) => entry && entry.name), ['a.tsv', null]);
-  assert.equal(bindInputFileList(store, files, 'c_conservation_fastas', first)[0], refs[0], 'one ref per File');
+  assert.equal(bindDrawingInputFileList(store, handle, 'c_conservation_fastas', first)[0], refs[0], 'one ref per File');
 });
 
 test('the refs of two views of one stored resource share its source; other files keep their own', () => {
@@ -116,11 +117,11 @@ test('a Load installs its Files as refs at install, and a rolled-back ref stays 
   assert.equal(store.fileOf(bound.linearComparisonPlan.edges[0].file), edgeFile);
   assert.equal(bound.circularRecordDiscovery.primaryFile, genomeRef, 'the discovery names the field\'s ref');
   const ids = boundInputFileIds({
-    files: bound.files,
-    drawingList: () => [{ linearSeqs: bound.linearSeqs, linearComparisonPlan: bound.linearComparisonPlan }]
+    cardFiles: {},
+    drawingList: () => [{ files: bound.files, linearSeqs: bound.linearSeqs, linearComparisonPlan: bound.linearComparisonPlan }]
   });
   assert.equal(ids.size, 5, 'every bound ref is named (genome, depth, kept, comparison, edge)');
-  assert.equal(boundInputFileIds({ files: { c_gb: fileNamed('raw.gb') }, drawingList: () => [] }).size, 0,
+  assert.equal(boundInputFileIds({ cardFiles: { d_color: fileNamed('raw.tsv') }, drawingList: () => [{ files: { c_gb: fileNamed('raw.gb') }, linearSeqs: [] }] }).size, 0,
     'a binding holds refs only: a File in a field names nothing');
 });
 
@@ -132,7 +133,7 @@ test('a file bound only by a hidden drawing survives History eviction (the union
   const recordRef = store.registerFile(record);
   const shown = { linearComparisonPlan: null, files: { c_gb: null }, linearSeqs: [] };
   const hidden = { linearComparisonPlan: null, files: { c_gb: genomeRef }, linearSeqs: [{ uid: 'r', gb: recordRef }] };
-  retainHistoryAndBoundFiles({ files: {}, linearSeqs: [], drawingList: () => [shown, hidden] }, store)([]);
+  retainHistoryAndBoundFiles({ cardFiles: {}, drawingList: () => [shown, hidden] }, store)([]);
   assert.equal(store.fileOf(genomeRef), genome, 'the hidden drawing\'s input file stays stored');
   assert.equal(store.fileOf(recordRef), record, 'the hidden drawing\'s record file stays stored');
 });
@@ -207,8 +208,8 @@ test('inputs: the row writers find a row by its uid and refuse an unknown one', 
   const first = view.linearSeqs[0].uid;
   moveLinearSeq(handle, 'second', 0);
   assert.deepEqual(view.linearSeqs.map((seq) => seq.uid), ['second', first]);
-  assert.throws(() => bindLinearSeqFile(createInputFileStore(), handle, 'none', 'gb', null), /Unknown Linear record row none/);
-  assert.throws(() => addLinearSeq(handle, createLinearSeq({ uid: 'second' })), /exists/);
+  assert.throws(() => bindLinearSeqFile(createInputFileStore(), handle, 'none', 'gb', null), /UNKNOWN_ROW/);
+  assert.throws(() => addLinearSeq(handle, createLinearSeq({ uid: 'second' })), /DUPLICATE_ROW/);
   removeLinearSeq(handle, 'second');
   removeLinearSeq(handle, first);
   assert.equal(view.linearSeqs.length, 1, 'a drawing always holds a row');
@@ -221,9 +222,9 @@ test('inputs: the row writers find a row by its uid and refuse an unknown one', 
 
 test('the retention walk names every bound file of a slice\'s drawing', () => {
   const { handle, view, store } = filledInputs();
-  const ids = boundInputFileIds({ files: {}, drawingList: () => [{ ...view, linearComparisonPlan: null }] });
+  const ids = boundInputFileIds({ cardFiles: {}, drawingList: () => [{ ...view, linearComparisonPlan: null }] });
   assert.equal(ids.size, INPUTS_SLICE.members.reduce((count, member) => count + MEMBER_FILLS[member].boundFiles, 0),
     'genome, BLAST, Depth, comparison, row GenBank, row Depth, of the joined members');
-  retainHistoryAndBoundFiles({ files: {}, drawingList: () => [view] }, store)([]);
+  retainHistoryAndBoundFiles({ cardFiles: {}, drawingList: () => [view] }, store)([]);
   assert.ok(INPUTS_SLICE.capture(handle).linearSeqs.every((seq) => !seq.gb || store.fileOf(seq.gb)));
 });

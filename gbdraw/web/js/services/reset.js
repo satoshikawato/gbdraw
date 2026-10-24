@@ -130,7 +130,7 @@ const clearSettingTableFiles = (files) => {
 
 /** @param {typeof AppState} state */
 export const resetSettings = (state) => {
-  clearSettingTableFiles(state.files);
+  clearSettingTableFiles(state.cardFiles);
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
   state.drawingList().forEach((drawing) => {

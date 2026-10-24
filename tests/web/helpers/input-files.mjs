@@ -21,3 +21,16 @@ export const boundState = (source, store = createTestInputStore()) => {
     ...(source.linearComparisonPlan ? { linearComparisonPlan: bound.linearComparisonPlan } : {})
   };
 };
+
+/**
+ * The drawings a Session 48 binds (`buildSessionResources`), from a fixture
+ * that holds one input set: its fields as the Circular drawing's, its record
+ * rows and comparison plan as the Linear drawing's.
+ */
+export const bindingDrawings = (fixture) => [
+  { mode: 'circular', files: fixture.files || {}, linearSeqs: [] },
+  {
+    mode: 'linear', files: {}, linearSeqs: fixture.linearSeqs || [],
+    linearComparisonPlan: fixture.linearComparisonPlan || null
+  }
+];

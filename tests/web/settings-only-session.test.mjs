@@ -9,6 +9,7 @@ import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/sessi
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
+import { bindingDrawings } from './helpers/input-files.mjs';
 import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
@@ -35,7 +36,7 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   // The card names its file by ref of the input file store.
   const inputFiles = createInputFileStore();
   const resources = await buildSessionResources(
-    { inputFiles, files: { qualifier_priority: inputFiles.registerFile(file) }, linearSeqs: [] }, null);
+    { inputFiles, cardFiles: { qualifier_priority: inputFiles.registerFile(file) } }, null);
   const document = { ...structuredClone(settings), ...resources };
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   const projected = projectSettingsOnlySession(document, adoptCurrentSessionResources(document.resources));
@@ -46,7 +47,7 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   assert.equal(restored.lastModified, file.lastModified);
   // Load binds the loaded file to the card by ref.
   const again = await buildSessionResources(
-    { inputFiles, files: { qualifier_priority: inputFiles.registerFile(restored) }, linearSeqs: [] }, null);
+    { inputFiles, cardFiles: { qualifier_priority: inputFiles.registerFile(restored) } }, null);
   assert.deepEqual(again, resources);
 });
 
@@ -57,7 +58,7 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
     { linearSeqs: [{ gb: {} }] }, { linearSeqs: [{ gff: {}, fasta: {} }] }
   ]) {
     assert.equal(hasBiologicalSessionInputs(inventory), true);
-    await assert.rejects(buildSessionResources({ files: inventory }, null, { linearSeqs: inventory.linearSeqs ?? [] }), /canonical render request/);
+    await assert.rejects(buildSessionResources({}, null, bindingDrawings({ files: inventory, linearSeqs: inventory.linearSeqs ?? [] })), /canonical render request/);
   }
   const inactive = structuredClone(full);
   inactive.ui = { mode: 'linear' };

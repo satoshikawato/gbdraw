@@ -6,7 +6,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
-/** @import { CircularDiscoveryState, ParsedSequenceRecord } from '../services/record-discovery.js' */
+/** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
@@ -700,7 +700,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 
 /**
  * @param {object} options
- * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
+ * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `drawing.files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
@@ -1458,7 +1458,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
@@ -1591,9 +1591,6 @@ export const createRunAnalysis = ({
     orthogroups,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
-    circularRecordList,
-    circularRecordDiscovery,
-    files,
     inputFiles,
     extractedFeatures,
     biologicalFeatures,
@@ -2268,14 +2265,13 @@ export const createRunAnalysis = ({
     ));
   };
 
-  // `state` is the state.js object, which holds the members the discovery reads.
-  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(
-    /** @type {CircularDiscoveryState<unknown>} */ (state)
-  ).current;
+  /** @param {DrawingState} drawing */
+  const circularDiscoveryTargetsCurrentInput = (drawing) => circularDiscoveryForInput(cInputType.value, drawing).current;
 
-  const circularDiscoveryMatchesCurrentInput = () => (
-    circularRecordDiscovery.status === 'ready' &&
-    circularDiscoveryTargetsCurrentInput()
+  /** @param {DrawingState} drawing */
+  const circularDiscoveryMatchesCurrentInput = (drawing) => (
+    drawing.circularRecordDiscovery.status === 'ready' &&
+    circularDiscoveryTargetsCurrentInput(drawing)
   );
 
   /** @param {DrawingState} drawing */
@@ -2290,22 +2286,22 @@ export const createRunAnalysis = ({
       rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
     } else {
       const discoveredCount = (
-        circularDiscoveryMatchesCurrentInput() &&
-        Array.isArray(circularRecordList.value)
+        circularDiscoveryMatchesCurrentInput(drawing) &&
+        Array.isArray(drawing.circularRecordList.value)
       )
-        ? circularRecordList.value.length
+        ? drawing.circularRecordList.value.length
         : 0;
       const recordCount = discoveredCount > 0
         ? discoveredCount
         : (
-            isRecordMajorDepthFileMatrix(files.c_depth)
-              ? Math.max(1, files.c_depth.length)
+            isRecordMajorDepthFileMatrix(drawing.files.c_depth)
+              ? Math.max(1, drawing.files.c_depth.length)
               : 1
           );
-      if (isRecordMajorDepthFileMatrix(files.c_depth) && files.c_depth.length !== recordCount) {
-        return `Circular Depth matrix has ${files.c_depth.length} record rows; expected ${recordCount}.`;
+      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length !== recordCount) {
+        return `Circular Depth matrix has ${drawing.files.c_depth.length} record rows; expected ${recordCount}.`;
       }
-      rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
+      rows = normalizeRecordMajorDepthFileRows(drawing.files.c_depth, recordCount);
     }
     if (customStack) {
       // An enabled Depth row must reference a logical series with a source in
@@ -2344,37 +2340,37 @@ export const createRunAnalysis = ({
     // An inactive Circular source keeps its records and Multi-Record Canvas
     // order; only a read still running for it is superseded.
     if (drawing.mode !== 'circular' || drawingLeft()) {
-      if (circularRecordDiscovery.status === 'loading') {
+      if (drawing.circularRecordDiscovery.status === 'loading') {
         circularRecordRefreshGeneration += 1;
-        circularRecordDiscovery.status = 'idle';
+        drawing.circularRecordDiscovery.status = 'idle';
       }
       return;
     }
-    if (automatic && circularDiscoveryTargetsCurrentInput()
-      && ['deferred', 'ready', 'error'].includes(circularRecordDiscovery.status)) return;
+    if (automatic && circularDiscoveryTargetsCurrentInput(drawing)
+      && ['deferred', 'ready', 'error'].includes(drawing.circularRecordDiscovery.status)) return;
     // Generate reports a final error of these exact files without reading them
     // again; Retry source inspection still reads.
-    if (reuseFinalError && circularDiscoveryTargetsCurrentInput()
-      && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
+    if (reuseFinalError && circularDiscoveryTargetsCurrentInput(drawing)
+      && drawing.circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(drawing.circularRecordDiscovery.error)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) {
       drawing.adv.multi_record_positions = [];
     }
     const inputType = cInputType.value;
-    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+    const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
+    const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
+    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput(drawing);
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
       [
-        ...(Array.isArray(circularRecordDiscovery.canonicalRecordIdentities)
-          ? circularRecordDiscovery.canonicalRecordIdentities
+        ...(Array.isArray(drawing.circularRecordDiscovery.canonicalRecordIdentities)
+          ? drawing.circularRecordDiscovery.canonicalRecordIdentities
           : []),
-        ...(Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+        ...drawing.circularRecordList.value
       ]
-        .forEach((record) => {
+        .forEach((/** @type {Readonly<Record<string, unknown>>} */ record) => {
           const recordKey = String(record?.recordKey || '').trim();
           if (!recordKey) return;
           [record?.selector, record?.record_id, record?.recordId]
@@ -2383,17 +2379,17 @@ export const createRunAnalysis = ({
             .forEach((value) => preservedRecordKeys.set(value, recordKey));
         });
     }
-    Object.assign(circularRecordDiscovery, {
+    Object.assign(drawing.circularRecordDiscovery, {
       status: hasCompleteInput ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
       pairedFile: pairedFile || null,
       canonicalRecordIdentities: preserveCanonicalRecordKeys
-        ? circularRecordDiscovery.canonicalRecordIdentities
+        ? drawing.circularRecordDiscovery.canonicalRecordIdentities
         : []
     });
-    circularRecordList.value = [];
+    drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       return;
@@ -2403,8 +2399,8 @@ export const createRunAnalysis = ({
       recordDiscoverySuppressed() ||
       drawingLeft() ||
       cInputType.value !== inputType ||
-      (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-      (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+      (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+      (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
     ) return;
 
     try {
@@ -2416,13 +2412,13 @@ export const createRunAnalysis = ({
         recordDiscoverySuppressed() ||
         drawingLeft() ||
         cInputType.value !== inputType ||
-        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
-        circularRecordDiscovery.status = 'deferred';
-        circularRecordDiscovery.primaryFile = null;
+        drawing.circularRecordDiscovery.status = 'deferred';
+        drawing.circularRecordDiscovery.primaryFile = null;
         return busy;
       }
       const nextRecords = records.map((entry) => {
@@ -2437,10 +2433,10 @@ export const createRunAnalysis = ({
           ...(recordKey ? { recordKey } : {})
         };
       });
-      circularRecordList.value = nextRecords;
-      circularRecordDiscovery.status = 'ready';
+      drawing.circularRecordList.value = nextRecords;
+      drawing.circularRecordDiscovery.status = 'ready';
       // Identity belongs to the source, including while its mode is inactive.
-      circularRecordDiscovery.canonicalRecordIdentities = nextRecords
+      drawing.circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
@@ -2453,19 +2449,19 @@ export const createRunAnalysis = ({
         recordDiscoverySuppressed() ||
         drawingLeft() ||
         cInputType.value !== inputType ||
-        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
-        circularRecordDiscovery.status = 'deferred';
-        circularRecordDiscovery.primaryFile = null;
+        drawing.circularRecordDiscovery.status = 'deferred';
+        drawing.circularRecordDiscovery.primaryFile = null;
         return busy;
       }
 
-      circularRecordList.value = [];
-      circularRecordDiscovery.status = 'error';
-      circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
+      drawing.circularRecordList.value = [];
+      drawing.circularRecordDiscovery.status = 'error';
+      drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
@@ -2489,8 +2485,8 @@ export const createRunAnalysis = ({
       Boolean(options.suppress || recordDiscoverySuppressed()),
       drawing.id,
       inputType,
-      inputType === 'gff' ? files.c_gff : files.c_gb,
-      inputType === 'gff' ? files.c_fasta : null
+      inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
+      inputType === 'gff' ? drawing.files.c_fasta : null
     ];
     const inflightRefresh = activeCircularRecordRefresh;
     if (
@@ -2747,12 +2743,12 @@ export const createRunAnalysis = ({
     }
     if (mode.value === 'circular') {
       const inputType = cInputType.value;
-      const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-      const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+      const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
+      const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
       const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
       if (
         hasCompleteInput &&
-        !circularDiscoveryMatchesCurrentInput()
+        !circularDiscoveryMatchesCurrentInput(drawing)
       ) {
         processingStatus.value = t('Reading input records...');
         try {
@@ -2770,8 +2766,8 @@ export const createRunAnalysis = ({
             ? finishCanceledManualRun()
             : { status: 'stale' };
         }
-        if (!circularDiscoveryMatchesCurrentInput()) {
-          const message = circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
+        if (!circularDiscoveryMatchesCurrentInput(drawing)) {
+          const message = drawing.circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
           const outcome = await failOperation(message, { handle: committedArtifactHandle,
             restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
           if (activeLosatAbortController === generationAbortController) {
@@ -3082,7 +3078,7 @@ export const createRunAnalysis = ({
         drawing.adv.circular_label_placement = normalizedCircularLabelPlacement;
         if (drawing.form.multi_record_canvas) {
           const effectiveRecordPositions = mergeCircularRecordPositions(
-            circularRecordList.value,
+            drawing.circularRecordList.value,
             drawing.adv.multi_record_positions
           );
           requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
@@ -3094,20 +3090,20 @@ export const createRunAnalysis = ({
         }
 
         const discoveredCircularRecordCount = (
-          circularDiscoveryMatchesCurrentInput() &&
-          Array.isArray(circularRecordList.value)
+          circularDiscoveryMatchesCurrentInput(drawing) &&
+          Array.isArray(drawing.circularRecordList.value)
         )
-          ? circularRecordList.value.length
+          ? drawing.circularRecordList.value.length
           : 0;
         const circularDepthRecordCount = discoveredCircularRecordCount > 0
           ? discoveredCircularRecordCount
           : (
-              isRecordMajorDepthFileMatrix(files.c_depth)
-                ? Math.max(1, files.c_depth.length)
+              isRecordMajorDepthFileMatrix(drawing.files.c_depth)
+                ? Math.max(1, drawing.files.c_depth.length)
                 : 1
             );
         const circularDepthRows = normalizeRecordMajorDepthFileRows(
-          files.c_depth,
+          drawing.files.c_depth,
           circularDepthRecordCount
         );
         const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
@@ -3146,8 +3142,8 @@ export const createRunAnalysis = ({
           ? 'upload'
           : 'losat';
         const circularConservationSourceFiles = sourceMode === 'upload'
-          ? normalizeFileList(files.c_conservation_blasts)
-          : normalizeFileList(files.c_conservation_fastas);
+          ? normalizeFileList(drawing.files.c_conservation_blasts)
+          : normalizeFileList(drawing.files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
         setCircularConservationEnabled(drawing, shouldDrawCircularPairwiseComparisons);
 
@@ -3179,7 +3175,7 @@ export const createRunAnalysis = ({
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             // Generate checked above that the Circular input is complete.
-            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(cInputType.value === 'gb' ? files.c_gb : files.c_fasta));
+            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(cInputType.value === 'gb' ? drawing.files.c_gb : drawing.files.c_fasta));
             const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
@@ -3491,7 +3487,7 @@ export const createRunAnalysis = ({
         const reuseResolvedProteinArtifacts = useProteinBlastp
           && !workingLegacyProteinRawCandidates?.entries?.length
           && canReuseResolvedProteinArtifacts({
-            canonicalComparisons: files.linearCanonicalComparisons,
+            canonicalComparisons: drawing.files.linearCanonicalComparisons,
             sequences: linearSeqs,
             committedSession: typeof getCommittedCanonicalSession === 'function'
               ? getCommittedCanonicalSession()
@@ -4933,8 +4929,8 @@ export const createRunAnalysis = ({
         }
         const converted = await convertRingTablesOncePerFrame(
           /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb'
-            ? [inputFiles.fileOf(files.c_gb)]
-            : [inputFiles.fileOf(files.c_gff), inputFiles.fileOf(files.c_fasta)]),
+            ? [inputFiles.fileOf(drawing.files.c_gb)]
+            : [inputFiles.fileOf(drawing.files.c_gff), inputFiles.fileOf(drawing.files.c_fasta)]),
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.
@@ -5340,7 +5336,7 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
       }
       settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
@@ -5785,7 +5781,7 @@ export const createRunAnalysis = ({
         });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
       }
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;

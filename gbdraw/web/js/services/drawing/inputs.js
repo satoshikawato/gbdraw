@@ -124,18 +124,18 @@ export const collapseEmptyLinearSeqList = (items) => {
 
 /**
  * A drawing's bindings, as the retention walk reads them: its uploaded
- * comparison files and, from the inputs slice, its record rows and (until
- * they join the slice) its input fields.
+ * comparison files and, from the inputs slice, its input fields and record
+ * rows.
  * @typedef {object} BoundDrawingInputs
  * @property {{ readonly edges?: readonly { readonly file?: unknown }[] } | null} [linearComparisonPlan]
- * @property {Readonly<Record<string, unknown>>} [files]
+ * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly Readonly<Record<string, unknown>>[]} linearSeqs
  */
 /**
- * The bindings that name stored files: the project's input fields and every
+ * The bindings that name stored files: the project's card files and every
  * drawing's bindings.
  * @typedef {object} InputBindings
- * @property {Readonly<Record<string, unknown>>} files
+ * @property {Readonly<CardInputFiles>} cardFiles
  * @property {() => readonly BoundDrawingInputs[]} drawingList
  */
 
@@ -175,16 +175,14 @@ export const collapseEmptyLinearSeqList = (items) => {
  * @property {InputFileRef | null} whitelist
  * @property {InputFileRef | null} qualifier_priority
  */
-/** The project's input fields (`state.files`) until the inputs slice is joined. @typedef {DrawingInputFiles & CardInputFiles} InputFiles */
-
-/** The `InputFiles` fields that hold one ref or null. @typedef {'c_gb' | 'c_gff' | 'c_fasta' | 'd_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} InputFileSlot */
+/** The card files' fields (`state.files`). @typedef {keyof CardInputFiles} CardFileSlot */
 
 /**
- * Bind a file to one input field: the store registers it and the field holds
- * its ref. This is the one writer of a single-file field.
+ * Bind a file to one card file field of the project: the store registers it
+ * and the field holds its ref. This is the one writer of a card file field.
  * @param {Pick<InputFileStore, 'registerFile'>} store
- * @param {InputFiles} files
- * @param {InputFileSlot} slot
+ * @param {CardInputFiles} files
+ * @param {CardFileSlot} slot
  * @param {InputFileCandidate} file
  * @returns {InputFileRef | null}
  */
@@ -194,21 +192,7 @@ export const bindInputFile = (store, files, slot, file) => {
   return ref;
 };
 
-/** The `InputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts' | 'c_conservation_fastas'} InputFileListSlot */
-
-/**
- * Bind the files of one list field; a place that holds no file is dropped.
- * @param {Pick<InputFileStore, 'registerFile'>} store
- * @param {InputFiles} files
- * @param {InputFileListSlot} slot
- * @param {InputFileCandidate | readonly InputFileCandidate[]} list
- * @returns {InputFileRef[]}
- */
-export const bindInputFileList = (store, files, slot, list) => {
-  const refs = registerInputFiles(store, list).filter((ref) => ref !== null);
-  files[slot] = refs;
-  return refs;
-};
+/** The `DrawingInputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts' | 'c_conservation_fastas'} InputFileListSlot */
 
 /**
  * The refs of a file or a list of files, each place kept (null for no file).
@@ -254,9 +238,9 @@ export const boundInputFileIds = (bindings) => {
       .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
     linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
   };
-  addInputs(bindings.files, []);
+  addInputs(bindings.cardFiles, []);
   bindings.drawingList().forEach((drawing) => {
-    addInputs(drawing.files ?? {}, drawing.linearSeqs);
+    addInputs(drawing.files, drawing.linearSeqs);
     (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));
   });
   return fileIds;
@@ -319,8 +303,8 @@ export const bindCanonicalComparisons = (store, comparisons) => comparisons.map(
  * }} LoadedComparisonPlan
  */
 /**
- * The project inputs a Load installs (its candidate, which holds the loaded
- * Files) or a rollback restores (refs).
+ * The inputs a Load installs (its candidate, which holds the loaded Files) or
+ * a rollback restores (refs): the drawing's fields and the card files.
  * @typedef {object} LoadedInputs
  * @property {Readonly<Record<string, unknown>>} files
  * @property {readonly LoadedLinearSeq[]} linearSeqs
@@ -404,7 +388,7 @@ export const bindLoadedInputs = (store, loaded) => {
 /**
  * The members a drawing holds now: each joins in the step that deletes its
  * project key (`JOINED_MEMBERS`, below).
- * @typedef {'linearSeqs'} JoinedInputsMember
+ * @typedef {'files' | 'linearSeqs' | 'circularRecordList' | 'circularRecordDiscovery'} JoinedInputsMember
  */
 /** @typedef {Readonly<Pick<InputsMembers, JoinedInputsMember>>} InputsView */
 /** What `capture` returns: the joined members' data. @typedef {Pick<InputsData, JoinedInputsMember>} JoinedInputsData */
@@ -503,7 +487,7 @@ const MEMBER_OPS = Object.freeze({
   }
 });
 /** @type {readonly JoinedInputsMember[]} */
-const JOINED_MEMBERS = Object.freeze(['linearSeqs']);
+const JOINED_MEMBERS = Object.freeze(['files', 'linearSeqs', 'circularRecordList', 'circularRecordDiscovery']);
 
 /**
  * A new slice, or one over a drawing's existing members (a test fixture).
@@ -578,11 +562,11 @@ export const bindDrawingInputFileList = (store, slice, slot, list) => {
 };
 
 /**
- * Bind the drawing's Depth matrix (each place kept) or its conservation
- * sequence sources (each place kept, null for none).
+ * Bind the drawing's Depth matrix, or its conservation comparison sequences
+ * or sequence sources, each place kept (null for none).
  * @param {Pick<InputFileStore, 'registerFile'>} store
  * @param {InputsSlice} slice
- * @param {'c_depth' | 'c_conservation_sequence_sources'} slot
+ * @param {'c_depth' | 'c_conservation_fastas' | 'c_conservation_sequence_sources'} slot
  * @param {LoadedFileValue} value
  */
 export const bindDrawingInputFileTree = (store, slice, slot, value) => {

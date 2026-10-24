@@ -348,7 +348,6 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * Session's request is rebuilt from (`buildCanonicalRequestState`).
  * @typedef {RequestTableState & {
  *   mode: ExportRef<ModeProfileName>, cInputType: ExportRef<string>, lInputType: ExportRef<string>,
- *   circularRecordList: ExportRef<CircularRequestRecordSetOptions['records']>,
  *   losatExecution?: { threadsPerJob?: unknown }
  * }} RequestState
  */
@@ -1383,9 +1382,9 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       const requestedSelector = String(
         drawing.form.circular_record_selector || savedSelector || ''
       ).trim();
-      const knownRecords = (Array.isArray(state.circularRecordList.value)
-        ? state.circularRecordList.value
-        : []).map((entry) => ({
+      /** @type {CircularRequestRecordSetOptions['records']} */
+      const circularRecordList = drawing.circularRecordList.value;
+      const knownRecords = (Array.isArray(circularRecordList) ? circularRecordList : []).map((entry) => ({
           ...entry,
           recordId: entry?.record_id ?? entry?.recordId
         }));
@@ -1438,7 +1437,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
-  const recordSet = circularDrawingRecordSet(state.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
+  const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
@@ -3065,12 +3064,12 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
   const stateRefs = {
     mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
     lInputType: session?.ui?.lInputType || projection.inputType,
-    circularRecordList,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
   };
   const drawingRefs = {
+    circularRecordList,
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
     selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
@@ -3243,8 +3242,8 @@ const projectCanonicalRenderInput = ({
   if (state.mode.value === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
-  const knownCircularRecords = Array.isArray(state.circularRecordList.value)
-    ? state.circularRecordList.value
+  const knownCircularRecords = Array.isArray(drawing.circularRecordList.value)
+    ? drawing.circularRecordList.value
     : [];
   const knownCircularEntries = buildDisambiguatedRecordEntries(
     knownCircularRecords.map((/** @type {{ record_id?: unknown, recordId?: unknown } | null} */ record) => ({

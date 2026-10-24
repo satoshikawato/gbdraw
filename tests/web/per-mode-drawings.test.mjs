@@ -62,7 +62,7 @@ const requestOf = (mode, { linearDepth = null } = {}) => {
   installShownDrawing(mode);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
-  state.circularRecordList.value = [];
+  drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
     ? { c_gb: genbank(), linearSeqs: [] }
     : {
@@ -178,7 +178,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   const linear = modeDrawing(state, 'linear');
   installShownDrawing('circular');
   state.cInputType.value = 'gb';
-  state.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
+  circular.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
   circular.form.multi_record_canvas = true;
   const circularKeys = () => buildCanonicalRenderRequest({
     state, drawing: circular, filesData: { c_gb: genbank(), linearSeqs: [] }
@@ -194,7 +194,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   circular.recordsOff.splice(0);
   linear.recordsOff.splice(0);
   linear.linearSeqs.splice(0, Infinity, ...savedCards);
-  state.circularRecordList.value = [];
+  circular.circularRecordList.value = [];
   MODES.forEach(resetDrawing);
 });
 
@@ -213,7 +213,7 @@ const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')))
 // of members the slice does not hold yet (`files` joins with the five cards,
 // B2b-1b-5c; until then the handle has no `files` to write).
 const INPUTS_NO_HANDLE_CALLS = new Set([
-  'createLinearSeq', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile', 'bindInputFileList',
+  'createLinearSeq', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile',
   'registerInputFiles', 'boundInputFileIds', 'retainHistoryAndBoundFiles', 'registerInputFileTree',
   'bindCanonicalComparisons', 'bindLoadedInputs',
   'bindDrawingInputFile', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',

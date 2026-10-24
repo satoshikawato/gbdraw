@@ -1,7 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 /** @import { CommittedRecord, CommittedRecordRequest } from '../services/feature-identity.js' */
-/** @import { CircularDiscoveryState } from '../services/record-discovery.js' */
 // Source-bound editable rotation intent. The request service owns serialization.
 import {
   bindRecordDisplayDrafts,
@@ -145,16 +144,15 @@ export const createRecordDisplayControls = ({
   let boundSources = [];
   // The record sources of one drawing, each named by that drawing's ID: a
   // Circular drawing's file card with its crop and orientation, a Linear
-  // drawing's cards. The Circular inputs are still the project's (the inputs
-  // move reads them from the drawing); a Linear drawing's cards are its own.
+  // drawing's cards: each read from that drawing's inputs.
   /** @param {DrawingState} drawing @returns {DrawingRecordSource[]} */
   const sourcesOf = (drawing) => (drawing.mode === 'circular'
     ? [{ scope: 'circular', drawingId: drawing.id, sourceUid: 'circular',
-        source: state.cInputType.value === 'gff' ? state.files.c_gff : state.files.c_gb,
-        paired: state.cInputType.value === 'gff' ? state.files.c_fasta : null,
-        records: state.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
+        source: state.cInputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
+        paired: state.cInputType.value === 'gff' ? drawing.files.c_fasta : null,
+        records: drawing.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
-        cropped: circularDrawingCropped(state.circularRecordList.value, drawing),
+        cropped: circularDrawingCropped(drawing.circularRecordList.value, drawing),
         reverse: drawing.form.circular_reverse }]
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
         source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
@@ -417,8 +415,7 @@ export const createRecordDisplayControls = ({
   });
   /** @param {DrawingRecordSource} source */
   const discoveryFor = (source) => {
-    // `state` is the state.js object, which holds the members the discovery reads.
-    if (source.scope === 'circular') return circularDiscoveryForInput(/** @type {CircularDiscoveryState<unknown>} */ (state));
+    if (source.scope === 'circular') return circularDiscoveryForInput(state.cInputType.value, state.drawingOf(source.drawingId));
     const sequence = state.drawingOf(source.drawingId).linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
     return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
   };

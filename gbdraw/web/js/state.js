@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports } from './services/file-imports.js' */
-/** @import { InputFiles } from './services/drawing/inputs.js' */
+/** @import { CardInputFiles } from './services/drawing/inputs.js' */
 /** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
@@ -130,16 +130,10 @@ const activeDrawingId = typedRef(drawingIdOfMode('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
 const cInputType = ref('gb');
 const lInputType = ref('gb');
-const files = /** @type {InputFiles} */ (reactive({
-  c_gb: null,
-  c_gff: null,
-  c_fasta: null,
-  c_depth: null,
-  c_conservation_blasts: [],
-  c_conservation_blasts_source: null,
-  c_conservation_fastas: [],
-  c_conservation_sequence_sources: [],
-  linearCanonicalComparisons: [],
+// The five card files stay the project's until the card steps move them into
+// the drawing (D-15-91 S-2 A); every other input field is a drawing's
+// (`drawing.files`, services/drawing/inputs.js).
+const cardFiles = /** @type {CardInputFiles} */ (reactive({
   d_color: null,
   t_color: null,
   blacklist: null,
@@ -229,17 +223,6 @@ const linearReorderNotice = ref('');
 /** @import { FoldedLinearSources } from './services/linear-sources.js' */
 /** @type {FoldedLinearSources} */
 const linearFoldedSources = reactive(new Set());
-const circularRecordList = ref([]); // [{ selector: '#1', record_id: 'NC_xxx' }]
-/** @import { CircularRecordDiscovery } from './services/record-discovery.js' */
-/** @type {CircularRecordDiscovery} */
-const circularRecordDiscovery = reactive({
-  status: 'idle',
-  error: '',
-  inputType: '',
-  primaryFile: null,
-  pairedFile: null,
-  canonicalRecordIdentities: []
-});
 
 // The fonts registered in this page (custom fonts D-01, services/font-store.js):
 // frozen entries with their bytes, never saved (D-02) and not in History.
@@ -948,8 +931,9 @@ export const createDrawingState = (id, drawingMode) => {
   // (services/record-draw-selection.js).
   /** @type {string[]} */
   const recordsOff = reactive(initial.recordsOff);
-  // The drawing's inputs (DESIGN §2): its Linear record rows, which its
-  // cards, Load, and History write through the slice's row writers.
+  // The drawing's inputs (DESIGN §2): its input fields, Linear record rows,
+  // and Circular record list and discovery. Its cards, Load, and History write
+  // the fields and rows through the slice's writers.
   const inputs = INPUTS_SLICE.create();
   const { linearSeqs } = inputs.view;
   const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
@@ -1212,7 +1196,7 @@ export const state = Object.freeze({
   activeDrawing,
   cInputType,
   lInputType,
-  files,
+  cardFiles,
   selectedAnnotation,
   losatCacheInfo,
   losatThreadingStatus,
@@ -1236,8 +1220,6 @@ export const state = Object.freeze({
   rightDrawerTab,
   linearReorderNotice,
   linearFoldedSources,
-  circularRecordList,
-  circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
   paletteInstantPreviewEnabled,

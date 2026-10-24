@@ -4,7 +4,10 @@
 /** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
-import { boundInputFileIds, normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs } from './drawing/inputs.js';
+import {
+  bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, boundInputFileIds,
+  normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs, setConservationBlastsSource
+} from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
 /** @import { BoundFileValue, InputBindings, LoadedFileValue } from './drawing/inputs.js' */
@@ -751,19 +754,20 @@ const refsOf = (value) => (
  * @returns {FilesData}
  */
 const buildIntentFilesData = (state, drawing) => {
-  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(state.files?.[key])]));
+  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(state.cardFiles[key])]));
   if (drawing.mode !== 'linear') {
+    const { files } = drawing;
     return {
-      c_gb: refsOf(state.files?.c_gb),
-      c_gff: refsOf(state.files?.c_gff),
-      c_fasta: refsOf(state.files?.c_fasta),
-      c_depth: refsOf(state.files?.c_depth),
-      c_conservation_blasts: refsOf(state.files?.c_conservation_blasts || []),
-      c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
+      c_gb: refsOf(files.c_gb),
+      c_gff: refsOf(files.c_gff),
+      c_fasta: refsOf(files.c_fasta),
+      c_depth: refsOf(files.c_depth),
+      c_conservation_blasts: refsOf(files.c_conservation_blasts),
+      c_conservation_blasts_source: files.c_conservation_blasts_source === 'losat-cache'
         ? 'losat-cache'
         : null,
-      c_conservation_fastas: refsOf(state.files?.c_conservation_fastas || []),
-      c_conservation_sequence_sources: refsOf(state.files?.c_conservation_sequence_sources || []),
+      c_conservation_fastas: refsOf(files.c_conservation_fastas),
+      c_conservation_sequence_sources: refsOf(files.c_conservation_sequence_sources),
       ...shared
     };
   }
@@ -804,11 +808,7 @@ const buildFilesData = (state, drawing) => {
   if (drawing.mode !== 'linear') return files;
   return {
     ...files,
-    linearCanonicalComparisons: (
-      Array.isArray(state.files?.linearCanonicalComparisons)
-        ? state.files.linearCanonicalComparisons
-        : []
-    ).map((/** @type {ResourceBackedComparison} */ comparison) => (
+    linearCanonicalComparisons: drawing.files.linearCanonicalComparisons.map((/** @type {ResourceBackedComparison} */ comparison) => (
       isResourceBackedCanonicalComparison(comparison)
         ? {
             ...mapResourceBackedCanonicalComparison(comparison),
@@ -824,7 +824,7 @@ const buildFilesData = (state, drawing) => {
  * @param {HistorySnapshotState} state
  * @returns {InputBindings}
  */
-const inputBindingsOf = (state) => ({ files: state.files, drawingList: state.drawingList });
+const inputBindingsOf = (state) => ({ cardFiles: state.cardFiles, drawingList: state.drawingList });
 
 /**
  * @param {Record<string, any>} state
@@ -833,7 +833,6 @@ const inputBindingsOf = (state) => ({ files: state.files, drawingList: state.dra
  * @param {HistorySnapshotFileStore} fileStore
  */
 const applyFilesData = (state, drawing, filesData, fileStore) => {
-  if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
   // A binding holds the step's refs, which History keeps stored (a ref whose
   // file was released binds nothing).
@@ -842,35 +841,33 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
   /** @param {unknown} value */
   const restoreOne = (value) => fileStore.registerFile(isInputFileRef(value) ? value : null);
   FILE_IMPORT_CARDS.forEach((key) => {
-    state.files[key] = restore(filesData?.[/** @type {keyof FilesData} */ (key)]);
+    state.cardFiles[key] = restoreOne(filesData?.[/** @type {keyof FilesData} */ (key)]);
   });
+  // The drawing's own fields go through its inputs slice's writers.
+  const slice = drawing.slices.inputs;
+  /** @param {unknown} value @returns {LoadedFileValue[]} */
+  const listOf = (value) => (Array.isArray(value) ? value : []);
   if (drawing.mode !== 'linear') {
-    state.files.c_gb = restore(filesData?.c_gb);
-    state.files.c_gff = restore(filesData?.c_gff);
-    state.files.c_fasta = restore(filesData?.c_fasta);
-    state.files.c_depth = restore(filesData?.c_depth);
-    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-      ? /** @type {(InputFileRef | null)[]} */ (restore(filesData.c_conservation_blasts)).filter(Boolean)
-      : [];
-    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null;
-    state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
-      ? restore(filesData.c_conservation_fastas)
-      : [];
-    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-      ? restore(filesData.c_conservation_sequence_sources)
-      : [];
+    bindDrawingInputFile(fileStore, slice, 'c_gb', restoreOne(filesData?.c_gb));
+    bindDrawingInputFile(fileStore, slice, 'c_gff', restoreOne(filesData?.c_gff));
+    bindDrawingInputFile(fileStore, slice, 'c_fasta', restoreOne(filesData?.c_fasta));
+    bindDrawingInputFileTree(fileStore, slice, 'c_depth', /** @type {LoadedFileValue} */ (filesData?.c_depth ?? null));
+    bindDrawingInputFileList(fileStore, slice, 'c_conservation_blasts',
+      listOf(filesData?.c_conservation_blasts).map(restoreOne));
+    setConservationBlastsSource(slice, filesData?.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null);
+    bindDrawingInputFileTree(fileStore, slice, 'c_conservation_fastas', listOf(filesData?.c_conservation_fastas));
+    bindDrawingInputFileTree(fileStore, slice, 'c_conservation_sequence_sources',
+      listOf(filesData?.c_conservation_sequence_sources));
     return;
   }
   if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
-    state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
+    bindDrawingCanonicalComparisons(fileStore, slice, Array.isArray(filesData?.linearCanonicalComparisons)
       ? filesData.linearCanonicalComparisons.map((comparison) => (
           isResourceBackedCanonicalComparison(comparison)
             ? mapResourceBackedCanonicalComparison(comparison, restore)
             : cloneJsonData(comparison)
-        ))
-      : [];
+        )).filter((comparison) => comparison !== null)
+      : []);
   }
 
   const rows = Array.isArray(filesData?.linearSeqs)

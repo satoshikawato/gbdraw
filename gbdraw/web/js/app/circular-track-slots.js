@@ -77,21 +77,11 @@ import {
 } from '../services/circular-track-slot-model.js';
 /** @import { CircularTrackSlot } from '../services/circular-track-slot-model.js' */
 /** @import { OverlaySlotReference, TrackSlotRow } from '../services/track-slot-validation.js' */
-/** @import { InputFileRef } from '../services/history-files.js' */
-/** @import { DepthFileSlots } from '../services/depth-track-state.js' */
-
 /**
- * What the slot helpers read of the Web state (`state.js`): the Depth and
- * Conservation inputs (refs; the helpers read names and presence only) and
- * the shown mode.
+ * What the slot helpers read of the Web state (`state.js`): the shown mode.
+ * The Depth and Conservation inputs are the drawing's (`drawing.files`).
  * @typedef {object} TrackSlotStateView
  * @property {{ value?: string }} [mode]
- * @property {{
- *   c_depth?: DepthFileSlots<InputFileRef> | DepthFileSlots<InputFileRef>[],
- *   c_conservation_blasts?: InputFileRef | InputFileRef[] | null,
- *   c_conservation_blasts_source?: unknown,
- *   c_conservation_fastas?: InputFileRef | (InputFileRef | null)[] | null
- * }} [files]
  */
 
 const UI_RENDERERS = SUPPORTED_RENDERERS.filter(
@@ -294,15 +284,15 @@ const slotHasManualGeometry = (slot) => (
   normalizeOptionalText(slot?.outer_gap_px) !== null
 );
 
-/** @param {TrackSlotStateView | null | undefined} state */
-const circularAvailableDepthTrackCountForState = (state) => {
-  const files = representativeDepthFiles(state?.files?.c_depth);
+/** @param {DrawingState} drawing */
+const circularAvailableDepthTrackCount = (drawing) => {
+  const files = representativeDepthFiles(drawing.files.c_depth);
   return files.some(Boolean) ? files.length : 0;
 };
 
-/** @param {TrackSlotStateView | null | undefined} state */
-const circularSourcedDepthTrackIndexesForState = (state) => (
-  representativeDepthFiles(state?.files?.c_depth)
+/** @param {DrawingState} drawing */
+const circularSourcedDepthTrackIndexes = (drawing) => (
+  representativeDepthFiles(drawing.files.c_depth)
     .flatMap((file, trackIndex) => (file ? [trackIndex] : []))
 );
 
@@ -517,26 +507,26 @@ export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC'
   })
 );
 
-/** @param {TrackSlotStateView | null | undefined} state @param {DrawingState} drawing */
-const conservationSourceFilesForState = (state, drawing) => {
-  const blasts = normalizeFileList(state?.files?.c_conservation_blasts);
+/** @param {DrawingState} drawing */
+const conservationSourceFiles = (drawing) => {
+  const blasts = normalizeFileList(drawing.files.c_conservation_blasts);
   if (
     String(drawing?.circularConservation?.source || '').trim().toLowerCase() === 'upload' ||
     (
-      state?.files?.c_conservation_blasts_source === 'losat-cache' &&
+      drawing.files.c_conservation_blasts_source === 'losat-cache' &&
       blasts.length > 0
     )
   ) {
     return blasts;
   }
-  return normalizeFileList(state?.files?.c_conservation_fastas);
+  return normalizeFileList(drawing.files.c_conservation_fastas);
 };
 
-/** @param {TrackSlotStateView | null | undefined} state @param {DrawingState} drawing */
-const conservationEntriesForState = (state, drawing) => {
+/** @param {DrawingState} drawing */
+const conservationEntries = (drawing) => {
   if (drawing?.circularConservation?.enabled !== true) return [];
   return orderedConservationSources(
-    conservationSourceFilesForState(state, drawing),
+    conservationSourceFiles(drawing),
     drawing.circularConservation
   );
 };
@@ -558,7 +548,7 @@ export const estimateCircularConservationLayoutWarning = (state, drawing, record
   if (currentMode && currentMode !== 'circular') return '';
   if (drawing?.circularConservation?.enabled !== true) return '';
 
-  const entries = conservationEntriesForState(state, drawing);
+  const entries = conservationEntries(drawing);
   if (entries.length <= 0) return '';
 
   const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
@@ -790,10 +780,10 @@ export const createCircularTrackSlotEditor = ({
     slots: drawing.adv.circular_track_slots,
     axisIndex: drawing.adv.circular_track_slots_axis_index,
     trackType: drawing.form.track_type,
-    depthTrackCount: circularAvailableDepthTrackCountForState(state),
-    depthSourcedTrackIndexes: circularSourcedDepthTrackIndexesForState(state),
+    depthTrackCount: circularAvailableDepthTrackCount(drawing),
+    depthSourcedTrackIndexes: circularSourcedDepthTrackIndexes(drawing),
     annotationSetIds: annotationSetIds(drawing),
-    conservationSeries: conservationEntriesForState(state, drawing)
+    conservationSeries: conservationEntries(drawing)
   });
 
   /** @param {CircularTrackSlot | null | undefined} slot @param {unknown} [index] */
@@ -894,7 +884,7 @@ export const createCircularTrackSlotEditor = ({
     return trackAddBlockReason(normalizedRenderer, {
       supported: UI_RENDERERS.includes(normalizedRenderer),
       annotationSetCount: annotationSetIds(drawing).length,
-      depthSeriesCount: circularAvailableDepthTrackCountForState(state)
+      depthSeriesCount: circularAvailableDepthTrackCount(drawing)
     });
   };
 
@@ -916,7 +906,7 @@ export const createCircularTrackSlotEditor = ({
     if (!slot || isManagedConservationSlot(slot) || state.sessionOperationAvailability?.()) return false;
     if (slot.enabled === false) return true;
     if (slot.renderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (slot.renderer === 'depth') return circularAvailableDepthTrackCountForState(state) > 0;
+    if (slot.renderer === 'depth') return circularAvailableDepthTrackCount(drawing) > 0;
     return true;
   };
 
@@ -1116,12 +1106,12 @@ export const createCircularTrackSlotEditor = ({
       reconcileManagedDepthSlots(/** @type {any} */ ({
         slots,
         previousSourced,
-        sourced: circularSourcedDepthTrackIndexesForState(state),
+        sourced: circularSourcedDepthTrackIndexes(drawing),
         managedPredicate: isDefaultManagedDepthSlot
       }))
     );
     if (additions.length === 0 && nextSlots.length === slots.length) return;
-    const seriesCount = circularAvailableDepthTrackCountForState(state);
+    const seriesCount = circularAvailableDepthTrackCount(drawing);
     /** @type {{ id?: unknown }[]} */
     const takenSlots = [...nextSlots];
     // The shortcut copies of the new rows are rows (the service types them as Record<string, unknown>).
@@ -1152,15 +1142,15 @@ export const createCircularTrackSlotEditor = ({
   // source; the other mode's drawing is not touched (OV-82, OV-101).
   /** @param {DrawingState} drawing @param {() => unknown} mutate */
   const changeCircularDepthSources = (drawing, mutate) => {
-    const previousSourced = circularSourcedDepthTrackIndexesForState(state);
+    const previousSourced = circularSourcedDepthTrackIndexes(drawing);
     mutate();
     reconcileCircularDepthSlots(drawing, previousSourced);
-    if (previousSourced.length > 0 && circularSourcedDepthTrackIndexesForState(state).length === 0) drawing.form.show_depth = false;
+    if (previousSourced.length > 0 && circularSourcedDepthTrackIndexes(drawing).length === 0) drawing.form.show_depth = false;
   };
 
   /** @param {DrawingState} drawing */
   const syncConservationSlots = (drawing) => {
-    const entries = conservationEntriesForState(state, drawing);
+    const entries = conservationEntries(drawing);
     /** @type {CircularTrackSlot[]} */
     const slots = Array.isArray(drawing.adv.circular_track_slots)
       ? drawing.adv.circular_track_slots
@@ -1213,7 +1203,7 @@ export const createCircularTrackSlotEditor = ({
   const resetSlotsToPreset = (drawing, preset) => {
     const normalizedPreset = normalizeCircularTrackPreset(preset);
     // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
-    const depthTrackCount = circularAvailableDepthTrackCountForState(state);
+    const depthTrackCount = circularAvailableDepthTrackCount(drawing);
     const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: drawing.adv.nt,
       showDepth: depthTrackCount > 0,
@@ -1272,7 +1262,7 @@ export const createCircularTrackSlotEditor = ({
     if (slot.renderer === 'annotations') {
       slot.params.set_id = String(drawing.annotationSets?.[0]?.id || '').trim();
     } else if (slot.renderer === 'depth') {
-      const available = circularAvailableDepthTrackCountForState(state);
+      const available = circularAvailableDepthTrackCount(drawing);
       const claimed = new Set(
         drawing.adv.circular_track_slots
           .filter((/** @type {CircularTrackSlot} */ candidate) => candidate?.enabled !== false && candidate?.renderer === 'depth')

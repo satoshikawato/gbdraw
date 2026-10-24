@@ -332,7 +332,9 @@ const plain = (value) => {
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-const captures = (mode) => JSON.stringify(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
+// The slices a Session 48 round trip keeps (`ROUND_TRIP_SLICES`, below): a
+// Load binds each input file again, under a new ref.
+const captures = (mode) => JSON.stringify(ROUND_TRIP_SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {

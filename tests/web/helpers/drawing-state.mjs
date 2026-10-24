@@ -85,8 +85,7 @@ export const ARTIFACT_KEYS = Object.freeze([
 
 // Inputs and caches that every drawing shares.
 export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'files', 'cInputType', 'lInputType', 'circularRecordList',
-  'circularRecordDiscovery', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
+  'sessionTitle', 'cardFiles', 'cInputType', 'lInputType', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
