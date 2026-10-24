@@ -72,11 +72,13 @@ const {
 const fixture = (path) => join(process.cwd(), path);
 const snapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
+  const circular = state.drawingList().find((drawing) => drawing.mode === 'circular');
+  const fileName = (ref) => (ref ? state.inputFiles.fileOf(ref).name : null);
   return {
-    status: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status,
+    status: circular.circularRecordDiscovery.status,
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
-    rows: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordList.value.map(row => [row.selector, row.record_id]),
-    primary: state.drawingList().find((drawing) => drawing.mode === 'circular').state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb?.name || state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gff?.name || null,
+    rows: circular.circularRecordList.value.map(row => [row.selector, row.record_id]),
+    primary: fileName(circular.files.c_gb) || fileName(circular.files.c_gff) || null,
     result: state.results.value[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
@@ -194,12 +196,10 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await openApp(page);
   const delay = async () => {
     await page.evaluate(async text => {
-      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
-      const { state } = await import('./js/state.js');
       const source = new File([text], 'slow.gb');
       const pending = new Promise(resolve => { window.__releaseSlow = () => resolve(new TextEncoder().encode(text).buffer); });
       source.arrayBuffer = () => pending;
-      state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb = bound(source);
+      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
@@ -210,13 +210,17 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await page.evaluate(() => window.__releaseSlow());
   expect((await snapshot(page)).rows).toEqual([['#1', 'new']]);
   await delay();
-  await page.evaluate(() => { window.__GBDRAW_APP__.files.c_gb = null; window.__releaseSlow(); });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setCircularSourceFile('c_gb', null); window.__releaseSlow(); });
   await waitStatus(page, 'idle');
   expect((await snapshot(page)).rows).toEqual([]);
   await delay();
+  // Each drawing owns its discovery and a drawing switch runs none: the
+  // Circular source is still current while Linear is shown, so its reply
+  // settles the Circular drawing and is shown on return.
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await page.evaluate(() => window.__releaseSlow());
-  await waitStatus(page, 'idle');
+  await waitStatus(page, 'ready');
+  expect((await snapshot(page)).rows).toEqual([['#1', 'same']]);
   await page.getByRole('button', { name: 'Circular', exact: true }).click();
   await waitStatus(page, 'ready');
   await delay();
@@ -243,8 +247,6 @@ test('existing helper stays loading until settlement and rejects superseded sour
   await openApp(page);
   const helperSource = async () => {
     await page.evaluate(async text => {
-      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
-      const { state } = await import('./js/state.js');
       const source = new File([text], 'helper.gb');
       const read = source.arrayBuffer.bind(source);
       let first = true;
@@ -253,7 +255,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
         return read();
       };
       window.__holdHelper = true;
-      state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb = bound(source);
+      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.locator('[data-circular-inspect]')).toHaveAttribute('aria-disabled', 'true');

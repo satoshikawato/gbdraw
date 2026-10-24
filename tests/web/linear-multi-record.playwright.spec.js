@@ -3742,9 +3742,8 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
     };
   })).toEqual({ circular: true, linear: true });
   await page.evaluate(async (content) => {
-    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = bound(new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 }));
+    app.setCircularSourceFile('c_gb', new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
   }, makeComparisonGenbank('CircularA') + makeComparisonGenbank('CircularB'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);

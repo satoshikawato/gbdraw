@@ -260,8 +260,9 @@ test('25,000-feature Python preparation keeps the event loop responsive and reus
     const { ruleMatchesFeature } = await import('/gbdraw/web/js/services/rule-matchers.js');
     const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const features = Array.from({ length: 25000 }, (_, i) => ({ type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [i % 2 ? 'other' : 'β-lactamase'] } }));
-    const drawing = { manualSpecificRules: [] };
-    const state = { extractedFeatures: { value: features }, activeDrawing: () => drawing };
+    // The app's drawing store and card files, with the 25,000-feature catalog.
+    const { state: appState } = await import('/gbdraw/web/js/state.js');
+    const state = Object.create(appState, { extractedFeatures: { value: { value: features } } });
     let calls = 0;
     const preparation = createRulePreparation({ state, evaluate: async payload => {
       calls++;
