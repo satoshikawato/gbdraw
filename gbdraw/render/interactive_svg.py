@@ -19,6 +19,7 @@ from gbdraw.core.numeric import (
     parse_ascii_nonnegative_integer,
 )
 from gbdraw.exceptions import GbdrawError
+from gbdraw.features.ids import SourceFeatureHash, parse_source_feature_hash
 
 SVG_NS = "http://www.w3.org/2000/svg"
 XLINK_NS = "http://www.w3.org/1999/xlink"
@@ -227,7 +228,7 @@ def _feature_rendered_id_status(
 
 def _feature_stable_id(feature: Mapping[str, object]) -> str:
     stable_id, valid = _feature_stable_id_status(feature)
-    return stable_id if valid else ""
+    return (stable_id or "") if valid else ""
 
 
 def _consistent_text_alias(
@@ -253,6 +254,19 @@ def _consistent_text_alias(
 
 
 def _feature_stable_id_status(
+    feature: Mapping[str, object],
+) -> tuple[SourceFeatureHash | None, bool]:
+    """The feature's stable ID (source frame) and whether its aliases agree.
+
+    This is the typed parse boundary of the strict validator: the ID is
+    ``None`` when the feature names none.
+    """
+
+    stable_id, valid = _stable_id_text_status(feature)
+    return parse_source_feature_hash(stable_id), valid
+
+
+def _stable_id_text_status(
     feature: Mapping[str, object],
 ) -> tuple[str, bool]:
     stable_feature_id = feature.get("stable_feature_id")
@@ -1004,9 +1018,10 @@ def _resolve_rendered_features(
     seen: set[str] = set()
     for feature in features:
         record_index, record_index_valid = _feature_record_index_status(feature)
-        stable_feature_id, stable_feature_id_valid = _feature_stable_id_status(
+        parsed_stable_id, stable_feature_id_valid = _feature_stable_id_status(
             feature
         )
+        stable_feature_id = parsed_stable_id or ""
         rendered_feature_id, rendered_feature_id_valid = (
             _feature_rendered_id_status(feature)
         )

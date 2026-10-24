@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional, Union, List, Dict
 
 from gbdraw.svg.elements import Group, Path
 
+from ....features.ids import SourceFeatureHash
 from ....features.objects import FeatureObject
 from ....layout.common import calculate_cds_ratio
 from ....layout.circular import CircularFeatureLane, calculate_feature_position_factors_circular
@@ -59,7 +60,7 @@ class FeatureDrawer:
         self.feature_layout = feature_layout
 
     @staticmethod
-    def get_feature_data_id(feature_object: FeatureObject) -> Optional[str]:
+    def get_feature_data_id(feature_object: FeatureObject) -> Optional[SourceFeatureHash]:
         return feature_object.feature_hash
 
     def draw_path(
