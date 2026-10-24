@@ -206,7 +206,7 @@ test('Generate keeps the numeric draft: no Generate-path draft assignments are a
   // Generate-path draft assignments in run-analysis.js may not exceed the
   // baseline (69 on dev before X-02). Lowering it is optional; raising it is
   // an authority-only change.
-  const BASELINE = 44;
+  const BASELINE = 42;
   const source = readFileSync(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   const assignments = source.split('\n').filter((line) => (
     /^\s*(drawing\.)?(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
