@@ -347,7 +347,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * What the request reads of `state` (state.js), or of the state a Gallery
  * Session's request is rebuilt from (`buildCanonicalRequestState`).
  * @typedef {RequestTableState & {
- *   mode: ExportRef<ModeProfileName>, cInputType: ExportRef<string>, lInputType: ExportRef<string>,
+ *   mode: ExportRef<ModeProfileName>,
  *   losatExecution?: { threadsPerJob?: unknown }
  * }} RequestState
  */
@@ -1323,7 +1323,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     );
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
-      const source = linearRecordSource(resources, state.lInputType.value, seq, index);
+      const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
       const region = linearRegionPayload(seq);
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
@@ -1426,7 +1426,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     };
   }
   /** @type {CanonicalRecord['source']} */
-  const source = state.cInputType.value === 'gff'
+  const source = drawing.inputType.value === 'gff'
     ? {
         kind: 'gffFasta',
         gffResourceId: resources.addFile('record-1-gff3', 'gff3', filesData.c_gff),
@@ -3062,13 +3062,14 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
     conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
-    mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
-    lInputType: session?.ui?.lInputType || projection.inputType,
+    mode: projection.mode,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
   };
   const drawingRefs = {
+    // The drawing's input type: its mode's Session 48 field, else the request's.
+    inputType: (projection.mode === 'linear' ? session?.ui?.lInputType : session?.ui?.cInputType) || projection.inputType,
     circularRecordList,
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
     selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
@@ -3444,7 +3445,7 @@ const projectCanonicalRenderInput = ({
   if (Object.keys(resources.resourceOriginalNames).length > 0) {
     webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
   }
-  if (state.mode.value === 'circular' && state.cInputType.value === 'gb') {
+  if (state.mode.value === 'circular' && drawing.inputType.value === 'gb') {
     const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }

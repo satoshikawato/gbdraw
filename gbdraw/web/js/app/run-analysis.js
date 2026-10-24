@@ -1496,7 +1496,7 @@ export const executeCanonicalRenderCandidate = async ({
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
  *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
- * @property {((drawing: DrawingState, state: any) => void) | null} [assertDrawingInputs]
+ * @property {((drawing: DrawingState) => void) | null} [assertDrawingInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
@@ -1579,8 +1579,6 @@ export const createRunAnalysis = ({
     appliedPaletteName,
     appliedPaletteColors,
     mode,
-    cInputType,
-    lInputType,
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
@@ -1908,7 +1906,7 @@ export const createRunAnalysis = ({
     if (!sourceInputFailure || sourceInputFailure.mode !== drawing.mode
       || errorLog.value !== sourceInputFailure.error) return;
     try {
-      assertDrawingInputs?.(drawing, state);
+      assertDrawingInputs?.(drawing);
     } catch (_) {
       return;
     }
@@ -2266,7 +2264,7 @@ export const createRunAnalysis = ({
   };
 
   /** @param {DrawingState} drawing */
-  const circularDiscoveryTargetsCurrentInput = (drawing) => circularDiscoveryForInput(cInputType.value, drawing).current;
+  const circularDiscoveryTargetsCurrentInput = (drawing) => circularDiscoveryForInput(drawing).current;
 
   /** @param {DrawingState} drawing */
   const circularDiscoveryMatchesCurrentInput = (drawing) => (
@@ -2357,7 +2355,7 @@ export const createRunAnalysis = ({
     if (!Array.isArray(drawing.adv.multi_record_positions)) {
       drawing.adv.multi_record_positions = [];
     }
-    const inputType = cInputType.value;
+    const inputType = drawing.inputType.value;
     const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
     const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
@@ -2398,7 +2396,7 @@ export const createRunAnalysis = ({
       refreshGeneration !== circularRecordRefreshGeneration ||
       recordDiscoverySuppressed() ||
       drawingLeft() ||
-      cInputType.value !== inputType ||
+      drawing.inputType.value !== inputType ||
       (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
       (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
     ) return;
@@ -2411,7 +2409,7 @@ export const createRunAnalysis = ({
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
         drawingLeft() ||
-        cInputType.value !== inputType ||
+        drawing.inputType.value !== inputType ||
         (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
@@ -2448,7 +2446,7 @@ export const createRunAnalysis = ({
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
         drawingLeft() ||
-        cInputType.value !== inputType ||
+        drawing.inputType.value !== inputType ||
         (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
@@ -2480,7 +2478,7 @@ export const createRunAnalysis = ({
     options = options || {};
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const inputType = cInputType.value;
+    const inputType = drawing.inputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
       drawing.id,
@@ -2742,7 +2740,7 @@ export const createRunAnalysis = ({
       linearRecordCatalog = prepared?.catalog || null;
     }
     if (mode.value === 'circular') {
-      const inputType = cInputType.value;
+      const inputType = drawing.inputType.value;
       const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
       const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
       const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
@@ -3175,8 +3173,8 @@ export const createRunAnalysis = ({
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
             // Generate checked above that the Circular input is complete.
-            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(cInputType.value === 'gb' ? drawing.files.c_gb : drawing.files.c_fasta));
-            const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
+            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb' ? drawing.files.c_gb : drawing.files.c_fasta));
+            const subjectFmt = drawing.inputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
                 const fasta = await readAllLosatFasta(subjectFile, subjectFmt);
@@ -3687,7 +3685,7 @@ export const createRunAnalysis = ({
               gb: inputFiles.fileOf(seq.gb),
               gff: inputFiles.fileOf(seq.gff),
               fasta: inputFiles.fileOf(seq.fasta)
-            })), lInputType.value);
+            })), drawing.inputType.value);
           }
           return nextResources;
         };
@@ -3716,12 +3714,12 @@ export const createRunAnalysis = ({
           const held = fastaCache.get(idx);
           if (held) return held.entry;
           const startedAt = getNow();
-          const fmt = lInputType.value === 'gb'
+          const fmt = drawing.inputType.value === 'gb'
             ? 'genbank'
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
-          const recordSelector = !useProteinBlastp && lInputType.value === 'gff'
+          const recordSelector = !useProteinBlastp && drawing.inputType.value === 'gff'
             ? await gffFastaReaderSelector({
                 gffFile: inputFiles.fileOf(losatSeqs[idx]?.gff), fastaFile: inputFiles.fileOf(losatSeqs[idx]?.fasta),
                 selector: recordSelectors[idx] ?? ''
@@ -3730,10 +3728,10 @@ export const createRunAnalysis = ({
           const reverseFlag = /** @type {string} */ ('0');
           // The bytes of the card's files (the card names them by ref); a
           // searched card holds its source file (Generate checked each card).
-          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(lInputType.value === 'gb'
+          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb'
             ? losatSeqs[idx]?.gb
             : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta)));
-          const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
+          const pairedFastaFile = drawing.inputType.value === 'gff' && useProteinBlastp
             ? inputFiles.fileOf(losatSeqs[idx]?.fasta)
             : null;
           const recordInstanceKey = useProteinBlastp
@@ -3744,7 +3742,7 @@ export const createRunAnalysis = ({
           // extraction, or the LOSAT FASTA of this record and region.
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
-                inputFormat: lInputType.value,
+                inputFormat: drawing.inputType.value,
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
@@ -4928,7 +4926,7 @@ export const createRunAnalysis = ({
           throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
         }
         const converted = await convertRingTablesOncePerFrame(
-          /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb'
+          /** @type {[FileLike] | [FileLike, FileLike]} */ (drawing.inputType.value === 'gb'
             ? [inputFiles.fileOf(drawing.files.c_gb)]
             : [inputFiles.fileOf(drawing.files.c_gff), inputFiles.fileOf(drawing.files.c_fasta)]),
           {
@@ -5446,7 +5444,7 @@ export const createRunAnalysis = ({
       // UI-07: the active mode's input check runs before anything here starts
       // the diagram Worker, so a missing input is named at once.
       try {
-        assertDrawingInputs?.(drawing, state);
+        assertDrawingInputs?.(drawing);
       } catch (cause) {
         outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });

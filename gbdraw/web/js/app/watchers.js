@@ -161,8 +161,6 @@ export const setupWatchers = ({
     svgContent,
     selectedResultIndex,
     mode,
-    cInputType,
-    lInputType,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
@@ -527,8 +525,9 @@ export const setupWatchers = ({
       state.sessionSavePending?.value,
       state.sessionImportPending?.value,
       mode.value,
-      cInputType.value,
-      // The shown drawing's files: the discovery runs for the shown one.
+      // The shown drawing's input type and files: the discovery runs for the
+      // shown one.
+      state.activeDrawing().inputType.value,
       state.activeDrawing().files.c_gb,
       state.activeDrawing().files.c_gff,
       state.activeDrawing().files.c_fasta
@@ -549,12 +548,15 @@ export const setupWatchers = ({
       state.sessionSavePending?.value,
       state.sessionImportPending?.value,
       mode.value,
-      lInputType.value,
-      // Every drawing's cards: the discovery runs for the shown one.
-      ...state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs).flatMap((/** @type {LinearSeq} */ seq) => [
-        seq.uid,
-        lInputType.value === 'gff' ? seq.gff : seq.gb,
-        lInputType.value === 'gff' ? seq.fasta : null
+      // Every drawing's input type and cards: the discovery runs for the shown
+      // one.
+      ...state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => [
+        drawing.inputType.value,
+        ...drawing.linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
+          seq.uid,
+          drawing.inputType.value === 'gff' ? seq.gff : seq.gb,
+          drawing.inputType.value === 'gff' ? seq.fasta : null
+        ])
       ])
     ],
     async () => {

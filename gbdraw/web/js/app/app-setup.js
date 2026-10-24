@@ -485,8 +485,6 @@ export const createAppSetup = () => {
     canvasPan,
     canvasContainerRef,
     mode,
-    cInputType,
-    lInputType,
     selectedAnnotation,
     losatCacheInfo,
     losatThreadingStatus,
@@ -856,7 +854,7 @@ export const createAppSetup = () => {
   const canRunLinearLosat = computed(() => {
     const drawing = shownDrawingOfMode('linear');
     return drawing !== null && drawing.drawnLinearSeqs.value.filter((sequence) => (
-      lInputType.value === 'gff'
+      drawing.inputType.value === 'gff'
         ? sequence.gff && sequence.fasta
         : sequence.gb
     )).length >= 2;
@@ -888,14 +886,19 @@ export const createAppSetup = () => {
    * @param {LinearSourceGroup} source
    */
   const linearCardFileLine = (source) => {
-    const fields = linearCardFileFields(lInputType.value);
+    const drawing = shownDrawingOfMode('linear');
+    if (drawing === null) return t('No file');
+    const fields = linearCardFileFields(drawing.inputType.value);
     if (!fields.some((field) => source.sequence[field])) return t('No file');
     return fields.map((field) => (
       source.sequence[field] ? chosenFileName(source.sequence[field]) : t('no {file}', { file: LINEAR_FILE_SLOT_NAMES[field] })
     )).join(' + ');
   };
   /** @param {LinearSourceGroup} source */
-  const linearCardHoldsInput = (source) => linearCardInputComplete(source, lInputType.value);
+  const linearCardHoldsInput = (source) => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing !== null && linearCardInputComplete(source, drawing.inputType.value);
+  };
   // A File card folds to its header line. The disclosure reports every change
   // of its own state: the user's press, and a path that opened the card to
   // show a setting inside it.
@@ -1459,7 +1462,7 @@ export const createAppSetup = () => {
     // loaded Session keeps its own.
     const fromUpload = !isRollbackOrSessionLoad && pendingLinearUploads.delete(uid);
     const expanded = expandDiscoveredLinearRecords(drawing, {
-      uid, records, inferDefinitions: fromUpload && lInputType.value === 'gb'
+      uid, records, inferDefinitions: fromUpload && drawing.inputType.value === 'gb'
     });
     if (fromUpload) requestRecordListAfterUpload('linear', uid, records.length);
     // After the expansion, which gives records 2..n of the file new keys: an
@@ -1509,34 +1512,36 @@ export const createAppSetup = () => {
     recordReader: ({ inputType, primaryFile, pairedFile }) => readInputRecords(inputType, primaryFile, pairedFile)
   });
   /** @param {DrawingState} drawing */
-  const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(cInputType.value, drawing);
+  const getCircularRecordDiscoveryState = (drawing) => circularDiscoveryForInput(drawing);
   /** @param {DrawingState} drawing */
   const circularAnnotationSourceKey = (drawing) => annotationSourceKey({
     scope: 'circular',
-    inputType: cInputType.value,
-    primaryFile: cInputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
-    pairedFile: cInputType.value === 'gff' ? drawing.files.c_fasta : null
+    inputType: drawing.inputType.value,
+    primaryFile: drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
+    pairedFile: drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null
   });
   /**
    * A Linear record card as the annotation record catalog reads it.
+   * @param {DrawingState} drawing the drawing that holds the card
    * @param {LinearSeq} seq
    * @param {boolean} drawn
    * @returns {AnnotationCatalogSource}
    */
-  const linearAnnotationSource = (seq, drawn) => {
-    const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
-    const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
+  const linearAnnotationSource = (drawing, seq, drawn) => {
+    const inputType = drawing.inputType.value;
+    const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
+    const pairedFile = inputType === 'gff' ? seq.fasta : null;
     return {
       sourceKey: annotationSourceKey({
         scope: 'linear',
         uid: seq.uid,
-        inputType: lInputType.value,
+        inputType,
         primaryFile,
         pairedFile
       }),
       selector: seq.region_record_id,
       drawn,
-      hasInput: Boolean(primaryFile && (lInputType.value !== 'gff' || pairedFile)),
+      hasInput: Boolean(primaryFile && (inputType !== 'gff' || pairedFile)),
       status: linearRecordSelector.statusFor(seq),
       error: linearRecordSelector.errorFor(seq),
       records: linearRecordSelector.recordsFor(seq)
@@ -1564,7 +1569,7 @@ export const createAppSetup = () => {
     };
     const linearSources = () => {
       const recordsOff = new Set(drawing.recordsOff);
-      return linearSourcesOverride || drawing.linearSeqs.map((seq) => linearAnnotationSource(seq, !recordsOff.has(seq.uid)));
+      return linearSourcesOverride || drawing.linearSeqs.map((seq) => linearAnnotationSource(drawing, seq, !recordsOff.has(seq.uid)));
     };
     return buildAnnotationRecordCatalog(/** @type {any} */ (drawing.mode === 'linear'
       ? { mode: 'linear', linearSources: linearSources() }
@@ -4769,8 +4774,8 @@ export const createAppSetup = () => {
     if (drawing.mode !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = drawing.linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
-      const primary = lInputType.value === 'gff' ? sequence?.gff : sequence?.gb;
-      return Boolean(primary && (lInputType.value !== 'gff' || sequence?.fasta));
+      const primary = drawing.inputType.value === 'gff' ? sequence?.gff : sequence?.gb;
+      return Boolean(primary && (drawing.inputType.value !== 'gff' || sequence?.fasta));
     });
     const hasRegionAnnotations = drawing.annotationSets.some((/** @type {{ annotations?: unknown } | null | undefined} */ set) => (
       Array.isArray(set?.annotations) && set.annotations.length > 0
@@ -4782,7 +4787,7 @@ export const createAppSetup = () => {
       const linearRecordsOff = new Set(drawing.recordsOff);
       const sources = await Promise.all(drawing.linearSeqs.map(async (seq) => {
         const drawn = !linearRecordsOff.has(seq.uid);
-        const inputType = lInputType.value;
+        const inputType = drawing.inputType.value;
         const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
         const pairedFile = inputType === 'gff' ? seq.fasta : null;
         const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
@@ -5285,7 +5290,7 @@ export const createAppSetup = () => {
       drawing.linearComparisonResolution.value.valid &&
       drawing.losatProgram.value === 'blastp' &&
       drawing.losat.blastp?.mode === 'orthogroup' &&
-      lInputType.value === 'gb' &&
+      drawing.inputType.value === 'gb' &&
       cf.feat?.type === 'CDS' &&
       cf.orthogroupId
     );
@@ -6601,10 +6606,10 @@ export const createAppSetup = () => {
     const selection = resolveDisambiguatedRecordSelection(linearRecordSelector.recordsFor(seq), seq.region_record_id);
     return selection.record || (selection.entries.length === 1 ? selection.entries[0] : null);
   };
-  /** @param {LinearSeq} seq @returns {RecordSettingsOwner} */
-  const linearRecordSettingsOwner = (seq) => ({
+  /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq @returns {RecordSettingsOwner} */
+  const linearRecordSettingsOwner = (drawing, seq) => ({
     key: seq.uid, requestKeys: [seq.uid], ownsExpansions: true,
-    bindingKeys: annotationRecordKeysOf(linearAnnotationSource(seq, false), seq.uid),
+    bindingKeys: annotationRecordKeysOf(linearAnnotationSource(drawing, seq, false), seq.uid),
     displaySource: seq.uid, displaySelector: null
   });
   /** @param {DrawingState} drawing */
@@ -6650,7 +6655,7 @@ export const createAppSetup = () => {
       const entries = circularRecordEntries(drawing);
       return {
         key: 'circular',
-        name: [cInputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb, cInputType.value === 'gff' ? drawing.files.c_fasta : null]
+        name: [drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb, drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null]
           .filter(Boolean).map((file) => String(file?.name || 'Unnamed file')).join(' + '),
         records: owners.map((owner, index) => ({
           key: owner.key, recordId: entries[index].recordId, length: entries[index].recordLength ?? null,
@@ -6661,7 +6666,7 @@ export const createAppSetup = () => {
     const group = linearSourceGroups.value.find((entry) => entry.uid === sourceKey);
     if (!group) return null;
     const cards = group.records.map(({ sequence }) => sequence);
-    const edited = recordsWithEdits(cards.map(linearRecordSettingsOwner), recordEditData(drawing));
+    const edited = recordsWithEdits(cards.map((seq) => linearRecordSettingsOwner(drawing, seq)), recordEditData(drawing));
     return {
       key: group.uid,
       name: linearSourceFileName(group),
@@ -6687,7 +6692,7 @@ export const createAppSetup = () => {
     const deleted = new Set(keys);
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key))
-      : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
+      : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map((seq) => linearRecordSettingsOwner(drawing, seq));
     retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
     if (listMode === 'linear') {
       applyLinearSeqMutation(drawing, drawing.linearSeqs.map((seq) => (
@@ -6705,7 +6710,10 @@ export const createAppSetup = () => {
    */
   const removeRecordSource = (listMode, sourceKey) => {
     if (listMode === 'circular') {
-      if (cInputType.value === 'gff') {
+      // The shown Circular drawing's input, which its File card removes from.
+      const drawing = shownDrawingOfMode('circular');
+      if (drawing === null) return undefined;
+      if (drawing.inputType.value === 'gff') {
         setCircularSourceFile('c_gff', null);
         return setCircularSourceFile('c_fasta', null);
       }
@@ -6794,8 +6802,10 @@ export const createAppSetup = () => {
     if (String(sequence.region_record_id || '') === next) return false;
     similarityAlignmentActions?.clearForMutation?.(msg('record selector changed.'));
     sequence.region_record_id = next;
-    // The inferred definition follows the record the row now selects (D-12).
-    if (lInputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
+    // The inferred definition follows the record the row now selects (D-12);
+    // the row is a card of the shown Linear drawing.
+    const drawing = shownDrawingOfMode('linear');
+    if (drawing !== null && drawing.inputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
       sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(sequence), next);
     }
     rebindAnnotationRecords();
@@ -6809,8 +6819,8 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('circular');
     if (!drawing) return { status: 'unavailable' };
     const next = value === 'gff' ? 'gff' : 'gb';
-    if (cInputType.value === next) return { status: 'ok' };
-    changeRecordSources(drawing, () => { cInputType.value = next; });
+    if (drawing.inputType.value === next) return { status: 'ok' };
+    changeRecordSources(drawing, () => { drawing.inputType.value = next; });
     // The other input's records are not the ones the OFF list names.
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
     return { status: 'ok' };
@@ -6823,9 +6833,9 @@ export const createAppSetup = () => {
     const drawing = shownDrawingOfMode('linear');
     if (!drawing) return false;
     const next = value === 'gff' ? 'gff' : 'gb';
-    if (lInputType.value === next) return false;
+    if (drawing.inputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.(msg('source type changed.'));
-    changeRecordSources(drawing, () => { lInputType.value = next; });
+    changeRecordSources(drawing, () => { drawing.inputType.value = next; });
     return true;
   };
 
@@ -7014,8 +7024,8 @@ export const createAppSetup = () => {
     closeDockedSettings: settingsPaneActions.closeDockedSettings,
     mode,
     setCircularInputType,
-    cInputType,
-    lInputType,
+    // The shown drawing's input type (each mode panel is the shown drawing's).
+    inputType: drawingMember('inputType'),
     losatProgram: drawingMember('losatProgram'),
     circularConservation: drawingMember('circularConservation'),
     annotationSets: drawingMember('annotationSets'),

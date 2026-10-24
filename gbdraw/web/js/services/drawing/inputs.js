@@ -385,13 +385,7 @@ export const bindLoadedInputs = (store, loaded) => {
  * @property {import('../../utils/reactivity.js').Ref<CircularRecordEntry[]>} circularRecordList
  * @property {CircularRecordDiscovery} circularRecordDiscovery
  */
-/**
- * The members a drawing holds now: each joins in the step that deletes its
- * project key (`JOINED_MEMBERS`, below).
- * @typedef {'files' | 'linearSeqs' | 'circularRecordList' | 'circularRecordDiscovery'} JoinedInputsMember
- */
-/** @typedef {Readonly<Pick<InputsMembers, JoinedInputsMember>>} InputsView */
-/** What `capture` returns: the joined members' data. @typedef {Pick<InputsData, JoinedInputsMember>} JoinedInputsData */
+/** @typedef {Readonly<InputsMembers>} InputsView */
 /** @typedef {SliceHandle<'inputs'>} InputsSlice The handle a writer takes. */
 
 /** @returns {DrawingInputFiles} */
@@ -432,10 +426,7 @@ const copyFiles = (files) => ({
 /** @param {LinearSeq} seq @returns {LinearSeq} */
 const copyRow = (seq) => ({ ...seq, depth: copyBound(seq.depth) });
 
-// Each member's build, copy, and write. A member joins the drawing (it is in
-// `INPUTS_SLICE.members`) in the step that deletes its project key and moves
-// every reader and writer of it, so no member has two owners (D-15-80); the
-// slice builds, captures, and installs only the joined members.
+// Each member's build, copy, and write.
 /** @typedef {keyof InputsMembers} InputsMember */
 const MEMBER_OPS = Object.freeze({
   files: {
@@ -486,8 +477,8 @@ const MEMBER_OPS = Object.freeze({
     }
   }
 });
-/** @type {readonly JoinedInputsMember[]} */
-const JOINED_MEMBERS = Object.freeze(['files', 'linearSeqs', 'circularRecordList', 'circularRecordDiscovery']);
+/** @type {readonly InputsMember[]} */
+const MEMBERS = Object.freeze(['files', 'linearSeqs', 'inputType', 'circularRecordList', 'circularRecordDiscovery']);
 
 /**
  * A new slice, or one over a drawing's existing members (a test fixture).
@@ -495,7 +486,7 @@ const JOINED_MEMBERS = Object.freeze(['files', 'linearSeqs', 'circularRecordList
  * @returns {{ handle: InputsSlice, view: InputsView }}
  */
 const create = (members = {}) => {
-  const data = /** @type {Pick<InputsMembers, JoinedInputsMember>} */ (Object.fromEntries(JOINED_MEMBERS.map((member) => (
+  const data = /** @type {InputsMembers} */ (Object.fromEntries(MEMBERS.map((member) => (
     [member, members[member] ?? MEMBER_OPS[member].create()]
   ))));
   return { handle: createSliceHandle('inputs', data), view: Object.freeze({ ...data }) };
@@ -503,11 +494,11 @@ const create = (members = {}) => {
 
 /**
  * @param {InputsSlice} slice
- * @returns {JoinedInputsData}
+ * @returns {InputsData}
  */
 const capture = (slice) => {
   const members = membersOf(slice);
-  return /** @type {JoinedInputsData} */ (Object.fromEntries(JOINED_MEMBERS.map((member) => (
+  return /** @type {InputsData} */ (Object.fromEntries(MEMBERS.map((member) => (
     [member, MEMBER_OPS[member].capture(members)]
   ))));
 };
@@ -520,7 +511,7 @@ const capture = (slice) => {
  */
 const install = (slice, data) => {
   const members = membersOf(slice);
-  JOINED_MEMBERS.forEach((member) => {
+  MEMBERS.forEach((member) => {
     if (data[member]) MEMBER_OPS[member].install(members, /** @type {InputsData} */ (data));
   });
 };
@@ -668,6 +659,6 @@ export const replaceLinearSeqs = (slice, rows) => {
 };
 
 export const INPUTS_SLICE = Object.freeze({
-  members: JOINED_MEMBERS,
+  members: MEMBERS,
   create, capture, install, reset
 });

@@ -264,7 +264,8 @@ export const createRulePreparation = ({
     biology: state.biologicalFeatures?.value,
     result: state.svgResultIdentity?.value,
     mode: state.mode?.value,
-    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
+    // Every drawing's input type, in tab order.
+    inputKinds: JSON.stringify(state.drawingList().map((/** @type {DrawingState} */ drawing) => drawing.inputType.value)),
     file: state.cardFiles.t_color,
     // Every drawing's cards, in tab order: the same invalidation as the
     // project's rows had.

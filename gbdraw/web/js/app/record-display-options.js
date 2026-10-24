@@ -148,15 +148,15 @@ export const createRecordDisplayControls = ({
   /** @param {DrawingState} drawing @returns {DrawingRecordSource[]} */
   const sourcesOf = (drawing) => (drawing.mode === 'circular'
     ? [{ scope: 'circular', drawingId: drawing.id, sourceUid: 'circular',
-        source: state.cInputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
-        paired: state.cInputType.value === 'gff' ? drawing.files.c_fasta : null,
+        source: drawing.inputType.value === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
+        paired: drawing.inputType.value === 'gff' ? drawing.files.c_fasta : null,
         records: drawing.circularRecordList.value.map((/** @type {CircularListRecord} */ record) => ({ ...record,
           recordId: record.record_id ?? record.recordId, recordLength: record.record_length ?? record.recordLength })), selector: drawing.form.circular_record_selector,
         cropped: circularDrawingCropped(drawing.circularRecordList.value, drawing),
         reverse: drawing.form.circular_reverse }]
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
-        source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
-        paired: state.lInputType.value === 'gff' ? seq.fasta : null,
+        source: drawing.inputType.value === 'gff' ? seq.gff : seq.gb,
+        paired: drawing.inputType.value === 'gff' ? seq.fasta : null,
         records: linearRecordsFor(seq), selector: seq.region_record_id,
         cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
   // The sources of every drawing, in the drawings' order.
@@ -415,7 +415,7 @@ export const createRecordDisplayControls = ({
   });
   /** @param {DrawingRecordSource} source */
   const discoveryFor = (source) => {
-    if (source.scope === 'circular') return circularDiscoveryForInput(state.cInputType.value, state.drawingOf(source.drawingId));
+    if (source.scope === 'circular') return circularDiscoveryForInput(state.drawingOf(source.drawingId));
     const sequence = state.drawingOf(source.drawingId).linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
     return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
   };

@@ -280,7 +280,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, clearLabelTextEdits, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE, clearFeatureOverrides } from './drawing/feature-edits.js';
-import { inputTypeKeyOf } from './drawing-view.js';
+import { inputTypeKeyOf, sessionInputTypes } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -322,7 +322,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId } from './drawing-view.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CardInputFiles, CircularRecordEntry, DrawingInputFiles, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CardInputFiles, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -3568,19 +3568,19 @@ export const applyOrthogroupStateData = (
 /**
  * The one check that a drawing has its biological inputs; Generate and Save
  * from the draft both use it, so both explain the same missing input. The
- * caller passes the drawing it resolved, whose record rows it checks.
+ * caller passes the drawing it resolved, whose input type and record rows it
+ * checks.
  * @param {{ readonly mode: string, readonly recordsOff: readonly string[], readonly linearSeqs: readonly LinearSeq[],
- *   readonly files: Readonly<DrawingInputFiles> }} drawing
+ *   readonly files: Readonly<DrawingInputFiles>, readonly inputType: { readonly value: string } }} drawing
  */
-export const assertDrawingInputs = (drawing, sourceState = state) => {
+export const assertDrawingInputs = (drawing) => {
   const { files } = drawing;
+  const gff = drawing.inputType.value === 'gff';
   if (drawing.mode === 'circular') {
-    const gff = sourceState.cInputType?.value === 'gff';
     if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
     if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
     return;
   }
-  const gff = sourceState.lInputType?.value === 'gff';
   const sequences = drawing.linearSeqs;
   sequences.forEach((seq, index) => {
     if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
@@ -4756,8 +4756,6 @@ const resetSessionBaseline = () => {
   // every record its slices do not turn OFF (PD-OI-091).
   for (const drawing of state.drawingList()) SETTINGS_SLICE.install(drawing.slices.settings, { recordsOff: [] });
   installShownDrawing(state.drawingOfMode('circular').id);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
   state.sessionTitle.value = '';
   state.errorLog.value = null;
   state.results.value = [];
@@ -4771,8 +4769,9 @@ const resetSessionBaseline = () => {
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   state.labelFitReports.value = [];
-  // Each drawing's inputs start empty (the card files Reset Settings cleared);
-  // a Linear drawing's record layout and comparison plan follow its one empty row.
+  // Each drawing's inputs start empty, GenBank input (the card files Reset
+  // Settings cleared); a Linear drawing's record layout and comparison plan
+  // follow its one empty row.
   state.matchSequenceRegistry?.reset?.();
   state.linearReorderNotice.value = '';
   for (const drawing of state.drawingList()) {
@@ -4845,8 +4844,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     ),
     layoutPreferences: cloneJsonData(drawing.layoutPreferences),
     featurePanelTab: state.featurePanelTab.value,
-    cInputType: state.cInputType.value,
-    lInputType: state.lInputType.value,
+    ...sessionInputTypes(state.drawingList()),
     losatProgram: drawing.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
     autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
@@ -4898,7 +4896,7 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
   applySessionUiData(ui);
   // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
   const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) state[inputType].value = ui[inputType];
+  if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
     SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
@@ -6420,8 +6418,10 @@ const importSessionDocument = async (e, options = {}) => {
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
     if (ui.mode) installShownDrawing(state.drawingOfMode(candidateMode).id);
-    state.cInputType.value = inputTypes.cInputType;
-    state.lInputType.value = inputTypes.lInputType;
+    // Each drawing's input type, the field of its mode.
+    state.drawingList().forEach((drawing) => {
+      INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (inputTypes[inputTypeKeyOf(drawing)]) });
+    });
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;
     // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
@@ -6498,7 +6498,7 @@ const importSessionDocument = async (e, options = {}) => {
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
       state.linearFoldedSources, groupLinearSourceRecords(linearDrawing.linearSeqs),
-      state.lInputType.value
+      linearDrawing.inputType.value
     );
     // The comparisons are the Linear drawing's.
     restoreImportedComparisonIntent(
@@ -6841,8 +6841,7 @@ export const exportSession = (titleOverride = null, options) => {
       generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,
       generatedCircularPlotTitlePosition: artifactUi.generatedCircularPlotTitlePosition,
       featurePanelTab: state.featurePanelTab.value,
-      cInputType: state.cInputType.value,
-      lInputType: state.lInputType.value,
+      ...sessionInputTypes(state.drawingList()),
       downloadDpi: state.downloadDpi.value,
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),

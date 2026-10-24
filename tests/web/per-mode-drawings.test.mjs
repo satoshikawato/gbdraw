@@ -60,8 +60,7 @@ const resetDrawing = (mode) => {
 const requestOf = (mode, { linearDepth = null } = {}) => {
   const drawing = modeDrawing(state, mode);
   installShownDrawing(mode);
-  state.cInputType.value = 'gb';
-  state.lInputType.value = 'gb';
+  drawing.inputType.value = 'gb';
   drawing.circularRecordList.value = [];
   const filesData = mode === 'circular'
     ? { c_gb: genbank(), linearSeqs: [] }
@@ -177,7 +176,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');
   installShownDrawing('circular');
-  state.cInputType.value = 'gb';
+  circular.inputType.value = 'gb';
   circular.circularRecordList.value = [{ selector: '#1', record_id: 'a' }, { selector: '#2', record_id: 'b' }];
   circular.form.multi_record_canvas = true;
   const circularKeys = () => buildCanonicalRenderRequest({

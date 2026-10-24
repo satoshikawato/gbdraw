@@ -110,12 +110,11 @@ const sanitizePathSegment = (value) =>
  * the whole state. The two suppression flags and `sessionOperationAvailability`
  * are absent in a test state.
  * @typedef {object} LinearRecordSelectorState
- * @property {{ value: string }} lInputType
  * @property {{ value: DiagramMode }} mode
- * @property {() => Pick<DrawingState, 'id' | 'mode' | 'linearSeqs'>} activeDrawing the shown drawing, which a
- *   discovery runs for, over its record rows
- * @property {() => readonly Pick<DrawingState, 'linearSeqs'>[]} drawingList every drawing, whose rows keep their
- *   selector state
+ * @property {() => Pick<DrawingState, 'id' | 'mode' | 'linearSeqs' | 'inputType'>} activeDrawing the shown drawing,
+ *   which a discovery runs for, over its record rows and input type
+ * @property {() => readonly Pick<DrawingState, 'linearSeqs' | 'inputType'>[]} drawingList every drawing, whose rows
+ *   keep their selector state, each read with its drawing's input type
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
  * @property {{ value: boolean }} [sessionImportRollbackInProgress]
  * @property {() => SessionBusy | null} [sessionOperationAvailability]
@@ -153,10 +152,10 @@ export const createLinearRecordSelector = ({
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
   /**
    * @param {LinearSeqLike} seq
-   * @param {string} [inputType]
+   * @param {string} inputType the input type of the row's drawing
    * @returns {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }}
    */
-  const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
+  const sourceFilesFor = (seq, inputType) => (
     inputType === 'gff'
       ? { primaryFile: seq?.gff || null, pairedFile: seq?.fasta || null }
       : { primaryFile: seq?.gb || null, pairedFile: null }
@@ -168,8 +167,12 @@ export const createLinearRecordSelector = ({
    */
   const stateFor = (seq) => {
     const uid = uidFor(seq);
-    const stored = (uid && selectorStateByUid[uid]) || emptySelectorState();
-    const inputType = state.lInputType.value;
+    // The row's drawing, found by the row's uid: its input type says which
+    // files the row's records come from. A row no drawing holds has none.
+    const drawing = uid ? state.drawingList().find((candidate) => candidate.linearSeqs.some((row) => uidFor(row) === uid)) : undefined;
+    if (!drawing) return emptySelectorState();
+    const stored = selectorStateByUid[uid] || emptySelectorState();
+    const inputType = drawing.inputType.value;
     const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
     if (
       stored.inputType !== inputType ||
@@ -223,13 +226,13 @@ export const createLinearRecordSelector = ({
   };
 
   /**
-   * @param {Pick<DrawingState, 'linearSeqs'>} drawing the drawing the discovery runs for
+   * @param {Pick<DrawingState, 'linearSeqs' | 'inputType'>} drawing the drawing the discovery runs for
    * @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request
    */
   const isCurrentRequest = (drawing, { generation, uid, primaryFile, pairedFile, inputType }) => {
     if (generation !== refreshGeneration) return false;
     if (recordDiscoverySuppressed()) return false;
-    if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
+    if (state.mode.value !== 'linear' || drawing.inputType.value !== inputType) return false;
     const currentSeq = drawing.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
     const currentFiles = sourceFilesFor(currentSeq, inputType);
@@ -237,15 +240,19 @@ export const createLinearRecordSelector = ({
   };
 
   /** @param {RefreshOptions} [options] */
-  const refreshFingerprint = ({ suppress = false } = {}) => [
-    Boolean(suppress || recordDiscoverySuppressed()),
-    state.mode.value,
-    state.lInputType.value,
-    ...state.activeDrawing().linearSeqs.flatMap((seq) => {
-      const { primaryFile, pairedFile } = sourceFilesFor(seq);
-      return [uidFor(seq), primaryFile, pairedFile];
-    })
-  ];
+  const refreshFingerprint = ({ suppress = false } = {}) => {
+    const drawing = state.activeDrawing();
+    const inputType = drawing.inputType.value;
+    return [
+      Boolean(suppress || recordDiscoverySuppressed()),
+      state.mode.value,
+      inputType,
+      ...drawing.linearSeqs.flatMap((seq) => {
+        const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
+        return [uidFor(seq), primaryFile, pairedFile];
+      })
+    ];
+  };
   /**
    * @param {readonly unknown[]} left
    * @param {readonly unknown[]} right
@@ -269,7 +276,7 @@ export const createLinearRecordSelector = ({
     const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return;
 
-    const inputType = state.lInputType.value;
+    const inputType = drawing.inputType.value;
     /** @type {{ uid: string, primaryFile: InputFileRef, pairedFile: InputFileRef | null }[]} */
     const targets = [];
     for (const seq of drawing.linearSeqs) {

@@ -5,14 +5,14 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import {
-  bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, boundInputFileIds,
+  INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, boundInputFileIds,
   normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs, setConservationBlastsSource
 } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
-/** @import { BoundFileValue, InputBindings, LoadedFileValue } from './drawing/inputs.js' */
+/** @import { BoundFileValue, InputBindings, InputType, LoadedFileValue } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { inputTypeKeyOf } from './drawing-view.js';
+import { inputTypeKeyOf, sessionInputTypes } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
@@ -567,8 +567,7 @@ const closeTransientState = (state) => {
 const buildFallbackUiStateData = (state, drawing) => ({
   title: getRef(state.sessionTitle, ''),
   mode: getRef(state.mode, 'circular'),
-  cInputType: getRef(state.cInputType, 'gb'),
-  lInputType: getRef(state.lInputType, 'gb'),
+  ...sessionInputTypes(state.drawingList()),
   ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
@@ -611,7 +610,7 @@ const applyFallbackSessionUiData = (state, ui) => {
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   applyFallbackSessionUiData(state, ui);
   const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) setRef(state[inputType], ui[inputType]);
+  if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
   SETTINGS_SLICE.install(drawing.slices.settings, {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
@@ -1574,7 +1573,7 @@ export const createHistorySnapshotService = ({
       const ui = mutableIntent.ui || {};
       const drawing = state.drawingOf(drawingId);
       const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) setGeneratedArtifactRef(state[inputType], ui[inputType]);
+      if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
@@ -1914,7 +1913,7 @@ export const createHistorySnapshotService = ({
       const ui = shown ? intent.ui || {} : drawingUi;
       if (domains.has('ui')) {
         const inputType = inputTypeKeyOf(drawing);
-        if (ui[inputType]) setRef(state[inputType], ui[inputType]);
+        if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
         await nextTick();
       }
 
@@ -2009,7 +2008,7 @@ export const createHistorySnapshotService = ({
       const ui = { ...(snapshot.ui || {}) };
       delete ui[inputTypeKeyOf(drawing) === 'lInputType' ? 'cInputType' : 'lInputType'];
       const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) setRef(state[inputType], ui[inputType]);
+      if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
       await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {

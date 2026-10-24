@@ -119,7 +119,7 @@ test('no module reads a drawing key from state', () => {
 
 // The project input keys the inputs slice replaced (multi-drawing B, DESIGN
 // §2): each is gone from `state`, and no module reads it from `state`.
-const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs', 'circularRecordList', 'circularRecordDiscovery']);
+const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs', 'circularRecordList', 'circularRecordDiscovery', 'cInputType', 'lInputType']);
 // The project's `state.cardFiles` holds only the five card files (D-15-91
 // S-2 A, D-15-92); the other fields are each drawing's (`drawing.files`, a
 // drawing key that the drawing-key guard above keeps off `state`).

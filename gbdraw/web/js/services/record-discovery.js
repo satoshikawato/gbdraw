@@ -77,6 +77,7 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
  * slice); the record list passes through.
  * @template Entry
  * @typedef {{
+ *   inputType: { value: string },
  *   files: { c_gb: InputFileRef | null, c_gff: InputFileRef | null, c_fasta: InputFileRef | null },
  *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
@@ -86,10 +87,10 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
 /**
  * A catalog is current only for the exact active source instance and input type.
  * @template Entry
- * @param {string} inputType the drawing's Circular input type
  * @param {CircularDiscoveryDrawing<Entry>} drawing
  */
-export const circularDiscoveryForInput = (inputType, drawing) => {
+export const circularDiscoveryForInput = (drawing) => {
+  const inputType = drawing.inputType.value;
   const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
   const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
   const hasInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));

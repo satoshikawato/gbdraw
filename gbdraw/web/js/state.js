@@ -128,8 +128,6 @@ const canvasContainerRef = ref(null);
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
 const activeDrawingId = typedRef(drawingIdOfMode('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
-const cInputType = ref('gb');
-const lInputType = ref('gb');
 // The five card files stay the project's until the card steps move them into
 // the drawing (D-15-91 S-2 A); every other input field is a drawing's
 // (`drawing.files`, services/drawing/inputs.js).
@@ -932,8 +930,8 @@ export const createDrawingState = (id, drawingMode) => {
   /** @type {string[]} */
   const recordsOff = reactive(initial.recordsOff);
   // The drawing's inputs (DESIGN §2): its input fields, Linear record rows,
-  // and Circular record list and discovery. Its cards, Load, and History write
-  // the fields and rows through the slice's writers.
+  // input type, and Circular record list and discovery. Its cards, Load, and
+  // History write the fields and rows through the slice's writers.
   const inputs = INPUTS_SLICE.create();
   const { linearSeqs } = inputs.view;
   const linearComparisonResolution = typedComputed(() => resolveLinearComparisonPlan({
@@ -1194,8 +1192,6 @@ export const state = Object.freeze({
   renameDrawing,
   drawingOfMode,
   activeDrawing,
-  cInputType,
-  lInputType,
   cardFiles,
   selectedAnnotation,
   losatCacheInfo,
