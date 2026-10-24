@@ -310,7 +310,6 @@ def _measured_legend(
             canvas_width=wrap_width,
             font_family=legend_config.font_family,
             font_size=float(legend_config.font_size),
-            dpi=int(legend_config.dpi),
             color_rect_size=float(legend_config.color_rect_size),
         )
         return legend_config._measurement(
@@ -335,7 +334,6 @@ def _measured_legend(
         canvas_width=wrap_width,
         font_family=legend_config.font_family,
         font_size=float(legend_config.font_size),
-        dpi=int(legend_config.dpi),
         color_rect_size=float(legend_config.color_rect_size),
     )
     active = layout.active

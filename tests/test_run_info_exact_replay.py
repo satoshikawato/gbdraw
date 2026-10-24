@@ -26,14 +26,18 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-OUTPUT_SHA = "e0503332f9a48545417cc75da80e57fd50af7726aa1fb46b6985995a0eb81b90"
+# Owner V-D03 (2026-10-24): the Legend is laid out at the drawn text width, so the
+# replay differs from the dev 71610129f one (e0503332...) only by the Legend box
+# width (156.24 -> 150.39) and the canvas width; both hashes below moved with it.
+OUTPUT_SHA = "555a3c90465fe7bf099f0dbe9fa76fb4b16741620959ef508b084c1e013ad8e7"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
 # from 1.5 to 1.0, which shrinks each obstacle box by half that change per
 # side, so the boxes cannot be peeled and are left out of the comparison.
+# Since V-D03 the hash is of that replay with the Legend box at the drawn width.
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "c42139da6f913db165da9bfaa5de8f42e694b81ab8d7b8296570f647932c425a"
+    "9a34cf0d91404ee7cf2f791eecb9a440ace08c65118b6b172c0d2af0b3e94cde"
 )
 
 

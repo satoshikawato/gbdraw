@@ -213,7 +213,7 @@
         "gbdraw/legend/circular_layout.py:build_circular_legend_layout",
         "gbdraw/legend/linear_layout.py:build_linear_legend_layout",
         "gbdraw/layout/composition.py:plan_composition",
-        "gbdraw/core/text.py:calculate_bbox_dimensions"
+        "gbdraw/core/text.py:drawn_text_box"
       ],
       "jsOwner": [
         "gbdraw/web/js/services/legend-layout.js:buildCircularLegendLayout",
@@ -221,8 +221,8 @@
         "gbdraw/web/js/app/legend/layout-actions.js:createLegendLayoutActions"
       ],
       "vector": "tests/fixtures/legend_layout_vectors.json",
-      "reason": "A Legend edit lays out in the browser with no Generate; 462 measurement and 140 Legend cases from Python pin the port (difference 0).",
-      "retireWhen": "incremental rendering lays out an edited Legend in Python (OV-165 part 2)",
+      "reason": "A Legend edit lays out in the browser with no Generate; 456 measurement and 140 Legend cases from Python pin the port (difference 0).",
+      "retireWhen": "a Legend edit calls the Python layout through the Worker",
       "source": "inventory C section B (Legend measurement and layout; OV-127, OV-143, OV-165, #940)"
     },
     {

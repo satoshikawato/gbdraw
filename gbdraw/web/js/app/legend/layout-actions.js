@@ -12,11 +12,6 @@ import {
 import { drawnLegendRowName, getComparisonLegendGroup, getLegendEntrySwatch, legendRowShown, pythonLegendKey } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
-// The dpi Python lays the Legend out at unless the Result says otherwise
-// (gbdraw/data/config.toml `canvas.dpi`); Results written before Python
-// recorded its Legend layout inputs (`legendReflow.dpi`) were laid out at it.
-const DEFAULT_LEGEND_DPI = 96;
-
 /**
  * The Legend layout inputs Python records in the composition metadata
  * (`legendReflow`), when the Result has them.
@@ -24,7 +19,6 @@ const DEFAULT_LEGEND_DPI = 96;
  * @property {number} colorRectSize
  * @property {string | null} [fontFile]
  * @property {number} [fontSize]
- * @property {number} [dpi]
  * @property {number} [wrapWidth]
  */
 
@@ -195,7 +189,6 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
       wrapWidth: recorded.wrapWidth ?? metadata.primary.finalBounds.width,
       fontFile: legendMeasurementFace(metrics, recorded.fontFile, sampleLabel?.getAttribute('font-family') || ''),
       fontSize: recorded.fontSize ?? Number(sampleLabel?.getAttribute('font-size')),
-      dpi: recorded.dpi ?? DEFAULT_LEGEND_DPI,
       colorRectSize: recorded.colorRectSize
     };
     if (!Number.isFinite(options.fontSize) || options.fontSize <= 0) return null;

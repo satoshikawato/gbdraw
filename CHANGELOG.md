@@ -24,6 +24,14 @@ write-up of a release.
   whether the rings fit, which did not follow the Python layout. A ring stack
   that does not fit is still reported by Generate, and a ring width the layout
   narrows shows in the drawn row's **Width** (OV-1712).
+- Legend: its box is laid out at the width of the painted captions, measured in
+  the face that draws them, plus the existing offsets, in the CLI, the Python
+  API, and the Web app alike. A Legend whose captions are in a monospace or
+  other wide face no longer cuts off their last characters at the canvas edge
+  (OV-1740); most Legends, and the canvases they set, become a few pixels
+  narrower (about 40 px with the Japanese captions we measured). Saved Results are not
+  migrated: a Result saved by an earlier version keeps its Legend until its
+  first Legend edit, which lays it out again, and Generate redraws it (OV-165).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

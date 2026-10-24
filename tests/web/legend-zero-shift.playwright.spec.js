@@ -167,12 +167,23 @@ const rowIndex = (page, pattern) => page.evaluate((source) => (
   window.__GBDRAW_APP__.legendEntries.findIndex((entry) => new RegExp(source).test(entry.caption))
 ), pattern);
 
-for (const mode of ['linear', 'circular']) {
-  test(`live Legend edits equal the next Generate exactly (${mode})`, async ({ page }) => {
+// A monospace Legend with multi-space captions: the layout reserves the drawn
+// width (OV-165 part 2, OV-1740), live and at Generate.
+for (const [mode, fontFamily] of [['linear', null], ['circular', null], ['circular', 'Courier New, monospace']]) {
+  test(`live Legend edits equal the next Generate exactly (${fontFamily ? `${mode}, ${fontFamily}` : mode})`, async ({ page }) => {
     test.setTimeout(300_000);
     if (mode === 'linear') await openLinear(page);
     else await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+    if (fontFamily) {
+      await page.evaluate((family) => { window.__GBDRAW_APP__.adv.font_family = family; }, fontFamily);
+      await settleLive(page);
+    }
     await generate(page);
+    if (fontFamily) {
+      const fontFile = await page.evaluate(() => JSON.parse(window.__GBDRAW_APP__.svgContainer.querySelector('svg')
+        .getAttribute('data-gbdraw-composition')).legendReflow.fontFile);
+      expect(fontFile, 'the Legend is measured in the monospace face').toBe('LiberationMono-Regular');
+    }
     const unedited = await legendGeometry(page);
     // An editor row from a Session (R15-2 retired Add legend item).
     await loadEditorLegendRows(page, [['Manual row with a long caption', '#118833']]);
