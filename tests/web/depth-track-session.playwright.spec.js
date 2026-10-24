@@ -2839,13 +2839,14 @@ ORIGIN
     app.sessionTitle = 'keep-after-rollback';
     app.form.legend = 'left';
     app.adv.comparison_height = 37;
-    // The first palette write of the reset throws once, then the ref behaves normally again.
-    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
-    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
+    // The commit's first applied-palette write throws once (a Load commits new
+    // drawing states, so the shown drawing's own refs are not written), then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.appliedPaletteName), 'value');
+    Object.defineProperty(state.appliedPaletteName, 'value', {
       configurable: true,
       get() { return accessor.get.call(this); },
       set() {
-        delete state.activeDrawing().selectedPalette.value;
+        delete state.appliedPaletteName.value;
         throw new Error('Injected session commit failure');
       }
     });

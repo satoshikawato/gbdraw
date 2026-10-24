@@ -250,12 +250,13 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   // Fail after reset/commit began: actual Session owner must restore source first.
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    // The first palette write of the reset throws once, then the ref behaves normally again.
-    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
-    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
+    // The commit's first applied-palette write throws once (a Load commits new
+    // drawing states, so the shown drawing's own refs are not written), then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.appliedPaletteName), 'value');
+    Object.defineProperty(state.appliedPaletteName, 'value', {
       configurable: true,
       get() { return accessor.get.call(this); },
-      set() { delete state.activeDrawing().selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
+      set() { delete state.appliedPaletteName.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
     });
   });
   await load(page, fixture('circular'));
