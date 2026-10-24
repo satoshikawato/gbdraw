@@ -21,9 +21,9 @@ from gbdraw.core.record_metadata import (
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
 from .ids import (
-    compute_feature_hash_from_location_parts,
+    SourceFeatureHash,
     disambiguate_feature_ids,
-    source_feature_location_parts,
+    source_feature_hash_and_parts,
 )
 from .selector_values import (
     matches_feature_selector,
@@ -39,7 +39,7 @@ class SourceFeatureIdentity:
     feature_type: str
     location_parts: tuple[tuple[int, int, int | None], ...]
     qualifiers: tuple[tuple[str, tuple[str, ...]], ...]
-    stable_feature_id: str
+    stable_feature_id: SourceFeatureHash
 
     def matches(self, *, key: str | None, value: str, record_id: str) -> bool:
         # hash= also names one of identical features by its `<hash>~<n>` ID.
@@ -67,13 +67,12 @@ def build_source_feature_catalog(
     entries = []
     for ordinal, feature in enumerate(_iter_source_features(record.features)):
         index = _source_feature_index(feature)
-        parts = source_feature_location_parts(feature, record)
-        if not parts:
+        stable_id, parts = source_feature_hash_and_parts(
+            feature, record, record_id=record.id
+        )
+        if stable_id is None:
             continue
         feature_type = str(feature.type)
-        stable_id = compute_feature_hash_from_location_parts(
-            feature_type, parts, record_id=record.id
-        )
         entries.append(
             SourceFeatureIdentity(
                 biological_feature_id=stable_id,

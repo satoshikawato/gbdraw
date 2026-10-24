@@ -3,7 +3,11 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
-from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
+from ....features.ids import (
+    DrawnFeatureHash,
+    compute_feature_object_hash,
+    make_linear_rendered_feature_id,
+)
 from ....features.objects import FeatureObject
 from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
@@ -15,7 +19,7 @@ class LinearFeatureDomIndex:
     """Source-bound DOM identities and final feature attachment geometry."""
 
     by_source_index: Mapping[tuple[int, int], str]
-    by_view_id: Mapping[tuple[int, str], tuple[str, ...]]
+    by_view_id: Mapping[tuple[int, DrawnFeatureHash], tuple[str, ...]]
     attachment_bands: Mapping[str, VerticalBand] = field(default_factory=dict)
 
 
@@ -26,14 +30,14 @@ def build_linear_feature_dom_index(
 
     record_count = len(feature_dicts)
     by_source_index: dict[tuple[int, int], str] = {}
-    by_view_id: dict[tuple[int, str], tuple[str, ...]] = {}
+    by_view_id: dict[tuple[int, DrawnFeatureHash], tuple[str, ...]] = {}
     for record_index, feature_dict in enumerate(feature_dicts):
         features = list(feature_dict.values())
         stable_ids = [
             str(FeatureDrawer.get_feature_data_id(feature) or "")
             for feature in features
         ]
-        mutable_by_view_id: dict[str, list[str]] = {}
+        mutable_by_view_id: dict[DrawnFeatureHash, list[str]] = {}
         for feature, stable_id in zip(features, stable_ids, strict=True):
             if not stable_id:
                 continue

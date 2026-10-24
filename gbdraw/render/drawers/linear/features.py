@@ -3,12 +3,12 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from gbdraw.svg.elements import Group, Path
 
 from ....configurators import FeatureDrawingConfigurator
-from ....features.ids import make_linear_rendered_feature_id
+from ....features.ids import SourceFeatureHash, make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
 from ....svg.arrows import ArrowHeadLengthRatio
 from ....svg.ids import instance_svg_id
@@ -18,6 +18,9 @@ from ....svg.linear_features import (
     create_intron_path_linear,
     create_rectangle_path_linear,
 )
+
+if TYPE_CHECKING:
+    from ....features.objects import FeatureObject
 
 
 class FeatureDrawer:
@@ -42,7 +45,7 @@ class FeatureDrawer:
         )
 
     @staticmethod
-    def get_feature_data_id(feature_object) -> Optional[str]:
+    def get_feature_data_id(feature_object: FeatureObject) -> Optional[SourceFeatureHash]:
         return feature_object.feature_hash
 
     def draw_path(
@@ -55,7 +58,7 @@ class FeatureDrawer:
         feature_data_id: Optional[str] = None,
         dom_element_id: Optional[str] = None,
         rendered_feature_id: Optional[str] = None,
-        stable_feature_id: Optional[str] = None,
+        stable_feature_id: Optional[SourceFeatureHash] = None,
         record_id: Optional[str] = None,
         record_index: int | None = None,
         source_feature_index: int | None = None,

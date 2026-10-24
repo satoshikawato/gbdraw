@@ -1077,6 +1077,60 @@ def test_only_a_stack_of_the_presets_rows_keeps_the_preset_lanes(
 
 
 @pytest.mark.circular
+@pytest.mark.parametrize("input_name", ["HmmtDNA.gbk", "NC_005856.1.gb"])
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize("separate_strands", [True, False])
+def test_web_auto_slot_sizes_are_the_sizes_generate_draws(
+    tmp_path: Path,
+    input_name: str,
+    track_type: str,
+    separate_strands: bool,
+) -> None:
+    # OV-1712: before Generate draws a row, the Web shows these Auto sizes
+    # (mode-profiles.generated.js) and no radius. They are the width and gaps
+    # Generate draws for each row the layout does not narrow, for the preset's
+    # stack and for a stack that packs (an AT skew row added, OV-1711).
+    from gbdraw.circular import _get_args, run_circular_from_namespace
+    from gbdraw.mode_profiles import mode_profiles_payload
+
+    sizes = mode_profiles_payload()["autoSizes"]["circularSlots"]  # type: ignore[index]
+    record_path = Path(__file__).parent / "test_inputs" / input_name
+    record = SeqIO.read(str(record_path), "genbank")
+    threshold = int(GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")).labels.length_threshold.circular)
+    size = "short" if len(record.seq) < threshold else "long"
+    default_stack = ["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"]
+    narrowed = 0
+    for stack in (default_stack, [*default_stack, "at_skew:dinucleotide_skew@nt=AT"]):
+        argv = ["--gbk", str(record_path), "-o", str(tmp_path / f"out{len(stack)}"), "--track_type", track_type,
+                "-f", "svg", "--legend", "none"]
+        argv += ["--separate_strands"] if separate_strands else []
+        for spec in stack:
+            argv += ["--circular_track_slot", spec]
+        run = run_circular_from_namespace(_get_args(argv))
+        # The editor shows the rows of the stack (not the layout's own underlay rows).
+        rows = [row for row in run.run_metadata["trackSlotGeometry"]["records"][0]["slots"]
+                if row["slotId"] in {spec.split(":")[0] for spec in stack}]
+        assert len(rows) == len(stack)
+        for row in rows:
+            renderer = row["renderer"]
+            auto_width = (
+                sizes["ticksWidthPx"][size][track_type]["separate" if separate_strands else "combined"]
+                if renderer == "ticks"
+                else sizes["widthPx"][size][renderer]
+            )
+            name = f"{row['slotId']} in {len(stack)} rows"
+            if row["compressed"]:
+                narrowed += 1
+                assert row["widthPx"] < auto_width, name
+            else:
+                assert row["widthPx"] == pytest.approx(auto_width), name
+            assert (row["innerGapPx"], row["outerGapPx"]) == pytest.approx((sizes["gapPx"], sizes["gapPx"])), name
+    assert sizes["presetNumericRowSides"][track_type] == {"depth": "inside", "gc_content": "inside", "gc_skew": "inside"}
+    if (input_name, track_type) == ("NC_005856.1.gb", "middle"):
+        assert narrowed > 0, "the packed stack narrows its rows"
+
+
+@pytest.mark.circular
 def test_custom_conservation_slot_keeps_auto_width_for_compression() -> None:
     from gbdraw.canvas import CircularCanvasConfigurator
     from gbdraw.config.models import CircularRenderProfile, GbdrawConfig

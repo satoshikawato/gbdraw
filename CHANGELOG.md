@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: before Generate draws a Circular track row, its **Radius** field says
+  "Auto" instead of an estimate that often differed from the drawn radius (for
+  example 0.75 R shown and 0.79 R drawn for GC content of E. coli MG1655 after
+  an AT skew row is added to a Middle stack). Its **Width** and gap estimates
+  are now the Auto sizes the Python layout starts from, so an Auto ticks row
+  shows 7.8 px, as drawn, instead of 9.8 px; the layout can still narrow a
+  width when the rows do not fit (OV-1712).
+
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
 - Patch release of 0.14.0. Session files are unchanged (Session version 48).

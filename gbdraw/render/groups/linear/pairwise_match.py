@@ -18,7 +18,7 @@ from ....core.color import (
     DEFAULT_COLLINEAR_ORIENTATION_COLORS,
     interpolate_default_colors,
 )
-from ....features.ids import make_linear_rendered_feature_id
+from ....features.ids import DrawnFeatureHash, make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
@@ -219,7 +219,9 @@ class PairWiseMatchGroup:
         record_index: int,
         feature_index_value: object = "",
     ) -> str:
-        view_ids = [part.strip() for part in _attribute_text(value).split(";")]
+        view_ids = [
+            DrawnFeatureHash(part.strip()) for part in _attribute_text(value).split(";")
+        ]
         if not any(view_ids):
             return ""
         if any(not view_id for view_id in view_ids):
