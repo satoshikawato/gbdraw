@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 
-import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from '../../gbdraw/web/js/app/candidate-render.js';
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
@@ -802,7 +802,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
-    readShownLegendColor: (entry) => String(entry?.color || ''),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
@@ -839,7 +839,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
     },
-    readShownLegendColor: (entry) => String(entry?.color || ''),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
     legendRowNames: { value: new Map() }
   });
   reconcileMountedResult(mounted, two);
@@ -879,7 +879,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     legendStrokeOptionsOpen: strokeOptionsOpen,
     activeDrawing: () => drawing
   };
-  const owner = createLegendEntryActions({ state, readShownLegendColor: (entry) => String(entry?.color || '') });
+  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   const strokes = createLegendStrokeActions({ state });
   assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
   assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);

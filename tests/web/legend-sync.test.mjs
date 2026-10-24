@@ -35,6 +35,9 @@ const {
 const { createLegendEntryActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
 );
+// The root's reader of the colors Legend rows show (app-setup.js); without a
+// displayed Result, a row shows the color it records.
+const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -245,8 +248,7 @@ const mockLegendEntry = (caption, color, x) => {
       dirtyMarks += 1;
       return true;
     },
-    // The root's reader without a displayed Result: the row's recorded color.
-    readShownLegendColor: (entry) => entry?.color
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
   });
   // The layout owner lays the Legend out after a restore (zero shift).
   actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
@@ -838,7 +840,8 @@ const mockLegendEntry = (caption, color, x) => {
   };
   let commits = 0;
   const actions = createLegendEntryActions({
-    state: withDrawings(state), commitActiveResultEdit: () => { commits += 1; return true; }, readActiveResultIdentity: () => 'result-1'
+    state: withDrawings(state), commitActiveResultEdit: () => { commits += 1; return true; }, readActiveResultIdentity: () => 'result-1',
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
   });
   const listed = () => state.legendEntries.value.map(({ caption, color }) => [caption, color]);
   const drawnRows = shownRows();
@@ -915,7 +918,9 @@ const mockLegendEntry = (caption, color, x) => {
     };
     featureLegend.children.splice(0);
     order.listed.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, colors[caption], index * 70)));
-    const actions = createLegendEntryActions({ state: withDrawings(state), readActiveResultIdentity: () => 'result-1' });
+    const actions = createLegendEntryActions({
+      state: withDrawings(state), readActiveResultIdentity: () => 'result-1', readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
+    });
     return {
       state, actions,
       listed: () => state.legendEntries.value.map(({ caption, originalCaption }) => (assert.equal(originalCaption, caption), caption)),
@@ -1017,7 +1022,7 @@ const mockLegendEntry = (caption, color, x) => {
   const actions = createLegendEntryActions({
     state: withDrawings(state),
     commitActiveResultEdit: () => true,
-    readShownLegendColor: (entry) => entry?.color
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])
   });
   await actions.restoreDeletedLegendEntries();
   const colors = Object.fromEntries(state.legendEntries.value.map((entry) => [entry.caption, entry.color]));
@@ -1109,7 +1114,7 @@ const mockLegendEntry = (caption, color, x) => {
     extractedFeatures: ref([]),
     skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   const strokeActions = createLegendStrokeActions({ state: withDrawings(state) });
   assert.equal(actions.updateLegendEntryColor(0, '#ff0000'), true);
   assert.deepEqual(state.legendColorOverrides, { Alpha: '#ff0000', Beta: '#ff0000' }, 'the color reaches both keys');
@@ -1159,7 +1164,7 @@ const mockLegendEntry = (caption, color, x) => {
     dormantLegendEntries: ref([]), originalLegendOrder: ref(['Alpha', 'Beta']), originalLegendColors: ref({}),
     legendStrokeOverrides: {}, legendColorOverrides: {}, manualSpecificRules: [], skipCaptureBaseConfig: ref(false)
   };
-  const actions = createLegendEntryActions({ state: withDrawings(state), readShownLegendColor: (entry) => entry?.color });
+  const actions = createLegendEntryActions({ state: withDrawings(state), readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   const keepBoth = () => {
     actions.readLegendRowNames();
     return actions.keepBothNamesOf({ name: 'Beta', renamedKey: 'Alpha', targetKey: null, color: '#112233', deletedKey: 'Beta' });

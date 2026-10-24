@@ -25,7 +25,7 @@ from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.legend import LegendMeasurement
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
@@ -541,7 +541,7 @@ def _extract_horizontal_legend_row_centers(root: ET.Element) -> list[tuple[float
         caption = "".join(text.itertext()).strip()
         font_size = float(text.attrib.get("font-size", "0").replace("px", ""))
         font_family = text.attrib.get("font-family", "")
-        text_width, _ = calculate_bbox_dimensions(caption, font_family, font_size, 72)
+        text_width, _ = drawn_text_box(caption, font_family, font_size)
 
         entry_left = legend_x + rect_x
         entry_right = entry_left + float(text_width) + 2.0 * float(x_margin)
@@ -4012,8 +4012,10 @@ def test_title_clears_a_corner_legend_grown_onto_its_side(
     """A corner Legend that the planner moved above or below the records keeps the title outside it (OV-1605)."""
     names = ("NC_001416.gb", "NC_005856.1.gb", "NC_005859.1.gb") if grid else ("NC_001416.gb",)
     records = [next(SeqIO.parse(Path("tests/test_inputs") / name, "genbank")) for name in names]
+    # A 20 px Legend is too large for the records' corner, so the planner grows the canvas for it.
+    legend_font_size = {"objects.legends.font_size.long": 20.0, "objects.legends.font_size.short": 20.0}
     options: dict[str, Any] = {
-        "cfg": apply_config_overrides(None, {}),
+        "cfg": apply_config_overrides(None, legend_font_size),
         "legend": corner,
         "plot_title": _LONG_PLOT_TITLE,
         "plot_title_position": title_position,

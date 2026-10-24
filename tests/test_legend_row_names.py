@@ -172,7 +172,6 @@ def test_the_layout_measures_the_drawn_name():
             canvas_width=1000,
             font_family="Liberation Sans",
             font_size=16,
-            dpi=96,
             color_rect_size=16,
         ).width
 

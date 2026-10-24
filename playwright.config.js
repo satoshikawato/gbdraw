@@ -21,6 +21,10 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? 'github' : 'list',
+  // In CI Playwright reads the pull request's whole diff for the HTML report,
+  // which no reporter here uses; a diff over Node's string limit (a Gallery
+  // regeneration) crashed the runner before any test ran (OV-1742).
+  captureGitInfo: { diff: false },
   use: {
     baseURL: serverUrl,
     trace: 'on-first-retry'

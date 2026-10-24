@@ -732,6 +732,12 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       jsonArgument(payload.features, []), jsonArgument(payload.rules, []), String(payload.kind || 'color')
     ])
   },
+  // The rules of a group color edit (OV-244): Python writes them over the whole catalog.
+  [DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES]: {
+    keys: ['request'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(pyodide, 'synthesize_color_rules_json', [jsonArgument(payload.request, null)])
+  },
   // One row of the label fit dialog for a figure drawn with crossing leaders:
   // Python searches it on the figure it kept (OD-F14); nothing here places labels.
   [DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW]: {

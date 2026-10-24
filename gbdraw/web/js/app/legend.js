@@ -33,8 +33,8 @@ import { msg } from '../utils/i18n.js';
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
- * @property {import('./candidate-render.js').LegendRowColorOf} readShownLegendColor
- *   The root's color of a listed row as the Legend panel shows it (OV-282).
+ * @property {import('./candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
+ *   The root's colors of a drawing's listed and deleted rows as the Legend panel shows them (OV-282).
  * @property {import('./legend/entry-actions.js').LegendEntryActionsOptions['legendRowNames']} [legendRowNames]
  *   The root's reactive holder of the names the displayed Result shows for its rows; the entry owner writes it.
  * @property {() => unknown} showLegendStructure The root's show of the Legend structure intent (R1).
@@ -51,7 +51,7 @@ export const createLegendManager = ({
   // R13: the preview owner's ports; the Legend owners never hold it.
   commitActiveResultEdit = null,
   readActiveResultIdentity = null,
-  readShownLegendColor,
+  readLegendRowColors,
   legendRowNames,
   showLegendStructure,
   readHiddenTrackRows
@@ -59,7 +59,7 @@ export const createLegendManager = ({
   const layoutActions = createLegendLayoutActions({
     readRegisteredFontFaces: () => registeredLegendFaces(state.loadedFonts.value)
   });
-  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readShownLegendColor, legendRowNames, readHiddenTrackRows });
+  const entryActions = createLegendEntryActions({ state, readActiveResultIdentity, readLegendRowColors, legendRowNames, readHiddenTrackRows });
   const sortActions = createLegendSortActions({ state, showLegendStructure });
   const strokeActions = createLegendStrokeActions({ state });
   // The keys a listed row stands for on the displayed Result (D-35: its own

@@ -78,6 +78,11 @@ const matchesChain = (element, chain, index = chain.length - 1) => {
 
 const matchesSelector = (element, selector) => matchesChain(element, selectorChain(selector));
 
+const decodeEntities = (value) => String(value || '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
+  .replace(/&amp;/g, '&');
+
 class FakeSvgElement {
   constructor(source) {
     const tagName = String(source || '').match(/^<\s*([\w:-]+)/)?.[1] || '';
@@ -85,6 +90,8 @@ class FakeSvgElement {
     this.localName = tagName.toLowerCase().replace(/^.*:/, '');
     this.attributes = parseAttributes(source);
     this.children = [];
+    // Element children and text runs (strings, as written), in document order.
+    this.childNodes = [];
     this.parentElement = null;
     this.style = {
       removeProperty: (name) => {
@@ -101,6 +108,20 @@ class FakeSvgElement {
 
   get id() {
     return this.getAttribute('id') || '';
+  }
+
+  // The text the element and its descendants hold, in document order,
+  // entities decoded; setting it replaces the children, as the DOM does.
+  get textContent() {
+    return this.childNodes
+      .map((node) => (typeof node === 'string' ? decodeEntities(node) : node.textContent))
+      .join('');
+  }
+
+  set textContent(value) {
+    this.children.forEach((child) => { child.parentElement = null; });
+    this.children = [];
+    this.childNodes = [String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;')];
   }
 
   getAttribute(name) {
@@ -122,9 +143,11 @@ class FakeSvgElement {
   appendChild(child) {
     if (child.parentElement) {
       child.parentElement.children = child.parentElement.children.filter((item) => item !== child);
+      child.parentElement.childNodes = child.parentElement.childNodes.filter((item) => item !== child);
     }
     child.parentElement = this;
     this.children.push(child);
+    this.childNodes.push(child);
     return child;
   }
 
@@ -192,8 +215,12 @@ class FakeSvgRoot extends FakeSvgElement {
   #parseChildren() {
     const stack = [];
     const tagPattern = /<\/?([\w:-]+)\b[^>]*>/g;
+    let textStart = 0;
     for (const match of this.content.matchAll(tagPattern)) {
       const token = match[0];
+      const text = this.content.slice(textStart, match.index);
+      textStart = match.index + token.length;
+      if (text && stack.length > 0) stack[stack.length - 1].childNodes.push(text);
       const tagName = match[1].toLowerCase().replace(/^.*:/, '');
       if (token.startsWith('</')) {
         if (stack.length > 0) stack.pop();
