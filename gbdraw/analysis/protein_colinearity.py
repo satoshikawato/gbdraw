@@ -107,12 +107,16 @@ _INTEGER_COMPARISON_COLUMNS = frozenset(
     }
 )
 _STRICT_DECIMAL_INTEGER = r"[+-]?[0-9]+"
-_STRICT_DECIMAL_NUMBER = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+# Digits with an optional point, or a point and digits; then an optional exponent.
+# "[0-9]+\.?[0-9]*" spells "[0-9]+(?:\.[0-9]*)?" without a group, which re matches faster.
+_STRICT_DECIMAL_NUMBER = r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
 _STRICT_DECIMAL_INTEGER_RE = re.compile(rf"^{_STRICT_DECIMAL_INTEGER}$")
 _STRICT_DECIMAL_NUMBER_RE = re.compile(rf"^{_STRICT_DECIMAL_NUMBER}$")
-# A data line that is not 12 tab-separated fields of the strict grammar above.
+# The start of a data line that is not 12 tab-separated fields of the strict
+# grammar above, searched in "\n" + data: a literal "\n" lets re skip to each line
+# start, where "^" with re.MULTILINE would try every character.
 _NON_STRICT_OUTFMT6_LINE_RE = re.compile(
-    "^(?!"
+    "\n(?!"
     + "\t".join(
         [r"[^\t\n]*", r"[^\t\n]*"]
         + [
@@ -120,8 +124,7 @@ _NON_STRICT_OUTFMT6_LINE_RE = re.compile(
             for column in COMPARISON_COLUMNS[2:]
         ]
     )
-    + "$).*$",
-    re.MULTILINE,
+    + "(?:\n|\\Z))"
 )
 LOSATP_METADATA_COLUMNS = (
     "query_protein_id",
@@ -3230,16 +3233,15 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
     data = "\n".join(data_lines)
     # One regex pass accepts the strict grammar. The line-by-line check runs
     # only to choose the error that the first failing line raises, and to
-    # settle a value whose float is not finite.
-    if _NON_STRICT_OUTFMT6_LINE_RE.search(data) is not None:
+    # settle a value whose float is not finite, for which read_comparison_table
+    # raises.
+    if _NON_STRICT_OUTFMT6_LINE_RE.search("\n" + data) is not None:
         _validate_losatp_outfmt6_lines(data_lines)
     try:
         table = read_comparison_table(StringIO(data), label="LOSATP blastp output")
     except ValidationError as exc:
         _validate_losatp_outfmt6_lines(data_lines)
         raise ParseError(f"Failed to parse LOSATP blastp output: {exc}") from exc
-    if _finite_numeric_values(table) is None:
-        _validate_losatp_outfmt6_lines(data_lines)
     return table
 
 
