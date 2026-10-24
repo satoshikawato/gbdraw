@@ -227,7 +227,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     await switchMode(page, 'linear');
     await evaluateWithRetainedPromise(page, async (content) => {
       const app = window.__GBDRAW_APP__;
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       if (!app.linearSeqs.length) app.addLinearSeq();
       app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'linear.gbk', { type: 'text/plain', lastModified: 1 }));
       await app.refreshLinearRecordSelectors();

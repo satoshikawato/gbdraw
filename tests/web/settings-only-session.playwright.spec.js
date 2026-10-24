@@ -188,7 +188,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await restored.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(
       path.join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb'));
     await restored.waitForFunction(async () =>
-      (await import('./js/state.js')).state.circularRecordDiscovery.status !== 'loading');
+      (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status !== 'loading');
     await generateAndWaitForResult(restored);
     const generated = await snapshot(restored);
     expect(generated.committed.renderRequest.diagramOptions.configOverrides['canvas.circular.track_type']).toBe('middle');

@@ -46,7 +46,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
+    app.setCircularInputType('gb');
     app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 1
@@ -114,7 +114,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 2
@@ -168,7 +168,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
+    app.setCircularInputType('gb');
     app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 31
@@ -244,7 +244,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 32

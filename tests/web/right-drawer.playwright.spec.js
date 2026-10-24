@@ -514,7 +514,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
     name: 'lambda-replacement.gb', mimeType: 'text/plain', buffer: Buffer.from(replacement)
   });
-  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
   await expect(toggle).toHaveCount(1);
   await expect(page.locator('.right-drawer')).toHaveCount(1);
   await centerPreview(page);

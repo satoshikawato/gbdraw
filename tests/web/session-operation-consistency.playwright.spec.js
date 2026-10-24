@@ -25,7 +25,7 @@ const capture = page => page.evaluate(async () => {
     canonical: config.getCommittedCanonicalSession(),
     request: config.getCommittedCanonicalRenderRequest(),
     resources: config.getCommittedCanonicalSession()?.resources,
-    results: state.results.value, file: state.files.c_gb,
+    results: state.results.value, file: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: state.losatCache.value, evidence: state.proteinIdentityManifest.value,
     undo: history.getUndoCount(), redo: history.getRedoCount(),
     config: JSON.stringify(config.buildConfigData(state.activeDrawing()))
@@ -41,7 +41,7 @@ const intact = page => page.evaluate(async () => {
     request: before.request === config.getCommittedCanonicalRenderRequest(),
     resources: before.resources === config.getCommittedCanonicalSession()?.resources,
     results: before.results === state.results.value,
-    file: before.file === state.files.c_gb,
+    file: before.file === state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: before.cache === state.losatCache.value,
     evidence: before.evidence === state.proteinIdentityManifest.value,
     history: before.undo === history.getUndoCount() && before.redo === history.getRedoCount(),

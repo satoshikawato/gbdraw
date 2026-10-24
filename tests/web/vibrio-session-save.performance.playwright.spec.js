@@ -303,7 +303,7 @@ const snapshotLiveState = (page) => page.evaluate(async () => {
   window.__GBDRAW_SAVE_LIVE_STATE__ = {
     results: [...app.results],
     selectedResultIndex: app.selectedResultIndex,
-    linearFiles: state.linearSeqs.map((sequence) => sequence.gb),
+    linearFiles: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map((sequence) => sequence.gb),
     losatCache: state.losatCache.value,
     losatEntries: [...state.losatCache.value],
     manifest: state.proteinIdentityManifest.value,
@@ -321,8 +321,8 @@ const liveStateIntact = (page) => page.evaluate(async () => {
     results: before.results.length === app.results.length
       && before.results.every((result, index) => result === app.results[index]),
     selectedResultIndex: before.selectedResultIndex === app.selectedResultIndex,
-    linearFiles: before.linearFiles.length === state.linearSeqs.length
-      && before.linearFiles.every((file, index) => file === state.linearSeqs[index].gb),
+    linearFiles: before.linearFiles.length === state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.length
+      && before.linearFiles.every((file, index) => file === state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[index].gb),
     losatCache: before.losatCache === state.losatCache.value,
     losatEntries: before.losatEntries.length === state.losatCache.value.size
       && before.losatEntries.every(([key, value]) => state.losatCache.value.get(key) === value),

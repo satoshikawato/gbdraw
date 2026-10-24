@@ -22,7 +22,7 @@ const loadMode = async (page, mode) => {
     const file = (text, name) => new File([text], name, { type: 'text/plain' });
     if (mode === 'linear') {
       app.selectDrawing('linear');
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       app.setLinearSeqPrimaryFile(0, 'gb', file(genbank, 'HmmtDNA.gbk'));
       app.setLinearDepthFile(app.linearSeqs[0], 0, file(depthTsv, 'sample.depth.tsv'));
     } else {

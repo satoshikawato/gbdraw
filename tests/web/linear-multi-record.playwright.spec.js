@@ -1209,7 +1209,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   const sharedRowUids = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
       [content], `normalize-record-${index + 1}.gbk`, {
@@ -1296,7 +1296,7 @@ test('No comparison completes a real render without touching dormant comparison 
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.addLinearSeq();
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
@@ -1440,7 +1440,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   await page.evaluate(async ({ content, name }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     const source = new File(
       [content], name, { type: 'text/plain', lastModified: 1 }
     );
@@ -1804,7 +1804,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearRecordLayoutEnabled(false);
     app.addLinearSeq();
     app.addLinearSeq();
@@ -2370,7 +2370,7 @@ ${origin}
   await page.evaluate(({ firstRecord, secondRecord }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([firstRecord], 'record-a.gbk', {
       type: 'text/plain', lastModified: 1
@@ -2757,7 +2757,7 @@ ORIGIN
   await page.evaluate((content) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'two-records.gb', {
       type: 'text/plain',
       lastModified: 1
@@ -2831,7 +2831,7 @@ AAAAAAAAAA
   await page.evaluate(({ gffText, fastaText }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gff';
+    app.setLinearInputType('gff');
     app.setLinearSeqPrimaryFile(0, 'gff', new File([gffText], 'records.gff3', {
       type: 'text/plain',
       lastModified: 2
@@ -2908,7 +2908,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
   await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(
       index,
@@ -3176,7 +3176,7 @@ const uploadCompleteRecordSources = async (page, contents =
   await page.evaluate(async (contents) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     const upload = async (index, chunks, name) => {
       app.setLinearSeqPrimaryFile(index, 'gb', new File(chunks, name, {
         type: 'text/plain', lastModified: 1
@@ -3477,7 +3477,7 @@ test('@comparison-contract source order survives pending multi-record discovery'
   await page.evaluate(async ({ readyText, delayedText }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([readyText], 'ready.gbff', {
       type: 'text/plain', lastModified: 1
     }));
@@ -3520,7 +3520,7 @@ test('@comparison-contract GFF3 and FASTA source order moves both bindings with 
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gff';
+    app.setLinearInputType('gff');
     const upload = async (index, source, stem) => {
       app.setLinearSeqPrimaryFile(index, 'gff', new File([source.gff], `${stem}.gff3`, {
         type: 'text/plain', lastModified: 1
@@ -3809,10 +3809,10 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources.nth(0)).toContainText('UpperB');
   await recordSummary.press('Space');
   await expect(recordList).not.toHaveAttribute('open', '');
-  await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gff'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setLinearInputType('gff'); });
   await expect(sources).toHaveCount(2);
   await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(4);
-  await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gb'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setLinearInputType('gb'); });
   await expect(sources).toHaveCount(2);
   await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   await page.evaluate(() => {
@@ -4176,7 +4176,7 @@ test('File-level default organism and subtitle apply across records and allow pe
   await page.evaluate(async ({ content, name }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     const source = new File([content], name, { type: 'text/plain', lastModified: 1 });
     app.setLinearSeqPrimaryFile(0, 'gb', source);
     Object.assign(app.form, {

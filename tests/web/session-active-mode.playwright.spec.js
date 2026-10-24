@@ -55,8 +55,8 @@ const snapshot = page => page.evaluate(async () => {
     selectedResultIndex: state.selectedResultIndex.value,
     featurePanelTab: state.featurePanelTab.value,
     downloadDpi: state.downloadDpi.value,
-    circularSource: await fileInfo(state.inputFiles.fileOf(state.files.c_gb)),
-    linearSource: await fileInfo(state.inputFiles.fileOf(state.linearSeqs[0]?.gb)),
+    circularSource: await fileInfo(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb)),
+    linearSource: await fileInfo(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[0]?.gb)),
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
 });

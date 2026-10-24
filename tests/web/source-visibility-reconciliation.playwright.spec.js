@@ -17,7 +17,7 @@ const source = async (file, name) => {
 const upload = async (page, file) => {
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(file);
   await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+    (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).not.toBe('loading');
 };
 const hide = async page => {
   const target = await popup(page, 1);

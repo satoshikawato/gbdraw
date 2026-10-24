@@ -868,7 +868,7 @@ test('Linear CLI Session that draws some records of a file loads and generates o
   await loadSessionFile(page, session);
   const linearRows = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
+    return state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
   });
   await expect(page.locator('[data-linear-source-records]')).toHaveCount(2);
   expect(await linearRows()).toEqual([

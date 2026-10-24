@@ -65,11 +65,11 @@ const renderRealDiagram = async (
       lastModified: diagramMode === 'circular' ? 51 : 52
     });
     if (diagramMode === 'circular') {
-      app.cInputType = 'gb';
+      app.setCircularInputType('gb');
       app.files.c_gb = bound(input);
       app.setCircularTrackSlotsEnabled(false);
     } else {
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       app.setLinearSeqPrimaryFile(0, 'gb', input);
       await app.setLinearComparisonGlobalAction('none');
       app.setLinearTrackSlotsEnabled(false);

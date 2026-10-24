@@ -168,7 +168,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await switchMode(page, 'linear');
   await page.evaluate(async (content) => {
     const app = window.__GBDRAW_APP__;
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     if (!app.linearSeqs.length) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'lambda.gbk', { type: 'text/plain', lastModified: 1 }));
     await app.refreshLinearRecordSelectors();

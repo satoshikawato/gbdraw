@@ -1256,7 +1256,7 @@ test('comparison controls drive appearance and current Session round trips', { t
 
 const configureLinearRecords = (page, records) => page.evaluate((contents) => {
   const app = window.__GBDRAW_APP__;
-  app.lInputType = 'gb';
+  app.setLinearInputType('gb');
   while (app.linearSeqs.length < contents.length) app.addLinearSeq();
   contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
     index,

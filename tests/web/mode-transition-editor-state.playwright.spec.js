@@ -141,7 +141,7 @@ test('incompatible source replacement reconciles old label intent after a mode r
     expect.soft((await snapshot(page)).labels).toEqual(edited.labels);
     await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('examples/MellatMJNV.gb');
     await expect.poll(() => page.evaluate(async () =>
-      (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
+      (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status)).toBe('ready');
     await generate(page);
     const replaced = await snapshot(page);
     expect(replaced.labels).toEqual({});

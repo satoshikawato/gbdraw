@@ -72,10 +72,10 @@ const fixture = (path) => join(process.cwd(), path);
 const snapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   return {
-    status: state.circularRecordDiscovery.status,
+    status: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status,
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
-    rows: state.circularRecordList.value.map(row => [row.selector, row.record_id]),
-    primary: state.files.c_gb?.name || state.files.c_gff?.name || null,
+    rows: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordList.value.map(row => [row.selector, row.record_id]),
+    primary: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb?.name || state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gff?.name || null,
     result: state.results.value[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
@@ -83,7 +83,7 @@ const snapshot = (page) => page.evaluate(async () => {
   };
 });
 const waitStatus = (page, status) => expect.poll(() => page.evaluate(async () => (
-  (await import('./js/state.js')).state.circularRecordDiscovery.status
+  (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status
 )), { timeout: 180000 }).toBe(status);
 const uploadNative = (page, text, name = 'native.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
@@ -198,7 +198,7 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
       const source = new File([text], 'slow.gb');
       const pending = new Promise(resolve => { window.__releaseSlow = () => resolve(new TextEncoder().encode(text).buffer); });
       source.arrayBuffer = () => pending;
-      state.files.c_gb = bound(source);
+      state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb = bound(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
@@ -252,7 +252,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
         return read();
       };
       window.__holdHelper = true;
-      state.files.c_gb = bound(source);
+      state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb = bound(source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.locator('[data-circular-inspect]')).toHaveAttribute('aria-disabled', 'true');

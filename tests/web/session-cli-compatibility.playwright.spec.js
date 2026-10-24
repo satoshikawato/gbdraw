@@ -70,8 +70,9 @@ const snapshot = page => page.evaluate(async () => {
   const { getSessionResourceSource, readFileBytes } = await import('./js/services/file-content-cache.js');
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
-  const files = state.mode.value === 'linear' ? state.linearSeqs.map(seq => seq.gb)
-    : state.cInputType.value === 'gff' ? [state.files.c_gff, state.files.c_fasta] : [state.files.c_gb];
+  const drawing = state.activeDrawing();
+  const files = drawing.mode === 'linear' ? drawing.linearSeqs.map(seq => seq.gb)
+    : drawing.inputType.value === 'gff' ? [drawing.files.c_gff, drawing.files.c_fasta] : [drawing.files.c_gb];
   const session = getCommittedCanonicalSession();
   return {
     mode: state.mode.value, request: session.renderRequest,

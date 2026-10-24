@@ -275,7 +275,7 @@ const controlState = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   return {
     overlaps: state.drawingOf('circular').adv.resolve_overlaps,
-    input: app.cInputType,
+    input: state.drawingOf('circular').inputType.value,
     prefix: state.drawingOf('circular').form.prefix,
     mode: app.mode,
     labels: state.drawingOf('circular').form.labels_mode
