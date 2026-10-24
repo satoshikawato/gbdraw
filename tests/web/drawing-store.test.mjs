@@ -2,13 +2,15 @@
 // holds the tab order and names, `drawingList()` follows it, and each writer
 // refuses an unknown or duplicate drawing ID. `removeDrawing` refuses the last
 // drawing and the shown one and drops the removed drawing's artifact slot.
+// The store is reactive (the page's Vue): a reader of `drawingOf` or
+// `activeDrawing()` follows a write that replaces a drawing under its ID
+// (OV-1778: Load commits new drawing states under the same IDs).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { loadPageVue } from './helpers/vue-runtime.mjs';
 
-globalThis.window = { Vue: {
-  ref: (value) => ({ value }), reactive: (value) => value, toRaw: (value) => value,
-  computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
-} };
+const Vue = loadPageVue();
+globalThis.window = { Vue, setTimeout, clearTimeout };
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 
@@ -63,4 +65,28 @@ test('the store writers keep drawingList() in tab order and refuse bad IDs', () 
     state.replaceDrawings(original, originalTabs);
   }
   assert.deepEqual(ids(), ['circular', 'linear']);
+});
+
+test('a reader of the shown drawing follows a store write that replaces it under its ID (OV-1778)', () => {
+  const original = state.drawingList();
+  const originalTabs = state.drawingTabs.value;
+  // What a setup member reads (app-setup.js `drawingMember`): a cached computed.
+  const shownAdv = Vue.computed(() => state.activeDrawing().adv);
+  const linearOf = Vue.computed(() => state.drawingOf('linear'));
+  try {
+    assert.equal(state.activeDrawingId.value, 'circular');
+    assert.equal(shownAdv.value, original[0].adv);
+    assert.equal(linearOf.value, original[1]);
+    // Session Load's commit: new drawing states under the same IDs, the shown ID unchanged.
+    const loaded = [createDrawingState('circular', 'circular'), createDrawingState('linear', 'linear')];
+    state.replaceDrawings(loaded, originalTabs);
+    assert.equal(shownAdv.value, loaded[0].adv, 'the shown drawing is the committed one');
+    assert.equal(linearOf.value, loaded[1]);
+    // A move or a rename replaces no drawing.
+    state.renameDrawing('linear', 'Phages');
+    assert.equal(linearOf.value, loaded[1]);
+  } finally {
+    state.replaceDrawings(original, originalTabs);
+  }
+  assert.equal(shownAdv.value, original[0].adv, 'a rollback shows the previous drawing again');
 });
