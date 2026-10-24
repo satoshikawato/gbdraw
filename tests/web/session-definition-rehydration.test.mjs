@@ -42,7 +42,7 @@ assert.equal(typeof state.files.c_gb.arrayBuffer, 'undefined');
 assert.ok(Object.isFrozen(state.files.c_gb));
 assert.ok(state.extractedFeatures.value.length > 0);
 assert.equal(state.featureEditorStatus.status, 'summary-ready');
-assert.equal(state.featureEditorStatus.summaryCount, state.extractedFeatures.value.length);
+assert.equal(state.featureEditorStatusText.value, `${state.extractedFeatures.value.length} features ready`);
 assert.equal(state.featureExtractionPending.value, false);
 assert.equal(state.featureExtractionError.value, null);
 
