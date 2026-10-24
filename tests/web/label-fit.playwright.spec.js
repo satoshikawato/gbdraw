@@ -65,7 +65,11 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading')).toHaveText('Labels do not fit');
   await expect(dialog.locator('[data-label-fit-records]')).toContainText('3 embedded labels at 14 pt (1 label pair overlaps');
-  // Python searched every row before the dialog opened, in its order.
+  // Python searches the rows for at most SWITCH_SEARCH_SECONDS before the
+  // dialog opens; on a loaded machine the dialog computes the rows it did not
+  // reach (OD-F14), so the rows are read once none is still being computed.
+  await expect(dialog.locator('[data-label-fit-status="not_computed"], [data-label-fit-status="computing"]'))
+    .toHaveCount(0, { timeout: 120_000 });
   const statuses = await rowStatuses(dialog);
   expect(statuses.map(([kind]) => kind)).toEqual([...ROW_KINDS, 'radial', 'separate_features']);
   expect(statuses.filter(([, status]) => status !== 'not_found')).toEqual([['separate_features', 'found_with_notice']]);
