@@ -322,11 +322,12 @@ const uniqueLegendKey = (reserved, preferred) => {
 
 /**
  * How a rule table write (rule-actions.js) builds the next table from the one at its turn (OV-444);
- * a row returned as it is or as `revise(row, patch)` keeps its identity. Null writes nothing.
+ * a row returned as it is or as `revise(row, patch)` keeps its identity. Null writes nothing. A build
+ * that Python answers (a group color edit) returns a promise; the write waits for it at its turn.
  * @callback SpecificRuleBuild
  * @param {readonly SpecificColorRule[]} current
  * @param {(row: SpecificColorRule, patch: Partial<SpecificColorRule>) => SpecificColorRule} revise
- * @returns {Partial<SpecificColorRule>[] | null}
+ * @returns {Partial<SpecificColorRule>[] | null | Promise<Partial<SpecificColorRule>[] | null>}
  */
 
 // The rules of one caption and one fill draw one Legend row: that pair is the

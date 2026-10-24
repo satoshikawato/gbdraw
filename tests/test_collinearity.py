@@ -62,7 +62,7 @@ from gbdraw.configurators import (
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import (
     PairwiseIdentityGradient,
@@ -3233,11 +3233,10 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         if str(path.get("fill", "")).startswith("url(")
     )
     bar_x, _ = _translate_xy(collinear_bar.get("transform"))
-    label_width, _ = calculate_bbox_dimensions(
+    label_width, _ = drawn_text_box(
         "Collinear",
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     assert bar_x == pytest.approx(
         label_width + 0.2 * legend_measurement.color_rect_size
@@ -3246,7 +3245,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> None:
-    feature_key = "tyrosine recombinase"
+    feature_key = "tyrosine recombinase family protein"
     gradient_key = "Pairwise match identity"
     legend_table = {
         feature_key: {
@@ -3306,11 +3305,10 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     assert title is not None
     title_x, _ = _translate_xy(title.get("transform"))
 
-    text_width, _ = calculate_bbox_dimensions(
+    text_width, _ = drawn_text_box(
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3376,11 +3374,10 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     feature_group_x, _ = _translate_xy_or_zero(feature_legend.get("transform"))
     pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
 
-    text_width, _ = calculate_bbox_dimensions(
+    text_width, _ = drawn_text_box(
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width

@@ -192,8 +192,8 @@ test('the Legend measures a registered family with its face, and an unknown face
   const face = resolveLegendFontFace(metrics, "'Gbdraw Test Serif', serif");
   assert.equal(face, entries[1].measurementName, 'CSS matching takes weight 400 over 300');
   assert.deepEqual(
-    measureTextBox(metrics, { text: 'Hypothetical protein', fontFile: face, fontSize: 14, dpi: 72 }),
-    measureTextBox(metrics, { text: 'Hypothetical protein', fontFile: 'LiberationSerif-Regular', fontSize: 14, dpi: 72 })
+    measureTextBox(metrics, { text: 'Hypothetical protein', fontFile: face, fontSize: 14 }),
+    measureTextBox(metrics, { text: 'Hypothetical protein', fontFile: 'LiberationSerif-Regular', fontSize: 14 })
   );
   const replaced = withRegisteredFontFaces(createLegendFontMetrics(LEGEND_FONT_METRICS), [
     ...registeredLegendFaces(entries), { ...registeredLegendFaces(entries)[1], measurementName: 'user-later-Regular' }

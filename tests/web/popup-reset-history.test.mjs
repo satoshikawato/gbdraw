@@ -77,7 +77,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
       getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
       effectiveLegendCaptions: () => () => 'CDS',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      getLabelSpecificRule: (feature, label) => (label ? { feat: feature.type, qual: 'product', val: `^${label}$` } : null),
+      groupColorRules: () => assert.fail('a fill reset writes no group rules'),
       getLegendRowRules: () => []
     }
   });
@@ -88,7 +88,8 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
   assert.equal(resetColorDialog.show, false);
   assert.deepEqual(manualSpecificRules, [savedRule]);
   assert.deepEqual(stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:product', 'commitSpecificRules',
+    // The rules it may add are prepared already: no label rule is a candidate since OV-244.
+    'history:buildIntent', 'history:signature', 'commitSpecificRules',
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(history.getUndoCount(), 1);

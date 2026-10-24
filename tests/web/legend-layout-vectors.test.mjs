@@ -95,11 +95,11 @@ const circularResult = (layout) => ({
     barWidth: layout.gradient.barWidth,
     barX: layout.gradient.barX,
     minLabelText: layout.gradient.minLabelText,
-    scaleY: layout.gradient.scaleY,
-    compactEntries: layout.gradient.compactEntries.map(({ key, labelY, barY }) => ({ key, labelY, barY })),
-    singleEntries: layout.gradient.singleEntries.map(({ key, titleX, titleY, barX, barY, minLabelX, maxLabelX, scaleLabelY }) => (
-      { key, titleX, titleY, barX, barY, minLabelX, maxLabelX, scaleLabelY }
-    ))
+    minLabelX: layout.gradient.minLabelX,
+    maxLabelX: layout.gradient.maxLabelX,
+    scaleLabelY: layout.gradient.scaleLabelY,
+    compactEntries: layout.gradient.compactEntries.map(({ key, labelX, labelY, barY }) => ({ key, labelX, labelY, barY })),
+    singleEntries: layout.gradient.singleEntries.map(({ key, titleX, titleY, barX, barY }) => ({ key, titleX, titleY, barX, barY }))
   },
   gradientX: layout.gradientX,
   gradientY: layout.gradientY
@@ -153,7 +153,7 @@ test('the vectors cover every Gallery Legend, its edits, and the synthetic branc
   assert.ok(vectors.measurement.length >= 200);
 });
 
-test('text measurement equals calculate_bbox_dimensions', () => {
+test('text measurement equals drawn_text_box', () => {
   vectors.measurement.forEach((vector, index) => {
     assert.equal(resolveLegendFontFace(metrics, vector.fontFamily), vector.fontFile, `measurement[${index}] face`);
     const measured = measureTextBox(metrics, vector);
@@ -187,6 +187,6 @@ test('an unknown recorded face falls back to the bundled face of the family', ()
   assert.equal(legendMeasurementFace(metrics, 'DejaVuSans', "'DejaVu Sans', serif"), 'LiberationSerif-Regular');
   assert.equal(legendMeasurementFace(metrics, undefined, "'DejaVu Sans', sans-serif"), 'LiberationSans-Regular');
   assert.doesNotThrow(() => measureTextBox(metrics, {
-    text: 'CDS', fontFile: legendMeasurementFace(metrics, 'DejaVuSans', 'sans-serif'), fontSize: 14, dpi: 96
+    text: 'CDS', fontFile: legendMeasurementFace(metrics, 'DejaVuSans', 'sans-serif'), fontSize: 14
   }));
 });

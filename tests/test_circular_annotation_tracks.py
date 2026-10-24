@@ -1494,20 +1494,20 @@ def test_circular_overlay_labels_keep_their_room_from_the_automatic_ring_outside
             ("o1:dinucleotide_content@side=outside", "features:features",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,w=60px,show_labels=false,z=5",
              "gc:dinucleotide_content@side=inside"),
-            1144.23,
+            1136.876,
             {"o1": (393.9, 468.0), "features": (349.05, 386.1), "regions": (337.575, 397.575), "gc": (271.05, 345.15)},
         ),
         (
             ("features:features",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,w=80px,show_labels=false,z=5"),
-            929.102,
+            921.941,
             {"features": (349.05, 386.1), "regions": (327.575, 407.575)},
         ),
         (
             ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,w=120px,show_labels=false,z=5",
              "sk:dinucleotide_skew@side=inside"),
-            1153.24,
+            1147.394,
             {"o1": (393.9, 468.0), "features": (349.05, 386.1), "gc": (271.05, 345.15), "regions": (248.1, 368.1),
              "sk": (193.05, 267.15)},
         ),
@@ -1519,6 +1519,7 @@ def test_circular_label_less_overlay_wider_than_its_anchor_keeps_every_band(
 ) -> None:
     # OV-1359: an overlay that spans nothing and has no labels needs no room, so a tint wider than its anchor leaves
     # every band and the canvas where they were before the labels' room (dev dc1fae14a).
+    # The canvas widths include the Legend, laid out at the drawn text width since Owner V-D03 (2026-10-24).
     drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     bands = _slot_bands(drawing)
     assert {slot: (round(inner, 3), round(outer, 3)) for slot, (inner, outer) in bands.items()} == dev_bands

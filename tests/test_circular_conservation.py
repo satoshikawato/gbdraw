@@ -23,7 +23,7 @@ from gbdraw.api.diagram import (
 )
 from gbdraw.api.options import CircularDiagramOptions
 from gbdraw.configurators import LegendMeasurement
-from gbdraw.core.text import calculate_bbox_dimensions, measurement_font_file
+from gbdraw.core.text import drawn_text_box, measurement_font_file
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.circular_layout import build_circular_legend_layout
@@ -111,7 +111,6 @@ def _circular_legend_measurement(
         ),
         font_family=legend_config.font_family,
         font_size=float(legend_config.font_size),
-        dpi=int(canvas_config.dpi),
         color_rect_size=float(legend_config.color_rect_size),
         legend_width=float(legend_config.legend_width),
         pairwise_legend_width=float(legend_config.pairwise_legend_width),
@@ -142,7 +141,7 @@ def _text_x_bounds(text: ET.Element, x_offset: float, dpi: int) -> tuple[float, 
     caption = "".join(text.itertext())
     font_family = text.get("font-family", "")
     font_size = float(str(text.get("font-size", "0")).replace("px", ""))
-    width, _ = calculate_bbox_dimensions(caption, font_family, font_size, dpi)
+    width, _ = drawn_text_box(caption, font_family, font_size)
     anchor = text.get("text-anchor", "start")
     if anchor == "end":
         return x_offset - float(width), x_offset
@@ -186,7 +185,7 @@ def _text_y_bounds(text: ET.Element, y_offset: float, dpi: int) -> tuple[float, 
     caption = "".join(text.itertext())
     font_family = text.get("font-family", "")
     font_size = float(str(text.get("font-size", "0")).replace("px", ""))
-    _, height = calculate_bbox_dimensions(caption, font_family, font_size, dpi)
+    _, height = drawn_text_box(caption, font_family, font_size)
     dominant_baseline = text.get("dominant-baseline", "middle")
     if dominant_baseline in {"central", "middle"}:
         half_height = float(height) / 2.0
@@ -640,11 +639,10 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
         if str(path.get("fill", "")).startswith("url(")
     )
     bar_x, _ = _translate_xy(gradient_bar.get("transform"))
-    label_width, _ = calculate_bbox_dimensions(
+    label_width, _ = drawn_text_box(
         "barcode07.draft",
         legend_config.font_family,
         legend_config.font_size,
-        canvas_config.dpi,
     )
     assert bar_x == pytest.approx(label_width + legend_config.color_rect_size)
 
@@ -813,7 +811,6 @@ def test_circular_bottom_multi_conservation_layout_height_contains_gradient_bloc
         canvas_width=500.0,
         font_family="'Liberation Sans', 'Arial', sans-serif",
         font_size=10.0,
-        dpi=canvas_config.dpi,
         color_rect_size=12.0,
     )
     legend_config = SimpleNamespace(
@@ -1110,12 +1107,9 @@ def test_circular_single_conservation_legend_keeps_long_title_inside_legend_widt
         canvas_width=1000.0,
         font_family=font_family,
         font_size=10.0,
-        dpi=96,
         color_rect_size=12.0,
     )
-    title_width, _ = calculate_bbox_dimensions(
-        "Enterobacteria phage DE3, complete genome", font_family, 10.0, 96
-    )
+    title_width, _ = drawn_text_box("Enterobacteria phage DE3, complete genome", font_family, 10.0)
     assert title_width > 10 * 12.0
     legend_config = SimpleNamespace(
         font_family=font_family,
