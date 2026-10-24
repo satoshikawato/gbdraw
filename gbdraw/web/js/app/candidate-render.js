@@ -5,7 +5,7 @@
 /** @import { LegendRowContext, SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { DrawnTrack, TrackLegendRows } from '../services/track-legend-rows.js' */
 /** @import { DrawingState } from '../state.js' */
-/** @import { LegendCaption, LegendEntry, RecordedLegendColor } from '../services/drawing/paint.js' */
+/** @import { LegendCaption, RecordedLegendColor } from '../services/drawing/paint.js' */
 /** @import { DisplayedLegendState } from '../services/feature-visibility.js' */
 /** @import { AddressedFeature } from '../services/feature-override-identity.js' */
 import { appliedFeatureColors, readCommittedPaint, samePaint } from '../utils/color-utils.js';
@@ -371,15 +371,26 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
 };
 
 /**
- * The color a Legend row shows: the palette's swatch color, else the color the row records.
- * @typedef {(entry: Pick<LegendEntry, 'caption' | 'originalCaption'> & { color?: RecordedLegendColor } | null | undefined)
+ * The color a Legend row shows: the palette's swatch color, else the color the row records. The row is
+ * read by its key (`legendEntryKey`) and its recorded `color`, as every Legend list holds them.
+ * @typedef {(entry: { readonly caption?: unknown, readonly originalCaption?: unknown, readonly color?: string } | null | undefined)
  *   => SwatchColor | RecordedLegendColor | undefined} LegendRowColorOf
+ */
+/**
+ * The colors the rows of a drawing's Legend lists show on the displayed Result (`displayedLegendRowColors`).
+ * @typedef {{ listed: LegendRowColorOf, deleted: LegendRowColorOf }} LegendRowColors
+ */
+/**
+ * The composition root's reader of `displayedLegendRowColors` for a drawing: the one reader of the
+ * color a Legend row shows for the owners that compare, offer or restore it.
+ * @typedef {(drawing: DrawingState) => LegendRowColors} ReadLegendRowColorsPort
  */
 
 // OV-282 (D-26): the one reader of the color a Legend row of the displayed
 // Result shows, listed or deleted: the palette's for a row the palette colors
 // (`draftLegendPanelColors`), else the color the row records. The Legend
-// panel, "Use existing color" and the rename and color requests read it. No
+// panel, "Use existing color", the rename and color requests, the rows a rule
+// commit owns and the OV-644 conflict test, and Restore read it. No
 // palette edit writes a row's recorded color; only a Legend extraction
 // records the swatch the Result shows (`RecordedLegendColor`).
 /**
@@ -387,7 +398,7 @@ export const draftLegendPanelColors = ({ legendColorOverrides, rules, pythonRows
  * @param {Parameters<typeof displayedLegendRowContext>[1] & Pick<DrawingState,
  *   'legendEntries' | 'deletedLegendEntries' | 'dormantLegendEntries' | 'legendColorOverrides'>} drawing
  * @param {readonly DrawnTrack[]} drawnTracks The tracks of the request that drew the displayed Result.
- * @returns {{ listed: LegendRowColorOf, deleted: LegendRowColorOf }}
+ * @returns {LegendRowColors}
  */
 export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
   const context = state.svgContent?.value ? displayedLegendRowContext(state, drawing) : null;
@@ -397,10 +408,12 @@ export const displayedLegendRowColors = (state, drawing, drawnTracks) => {
     dormantLegendEntries: drawing.dormantLegendEntries.value, legendColorOverrides: drawing.legendColorOverrides,
     paletteColors: appliedFeatureColors(state), drawnTracks
   }) : { listed: new Map(), deleted: new Map() };
-  return {
-    listed: (entry) => (entry ? colors.listed.get(legendEntryKey(entry)) || entry.color : undefined),
-    deleted: (entry) => (entry ? colors.deleted.get(legendEntryKey(entry)) || entry.color : undefined)
-  };
+  /** @param {Map<PythonLegendKey, SwatchColor>} derived @returns {LegendRowColorOf} */
+  const shownColor = (derived) => (entry) => (
+    // A row's `color` is the color it records (`RecordedLegendColor`, services/drawing/paint.js).
+    entry ? derived.get(legendEntryKey(entry)) || /** @type {RecordedLegendColor | undefined} */ (entry.color) : undefined
+  );
+  return { listed: shownColor(colors.listed), deleted: shownColor(colors.deleted) };
 };
 
 // Python's fill of a feature type (gbdraw/features/colors.py

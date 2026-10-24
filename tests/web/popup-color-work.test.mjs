@@ -161,6 +161,29 @@ test('a popup color pick opens the scope dialog after the History capture alone'
   assert.deepEqual(dialogStages(), ['history:buildIntent', 'history:signature']);
 });
 
+// OV-282 (D-26), guard: after a palette switch that no Generate drew yet, the
+// scope dialog's "Use existing color" offers the color the CDS row shows (the
+// new palette's, `displayedLegendRowColors`), not the swatch it recorded.
+test('Use existing color offers the palette color a palette row shows after a palette switch', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [], appliedColors: {} });
+  const legendRow = { getAttribute: (name) => ({ 'data-legend-key': 'CDS' })[name] ?? null, hasAttribute: (name) => name === 'data-legend-key',
+    localName: 'g', querySelector: () => null, querySelectorAll: () => [swatch], children: [] };
+  const swatch = { getAttribute: (name) => (name === 'fill' ? '#cccccc' : null), hasAttribute: (name) => name === 'fill',
+    localName: 'path', querySelector: () => null, querySelectorAll: () => [], children: [] };
+  legendRow.children.push(swatch);
+  const legend = { localName: 'g', getAttribute: () => null, hasAttribute: () => false, querySelector: () => null,
+    querySelectorAll: () => [legendRow], children: [legendRow] };
+  const svg = { getElementById: (id) => (id === 'legend' ? legend : null) };
+  Object.assign(setup_.state, { svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }), originalLegendOrder: ref(['CDS']),
+    dormantLegendEntries: ref([]) });
+  setup_.state.appliedPaletteName.value = 'forest';
+  assert.equal(await setup_.preparation.prepare([]), true);
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.show, true);
+  assert.equal(setup_.featureStyleScopeDialog.existingCaptionColor, '#228b22');
+  assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#cccccc' }], 'the row keeps its record');
+});
+
 test('a popup color pick without a dialog prepares the rules it commits', async () => {
   const { stages, preparation, pick, dialogStages } = setup({ siblings: false });
   assert.equal(await preparation.prepare([savedRule]), true);

@@ -109,6 +109,8 @@ import {
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {MoveLegendRecordsPort} moveLegendRecords
  *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
+ * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
+ *   The root's colors of a drawing's Legend rows as they show (OV-282): a commit owns a listed row in that color.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
@@ -130,7 +132,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -201,8 +203,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
+    // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
+    const shown = readLegendRowColors(drawing);
     const takenRows = listed.filter(entry => takenKeys.has(legendEntryKey(entry)))
-      .map(entry => ({ caption: legendEntryKey(entry), color: entry.color }));
+      .map(entry => ({ caption: legendEntryKey(entry), color: shown.listed(entry) }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,

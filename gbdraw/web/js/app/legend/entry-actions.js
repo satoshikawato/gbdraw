@@ -106,9 +106,9 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
- * @property {import('../candidate-render.js').LegendRowColorOf} readShownLegendColor
- *   The color a listed row shows (`displayedLegendRowColors`, OV-282), read
- *   from the composition root's derivation the Legend panel shows.
+ * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
+ *   The colors a drawing's listed and deleted rows show (`displayedLegendRowColors`, OV-282), read
+ *   from the composition root's derivation the Legend panel shows; never the color a row records.
  * @property {{ value: ReadonlyMap<PythonLegendKey, import('../../services/legend-svg.js').ShownLegendRowNames> }} [legendRowNames]
  *   The root's reactive holder of the names the displayed Result shows for its rows;
  *   this owner is its one writer.
@@ -125,7 +125,7 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
 export const createLegendEntryActions = ({
   state,
   readActiveResultIdentity = null,
-  readShownLegendColor,
+  readLegendRowColors,
   legendRowNames = { value: new Map() },
   readHiddenTrackRows = () => []
 }) => {
@@ -220,9 +220,10 @@ export const createLegendEntryActions = ({
     const byDrawn = drawn.find((row) => row.drawnName === text) || drawn.find((row) => row.drawnName.toLowerCase() === lower);
     if (byDrawn) return byDrawn.key;
     const wanted = normalizedColor(color);
+    const shown = readLegendRowColors(drawing);
     const named = [
-      ...listed.map((entry) => ({ entry, color: readShownLegendColor(/** @type {Parameters<typeof readShownLegendColor>[0]} */ (entry)) })),
-      ...deleted.map((entry) => ({ entry, color: entry.color }))
+      ...listed.map((entry) => ({ entry, color: shown.listed(entry) })),
+      ...deleted.map((entry) => ({ entry, color: shown.deleted(entry) }))
     ].filter(({ entry }) => String(legendEntryName(entry)).toLowerCase() === lower);
     const found = named.find((row) => normalizedColor(row.color) === wanted) || named[0];
     return found ? legendEntryKey(found.entry) : null;
@@ -360,10 +361,13 @@ export const createLegendEntryActions = ({
       if (!provenance.has(caption)) provenance.set(caption, new Set());
       provenance.get(caption)?.add(normalizedColor(entry?.color));
     }
-    // A listed row is its key: an intent's `caption` is its row's key.
+    // A listed row is its key: an intent's `caption` is its row's key, and
+    // its color the one it shows (OV-282: the palette's for a palette row),
+    // as the previous intents name it.
+    const shown = readLegendRowColors(drawing);
     /** @type {{ caption: string, color: string }[]} */
     const listed = (drawing.legendEntries.value || [])
-      .map((/** @type {EntryRecord} */ entry) => ({ caption: legendEntryKey(entry), color: normalizedColor(entry.color) }));
+      .map((/** @type {EntryRecord} */ entry) => ({ caption: legendEntryKey(entry), color: normalizedColor(shown.listed(entry)) }));
     const owned = listed.filter((entry) => provenance.get(entry.caption)?.has(entry.color));
     const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
     for (const intent of intents) {
@@ -383,7 +387,8 @@ export const createLegendEntryActions = ({
         const removed = new Set(diff.remove.map(({ caption }) => caption));
         // An intent's `caption` is its row's key; its `name` is the rule's caption.
         const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
-        const colors = new Map(diff.update.map(({ caption, color }) => [caption, color]));
+        // A row the rules draw records their color, also one that already showed it (a palette row).
+        const colors = new Map([...diff.update, ...diff.unchanged].map(({ caption, color }) => [caption, color]));
         const added = new Map(diff.add.map(({ caption, color }) => [caption, { caption, originalCaption: caption, color, featureIds: [] }]));
         /** @type {EntryRecord[]} */
         let entries = (drawing.legendEntries.value || []).map((/** @type {EntryRecord} */ entry) => (
@@ -807,7 +812,7 @@ export const createLegendEntryActions = ({
     if (sessionBusy) return sessionBusy;
     const entry = drawing.legendEntries.value[idx];
     if (!entry?.caption) return false;
-    if (normalizedColor(readShownLegendColor(entry)) === normalizedColor(newColor)) return false;
+    if (normalizedColor(readLegendRowColors(drawing).listed(entry)) === normalizedColor(newColor)) return false;
     writeLegendRowColor(drawing, legendRowKeys(svgContainer.value?.querySelector?.('svg'), legendEntryKey(entry)), newColor);
     return true;
   };
@@ -859,11 +864,13 @@ export const createLegendEntryActions = ({
     if (!svgContainer.value?.querySelector?.('svg') || returning.length === 0) return false;
     const inventory = (originalLegendOrder.value || []).map((/** @type {unknown} */ caption) => String(caption || '').trim());
     const context = displayedLegendRowContext(state, drawing);
+    const shown = readLegendRowColors(drawing);
     let entries = [...(drawing.legendEntries.value || [])];
     for (const entry of returning) {
       const key = legendEntryKey(entry);
       const recorded = Object.hasOwn(drawing.legendColorOverrides, key) ? drawing.legendColorOverrides[key] : undefined;
-      const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || entry.color);
+      // OV-282: a palette row returns in the palette's color it shows, never the swatch it recorded.
+      const color = String(recorded || legendRowRules(legendEntryKey(entry), context)[0]?.color || shown.deleted(entry));
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
     restoreLegendRows(drawing.slices.paint, picked, listedRowsOf(entries));

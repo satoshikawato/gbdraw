@@ -5,7 +5,7 @@ import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js'
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
-import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { readFileSync } from 'node:fs';
 import {
   createRuleLegendCaptions, diffLegendIntents, generatedLegendRow, legendRowRules, prepareSpecificColorImport,
@@ -89,6 +89,8 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   // The Legend owner's writer, which the take-back of a drawing not shown calls (OV-1280, AUTH-ORIGIN-1);
   // `state` already has its drawing store, which a test may have made per mode.
   moveLegendRecords: (...args) => createLegendManager({ state, commitLegendRowRules: () => true }).moveLegendRecords(...args),
+  // app-setup.js: the root's color of each Legend row as it shows (OV-282, D-26).
+  readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, []),
   projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
@@ -478,9 +480,76 @@ test('a rule captioned with its own feature type commits while the type\'s row s
   assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#ff8800' }], 'the listed row, by its key');
   // The Legend preparation owns that row and updates it.
   s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#ff8800' }];
-  const legend = createLegendManager({ state: withDrawings(s.state), commitLegendRowRules: () => true });
+  const view = withDrawings(s.state);
+  const legend = createLegendManager({
+    state: view, commitLegendRowRules: () => true, readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, [])
+  });
   const prepared = await legend.prepareFileLegendEntries(intents, { previousFileIntents: s.previousIntents() });
   assert.deepEqual(prepared.diff.update.map(({ caption, color }) => ({ caption, color })), [{ caption: 'CDS', color: '#c83366' }]);
+});
+
+// OV-282 (D-26): a palette switch that no Generate drew yet leaves the swatch
+// Python drew in the CDS row's record; the row shows the new palette color
+// (`displayedLegendRowColors`). The rule owner, the Legend preparation and
+// Restore read the color the row shows, never the recorded copy.
+const paletteSwitched = (s, { listed = [], deleted = [] } = {}) => {
+  const ref = (value) => ({ value });
+  Object.assign(s.state, {
+    originalLegendOrder: ref(['CDS']), deletedLegendEntries: ref(deleted), dormantLegendEntries: ref([]),
+    originalLegendColors: ref({ CDS: '#54bcf8' }), legendStrokeOverrides: {}, legendColorOverrides: {}, adv: {},
+    selectedResultIndex: ref(0), svgContainer: mounted([['CDS', '#54bcf8']]), svgContent: ref('<svg/>'),
+    paletteDefinitions: ref({ default: { CDS: '#54bcf8' }, forest: { CDS: '#2e7d32' } }),
+    appliedPaletteName: ref('forest'), appliedPaletteColors: ref({})
+  });
+  s.state.legendEntries.value = listed;
+  const view = withDrawings(s.state);
+  const legend = createLegendManager({
+    state: view, commitLegendRowRules: () => true, readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, [])
+  });
+  return { view, legend };
+};
+const recordedCds = () => ({ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8', featureIds: [] });
+
+// The commit owns the listed row its rule takes in the color the row shows,
+// and the Legend preparation reads that color too: it updates the row.
+test('a rule that takes a palette row after a palette switch owns the row in the color it shows', async () => {
+  const s = setup();
+  const { legend } = paletteSwitched(s, { listed: [recordedCds()] });
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  const rule = { feat: 'CDS', qual: 'gene', val: '.', color: '#c83366', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules(() => [rule]), true);
+  assert.deepEqual(s.previousIntents(), [{ caption: 'CDS', color: '#2e7d32' }], 'the palette color the row shows');
+  // The preparation runs before the rule transition: the table and the row as they were.
+  s.state.manualSpecificRules.length = 0;
+  s.state.legendEntries.value = [recordedCds()];
+  const prepared = await legend.prepareFileLegendEntries(intents, { previousFileIntents: s.previousIntents() });
+  assert.deepEqual(prepared.diff.update.map(({ caption, color }) => ({ caption, color })), [{ caption: 'CDS', color: '#c83366' }]);
+});
+
+// OV-644: a rule row of a palette row's key in the palette color that row
+// shows is that row (no LEGEND_ROW_CONFLICT); the row then records the color
+// of the rule that draws it.
+test('a rule row in the color a palette row shows after a palette switch is no Legend row conflict', async () => {
+  const s = setup();
+  const { view, legend } = paletteSwitched(s, { listed: [recordedCds()] });
+  const prepared = await legend.prepareFileLegendEntries([{ caption: 'CDS', color: '#2e7d32' }]);
+  assert.deepEqual(prepared.diff.unchanged.map(({ caption, color }) => ({ caption, color })), [{ caption: 'CDS', color: '#2e7d32' }]);
+  assert.equal(prepared.apply(), null);
+  assert.deepEqual(view.activeDrawing().legendEntries.value.map(({ caption, color }) => [caption, color]), [['CDS', '#2e7d32']]);
+  // A rule row in another color than the row shows still stops the commit.
+  s.state.legendEntries.value = [recordedCds()];
+  await assert.rejects(legend.prepareFileLegendEntries([{ caption: 'CDS', color: '#54bcf8' }]),
+    (error) => error.code === 'LEGEND_ROW_CONFLICT');
+});
+
+// PD-OI-063: Restore gives a returning row the color Generate gives it; for a
+// palette row, the palette's after a switch, not the swatch it recorded.
+test('Restore gives a deleted palette row the palette color it shows after a palette switch', () => {
+  const s = setup();
+  const { view, legend } = paletteSwitched(s, { deleted: [recordedCds()] });
+  assert.deepEqual(legend.restoreDeletedLegendEntries(), ['CDS']);
+  assert.deepEqual(view.activeDrawing().legendEntries.value.map(({ caption, color }) => [caption, color]), [['CDS', '#2e7d32']]);
 });
 
 // L2 (OV-306 to OV-308 in batch): the rows the rules take are read from the
@@ -581,7 +650,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: (build, label) => {
     committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
     return true;
-  }, readShownLegendColor: (entry) => entry?.color });
+  }, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
   assert.deepEqual([legend.legendRowHasRules(0), legend.legendRowHasRules(1)], [false, true]);
@@ -613,7 +682,7 @@ test('the Legend editor recolors every row a merged row stands for, a rule row t
     committed.push({ rules: build(state.manualSpecificRules, (row, patch) => ({ ...row, ...patch })), label });
     options?.afterCommit?.([]);
     return true;
-  }, readShownLegendColor: (entry) => entry?.color });
+  }, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   assert.equal(legend.legendRowHasRules(0), true, 'the shown row stands for a rule row');
   assert.equal(legend.updateLegendEntryColor(0, '#00ff00'), true);
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
@@ -649,7 +718,7 @@ test('the popup\'s Legend item scope recolors and restrokes every row a merged r
     const committed = [];
     const defaults = [];
     const legend = createLegendManager({ state: withDrawings(state), commitLegendRowRules: () => assert.fail('no Legend editor commit'),
-      readShownLegendColor: (entry) => entry?.color });
+      readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
     const popup = createFeatureColorActions({
       state: withDrawings(state), readDrawnTracks: () => [], getFeatureElements: () => [], getFeatureFillElements: () => [],
       readUserDefaultColor: () => null, setDefaultColor: (_drawing, type, color) => { defaults.push([type, color]); },
@@ -821,6 +890,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
         return { add: diff.add.map(({ caption, color }) => ({ caption, color })), retire: diff.remove.map(({ caption }) => caption) };
       } };
     },
+    readLegendRowColors: (drawing) => displayedLegendRowColors(drawingState, drawing, []),
     projectPaletteAndRules: () => true, ports: { requestAutomaticRerender: () => { rerenders += 1; return true; }, isRedrawOwed: () => false }
   });
   const tagRule = (pattern, cap) => ({ feat: 'CDS', qual: 'locus_tag', val: `^(${pattern})$`, color: '#112233', cap });
@@ -1054,7 +1124,7 @@ test('a Legend recolor of a rule row made while an Add is pending applies after 
     legendStrokeOverrides:{},adv:{}});
   s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#54bcf8'},{caption:'B',originalCaption:'B',color:'#445566'}];
   assert.equal(await s.preparation.prepare(s.state.manualSpecificRules),true);
-  const legend=createLegendManager({state:s.state,commitLegendRowRules:s.actions.commitSpecificRules,readShownLegendColor:entry=>entry?.color});
+  const legend=createLegendManager({state:s.state,commitLegendRowRules:s.actions.commitSpecificRules,readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, [])});
   assert.equal(legend.legendRowHasRules(1),true);
   const [add,release]=await held(s.actions.addSpecificRule());
   const recolored=legend.updateLegendEntryColor(1,'#000000');

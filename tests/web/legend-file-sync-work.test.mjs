@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLegendEntryActions } from '../../gbdraw/web/js/app/legend/entry-actions.js';
+import { displayedLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { SPECIFIC_COLOR_FILE_OWNER } from '../../gbdraw/web/js/services/legend-svg.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
@@ -106,7 +107,9 @@ const setup = () => {
   });
   const work = { commits: 0, layouts: 0 };
   const commitActiveResultEdit = () => { work.commits += 1; return true; };
-  const actions = createLegendEntryActions({ state, commitActiveResultEdit });
+  const actions = createLegendEntryActions({
+    state, commitActiveResultEdit, readLegendRowColors: (drawing) => displayedLegendRowColors(state, drawing, [])
+  });
   // The layout owner (legend-layout/reposition-actions.js `refreshLegendGeometry`)
   // commits what it laid out unless asked not to.
   actions.setLegendGeometryChangedHandler(({ commit = true } = {}) => {

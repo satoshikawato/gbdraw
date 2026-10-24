@@ -1858,7 +1858,7 @@ export const createAppSetup = () => {
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
-    readShownLegendColor: (entry) => legendEntryColor(entry),
+    readLegendRowColors: (drawing) => readLegendRowColors(drawing),
     readHiddenTrackRows: (drawing) => hiddenTrackLegendRows(drawing),
     legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
@@ -1898,8 +1898,11 @@ export const createAppSetup = () => {
   // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
   // gives its swatch on the displayed Result (the live compile's, by Python's
   // rows), derived and never written into the rows. A new Result brings new
-  // Python rows.
-  const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readDrawnTracks()));
+  // Python rows. The Legend and rule owners read the same colors through
+  // `readLegendRowColors`.
+  /** @type {import('./candidate-render.js').ReadLegendRowColorsPort} */
+  const readLegendRowColors = (drawing) => displayedLegendRowColors(state, drawing, readDrawnTracks());
+  const legendRowColors = computed(() => readLegendRowColors(state.activeDrawing()));
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
@@ -1989,6 +1992,7 @@ export const createAppSetup = () => {
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
     moveLegendRecords: legendActions.moveLegendRecords,
+    readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     showEditorIntent: (options) => showEditorIntent(options),
