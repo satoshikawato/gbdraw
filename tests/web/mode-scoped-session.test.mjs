@@ -417,7 +417,7 @@ test('Reset Settings keeps the OFF records of both drawings (record selection)',
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, 'card-b');
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#3');
-  resetSettings(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], ['card-b']);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#3']);
   modeDrawing(state, 'linear').recordsOff.splice(0);
@@ -435,7 +435,7 @@ test('Reset Settings removes the saved label table and the dormant Similarity gr
     drawing.canonicalLabelOverrideRows.value = [row];
     drawing.orthogroupDormantOverrides.OG_1 = { name: 'Saved name' };
   });
-  resetSettings(state);
+  state.drawingList().forEach((drawing) => resetSettings(state, drawing));
   MODES.forEach((mode) => {
     const drawing = modeDrawing(state, mode);
     assert.deepEqual(drawing.canonicalLabelOverrideRows.value, [], `${mode} label table`);

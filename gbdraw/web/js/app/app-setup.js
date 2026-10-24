@@ -134,7 +134,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
-import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
+import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from '../services/reset.js';
 import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
@@ -5411,8 +5411,45 @@ export const createAppSetup = () => {
     if (choice !== 'reset') return false;
     return resetSettings();
   };
+  // What a drawing's reset changes beyond its slices, by its mode.
+  /** @type {Readonly<Record<DiagramMode, (drawing: DrawingState) => void>>} */
+  const RESET_FOLLOW_UPS = Object.freeze({
+    circular: (drawing) => {
+      // OV-1249: the loaded Circular records keep a Record Order row each, at
+      // their defaults; Reset resets settings, not the records.
+      drawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(drawing));
+      // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
+      // kept ring files, as a new drawing with those files uploaded has them.
+      reconcileCircularConservation(drawing);
+    },
+    linear: (drawing) => {
+      // Linear records return to their File defaults and inferred
+      // definitions; Files, record selections, File defaults, and depth stay.
+      // The mutation also clears the alignment plan (D-15).
+      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((sequence) => ({
+        ...sequence,
+        definition: '',
+        record_subtitle: '',
+        region_start: null,
+        region_end: null,
+        region_reverse: false
+      })), { alignmentMutation: msg('settings reset.') });
+      invalidateLinearComparisonArtifacts(drawing);
+    }
+  });
+  // One drawing returns to a new drawing's settings of its mode; the
+  // one-per-Session values stay (R17-5). OV-1168, OV-1195: its artifact takes
+  // the default palette applied, and a drawing not shown loses its alignment
+  // Reset receipt (the shown one's plan is cleared by its follow-up).
+  /** @param {DrawingState} drawing */
+  const resetDrawing = (drawing) => {
+    const artifact = resetDrawingSettings(state, drawing);
+    historySnapshots.writeArtifactValues(drawing.id, drawing.id === state.activeDrawingId.value
+      ? artifact
+      : { ...artifact, similarityAlignmentResetReceipt: null });
+    RESET_FOLLOW_UPS[drawing.mode](drawing);
+  };
   const resetSettings = () => {
-    const drawing = state.drawingOfMode('linear');
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     // A notice (a loaded Session's warnings, a table import) described the
@@ -5442,38 +5479,10 @@ export const createAppSetup = () => {
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
+      resetProject(state);
       // OV-1166 (Q-DR-6 A): every drawing's multi-record layout takes a new
       // drawing's defaults (its sides unset), whatever the canvas was before.
-      resetSettingsState(state);
-      // OV-1168, OV-1195: the artifact of a drawing not shown takes what the
-      // reset gives the displayed one: the default palette applied, and no
-      // alignment Reset receipt (the plan is cleared below).
-      state.drawingList().filter(({ id }) => id !== state.activeDrawingId.value).forEach(({ id }) => {
-        historySnapshots.writeArtifactValues(id, {
-          appliedPaletteName: appliedPaletteName.value,
-          appliedPaletteColors: { ...appliedPaletteColors.value },
-          similarityAlignmentResetReceipt: null
-        });
-      });
-      // OV-1249: the loaded Circular records keep a Record Order row each, at
-      // their defaults; Reset resets settings, not the records.
-      const circularDrawing = state.drawingOfMode('circular');
-      circularDrawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(circularDrawing));
-      // OV-1167 (Q-DR-7 B): the comparison rings are derived again from the
-      // kept ring files, as a new drawing with those files uploaded has them.
-      reconcileCircularConservation(circularDrawing);
-      // Linear records return to their File defaults and inferred definitions;
-      // Files, record selections, File defaults, and depth stay. The mutation
-      // also clears the alignment plan (D-15).
-      applyLinearSeqMutation(drawing, drawing.linearSeqs.map((sequence) => ({
-        ...sequence,
-        definition: '',
-        record_subtitle: '',
-        region_start: null,
-        region_end: null,
-        region_reverse: false
-      })), { alignmentMutation: msg('settings reset.') });
-      invalidateLinearComparisonArtifacts(drawing);
+      state.drawingList().forEach((drawing) => resetDrawing(drawing));
       matchSequenceRegistry?.reset?.();
       circularTrackNewRenderer.value = 'dinucleotide_skew';
       linearTrackNewRenderer.value = 'dinucleotide_skew';

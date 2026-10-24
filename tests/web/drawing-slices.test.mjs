@@ -398,7 +398,7 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
       edge('with-file', { file }), edge('with-name', { losatFilename: 'pair.losat' }), edge('empty', { losatFilename: ' ' })
     ] }
   });
-  resetSettings(state);
+  resetSettings(state, modeDrawing(state, 'linear'));
   const after = settings.capture(handle);
   assert.deepEqual([after.form.plot_title, after.losatProgram], ['', 'blastn']);
   assert.deepEqual([after.linearRecordGap, after.linearRecordRows, after.recordsOff], [40, [{ uid: 'card-a', row: 2 }], ['card-b']]);
