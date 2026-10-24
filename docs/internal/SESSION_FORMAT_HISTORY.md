@@ -12,6 +12,31 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: Session 49 stores a project and its list of drawings
+
+Session version 49 replaces the two diagram-mode slices of Sessions 46 to 48
+with a list of drawings, so a project can hold several drawings of one mode
+(PD-OI-090). The project keeps `format`, `version`, `createdAt`, `title`,
+`resources`, `ui` (the project's view keys and `ui.activeDrawingId`), and
+`legacyArtifacts`. Each `drawings[]` entry holds one drawing: `id`, `name`,
+`mode`, `renderRequest` (or null, with no `results`), `results`, `editorState`,
+`features`, `config`, `ui`, `webFiles.bindings` (only the slots of its mode, and
+the five file cards), `orthogroupState`, `runMetadata`, `cliInvocation`,
+`cliOptions`, `losatCache`, `losatDerivedCache`, and `proteinIdentityManifest`.
+Array order is tab order. The top-level `modes`, `otherModeResult`,
+`renderRequest`, `results`, `config`, `features`, `files`, and `ui.mode` are
+retired. There is no settings-only form: a drawing without a request has no
+Results.
+
+The owner of the layout is `gbdraw/session_drawings.py`
+(`read_session_drawings`, `write_session_drawings`); the admission band is
+`SessionChecked49` in `gbdraw/session_contract.py`. Python and the Web app read
+Session 49, and Save writes it. Reading a Session 46 to 48 moves each mode's
+part into its own drawing (`circular`, `linear`), the rules of
+`services/session-drawings-upgrade.js` in the Web app and of the 46-48 step of
+`upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
+once at Load. Fixtures: `tests/fixtures/sessions/drawings-v49/`.
+
 ## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
 
 Session version 48 stores the protein results of a reverse-complemented Linear

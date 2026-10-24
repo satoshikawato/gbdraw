@@ -11,6 +11,9 @@ const generatedSchema = readFileSync(
 const generatedConstant = name => Number(generatedSchema.match(new RegExp(`^export const ${name} = (\\d+);$`, 'm'))[1]);
 const CURRENT_REQUEST_SCHEMA = generatedConstant('CANONICAL_REQUEST_SCHEMA');
 const CURRENT_SESSION_VERSION = generatedConstant('SESSION_VERSION');
+// The newest Session version the app reads (Save writes CURRENT_SESSION_VERSION).
+const NEWEST_READ_SESSION_VERSION = Math.max(...generatedSchema
+  .match(/^export const SUPPORTED_SESSION_VERSIONS = Object\.freeze\(\[([\d, ]+)\]\);$/m)[1].split(',').map(Number));
 const CURRENT_FEATURE_CATALOG_SCHEMA = generatedConstant('FEATURE_CATALOG_SCHEMA');
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
@@ -955,6 +958,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 });
 
 module.exports = {
+  NEWEST_READ_SESSION_VERSION,
   answerChoicePrompt,
   answerSessionTitle,
   expectNoLoadRepairDialog,

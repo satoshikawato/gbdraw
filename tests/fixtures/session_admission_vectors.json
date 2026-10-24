@@ -897,6 +897,9 @@
   },
   "cli-42": {
    "fixture": "tests/fixtures/sessions/se08-main-linear-cli.v42.gbdraw-session.json.gz"
+  },
+  "web-49": {
+   "fixture": "tests/fixtures/sessions/drawings-v49/drawings-circular-only.v49.gbdraw-session.json.gz"
   }
  },
  "vectors": [
@@ -5812,6 +5815,168 @@
    "web": "loaded",
    "note": "Known difference, hand-made input only: the Web zero-hit check reads only the result envelope, so a typed result whose fields are empty loads; Python decodes the member and refuses the Session.",
    "pythonMessage": "contains unresolved protein references"
+  },
+  {
+   "id": "control-web-49",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [],
+   "python": "accept",
+   "web": "loaded",
+   "note": "A Session 49 with one Circular drawing, as Python writes it."
+  },
+  {
+   "id": "s49-format-other",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/format",
+     "value": "other"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 whose format is not gbdraw-session.",
+   "pythonMessage": "Not a gbdraw-session JSON file",
+   "webClass": "R2"
+  },
+  {
+   "id": "s49-version-text",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/version",
+     "value": "49"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 whose version is text.",
+   "pythonMessage": "Session version is required and must be an integer",
+   "webClass": "R2"
+  },
+  {
+   "id": "s49-resources-missing",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/resources"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 without resources.",
+   "pythonMessage": "Session 49 requires resources",
+   "webClass": "R2"
+  },
+  {
+   "id": "s49-drawings-missing",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/drawings"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 without drawings.",
+   "pythonMessage": "Session 49 requires drawings",
+   "webClass": "R2"
+  },
+  {
+   "id": "s49-retired-top-level-field",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/unknownField",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "web": "repaired",
+   "note": "A Session 49 with a top-level field no writer writes.",
+   "pythonMessage": "project contains unclassified field(s): unknownField",
+   "webRepairs": [
+    "session-field-dropped@unknownField"
+   ]
+  },
+  {
+   "id": "s49-drawing-id-missing",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/drawings/0/id"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 drawing without an ID.",
+   "pythonMessage": "drawing requires id",
+   "webClass": "R4"
+  },
+  {
+   "id": "s49-drawing-mode-unknown",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/mode",
+     "value": "radial"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 drawing of no diagram mode.",
+   "pythonMessage": "needs a name and a diagram mode",
+   "webClass": "R4"
+  },
+  {
+   "id": "s49-drawing-name-missing",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "remove",
+     "path": "/drawings/0/name"
+    }
+   ],
+   "python": "refuse",
+   "web": "refused",
+   "note": "A Session 49 drawing without a name.",
+   "pythonMessage": "drawing requires name",
+   "webClass": "R4"
+  },
+  {
+   "id": "s49-drawing-unknown-field",
+   "finding": "session-49",
+   "base": "web-49",
+   "edits": [
+    {
+     "op": "set",
+     "path": "/drawings/0/unknownField",
+     "value": 1
+    }
+   ],
+   "python": "refuse",
+   "web": "repaired",
+   "note": "A Session 49 drawing with a field no writer writes.",
+   "pythonMessage": "drawing contains unclassified field(s): unknownField",
+   "webRepairs": [
+    "session-field-dropped@drawings[0].unknownField"
+   ]
   }
  ]
 }

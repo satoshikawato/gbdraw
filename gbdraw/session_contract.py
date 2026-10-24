@@ -520,11 +520,12 @@ def describe_session_admission() -> dict[str, Any]:
             # The closed project and its drawings (_validate_session_drawings);
             # each drawing's parts are checked on its one-drawing view.
             drawing = obj(
-                {key: UNKNOWN for key in keys_of(SessionDrawing)}
+                # Sorted: a set's order changes between runs, and the generated Web modules list fields in order.
+                {key: UNKNOWN for key in sorted(keys_of(SessionDrawing))}
                 | {"id": STRING, "name": STRING, "mode": literal(*DIAGRAM_MODES)},
                 optional=sorted(keys_of(SessionDrawing) - {"id", "name", "mode"}),
             )
-            project = {key: UNKNOWN for key in keys_of(GbdrawSession49)} | fields | {
+            project = {key: UNKNOWN for key in sorted(keys_of(GbdrawSession49))} | fields | {
                 "resources": record(UNKNOWN),
                 "drawings": array(named("SessionCheckedDrawing", drawing)),
             }

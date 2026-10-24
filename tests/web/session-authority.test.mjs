@@ -11,6 +11,7 @@ const {
   isAuthorityBand,
   isCanonicalBand,
   isModeScopedBand,
+  isDrawingsBand,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -512,17 +513,17 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const version of [undefined, null, '46', 46.5, true, [46], {}]) {
     assert.equal(refusal({ format: 'gbdraw-session', version }), format, `version ${JSON.stringify(version)}`);
   }
-  for (const version of [49, 45, 43, 38, 34, 26, 0, -1]) {
+  for (const version of [50, 45, 43, 38, 34, 26, 0, -1]) {
     // B51 (Q2): a Session older than 27 is refused as an old version; OV-1253:
     // a newer one, and one in a gap, are refused as such.
-    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 48 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
+    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 49 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
     assert.equal(refusal({ format: 'gbdraw-session', version }), `INPUT_INVALID:${reason}`, `version ${version}`);
     if (reason === 'SESSION_TOO_OLD') continue;
     // The refusal names the versions this reader takes.
     assert.throws(() => readSessionInput({ format: 'gbdraw-session', version }), (error) => {
       assert.deepEqual(error.context, reason === 'SESSION_TOO_NEW'
-        ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 48 }
-        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–48' });
+        ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 49 }
+        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–49' });
       return true;
     });
     // The version is read before the format.
@@ -531,7 +532,7 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const formatValue of [undefined, null, 'other', 'GBDRAW-SESSION', ['gbdraw-session'], 46]) {
     assert.equal(refusal({ format: formatValue, version: 46 }), format, `format ${JSON.stringify(formatValue)}`);
   }
-  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]) {
+  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
   }
@@ -546,11 +547,13 @@ assert.throws(() => validateSessionAuthorityInventory({
     [isCanonicalBand, ['SessionChecked31', 'SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
     [isArtifactBand, ['SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
     [isAuthorityBand, ['SessionChecked40', 'SessionChecked46']],
-    [isModeScopedBand, ['SessionChecked46']]
+    [isModeScopedBand, ['SessionChecked46']],
+    // A Session 49 is in none of the four (DESIGN §6: no `>=` branch admits it).
+    [isDrawingsBand, ['SessionChecked49']]
   ];
   const { bands } = SESSION_ADMISSION_DESCRIPTION;
   assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
-  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1]]);
+  assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1], ...predicates[4][1]]);
   for (const version of SUPPORTED_SESSION_VERSIONS) {
     const band = bands.find(({ versions }) => versions.includes(version));
     assert.equal(band.minVersion, Math.min(...band.versions));

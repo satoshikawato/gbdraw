@@ -4968,12 +4968,11 @@ test('persisted contract: a renamed export with the same value needs review only
 const SESSION_UNIT_KEY = Object.freeze({ ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'main' });
 const SESSION_UNIT_FAILURE = /persisted-contract\.fold: /;
 const SESSION_UNIT_REVIEW = /the head and main both write Session /;
-const sessionVersionSchema = (version) => withContractExport(
-  withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version)),
-  'SUPPORTED_SESSION_VERSIONS',
-  `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
-    .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}])`
-);
+// The read list may hold `version` already (a branch reads a Session before it writes it).
+const sessionVersionSchema = (version) => withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version))
+  .replace(contractExportPattern('SUPPORTED_SESSION_VERSIONS'), `export const SUPPORTED_SESSION_VERSIONS = Object.freeze([${
+    [...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
+      .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}]);`);
 // Raises the Session version from `from` to `to` with every co-change the Gate asks for.
 const sessionRaise = (from, to) => ({
   [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(to),
@@ -5022,7 +5021,8 @@ test('persisted contract: a Session version above main takes later breaking chan
       [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE,
       [SESSION_HISTORY_PATH]: historyWith('Session version lowered.'),
       [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nLowered.\n',
-      'tests/fixtures/sessions/lowered.json': '{}\n'
+      // The head's read list may still hold the version main writes; it then keeps a fixture of it.
+      [`tests/fixtures/sessions/lowered.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
     }
   });
   assertVendorGateFailure(lowered, SESSION_UNIT_FAILURE, 'lowered below main');

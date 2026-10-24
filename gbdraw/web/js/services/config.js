@@ -135,7 +135,8 @@ import {
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView,
-  isSessionResourceFileView
+  isSessionResourceFileView,
+  webBindingInputSlot
 } from './session-resource-backing.js';
 import { normalizeLogicalResults } from './result-normalization.js';
 import {
@@ -208,6 +209,7 @@ import {
   adoptRuntimeCanonicalSession,
   isAdoptedCanonicalSession,
   isAuthorityBand,
+  isDrawingsBand,
   isCanonicalBand,
   hasBiologicalSessionInputs,
   holdsNothing,
@@ -216,6 +218,9 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
+  drawingSetIndex,
+  drawingSetPath,
+  readDrawingResultSetParts,
   readSessionAuthorityParts,
   readSessionDocument,
   readSessionInput,
@@ -255,7 +260,6 @@ import {
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
   DRAWN_HASH_RULE_SESSION_MAX_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -272,7 +276,9 @@ import {
   unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
-import { sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession } from './session-drawings-upgrade.js';
+import {
+  drawingViewOf, openedDrawingOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
+} from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from './drawing/annotation-sets.js';
@@ -323,7 +329,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
-/** @import { Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
+/** @import { ModeScopedUpgrade, Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { BoundCanonicalComparison, BoundFileValue, CardInputFiles, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
@@ -339,7 +345,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
+/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
@@ -1652,8 +1658,8 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
 
 
 /**
- * A Session's stored drafts (the flat `config` of a Session 27-44 and each
- * Session 46 slice's `config`) with the preserved overrides that are now
+ * A Session's stored drafts (the flat `config` of a Session 27-44, each
+ * Session 46 slice's `config` and each Session 49 drawing's) with the preserved overrides that are now
  * settings moved into them (`adoptPromotedPreservedOverrides`), read once
  * before anything validates or splits the drafts. A draft whose `adv` is no
  * object takes the font into a new `adv`; the value it drops is listed as
@@ -1664,7 +1670,7 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
  * @returns {T}
  */
 const adoptPromotedPreservedSettings = (data, repairs) => {
-  const document = /** @type {{ config?: unknown, modes?: unknown }} */ (data);
+  const document = /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */ (data);
   /** @param {unknown} config @param {string} path */
   const adopt = (config, path) => {
     const adoptedConfig = adoptPromotedPreservedOverrides(config);
@@ -1672,7 +1678,7 @@ const adoptPromotedPreservedSettings = (data, repairs) => {
     if (adoptedConfig !== config) repairs.push(...valueRepairs(readPlainObject, /** @type {{ adv?: unknown }} */ (config).adv, `${path}.adv`));
     return adoptedConfig;
   };
-  /** @type {{ config?: unknown, modes?: unknown }} */
+  /** @type {{ config?: unknown, modes?: unknown, drawings?: unknown }} */
   let adopted = document;
   if (isPlainObject(document.config)) {
     const config = adopt(document.config, 'config');
@@ -1690,6 +1696,14 @@ const adoptPromotedPreservedSettings = (data, repairs) => {
       changed = true;
     }
     if (changed) adopted = { ...adopted, modes };
+  }
+  if (Array.isArray(document.drawings)) {
+    const entries = document.drawings.map((entry, index) => {
+      if (!isPlainObject(entry) || !isPlainObject(entry.config)) return entry;
+      const config = adopt(entry.config, `${drawingSetPath(index)}config`);
+      return config === entry.config ? entry : { ...entry, config };
+    });
+    if (entries.some((entry, index) => entry !== /** @type {unknown[]} */ (document.drawings)[index])) adopted = { ...adopted, drawings: entries };
   }
   return /** @type {T} */ (adopted);
 };
@@ -2049,27 +2063,60 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
  * @typedef {{ resources: unknown, orthogroupState?: unknown }} StoredSetProject
  */
 /**
- * The committed Result sets of a Session 27-48, the projected one first: its
- * top-level set and a Session 46-48's `otherModeResult`. The one place Load
- * names where such a file holds a set; each set reader below reads one.
+ * The committed Result sets of a Session, the projected one first: a Session
+ * 27-48's top-level set and a Session 46-48's `otherModeResult`; each Session
+ * 49 drawing that holds a request, the one it opens (`openedDrawingOf`)
+ * projected (a drawing is found by its ID). The one place Load names where a
+ * file holds a set; each set reader below reads one.
  * @param {SessionInput} data
  * @returns {StoredResultSet[]}
  */
-const storedResultSets = (data) => [
-  { at: '', projected: true, set: data },
-  ...(isPlainObject(data.otherModeResult)
-    ? [{ at: /** @type {ResultSetPath} */ ('otherModeResult.'), projected: false, set: /** @type {SessionInput} */ (data.otherModeResult) }]
-    : [])
-];
+const storedResultSets = (data) => {
+  if (isDrawingsBand(/** @type {SessionChecked} */ (data))) {
+    const document = /** @type {Session49} */ (/** @type {unknown} */ (data));
+    // A Session 49 whose every drawing was dropped holds no set (R4, `restoresNothing`).
+    const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
+    /** @type {StoredResultSet[]} */
+    const sets = document.drawings.flatMap((entry, index) => (entry.renderRequest == null ? [] : [{
+      at: drawingSetPath(index),
+      projected: entry.id === openedId,
+      set: /** @type {SessionInput} */ (/** @type {unknown} */ (entry))
+    }]));
+    return [...sets.filter(({ projected }) => projected), ...sets.filter(({ projected }) => !projected)];
+  }
+  return [
+    { at: '', projected: true, set: data },
+    ...(isPlainObject(data.otherModeResult)
+      ? [{ at: /** @type {ResultSetPath} */ ('otherModeResult.'), projected: false, set: /** @type {SessionInput} */ (data.otherModeResult) }]
+      : [])
+  ];
+};
 
 /**
  * `data` with its set at `at` replaced by `set`; a null `set` leaves a stored
- * set out (the projected set is never left out).
+ * set out (the projected set of a Session 27-48 is never left out). A Session
+ * 49 drawing whose set is left out stays, without its set: no request, no
+ * Results, and none of the set's catalog, run metadata or invocation.
  * @template {SessionInput} T
  * @param {T} data @param {ResultSetPath} at @param {SessionInput | null} set
  * @returns {T}
  */
 const withStoredResultSet = (data, at, set) => {
+  const drawingIndex = drawingSetIndex(at);
+  if (drawingIndex !== null) {
+    const entries = [.../** @type {SessionInput[]} */ (/** @type {Record<string, unknown>} */ (data).drawings)];
+    if (set !== null) {
+      entries[drawingIndex] = set;
+    } else {
+      const { runMetadata: _runMetadata, cliInvocation: _cliInvocation, ...drawing } = entries[drawingIndex];
+      const { featureCatalog: _catalog, ...editorState } = isPlainObject(drawing.editorState) ? drawing.editorState : {};
+      entries[drawingIndex] = {
+        ...drawing, renderRequest: null, results: [],
+        ...(Object.hasOwn(drawing, 'editorState') ? { editorState } : {})
+      };
+    }
+    return { ...data, drawings: entries };
+  }
   if (at === '') {
     if (set === null) throw new Error('The projected Result set is never left out.');
     return /** @type {T} */ (set);
@@ -2085,8 +2132,8 @@ const withStoredResultSet = (data, at, set) => {
  * @param {readonly StoredResultSet[]} sets
  * @returns {StoredRequestSchemas}
  */
-const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, set }) => [
-  at === '' ? 'renderRequest' : 'otherModeResult',
+const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, projected, set }) => [
+  projected ? 'renderRequest' : at === 'otherModeResult.' ? 'otherModeResult' : at,
   /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema
 ]));
 
@@ -2196,7 +2243,9 @@ const readResultSetRequest = ({ at, set }, project) => {
  */
 const readSessionRequests = (rawData, version, repairs) => {
   const sets = storedResultSets(rawData);
-  const [projected, ...stored] = sets;
+  // A Session 49 whose opened drawing holds no request projects no set.
+  const projected = sets.find((entry) => entry.projected);
+  const stored = sets.filter((entry) => !entry.projected);
   const storedSchemas = storedRequestSchemas(sets);
   // A missing request is one its reader cannot read (K22, C-OD07; OV-785):
   // no writer omits the key. A null one marks a settings-only Session of a
@@ -2210,6 +2259,7 @@ const readSessionRequests = (rawData, version, repairs) => {
   }
   /** @type {StoredSetProject} */
   const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState };
+  if (!projected) return { data: readStoredSetRequests(rawData, stored, project, repairs), storedSchemas, settingsOnly: false, comparisonClassification: null };
   const { read: projectedRead, classification: comparisonClassification } = readResultSetRequest(projected, project);
   if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
@@ -2225,7 +2275,21 @@ const readSessionRequests = (rawData, version, repairs) => {
     };
   }
   repairs.push(...projectedRead.repairs);
-  let data = projectedRead.value === rawData.renderRequest ? rawData : /** @type {T} */ ({ ...rawData, renderRequest: projectedRead.value });
+  const data = projectedRead.value === projected.set.renderRequest
+    ? rawData : withStoredResultSet(rawData, projected.at, { ...projected.set, renderRequest: projectedRead.value });
+  return { data: readStoredSetRequests(data, stored, project, repairs), storedSchemas, settingsOnly: false, comparisonClassification };
+};
+
+/**
+ * `readSessionRequests` of the stored sets (all but the projected one): a
+ * set whose request cannot be read is left out, with its row.
+ * @template {SessionInput} T
+ * @param {T} rawData @param {readonly StoredResultSet[]} stored
+ * @param {StoredSetProject} project @param {LoadRepair[]} repairs
+ * @returns {T}
+ */
+const readStoredSetRequests = (rawData, stored, project, repairs) => {
+  let data = rawData;
   for (const entry of stored) {
     if (!Object.hasOwn(entry.set, 'renderRequest')) continue;
     const { read } = readResultSetRequest(entry, project);
@@ -2241,7 +2305,7 @@ const readSessionRequests = (rawData, version, repairs) => {
       if (read.value !== entry.set.renderRequest) data = withStoredResultSet(data, entry.at, { ...entry.set, renderRequest: read.value });
     }
   }
-  return { data, storedSchemas, settingsOnly: false, comparisonClassification };
+  return data;
 };
 
 /**
@@ -2284,6 +2348,18 @@ const readSettingsOnlyMode = (data, repairs) => {
 };
 
 /**
+ * The one-drawing view (`drawingViewOf`) of the drawing a Session 49 opens
+ * (`openedDrawingOf`).
+ * @template {SessionInput} T
+ * @param {T} data A Session 49 as Load read its sets.
+ * @returns {T}
+ */
+const projectedDrawingView = (data) => {
+  const document = /** @type {Session49} */ (/** @type {unknown} */ (data));
+  return /** @type {T} */ (/** @type {unknown} */ (drawingViewOf(document, openedDrawingOf(document))));
+};
+
+/**
  * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
@@ -2297,9 +2373,14 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // its drop has a code the dialog does not list (Q1).
   /** @type {{ slice: string, unread: LegendEditsUnread }[]} */
   const unreadLegendEdits = [];
+  // A Session 49 is a list of drawings, each read by its set's readers below
+  // (`storedResultSets`); its tables are framed and its Legend edits row keyed.
+  const drawingsBand = isDrawingsBand(sessionData);
   // A Session before 31 holds no request (OV-862), so no stored table of it is converted.
   const framed = isCanonicalBand(sessionData) ? await convertMainSessionComparisonFrames(sessionData) : sessionData;
-  const legendRead = sessionLegendEditsByRowKey(framed, sourceSessionVersion, unreadLegendEdits);
+  const legendRead = drawingsBand
+    ? { session: framed, outcomes: [] }
+    : sessionLegendEditsByRowKey(framed, sourceSessionVersion, unreadLegendEdits);
   unreadLegendEdits.forEach(({ slice, unread }) => repairs.push(
     ...legendEditRepairs(unread, `${slice === 'draft' ? '' : `modes.${slice}.`}editorState.legend`)
   ));
@@ -2318,11 +2399,17 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
   // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
-  const authorityData = readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
+  const authorityData = drawingsBand
+    ? await readEachResultSet(requestData, async (entry) => readDrawingResultSetParts(entry, sourceSessionVersion,
+      requestRead.storedSchemas[entry.projected ? 'renderRequest' : /** @type {DrawingSetPath} */ (entry.at)],
+      repairs, uncomposedSets))
+    : readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
   /** @type {StoredSetProject} */
   const project = { resources: authorityData.resources };
   const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
-  const currentSession = isAuthorityBand(rawData);
+  const currentSession = isDrawingsBand(rawData) || isAuthorityBand(rawData);
+  /** @type {ModeScopedUpgrade | null} The Session 49 of a Session 46-49, below. */
+  let upgrade = null;
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
   /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
@@ -2340,17 +2427,36 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   let normalizedData;
 
   if (currentSession) {
-    recordSessionLifecycleEvent('session-authority-validation-start');
-    adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
-    recordSessionLifecycleEvent('session-authority-validation-end');
+    if (!drawingsBand) {
+      recordSessionLifecycleEvent('session-authority-validation-start');
+      adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
+      recordSessionLifecycleEvent('session-authority-validation-end');
+    }
     recordSessionLifecycleEvent('feature-catalog-validation-start');
-    const catalogData = await readEachResultSet(rawData, async (entry) => {
+    const catalogSets = await readEachResultSet(rawData, async (entry) => {
       const read = await readResultSetFeatureCatalog(entry, repairs);
       if (read.set) setCatalogs.set(entry.at, read.catalog);
       return read.set;
     });
-    validatedFeatureCatalog = setCatalogs.get('') ?? null;
+    // A Session 49's drafts take their promoted preserved settings once, so
+    // the projected view and every drawing's entry read the same draft.
+    const readSets = drawingsBand ? adoptPromotedPreservedSettings(catalogSets, repairs) : catalogSets;
+    const projectedAt = storedResultSets(rawData).find((entry) => entry.projected)?.at;
+    validatedFeatureCatalog = projectedAt === undefined ? null : setCatalogs.get(projectedAt) ?? null;
     recordSessionLifecycleEvent('feature-catalog-validation-end');
+    // A Session 49 projects the drawing it opens as a Session 46-48 projects
+    // its committed set: from the drawing's one-drawing view (`drawingViewOf`).
+    const catalogData = drawingsBand ? projectedDrawingView(readSets) : readSets;
+    if (drawingsBand) {
+      upgrade = {
+        document: /** @type {Session49} */ (/** @type {unknown} */ (readSets)),
+        setSources: new Map(storedResultSets(readSets).map(({ at, set }) => [/** @type {SessionDrawing49} */ (/** @type {unknown} */ (set)).id, at])),
+        sourceFacts: { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false }
+      };
+      recordSessionLifecycleEvent('session-authority-validation-start');
+      adoptedSession = adoptCurrentSessionDocument(catalogData, sourceSessionVersion, requestRead.storedSchemas);
+      recordSessionLifecycleEvent('session-authority-validation-end');
+    }
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(catalogData.editorState, {
       featureCatalog: validatedFeatureCatalog,
@@ -2384,6 +2490,13 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
     : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
+  // The Session 49 of a Session 46-48 (DESIGN §4.2): each drawing's part of
+  // the file is its own entry, found by drawing ID, and so is where the file
+  // holds its saved Result set (`setSources`). Its Legend edits were read by
+  // row key above.
+  if (!drawingsBand && sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION) {
+    upgrade = upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion);
+  }
   const storedRequest = /** @type {UnvalidatedFields<'mode'>
     & UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (data.renderRequest);
   // A Gallery migration rebuilt its request, which is classified as rebuilt.
@@ -2439,7 +2552,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     : data.config;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-start');
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
-  const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data);
+  // A Session 49 drawing without a request projects as a settings-only
+  // Session does; the document itself is no settings-only Session.
+  const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data)
+    || (drawingsBand && data.renderRequest == null);
   // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
   /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
   const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
@@ -2464,8 +2580,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         deferResourceContent: currentSession && hasStoredDraft,
         adoptCanonicalPayloads: currentSession,
         // OV-1280: from Session 48 on, a Session without a draft holds each
-        // table as its card's file.
-        markCardFileRows: !hasStoredDraft && sourceSessionVersion >= FILE_IMPORT_ORIGIN_SESSION_VERSION
+        // table as its card's file (what only the source says, DESIGN §6).
+        markCardFileRows: !hasStoredDraft && Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
+        // A Session 49 drawing binds its own mode's input.
+        bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode)
       }
     : null;
   /** @type {SessionRequestProjection | null} */
@@ -2608,7 +2726,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     setCatalogs,
     comparisonClassification,
     unmanagedConfigValidation,
-    settingsOnly
+    settingsOnly,
+    upgrade,
+    // The drawing whose set Load projects: a Session 49's opened drawing.
+    projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session49} */ (/** @type {unknown} */ (sessionData))).id) : null
   };
 };
 
@@ -4769,7 +4890,7 @@ const loadedDrawingPlan = (document) => Object.freeze({
   drawings: Object.freeze(document.drawings.map(({ id, mode, name }) => Object.freeze({
     id: /** @type {DrawingId} */ (id), mode, name
   }))),
-  activeDrawingId: /** @type {DrawingId} */ (document.ui.activeDrawingId)
+  activeDrawingId: /** @type {DrawingId} */ (openedDrawingOf(document).id)
 });
 /**
  * A new drawing of each mode `drawings` have none of, which a Load keeps for
@@ -5688,7 +5809,9 @@ const importSessionDocument = async (e, options = {}) => {
       setCatalogs,
       comparisonClassification,
       unmanagedConfigValidation,
-      settingsOnly
+      settingsOnly,
+      upgrade,
+      projectedDrawingId
     } = preflight;
     if (restoredConfig && unmanagedConfigValidation) {
       // A stored draft's overrides are read; a request's are checked.
@@ -5746,28 +5869,26 @@ const importSessionDocument = async (e, options = {}) => {
     // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
     const isStoredSlice = (drawingId) => modeScopedSession && !(drawingId === committedSetDrawingId && committedSliceProjected);
-    // The 49 document of a Session 46-48 (the fast path, DESIGN §4.2; its
-    // Legend edits were read by row key in preflight): each drawing's part
-    // of the file is its own entry, found by drawing ID, and so is where the
-    // file holds its saved Result set (`setSources`).
-    const upgrade = modeScopedSession
-      ? upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion)
-      : null;
+    // The 49 document of a Session 46-49 (preflight read each drawing's part
+    // of the file as its own entry, found by drawing ID, and where the file
+    // holds its saved Result set, `setSources`).
     const upgraded = upgrade ? upgrade.document : null;
     /**
-     * The drawing that takes a Session 27-48's part of `mode` (the file holds
-     * one per mode): its 49 document's drawing of that mode, else the new
-     * drawing of it a Load makes (`legacyDrawingPlan`, `unusedDrawingsOf`).
-     * The one place a Load maps the file's modes to drawing IDs.
+     * The drawing that takes a Session's part of `mode` the projection reads:
+     * a Session 49's opened drawing for its mode, else its 49 document's
+     * drawing of that mode, else the new drawing of it a Load makes
+     * (`legacyDrawingPlan`, `unusedDrawingsOf`). The one place a Load maps
+     * the file's modes to drawing IDs.
      * @param {DiagramMode} mode @returns {DrawingId}
      */
-    const fileDrawingIdOf = (mode) => /** @type {DrawingId} */ (
-      upgraded?.drawings.find((entry) => entry.mode === mode)?.id ?? firstDrawingOfMode(mode).id);
+    const fileDrawingIdOf = (mode) => /** @type {DrawingId} */ ((projectedDrawingId !== null
+      && upgraded?.drawings.find((entry) => entry.id === projectedDrawingId)?.mode === mode ? projectedDrawingId : null)
+      ?? upgraded?.drawings.find((entry) => entry.mode === mode)?.id ?? firstDrawingOfMode(mode).id);
     // The drawing of the committed set (the top-level set of a Session 27-48,
     // whose request Load projects), and the drawings that take the file's one
     // Linear part (its record layout, comparisons, LOSAT caches and group
     // names) and its one Circular part (its conservation rows).
-    const committedSetDrawingId = fileDrawingIdOf(generatedMode);
+    const committedSetDrawingId = projectedDrawingId ?? fileDrawingIdOf(generatedMode);
     const linearPartDrawingId = fileDrawingIdOf('linear');
     const circularPartDrawingId = fileDrawingIdOf('circular');
     /**
@@ -5779,8 +5900,8 @@ const importSessionDocument = async (e, options = {}) => {
      */
     const draftParts = new Map();
     if (upgraded) {
-      upgraded.drawings.forEach((entry) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
-        slice: drawingDraftPartOf(entry), at: `modes.${entry.mode}`
+      upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
+        slice: drawingDraftPartOf(entry), at: projectedDrawingId !== null ? drawingSetPath(index).slice(0, -1) : `modes.${entry.mode}`
       }));
       const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
       unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
@@ -6045,7 +6166,9 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {ArtifactSlot[]} */
     const storedSetSlots = [];
     for (const { drawing, mode, at, catalog, set } of storedSets) {
-      const savedEdits = savedResultEdits(data, mode, set.editorState, sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
+      // The drawing's own draft part, found by its ID.
+      const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
+        sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
       savedEditsOf.set(drawing.id, savedEdits);
       const sequenceSources = await restoreLoadedSetSequenceSources({
         ...setSequenceSourceOptions, mode, catalog, renderRequest: set.renderRequest

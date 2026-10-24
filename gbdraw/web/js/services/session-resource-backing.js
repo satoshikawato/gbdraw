@@ -261,15 +261,26 @@ export const POSITIONAL_BINDING_LISTS = Object.freeze(new Set([
   'c_depth', 'depth', 'c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources'
 ]));
 /**
+ * The input slot a schema-2 inventory holds (`gbdraw/session_io.py`): `c_gb`
+ * for a Session 41-48, which binds both modes' inputs; a Session 49
+ * drawing's own mode's (its one-drawing view names the mode in `ui.mode`).
+ * @param {boolean} drawingView The inventory is a Session 49 drawing's.
+ * @param {unknown} mode The view's `ui.mode`.
+ * @returns {'c_gb' | 'linearSeqs'}
+ */
+export const webBindingInputSlot = (drawingView, mode) => (drawingView && mode === 'linear' ? 'linearSeqs' : 'c_gb');
+/**
  * The one check of a Web input inventory: Load drops what it names
  * (`readWebFileBindings` in session-authority.js), Save and the runtime refuse
  * it (`validateWebFileBindings`).
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
+ * @param {'c_gb' | 'linearSeqs'} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-48, the
+ *   drawing's mode's for a Session 49 drawing's one-drawing view (`gbdraw/session_io.py`).
  * @returns {WebFileBindingFault[]}
  */
-export const webFileBindingFaults = (webFiles, resources = {}) => {
+export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb') => {
   if (!webFiles || !Object.hasOwn(webFiles, 'bindings')) return [];
   const bindings = webFiles.bindings;
   /**
@@ -277,10 +288,10 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
    * @returns {value is Record<string, unknown>}
    */
   const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-  // The inventory: an object of a schema a writer wrote; schema 2 holds `c_gb`.
+  // The inventory: an object of a schema a writer wrote; schema 2 holds its input slot.
   if (!object(bindings) || !(/** @type {unknown[]} */ ([1, 2])).includes(bindings.schema)) return [{ at: null }];
   const current = bindings.schema === 2;
-  if (current && !Object.hasOwn(bindings, 'c_gb')) return [{ at: null }];
+  if (current && !Object.hasOwn(bindings, inputSlot)) return [{ at: null }];
   /** @param {Record<string, unknown>} value @returns {boolean} Its file metadata cannot be read. */
   const badMetadata = value => typeof value.name !== 'string' || typeof value.type !== 'string'
     || typeof value.lastModified !== 'number' || !Number.isFinite(value.lastModified) || value.lastModified < 0;
@@ -343,11 +354,12 @@ export const webFileBindingFaults = (webFiles, resources = {}) => {
 /**
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
+ * @param {'c_gb' | 'linearSeqs'} [inputSlot] As `webFileBindingFaults`.
  * @returns {WebFileBindings | undefined} the `webFiles.bindings` object, checked
  */
-export const validateWebFileBindings = (webFiles, resources = {}) => {
+export const validateWebFileBindings = (webFiles, resources = {}, inputSlot = 'c_gb') => {
   // R6: the typed Session-fields error; Load lists each fault's place before (`readSessionInputs`).
-  if (webFileBindingFaults(webFiles, resources).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+  if (webFileBindingFaults(webFiles, resources, inputSlot).length) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
   // No fault: the checks prove the schema and each file slot.
   return /** @type {WebFileBindings | undefined} */ (webFiles?.bindings);
 };

@@ -6,7 +6,7 @@ Current writers emit session version 48 and canonical `renderRequest` schema 9.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 48 | 27–33, 39–42, 44, and 46–48 |
+| gbdraw session | 48 | 27–33, 39–42, 44, and 46–49 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
 
@@ -62,6 +62,17 @@ Web app still loads a Session that holds such a form; until the Web repairs it
 at Load, Generate and any re-render of the stored request (label reflow,
 alignment, record transform) show "An input value is invalid"
 (`INPUT_INVALID`, field `schema`).
+
+Session 49 holds a project and its list of drawings. The project keeps
+`format`, `version`, `createdAt`, `title`, `resources`, `ui` (with
+`ui.activeDrawingId`, the drawing that opens), and `legacyArtifacts`. Each entry
+of `drawings` is one drawing in tab order: its `id`, `name`, and `mode`
+(`circular` or `linear`), and its own request, Results, settings (`config`),
+per-feature edits (`features`), editor state, view (`ui`), file bindings
+(`webFiles`), and saved LOSAT results. A project may hold several drawings of one
+mode. The top-level `modes`, `otherModeResult`, `renderRequest`, `results`,
+`config`, and `features` of Sessions 46 to 48 are not part of Session 49.
+Reading a Session 46 to 48 moves each mode's part into its own drawing.
 
 Sessions 46 to 48 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:

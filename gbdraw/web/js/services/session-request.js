@@ -4758,7 +4758,8 @@ export const projectCanonicalSessionRequest = ({
   sessionResourceTable = null,
   deferResourceContent = false,
   adoptCanonicalPayloads = false,
-  markCardFileRows = false
+  markCardFileRows = false,
+  bindingInputSlot = 'c_gb'
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -4829,7 +4830,7 @@ export const projectCanonicalSessionRequest = ({
     : {};
   // The checked bindings; the CLI initialization below rebuilds them field by field.
   /** @type {Readonly<Record<string, unknown>> | undefined} */
-  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources, bindingInputSlot);
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
   // particular GFF + FASTA), and initialize absent slots from the typed request.

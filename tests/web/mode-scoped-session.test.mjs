@@ -9,7 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
-import { evaluatePython } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
 globalThis.window = {
   Vue: {
@@ -29,6 +29,8 @@ installSessionImportWorker();
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
+// A Session 49 drawing's saved unmanaged overrides are checked as Load checks them (PD-OI-009).
+sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -661,5 +663,80 @@ test('Load reads each Result set\'s request, reset receipt and catalog where the
   }
   for (const name of ['otherModeCatalog', 'otherCatalog', 'readSessionResetReceipts', 'readSessionFeatureCatalogs']) {
     assert.equal(new RegExp(`\\b${name}\\b`).test(source), false, name);
+  }
+});
+
+// Session 49 (D-15-109): the Web reads the drawings document Python writes.
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/drawings-v49/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
+const loadKeepingSlots = async (session) => {
+  const stashed = [];
+  let opening = null;
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    installLoadedArtifactSlots: (slots) => { opening = slots.opening; stashed.push(...slots.stashed); }
+  });
+  return { loaded, stashed, opening };
+};
+// Each drawing's held request and features, by drawing ID: the shown one's from state, any other from its slot.
+const heldSetOf = (id, { stashed, opening }) => {
+  if (id === state.activeDrawing().id && !opening) {
+    return { request: getCommittedCanonicalSession()?.renderRequest ?? null, features: state.extractedFeatures.value };
+  }
+  const slot = [opening, ...stashed].find((entry) => entry?.drawingId === id);
+  return slot
+    ? { request: slot.runtimeState.canonical.committedCanonicalSession.renderRequest, features: slot.values.extractedFeatures }
+    : null;
+};
+const assertLoadedDrawings = (session, outcome) => {
+  assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+  const ids = session.drawings.map((entry) => entry.id);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id).slice(0, ids.length), ids);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode).slice(0, ids.length), session.drawings.map((entry) => entry.mode));
+  assert.equal(state.activeDrawing().id, session.ui.activeDrawingId);
+  for (const entry of session.drawings) {
+    const drawing = state.drawingOf(entry.id);
+    if (entry.config?.form?.plot_title !== undefined) assert.equal(drawing.form.plot_title, entry.config.form.plot_title, entry.id);
+    if (!entry.renderRequest || entry.results.length === 0) continue;
+    const held = heldSetOf(entry.id, outcome);
+    assert.ok(held, `${entry.id} holds its Result set`);
+    assert.equal(held.request.mode, entry.mode, entry.id);
+    assert.deepEqual(held.request.records.map((record) => record.recordKey), entry.renderRequest.records.map((record) => record.recordKey), entry.id);
+    assert.equal(held.features.length, entry.editorState.featureCatalog.items[0].features.length, entry.id);
+  }
+};
+
+test('a Python-written Session 49 loads each drawing\'s request, Results and draft by drawing ID', async () => {
+  for (const name of ['drawings-circular-only', 'drawings-circular-linear', 'drawings-linear-pair-losat', 'drawings-per-drawing-cards']) {
+    const session = v49Session(name);
+    // A draft value of its own in each drawing that holds a draft.
+    session.drawings.forEach((entry) => { if (entry.config?.form) entry.config.form.plot_title = `title of ${entry.id}`; });
+    resetDrawings();
+    assertLoadedDrawings(session, await loadKeepingSlots(session));
+  }
+});
+
+test('a Session 49 with two Circular drawings and a Linear one loads all three in tab order and keeps each Result in its own slot', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  session.drawings.push({ ...structuredClone(circular), id: 'circular-2', name: 'Circular 2' });
+  session.drawings.forEach((entry) => { if (entry.config?.form) entry.config.form.plot_title = `title of ${entry.id}`; });
+  session.ui.activeDrawingId = 'circular-2';
+  resetDrawings();
+  const outcome = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, outcome);
+  // Each drawing that is not shown keeps its Result in its own slot.
+  assert.deepEqual([outcome.opening, ...outcome.stashed].filter(Boolean).map((slot) => slot.drawingId).sort(), ['circular', 'linear']);
+});
+
+test('a Session 49 without its drawings or its resources is refused as no Session (OV-1768)', async () => {
+  for (const field of ['drawings', 'resources']) {
+    const session = v49Session('drawings-circular-only');
+    delete session[field];
+    resetDrawings();
+    const outcome = await load(session);
+    assert.equal(outcome.status, 'error', field);
+    assert.equal(outcome.error.context?.reason, 'SESSION_FORMAT', `${field}: ${JSON.stringify(outcome.error)}`);
   }
 });

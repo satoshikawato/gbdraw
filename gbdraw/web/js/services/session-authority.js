@@ -3,7 +3,8 @@ import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import {
-  POSITIONAL_BINDING_LISTS, readSessionResources, validateWebFileBindings, webFileBindingFaults, webFileBindingPath
+  POSITIONAL_BINDING_LISTS, readSessionResources, validateWebFileBindings, webBindingInputSlot, webFileBindingFaults,
+  webFileBindingPath
 } from './session-resource-backing.js';
 import { SESSION_INPUT_TYPES, alignmentResetReceiptShapeHolds, requireActiveConfigContainers } from './session-active-config-contract.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -26,6 +27,7 @@ import {
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
   MODE_SCOPED_SESSION_VERSION,
+  SESSION_DRAWINGS_LAYOUT,
   OTHER_MODE_RESULT_EDITOR_FIELDS,
   OTHER_MODE_RESULT_FIELDS,
   OTHER_MODE_RESULT_LEGEND_FIELDS,
@@ -37,7 +39,7 @@ import {
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 /**
- * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46,
+ * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46, SessionChecked49,
  *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
  */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
@@ -170,6 +172,8 @@ const READ_SESSION_VERSIONS = (() => {
   return words.length > 1 ? `${words.slice(0, -1).join(', ')}, and ${words[words.length - 1]}` : words.join('');
 })();
 const OLDEST_SESSION_VERSION = Math.min(...SUPPORTED_SESSION_VERSIONS);
+// The newest version this app reads; Save may still write an older one (SESSION_VERSION).
+const NEWEST_SESSION_VERSION = Math.max(...SUPPORTED_SESSION_VERSIONS);
 
 /**
  * The one reader of a parsed Session file. What it returns is a
@@ -188,11 +192,11 @@ export const readSessionInput = (value) => {
   if (value.format === 'gbdraw-session' && version > 0 && version < OLDEST_SESSION_VERSION) {
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_TOO_OLD' });
   }
-  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSION_SET.has(version)) {
+  if (!SUPPORTED_SESSION_VERSION_SET.has(version)) {
     // OV-1253: a Session names its version, as the CLI does; another file keeps the generic refusal.
     throw diagnosticError('INPUT_INVALID', value.format !== 'gbdraw-session' ? { field: 'schema', reason: 'FIELDS' }
-      : version > SESSION_VERSION
-        ? { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: version, latestSessionVersion: SESSION_VERSION }
+      : version > NEWEST_SESSION_VERSION
+        ? { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: version, latestSessionVersion: NEWEST_SESSION_VERSION }
         : { field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: version, readSessionVersions: READ_SESSION_VERSIONS });
   }
   if (value.format !== 'gbdraw-session') throw formatInvalid();
@@ -200,17 +204,21 @@ export const readSessionInput = (value) => {
 };
 
 // The band of a checked Session (`SessionChecked`, describe_session_admission()).
-// TypeScript does not narrow a version's literal union by `>=`, so these four
+// TypeScript does not narrow a version's literal union by `>=`, so these five
 // are the version tests that narrow it; each starts at its band's generated
 // threshold (tests/web/session-authority.test.mjs compares them with the bands).
+// A Session 49 is a list of drawings (`isDrawingsBand`): none of the four
+// bands of the file's sets holds it, so none of them reads it (DESIGN §6).
+/** @param {SessionChecked} document @returns {document is SessionChecked49} */
+export const isDrawingsBand = (document) => document.version >= SESSION_DRAWINGS_LAYOUT.version;
 /** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
-export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION;
+export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION && !isDrawingsBand(document);
 /** @param {SessionChecked} document @returns {document is SessionChecked39 | SessionChecked40 | SessionChecked46} */
-export const isArtifactBand = (document) => document.version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION;
+export const isArtifactBand = (document) => document.version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION && !isDrawingsBand(document);
 /** @param {SessionChecked} document @returns {document is SessionChecked40 | SessionChecked46} */
-export const isAuthorityBand = (document) => document.version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+export const isAuthorityBand = (document) => document.version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && !isDrawingsBand(document);
 /** @param {SessionChecked} document @returns {document is SessionChecked46} */
-export const isModeScopedBand = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+export const isModeScopedBand = (document) => document.version >= MODE_SCOPED_SESSION_VERSION && !isDrawingsBand(document);
 
 /**
  * A value that holds nothing: `null`, `[]` or `{}` (E-OD06; R4's held parts).
@@ -444,8 +452,11 @@ const readSessionInputs = (document, repairs) => {
   let next = document;
   const resources = readSessionResources(next.resources);
   // A resource nothing names is dropped with no row (E-OD06, A15).
+  // Each Result set's request names its resources: a Session 27-48's top-level
+  // set and `otherModeResult`, a Session 49's drawings (their bindings: B2d-3a-2).
+  const drawings = Array.isArray(next.drawings) ? /** @type {UnvalidatedFields<'renderRequest'>[]} */ (next.drawings) : [];
   const named = collectCanonicalResourceIds([next.renderRequest, /** @type {UnvalidatedFields<'renderRequest'>} */ (next.otherModeResult)?.renderRequest,
-    /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles)?.bindings]);
+    ...drawings.map((drawing) => drawing?.renderRequest), /** @type {UnvalidatedFields<'bindings'>} */ (next.webFiles)?.bindings]);
   resources.dropped.filter((id) => named.has(id.trim())).forEach((id) => repairs.push(
     loadRepair({ code: 'file-entry-dropped', path: `resources.${id}`, effect: 'dropped' })
   ));
@@ -499,12 +510,35 @@ export const readSessionDocument = (value) => {
     SESSION_REPAIR_POLICY);
   /** @type {LoadRepair[]} */
   const repairs = read.rows.flatMap((row) => bandRepair(row, envelope, band.root) ?? []);
+  // A root field the band requires that the file lacks leaves no document
+  // (OV-1768): the file is no Session this app reads (R2).
+  if (!isPlainObject(read.value)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   const repaired = read.rows.some(({ path }) => path === 'results') ? withoutResultSetMembers(read.value) : read.value;
   const checked = /** @type {SessionChecked} */ (repaired); // the band's description holds, as repaired
+  // A Session 49's drawings are read by drawing (Load's preflight); the
+  // project holds the resources every drawing names. The description drops
+  // a drawing without an ID, a name or a diagram mode; two drawings of one
+  // ID leave no drawing to find by its ID: the file is no Session this app
+  // reads (R2).
+  if (isDrawingsBand(checked)) {
+    if (!drawingIdsAreUnique(checked)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+    return { value: readSessionInputs(checked, repairs), repairs };
+  }
   return {
     value: readSettingsOnlyParts(readSessionInputs(readWebOnlyFields(withNullRequestAsMissing(checked), repairs), repairs), repairs),
     repairs
   };
+};
+
+/**
+ * Each drawing of a Session 49 has an ID of its own (`_identity_problem`,
+ * gbdraw/session_drawings.py).
+ * @param {SessionChecked49} document
+ * @returns {boolean}
+ */
+const drawingIdsAreUnique = (document) => {
+  const ids = document.drawings.map((entry) => entry.id);
+  return new Set(ids).size === ids.length;
 };
 
 /**
@@ -550,6 +584,11 @@ export const restoresNothing = (stored, repairs) => {
   // The other mode's set dropped for its request is the part `otherModeResult`.
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? 'otherModeResult' : path)));
+  // A Session 49 restores nothing when every drawing it holds was dropped.
+  const storedDrawings = /** @type {{ drawings?: unknown }} */ (/** @type {unknown} */ (stored)).drawings;
+  if (stored.version >= SESSION_DRAWINGS_LAYOUT.version && Array.isArray(storedDrawings)) {
+    return storedDrawings.every((_entry, index) => dropped.has(drawingSetPath(index).slice(0, -1)));
+  }
   /**
    * What a part holds: the members of an object part that hold something
    * (`key.member`; a part whose members hold nothing holds nothing), the
@@ -829,7 +868,10 @@ export const hasSettingsOnlyForm = (data) => data != null && isSettingsOnlySessi
 /**
  * The request schemas a file stored, read before Load promoted its requests:
  * a check that depends on what the writer wrote reads them (RK-1).
- * @typedef {{ renderRequest?: unknown, otherModeResult?: unknown }} StoredRequestSchemas
+ * Keyed by where the file holds each set: the projected set's under
+ * `renderRequest`, a Session 46-48's other mode's under `otherModeResult`,
+ * a Session 49's other drawings' under their `drawingSetPath`.
+ * @typedef {{ renderRequest?: unknown, otherModeResult?: unknown } & { [at: DrawingSetPath]: unknown }} StoredRequestSchemas
  */
 
 /** The Web input inventory of a Session that binds no input. */
@@ -1129,10 +1171,28 @@ const refuseFirstFault = ([fault]) => {
 };
 
 /**
- * Where a committed Result set is in a Session: the top level or the other
- * mode's set (the prefix of its paths).
- * @typedef {'' | 'otherModeResult.'} ResultSetPath
+ * The field of a Session 49 that holds its drawings (a file path, not the
+ * app's drawing list).
  */
+const DRAWING_LIST_FIELD = /** @type {const} */ ('drawings');
+/**
+ * Where a Session 49 holds a drawing's Result set: the prefix of its paths,
+ * written as the description reader writes a list member's (`list[i].`).
+ * @typedef {`${typeof DRAWING_LIST_FIELD}[${number}].`} DrawingSetPath
+ */
+/**
+ * Where a committed Result set is in a Session: the top level or the other
+ * mode's set of a Session 27-48, or a Session 49 drawing's (the prefix of its
+ * paths).
+ * @typedef {'' | 'otherModeResult.' | DrawingSetPath} ResultSetPath
+ */
+/** @param {number} index @returns {DrawingSetPath} */
+export const drawingSetPath = (index) => `${DRAWING_LIST_FIELD}[${index}].`;
+/** The index of the Session 49 drawing whose set is at `at`, else null. @param {ResultSetPath} at */
+export const drawingSetIndex = (at) => {
+  const matched = /^drawings\[(\d+)\]\.$/.exec(at);
+  return matched ? Number(matched[1]) : null;
+};
 /**
  * Load: a committed Result set as far as it can be restored (A7b, A9, A19,
  * A20). Results that cannot be read are dropped with the members that name
@@ -1345,6 +1405,33 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
   return /** @type {T} */ (withReadRunNotices(data));
 };
 
+/**
+ * Load: one drawing's committed Result set of a Session 49, read after its
+ * request (`readSessionRequests`) as `readSessionAuthorityParts` reads a
+ * Session 46-48's: the drawing Load projects keeps what can be restored of
+ * its set, as the top-level set does; any other drawing's set is dropped on
+ * a fault of its own (`session-part-dropped`), as the other mode's set is.
+ * Null drops the set (the drawing stays).
+ * @param {{ at: ResultSetPath, projected: boolean, set: SessionInput }} stored
+ * @param {number} version
+ * @param {unknown} storedSchema The schema the file stored for the set's request (RK-1).
+ * @param {LoadRepair[]} repairs Collects the rows.
+ * @param {readonly ResultSetPath[]} [uncomposedSets]
+ * @returns {SessionInput | null}
+ */
+export const readDrawingResultSetParts = ({ at, projected, set }, version, storedSchema, repairs, uncomposedSets = []) => {
+  /** @type {ResultSetFault[]} */
+  const faults = [
+    ...committedResultSetFaults(set, version, storedSchema ?? storedRequestSchema(set)),
+    ...(uncomposedSets.includes(at) ? [/** @type {ResultSetFault} */ ({ kind: 'results' })] : [])
+  ];
+  if (!projected && faults.some(({ kind }) => !['receipt', 'receipt-missing'].includes(kind))) {
+    repairs.push(loadRepair({ code: 'session-part-dropped', path: at.slice(0, -1), effect: 'dropped' }));
+    return null;
+  }
+  return withReadRunNotices(readCommittedResultSet(set, faults, at, repairs));
+};
+
 // Session 46 keeps each mode's draft in `modes` (registry fields only) and
 // none of it in its former homes; `ui.losatExecution` holds only the LOSAT
 // execution settings (plan 4.1).
@@ -1444,7 +1531,8 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   if (!load) validateBandFields(sessionData, version);
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
-    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources)
+    /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources),
+    webBindingInputSlot(Number(version) >= SESSION_DRAWINGS_LAYOUT.version, /** @type {UnvalidatedFields<'mode'>} */ (sessionData.ui)?.mode)
   );
   // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (
@@ -1457,10 +1545,11 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION]
-    .includes(Number(version))) {
+  // A Session 49 drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
+  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION,
+    SESSION_DRAWINGS_LAYOUT.version].includes(Number(version))) {
     throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
-      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, or ${SESSION_VERSION}.`);
+      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, ${SESSION_VERSION}, or ${SESSION_DRAWINGS_LAYOUT.version}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
@@ -1520,7 +1609,10 @@ export const adoptCurrentSessionDocument = (sessionData, currentVersion, storedS
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }
-  const canonical = isSettingsOnlySessionDocument(sessionData) ? null : adoptRuntimeCanonicalSession({
+  // A Session 49 drawing without a request projects as a settings-only Session.
+  const requestLess = isSettingsOnlySessionDocument(sessionData)
+    || (currentVersion >= SESSION_DRAWINGS_LAYOUT.version && sessionData.renderRequest == null);
+  const canonical = requestLess ? null : adoptRuntimeCanonicalSession({
     renderRequest: sessionData.renderRequest,
     resources: sessionData.resources,
     webFiles: isPlainObject(sessionData.webFiles) ? sessionData.webFiles : {}

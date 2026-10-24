@@ -24,6 +24,7 @@ import {
 } from '../contracts/schema.generated.js';
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { MODE_SLICE_DEFAULTS } from '../mode-slice-defaults.generated.js';
+import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { legendEntryKey } from './drawing/paint.js';
 import { withoutUnarrangedEntries } from './linear-record-layout.js';
 import { normalizeDefaultColor } from '../utils/color-utils.js';
@@ -524,6 +525,63 @@ const drawingOf = (view) => {
   }
   withKey(drawing, 'webFiles', drawingWebFiles, false);
   return /** @type {SessionDrawing49} */ (drawing);
+};
+
+/**
+ * The drawing a Session 49 opens (`_opened_drawing`, gbdraw/session_drawings.py):
+ * the one `ui.activeDrawingId` names, else the first. The one place the Web
+ * reads which drawing a Session 49 opens.
+ * @param {Session49} document
+ * @returns {SessionDrawing49}
+ */
+export const openedDrawingOf = (document) => {
+  const [first] = document.drawings;
+  return document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) ?? first;
+};
+
+/**
+ * `_drawing_view` (the inverse of `drawingOf`): one drawing of a Session 49
+ * as the one-drawing view a Session 46-48 gives, the project's fields with
+ * the drawing's: its Result set and request metadata at the top level, its
+ * draft as the slice of its mode (`modes.<mode>`), its input type under its
+ * mode's `ui` key. Load projects a drawing from it as it projects the
+ * committed set of a Session 46-48.
+ * @param {Session49} project
+ * @param {SessionDrawing49} drawing
+ * @returns {Fields}
+ */
+export const drawingViewOf = (project, drawing) => {
+  const { mode } = drawing;
+  const sliceEditorFields = new Set([...MODE_SLICE_CONTAINERS.editorState].filter((field) => field !== 'legend'));
+  const sliceLegendFields = MODE_SLICE_CONTAINERS['editorState.legend'];
+  const sliceUiFields = MODE_SLICE_CONTAINERS.ui;
+  const source = /** @type {Fields} */ (/** @type {unknown} */ (drawing));
+  /** @type {Fields} */
+  const view = { ...only(/** @type {Fields} */ (/** @type {unknown} */ (project)), PROJECT_FIELDS), ...only(source, DRAWING_FIELDS) };
+  const editor = mapping(drawing.editorState);
+  const legend = mapping(editor.legend);
+  if (Object.hasOwn(drawing, 'editorState')) {
+    const setEditor = without(editor, new Set([...sliceEditorFields, 'legend']));
+    withKey(setEditor, 'legend', without(legend, sliceLegendFields), Object.hasOwn(editor, 'legend'));
+    view.editorState = setEditor;
+  }
+  const drawingSlice = only(source, SLICE_DRAFT);
+  const sliceEditor = only(editor, sliceEditorFields);
+  withKey(sliceEditor, 'legend', only(legend, sliceLegendFields), false);
+  withKey(drawingSlice, 'editorState', sliceEditor, false);
+  const drawingUi = mapping(drawing.ui);
+  withKey(drawingSlice, 'ui', only(drawingUi, sliceUiFields), false);
+  view.modes = { [mode]: drawingSlice };
+  /** @type {Fields} */
+  const ui = {
+    ...without(mapping(project.ui), new Set(['activeDrawingId'])),
+    ...without(drawingUi, new Set([...sliceUiFields, 'inputType'])),
+    mode
+  };
+  if (Object.hasOwn(drawingUi, 'inputType')) ui[LAYOUT.inputTypeFields[mode]] = drawingUi.inputType;
+  view.ui = ui;
+  withKey(view, 'webFiles', { ...mapping(project.webFiles), ...mapping(drawing.webFiles) }, false);
+  return view;
 };
 
 /**

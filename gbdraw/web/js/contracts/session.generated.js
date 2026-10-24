@@ -791,5 +791,52 @@
  * @property {never} [features]
  * @property {never} [files]
  */
-/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} SessionChecked */
+/**
+ * @typedef {object} SessionCheckedDrawing
+ * @property {unknown} [cliInvocation]
+ * @property {unknown} [cliOptions]
+ * @property {unknown} [config]
+ * @property {unknown} [editorState]
+ * @property {unknown} [features]
+ * @property {string} id
+ * @property {unknown} [losatCache]
+ * @property {unknown} [losatDerivedCache]
+ * @property {'circular' | 'linear'} mode
+ * @property {string} name
+ * @property {unknown} [orthogroupState]
+ * @property {unknown} [proteinIdentityManifest]
+ * @property {unknown} [renderRequest]
+ * @property {unknown} [results]
+ * @property {unknown} [runMetadata]
+ * @property {unknown} [ui]
+ * @property {unknown} [webFiles]
+ */
+/**
+ * @typedef {object} SessionChecked49
+ * @property {unknown} [createdAt]
+ * @property {SessionCheckedDrawing[]} drawings
+ * @property {'gbdraw-session'} format
+ * @property {unknown} [legacyArtifacts]
+ * @property {Record<string, unknown>} resources
+ * @property {unknown} [title]
+ * @property {unknown} [ui]
+ * @property {49} version
+ * @property {unknown} [webFiles]
+ * @property {never} [results]
+ * @property {never} [runMetadata]
+ * @property {never} [cliInvocation]
+ * @property {never} [renderRequest]
+ * @property {never} [editorState]
+ * @property {never} [losatCache]
+ * @property {never} [losatDerivedCache]
+ * @property {never} [proteinIdentityManifest]
+ * @property {never} [orthogroupState]
+ * @property {never} [modes]
+ * @property {never} [cliOptions]
+ * @property {never} [otherModeResult]
+ * @property {never} [config]
+ * @property {never} [features]
+ * @property {never} [files]
+ */
+/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46 | SessionChecked49} SessionChecked */
 export {};

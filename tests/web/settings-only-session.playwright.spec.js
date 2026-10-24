@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, NEWEST_READ_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
@@ -276,7 +276,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
     ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
     ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
-    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: CURRENT_SESSION_VERSION }],
+    ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
     // A Session 46 holds the draft in `modes` only (Session format).
     ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
   ];
