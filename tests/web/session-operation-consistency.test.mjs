@@ -4,7 +4,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
@@ -270,8 +270,9 @@ test('late source discovery cannot expand the live source set during Session', a
   const file = {};
   const source = { uid: 'source', gb: file, region_record_id: '' };
   const selector = createLinearRecordSelector({
-    state: { mode: { value: 'linear' }, lInputType: { value: 'gb' },
-      activeDrawing: () => ({ id: 'linear', mode: 'linear' }), linearSeqs: [source], sessionOperationAvailability },
+    state: withModeDrawings({ mode: { value: 'linear' }, lInputType: { value: 'gb' }, sessionOperationAvailability }, {
+      circular: {}, linear: { id: 'linear', mode: 'linear', linearSeqs: [source] }
+    }),
     reactive: value => value, recordReader: () => read.promise,
     onRecordsDiscovered: () => { expanded += 1; }
   });

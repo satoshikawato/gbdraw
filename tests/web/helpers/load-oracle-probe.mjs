@@ -171,7 +171,7 @@ const DERIVED_DRAWING_KEYS = new Set([
   'slices', 'id', 'mode'
 ]);
 const DOCUMENT_KEYS = [
-  'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files', 'linearSeqs',
+  'mode', 'sessionTitle', 'results', 'selectedResultIndex', 'cInputType', 'lInputType', 'files',
   'losatCacheInfo', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest', 'legacyProteinRawCandidates',
   'legacyProteinDerivedEvidence', 'orthogroups', 'collinearGroups', 'similarityAlignmentPlan',
   'similarityAlignmentResetReceipt', 'linearRecordTranslations', 'legacySimilarityAlignment', 'selectedOrthogroupId',

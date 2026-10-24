@@ -37,7 +37,12 @@ const { buildSessionResources: buildBoundSessionResources } = await import(
   '../../gbdraw/web/js/services/session-resources.js'
 );
 // A fixture state registers its input files in a store and names them by ref, as the app does.
-const buildSessionResources = (state, ...rest) => buildBoundSessionResources(state.inputFiles ? state : boundState(state), ...rest);
+// The drawing's rows are bound with the state's Files, so both name the same refs.
+const buildSessionResources = (state, committed, drawing, ...rest) => {
+  if (state.inputFiles) return buildBoundSessionResources(state, committed, drawing, ...rest);
+  const bound = boundState({ ...state, linearSeqs: drawing?.linearSeqs ?? state.linearSeqs ?? [] });
+  return buildBoundSessionResources(bound, committed, drawing && { ...drawing, linearSeqs: bound.linearSeqs }, ...rest);
+};
 
 const encodedDescriptor = (name, text, overrides = {}) => {
   const bytes = new TextEncoder().encode(text);

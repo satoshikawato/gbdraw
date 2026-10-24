@@ -244,7 +244,7 @@ const filledSession = async ({ overrides = false } = {}) => {
   const loaded = await importSession(input(draft), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   for (const drawing of state.drawingList()) {
-    drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...state.linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
+    drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...modeDrawing(state, 'linear').linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
   }
   return savedSession('g2-filled');
 };
@@ -1440,7 +1440,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(DEPTH_ROUND_TRI
     assert.equal(adv.depth_tracks.length, 1);
     // Add Depth track (Linear pads each record's Depth slots to the new series).
     adv.depth_tracks.push({ ...normalizeDepthTrackConfig(null, 1), label: 'Coverage B', small_tick_interval: 5 });
-    if (mode === 'linear') state.linearSeqs.forEach((seq) => { seq.depth = padDepthFileSlots(seq.depth, 2); });
+    if (mode === 'linear') modeDrawing(state, 'linear').linearSeqs.forEach((seq) => { seq.depth = padDepthFileSlots(seq.depth, 2); });
     // The row's series 1 had a file; clearing it keeps the row with geometry.
     const stack = adv[stackKey];
     const { slots } = reconcileManagedDepthSlots({
@@ -1479,7 +1479,7 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
       const { adv } = modeDrawing(state, mode);
       adv[`${stackKey}_enabled`] = true;
       adv[stackKey].push(structuredClone(manualRow));
-      if (mode === 'linear') state.linearSeqs.forEach((seq) => { seq.depth = structuredClone(cleared); });
+      if (mode === 'linear') modeDrawing(state, 'linear').linearSeqs.forEach((seq) => { seq.depth = structuredClone(cleared); });
       else state.files.c_depth = structuredClone(cleared);
       // No Generate since: no committed request and no Result.
       canonicalRenderArtifactOwner.restore(null);

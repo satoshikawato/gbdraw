@@ -74,7 +74,7 @@ const fillCircularArtifact = async () => {
   };
   Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
   state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
-  state.linearSeqs.splice(0, state.linearSeqs.length, { uid: 'seq-1', region_reverse: true });
+  modeDrawing(state, 'linear').linearSeqs.splice(0, modeDrawing(state, 'linear').linearSeqs.length, { uid: 'seq-1', region_reverse: true });
   state.matchSequenceRegistry.register({ origin: 'linear-record', sourceKey: 'k1', recordId: 'R1', sequence: 'ACGT' });
   return { values, kept };
 };
@@ -108,7 +108,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
-  assert.equal(state.linearSeqs[0].region_reverse, true);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, true);
 
   // The displayed artifact is the Linear drawing's now (its mode is linear; the test installs it without a switch).
   const linear = snapshots.captureArtifactSlot();

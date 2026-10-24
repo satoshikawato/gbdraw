@@ -655,7 +655,7 @@ const installSimpleCircularInput = (primary, inactive) => {
     primaryFile: bound(primary),
     pairedFile: null
   });
-  state.linearSeqs.splice(0, state.linearSeqs.length, {
+  state.drawingOfMode('linear').linearSeqs.splice(0, state.drawingOfMode('linear').linearSeqs.length, {
     uid: 'inactive-linear-row',
     gb: bound(inactive),
     gff: null,
@@ -1928,7 +1928,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().adv.comparison_height = null;
     state.activeDrawing().linearRecordLayoutEnabled.value = false;
     state.activeDrawing().linearRecordRows.splice(0);
-    state.linearSeqs.splice(0, state.linearSeqs.length, {
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, {
       uid: 'multi',
       gb: bound(multiView),
       gff: null,
@@ -1997,12 +1997,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: state.activeDrawing().losatProgram.value,
       blastpMode: state.activeDrawing().losat.blastp.mode
     });
-    state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
+    state.activeDrawing().linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
     recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
       key: JSON.stringify(['middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
       reverse: true, cropped: false, detectedTopology: 'linear' }];
@@ -2045,7 +2045,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const projectedRun = workerMessages.findLast(({ type }) => type === 'run').payload.request;
     assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
       .presentation.reverseComplement, true);
-    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    assert.equal(state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     recordDisplayRows.value = [];
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
@@ -2130,7 +2130,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount'),
       []
     );
-    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    assert.equal(state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.activeDrawing().losat.blastn.task = 'megablast';
     assert.equal(state.errorLog.value?.code, 'UNKNOWN');
@@ -2200,7 +2200,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     };
     const warmComparisonPlan = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: state.activeDrawing().losatProgram.value,
       blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2249,7 +2249,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.deepEqual(
       await runner.runAnalysis(resolveLinearComparisonPlan({
         plan: state.activeDrawing().linearComparisonPlan,
-        sequences: state.linearSeqs,
+        sequences: state.activeDrawing().linearSeqs,
         layout: [],
         losatProgram: state.activeDrawing().losatProgram.value,
         blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2318,7 +2318,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       await runner.runCommittedCanonicalCandidate({
         canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations}),
         label:'Align Similarity Group',
-        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
+        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.activeDrawing().linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
       }),
       { status: 'ok' },
       JSON.stringify(state.errorLog.value)
@@ -2336,7 +2336,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ]));
     assert.equal(alignedOrientation.middle, true);
     assert.equal(
-      state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
+      state.activeDrawing().linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
       true,
       'successful admission must install the materialized base orientation'
     );
@@ -2385,7 +2385,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       `        1 ${bases[index % 4].repeat(4)}${bases[(index + 1) % 4].repeat(4)}`,
       '//'
     ].join('\n')).join('\n') + '\n'], 'thirteen.gb');
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...[...recordIds, 'REC1'].map((id, index) => ({
       uid: `card-${index + 1}`, gb: bound(thirteenFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
@@ -2401,7 +2401,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.activeDrawing().linearComparisonPlan.edges.splice(0);
     const thirteenPlan = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan,
-      sequences: state.linearSeqs,
+      sequences: state.activeDrawing().linearSeqs,
       layout: [],
       losatProgram: 'blastn',
       blastpMode: state.activeDrawing().losat.blastp.mode
@@ -2441,9 +2441,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // GenBank bytes. It stages the record source under the resource id and token the Worker
     // holds, so Python reads the records that Generate parsed; and it leaves the staging cache
     // as it was, so the next Generate sends nothing either.
-    state.linearSeqs.splice(2);
+    state.activeDrawing().linearSeqs.splice(2);
     const twoPlan = resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastn', blastpMode: state.activeDrawing().losat.blastp.mode
     });
     const twoResult = result('two-cards.svg', 'two-cards');
@@ -2463,7 +2463,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     } }));
     // The Generate stops after the extractions: these replies carry no protein identity manifest.
     assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastp', blastpMode: 'pairwise'
     }))).status, 'error');
     const extractions = workerMessages.slice(helpersBeforeProteins)
@@ -2489,13 +2489,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const uploadFile = new AuditFile([['UP1', 'UP2', 'UP3'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'upload.gb', { lastModified: 7 });
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
+    state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, ...['UP1', 'UP2', 'UP3'].map((id, index) => ({
       uid: `upload-${index + 1}`, gb: bound(uploadFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: id,
       region_start: null, region_end: null, region_reverse: false
     })));
     const uploadPlan = (losatProgram) => resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram, blastpMode: 'pairwise'
     });
     state.activeDrawing().losatProgram.value = 'blastp';
@@ -2547,7 +2547,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const insertedFile = new AuditFile([
       'LOCUS       NEW1 8 bp DNA\nORIGIN\n        1 ggggcccc\n//\n'
     ], 'inserted.gb', { lastModified: 9 });
-    state.linearSeqs.unshift({
+    state.activeDrawing().linearSeqs.unshift({
       uid: 'inserted-1', gb: bound(insertedFile), gff: null, fasta: null, depth: null, blast: null,
       losat_gencode: 1, losat_filename: '', definition: '', record_subtitle: '', region_record_id: 'NEW1',
       region_start: null, region_end: null, region_reverse: false
@@ -2578,7 +2578,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       .filter(({ resourceId }) => resourceId.startsWith('record-'))
       .reduce((total, { bytes }) => total + bytes.byteLength, 0);
     assert.equal(recordBytesSent, insertedFile.size);
-    state.linearSeqs.splice(2);
+    state.activeDrawing().linearSeqs.splice(2);
 
     // A file that starts with a UTF-8 byte order mark: Python reads the mark as content (Biopython then
     // skips the first record), so the record list leaves the file to the Python reader, and the LOSAT FASTA
@@ -2586,7 +2586,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const bomFile = new AuditFile([new Uint8Array([0xef, 0xbb, 0xbf]), ['BOM1', 'BOM2'].map((id) => [
       `LOCUS       ${id} 8 bp DNA`, 'ORIGIN', '        1 acgtacgt', '//'
     ].join('\n')).join('\n') + '\n'], 'bom.gb');
-    state.linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bound(bomFile), region_record_id: `BOM${index + 1}` }));
+    state.activeDrawing().linearSeqs.forEach((seq, index) => Object.assign(seq, { gb: bound(bomFile), region_record_id: `BOM${index + 1}` }));
     ['BOM1', 'BOM2'].forEach((id) => workerHelperResponses.push({ ok: true, result: {
       fasta: `>${id}\nACGTACGT\n`, record_id: id, record_length: 8
     } }));
@@ -2607,7 +2607,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     const pairedFasta = new AuditFile(['>G1\nATGAAATAA\n'], 'pair.fasta');
     state.lInputType.value = 'gff';
     state.activeDrawing().losatProgram.value = 'blastn';
-    state.linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
+    state.activeDrawing().linearSeqs.forEach((seq) => Object.assign(seq, { gb: null, gff: bound(gffFile), fasta: bound(pairedFasta), region_record_id: 'G1' }));
     const pairResult = result('gff-pair.svg', 'gff-pair');
     workerResponses.push(response(pairResult, validCatalog(pairResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2621,7 +2621,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       runtime_binding_hash: `rt-${index}`, display_binding_hash: `dp-${index}`, identity_manifest: null
     } }));
     assert.equal((await runner.runAnalysis(resolveLinearComparisonPlan({
-      plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+      plan: state.activeDrawing().linearComparisonPlan, sequences: state.activeDrawing().linearSeqs, layout: [],
       losatProgram: 'blastp', blastpMode: 'pairwise'
     }))).status, 'error');
     const pairExtractions = workerMessages.slice(helpersBeforePair)
@@ -2647,7 +2647,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       '##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\nG2\t.\tCDS\t1\t9\t.\t+\t0\tID=c2\n'
     ], 'named.gff');
     const extraFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n>G2\nATGGGGTAA\n'], 'extra.fasta');
-    state.linearSeqs.forEach((seq, index) => Object.assign(seq, {
+    state.activeDrawing().linearSeqs.forEach((seq, index) => Object.assign(seq, {
       gff: bound(namedGff), fasta: bound(extraFasta), region_record_id: `#${index + 1}`
     }));
     let searched = [];
@@ -2663,7 +2663,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     // entry X has no GFF3 feature draws G1, so LOSAT searches G1 (OV-1681).
     const g1Gff = new AuditFile(['##gff-version 3\nG1\t.\tCDS\t1\t9\t.\t+\t0\tID=c1\n'], 'g1-only.gff');
     const xFirstFasta = new AuditFile(['>X\nCCCCCCCCC\n>G1\nATGAAATAA\n'], 'x-first.fasta');
-    Object.assign(state.linearSeqs[0], { gff: bound(g1Gff), fasta: bound(xFirstFasta), region_record_id: '' });
+    Object.assign(state.activeDrawing().linearSeqs[0], { gff: bound(g1Gff), fasta: bound(xFirstFasta), region_record_id: '' });
     const autoResult = result('gff-auto.svg', 'gff-auto');
     workerResponses.push(response(autoResult, validCatalog(autoResult.name)));
     assert.deepEqual(await runner.runAnalysis(twoPlan), { status: 'ok' }, JSON.stringify(state.errorLog.value));
@@ -2891,7 +2891,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   }];
   state.activeDrawing().linearRecordLayoutEnabled.value = false;
   state.activeDrawing().linearRecordRows.splice(0);
-  state.linearSeqs.splice(0, state.linearSeqs.length,
+  state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length,
     {
       uid: 'linear-none-first',
       gb: bound(first),
@@ -3018,7 +3018,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
 
   const comparisonPlanSnapshot = resolveLinearComparisonPlan({
     plan: state.activeDrawing().linearComparisonPlan,
-    sequences: state.linearSeqs,
+    sequences: state.activeDrawing().linearSeqs,
     layout: [],
     losatProgram: state.activeDrawing().losatProgram.value,
     blastpMode: state.activeDrawing().losat.blastp.mode
@@ -3189,7 +3189,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
   const committedResults = state.results.value;
   const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
-  const priorOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
+  const priorOrientations = state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   }));
   const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
@@ -3199,7 +3199,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
-  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+  assert.deepEqual(state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   })), priorOrientations);
   assert.equal(state.results.value, committedResults);
@@ -3247,7 +3247,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(state.results.value, [newestResult]);
   releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await supersededRun, { status: 'stale' });
-  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+  assert.deepEqual(state.activeDrawing().linearSeqs.map(({ uid, region_reverse }) => ({
     recordKey: uid, reverseComplement: Boolean(region_reverse)
   })), priorOrientations);
   assert.deepEqual(state.results.value, [newestResult]);
@@ -3508,7 +3508,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
   drawing.linearComparisonPlan.mode = 'none';
   drawing.linearComparisonPlan.edges.splice(0);
   drawing.annotationSets.splice(0);
-  state.linearSeqs.splice(0, state.linearSeqs.length, {
+  state.activeDrawing().linearSeqs.splice(0, state.activeDrawing().linearSeqs.length, {
     uid: 'row-height',
     gb: bound(genbank),
     gff: null,

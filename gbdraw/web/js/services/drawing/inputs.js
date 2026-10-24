@@ -13,6 +13,7 @@
 /** @import { CircularRecordDiscovery } from '../record-discovery.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
 import { isInputFileRef } from '../history-files.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
 import { reactive, ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
 
@@ -617,7 +618,7 @@ export const bindDrawingCanonicalComparisons = (store, slice, comparisons) => {
  */
 const rowIndexOf = (slice, uid) => {
   const index = membersOf(slice).linearSeqs.findIndex((seq) => seq.uid === uid);
-  if (index < 0) throw new Error(`Unknown Linear record row ${uid}`);
+  if (index < 0) throw diagnosticError('INPUT_INVALID', { field: 'linearSeqs', reason: 'UNKNOWN_ROW', uid }, { stage: 'drawing-inputs' });
   return index;
 };
 
@@ -643,7 +644,7 @@ export const bindLinearSeqFile = (store, slice, uid, key, file) => {
  */
 export const addLinearSeq = (slice, row, index) => {
   const rows = membersOf(slice).linearSeqs;
-  if (rows.some((seq) => seq.uid === row.uid)) throw new Error(`Linear record row ${row.uid} exists`);
+  if (rows.some((seq) => seq.uid === row.uid)) throw diagnosticError('INPUT_INVALID', { field: 'linearSeqs', reason: 'DUPLICATE_ROW', uid: row.uid }, { stage: 'drawing-inputs' });
   rows.splice(index === undefined ? rows.length : index, 0, row);
 };
 

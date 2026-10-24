@@ -65,13 +65,12 @@ test('OV-373: a saved annotation target before Inspect is not called unavailable
 // OV-379: before the records of a Linear File are read (a loaded Session
 // defers discovery), the record select says "Not inspected", not "Loading".
 test('OV-379: an unread Linear record select says Not inspected', async () => {
+  const { withModeDrawings } = await import(pathToFileURL(join(process.cwd(), 'tests/web/helpers/drawing-state.mjs')));
   const ref = (value) => ({ value });
-  const state = {
-    mode: ref('linear'),
-    lInputType: ref('gb'),
-    activeDrawing: () => ({ id: 'linear', mode: 'linear' }),
-    linearSeqs: [{ uid: 'row-a', gb: { name: 'a.gb' }, fasta: null, region_record_id: '' }]
-  };
+  const rows = [{ uid: 'row-a', gb: { name: 'a.gb' }, fasta: null, region_record_id: '' }];
+  const state = withModeDrawings({ mode: ref('linear'), lInputType: ref('gb') }, {
+    circular: {}, linear: { id: 'linear', mode: 'linear', linearSeqs: rows }
+  });
   let resolveRead;
   const controller = createLinearRecordSelector({
     state,
@@ -79,15 +78,15 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
     recordReader: () => new Promise((resolve) => { resolveRead = resolve; }),
     logger: { warn: () => {} }
   });
-  assert.deepEqual(controller.optionsFor(state.linearSeqs[0]), [
+  assert.deepEqual(controller.optionsFor(rows[0]), [
     { value: '', label: 'Not inspected', synthetic: false }
   ]);
   // A read in progress still says so.
   const refresh = controller.refresh();
-  assert.equal(controller.optionsFor(state.linearSeqs[0])[0].label, 'Loading records...');
+  assert.equal(controller.optionsFor(rows[0])[0].label, 'Loading records...');
   resolveRead([{ selector: '#1', recordId: 'Rec', recordLength: 9 }]);
   await refresh;
-  assert.equal(controller.statusFor(state.linearSeqs[0]), 'ready');
+  assert.equal(controller.statusFor(rows[0]), 'ready');
 });
 
 // Auto window and step values name their rule until the genome length is

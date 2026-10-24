@@ -75,16 +75,16 @@ const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
 const CASES = [
   // OV-568: a Linear card's crop and genetic code, read once by the Files reader.
   ['so46', `${LINEAR_SEQ}.region_start`, 'abc', ['setting-replaced webFiles.bindings.linearSeqs[0].region_start'],
-    () => assert.equal(state.linearSeqs[0].region_start, null)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_start, null)],
   ['so46', `${LINEAR_SEQ}.region_end`, [1], ['setting-replaced webFiles.bindings.linearSeqs[0].region_end'],
-    () => assert.equal(state.linearSeqs[0].region_end, null)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_end, null)],
   ['so46', `${LINEAR_SEQ}.losat_gencode`, 'x', ['setting-replaced webFiles.bindings.linearSeqs[0].losat_gencode'],
-    () => assert.equal(state.linearSeqs[0].losat_gencode, 1)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].losat_gencode, 1)],
   // An orientation that is no boolean is not used (D1b: changed, U false), its text included.
   ['so46', `${LINEAR_SEQ}.region_reverse`, 'true', ['setting-replaced webFiles.bindings.linearSeqs[0].region_reverse'],
-    () => assert.equal(state.linearSeqs[0].region_reverse, false)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, false)],
   ['so46', `${LINEAR_SEQ}.definition`, 5, ['setting-replaced webFiles.bindings.linearSeqs[0].definition'],
-    () => assert.equal(state.linearSeqs[0].definition, '')],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].definition, '')],
   ['v30', 'files.linearSeqs.0.losat_gencode', 0, ['setting-replaced files.linearSeqs[0].losat_gencode']],
   // OV-595: the PNG DPI is one of the choices the DPI menu lists.
   ['g47L', 'ui.downloadDpi', 'abc', ['setting-replaced ui.downloadDpi'], () => assert.equal(Number(state.downloadDpi.value), 300)],
@@ -230,7 +230,7 @@ test('OV-655, TB23: a single file slot keeps the first file it reads and lists t
   const first = session.files.linearSeqs[0].gb;
   session.files.linearSeqs[0].gb = [first, { ...first, name: 'second.gbk' }];
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[0].gb']);
-  assert.equal(state.linearSeqs[0].gb?.name, first.name);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].gb?.name, first.name);
   session = BASES.v30();
   session.files.linearSeqs[1].gb = { bogus: 1 };
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[1].gb']);

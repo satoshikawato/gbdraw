@@ -4986,7 +4986,7 @@ export const createAppSetup = () => {
     // The Linear drawing is pinned here, before the run's first await.
     runRecordAlignment: ({ orientations, ...run }) => {
       const drawing = shownDrawingOfMode('linear');
-      if (!drawing) throw new Error('Record alignment runs from the Linear drawing.');
+      if (!drawing) throw diagnosticError('INPUT_INVALID', { field: 'drawing', reason: 'LINEAR_DRAWING_REQUIRED' }, { stage: 'record-alignment' });
       return runCommittedCanonicalCandidate({ ...run,
         captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(drawing, orientations),
         restoreIntentCheckpoint: (/** @type {AlignmentOrientationCheckpoint[]} */ checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(drawing, checkpoint),

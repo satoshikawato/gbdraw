@@ -46,7 +46,7 @@ test('a Linear multi-record expansion binds an annotation to its record card, an
   app.addLinearSeq();
   app.setLinearSeqPrimaryFile(1, 'gb', genbank(['chr1', 50], ['chr2', 60]));
   await app.refreshLinearRecordSelectors();
-  const card = state.linearSeqs.find((seq) => seq.region_record_id === 'chr2');
+  const card = modeDrawing(state, 'linear').linearSeqs.find((seq) => seq.region_record_id === 'chr2');
   assert.ok(card, 'the file expands into one card per record');
   const [set] = drawing.annotationSets;
   const bound = annotationRecordBinding(set.annotations[0]);

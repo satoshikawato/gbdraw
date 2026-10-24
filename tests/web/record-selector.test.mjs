@@ -156,10 +156,12 @@ await assert.rejects(
 );
 
 const ref = (value) => ({ value });
-// One drawing per mode, as in state.js: the shown drawing follows `mode`.
-const withShownDrawing = (fixture) => Object.assign(fixture, {
-  activeDrawing: () => ({ id: fixture.mode.value, mode: fixture.mode.value })
-});
+// One drawing per mode, as in state.js: the shown drawing follows `mode` and
+// holds the fixture's rows (`fixture.linearSeqs` is that drawing's array).
+const withShownDrawing = (fixture) => {
+  const shown = () => ({ id: fixture.mode.value, mode: fixture.mode.value, linearSeqs: fixture.linearSeqs });
+  return Object.assign(fixture, { activeDrawing: shown, drawingList: () => [shown()] });
+};
 const fileA = { name: 'a.gb' };
 const fileB = { name: 'b.gb' };
 const state = {
@@ -464,9 +466,11 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
 {
   let shownId = 'linear';
   const pinState = {
-    mode: ref('linear'), lInputType: ref('gb'), activeDrawing: () => ({ id: shownId, mode: 'linear' }),
+    mode: ref('linear'), lInputType: ref('gb'),
     linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
   };
+  pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', linearSeqs: pinState.linearSeqs });
+  pinState.drawingList = () => [pinState.activeDrawing()];
   /** @type {((records: unknown[]) => void)[]} */
   const reads = [];
   const discovered = [];

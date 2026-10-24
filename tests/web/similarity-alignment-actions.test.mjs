@@ -42,23 +42,26 @@ const renderRequest = {
     recordKey, source:{kind:'genbank',resourceId:'source'}, selector:{kind:'recordId',id:recordKey},cardinality:'exactly_one',display:{isCircular:null,startCoordinate:null}, region: null, presentation: { reverseComplement: false }
   }))
 };
-const state = () => ({
-  ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
-  activeDrawing: () => ({ mode: 'linear', recordsOff: [] }),
-  mode: ref('linear'),
-  featureCatalog: ref({ items: [{
-    recordKeys: ['a', 'b', 'c'],
-    sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
-      { sequence: 'G'.repeat(300) }]
-  }] }),
-  selectedOrthogroupId: ref('og-1'),
-  similarityAlignmentPlan: ref(null),
-  similarityAlignmentResetReceipt:ref(null),
-  errorLog: ref(null),
-  linearRecordTranslations: ref([]),
-  linearSeqs: ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false })),
-  results: ref([{ name: 'prior.svg' }])
-});
+const state = () => {
+  // The shown Linear drawing's rows.
+  const linearSeqs = ['a', 'b', 'c'].map((uid) => ({ uid, region_reverse: false }));
+  return {
+    ...drawingStore({ recordsOff: [] }, { recordsOff: [] }),
+    activeDrawing: () => ({ mode: 'linear', recordsOff: [], linearSeqs }),
+    mode: ref('linear'),
+    featureCatalog: ref({ items: [{
+      recordKeys: ['a', 'b', 'c'],
+      sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
+        { sequence: 'G'.repeat(300) }]
+    }] }),
+    selectedOrthogroupId: ref('og-1'),
+    similarityAlignmentPlan: ref(null),
+    similarityAlignmentResetReceipt:ref(null),
+    errorLog: ref(null),
+    linearRecordTranslations: ref([]),
+    results: ref([{ name: 'prior.svg' }])
+  };
+};
 const deferred = () => {
   let resolve;
   const promise = new Promise((done) => { resolve = done; });
@@ -158,7 +161,7 @@ const create = ({
     canonical, receipt:controllerState.similarityAlignmentResetReceipt.value,
     plan: controllerState.similarityAlignmentPlan.value,
     translations: controllerState.linearRecordTranslations.value,
-    sequences: controllerState.linearSeqs,
+    sequences: controllerState.activeDrawing().linearSeqs,
     results: controllerState.results.value
   }) });
   const history = createHistoryManager({
@@ -172,7 +175,7 @@ const create = ({
       controllerState.similarityAlignmentResetReceipt.value=structuredClone(ownerSet.receipt);
       controllerState.similarityAlignmentPlan.value = structuredClone(ownerSet.plan);
       controllerState.linearRecordTranslations.value = structuredClone(ownerSet.translations);
-      controllerState.linearSeqs.splice(0, controllerState.linearSeqs.length,
+      controllerState.activeDrawing().linearSeqs.splice(0, controllerState.activeDrawing().linearSeqs.length,
         ...structuredClone(ownerSet.sequences));
       controllerState.results.value = structuredClone(ownerSet.results);
     }
@@ -200,7 +203,7 @@ const create = ({
         controllerState.similarityAlignmentResetReceipt.value=receipt;
         controllerState.similarityAlignmentPlan.value = canonical.renderRequest.layout.similarityAlignment;
         controllerState.linearRecordTranslations.value = canonical.renderRequest.layout.recordTranslations;
-        options.orientations.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;});
+        options.orientations.forEach(({recordKey,reverseComplement})=>{controllerState.activeDrawing().linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;});
         controllerState.results.value = [{ name: 'aligned.svg' }];
         svg = null;
       }
@@ -550,9 +553,9 @@ test('validation and generation failures preserve editable draft and prior artif
     await startReview(fixture);
     fixture.actions.setDirectionMode('right');
     const before = fixture.actions.draft.value;
-    const orientations = fixture.state.linearSeqs.map(({ region_reverse }) => region_reverse);
+    const orientations = fixture.state.activeDrawing().linearSeqs.map(({ region_reverse }) => region_reverse);
     assert.equal((await fixture.actions.applyDraft()).status, 'error');
-    assert.deepEqual(fixture.state.linearSeqs.map(({ region_reverse }) => region_reverse), orientations);
+    assert.deepEqual(fixture.state.activeDrawing().linearSeqs.map(({ region_reverse }) => region_reverse), orientations);
     assert.equal(fixture.history.getUndoCount(), 0);
     assert.equal(fixture.actions.status.value, 'reviewing');
     assert.equal(fixture.actions.draft.value, before);
@@ -859,10 +862,10 @@ test('manual Reverse keeps the plan while invalidating edits clear it with a not
   await startReview(fixture);
   await fixture.actions.applyDraft();
   const plan = fixture.state.similarityAlignmentPlan.value;
-  fixture.state.linearSeqs[1].region_reverse = true;
+  fixture.state.activeDrawing().linearSeqs[1].region_reverse = true;
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
-  assert.equal(fixture.state.linearSeqs[1].region_reverse, true);
+  assert.equal(fixture.state.activeDrawing().linearSeqs[1].region_reverse, true);
   assert.equal(fixture.actions.notice.value, '');
   await startReview(fixture);
   await fixture.actions.applyDraft();
@@ -1008,7 +1011,7 @@ test('a regrouped plan whose reference feature is gone names it in the repair no
 test('candidate labels retain biological metadata and displayed record names', async () => {
   const fixture = create({ members: [reference, targetA, targetB, targetC],
     helper: (_operation, { request }) => ({ result: responseFor(request, { ambiguous: true }) }) });
-  fixture.state.linearSeqs[1].definition = 'Genome B';
+  fixture.state.activeDrawing().linearSeqs[1].definition = 'Genome B';
   await startReview(fixture);
   const row = fixture.actions.draft.value.rows[0];
   assert.equal(row.recordLabel, 'Genome B');
@@ -1036,14 +1039,14 @@ test('exclusive modes, reference Custom, Select and Skip are local with zero Wor
 test('Apply and both Reset scopes own one History transaction and consume receipt',async()=>{
   for(const scope of ['positions','positions-and-directions']){
     const f=create();await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
-    assert.equal(f.history.getUndoCount(),1);assert.equal(f.state.linearSeqs[0].region_reverse,true);
+    assert.equal(f.history.getUndoCount(),1);assert.equal(f.state.activeDrawing().linearSeqs[0].region_reverse,true);
     const receipt=structuredClone(f.state.similarityAlignmentResetReceipt.value);assert.deepEqual(receipt.directions,[{recordKey:'a',before:false,after:true}]);
     assert.ok(receipt.referenceDeltaX);const calls=f.helperCalls.length;
     await f.actions.resetAlignment(scope);assert.equal(f.helperCalls.length,calls+Number(scope==='positions-and-directions'));
     assert.equal(f.state.similarityAlignmentResetReceipt.value,null);assert.equal(f.state.similarityAlignmentPlan.value,null);
-    assert.equal(f.state.linearSeqs[0].region_reverse,scope==='positions');
+    assert.equal(f.state.activeDrawing().linearSeqs[0].region_reverse,scope==='positions');
     await f.history.undo();assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receipt);
-    assert.equal(f.state.linearSeqs[0].region_reverse,true);await f.history.redo();assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
+    assert.equal(f.state.activeDrawing().linearSeqs[0].region_reverse,true);await f.history.redo();assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
   }
 });
 test('changed final reference correction refreshes preview and requires another Apply',async()=>{
@@ -1071,7 +1074,7 @@ test('canceled and stale direction generations leave orientations, receipt and H
   for (const outcome of ['canceled', 'stale']) {
     const pending = deferred();const fixture=create({generation:()=>pending.promise});await startReview(fixture);
     fixture.actions.setDirectionMode('right');const operation=fixture.actions.applyDraft();await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(fixture.state.linearSeqs[1].region_reverse,false);if(outcome==='canceled')fixture.actions.cancel();pending.resolve({status:outcome});
+    assert.equal(fixture.state.activeDrawing().linearSeqs[1].region_reverse,false);if(outcome==='canceled')fixture.actions.cancel();pending.resolve({status:outcome});
     assert.equal((await operation).status,outcome==='canceled'?'stale':outcome);assert.equal(fixture.history.getUndoCount(),0);
     assert.equal(fixture.state.similarityAlignmentResetReceipt.value,null);
   }
@@ -1080,7 +1083,7 @@ test('canceled and stale direction generations leave orientations, receipt and H
 test('Align A then B resets to B before, including reference and only affected later edits', async () => {
   const f = create();
   await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
-  const afterA = f.state.linearSeqs.map(row => row.region_reverse);
+  const afterA = f.state.activeDrawing().linearSeqs.map(row => row.region_reverse);
   await startReview(f);f.actions.setDirectionMode('right');
   const firstB=await f.actions.applyDraft();
   if(firstB.status==='reviewing'){assert.equal(f.history.getUndoCount(),1);assert.equal((await f.actions.applyDraft()).status,'ok');}
@@ -1091,23 +1094,23 @@ test('Align A then B resets to B before, including reference and only affected l
   ]);
   assert.equal(f.history.getUndoCount(),2);
   // A later affected edit is replaced, while a skipped/unknown record's edit survives.
-  f.state.linearSeqs[0].region_reverse=true;
-  f.state.linearSeqs[2].region_reverse=true;
+  f.state.activeDrawing().linearSeqs[0].region_reverse=true;
+  f.state.activeDrawing().linearSeqs[2].region_reverse=true;
   // Model the ordinary Generate owner committing those manual directions.
   f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.reverseComplement=true;
   f.generationCalls.at(-1).canonical.renderRequest.records[2].presentation.reverseComplement=true;
   f.generationCalls.at(-1).canonical.renderRequest.records[0].presentation.label='<i>Exact displayed record</i>';
-  f.state.linearSeqs[0].definition='Source-only name';
+  f.state.activeDrawing().linearSeqs[0].definition='Source-only name';
   assert.equal(f.actions.resetPreview.value.targets[0].label,'Exact displayed record');
   assert.equal(f.actions.resetPreview.value.targets[0].name,'Exact displayed record');
   assert.equal(f.actions.resetPreview.value.directionsLabel,'Positions and directions (2 records)');
   assert.equal(f.actions.resetPreview.value.targets[0].laterManualEdit,true);
   assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
-  assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
+  assert.deepEqual(f.state.activeDrawing().linearSeqs.map(row=>row.region_reverse),[...afterA.slice(0,2),true]);
   assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
   assert.equal(f.history.getUndoCount(),3);
   await f.history.undo();assert.deepEqual(f.state.similarityAlignmentResetReceipt.value,receiptB);
-  await f.history.undo();assert.deepEqual(f.state.linearSeqs.map(row=>row.region_reverse),afterA);
+  await f.history.undo();assert.deepEqual(f.state.activeDrawing().linearSeqs.map(row=>row.region_reverse),afterA);
 });
 
 test('failed Reset retains the original receipt and Result for an explicit retry', async () => {
@@ -1116,11 +1119,11 @@ test('failed Reset retains the original receipt and Result for an explicit retry
   await startReview(f);f.actions.setDirectionMode('left');await f.actions.applyDraft();
   const before=structuredClone({receipt:f.state.similarityAlignmentResetReceipt.value,
     plan:f.state.similarityAlignmentPlan.value,translations:f.state.linearRecordTranslations.value,
-    sequences:f.state.linearSeqs,results:f.state.results.value});
+    sequences:f.state.activeDrawing().linearSeqs,results:f.state.results.value});
   fail=true;assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'error');
   assert.deepEqual({receipt:f.state.similarityAlignmentResetReceipt.value,
     plan:f.state.similarityAlignmentPlan.value,translations:f.state.linearRecordTranslations.value,
-    sequences:f.state.linearSeqs,results:f.state.results.value},before);
+    sequences:f.state.activeDrawing().linearSeqs,results:f.state.results.value},before);
   assert.equal(f.history.getUndoCount(),1);
   fail=false;assert.equal((await f.actions.resetAlignment('positions-and-directions')).status,'ok');
   assert.equal(f.history.getUndoCount(),2);assert.equal(f.state.similarityAlignmentResetReceipt.value,null);
@@ -1163,9 +1166,9 @@ test('missing caller diagnostic cannot borrow an unrelated global error',async()
 test('Review and the active-plan inspector use names, never internal keys or hashes', async () => {
   const unnamed = { ...targetC, gene: undefined, proteinId: undefined, sourceProteinId: undefined, type: 'CDS' };
   const fixture = create({ members: [reference, targetA, unnamed] });
-  Object.assign(fixture.state.linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
-  fixture.state.linearSeqs[1].definition = 'Genome B';
-  fixture.state.linearSeqs[2].definition = 'Genome B';
+  Object.assign(fixture.state.activeDrawing().linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
+  fixture.state.activeDrawing().linearSeqs[1].definition = 'Genome B';
+  fixture.state.activeDrawing().linearSeqs[2].definition = 'Genome B';
   assert.deepEqual(await startReview(fixture), { status: 'reviewing' });
   const draft = fixture.actions.draft.value;
   assert.equal(draft.reference.recordLabel, 'Genome A · ACC-A');
@@ -1192,8 +1195,8 @@ test('Review and the active-plan inspector use names, never internal keys or has
 test('drawer reference options and the active-plan line use record and gene names', async () => {
   const inparalog = { ...member('a', 'twin', 9, '-'), gene: 'gene-clicked' };
   const fixture = create({ members: [reference, inparalog, targetA, targetC] });
-  Object.assign(fixture.state.linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
-  fixture.state.linearSeqs[1].definition = 'Genome B';
+  Object.assign(fixture.state.activeDrawing().linearSeqs[0], { definition: 'Genome A', accession: 'ACC-A' });
+  fixture.state.activeDrawing().linearSeqs[1].definition = 'Genome B';
   assert.deepEqual(fixture.actions.drawerReferenceOptions('og-1').map(({ label }) => label), [
     'ACC-A · gene-clicked · 51..70 (+)',
     'ACC-A · gene-clicked · 101..120 (-)',

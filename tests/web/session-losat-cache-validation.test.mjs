@@ -723,7 +723,7 @@ ORIGIN
   const result = await importSession(event);
 
   assert.equal(result.status, 'ok');
-  assert.equal(state.linearSeqs[0].gb.name, 'catalog-primary.gbk');
+  assert.equal(state.drawingOfMode('linear').linearSeqs[0].gb.name, 'catalog-primary.gbk');
   assert.equal(restoredPrimaryReads, 0);
   assert.equal(restoredPrimaryArrayBufferReads, 0);
   assert.deepEqual(state.matchSequenceRegistry.values(), [{

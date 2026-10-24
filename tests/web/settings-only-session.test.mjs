@@ -57,7 +57,7 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
     { linearSeqs: [{ gb: {} }] }, { linearSeqs: [{ gff: {}, fasta: {} }] }
   ]) {
     assert.equal(hasBiologicalSessionInputs(inventory), true);
-    await assert.rejects(buildSessionResources({ files: inventory, linearSeqs: inventory.linearSeqs }, null), /canonical render request/);
+    await assert.rejects(buildSessionResources({ files: inventory }, null, { linearSeqs: inventory.linearSeqs ?? [] }), /canonical render request/);
   }
   const inactive = structuredClone(full);
   inactive.ui = { mode: 'linear' };

@@ -326,7 +326,7 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   assert.deepEqual(rows.map((row) => row.depth), [null]);
   assert.equal(first.modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
   assert.equal((await load(first)).status, 'ok');
-  assert.deepEqual(state.linearSeqs.map((seq) => seq.depth), [null]);
+  assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map((seq) => seq.depth), [null]);
   const second = await save('gallery round trip again');
   assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
 });
@@ -353,7 +353,7 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
-  const uid = state.linearSeqs[0].uid;
+  const uid = modeDrawing(state, 'linear').linearSeqs[0].uid;
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, uid);
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   const saved = await save('records off');
@@ -403,7 +403,7 @@ test('a Session without a mode slice turns every record of that mode ON (record 
   resetDrawings();
   const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
   assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
-  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, state.linearSeqs[0].uid);
+  modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, modeDrawing(state, 'linear').linearSeqs[0].uid);
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
   assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
@@ -447,8 +447,8 @@ test('Reset Settings removes the saved label table and the dormant Similarity gr
 // hand-edited Session reaches it) fails Generate and Save with NONE_DRAWN.
 test('a Linear drawing with no ON record names the fix', () => {
   const sourceState = withModeDrawings({
-    files: {}, lInputType: { value: 'gb' }, linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }]
-  }, { circular: {}, linear: { recordsOff: ['a', 'b'] } });
+    files: {}, lInputType: { value: 'gb' }
+  }, { circular: {}, linear: { recordsOff: ['a', 'b'], linearSeqs: [{ uid: 'a', gb: {} }, { uid: 'b', gb: {} }] } });
   assert.throws(() => assertDrawingInputs(modeDrawing(sourceState, 'linear'), sourceState),
     (error) => error.code === 'RECORD_SELECTION' && error.context.reason === 'NONE_DRAWN');
   modeDrawing(sourceState, 'linear').recordsOff = ['a'];

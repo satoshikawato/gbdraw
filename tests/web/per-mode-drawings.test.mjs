@@ -24,6 +24,7 @@ const { MODE_SCOPED_SETTINGS } = await import('../../gbdraw/web/js/mode-scoped-s
 const MODE_SCOPED_ROWS = MODE_SCOPED_SETTINGS.rows;
 const { DRAWING_SLICES, SLICE_READERS } = await import('./helpers/drawing-state.mjs');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
+const { createLinearSeq } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 
 const MODES = ['circular', 'linear'];
 const genbankText = `LOCUS       PERMODE                    40 bp    DNA     linear   UNK 01-JAN-1980
@@ -182,8 +183,8 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   const circularKeys = () => buildCanonicalRenderRequest({
     state, drawing: circular, filesData: { c_gb: genbank(), linearSeqs: [] }
   }).renderRequest.records.map((record) => record.recordKey);
-  const savedCards = [...state.linearSeqs];
-  state.linearSeqs.splice(0, Infinity, { uid: 'card-1' }, { uid: 'card-2' });
+  const savedCards = [...linear.linearSeqs];
+  linear.linearSeqs.splice(0, Infinity, { uid: 'card-1' }, { uid: 'card-2' });
   linear.recordsOff.splice(0, Infinity, 'card-2');
   assert.deepEqual(circularKeys(), ['record-1', 'record-2'], 'a Linear OFF card leaves the Circular request alone');
   circular.recordsOff.splice(0, Infinity, '#2');
@@ -192,7 +193,7 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
   assert.deepEqual(linear.drawnLinearSeqs.value.map((card) => card.uid), ['card-1']);
   circular.recordsOff.splice(0);
   linear.recordsOff.splice(0);
-  state.linearSeqs.splice(0, Infinity, ...savedCards);
+  linear.linearSeqs.splice(0, Infinity, ...savedCards);
   state.circularRecordList.value = [];
   MODES.forEach(resetDrawing);
 });
@@ -207,6 +208,19 @@ test('records turned OFF in one mode stay ON in the other (record selection)', (
 // seed, whose rows the writers address by identity (their own view's rows).
 const SLICE_DIRECTORY = new URL('../../gbdraw/web/js/services/drawing/', import.meta.url);
 const NOT_WRITERS = new Set(SLICE_READERS.filter((name) => !name.includes('.')));
+// Exports of the inputs module that are no call on a slice handle: builders and
+// the project-level binders (they take the store, not a handle), and the writers
+// of members the slice does not hold yet (`files` joins with the five cards,
+// B2b-1b-5c; until then the handle has no `files` to write).
+const INPUTS_NO_HANDLE_CALLS = new Set([
+  'createLinearSeq', 'normalizeLinearSeqList', 'collapseEmptyLinearSeqList', 'bindInputFile', 'bindInputFileList',
+  'registerInputFiles', 'boundInputFileIds', 'retainHistoryAndBoundFiles', 'registerInputFileTree',
+  'bindCanonicalComparisons', 'bindLoadedInputs',
+  'bindDrawingInputFile', 'bindDrawingInputFileList', 'bindDrawingInputFileTree', 'setConservationBlastsSource',
+  'bindDrawingCanonicalComparisons'
+]);
+const isHandleCall = (name, key) => !NOT_WRITERS.has(key) && !(name === 'inputs' && INPUTS_NO_HANDLE_CALLS.has(key));
+const inputStore = { registerFile: (file) => ({ id: 'file-1', name: file.name }) };
 const legendRow = (caption, originalCaption, color) => ({ caption, originalCaption, color, xPos: 0, yPos: 0, featureIds: [] });
 const SEEDS = {
   canvas: () => ({ canvasPadding: { top: 1, right: 2, bottom: 3, left: 4 } }),
@@ -251,6 +265,7 @@ const SEEDS = {
     featureColorOverrides: { 'record-1:CDS_1': { color: '#444444', caption: 'Kinase' } },
     featureStrokeOverrides: { 'record-1:CDS_1': { strokeColor: '#555555', strokeWidth: 2 } }
   }),
+  inputs: () => ({ linearSeqs: [createLinearSeq({ uid: 'seed-a' }), createLinearSeq({ uid: 'seed-b', region_record_id: 'r2' })] }),
   settings: (drawing) => {
     const settings = DRAWING_SLICES.settings.capture(drawing.slices.settings);
     return { ...settings, form: { ...settings.form, plot_title: 'Isolation title' }, losatProgram: 'tblastx' };
@@ -346,6 +361,13 @@ const WRITES = {
     setFeatureStroke: (h) => modules.paint.setFeatureStroke(h, 'record-1:CDS_2', stroke),
     clearStrokes: (h) => modules.paint.clearStrokes(h)
   },
+  inputs: {
+    bindLinearSeqFile: (h, drawing) => modules.inputs.bindLinearSeqFile(inputStore, h, drawing.linearSeqs[0].uid, 'gb', { name: 'a.gb' }),
+    addLinearSeq: (h) => modules.inputs.addLinearSeq(h, createLinearSeq({ uid: 'added' })),
+    removeLinearSeq: (h, drawing) => modules.inputs.removeLinearSeq(h, drawing.linearSeqs[0].uid),
+    moveLinearSeq: (h, drawing) => modules.inputs.moveLinearSeq(h, drawing.linearSeqs[1].uid, 0),
+    replaceLinearSeqs: (h) => modules.inputs.replaceLinearSeqs(h, [createLinearSeq({ uid: 'replaced' })])
+  },
   settings: {}
 };
 // The slice modules (a module that exports a slice), by the slice's name.
@@ -364,7 +386,7 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
   for (const [name, module] of Object.entries(modules)) {
     captures.push(`${Object.keys(module).find((key) => module[key] === DRAWING_SLICES[name])}.capture`);
     const functions = Object.entries(module).filter(([, value]) => typeof value === 'function').map(([key]) => key);
-    assert.deepEqual(functions.filter((key) => !NOT_WRITERS.has(key)).sort(), Object.keys(WRITES[name]).sort(),
+    assert.deepEqual(functions.filter((key) => isHandleCall(name, key)).sort(), Object.keys(WRITES[name]).sort(),
       `${name}: the table lists every writer the module exports`);
     functions.filter((key) => NOT_WRITERS.has(key)).forEach((key) => listed.add(key));
   }
@@ -381,7 +403,8 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
       const seed = SEEDS[name](drawing);
       const writes = [
         ['install', (h) => slice.install(h, seed), (h) => slice.reset(h)],
-        ['reset', (h) => slice.reset(h)],
+        // The inputs slice's reset changes nothing until the card files join it (D-15-78, B2b-1b-5c).
+        ['reset', (h) => slice.reset(h), undefined, name === 'inputs' ? 'reads' : undefined],
         ['capture', (h) => slice.capture(h), undefined, 'reads'],
         ...Object.entries(WRITES[name]).map(([writer, write]) => [writer, (h) => write(h, drawing)]),
         ...[...listed].filter((key) => Object.hasOwn(modules[name], key))

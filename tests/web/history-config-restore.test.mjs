@@ -96,7 +96,7 @@ for (const [domain, key, first, second] of [
   // The record settings are the Linear drawing's: its History records them.
   installShownDrawing('linear');
   const drawing = modeDrawing(state, 'linear');
-  const card = state.linearSeqs[0];
+  const card = modeDrawing(state, 'linear').linearSeqs[0];
   const uid = card.uid;
   card.definition = 'Kept organism';
   card.losat_gencode = 11;
@@ -120,7 +120,7 @@ for (const [domain, key, first, second] of [
   assert.equal(drawing.featureOverrides[key], undefined);
   assert.equal(drawing.annotationSets[0].annotations.length, 0);
   await editorHistory.undo();
-  const restored = state.linearSeqs.find((sequence) => sequence.uid === uid);
+  const restored = modeDrawing(state, 'linear').linearSeqs.find((sequence) => sequence.uid === uid);
   assert.equal(restored.definition, 'Kept organism');
   assert.equal(restored.losat_gencode, 11);
   assert.equal(drawing.featureOverrides[key]?.featureVisibility, 'off');
