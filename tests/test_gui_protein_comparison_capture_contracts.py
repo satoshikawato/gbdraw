@@ -894,8 +894,8 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     history_snapshot = HISTORY_SNAPSHOT_PATH.read_text(encoding="utf-8")
 
     for fragment in (
-        "const setLinearComparisonLosatFilename = (id, value) => {",
-        "const deactivateLinearComparisonLosatFilename = (id) => {",
+        "const setLinearComparisonLosatFilename = (id, value) => shownAction('linear', (drawing) => {",
+        "const deactivateLinearComparisonLosatFilename = (id) => shownAction('linear', (drawing) => {",
         "const updateResolvedLosatFilenameDraft = (drawing, edgeKey, updater) => {",
     ):
         start = app_setup.index(fragment)
