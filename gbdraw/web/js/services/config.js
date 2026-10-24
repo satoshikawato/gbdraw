@@ -6409,8 +6409,12 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value = true;
     const committed = commitLoadedDrawings(plan);
     resetSessionProject();
-    // The shown artifact takes the default palette of its drawing (the Results are cleared above).
+    // Each committed drawing takes a new drawing's settings of its mode, its
+    // default palette colors included (a new drawing state has none), before
+    // its part of the file installs over them; the shown artifact takes the
+    // shown drawing's palette (the Results are cleared above).
     const shownDrawing = installShownDrawing(plan.activeDrawingId);
+    committed.loaded.filter((drawing) => drawing !== shownDrawing).forEach((drawing) => resetDrawingSettings(state, drawing));
     const artifact = resetDrawingSettings(state, shownDrawing);
     state.appliedPaletteName.value = artifact.appliedPaletteName;
     state.appliedPaletteColors.value = artifact.appliedPaletteColors;
