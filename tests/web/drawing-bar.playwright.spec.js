@@ -79,6 +79,14 @@ test.describe('390 px', () => {
     await expect(paneTab('preview')).toHaveAttribute('aria-selected', 'true');
     await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 180_000 });
     await expect(page.getByRole('region', { name: 'Result Preview' })).toBeVisible();
+    // The approved images (Owner R17-10 A): the Result comes in with its workspace at the pane's top, and the
+    // canvas with the controls below it fills the pane; the Result header and the search lie above it.
+    const workspaceFit = () => page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      return { top: Math.round(box('.preview-workspace').top - box('#result-pane').top),
+        end: Math.round(box('#result-pane').bottom - box('.preview-controls').bottom) };
+    });
+    await expect.poll(workspaceFit).toEqual({ top: 0, end: 0 });
     await paneTab('settings').tap();
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('features'));
     await expect(paneTab('preview')).toHaveAttribute('aria-selected', 'true');
@@ -102,10 +110,19 @@ test.describe('390 px', () => {
         drawerBelow: box(document.querySelector('.right-drawer')).top >= box(canvas).bottom - 0.5,
         toggleHit: document.querySelector('.drawer-toggle').contains(document.elementFromPoint(
           toggle.left + toggle.width / 2, toggle.top + toggle.height / 2)),
-        pageWidth: document.documentElement.scrollWidth
+        pageWidth: document.documentElement.scrollWidth,
+        // Opening the Editor brings the workspace to the pane's top: the canvas keeps 13rem, the whole dock
+        // ends above the Generate bar, and its feature rows start in view.
+        workspaceTop: Math.round(box(preview.querySelector('.preview-workspace')).top - box(document.querySelector('#result-pane')).top),
+        canvasHeight: Math.round(box(canvas).height),
+        dockAboveGenerate: box(document.querySelector('.right-drawer')).bottom <= bottom,
+        rowsInView: [...document.querySelectorAll('.right-drawer [data-feature-list-row]')]
+          .filter((row) => box(row).top >= box(canvas).bottom && box(row).bottom <= bottom).length
       };
     });
-    expect(geometry).toMatchObject({ canvasLeft: 0, canvasRight: 0, drawerBelow: true, toggleHit: true });
+    expect(geometry).toMatchObject({ canvasLeft: 0, canvasRight: 0, drawerBelow: true, toggleHit: true,
+      workspaceTop: 0, canvasHeight: 13 * 16, dockAboveGenerate: true });
+    expect(geometry.rowsInView).toBeGreaterThanOrEqual(2);
     expect(geometry.visibleHeight).toBeGreaterThanOrEqual(200);
     expect(geometry.pageWidth).toBeLessThanOrEqual(390);
   });

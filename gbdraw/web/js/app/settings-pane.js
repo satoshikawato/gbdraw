@@ -44,7 +44,13 @@ const POPUP_EXPECTED_HEIGHT = 360;
  * @typedef {'settings' | 'preview'} PhonePane
  */
 
-/** @typedef {(pane: PhonePane) => void} ShowPhonePane */
+/**
+ * Shows `pane` in the phone layout. Showing the Preview brings its workspace
+ * (the canvas, and the Editor when open) to the top of the pane, as entering
+ * it does; `{ workspace: false }` leaves the pane where it is (a Generate that
+ * has not produced its Result yet).
+ * @typedef {(pane: PhonePane, options?: { workspace?: boolean }) => void} ShowPhonePane
+ */
 
 /**
  * Brings a setting into view and focuses it: opens the disclosures around
@@ -93,8 +99,15 @@ export const createSettingsPaneController = ({ state }) => {
   /** @type {{ value: PhonePane }} */
   const phonePane = ref('settings');
   /** @type {ShowPhonePane} */
-  const showPhonePane = (pane) => {
+  const showPhonePane = (pane, { workspace = true } = {}) => {
     phonePane.value = pane;
+    if (pane !== 'preview' || !workspace) return;
+    void nextTick(() => {
+      const resultPane = document.getElementById('result-pane');
+      const top = resultPane?.querySelector('.preview-workspace')?.getBoundingClientRect().top;
+      if (!phoneLayout.value || !resultPane || top === undefined) return;
+      resultPane.scrollBy({ top: top - resultPane.getBoundingClientRect().top, behavior: 'instant' });
+    });
   };
   const settingsArea = () => document.querySelector('.settings-scroll');
   const popupElement = () => document.getElementById('settings-popup');

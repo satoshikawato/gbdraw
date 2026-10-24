@@ -1680,6 +1680,7 @@
                 flex: 1 1 0 !important;
                 min-height: 0 !important;
                 overflow-y: auto !important;
+                container-type: size;
             }
 
             .app-main {
@@ -1981,16 +1982,29 @@
             .preview-workspace:has(> .right-drawer[aria-hidden="false"]) {
                 grid-template-rows: calc(13rem + var(--preview-search-space)) auto auto;
             }
-            /* The phone layout's Preview pane has the viewport's height: the canvas takes what the pane
-               does not need, and the open Editor takes it while the canvas keeps 13rem. */
+            /* The phone layout's Preview pane (Owner R17-10 A): the workspace takes the pane's height, the
+               canvas with the controls below it, or the canvas (13rem) and the open Editor with the controls
+               after them. The Result header and the search lie above it, reached by scrolling the pane up.
+               The pane is the size container; the workspace's own content never sets its row. */
             @media (max-width: 768px) {
-                .app-main[data-phone-pane="preview"] .result-pane > [data-result-preview] {
-                    flex: 1 0 auto;
-                }
                 .app-main[data-phone-pane="preview"] .preview-editor-layout {
                     grid-template-rows: auto minmax(0, 1fr) auto;
                 }
+                /* Its rows end where this box ends; the items share the one column with it. */
+                .app-main[data-phone-pane="preview"] .preview-editor-layout::after {
+                    content: '';
+                    grid-area: 2 / 1 / 4;
+                    height: 100cqh;
+                    pointer-events: none;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout > * {
+                    grid-column: 1;
+                }
+                .app-main[data-phone-pane="preview"] .preview-editor-layout:has(> .preview-workspace > .right-drawer[aria-hidden="false"])::after {
+                    grid-row: 2;
+                }
                 .app-main[data-phone-pane="preview"] .preview-workspace {
+                    contain: size;
                     grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) auto auto;
                 }
                 .app-main[data-phone-pane="preview"] .preview-workspace:has(.alignment-review-panel) {
