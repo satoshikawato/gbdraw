@@ -4,7 +4,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
@@ -464,6 +464,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
   await expect(lock).toBeChecked();
   expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
   await page.setViewportSize({ width: 390, height: 844 });
+  // Generate showed the Preview pane; the Lock help tip is in Settings.
+  await showPhonePane(page, 'settings');
   await helpButton.scrollIntoViewIfNeeded();
   await helpButton.click();
   await expect(tooltip).toContainText('ON aligns Linear definitions in a common left column');
@@ -3325,6 +3327,8 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await expect(page.getByRole('button', { name: 'Move File 2 down' })).toBeDisabled();
 
   await page.setViewportSize({ width: 390, height: 844 });
+  // Generate and Load showed the Preview pane; the File cards are in Settings.
+  await showPhonePane(page, 'settings');
   await sources.first().scrollIntoViewIfNeeded();
   await expect(page.getByRole('button', { name: 'Move File 1 down' })).toBeVisible();
   await expect(sources.first().getByRole('button', { name: 'Remove' })).toBeVisible();
@@ -3648,6 +3652,8 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   expect(restored.comparisonWarnings).toEqual([]);
   expect(restored.sourceCount).toBe(2);
   await page.setViewportSize({ width: 390, height: 844 });
+  // Generate and Load showed the Preview pane; the record rows are in Settings.
+  await showPhonePane(page, 'settings');
   await controls.last().scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('per-record-layout-mobile.png') });
 });

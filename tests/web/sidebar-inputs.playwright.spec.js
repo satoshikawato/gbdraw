@@ -144,8 +144,10 @@ for (const viewport of [{ width: 1024, height: 768 }, { width: 1024, height: 768
       app.selectedFeatureIds = new Set([id]);
       app.selectedFeatureAnchorId = id;
     }, viewport.sidebar || 0);
-    // A phone user scrolls the page to the Preview; hovering its controls does
-    // that without scrolling the Preview itself.
+    // A phone user taps the Preview pane tab (a Load keeps Settings shown) and
+    // scrolls the page to the Preview; hovering its controls does that without
+    // scrolling the Preview itself.
+    await showPhonePane(page, 'preview');
     await page.locator('button[aria-label="Fit to preview"]').hover();
     // Set without a Playwright action, which would scroll the preview into
     // place where a user cannot scroll it.
