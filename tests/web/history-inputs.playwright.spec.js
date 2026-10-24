@@ -247,7 +247,14 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await page.getByRole('group', { name: 'Linear File actions' })
     .getByRole('button', { name: 'Add sequence', exact: true }).click();
   await expect(sources).toHaveCount(3);
-  const beforeBlankRemoval = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  // The input adapter commits a button's step after its click handlers settle
+  // (`app/history-inputs.js`), a few milliseconds after the new card renders:
+  // wait for Add sequence's one step before counting from it (OV-1664).
+  await expect.poll(() => page.evaluate(() => [
+    window.__GBDRAW_HISTORY__.getUndoCount(),
+    window.__GBDRAW_HISTORY__.getRedoCount()
+  ])).toEqual([baseline + 1, 0]);
+  const beforeBlankRemoval = baseline + 1;
   await globalRemove.click();
   await expect(globalDialog).toHaveCount(0);
   await expect(sources).toHaveCount(2);
