@@ -1,5 +1,4 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 import {
   appliedFeatureColors,
@@ -334,19 +333,24 @@ export const createSvgStyles = ({
     { deep: true }
   );
 
-  // Each drawing's answers of the hide rule (`drawnTrackHidden`): a track
+  // The shown drawing's answers of the hide rule (`drawnTrackHidden`): a track
   // checkbox, a slot switched on or off or removed, or the custom stack switch
   // changes them. The watcher only shows the answer on the Result; the writers
-  // retire the Legend rows (R10). A mode switch changes neither drawing, so it
-  // applies nothing.
-  /** @type {readonly DrawingState[]} */ (state.drawingList()).forEach((drawing) => watch(
-    () => /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawing.mode, drawing)).join(),
-    () => {
-      if (drawing !== state.activeDrawing()) return;
+  // retire the Legend rows (R10). It reads the shown drawing from the store, so
+  // it follows the drawing states a Load commits under the same IDs (OV-1805).
+  // Showing another drawing, or a Load that replaces the shown one, changes the
+  // drawing itself: the Result binding applies the answer then, not this.
+  watch(
+    [() => state.activeDrawing(), () => {
+      const drawing = state.activeDrawing();
+      return /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawing.mode, drawing)).join();
+    }],
+    ([drawing], [previousDrawing]) => {
+      if (drawing !== previousDrawing) return;
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyTrackVisibility();
     }
-  ));
+  );
 
   return {
     applyPaletteToSvg,
