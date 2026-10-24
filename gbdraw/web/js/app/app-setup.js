@@ -1699,7 +1699,9 @@ export const createAppSetup = () => {
   // PD-OI-090: one History per drawing behind the router, which keeps the
   // manager API for the shown drawing and the project stream (the
   // Session-level values, Reset all drawings); the drawings share one byte
-  // budget and one file retention (OV-112).
+  // budget and one file retention (OV-112). The router owns its members: these
+  // are the drawings at start, and `managerOptions` makes the History of any
+  // drawing the store holds (R11).
   const history = createHistoryRouter({
     drawingIds: state.drawingList().map((drawing) => drawing.id),
     activeDrawingId: () => state.activeDrawingId.value,
@@ -1711,7 +1713,7 @@ export const createAppSetup = () => {
     // A file stays stored while any History step or binding names it (R11).
     retainOnlyFiles: retainHistoryAndBoundFiles(state, state.inputFiles),
     managerOptions: (drawingId) => {
-      const drawing = state.drawingOf(/** @type {DrawingId} */ (drawingId));
+      const drawing = state.drawingOf(drawingId);
       const ports = historySnapshots.drawingHistory(drawing.id);
       return /** @type {HistoryManagerOptions} */ ({
         buildIntent: ports.buildIntent,
