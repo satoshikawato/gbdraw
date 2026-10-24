@@ -78,6 +78,12 @@ def canonical(value):
         return {"type": "pd.NA"}
     if type(value).__name__ == "OrthologPathCollection":
         return {"type": "OrthologPathCollection", "value": canonical(value.to_payload())}
+    if type(value).__name__ == "_DirectedHit":
+        # Its comparison source holds a whole table; only this hit's row is its value.
+        record = value._asdict()
+        source = record.pop("comparison_source")
+        return {"type": "_DirectedHit", "fields": canonical(record),
+                "comparisonValues": canonical(source.values(record["comparison_row"]))}
     if is_dataclass(value):
         return {"type": type(value).__name__,
                 "fields": [[f.name, canonical(getattr(value, f.name))] for f in fields(value)]}
