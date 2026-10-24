@@ -31,6 +31,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLegendColorOverrides, normalizeStrokeOverrideMap } from './style-overrides.js';
 /** @import { LegendEditsUnread } from './style-overrides.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
+/** @import { ResultSetPath } from './session-authority.js' */
 
 /** @param {unknown} value */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -315,25 +316,26 @@ const viewOf = (shared, resultSet) => {
 
 /**
  * Each mode's committed one-drawing view of a Session 46-48, in document
- * order (`read_session_drawings`, the 46-48 branch).
+ * order (`read_session_drawings`, the 46-48 branch), with where the file
+ * holds its Result set (`at`, the prefix of the set's paths).
  * @param {Fields} source
- * @returns {Map<DrawingMode, Fields>}
+ * @returns {Map<DrawingMode, { view: Fields, at: ResultSetPath }>}
  */
 const committedViews = (source) => {
-  /** @type {Map<DrawingMode, Fields>} */
+  /** @type {Map<DrawingMode, { view: Fields, at: ResultSetPath }>} */
   const committed = new Map();
   if (source.renderRequest === null || source.renderRequest === undefined) {
     const shown = mapping(source.ui).mode;
-    if (isDrawingMode(shown)) committed.set(shown, source);
+    if (isDrawingMode(shown)) committed.set(shown, { view: source, at: '' });
     return committed;
   }
   const topMode = requestMode(source);
   if (!topMode) return committed;
-  committed.set(topMode, without(source, new Set(['otherModeResult'])));
+  committed.set(topMode, { view: without(source, new Set(['otherModeResult'])), at: '' });
   if (isObject(source.otherModeResult)) {
     const view = viewOf(sharedOf(source), mapping(source.otherModeResult));
     const otherMode = requestMode(view);
-    if (otherMode) committed.set(otherMode, view);
+    if (otherMode) committed.set(otherMode, { view, at: 'otherModeResult.' });
   }
   return committed;
 };
@@ -454,7 +456,7 @@ const usedBySettings = (slices, mode, other) => {
  * Result and the other has one: then the drawing with the Result opens
  * (the figure the released app showed), and the drawing that opens comes first.
  * @param {Fields} source
- * @param {Map<DrawingMode, Fields>} committed
+ * @param {Map<DrawingMode, { view: Fields }>} committed
  * @returns {DrawingMode[]}
  */
 const migratedDrawingModes = (source, committed) => {
@@ -462,7 +464,7 @@ const migratedDrawingModes = (source, committed) => {
   const shown = isDrawingMode(shownMode) ? shownMode : [...committed.keys()][0];
   const other = DRAWING_MODES.find((mode) => mode !== shown) || shown;
   /** @param {DrawingMode} mode */
-  const hasResult = (mode) => mapping(committed.get(mode)).renderRequest != null;
+  const hasResult = (mode) => mapping(committed.get(mode)?.view).renderRequest != null;
   const slices = mapping(source.modes);
   const used = committed.has(other)
     || bindsInput(mapping(mapping(source.webFiles).bindings), other)
@@ -525,6 +527,13 @@ const drawingOf = (view) => {
 };
 
 /**
+ * A Session 46-48's Session 49, what only the source says, and where the
+ * file holds each drawing's saved Result set (`setSources`, by drawing ID;
+ * a drawing without a saved set has none), so Load finds a set's reading and
+ * keeps its repair paths the file's own.
+ * @typedef {{ document: Session49, sourceFacts: SourceFacts, setSources: ReadonlyMap<string, ResultSetPath> }} ModeScopedUpgrade
+ */
+/**
  * The Session 49 of an admitted Session 46-48, and what only the source says
  * (`drawings_document_from_mode_scoped`, gbdraw/session_drawings.py). Each
  * mode's committed set goes to its mode's drawing; the drawings, their
@@ -535,7 +544,7 @@ const drawingOf = (view) => {
  * drawing names are left out.
  * @param {SessionChecked46} checked
  * @param {number} version The admitted source version.
- * @returns {{ document: Session49, sourceFacts: SourceFacts }}
+ * @returns {ModeScopedUpgrade}
  */
 export const upgradeModeScopedSession = (checked, version) => upgradeRowKeyedModeScopedSession(
   /** @type {SessionChecked46} */ (/** @type {unknown} */ (sessionLegendEditsByRowKey(/** @type {Fields} */ (checked), version).session)),
@@ -549,7 +558,7 @@ export const upgradeModeScopedSession = (checked, version) => upgradeRowKeyedMod
  * is not run twice.
  * @param {SessionChecked46} checked
  * @param {number} version The admitted source version.
- * @returns {{ document: Session49, sourceFacts: SourceFacts }}
+ * @returns {ModeScopedUpgrade}
  */
 export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   if (!Number.isInteger(version) || version < MODE_SCOPED_SESSION_VERSION || version >= LAYOUT.version) {
@@ -559,7 +568,7 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   const committed = committedViews(source);
   if (!committed.size) throw layoutInvalid();
   const order = migratedDrawingModes(source, committed);
-  const views = order.map((mode) => committed.get(mode) || undrawnView(source, mode));
+  const views = order.map((mode) => committed.get(mode)?.view || undrawnView(source, mode));
   // The views share their project fields by construction (one source), so
   // the first gives them (`_drawings_document`'s `project_views`).
   const project = projectOf(views[0]);
@@ -570,7 +579,14 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   project.ui = { ...mapping(project.ui), activeDrawingId: migrated[0].id };
   project.drawings = migrated;
   const hasDraft = Object.values(mapping(source.modes)).some((value) => isObject(mapping(value).config));
+  /** @type {Map<string, ResultSetPath>} */
+  const setSources = new Map();
+  order.forEach((mode, index) => {
+    const held = committed.get(mode);
+    if (held && held.view.renderRequest != null) setSources.set(migrated[index].id, held.at);
+  });
   return {
+    setSources,
     document: /** @type {Session49} */ (/** @type {unknown} */ (project)),
     sourceFacts: {
       cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,

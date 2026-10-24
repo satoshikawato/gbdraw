@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { evaluatePython } from './helpers/python-evaluator.mjs';
 
 globalThis.window = {
   Vue: {
@@ -27,7 +28,7 @@ globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
-const { SESSION_VERSION, assertDrawingInputs, installShownDrawing } = sessionConfig;
+const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
@@ -580,12 +581,13 @@ test('a Load of a Session with a drawing of one mode keeps a new drawing of the 
 
 test('Load reads each drawing\'s saved Result set from its own entry of the 49 document, not from `otherModeResult`', () => {
   // The Load body after preflight reads the upgraded document's drawings; the
-  // file's location of a set beside the committed one is only a repair path.
+  // file's location of a set beside the committed one is only a repair path,
+  // which the upgrade gives by drawing ID (`setSources`).
   const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
   const body = source.slice(source.indexOf('const importSessionDocument = async'), source.indexOf('export const importSession ='));
   assert.ok(body.length > 1000);
   const reads = body.split('\n').filter((line) => /\botherModeResult\b/.test(line) && !/^\s*\/\/|^\s*\*/.test(line));
-  assert.deepEqual(reads.map((line) => line.trim()), ["const at = 'otherModeResult.';"]);
+  assert.deepEqual(reads.map((line) => line.trim()), []);
   for (const name of ['otherSetMode', 'otherArtifactSlot', 'opensOtherSet', 'ofMode']) {
     assert.equal(new RegExp(`\\b${name}\\b`).test(body), false, name);
   }
@@ -605,4 +607,59 @@ test('Load reads each drawing\'s draft from its own part of the file by drawing 
   assert.equal(/draftConfigOf\((?:'linear'|'circular'|mode|generatedMode)\)/.test(body), false, 'draftConfigOf by mode');
   assert.equal(/legendRekeysOf\((?:mode|generatedMode)\)/.test(body), false, 'legendRekeysOf by mode');
   assert.equal(/committed\.find\(\(drawing\) => drawing\.mode === 'linear'\)/.test(body), false, 'the Linear drawing by mode');
+});
+
+test('Load reads each Result set\'s request, reset receipt and catalog where the file holds it; each drawing holds its own, by drawing ID', async () => {
+  // tests/utils/two_mode_session.py: a Circular Session 48 with a Linear `otherModeResult`.
+  const session = await evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()');
+  assert.deepEqual([session.version, session.renderRequest.mode, session.otherModeResult.renderRequest.mode], [48, 'circular', 'linear']);
+  // A receipt that binds no plan, in each set: each reads as none, at its own path.
+  session.editorState.alignmentResetReceipt = { schema: 1 };
+  session.otherModeResult.editorState.alignmentResetReceipt = { schema: 1 };
+  // An entry the request reader drops, in the Linear set only.
+  Object.assign(session.otherModeResult.renderRequest.records[0], { bogus: true });
+  // The Load hands its caller the artifact of each drawing it does not show.
+  const stashed = [];
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    installLoadedArtifactSlots: (slots) => { stashed.push(...slots.stashed); }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.map(({ code, path }) => `${code} ${path}`), [
+    'setting-entries-dropped otherModeResult.renderRequest.records[0]',
+    'session-field-dropped editorState.alignmentResetReceipt',
+    'session-field-dropped otherModeResult.editorState.alignmentResetReceipt'
+  ]);
+  assert.equal(state.activeDrawing().id, 'circular');
+  const linear = stashed.find((slot) => slot.drawingId === 'linear');
+  assert.ok(linear, JSON.stringify(stashed.map((slot) => slot.drawingId)));
+  // [drawing ID, its request, its features, its receipt]: the shown drawing's, then the kept one's.
+  const held = [
+    ['circular', getCommittedCanonicalSession()?.renderRequest, state.extractedFeatures.value, state.similarityAlignmentResetReceipt.value],
+    ['linear', linear.runtimeState.canonical.committedCanonicalSession.renderRequest, linear.values.extractedFeatures,
+      linear.values.similarityAlignmentResetReceipt]
+  ];
+  for (const [id, request, features, receipt] of held) {
+    const set = id === 'circular' ? session : session.otherModeResult;
+    assert.equal(request.mode, set.renderRequest.mode, id);
+    assert.equal(Object.hasOwn(request.records[0], 'bogus'), false, id);
+    assert.equal(features.length, set.editorState.featureCatalog.items[0].features.length, id);
+    assert.equal(receipt, null, id);
+  }
+  // The readers read one set each; only `storedResultSets` and its writer
+  // name where the file holds a set, and no catalog is passed by position.
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const code = (name) => {
+    const start = source.indexOf(`const ${name} = `);
+    assert.ok(start >= 0, name);
+    return source.slice(start, source.indexOf('\n};\n', start)).split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line)).join('\n');
+  };
+  for (const name of ['readResultSetRequest', 'readResultSetResetReceipt', 'readResultSetFeatureCatalog', 'readSessionRequests']) {
+    assert.equal(/\botherModeResult\b/.test(code(name)), false, name);
+  }
+  for (const name of ['otherModeCatalog', 'otherCatalog', 'readSessionResetReceipts', 'readSessionFeatureCatalogs']) {
+    assert.equal(new RegExp(`\\b${name}\\b`).test(source), false, name);
+  }
 });

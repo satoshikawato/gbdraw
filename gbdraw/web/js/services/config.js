@@ -2038,90 +2038,156 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
 };
 
 /**
- * Load: a committed Result set's feature catalog, checked with its Results
- * by the check Generate and admission refuse with (A9, OV-711): one that does
- * not describe its Results is `dropped`.
- * @param {SessionInput} set
- * @returns {Promise<{ catalog: Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>>, dropped: boolean }>}
+ * One committed Result set of a Session as the file holds it: `at` is where
+ * (the prefix of its paths, so its rows keep the file's own paths), and
+ * `projected` says it is the set Load projects (the top-level set of a
+ * Session 27-48) rather than a stored set, which loads only as saved.
+ * @typedef {{ at: ResultSetPath, projected: boolean, set: SessionInput }} StoredResultSet
  */
-const readCurrentWriterFeatureCatalog = async (set) => {
-  try {
-    return { catalog: await validateCurrentWriterFeatureCatalog(set, { adopt: true }), dropped: false };
-  } catch (error) {
-    if (normalizeCaughtError(error).code !== 'FEATURE_METADATA') throw error;
-    return { catalog: null, dropped: true };
+/**
+ * The project fields a Result set's readers read beside the set.
+ * @typedef {{ resources: unknown, orthogroupState?: unknown }} StoredSetProject
+ */
+/**
+ * The committed Result sets of a Session 27-48, the projected one first: its
+ * top-level set and a Session 46-48's `otherModeResult`. The one place Load
+ * names where such a file holds a set; each set reader below reads one.
+ * @param {SessionInput} data
+ * @returns {StoredResultSet[]}
+ */
+const storedResultSets = (data) => [
+  { at: '', projected: true, set: data },
+  ...(isPlainObject(data.otherModeResult)
+    ? [{ at: /** @type {ResultSetPath} */ ('otherModeResult.'), projected: false, set: /** @type {SessionInput} */ (data.otherModeResult) }]
+    : [])
+];
+
+/**
+ * `data` with its set at `at` replaced by `set`; a null `set` leaves a stored
+ * set out (the projected set is never left out).
+ * @template {SessionInput} T
+ * @param {T} data @param {ResultSetPath} at @param {SessionInput | null} set
+ * @returns {T}
+ */
+const withStoredResultSet = (data, at, set) => {
+  if (at === '') {
+    if (set === null) throw new Error('The projected Result set is never left out.');
+    return /** @type {T} */ (set);
   }
+  if (set !== null) return { ...data, otherModeResult: set };
+  const { otherModeResult: _dropped, ...kept } = data;
+  return /** @type {T} */ (kept);
 };
 
 /**
- * Load: the feature catalog of each committed Result set (A9, OV-711): one
- * that does not describe its Results is dropped. The top-level Results stay
- * without one (`feature-recovery-failed`); the other mode's set, which loads
- * only with its catalog, is dropped whole (`session-part-dropped`).
- * @template {SessionInput} T
- * @param {T} data
- * @param {LoadRepair[]} repairs
+ * The request schemas the file stored (RK-1), under the key of where it
+ * holds each set.
+ * @param {readonly StoredResultSet[]} sets
+ * @returns {StoredRequestSchemas}
  */
-const readSessionFeatureCatalogs = async (data, repairs) => {
-  const top = await readCurrentWriterFeatureCatalog(data);
-  let next = data;
-  if (top.dropped) {
-    repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'editorState.featureCatalog', effect: 'dropped' }));
-    const editorState = isPlainObject(data.editorState) ? data.editorState : {};
-    next = /** @type {T} */ ({ ...data, editorState: { ...editorState, featureCatalog: null } });
-  }
-  // E1: the other mode's set is validated with its own mode.
-  const other = isPlainObject(next.otherModeResult)
-    ? await readCurrentWriterFeatureCatalog(/** @type {SessionInput} */ (next.otherModeResult)) : null;
-  if (other?.dropped) {
-    repairs.push(loadRepair({ code: 'session-part-dropped', path: 'otherModeResult', effect: 'dropped' }));
-    const { otherModeResult: _dropped, ...kept } = next;
-    next = /** @type {T} */ (kept);
-  }
-  return { data: next, catalog: top.catalog, otherCatalog: other ? other.catalog : null };
-};
+const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, set }) => [
+  at === '' ? 'renderRequest' : 'otherModeResult',
+  /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema
+]));
 
 /**
- * Load: the alignment reset receipt of each committed Result set, read
- * against the request Load read (RK-2): one that does not bind its plan and
- * sources reads as none, with a row (A19); History, Align and Save refuse it
- * (`validateSimilarityAlignmentResetReceipt`).
+ * `data` after `read` read each of its committed Result sets, in
+ * `storedResultSets` order; `read` gives the set back as read, or null to
+ * leave a stored set out.
  * @template {SessionInput} T
  * @param {T} data
- * @param {LoadRepair[]} repairs
+ * @param {(stored: StoredResultSet) => Promise<SessionInput | null>} read
  * @returns {Promise<T>}
  */
-const readSessionResetReceipts = async (data, repairs) => {
-  /** @param {SessionInput} set @param {string} at @returns {Promise<SessionInput>} */
-  const read = async (set, at) => {
-    const editorState = isPlainObject(set.editorState) ? set.editorState : {};
-    const receipt = editorState.alignmentResetReceipt;
-    if (receipt === null || receipt === undefined) return set;
-    // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
-    const canonical = /** @type {AlignmentResetCanonical} */ ({ renderRequest: set.renderRequest, resources: data.resources });
-    const { stale } = await readSimilarityAlignmentResetReceipt(receipt, canonical);
-    if (!stale) return set;
-    repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
-    return { ...set, editorState: { ...editorState, alignmentResetReceipt: null } };
-  };
-  const top = await read(data, '');
-  const other = isPlainObject(top.otherModeResult)
-    ? await read(/** @type {SessionInput} */ (top.otherModeResult), 'otherModeResult.') : top.otherModeResult;
-  return /** @type {T} */ (other === top.otherModeResult ? top : { ...top, otherModeResult: other });
+const readEachResultSet = async (data, read) => {
+  let next = data;
+  for (const stored of storedResultSets(data)) next = withStoredResultSet(next, stored.at, await read(stored));
+  return next;
 };
 
 /**
- * The stored requests of a Session, read before anything adopts them: the
- * top-level request and `otherModeResult.renderRequest` (OV-670). Returns a
- * new data object when a request changed (the parsed file is never changed),
- * the request schemas the file stored (RK-1), and whether the Session loads as
- * settings only because its request cannot be read (K22, C-OD07): only a
- * Session version that has a settings-only form (42, 44, 46, 47) and holds the
- * settings it keeps does; any other is refused (R4, C-OD25).
- * The Comparisons notice after Load is classified on the stored top-level
+ * Load: one committed Result set's feature catalog, checked with its Results
+ * by the check Generate and admission refuse with (A9, OV-711). One that does
+ * not describe its Results is dropped: the projected set's Results stay
+ * without one (`feature-recovery-failed`); a stored set, which loads only
+ * with its catalog, is left out whole (`session-part-dropped`). E1: each set
+ * is validated with its own mode.
+ * @param {StoredResultSet} stored
+ * @param {LoadRepair[]} repairs
+ * @returns {Promise<{ set: SessionInput | null, catalog: Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> }>}
+ */
+const readResultSetFeatureCatalog = async ({ at, projected, set }, repairs) => {
+  try {
+    return { set, catalog: await validateCurrentWriterFeatureCatalog(set, { adopt: true }) };
+  } catch (error) {
+    if (normalizeCaughtError(error).code !== 'FEATURE_METADATA') throw error;
+  }
+  if (!projected) {
+    repairs.push(loadRepair({ code: 'session-part-dropped', path: at.slice(0, -1), effect: 'dropped' }));
+    return { set: null, catalog: null };
+  }
+  repairs.push(loadRepair({ code: 'feature-recovery-failed', path: `${at}editorState.featureCatalog`, effect: 'dropped' }));
+  const editorState = isPlainObject(set.editorState) ? set.editorState : {};
+  return { set: { ...set, editorState: { ...editorState, featureCatalog: null } }, catalog: null };
+};
+
+/**
+ * Load: one committed Result set's alignment reset receipt, read against the
+ * request Load read (RK-2) and the project's resources: one that does not
+ * bind its plan and sources reads as none, with a row (A19); History, Align
+ * and Save refuse it (`validateSimilarityAlignmentResetReceipt`).
+ * @param {StoredResultSet} stored
+ * @param {StoredSetProject} project
+ * @param {LoadRepair[]} repairs
+ * @returns {Promise<SessionInput>}
+ */
+const readResultSetResetReceipt = async ({ at, set }, project, repairs) => {
+  const editorState = isPlainObject(set.editorState) ? set.editorState : {};
+  const receipt = editorState.alignmentResetReceipt;
+  if (receipt === null || receipt === undefined) return set;
+  // Load read the requests and resources before (`readSessionRequests`, `readSessionInputs`).
+  const canonical = /** @type {AlignmentResetCanonical} */ ({ renderRequest: set.renderRequest, resources: project.resources });
+  const { stale } = await readSimilarityAlignmentResetReceipt(receipt, canonical);
+  if (!stale) return set;
+  repairs.push(loadRepair({ code: 'session-field-dropped', path: `${at}editorState.alignmentResetReceipt`, effect: 'dropped' }));
+  return { ...set, editorState: { ...editorState, alignmentResetReceipt: null } };
+};
+
+/**
+ * Load: one committed Result set's stored request, read before anything
+ * adopts it (OV-670), with the Comparisons classification of the stored
+ * request (receipt 〔今までの知らせ〕, C-OD14).
+ * @param {StoredResultSet} stored
+ * @param {StoredSetProject} project
+ * @returns {{ read: ReturnType<typeof readStoredRenderRequest>, classification: ImportedComparisonIntent }}
+ */
+const readResultSetRequest = ({ at, set }, project) => {
+  const classification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
+    renderRequest: set.renderRequest, resources: project.resources
+  }));
+  const read = readStoredRenderRequest(set.renderRequest, {
+    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (set.editorState)?.featureCatalog ?? null,
+    legacyOrthogroupState: project.orthogroupState ?? null,
+    resourceIds: new Set(isPlainObject(project.resources) ? Object.keys(/** @type {object} */ (project.resources)) : []),
+    path: `${at}renderRequest`,
+    holdComparisons: classification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+  });
+  return { read, classification };
+};
+
+/**
+ * The stored requests of a Session, each read by its set's reader
+ * (`readResultSetRequest`) before anything adopts them. Returns a new data
+ * object when a request changed (the parsed file is never changed), the
+ * request schemas the file stored (RK-1), and whether the Session loads as
+ * settings only because its projected request cannot be read (K22, C-OD07):
+ * only a Session version that has a settings-only form (42, 44, 46, 47) and
+ * holds the settings it keeps does; any other is refused (R4, C-OD25). A
+ * stored set whose request cannot be read is left out, with its row.
+ * The Comparisons notice after Load is classified on the stored projected
  * request, as before the reader (receipt 〔今までの知らせ〕, C-OD14); it is null
  * when Load reads no stored request.
- * @template {object} T
+ * @template {SessionInput} T
  * @param {T} rawData
  * @param {number} version The Session version Load read.
  * @param {LoadRepair[]} repairs
@@ -2129,12 +2195,9 @@ const readSessionResetReceipts = async (data, repairs) => {
  *   comparisonClassification: ImportedComparisonIntent | null }}
  */
 const readSessionRequests = (rawData, version, repairs) => {
-  const top = /** @type {Record<string, unknown>} */ (rawData);
-  const other = isPlainObject(top.otherModeResult) ? /** @type {Record<string, unknown>} */ (top.otherModeResult) : null;
-  const storedSchemas = {
-    renderRequest: /** @type {UnvalidatedFields<'schema'>} */ (top.renderRequest)?.schema,
-    otherModeResult: /** @type {UnvalidatedFields<'schema'>} */ (other?.renderRequest)?.schema
-  };
+  const sets = storedResultSets(rawData);
+  const [projected, ...stored] = sets;
+  const storedSchemas = storedRequestSchemas(sets);
   // A missing request is one its reader cannot read (K22, C-OD07; OV-785):
   // no writer omits the key. A null one marks a settings-only Session of a
   // version with that form (a full Session's null request was read as a
@@ -2142,30 +2205,15 @@ const readSessionRequests = (rawData, version, repairs) => {
   // read. A Session before 31 holds no request (no writer wrote one), so Load
   // reads none (OV-862).
   const settingsOnlyForm = hasSettingsOnlyForm(/** @type {SessionEnvelope} */ (rawData));
-  if (version < CANONICAL_SESSION_MIN_VERSION || (top.renderRequest === null && settingsOnlyForm)) {
+  if (version < CANONICAL_SESSION_MIN_VERSION || (rawData.renderRequest === null && settingsOnlyForm)) {
     return { data: rawData, storedSchemas, settingsOnly: false, comparisonClassification: null };
   }
-  const resourceIds = new Set(isPlainObject(top.resources) ? Object.keys(/** @type {object} */ (top.resources)) : []);
-  /** @param {Record<string, unknown>} set */
-  const classify = (set) => classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
-    renderRequest: set.renderRequest, resources: top.resources
-  }));
-  /**
-   * @param {Record<string, unknown>} set @param {string} path
-   * @param {ImportedComparisonIntent} classification
-   */
-  const read = (set, path, classification) => readStoredRenderRequest(set.renderRequest, {
-    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (set.editorState)?.featureCatalog ?? null,
-    legacyOrthogroupState: top.orthogroupState ?? null,
-    resourceIds,
-    path,
-    holdComparisons: classification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-  });
-  const comparisonClassification = classify(top);
-  const topRead = read(top, 'renderRequest', comparisonClassification);
-  if ('kind' in topRead) {
+  /** @type {StoredSetProject} */
+  const project = { resources: rawData.resources, orthogroupState: rawData.orthogroupState };
+  const { read: projectedRead, classification: comparisonClassification } = readResultSetRequest(projected, project);
+  if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
-    repairs.push(loadRepair({ code: 'request-dropped', path: topRead.path, effect: 'dropped' }));
+    repairs.push(loadRepair({ code: 'request-dropped', path: projectedRead.path, effect: 'dropped' }));
     // Without a settings-only form, an unread request is never committed
     // (C-OD25): the row alone restores nothing, and so does a settings-only
     // reading that keeps no settings (a CLI or Python API Session 42, 44 or
@@ -2176,25 +2224,24 @@ const readSessionRequests = (rawData, version, repairs) => {
       comparisonClassification: null
     };
   }
-  repairs.push(...topRead.repairs);
-  /** @type {Record<string, unknown>} */
-  let data = topRead.value === top.renderRequest ? top : { ...top, renderRequest: topRead.value };
-  if (other && Object.hasOwn(other, 'renderRequest')) {
-    const otherRead = read(other, 'otherModeResult.renderRequest', classify(other));
-    if ('kind' in otherRead) {
-      const mode = /** @type {UnvalidatedFields<'mode'>} */ (other.renderRequest)?.mode;
+  repairs.push(...projectedRead.repairs);
+  let data = projectedRead.value === rawData.renderRequest ? rawData : /** @type {T} */ ({ ...rawData, renderRequest: projectedRead.value });
+  for (const entry of stored) {
+    if (!Object.hasOwn(entry.set, 'renderRequest')) continue;
+    const { read } = readResultSetRequest(entry, project);
+    if ('kind' in read) {
+      const mode = /** @type {UnvalidatedFields<'mode'>} */ (entry.set.renderRequest)?.mode;
       repairs.push(loadRepair({
-        code: 'other-result-set-dropped', path: otherRead.path, effect: 'dropped',
+        code: 'other-result-set-dropped', path: read.path, effect: 'dropped',
         ...(mode === 'circular' || mode === 'linear' ? { mode } : {})
       }));
-      const { otherModeResult: _dropped, ...rest } = data;
-      data = rest;
+      data = withStoredResultSet(data, entry.at, null);
     } else {
-      repairs.push(...otherRead.repairs);
-      if (otherRead.value !== other.renderRequest) data = { ...data, otherModeResult: { ...other, renderRequest: otherRead.value } };
+      repairs.push(...read.repairs);
+      if (read.value !== entry.set.renderRequest) data = withStoredResultSet(data, entry.at, { ...entry.set, renderRequest: read.value });
     }
   }
-  return { data: /** @type {T} */ (data), storedSchemas, settingsOnly: false, comparisonClassification };
+  return { data, storedSchemas, settingsOnly: false, comparisonClassification };
 };
 
 /**
@@ -2271,9 +2318,10 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   const requestData = readSettingsOnlyMode(requestRead.data, repairs);
   // R4 decided by the request row of a Session 31-41 (K22): nothing after can restore it.
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
-  const rawData = await readSessionResetReceipts(
-    readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets), repairs
-  );
+  const authorityData = readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
+  /** @type {StoredSetProject} */
+  const project = { resources: authorityData.resources };
+  const rawData = await readEachResultSet(authorityData, (entry) => readResultSetResetReceipt(entry, project, repairs));
   const currentSession = isAuthorityBand(rawData);
   /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
@@ -2281,8 +2329,11 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   let currentResourceTable = null;
   /** @type {Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> | null} */
   let validatedFeatureCatalog = null;
-  /** @type {Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> | null} */
-  let otherModeCatalog = null;
+  /**
+   * Each kept Result set's catalog, by where the file holds the set.
+   * @type {Map<ResultSetPath, Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>>>}
+   */
+  const setCatalogs = new Map();
   /** @type {ReturnType<typeof normalizeEditorStateData> | null} */
   let normalizedEditorState = null;
   /** @type {SessionChecked} */
@@ -2293,10 +2344,12 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion, requestRead.storedSchemas);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
-    const catalogRead = await readSessionFeatureCatalogs(rawData, repairs);
-    const catalogData = catalogRead.data;
-    validatedFeatureCatalog = catalogRead.catalog;
-    otherModeCatalog = catalogRead.otherCatalog;
+    const catalogData = await readEachResultSet(rawData, async (entry) => {
+      const read = await readResultSetFeatureCatalog(entry, repairs);
+      if (read.set) setCatalogs.set(entry.at, read.catalog);
+      return read.set;
+    });
+    validatedFeatureCatalog = setCatalogs.get('') ?? null;
     recordSessionLifecycleEvent('feature-catalog-validation-end');
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(catalogData.editorState, {
@@ -2552,7 +2605,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
     currentResourceTable,
-    otherModeCatalog,
+    setCatalogs,
     comparisonClassification,
     unmanagedConfigValidation,
     settingsOnly
@@ -5629,7 +5682,7 @@ const importSessionDocument = async (e, options = {}) => {
       projectionResult,
       adoptedCanonicalSession,
       currentResourceTable,
-      otherModeCatalog,
+      setCatalogs,
       comparisonClassification,
       unmanagedConfigValidation,
       settingsOnly
@@ -5692,10 +5745,12 @@ const importSessionDocument = async (e, options = {}) => {
     const isStoredSlice = (drawingId) => modeScopedSession && !(drawingId === committedSetDrawingId && committedSliceProjected);
     // The 49 document of a Session 46-48 (the fast path, DESIGN §4.2; its
     // Legend edits were read by row key in preflight): each drawing's part
-    // of the file is its own entry, found by drawing ID.
-    const upgraded = modeScopedSession
-      ? upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion).document
+    // of the file is its own entry, found by drawing ID, and so is where the
+    // file holds its saved Result set (`setSources`).
+    const upgrade = modeScopedSession
+      ? upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion)
       : null;
+    const upgraded = upgrade ? upgrade.document : null;
     /**
      * The drawing that takes a Session 27-48's part of `mode` (the file holds
      * one per mode): its 49 document's drawing of that mode, else the new
@@ -5954,18 +6009,20 @@ const importSessionDocument = async (e, options = {}) => {
     const loadedDrawings = [...plan.drawings, ...unusedDrawingsOf(plan.drawings)];
     // Every other drawing with a saved Result set, read from its own entry of
     // the 49 document: its request, Results, editor state, `ui` and run
-    // metadata. A Session 46-48 holds at most one (`otherModeResult` in the
-    // file), whose catalog preflight read; a set without one does not load.
-    const storedSetCatalog = currentSchemaSession ? otherModeCatalog : null;
-    /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, set: LoadedResultSet }[]} */
+    // metadata, and the catalog preflight read where the file holds the set
+    // (found by the drawing's ID); a set without one does not load.
+    /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, at: ResultSetPath, catalog: FeatureCatalog, set: LoadedResultSet }[]} */
     const storedSets = [];
-    (storedSetCatalog && upgraded ? upgraded.drawings : []).forEach((entry) => {
+    if (upgrade) upgrade.document.drawings.forEach((entry) => {
       const { renderRequest } = entry;
       if (entry.id === committedSetDrawingId || !renderRequest || entry.results.length === 0) return;
+      const at = upgrade.setSources.get(entry.id);
+      const catalog = at === undefined ? null : setCatalogs.get(at);
+      if (at === undefined || !catalog) return;
       // Each Result is read as a stored one (`normalizeLogicalResults`).
       const results = /** @type {Record<string, unknown>[]} */ (entry.results);
       const set = { renderRequest, results, editorState: entry.editorState, ui: entry.ui, runMetadata: entry.runMetadata };
-      storedSets.push({ drawing: { id: /** @type {DrawingId} */ (entry.id), mode: entry.mode }, mode: entry.mode, set });
+      storedSets.push({ drawing: { id: /** @type {DrawingId} */ (entry.id), mode: entry.mode }, mode: entry.mode, at, catalog, set });
     });
     // Each set's History byte estimate: its share of the decompressed file,
     // split by the size of its Results (a serialization of a set only to
@@ -5984,14 +6041,11 @@ const importSessionDocument = async (e, options = {}) => {
     const savedEditsOf = new Map([[committedSetDrawingId, committedSavedEdits]]);
     /** @type {ArtifactSlot[]} */
     const storedSetSlots = [];
-    for (const { drawing, mode, set } of storedSets) {
-      if (!storedSetCatalog) break; // storedSets is empty without it
-      /** @type {ResultSetPath} */
-      const at = 'otherModeResult.';
+    for (const { drawing, mode, at, catalog, set } of storedSets) {
       const savedEdits = savedResultEdits(data, mode, set.editorState, sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
       savedEditsOf.set(drawing.id, savedEdits);
       const sequenceSources = await restoreLoadedSetSequenceSources({
-        ...setSequenceSourceOptions, mode, catalog: storedSetCatalog, renderRequest: set.renderRequest
+        ...setSequenceSourceOptions, mode, catalog, renderRequest: set.renderRequest
       });
       if (sequenceSources.error) {
         repairs.push(loadRepair({ code: 'match-sequences-unrestored', path: 'resources', effect: 'dropped' }));
@@ -6001,7 +6055,7 @@ const importSessionDocument = async (e, options = {}) => {
         ...slotOptions,
         drawing,
         at,
-        featureCatalog: storedSetCatalog,
+        featureCatalog: catalog,
         savedEdits,
         legacy: loadedResultNormalization(mode, null, at),
         repairs,
