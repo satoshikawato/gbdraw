@@ -1259,6 +1259,9 @@ state.activeDrawing().adv.linear_track_slots_axis_index = null;
 state.originalSvgStroke.value = { color: 'gray', width: 1 };
 // Not the default, which Reset Settings would also give.
 state.richFeaturePopup.value = false;
+// OV-1770: the shown Result's groups, which the Load clears, come back.
+state.orthogroups.value = [{ id: 'keep-orthogroup', members: [] }];
+state.selectedOrthogroupId.value = 'keep-orthogroup';
 const stateBeforeFailedImport = rollbackState();
 
 const malformedCompositionSvg = {

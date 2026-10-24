@@ -4659,7 +4659,7 @@ const restoreSessionImportTransientState = (snapshot) => {
 // values it resets (`resetSessionProject`). The shown drawing's `ui` carries
 // the project's `ui` keys (title, LOSAT execution, PNG DPI, ...); its feature
 // and editor data carry the shown Result's artifacts (catalog features,
-// generated Legend inventory, stroke defaults, feature catalog).
+// generated Legend inventory, stroke defaults, feature catalog, groups).
 /** @param {DrawingState} shownDrawing The shown drawing, from Load's caller (`shownDrawing`). */
 const captureSessionImportSnapshot = (shownDrawing) => ({
   drawings: state.drawingList(),
@@ -4667,6 +4667,7 @@ const captureSessionImportSnapshot = (shownDrawing) => ({
   shownDrawingId: shownDrawing.id,
   shownUi: cloneJsonData(buildUiStateData(shownDrawing)),
   shownFeatures: buildFeatureStateData(shownDrawing),
+  shownOrthogroups: buildOrthogroupStateData(shownDrawing),
   shownEditorState: buildEditorStateData(shownDrawing),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   cardFiles: { ...state.cardFiles },
@@ -4722,6 +4723,8 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.skipCaptureBaseConfig.value = true;
     applyResultsData(snapshot.results, shownUi);
     applyFeatureArtifactData(snapshot.shownFeatures);
+    // The shown Result's groups, which `resetSessionProject` cleared (OV-1770).
+    applyOrthogroupStateData(shownDrawing, snapshot.shownOrthogroups);
     applyEditorArtifactData(snapshot.shownEditorState);
     state.collinearGroups.value = snapshot.collinearGroups;
     applyRunStateData(snapshot.runState);
