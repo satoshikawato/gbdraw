@@ -828,7 +828,7 @@ def _stable_feature_id(feature: Mapping[str, object]) -> str:
         raise GbdrawError(
             "Feature metadata contains conflicting stable feature ID aliases."
         )
-    return stable_id
+    return stable_id or ""
 
 
 def _feature_index(feature: Mapping[str, object]) -> int | None:
