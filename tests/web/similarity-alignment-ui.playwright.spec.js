@@ -4,7 +4,7 @@ const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
-const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { showPhonePane, paneTop } = require('./helpers/drawing-bar.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -1856,6 +1856,8 @@ test('exclusive directions include the minority reference and keep Custom Select
   await target.getByRole('checkbox', { name: /^Skip / }).uncheck();
   expect(await changed()).toEqual(['record-1', 'record-2']);
   await page.setViewportSize({ width: 390, height: 740 });
+  // At <= 768 px one pane shows; the review is in the Result (Preview pane).
+  await showPhonePane(page, 'preview');
   await expect(custom).toBeChecked();
   await expect(directionSelect(dialog, 'record-1')).toHaveValue('right');
   await expect(directionSelect(dialog, 'record-2')).toHaveValue('left');
@@ -2239,7 +2241,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       // Native pointer input, not a DOM dispatch or a fit-camera assignment.
       const canvas=await page.locator('.preview-canvas').boundingBox();
       const pan=await page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}));
-      const point={x:canvas.x+5,y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5))};
+      const point={x:canvas.x+5,y:Math.max(canvas.y+5,await page.locator('.app-header').evaluate(el=>el.getBoundingClientRect().bottom+5),await paneTop(page)+5)};
       await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x+24,point.y+10,{steps:4});await page.mouse.up();
       await expect.poll(()=>page.evaluate(()=>({...window.__GBDRAW_APP__.canvasPan}))).toEqual({x:pan.x+24,y:pan.y+10});
       const zoom=page.getByRole('button',{name:'Zoom in',exact:true});await exposeReviewControl(page,zoom);const zoomBefore=await page.evaluate(()=>window.__GBDRAW_APP__.zoom);await zoom.click();
@@ -2503,6 +2505,7 @@ test('the Review alignment panel is docked beside or below the figure with Cance
   }
   // Narrow: the panel is below the figure, which keeps a usable height.
   await page.setViewportSize({ width: 390, height: 844 });
+  await showPhonePane(page, 'preview');
   await expect.poll(async () => {
     const { panel, figure } = await edges();
     return panel.top >= figure.bottom - 1 && figure.height >= 200
@@ -2663,6 +2666,8 @@ for (const [width, height] of [[1280, 800], [390, 844]]) {
     await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => window.__GBDRAW_APP__);
     await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+    // A phone user taps Preview to reach the figure (a Load keeps the shown pane).
+    await showPhonePane(page, 'preview');
     const featureId = await page.evaluate(featureByProteinId, 'CAG38712.1');
     await page.locator(`[data-gbdraw-feature-id="${featureId}"]`).first()
       .dispatchEvent('click', { clientX: -100, clientY: -100 });
