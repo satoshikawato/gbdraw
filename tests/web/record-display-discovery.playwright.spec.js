@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const genbank = (topology, length = 120) => `LOCUS       same                     ${length} bp    DNA     ${topology.padEnd(8)} UNA 01-JAN-2000
 DEFINITION  Source discovery regression fixture.
@@ -26,7 +27,7 @@ for (const mode of ['circular', 'linear']) {
       return route.abort();
     });
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank('circular') + genbank('linear')) });
     if (mode === 'linear') {
@@ -135,8 +136,8 @@ test('saved preview remains deferred across disclosure and mode changes; Inspect
   const summary = page.getByLabel('Circular record presentation', { exact: true });
   await summary.click();
   await summary.click();
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
+  await showDrawing(page, { kind: 'circular' });
   expect((await snapshot(page)).status).toBe('deferred');
   await assertSessionLoadLeftWorkerIdle(page);
   const inspectionHistory = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -214,10 +215,10 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await waitStatus(page, 'idle');
   expect((await snapshot(page)).rows).toEqual([]);
   await delay();
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(() => window.__releaseSlow());
   await waitStatus(page, 'idle');
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await waitStatus(page, 'ready');
   await delay();
   await page.locator('input[type=radio][value=gff]').first().check();

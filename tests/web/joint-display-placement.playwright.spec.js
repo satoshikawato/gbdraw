@@ -4,6 +4,7 @@ const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, openLinearFileCards, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -89,7 +90,7 @@ for (const mode of ['circular', 'linear']) {
       window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: (event) => window.__JOINT_LIFECYCLE__.push(event) };
     });
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
       : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
@@ -223,7 +224,7 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode} duplicate source records keep independent starts through replacement and Undo`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1')
       : page.getByLabel('GenBank/DDBJ File', { exact: true });
     const bytes = Buffer.from(source + source);
@@ -275,7 +276,7 @@ for (const mode of ['circular', 'linear']) {
   test(`${mode} real topology reset bulk placement and Auto history`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (mode === 'linear') await page.getByRole('button', { name: 'Record options for sequence 1', exact: true }).click();
@@ -388,7 +389,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
   test(`${mode} ${intent} alone exports working Source recipe and Exact replay`, async ({ page }, testInfo) => {
     test.setTimeout(180000);
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'shared.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
     if (intent === 'rotation') {

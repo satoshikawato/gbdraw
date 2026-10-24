@@ -3,6 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
@@ -583,7 +584,7 @@ for (const continuation of ['disabled', 'inactive biological']) {
     // request stay with Circular; Linear, which has no Result, shows none. The
     // Circular slots are the Circular drawing's (PR-1).
     const circular = await snapshot(page);
-    if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (continuation === 'inactive biological') await showDrawing(page, { kind: 'linear' });
     const before = await snapshot(page);
     if (continuation === 'inactive biological') {
       expect(before.request).toBeNull();
@@ -621,7 +622,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
     await selectUnit(page, 'px');
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false; });
     await selectUnit(page, 'px', 'features');
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     const before = await snapshot(page);
     expect(before.request).toBeNull();
     expect(before.resultHashes).toEqual([]);
@@ -632,7 +633,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       expect(restored.config).toEqual(before.config);
       expect(restored.request).toBeNull();
       expect(restored.resultHashes).toEqual([]);
-      await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
+      await showDrawing(fresh, { kind: 'circular' });
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1e-12');
       await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');

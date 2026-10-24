@@ -8,6 +8,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./app
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./audit-browser.cjs');
 const { settleLive } = require('./live-generate-parity.cjs');
 const { loadEditorLegendRows } = require('./mode-transition.cjs');
+const { showDrawing } = require('./drawing-bar.cjs');
 
 const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 
@@ -18,7 +19,7 @@ const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 const open = async (page, { mode, results, reflow }) => {
   if (mode === 'linear') {
     await openFresh(page);
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
     await page.evaluate(async (text) => {
       const app = window.__GBDRAW_APP__;

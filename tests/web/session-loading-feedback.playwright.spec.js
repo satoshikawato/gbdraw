@@ -6,6 +6,7 @@ const {
   openApp, expectNoLoadRepairDialog, expectSessionLoadedWithoutWarnings, generateAndWaitForResult, answerLoadRepairs
 } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const sessionInputSelector =
@@ -318,7 +319,7 @@ test('a Session load error does not follow a switch to the other diagram mode', 
   await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false
     && window.__GBDRAW_APP__?.errorLog !== null);
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await expect(page.locator('.result-pane [role="alert"]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();

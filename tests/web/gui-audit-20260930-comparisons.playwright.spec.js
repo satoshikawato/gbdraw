@@ -8,6 +8,7 @@ const path = require('node:path');
 const { promisify } = require('node:util');
 const { answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -21,7 +22,7 @@ const bgc = (id) => ({ name: `${id}.gbk`, text: readFileSync(path.join(root, 'te
 
 const openLinearWith = async (page, files) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (items) => {
     const app = window.__GBDRAW_APP__;
