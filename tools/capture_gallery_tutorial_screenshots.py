@@ -694,9 +694,9 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
             timeout=DEFAULT_GENERATE_TIMEOUT_MS,
         )
         # History can stay busy for many seconds after that (OV-1700); every replay starts
-        # with a mode-button click, so wait until the mode buttons are enabled.
+        # with a drawing-tab click, so wait until the drawing tabs are enabled.
         page.wait_for_function(
-            "() => [...document.querySelectorAll('.app-mode-button')].every((button) => !button.disabled)",
+            "() => [...document.querySelectorAll('.drawing-bar [role=\"tab\"]')].every((tab) => !tab.disabled)",
             timeout=DEFAULT_GENERATE_TIMEOUT_MS,
         )
     elif action_type == "generate":

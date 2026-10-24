@@ -10,6 +10,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -565,9 +566,9 @@ test('Linear at 1280 x 720: the scale shows Axis & Scale and the plot title Titl
   // A mode switch closes the popup: Circular has its own Axis & Scale section.
   await clickInk(page, '#length_bar text');
   await expectPopup(page, 'linear-axis', AXIS);
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await expectNoPopup(page, 'a mode switch');
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByRole('button', { name: 'Fit to preview', exact: true }).click();
   expect(await popupState(page, 'linear-axis')).toMatchObject({ copies: 1, inPane: 1 });
   // A loaded Session closes it.

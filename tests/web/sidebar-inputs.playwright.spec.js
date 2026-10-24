@@ -3,6 +3,7 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp, openLinearFileCards, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
@@ -272,7 +273,7 @@ test('a color from a Default colors file leaves More colors', async ({ page }) =
 test('OV-379: Linear record selects say Not inspected after Session load', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await loadSession(page, 'BGC0000708-BGC0000713.gbdraw-session.json');
   const labels = await page.locator('select[data-record-selector-uid]').evaluateAll((selects) => (
     selects.map((select) => select.options[select.selectedIndex]?.text || '')));
@@ -308,7 +309,7 @@ ${origin}
 
 const openLinearWithFile = async (page, name, content, rows) => {
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
     name, mimeType: 'text/plain', buffer: Buffer.from(content)
   });
@@ -344,7 +345,7 @@ const drawnDefinitionLines = (page) => page.evaluate(() => {
 test('a one-record File shows its record names on the File card', async ({ page }) => {
   test.setTimeout(240000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const card = page.locator('[data-linear-source-card]').first();
   const fileNames = card.locator('[data-linear-source-defaults]');
   const definition = page.getByLabel('Definition for sequence 1', { exact: true });
@@ -502,7 +503,7 @@ for (const { kind, files, gff = false, names } of typedFirstUploads) {
   test(`a name typed on an empty File card is kept after ${kind} is chosen`, async ({ page }) => {
     test.setTimeout(240000);
     await openApp(page);
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
     const card = page.locator('[data-linear-source-card]').first();
     await page.getByLabel('Definition for sequence 1', { exact: true }).fill('Typed first');
@@ -543,7 +544,7 @@ for (const { kind, first, second, drawnId, gff = false } of oneRecordReplacement
   test(`a name typed on a one-record File card stays the record's name when another one-record ${kind} replaces it`, async ({ page }) => {
     test.setTimeout(240000);
     await openApp(page);
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     if (gff) await page.locator('input[type="radio"][value="gff"]:visible').check();
     const card = page.locator('[data-linear-source-card]').first();
     const definition = page.getByLabel('Definition for sequence 1', { exact: true });

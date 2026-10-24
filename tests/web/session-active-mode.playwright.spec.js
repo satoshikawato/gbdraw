@@ -5,6 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertSessionLoadLeftWorkerIdle,
@@ -66,7 +67,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   await openApp(page);
   await load(page, divergentFixture);
   const circular = await snapshot(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -120,7 +121,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
     // The Linear draft waits in the Linear drawing.
-    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(fresh, { kind: 'linear' });
     const linearDraft = await snapshot(fresh);
     expect(linearDraft.mode).toBe('linear');
     expect(linearDraft.results).toEqual([]);
@@ -180,12 +181,12 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
   expect(circular).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
 
   // The fixture omits config.linearRecordLayout; Linear starts from fresh defaults.
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   expect(await draft(page)).toEqual({ title: '', titleFont: null, definitionFont: null, rows: true, replicon: false });
   await expect(plotTitle).toHaveValue('');
   await plotTitle.fill('Linear title');
   await plotTitle.press('Tab');
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   expect(await draft(page)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
 
   const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
@@ -201,7 +202,7 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
     await openApp(fresh);
     await load(fresh, file);
     expect(await draft(fresh)).toMatchObject({ title: 'Circular title', titleFont: 32, definitionFont: 28 });
-    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(fresh, { kind: 'linear' });
     expect(await draft(fresh)).toEqual({ title: 'Linear title', titleFont: null, definitionFont: null, rows: true, replicon: false });
   } finally {
     await context.close();
@@ -280,7 +281,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   test.setTimeout(240_000);
   await openApp(page);
   await load(page, fixture);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   const before = await snapshot(page);
   const failure = await evaluateWithRetainedPromise(page, async () => {

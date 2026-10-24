@@ -4,6 +4,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   CURRENT_REQUEST_SCHEMA, generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards
 } = require('./helpers/app-lifecycle.cjs');
@@ -95,7 +96,7 @@ test('Prokka-style GenBank records keep their LOCUS names through Circular Gener
   await generateAndWaitForResult(page);
   expect(await resultRecordIds(page)).toEqual(['R2c']);
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (texts) => {
     const app = window.__GBDRAW_APP__;
@@ -139,7 +140,7 @@ test('GFF3+FASTA records without GFF3 lines are not offered and both modes gener
   await generateAndWaitForResult(page);
   expect(await resultRecordIds(page)).toEqual(annotated);
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (files) => {
     const app = window.__GBDRAW_APP__;

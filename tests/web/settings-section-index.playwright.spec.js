@@ -8,6 +8,7 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { openApp, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // Section key and title of every entry, per mode, in card order. Basic and
 // About & Citation have no entry.
@@ -48,7 +49,7 @@ const entryName = (title) => `Go to ${title}`;
 const index = (page) => page.getByRole('navigation', { name: 'Settings sections' });
 const entry = (page, title) => index(page).getByRole('button', { name: entryName(title), exact: true });
 const tip = (page) => page.locator('.settings-index-tip');
-const setMode = (page, mode) => page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+const setMode = (page, mode) => showDrawing(page, { kind: mode });
 
 const loadSession = async (page, name) => {
   page.on('dialog', (dialog) => dialog.accept());
@@ -316,7 +317,7 @@ test('the section title shows below an entry on hover and on keyboard focus, ins
   await entry(page, 'Layout').focus();
   await page.keyboard.press('Shift+Tab');
   await expect(tip(page)).toBeVisible();
-  await page.getByRole('button', { name: 'Linear', exact: true }).focus();
+  await page.getByRole('tab', { name: 'Linear', exact: true }).focus();
   await expect(tip(page)).toBeHidden();
   // A mode change (Undo, a loaded Session) that removes the focused entry removes its text.
   await entry(page, 'Input Genomes').focus();

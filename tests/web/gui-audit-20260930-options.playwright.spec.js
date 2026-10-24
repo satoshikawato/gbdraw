@@ -7,6 +7,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
 const { answerChoicePrompt, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -439,7 +440,7 @@ test('Undo while a Generate is running is rejected as busy', async ({ page }) =>
 test('default threaded LOSAT without cross-origin isolation reports a recognized diagnostic', async ({ page }) => {
   test.setTimeout(300_000);
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(false);
   await page.evaluate(async (records) => {

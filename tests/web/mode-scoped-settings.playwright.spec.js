@@ -12,6 +12,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./hel
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -22,8 +23,7 @@ const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
 const depthTsv = (base = 10) => Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${base + index}`).join('\n');
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: MODE_NAMES[mode], exact: true }).click();
-  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, mode);
+  await showDrawing(page, { kind: mode });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordDiscovery?.status)).not.toBe('loading');
   await settleLive(page);
 };

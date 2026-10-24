@@ -6,13 +6,17 @@
 // drawing shown before (R16-2). A step that takes a drawing out holds it, its
 // Result slot, and (through the router) its History, for its Undo (R16-3).
 import { allocateDrawingId, defaultDrawingName, drawingNamesProblem } from '../services/drawing-view.js';
-import { diagnosticError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { errorText } from '../utils/error-text.js';
+import { msg, t, tm } from '../utils/i18n.js';
 
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { ModeProfileName } from '../mode-profiles.js' */
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { AskText } from './app-messages.js' */
+/** @import { DiagnosticError } from '../utils/error-normalization.js' */
 
 /**
  * @typedef {() => readonly DrawingTab[]} ReadDrawingTabs The drawings' IDs and names, in tab order.
@@ -210,4 +214,135 @@ export const createDrawingList = ({
   };
 
   return { newDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
+};
+
+/**
+ * Whether `error` is the list's refusal of a name (blank or repeated), which
+ * the Rename dialog shows and asks again; any other error is not its to show.
+ * @param {unknown} error @returns {error is DiagnosticError}
+ */
+const isNameRefusal = (error) => error instanceof Error && 'stage' in error && error.stage === 'drawing-list'
+  && 'context' in error && typeof error.context === 'object' && error.context !== null && 'reason' in error.context
+  && (error.context.reason === 'BLANK_NAME' || error.context.reason === 'REPEATED_NAME');
+
+/** The UI language's word for each mode, for a default name in the bar. */
+const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Linear') });
+
+/**
+ * One tab of the drawing bar. `label` is the name as the tab shows it: a
+ * default name ("Circular", "Linear 2") in the UI language, any other name as
+ * stored. The tab's accessible name is its label.
+ * @typedef {object} DrawingBarTab
+ * @property {DrawingId} id
+ * @property {string} label
+ * @property {ModeProfileName} mode
+ * @property {boolean} selected the shown drawing
+ * @property {boolean} canMoveLeft
+ * @property {boolean} canMoveRight
+ */
+/**
+ * @typedef {(drawingId: DrawingId) => ModeProfileName} ReadDrawingMode
+ * @typedef {(drawingId: DrawingId, name: string) => DrawingListOutcome} RenameDrawingStep
+ *   The list's Rename: one History step, or a typed refusal (`stage: 'drawing-list'`).
+ * @typedef {(drawingId: DrawingId, index: number) => DrawingListOutcome} MoveDrawingStep The list's Move.
+ * @typedef {object} DrawingBarPorts
+ * @property {RenameDrawingStep} renameDrawing
+ * @property {MoveDrawingStep} moveDrawing
+ * @property {ReadDrawingTabs} drawingTabs
+ * @property {ReadShownDrawingId} shownDrawingId
+ * @property {ReadDrawingMode} modeOf
+ * @property {AskText} askText
+ */
+
+/**
+ * The tab the arrow keys focus next in a tablist of `count` tabs, wrapping at
+ * the ends, or `null` for a key the tab pattern leaves to the button: Enter
+ * and Space select the focused tab (manual activation), so moving the focus
+ * never switches a drawing.
+ * @param {string} key @param {number} index @param {number} count
+ * @returns {number | null}
+ */
+export const focusedTabIndex = (key, index, count) => {
+  if (key === 'ArrowRight') return (index + 1) % count;
+  if (key === 'ArrowLeft') return (index - 1 + count) % count;
+  if (key === 'Home') return 0;
+  if (key === 'End') return count - 1;
+  return null;
+};
+
+/**
+ * The tablist's keydown: the arrow keys, Home and End move the focus among
+ * the enabled tabs (the ARIA tab pattern with manual activation).
+ * @param {KeyboardEvent} event
+ */
+export const moveTabFocus = (event) => {
+  const tablist = event.currentTarget;
+  if (!(tablist instanceof HTMLElement)) return;
+  const tabs = /** @type {HTMLButtonElement[]} */ (Array.from(tablist.querySelectorAll('[role="tab"]:not(:disabled)')));
+  const at = tabs.findIndex((tab) => tab === document.activeElement);
+  const next = at < 0 ? null : focusedTabIndex(event.key, at, tabs.length);
+  if (next === null) return;
+  event.preventDefault();
+  tabs[next].focus();
+};
+
+/**
+ * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs, and
+ * the tab menu's Rename and Move, each one list operation (one History step).
+ * @param {DrawingBarPorts} ports
+ */
+export const createDrawingBar = ({ renameDrawing: renameStep, moveDrawing: moveStep, drawingTabs, shownDrawingId, modeOf, askText }) => {
+  /** @returns {DrawingBarTab[]} */
+  const tabs = () => {
+    const all = drawingTabs();
+    const shown = shownDrawingId();
+    return all.map(({ id, name }, index) => {
+      const mode = modeOf(id);
+      return {
+        id,
+        mode,
+        label: name === defaultDrawingName(mode, id) ? defaultDrawingName(mode, id, tm(MODE_LABELS[mode])) : name,
+        selected: id === shown,
+        canMoveLeft: index > 0,
+        canMoveRight: index < all.length - 1
+      };
+    });
+  };
+
+  /**
+   * Rename through the app's text dialog. A refused name (blank, or another
+   * drawing's) asks again with the error owner's text; Cancel renames nothing.
+   * @param {DrawingId} drawingId
+   * @returns {Promise<DrawingListOutcome | null>}
+   */
+  const renameDrawing = async (drawingId) => {
+    let value = drawingTabs().find((tab) => tab.id === drawingId)?.name ?? '';
+    let description = '';
+    for (;;) {
+      const input = await askText({
+        title: t('Rename drawing'), description, label: t('Drawing name'), value, actionLabel: t('Rename')
+      });
+      if (input === null) return null;
+      try {
+        return renameStep(drawingId, input);
+      } catch (error) {
+        if (!isNameRefusal(error)) throw error;
+        value = input;
+        // A refusal always normalizes (null only for a null input).
+        const refusal = normalizeUserFacingError(error);
+        description = refusal ? errorText(refusal.summaryParts) : '';
+      }
+    }
+  };
+
+  /**
+   * One place left (-1) or right (+1) in the tab order.
+   * @param {DrawingId} drawingId @param {-1 | 1} step
+   * @returns {DrawingListOutcome}
+   */
+  const moveDrawing = (drawingId, step) => moveStep(
+    drawingId, drawingTabs().findIndex((tab) => tab.id === drawingId) + step
+  );
+
+  return { tabs, renameDrawing, moveDrawing };
 };

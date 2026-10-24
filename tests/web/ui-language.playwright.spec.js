@@ -135,6 +135,9 @@ const savedSession = async (page, testInfo, name) => {
     await again.click();
     return pending;
   }, () => pending)]);
+  // The pointer leaves the dialog's button, which lies over the Result: a feature under the pointer takes a hover
+  // style that the figure comparisons would read.
+  await page.mouse.move(0, 0);
   const path = testInfo.outputPath(name);
   await download.saveAs(path);
   const bytes = readFileSync(path);
@@ -180,7 +183,7 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     .getByRole('button', { name: ja['Go to {section}'].replace('{section}', ja.Labels), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: ja['Generate Diagram'], exact: true })).toBeVisible();
   // The diagram mode keeps the key 'Linear'; the Record Size Mode option has its own (OV-1387, i18n-catalogs.test.mjs).
-  await expect(page.locator('header .mode-switch')).toContainText(ja.Linear);
+  await expect(page.locator('.drawing-bar [role="tab"][data-drawing-id="linear"]')).toHaveAccessibleName(ja.Linear);
   // No upper-casing or tracking in Japanese.
   expect(await page.locator('header .app-session-label').evaluate((element) => {
     const style = getComputedStyle(element);
@@ -428,7 +431,7 @@ const railAndFooterFit = (page) => page.evaluate(() => {
     }
     return tops.filter((top, index) => tops.findIndex((other) => Math.abs(other - top) < 3) === index);
   };
-  const wrappedHeaderNames = [...document.querySelectorAll('.mode-switch > button, .app-session-label')]
+  const wrappedHeaderNames = [...document.querySelectorAll('.drawing-bar [role="tab"], .app-session-label')]
     .filter((element) => element.getClientRects().length > 0 && lineTops(element).length > 1)
     .map((element) => element.textContent.trim());
   const separatorsAlone = [...footer.querySelectorAll('a')].flatMap((link) => {
@@ -573,7 +576,7 @@ test('in every language, the link beside the menu opens the feedback form with o
       await page.setViewportSize({ width, height: 800 });
       const fit = await page.locator('header').evaluate((header) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
-        // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
+        // The Session caption and title button paint inside the Session block, never under the language menu (OV-1530:
         // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
         const block = header.querySelector('.app-session-actions');
         const clipped = (node, edge) => {
@@ -591,7 +594,7 @@ test('in every language, the link beside the menu opens the feedback form with o
           range.selectNodeContents(node);
           parts.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => clipped(node, rect.right)));
         }
-        const limit = Math.min(block.getBoundingClientRect().right, header.querySelector('.mode-switch').getBoundingClientRect().left);
+        const limit = Math.min(block.getBoundingClientRect().right, header.querySelector('.app-language').getBoundingClientRect().left);
         return {
           inside: right <= document.documentElement.clientWidth,
           scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,

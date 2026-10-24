@@ -299,3 +299,70 @@ test('the last drawing cannot be deleted; Delete asks first only for a drawing w
   state.replaceDrawings(drawings, tabs);
   history.replaceMembers(drawings.map((each) => each.id));
 });
+
+// The drawing bar (B4a-5): one tab per drawing in tab order, a default name in
+// the UI language, and Rename and Move through the list operations. A refused
+// name asks again with the error owner's wording (R6), never a matched message.
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+const { focusedTabIndex } = await import('../../gbdraw/web/js/app/drawing-list.js');
+
+test('the drawing bar lists the tabs; Rename asks again on a refused name and Undo restores the name', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const shown = state.activeDrawingId.value;
+  assert.deepEqual(app.drawingBar.tabs().map(({ id, label, mode, selected }) => ({ id, label, mode, selected })),
+    state.drawingTabs.value.map((tab) => ({ id: tab.id, label: tab.name, mode: state.drawingOf(tab.id).mode,
+      selected: tab.id === shown })));
+  assert.equal(app.drawingBar.tabs()[0].label, defaultDrawingName(state.drawingOf(tabIds()[0]).mode, tabIds()[0]));
+
+  const name = tabNameOf('linear');
+  const other = tabNameOf('circular');
+  const asked = () => ({ show: app.choicePrompt.show, value: app.choicePrompt.field?.value, description: app.choicePrompt.description });
+  const answer = async (value) => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    app.choicePrompt.field.value = value;
+    app.resolveChoicePrompt('ok');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  const renaming = app.drawingBar.renameDrawing('linear');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(asked(), { show: true, value: name, description: '' }, 'the dialog starts from the stored name');
+  await answer(other.toUpperCase());
+  const refusal = normalizeUserFacingError(Object.assign(new Error('REPEATED_NAME'), {
+    code: 'INPUT_INVALID', stage: 'drawing-list', context: { field: 'drawing', reason: 'REPEATED_NAME' } }));
+  assert.equal(refusal.stage, 'drawing-list');
+  assert.match(refusal.summary, /Another drawing has this name/);
+  assert.deepEqual(asked(), { show: true, value: other.toUpperCase(), description: refusal.summary },
+    'a repeated name asks again with the reason');
+  await answer('   ');
+  assert.match(app.choicePrompt.description, /Enter a name for the drawing/);
+  await answer('Phage comparison');
+  assert.equal((await renaming).status, 'ok');
+  assert.equal(tabNameOf('linear'), 'Phage comparison');
+  assert.equal(app.drawingBar.tabs().find((tab) => tab.id === 'linear').label, 'Phage comparison');
+  assert.equal(history.undoLabel(), 'Rename drawing');
+  await history.undo();
+  assert.equal(tabNameOf('linear'), name, 'Undo restores the name');
+
+  const cancelled = app.drawingBar.renameDrawing('linear');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  app.resolveChoicePrompt('cancel');
+  assert.equal(await cancelled, null, 'Cancel renames nothing');
+
+  const order = tabIds();
+  const [first, second] = app.drawingBar.tabs();
+  assert.deepEqual([first.canMoveLeft, first.canMoveRight, second.canMoveRight], [false, true, order.length > 2]);
+  assert.equal(app.drawingBar.moveDrawing(second.id, -1).status, 'ok');
+  assert.deepEqual(tabIds(), [order[1], order[0], ...order.slice(2)]);
+  await history.undo();
+  assert.deepEqual(tabIds(), order, 'Undo restores the order');
+});
+
+test('arrow keys move the focus over the tabs and wrap; Home and End go to the ends', () => {
+  assert.equal(focusedTabIndex('ArrowRight', 0, 3), 1);
+  assert.equal(focusedTabIndex('ArrowRight', 2, 3), 0);
+  assert.equal(focusedTabIndex('ArrowLeft', 0, 3), 2);
+  assert.equal(focusedTabIndex('Home', 2, 3), 0);
+  assert.equal(focusedTabIndex('End', 0, 3), 2);
+  assert.equal(focusedTabIndex('Enter', 1, 3), null, 'Enter and Space select through the button (manual activation)');
+});

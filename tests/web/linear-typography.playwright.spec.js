@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -55,7 +56,7 @@ const focusAfterHistoryCapture = async (page, locator) => {
 test('Titles, Record Labels, and Legend expose one responsive control hierarchy', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
 
   const titles = page.getByLabel('Titles and Record Labels', { exact: true });
   const legend = page.getByLabel('Legend settings', { exact: true });
@@ -108,7 +109,7 @@ test('Titles, Record Labels, and Legend expose one responsive control hierarchy'
 test('Linear Accession and Length resolve independent Auto modes from rendered rows', async ({ page }) => {
   test.setTimeout(300000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByRole('group', { name: 'Linear File actions' })
     .getByRole('button', { name: 'Add sequence', exact: true }).click();
   await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
@@ -260,7 +261,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
 test('Auto disclosure names draft fields and navigates without changing Result or History', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const titles = page.getByLabel('Titles and Record Labels', { exact: true });
   const layout = page.locator('[data-linear-label-auto-layout]');
   const labels = page.locator('[data-linear-label-auto-labels]');
@@ -551,7 +552,7 @@ test('independent Linear typography follows linked, imported, and History journe
 test('a Record Labels style size of zero or less is refused by its setting', async ({ page }) => {
   test.setTimeout(120000);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles(genbankPath);
   await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
   await page.getByLabel('Subtitle style', { exact: true }).focus();

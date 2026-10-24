@@ -10,6 +10,7 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -24,7 +25,7 @@ delete replayEnv.PYTHONHOME;
 const INPUTS = [TESTA, TESTB, TESTA];
 const openLinear = async (page) => {
   await openFresh(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async (inputs) => {
     const app = window.__GBDRAW_APP__;

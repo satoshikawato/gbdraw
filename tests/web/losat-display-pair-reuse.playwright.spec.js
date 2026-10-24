@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { execFileSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // F-4 (OD-3, #694): a LOSAT derived payload holds the displayed direction of
 // each record pair and, for Collinear blocks, whether a CLI grid limits the
@@ -150,7 +151,7 @@ const PAIR_SOURCES = [
 const openSimilarityGroups = async (page, rows) => {
   await installProteinExecutor(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   for (const [index, source] of PAIR_SOURCES.entries()) {
     if (index > 0) await page.getByRole('button', { name: 'Add sequence' }).first().click();
     const chooser = page.waitForEvent('filechooser');
