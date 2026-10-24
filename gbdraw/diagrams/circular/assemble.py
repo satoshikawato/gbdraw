@@ -1546,11 +1546,12 @@ def _resolve_radial_layout_fitting_definition(
     other value is explicit and never wraps. A failure the wrap cannot fix
     raises the original definition-band error.
 
-    A plot title changes only the center text (OV-1710): when it replaces the
-    full definition the record draws without it (``layout_definition_profile``)
-    with the record summary (``definition_profile``), the slots are placed
-    around the full definition, which is never smaller. When the full
-    definition cannot fit, the slots are placed around the drawn one.
+    A plot title, or a Multi-Record Canvas under rows that pack, changes only
+    the center text (OV-1710, OV-1711): when the record draws the record
+    summary (``definition_profile``) and the layout follows the full
+    definition (``layout_definition_profile``), the slots are placed around
+    the full definition, which is never smaller. When the full definition
+    cannot fit, the slots are placed around the drawn one.
     """
 
     if center_reserved_radius is not None:
@@ -2843,6 +2844,14 @@ def add_record_on_circular_canvas(
         record_length=len(gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
+    # Rows that pack from the feature track take their Auto widths from the full definition the record draws
+    # alone, so a record summary on a Multi-Record Canvas changes only the center text (OV-1711). The preset
+    # lanes keep the drawn definition there (D-08 covers the plot title).
+    reserved_definition_profile: CircularDefinitionProfile = (
+        "full"
+        if definition_profile == "record_summary" and not preferred_anchor_slot_ids
+        else definition_profile if layout_definition_profile is None else layout_definition_profile
+    )
     # The tracks around the definition, and the definition text as drawn, for a config: the figure's own, or a
     # smaller definition font that the definition row probes (D-12).
     def place_around_definition(layout_cfg: GbdrawConfig) -> tuple[CircularRadialLayout, float | None, int]:
@@ -2868,9 +2877,7 @@ def add_record_on_circular_canvas(
             strain=strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
-            layout_definition_profile=(
-                definition_profile if layout_definition_profile is None else layout_definition_profile
-            ),
+            layout_definition_profile=reserved_definition_profile,
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,

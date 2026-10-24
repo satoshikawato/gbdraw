@@ -56,6 +56,17 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   and the tick labels no longer run together. In 0.14.0 the shorter definition
   let the rings jump to the preset's lanes. Figures without a plot title are
   unchanged.
+- A Circular custom track stack that adds an inside row the preset does not
+  have, such as an AT skew row or an inside annotation slot, packs its rows
+  from the feature ring toward the center again, as in 0.13.0.
+  Its Auto widths follow the full definition the record draws alone. In 0.14.0
+  such a stack moved to the preset's lanes whenever the center definition left
+  room, so the record summary each record draws on a Multi-Record Canvas could
+  move the GC content, skew, and tick rings and run the tick labels together.
+  A record now draws these rings in the same place alone and on a Multi-Record
+  Canvas. Figures from such a stack change. The default stack, a custom stack
+  with only the preset's rows (comparison rings and depth series count as
+  the preset's), and the Gallery figures are unchanged.
 - A record drawn from another start (`--display_start_coordinate`, a records
   table start, or **Rotate record using this feature**) shows its length in the
   definition, for example `16,569 bp`, in Circular and Linear. It showed the
@@ -164,14 +175,6 @@ saved by 0.14.0 opens in 0.14.1. See
 
 New in this release:
 
-- On a Circular figure with a custom track stack and blank radii, whether the
-  inside rows (GC content, skews, ticks) sit on the preset's positions or pack
-  under the features depends on the size of the center definition (OV-1711). An
-  edit that shrinks the definition, such as a shorter species or strain name or
-  several records on one Multi-Record Canvas, can move those rings and run the
-  tick labels together. Give the rows explicit radii (**Radius**) in the track
-  table: a pinned row keeps its radius, and one that would overlap the
-  definition is reported as an error.
 - A Session saved by 0.14.0 with a crop and ring LOSAT still holds unconverted
   rows. Its ring draws as in 0.14.0 on a forward crop, and at another
   unconverted place on a reverse-complemented crop, until the next **Generate

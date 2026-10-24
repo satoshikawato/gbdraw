@@ -127,6 +127,17 @@ write-up of a release.
   untitled layout and the tick labels no longer run together. In 0.14.0 the
   shorter definition let the rings jump to the preset's lanes. Figures without
   a plot title are unchanged (OV-1710, #1329).
+- Fixed: a Circular custom track stack that adds an inside row the preset does
+  not have (an AT skew row, an inside annotation slot) packs its rows from the
+  feature ring toward the center again, as in 0.13.0, and takes its Auto
+  widths from the full definition the record draws alone. In 0.14.0 it
+  moved to the preset's lanes whenever the center definition left room, so a
+  Multi-Record Canvas, where each record draws its record summary, moved the GC
+  content, skew, and tick rings and could run the tick labels together. The
+  default stack, a stack with only the preset's rows (comparison rings and
+  depth series count as the preset's), and the Gallery figures are
+  unchanged; the H-CLI-02, H-CLI-09, and H-CLI-10 recipe figures are
+  regenerated (OV-1711, #1336).
 - Added: when the center definition text of a Circular record touches what an
   inner track draws (GC content or GC skew, a feature block, or the axis
   circle), gbdraw warns through the label-fit warning and offers a smaller
