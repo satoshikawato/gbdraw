@@ -240,12 +240,15 @@ const clickShape = async (page, selector) => {
   return point;
 };
 
-const popupBounds = (page, popup, bodySelector) => popup.evaluate((element, selector) => {
+const popupBounds = (page, popup, bodySelector) => popup.evaluate(async (element, selector) => {
+  const { popupViewportBounds } = await import('./js/utils/popup-bounds.js');
   const box = element.getBoundingClientRect();
   const body = element.querySelector(selector);
   return {
     top: box.top, bottom: box.bottom, left: box.left, right: box.right,
     header: document.querySelector('header.app-header').getBoundingClientRect().bottom,
+    // The app's top limit for popups: below the header, and below a notice that ends in the upper half (OV-496).
+    limitTop: popupViewportBounds().top,
     footer: document.querySelector('[data-app-footer]').getBoundingClientRect().top,
     width: innerWidth,
     scrolls: body.scrollHeight > body.clientHeight + 1
@@ -260,7 +263,7 @@ const expectPlaced = (placed, point, name) => {
   const covers = point.x >= placed.left && point.x <= placed.right && point.y >= placed.top && point.y <= placed.bottom;
   expect(covers, `${name} leaves the clicked point visible`).toBe(false);
   // The popup opens as tall as its content needs, up to the space it has.
-  if (placed.scrolls) expect(placed.bottom - placed.top, `${name} uses the height it has`).toBeGreaterThan(placed.footer - placed.header - 48);
+  if (placed.scrolls) expect(placed.bottom - placed.top, `${name} uses the height it has`).toBeGreaterThan(placed.footer - placed.limitTop - 48);
 };
 
 test('OV-371 feature and ribbon popups open inside the window beside the clicked item', async ({ browser }) => {

@@ -60,4 +60,11 @@ const showPhonePane = async (page, pane) => {
   await expect(tab).toHaveAttribute('aria-selected', 'true');
 };
 
-module.exports = { showPhonePane, showDrawing, drawingTab, drawingIds, shownDrawing };
+/**
+ * The top of the area the panes show in: the bottom edge of the drawing bar, which PD-OI-090 puts under the header
+ * and above both panes. A pointer aimed above it lands on the bar or the header, not on a pane.
+ * @param {import('@playwright/test').Page} page @returns {Promise<number>}
+ */
+const paneTop = (page) => page.locator('.drawing-bar').evaluate((bar) => bar.getBoundingClientRect().bottom);
+
+module.exports = { showPhonePane, showDrawing, drawingTab, drawingIds, shownDrawing, paneTop };
