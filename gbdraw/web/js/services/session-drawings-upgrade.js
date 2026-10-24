@@ -527,17 +527,6 @@ const drawingOf = (view) => {
   return /** @type {SessionDrawing49} */ (drawing);
 };
 
-/**
- * The drawing a Session 49 opens (`_opened_drawing`, gbdraw/session_drawings.py):
- * the one `ui.activeDrawingId` names, else the first. The one place the Web
- * reads which drawing a Session 49 opens.
- * @param {Session49} document
- * @returns {SessionDrawing49}
- */
-export const openedDrawingOf = (document) => {
-  const [first] = document.drawings;
-  return document.drawings.find((entry) => entry.id === document.ui.activeDrawingId) ?? first;
-};
 
 /**
  * `_drawing_view` (the inverse of `drawingOf`): one drawing of a Session 49

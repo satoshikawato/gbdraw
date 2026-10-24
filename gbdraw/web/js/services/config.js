@@ -218,15 +218,18 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
-  drawingSetIndex,
   drawingSetPath,
+  openedDrawingOf,
   readDrawingResultSetParts,
   readSessionAuthorityParts,
   readSessionDocument,
   readSessionInput,
   restoresNothing,
   settingsOnlySessionCandidate,
-  validateSessionAuthorityInventory
+  storedRequestSchemas,
+  storedResultSets,
+  validateSessionAuthorityInventory,
+  withStoredResultSet
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
 import {
@@ -277,7 +280,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
-  drawingViewOf, openedDrawingOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
+  drawingViewOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
 } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -345,7 +348,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, UnvalidatedFields } from './session-authority.js' */
+/** @import { ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
@@ -1387,6 +1390,38 @@ const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
   return config;
 };
 
+/**
+ * A drawing's draft as Load restores it over its request's projection
+ * (`overlayModeSliceConfig`): a saved omission of
+ * `keep_definition_left_aligned` means historical OFF, independently of
+ * fresh/reset defaults. One rule for every drawing Load projects.
+ * @param {ReturnType<typeof overlayModeSliceConfig> | null | undefined} config
+ * @returns {ReturnType<typeof overlayModeSliceConfig>}
+ */
+const withSavedDefinitionAlignment = (config) => ({
+  ...config,
+  form: { keep_definition_left_aligned: false, ...config?.form }
+});
+
+/**
+ * The unmanaged config overrides Load restores for a drawing it projects
+ * (PD-OI-009): its draft's when the draft holds them, else its request's.
+ * @param {DiagramMode} mode
+ * @param {unknown} storedConfig The drawing's current-writer draft, else null.
+ * @param {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>> | null | undefined} storedRequest
+ * @returns {UnmanagedOverrideCheck}
+ */
+const unmanagedConfigValidationOf = (mode, storedConfig, storedRequest) => (
+  isPlainObject(storedConfig) && Object.hasOwn(storedConfig, 'unmanagedConfigOverrides')
+    ? { mode, configOverrides: storedConfig.unmanagedConfigOverrides, source: 'draft' }
+    : {
+        mode,
+        config: storedRequest?.diagramOptions?.config ?? null,
+        configOverrides: storedRequest?.diagramOptions?.configOverrides ?? {},
+        source: 'storedRequest'
+      }
+);
+
 // Installs one drawing's slice over the projection of its mode's committed
 // request (`projectedConfig`, or none); the drawing holds its mode's defaults
 // before. `ui` keys apply as Session Load reads them: the pending palette
@@ -2051,91 +2086,6 @@ const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {})
   });
 };
 
-/**
- * One committed Result set of a Session as the file holds it: `at` is where
- * (the prefix of its paths, so its rows keep the file's own paths), and
- * `projected` says it is the set Load projects (the top-level set of a
- * Session 27-48) rather than a stored set, which loads only as saved.
- * @typedef {{ at: ResultSetPath, projected: boolean, set: SessionInput }} StoredResultSet
- */
-/**
- * The project fields a Result set's readers read beside the set.
- * @typedef {{ resources: unknown, orthogroupState?: unknown }} StoredSetProject
- */
-/**
- * The committed Result sets of a Session, the projected one first: a Session
- * 27-48's top-level set and a Session 46-48's `otherModeResult`; each Session
- * 49 drawing that holds a request, the one it opens (`openedDrawingOf`)
- * projected (a drawing is found by its ID). The one place Load names where a
- * file holds a set; each set reader below reads one.
- * @param {SessionInput} data
- * @returns {StoredResultSet[]}
- */
-const storedResultSets = (data) => {
-  if (isDrawingsBand(/** @type {SessionChecked} */ (data))) {
-    const document = /** @type {Session49} */ (/** @type {unknown} */ (data));
-    // A Session 49 whose every drawing was dropped holds no set (R4, `restoresNothing`).
-    const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
-    /** @type {StoredResultSet[]} */
-    const sets = document.drawings.flatMap((entry, index) => (entry.renderRequest == null ? [] : [{
-      at: drawingSetPath(index),
-      projected: entry.id === openedId,
-      set: /** @type {SessionInput} */ (/** @type {unknown} */ (entry))
-    }]));
-    return [...sets.filter(({ projected }) => projected), ...sets.filter(({ projected }) => !projected)];
-  }
-  return [
-    { at: '', projected: true, set: data },
-    ...(isPlainObject(data.otherModeResult)
-      ? [{ at: /** @type {ResultSetPath} */ ('otherModeResult.'), projected: false, set: /** @type {SessionInput} */ (data.otherModeResult) }]
-      : [])
-  ];
-};
-
-/**
- * `data` with its set at `at` replaced by `set`; a null `set` leaves a stored
- * set out (the projected set of a Session 27-48 is never left out). A Session
- * 49 drawing whose set is left out stays, without its set: no request, no
- * Results, and none of the set's catalog, run metadata or invocation.
- * @template {SessionInput} T
- * @param {T} data @param {ResultSetPath} at @param {SessionInput | null} set
- * @returns {T}
- */
-const withStoredResultSet = (data, at, set) => {
-  const drawingIndex = drawingSetIndex(at);
-  if (drawingIndex !== null) {
-    const entries = [.../** @type {SessionInput[]} */ (/** @type {Record<string, unknown>} */ (data).drawings)];
-    if (set !== null) {
-      entries[drawingIndex] = set;
-    } else {
-      const { runMetadata: _runMetadata, cliInvocation: _cliInvocation, ...drawing } = entries[drawingIndex];
-      const { featureCatalog: _catalog, ...editorState } = isPlainObject(drawing.editorState) ? drawing.editorState : {};
-      entries[drawingIndex] = {
-        ...drawing, renderRequest: null, results: [],
-        ...(Object.hasOwn(drawing, 'editorState') ? { editorState } : {})
-      };
-    }
-    return { ...data, drawings: entries };
-  }
-  if (at === '') {
-    if (set === null) throw new Error('The projected Result set is never left out.');
-    return /** @type {T} */ (set);
-  }
-  if (set !== null) return { ...data, otherModeResult: set };
-  const { otherModeResult: _dropped, ...kept } = data;
-  return /** @type {T} */ (kept);
-};
-
-/**
- * The request schemas the file stored (RK-1), under the key of where it
- * holds each set.
- * @param {readonly StoredResultSet[]} sets
- * @returns {StoredRequestSchemas}
- */
-const storedRequestSchemas = (sets) => Object.fromEntries(sets.map(({ at, projected, set }) => [
-  projected ? 'renderRequest' : at === 'otherModeResult.' ? 'otherModeResult' : at,
-  /** @type {UnvalidatedFields<'schema'>} */ (set.renderRequest)?.schema
-]));
 
 /**
  * `data` after `read` read each of its committed Result sets, in
@@ -2348,15 +2298,91 @@ const readSettingsOnlyMode = (data, repairs) => {
 };
 
 /**
+ * A drawing's input type (OV-594): the stored one, else its request's
+ * (which wins over a stored value of no type), else GenBank; one rule for
+ * every drawing Load projects.
+ * @param {unknown} stored The type the file stores for the drawing.
+ * @param {string | null} requestInputType Its request's type; null: none.
+ * @returns {string}
+ */
+const drawingInputTypeOf = (stored, requestInputType) => {
+  const read = readSessionInputType(stored);
+  return requestInputType && (isUnsetValue(stored) || read.lost) ? requestInputType : read.value;
+};
+
+/**
+ * What only Load knows of a drawing it projects: its file's version and
+ * band, the classification of its comparisons, the draft the projection
+ * reads, and whether its file holds its tables as the cards' files.
+ * @typedef {object} DrawingProjectionFacts
+ * @property {number} sourceSessionVersion
+ * @property {boolean} drawingsBand The file is a Session 49 (a drawing binds its own mode's input).
+ * @property {boolean} currentSession The file is of the current-writer band (45 on) or a Session 49.
+ * @property {ImportedComparisonIntent} comparisonClassification
+ * @property {unknown} storedConfig The draft the projection reads.
+ * @property {boolean} hasStoredDraft
+ * @property {boolean} cardRowsAreFileRows
+ * @property {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
+ */
+/**
+ * The one builder of a drawing's request projection input (B2d-3a-3a): the
+ * committed set of a Session 31-48 and every drawing of a Session 49, opened
+ * or not, from its one-drawing view (`drawingViewOf`).
+ * @param {SessionInput} view
+ * @param {DrawingProjectionFacts} facts
+ * @returns {Parameters<typeof projectCanonicalSessionRequest>[0]}
+ */
+const drawingProjectionInputOf = (view, {
+  sourceSessionVersion, drawingsBand, currentSession, comparisonClassification, storedConfig, hasStoredDraft, cardRowsAreFileRows,
+  sessionResourceTable
+}) => {
+  const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
+  return {
+    // Comparisons that are not editable are not projected.
+    renderRequest: request?.mode === 'linear'
+      && comparisonClassification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+      ? { ...request, comparisons: [] } : request,
+    resources: view.resources,
+    webFiles: view.webFiles,
+    legacyFiles: view.files,
+    storedConfig,
+    // A Session without a Web draft (written by the CLI or the Python API)
+    // derives its draft from the request (D-02); the comparison plan of a
+    // Python re-save is stated the same way as the CLI's (OV-296).
+    initializeCliInputs: !hasStoredDraft,
+    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
+    linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
+      ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
+      : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+    repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+    sessionResourceTable,
+    // A Session without a Web draft (CLI, Python) holds its tables only
+    // in the request, so Load reads them; a draft holds them already.
+    deferResourceContent: currentSession && hasStoredDraft,
+    adoptCanonicalPayloads: currentSession,
+    // OV-1280: from Session 48 on, a Session without a draft holds each
+    // table as its card's file (what only the source says, DESIGN §6).
+    markCardFileRows: !hasStoredDraft && cardRowsAreFileRows,
+    // A Session 49 drawing binds its own mode's input.
+    bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (view.ui)?.mode)
+  };
+};
+
+/**
  * What a Session 49 drawing Load does not project gives its drawing
  * (B2d-3a-2): the input files of its request and bindings, read from its
  * one-drawing view as the projected drawing's are (`projectCanonicalSessionRequest`,
  * or its bindings alone without a request), the classification of its
- * comparisons, and its input type.
+ * comparisons, its input type, and its settings as the projected drawing's
+ * are restored (OV-1786): its draft over its request's projection.
  * @typedef {object} StoredDrawingInputs
  * @property {Record<string, unknown>} files The restored file slots `applyFiles` reads.
  * @property {ImportedComparisonIntent | null} comparisonClassification Null: the drawing holds no request.
  * @property {string} inputType
+ * @property {ReturnType<typeof overlayModeSliceConfig> | null} restoredConfig Null: the drawing holds no
+ *   request, and its draft installs over its mode's defaults.
+ * @property {UnmanagedOverrideCheck | null} requestOverrides Its request's unmanaged overrides, checked
+ *   when its draft holds none (the editor-draft loop reads a draft's).
  */
 /**
  * @param {Session49} document
@@ -2368,35 +2394,42 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
   const view = /** @type {SessionInput} */ (/** @type {unknown} */ (drawingViewOf(document, drawing)));
   const { mode } = drawing;
   const ui = /** @type {UnvalidatedFields<'cInputType' | 'lInputType'>} */ (view.ui);
-  const storedInputType = readSessionInputType(ui?.[mode === 'linear' ? 'lInputType' : 'cInputType']);
+  const storedInputType = ui?.[mode === 'linear' ? 'lInputType' : 'cInputType'];
   const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
   if (!isPlainObject(request)) {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
-    return { files, comparisonClassification: null, inputType: storedInputType.value };
+    return {
+      files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
+      restoredConfig: null, requestOverrides: null
+    };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
     renderRequest: request, resources: view.resources
   }));
   const config = /** @type {UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>} */ (view.modes)?.[mode]?.config;
   const hasStoredDraft = isPlainObject(config);
-  const projection = projectCanonicalSessionRequest({
-    // As the projected drawing's: comparisons that are not editable are not projected.
-    renderRequest: mode === 'linear' && comparisonClassification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-      ? { ...request, comparisons: [] } : request,
-    resources: view.resources,
-    webFiles: view.webFiles,
-    storedConfig: hasStoredDraft ? config : null,
-    initializeCliInputs: !hasStoredDraft,
-    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
-    linearTrackSlotSchemaVersion: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-    sessionResourceTable,
-    deferResourceContent: hasStoredDraft,
-    adoptCanonicalPayloads: true,
-    bindingInputSlot: webBindingInputSlot(true, mode)
-  });
-  const inputType = isUnsetValue(ui?.[mode === 'linear' ? 'lInputType' : 'cInputType']) || storedInputType.lost
-    ? String(projection.inputType || storedInputType.value) : storedInputType.value;
-  return { files: projection.files, comparisonClassification, inputType };
+  // The draft as the opened drawing's is read (preflight's `runtimeStoredConfig`).
+  const storedConfig = hasStoredDraft
+    ? migrateImportedLinearTrackSlots(migrateImportedCircularTrackSlots(config), document.version) : null;
+  const projection = projectCanonicalSessionRequest(drawingProjectionInputOf(view, {
+    sourceSessionVersion: document.version,
+    drawingsBand: true,
+    currentSession: true,
+    comparisonClassification,
+    storedConfig,
+    hasStoredDraft,
+    // A Session 49 holds each table of a drawing without a draft as its card's file (DESIGN §6).
+    cardRowsAreFileRows: true,
+    sessionResourceTable
+  }));
+  const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
+  const overrides = unmanagedConfigValidationOf(projection.mode, storedConfig,
+    /** @type {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (request));
+  return {
+    files: projection.files, comparisonClassification, inputType,
+    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
+    requestOverrides: overrides.source === 'storedRequest' ? overrides : null
+  };
 };
 
 /**
@@ -2453,7 +2486,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (restoresNothing(stored, repairs)) throw SESSION_FIELDS_ERROR();
   const authorityData = drawingsBand
     ? await readEachResultSet(requestData, async (entry) => readDrawingResultSetParts(entry, sourceSessionVersion,
-      requestRead.storedSchemas[entry.projected ? 'renderRequest' : /** @type {DrawingSetPath} */ (entry.at)],
+      requestRead.storedSchemas[entry.projected ? '' : entry.at],
       repairs, uncomposedSets))
     : readSessionAuthorityParts(requestData, sourceSessionVersion, requestRead.storedSchemas, repairs, uncomposedSets);
   /** @type {StoredSetProject} */
@@ -2532,7 +2565,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // its promotion from the request its reader read.
   const promotedData = !currentSession && (
     sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(requestRead.storedSchemas.renderRequest) === 2
+    Number(requestRead.storedSchemas['']) === 2
   )
     ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;
@@ -2558,13 +2591,6 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
-  const projectionRenderRequest = (
-    storedRequest?.mode === 'linear'
-    && comparisonClassification.disposition
-      !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-  )
-    ? { ...storedRequest, comparisons: [] }
-    : storedRequest;
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
@@ -2611,32 +2637,16 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
   /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
   const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
-    ? {
-        renderRequest: projectionRenderRequest,
-        resources: data.resources,
-        webFiles: data.webFiles,
-        legacyFiles: data.files,
+    ? drawingProjectionInputOf(data, {
+        sourceSessionVersion,
+        drawingsBand,
+        currentSession,
+        comparisonClassification,
         storedConfig: runtimeStoredConfig,
-        // A Session without a Web draft (written by the CLI or the Python API)
-        // derives its draft from the request (D-02); the comparison plan of a
-        // Python re-save is stated the same way as the CLI's (OV-296).
-        initializeCliInputs: !hasStoredDraft,
-        fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (data.cliInvocation)?.fileBindings,
-        linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
-          ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
-          : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-        repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-        sessionResourceTable: currentResourceTable,
-        // A Session without a Web draft (CLI, Python) holds its tables only
-        // in the request, so Load reads them; a draft holds them already.
-        deferResourceContent: currentSession && hasStoredDraft,
-        adoptCanonicalPayloads: currentSession,
-        // OV-1280: from Session 48 on, a Session without a draft holds each
-        // table as its card's file (what only the source says, DESIGN §6).
-        markCardFileRows: !hasStoredDraft && Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
-        // A Session 49 drawing binds its own mode's input.
-        bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode)
-      }
+        hasStoredDraft,
+        cardRowsAreFileRows: Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
+        sessionResourceTable: currentResourceTable
+      })
     : null;
   /** @type {SessionRequestProjection | null} */
   const canonicalProjection = settingsOnly
@@ -2719,31 +2729,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
   }
-  // Saved omission means historical OFF, independently of fresh/reset defaults.
-  restoredConfig = {
-    ...restoredConfig,
-    form: { keep_definition_left_aligned: false, ...restoredConfig?.form }
-  };
-  const hasCurrentStoredUnmanagedOverrides = currentSession && hasStoredDraft
-    && isPlainObject(runtimeStoredConfig)
-    && Object.prototype.hasOwnProperty.call(
-      runtimeStoredConfig,
-      'unmanagedConfigOverrides'
-    );
+  restoredConfig = withSavedDefinitionAlignment(restoredConfig);
   const unmanagedConfigValidation = canonicalProjection
-    ? hasCurrentStoredUnmanagedOverrides
-      ? {
-          mode: canonicalProjection.mode,
-          configOverrides: runtimeStoredConfig.unmanagedConfigOverrides,
-          source: /** @type {const} */ ('draft')
-        }
-      : {
-          mode: canonicalProjection.mode,
-          config: projectionRenderRequest?.diagramOptions?.config ?? null,
-          configOverrides:
-            projectionRenderRequest?.diagramOptions?.configOverrides ?? {},
-          source: /** @type {const} */ ('storedRequest')
-        }
+    ? unmanagedConfigValidationOf(canonicalProjection.mode, currentSession && hasStoredDraft ? runtimeStoredConfig : null, storedRequest)
     : null;
   if (currentSession) recordSessionLifecycleEvent('artifact-projection-start');
   const projectionResult = canonicalProjection
@@ -5903,6 +5891,11 @@ const importSessionDocument = async (e, options = {}) => {
           ? `modes.${unmanagedConfigValidation.mode}.config.unmanagedConfigOverrides` : 'config.unmanagedConfigOverrides', repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
+    for (const inputs of storedDrawingInputs.values()) {
+      if (inputs.restoredConfig && inputs.requestOverrides) {
+        inputs.restoredConfig.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides(inputs.requestOverrides);
+      }
+    }
     const canonicalSession = projectionResult !== null;
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
@@ -5949,9 +5942,18 @@ const importSessionDocument = async (e, options = {}) => {
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
-    // Any other Session 46 slice is stored settings: its track stacks install as saved (R11).
+    /**
+     * The restored settings of a drawing Load projects, by drawing ID: the
+     * committed set's (`restoredConfig`) and each other Session 49 drawing
+     * that holds a request (`storedDrawingInputs`, OV-1786); else null.
+     * @param {DrawingId} drawingId
+     */
+    const projectedConfigOf = (drawingId) => (drawingId === committedSetDrawingId
+      ? (committedSliceProjected ? restoredConfig : null)
+      : storedDrawingInputs.get(drawingId)?.restoredConfig ?? null);
+    // Any other Session 46-48 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
-    const isStoredSlice = (drawingId) => modeScopedSession && !(drawingId === committedSetDrawingId && committedSliceProjected);
+    const isStoredSlice = (drawingId) => modeScopedSession && projectedConfigOf(drawingId) === null;
     // The 49 document of a Session 46-49 (preflight read each drawing's part
     // of the file as its own entry, found by drawing ID, and where the file
     // holds its saved Result set, `setSources`).
@@ -5992,11 +5994,15 @@ const importSessionDocument = async (e, options = {}) => {
     }
     /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
     const draftPartOf = (drawingId) => /** @type {LoadedDraftPart} */ (draftParts.get(drawingId));
+    /**
+     * A Session 46-49 drawing's draft config: its restored settings when Load
+     * projects it (`projectedConfigOf`), else its slice over its mode's defaults.
+     * @param {DrawingId} drawingId
+     */
+    const sliceDraftConfigOf = (drawingId) => projectedConfigOf(drawingId)
+      ?? overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config);
     /** @param {DrawingId} drawingId @returns {Record<string, any> | null} */
-    const draftConfigOf = (drawingId) => (modeScopedSession
-      ? (drawingId === committedSetDrawingId && committedSliceProjected
-        ? restoredConfig : overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config))
-      : restoredConfig);
+    const draftConfigOf = (drawingId) => (modeScopedSession ? sliceDraftConfigOf(drawingId) : restoredConfig);
     // Each mode's input type (OV-594): the stored one, else its request's
     // (which wins without a row over a stored value of no type), else GenBank.
     // (A settings-only Session's projection holds its own `ui` type.)
@@ -6005,8 +6011,8 @@ const importSessionDocument = async (e, options = {}) => {
     /** @param {'cInputType' | 'lInputType'} field */
     const requestInputTypeWins = (field) => field === requestInputField && readSessionInputType(ui[field]).lost;
     /** @param {'cInputType' | 'lInputType'} field @returns {string} */
-    const inputTypeOf = (field) => (field === requestInputField && (isUnsetValue(ui[field]) || requestInputTypeWins(field))
-      ? /** @type {string} */ (canonicalProjection?.inputType) : readSessionInputType(ui[field]).value);
+    const inputTypeOf = (field) => drawingInputTypeOf(ui[field],
+      field === requestInputField ? /** @type {string} */ (canonicalProjection?.inputType) : null);
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
@@ -6527,7 +6533,7 @@ const importSessionDocument = async (e, options = {}) => {
       const committed = id === committedSetDrawingId;
       /** @type {Record<string, any>} */
       let config = modeScopedSession
-        ? (committed && committedSliceProjected ? restoredConfig : overlayModeSliceConfig(null, slice.config))
+        ? sliceDraftConfigOf(id)
         : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, slice.config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);

@@ -824,3 +824,76 @@ test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 
   assert.ok(paths.includes(`drawings[${index}].features.extractedFeatures`), JSON.stringify(paths));
   assert.equal(paths.some((path) => path.includes('orthogroupState')), false, JSON.stringify(paths));
 });
+
+// B2d-3a-3a: one per-drawing projection. Every Session 49 drawing, opened
+// or not, is projected by one function from its own one-drawing view.
+test('one function builds the request projection input of every Session 49 drawing, opened or not', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  // The projection input names the input slot its drawing binds; one builder writes it.
+  assert.equal(source.match(/\bbindingInputSlot:/g)?.length ?? 0, 1, 'one projection-input builder');
+  assert.match(source, /const drawingProjectionInputOf = /);
+  assert.ok((source.match(/\bdrawingProjectionInputOf\(/g)?.length ?? 0) >= 2, 'the opened drawing and every other drawing call it');
+});
+
+test('a Session 49 drawing Load does not open keeps its dormant Similarity group names', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  second.config.webEdits.orthogroupDormantOverrides = { '["a","b"]': { name: 'Dormant of linear-2' } };
+  first.config.webEdits.orthogroupDormantOverrides = { '["c","d"]': { name: 'Dormant of linear' } };
+  for (const opened of [first.id, second.id]) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual({ ...state.drawingOf(second.id).orthogroupDormantOverrides }, second.config.webEdits.orthogroupDormantOverrides, opened);
+    assert.deepEqual({ ...state.drawingOf(first.id).orthogroupDormantOverrides }, first.config.webEdits.orthogroupDormantOverrides, opened);
+  }
+});
+
+// B2d-3a-3a Part 2: session-authority lists a file's Result sets only
+// through `storedResultSets` (the one place that names where a Session
+// 27-49 file holds a set); its readers key the stored request schemas by
+// set path.
+test('session-authority reads `otherModeResult` only in the Result set enumeration owner', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/session-authority.js', import.meta.url), 'utf8');
+  const bodyOf = (name) => {
+    const start = source.indexOf(`export const ${name} = `);
+    assert.ok(start >= 0, name);
+    return source.slice(start, source.indexOf('\n};\n', start));
+  };
+  const owners = ['storedResultSets', 'withStoredResultSet'].map(bodyOf);
+  const outside = owners.reduce((text, body) => text.replace(body, ''), source)
+    .split('\n').filter((line) => !/^\s*(\/\/|\*|\/\*\*)/.test(line))
+    // The field registries name the key; they read no set.
+    .filter((line) => !/^\s*otherModeResult: \{ authority:|positionalArrays:/.test(line));
+  assert.deepEqual(outside.filter((line) => /\botherModeResult\b/.test(line)), []);
+});
+
+// OV-1786: Load restores every Session 49 drawing through its own request
+// projection, so a drawing gets the same settings whichever drawing opens
+// (DESIGN `drawingViewOf`).
+test('a Session 49 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
+  const session = v49Session('drawings-circular-linear');
+  // The drawing's settings (its draft's form and adv) and its other settings
+  // a request can carry.
+  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides'];
+  const settingsOf = (id) => {
+    const drawing = state.drawingOf(id);
+    return JSON.parse(JSON.stringify(Object.fromEntries(SETTINGS.map((name) => [name, drawing[name] ?? null]))));
+  };
+  const loads = [];
+  for (const opened of session.drawings.map((entry) => entry.id)) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    loads.push(Object.fromEntries(session.drawings.map((entry) => [entry.id, settingsOf(entry.id)])));
+  }
+  const [first, ...rest] = loads;
+  const differs = rest.flatMap((other) => session.drawings.flatMap(({ id }) => SETTINGS.flatMap((name) => {
+    const [a, b] = [first[id][name] ?? {}, other[id][name] ?? {}];
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])]
+      .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key])).map((key) => `${id}.${name}.${key}`);
+  })));
+  assert.deepEqual(differs, []);
+});
