@@ -46,7 +46,7 @@ const switchMode = async (page, mode) => {
   await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe(mode);
   await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.circularRecordDiscovery.status)).not.toBe('loading');
+    (await import('./js/state.js')).state.drawingOfMode('circular').circularRecordDiscovery.status)).not.toBe('loading');
   // Settle the Vue render and its asynchronous preview binder, without a time delay.
   await page.evaluate(async () => { await window.Vue.nextTick(); });
 };

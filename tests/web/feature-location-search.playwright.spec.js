@@ -222,7 +222,7 @@ test('a none Specific Table color survives Generate, Save, and Load', async ({ p
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles(table);
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    await app.waitForAuxiliaryFileImport(app.files.t_color);
+    await app.waitForAuxiliaryFileImport(app.cardFiles.t_color);
   });
   const rule = { feat: 'CDS', qual: 'product', val: 'duplicate', color: 'none', cap: 'hollow' };
   const rules = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules

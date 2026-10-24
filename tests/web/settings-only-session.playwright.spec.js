@@ -10,8 +10,8 @@ const snapshot = page => page.evaluate(async () => {
   const { buildConfigData, getCommittedCanonicalSession } = await import('./js/services/config.js');
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.files[key])),
-    linearSources: s.linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
+    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.drawingOfMode('circular').files[key])),
+    linearSources: s.drawingOfMode('linear').linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
   };

@@ -16,7 +16,7 @@ const rerendered = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.p
 // destroyed execution context.
 const waitForColorTableImport = (page) => evaluateWithRetainedPromise(page, async () => {
   const a = window.__GBDRAW_APP__;
-  await a.waitForAuxiliaryFileImport(a.files.t_color);
+  await a.waitForAuxiliaryFileImport(a.cardFiles.t_color);
 });
 const fills = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
@@ -148,7 +148,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   page.on('dialog', dialog => dialog.accept());
   await loadSession(page);
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'python.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?P<enzyme>NADH)\t#f01234\t\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles.t_color); });
   expect(await fills(page)).toHaveLength(7);
   const download = page.waitForEvent('download');
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -240,7 +240,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   const inspect = () => page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
-    return { file: a.files.t_color?.name, rules: JSON.stringify(a.manualSpecificRules), svg: a.svgContent, history: window.__GBDRAW_HISTORY__.getUndoCount() };
+    return { file: a.cardFiles.t_color?.name, rules: JSON.stringify(a.manualSpecificRules), svg: a.svgContent, history: window.__GBDRAW_HISTORY__.getUndoCount() };
   });
   const before = await inspect();
   await upload.setInputFiles({ name: 'invalid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n') });
