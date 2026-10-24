@@ -906,8 +906,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
 test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
   const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
   const showMode = async (page, target) => {
-    await page.getByRole('button', { name: MODE_NAMES[target], exact: true }).click();
-    await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+    await showDrawing(page, { kind: target });
     await settleLive(page);
   };
   const moveDecoration = async (page, role) => {
