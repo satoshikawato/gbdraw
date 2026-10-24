@@ -1585,3 +1585,22 @@ test('a group edit whose catalog changed during the synthesis is synthesized aga
   const { winners } = await evaluatePythonRules({ kind: 'color', features: [feature, other, added].map((item) => ruleFeaturePayload(item)), rules: s.state.manualSpecificRules });
   assert.deepEqual(winners, [0, -1, -1]);
 });
+
+test('a group edit whose rows a Generate reinstalled as equal clones during the synthesis is synthesized again and written', async () => {
+  const held = heldSynthesis();
+  const s = setup(evaluatePythonRules, { synthesize: held.synthesize });
+  const kept = { feat: 'CDS', qual: 'gene', val: 'zzz', color: '#778899', cap: 'Kept' };
+  assert.equal(await s.actions.commitSpecificRules(() => [kept]), true);
+  const [feature, other] = s.state.extractedFeatures.value;
+  const pending = s.actions.commitSpecificRules(s.actions.groupColorRules([feature], '#ff0000', 'Picked', 'group'));
+  await held.running;
+  // A Generate's activation installs cloned rows of the same content and replaces the catalog.
+  const clones = JSON.parse(JSON.stringify(s.state.manualSpecificRules));
+  s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, ...clones);
+  s.state.extractedFeatures.value = [feature, other, { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['a'] } }];
+  held.release();
+  assert.equal(await pending, true);
+  assert.equal(held.calls(), 2);
+  assert.deepEqual(s.state.manualSpecificRules.map((rule) => [rule.val, rule.color]).filter(([val]) => val === 'zzz'), [['zzz', '#778899']]);
+  assert.ok(s.state.manualSpecificRules.some((rule) => rule.color === '#ff0000'));
+});

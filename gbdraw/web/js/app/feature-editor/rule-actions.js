@@ -411,14 +411,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     for (let attempt = 0; ; attempt += 1) {
       // The table and the inputs the build reads. A build Python answers
       // (`groupColorRules`) spans an await, and the table is one array that a
-      // History restore or a Load fills in place: a table changed meanwhile
-      // writes nothing, and changed inputs (a Generate replaced the catalog)
-      // build again, so no rule is verified against a catalog it does not color.
+      // History restore or a Load fills in place: a table whose content changed
+      // meanwhile writes nothing. Equal content in other rows (a Generate's
+      // activation reinstalls cloned rows) and changed inputs (it replaced the
+      // catalog) build again from the current rows, so the edit is not dropped
+      // and no rule is verified against a catalog it does not color.
       const current = [...drawing.manualSpecificRules];
       const table = JSON.stringify(current);
-      const unchanged = () => drawing.manualSpecificRules.length === current.length
-        && current.every((row, index) => drawing.manualSpecificRules[index] === row)
-        && JSON.stringify(drawing.manualSpecificRules) === table;
+      const contentChanged = () => JSON.stringify(drawing.manualSpecificRules) !== table;
+      const sameRows = () => drawing.manualSpecificRules.length === current.length
+        && current.every((row, index) => drawing.manualSpecificRules[index] === row);
       const results = state.results.value;
       const inputs = rulePreparation.snapshot();
       /** @type {Map<Partial<SpecificColorRule>, SpecificColorRule>} */
@@ -428,12 +430,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         revised.set(next, row);
         return next;
       });
-      if (!rules || !unchanged()) return false;
+      if (!rules || contentChanged()) return false;
       // The row each rule is written into, so a kept or revised row keeps its identity.
       const sourceRows = rules.map(rule => revised.get(rule) || (current.find(row => row === rule) ?? null));
-      const outcome = rulePreparation.isCurrent(inputs) && await commitOnce(drawing, rules, sourceRows, label, commitOptions);
-      const stale = state.results.value !== results || !rulePreparation.isCurrent(inputs);
-      if (outcome || attempt === 2 || !stale || !unchanged()
+      const reinstalled = !sameRows();
+      const outcome = !reinstalled && rulePreparation.isCurrent(inputs)
+        && await commitOnce(drawing, rules, sourceRows, label, commitOptions);
+      const stale = reinstalled || state.results.value !== results || !rulePreparation.isCurrent(inputs);
+      if (outcome || attempt === 2 || !stale || contentChanged()
         || commitOptions.isCurrent?.() === false
         || state.sessionOperationAvailability?.()) return outcome;
       await rerenderIdle();
