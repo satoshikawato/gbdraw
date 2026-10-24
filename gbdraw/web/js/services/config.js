@@ -4748,7 +4748,6 @@ const resetSessionBaseline = () => {
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
-  state.sessionResourceDiscoveryDeferred.value = false;
   resetSettingsState(state);
   resetLayoutState(state);
   resetRightDrawerState(state);
@@ -6409,7 +6408,6 @@ const importSessionDocument = async (e, options = {}) => {
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
-    state.sessionResourceDiscoveryDeferred.value = currentSchemaSession;
     if (currentSchemaSession) {
       setCommittedCanonicalSession(adoptedCanonicalSession);
       activeSessionResourceTable = currentResourceTable;
@@ -6685,6 +6683,9 @@ const importSessionDocument = async (e, options = {}) => {
       // it could not restore was listed before the load (`repairs`).
       notices: migratedAnnotationTargetCount > 0 ? [ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount)] : [],
       repairs: listedRepairs,
+      // A current-schema Session holds its records' identities: the end of
+      // its Load reads no input records (each card stays "not inspected").
+      recordDiscoveryDeferred: currentSchemaSession,
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
@@ -6930,9 +6931,5 @@ export const importSession = async (event, options) => {
     }
     input.value = '';
     recordSessionLifecycleEvent('session-import-pending-cleared');
-    // Discovery watchers see the cleared pending flag while an adopted
-    // current-schema Session still defers resource reads; clear it afterwards.
-    await nextTick();
-    if (!activeSessionImport) state.sessionResourceDiscoveryDeferred.value = false;
   }
 };

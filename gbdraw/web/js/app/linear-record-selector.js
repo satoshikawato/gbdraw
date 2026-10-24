@@ -4,7 +4,7 @@ import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-/** @import { DrawingState, LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
@@ -45,6 +45,7 @@ export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
 
 /** @typedef {Partial<LinearSeq> | null | undefined} LinearSeqLike A row, or a partial one. */
 /** @typedef {{ suppress?: boolean }} RefreshOptions */
+/** @typedef {Pick<DrawingState, 'id' | 'mode' | 'linearSeqs' | 'inputType'>} LinearDiscoveryDrawing The drawing a discovery runs for, over its record rows and input type. */
 /** @typedef {SessionBusy | true | undefined} RefreshOutcome What a refresh settles to: a busy outcome, true when it expanded the rows and restarts, or nothing. */
 
 /** @param {LinearSeqLike} seq */
@@ -110,9 +111,6 @@ const sanitizePathSegment = (value) =>
  * the whole state. The two suppression flags and `sessionOperationAvailability`
  * are absent in a test state.
  * @typedef {object} LinearRecordSelectorState
- * @property {{ value: DiagramMode }} mode
- * @property {() => Pick<DrawingState, 'id' | 'mode' | 'linearSeqs' | 'inputType'>} activeDrawing the shown drawing,
- *   which a discovery runs for, over its record rows and input type
  * @property {() => readonly Pick<DrawingState, 'linearSeqs' | 'inputType'>[]} drawingList every drawing, whose rows
  *   keep their selector state, each read with its drawing's input type
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
@@ -140,9 +138,11 @@ export const createLinearRecordSelector = ({
   logger = console
 }) => {
   const selectorStateByUid = reactive({});
-  let refreshGeneration = 0;
-  /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null } | null} */
-  let activeRefresh = null;
+  // Each drawing's discovery: its read generation and the refresh still running.
+  /** @type {Map<DrawingId, number>} */
+  const refreshGenerations = new Map();
+  /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }>} */
+  const activeRefreshes = new Map();
   const recordDiscoverySuppressed = () => Boolean(
     state.semanticFileWatchersSuppressed?.value ||
     state.sessionImportRollbackInProgress?.value
@@ -226,26 +226,24 @@ export const createLinearRecordSelector = ({
   };
 
   /**
-   * @param {Pick<DrawingState, 'linearSeqs' | 'inputType'>} drawing the drawing the discovery runs for
+   * @param {LinearDiscoveryDrawing} drawing the drawing the discovery runs for
    * @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request
    */
   const isCurrentRequest = (drawing, { generation, uid, primaryFile, pairedFile, inputType }) => {
-    if (generation !== refreshGeneration) return false;
+    if (generation !== refreshGenerations.get(drawing.id)) return false;
     if (recordDiscoverySuppressed()) return false;
-    if (state.mode.value !== 'linear' || drawing.inputType.value !== inputType) return false;
+    if (drawing.inputType.value !== inputType) return false;
     const currentSeq = drawing.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
     const currentFiles = sourceFilesFor(currentSeq, inputType);
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
-  /** @param {RefreshOptions} [options] */
-  const refreshFingerprint = ({ suppress = false } = {}) => {
-    const drawing = state.activeDrawing();
+  /** @param {LinearDiscoveryDrawing} drawing @param {RefreshOptions} [options] */
+  const refreshFingerprint = (drawing, { suppress = false } = {}) => {
     const inputType = drawing.inputType.value;
     return [
       Boolean(suppress || recordDiscoverySuppressed()),
-      state.mode.value,
       inputType,
       ...drawing.linearSeqs.flatMap((seq) => {
         const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
@@ -262,18 +260,15 @@ export const createLinearRecordSelector = ({
   );
 
   /**
+   * @param {LinearDiscoveryDrawing} drawing the drawing whose cards it reads; its records land only in that drawing
    * @param {RefreshOptions} [options]
    * @returns {Promise<RefreshOutcome>}
    */
-  const runRefresh = async ({ suppress = false } = {}) => {
-    const generation = ++refreshGeneration;
+  const runRefresh = async (drawing, { suppress = false } = {}) => {
+    const generation = (refreshGenerations.get(drawing.id) ?? 0) + 1;
+    refreshGenerations.set(drawing.id, generation);
     if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
-
-    // An inactive Linear source keeps its records, as an inactive Circular one
-    // does. The drawing this discovery runs for is pinned before its first
-    // read: its records land in that drawing.
-    const drawing = state.activeDrawing();
     if (drawing.mode !== 'linear') return;
 
     const inputType = drawing.inputType.value;
@@ -338,25 +333,30 @@ export const createLinearRecordSelector = ({
   };
 
   /**
+   * The discovery of one drawing's cards (R10: the transition that changed
+   * them calls it for that drawing). It shares a refresh still running for
+   * the same drawing and sources.
+   * @param {LinearDiscoveryDrawing} drawing
    * @param {RefreshOptions} [options]
    * @returns {SessionBusy | Promise<RefreshOutcome>}
    */
-  const refresh = (options = {}) => {
+  const refresh = (drawing, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const fingerprint = refreshFingerprint(options);
+    const fingerprint = refreshFingerprint(drawing, options);
+    const activeRefresh = activeRefreshes.get(drawing.id);
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       // An entry is stored only after its promise is assigned (below).
       return /** @type {Promise<RefreshOutcome>} */ (activeRefresh.promise);
     }
     /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }} */
     const entry = { fingerprint, promise: null };
-    entry.promise = runRefresh(options).then((expanded) => {
-      if (expanded) return refresh(options);
+    entry.promise = runRefresh(drawing, options).then((expanded) => {
+      if (expanded) return refresh(drawing, options);
     }).finally(() => {
-      if (activeRefresh === entry) activeRefresh = null;
+      if (activeRefreshes.get(drawing.id) === entry) activeRefreshes.delete(drawing.id);
     });
-    activeRefresh = entry;
+    activeRefreshes.set(drawing.id, entry);
     // The promise was assigned above.
     return /** @type {Promise<RefreshOutcome>} */ (entry.promise);
   };

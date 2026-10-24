@@ -958,6 +958,9 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
  * @property {((runState: HistorySnapshotData) => unknown) | null} [applyRunStateData] The last-run restore.
  * @property {(() => void) | null} [clearSimilarityGroupCopyFeedback]
+ * @property {((drawing: D) => unknown) | null} [discoverDrawingRecords] The record discovery of a drawing whose
+ *   inputs a restore installed (R10, R11): the restore installs the files and input type as they were, and the
+ *   discovery derived from them reads them again, or keeps a read that still matches them.
  *   Clears the Similarity groups "Copied!" feedback when a Generate's artifact replaces the shown
  *   Results (D-37): a reused feature catalog keeps the groups array, so its watcher would not fire.
  */
@@ -991,7 +994,8 @@ export const createHistorySnapshotService = ({
   applyResultsData = null,
   buildRunStateData = null,
   applyRunStateData = null,
-  clearSimilarityGroupCopyFeedback = null
+  clearSimilarityGroupCopyFeedback = null,
+  discoverDrawingRecords = null
 }) => {
   if (!state || !fileStore) {
     throw new Error('createHistorySnapshotService requires state and fileStore.');
@@ -1970,6 +1974,7 @@ export const createHistorySnapshotService = ({
     } finally {
       if (domains.has('files')) setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
+    if (domains.has('files') || domains.has('ui')) discoverDrawingRecords?.(drawing);
   };
 
   // A checkpoint holds the shown drawing's artifact with the drawing.
@@ -2042,6 +2047,7 @@ export const createHistorySnapshotService = ({
     } finally {
       setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
+    discoverDrawingRecords?.(drawing);
   };
 
   // The History ports of one drawing (`createHistoryRouter`'s managers).

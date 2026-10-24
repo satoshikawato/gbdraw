@@ -1706,9 +1706,11 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
-  let circularRecordRefreshGeneration = 0;
-  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
-  let activeCircularRecordRefresh = null;
+  // Each drawing's Circular discovery: its read generation and the read still running.
+  /** @type {Map<DrawingId, number>} */
+  const circularRecordRefreshGenerations = new Map();
+  /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<any> | null }>} */
+  const activeCircularRecordRefreshes = new Map();
   /** @type {AbortController | null} */
   let activeLosatAbortController = null;
   /** @type {readonly Record<string, any>[]} */
@@ -2328,29 +2330,22 @@ export const createRunAnalysis = ({
 
   /**
    * Reads the Circular records of `drawing`'s inputs into its Multi-Record
-   * Canvas order. A drawing that is not shown keeps its records and order; its
-   * read goes stale when the drawing stops being shown.
+   * Canvas order. It writes only `drawing`, shown or not: a read of another
+   * drawing neither supersedes it nor lands in it.
    * @param {DrawingState} drawing
    * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
    */
   const runCircularRecordRefresh = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawingLeft = () => state.activeDrawingId.value !== drawing.id;
-    // An inactive Circular source keeps its records and Multi-Record Canvas
-    // order; only a read still running for it is superseded.
-    if (drawing.mode !== 'circular' || drawingLeft()) {
-      if (drawing.circularRecordDiscovery.status === 'loading') {
-        circularRecordRefreshGeneration += 1;
-        drawing.circularRecordDiscovery.status = 'idle';
-      }
-      return;
-    }
+    if (drawing.mode !== 'circular') return;
+    const currentGeneration = () => circularRecordRefreshGenerations.get(drawing.id) ?? 0;
     if (automatic && circularDiscoveryTargetsCurrentInput(drawing)
       && ['deferred', 'ready', 'error'].includes(drawing.circularRecordDiscovery.status)) return;
     // Generate reports a final error of these exact files without reading them
     // again; Retry source inspection still reads.
     if (reuseFinalError && circularDiscoveryTargetsCurrentInput(drawing)
       && drawing.circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(drawing.circularRecordDiscovery.error)) return;
-    const refreshGeneration = ++circularRecordRefreshGeneration;
+    const refreshGeneration = currentGeneration() + 1;
+    circularRecordRefreshGenerations.set(drawing.id, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) {
       drawing.adv.multi_record_positions = [];
@@ -2393,9 +2388,8 @@ export const createRunAnalysis = ({
       return;
     }
     if (
-      refreshGeneration !== circularRecordRefreshGeneration ||
+      refreshGeneration !== currentGeneration() ||
       recordDiscoverySuppressed() ||
-      drawingLeft() ||
       drawing.inputType.value !== inputType ||
       (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
       (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
@@ -2406,9 +2400,8 @@ export const createRunAnalysis = ({
         ? await discoverGffFastaRecords({ gffFile: inputFiles.fileOf(primaryFile), fastaFile: inputFiles.fileOf(pairedFile) })
         : await discoverSequenceRecords({ file: inputFiles.fileOf(primaryFile), format: 'genbank' });
       if (
-        refreshGeneration !== circularRecordRefreshGeneration ||
+        refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        drawingLeft() ||
         drawing.inputType.value !== inputType ||
         (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
@@ -2443,9 +2436,8 @@ export const createRunAnalysis = ({
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
-        refreshGeneration !== circularRecordRefreshGeneration ||
+        refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        drawingLeft() ||
         drawing.inputType.value !== inputType ||
         (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
@@ -2468,9 +2460,10 @@ export const createRunAnalysis = ({
 
   /**
    * The owner of the Circular record refresh: it reads the drawing its caller
-   * gives (Generate: the drawing it pinned) and shares a read still running
-   * for the same drawing and inputs. The File card, the watcher, and the
-   * record editor give the shown drawing (app-setup's binding, D-15-89).
+   * gives (Generate: the drawing it pinned; a transition that changed the
+   * drawing's inputs: that drawing, R10) and shares a read still running for
+   * the same drawing and inputs. The record editor gives the shown drawing
+   * (app-setup's binding, D-15-89).
    * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean } | undefined} options
    * @param {DrawingState} drawing
    */
@@ -2486,7 +2479,7 @@ export const createRunAnalysis = ({
       inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
       inputType === 'gff' ? drawing.files.c_fasta : null
     ];
-    const inflightRefresh = activeCircularRecordRefresh;
+    const inflightRefresh = activeCircularRecordRefreshes.get(drawing.id);
     if (
       inflightRefresh &&
       fingerprint.length === inflightRefresh.fingerprint.length &&
@@ -2499,9 +2492,9 @@ export const createRunAnalysis = ({
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
     entry.promise = runCircularRecordRefresh(drawing, options).finally(() => {
-      if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
+      if (activeCircularRecordRefreshes.get(drawing.id) === entry) activeCircularRecordRefreshes.delete(drawing.id);
     });
-    activeCircularRecordRefresh = entry;
+    activeCircularRecordRefreshes.set(drawing.id, entry);
     return entry.promise;
   };
 

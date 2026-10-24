@@ -102,7 +102,7 @@ export const UI_KEYS = Object.freeze([
 // dialogs, popups, drag and view state, and views derived from the others.
 export const TRANSIENT_KEYS = Object.freeze([
   'loadedFonts', 'processing', 'processingStatus', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
-  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
+  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
   'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef',

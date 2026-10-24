@@ -1454,13 +1454,9 @@ export const createAppSetup = () => {
   /** @param {{ drawingId: DrawingId, uid: string, records: SequenceRecord[] }} discovered the records of one card, for the drawing the discovery ran for */
   const handleLinearRecordsDiscovered = ({ drawingId, uid, records }) => {
     const drawing = state.drawingOf(drawingId);
-    const isRollbackOrSessionLoad = Boolean(
-      state.sessionImportRollbackInProgress?.value ||
-      state.sessionResourceDiscoveryDeferred?.value
-    );
     // Only an upload infers record definitions and opens the record list; a
     // loaded Session keeps its own.
-    const fromUpload = !isRollbackOrSessionLoad && pendingLinearUploads.delete(uid);
+    const fromUpload = !state.sessionImportRollbackInProgress.value && pendingLinearUploads.delete(uid);
     const expanded = expandDiscoveredLinearRecords(drawing, {
       uid, records, inferDefinitions: fromUpload && drawing.inputType.value === 'gb'
     });
@@ -1490,7 +1486,7 @@ export const createAppSetup = () => {
         pendingLinearRecordExpansions.set(seq.uid, true);
       }
     });
-    await linearRecordSelector.refresh();
+    await linearRecordSelector.refresh(drawing);
   };
   /**
    * The records of one input: a GenBank file, or a GFF3 file with its FASTA.
@@ -1619,6 +1615,8 @@ export const createAppSetup = () => {
     state,
     fileStore: state.inputFiles,
     nextTick,
+    // The discovery owner exists once the runner does; a restore runs after setup.
+    discoverDrawingRecords: (drawing) => discoverDrawingRecords(drawing),
     buildConfigData,
     applyConfigData: applyCapturedConfigData,
     buildUiStateData,
@@ -3516,6 +3514,27 @@ export const createAppSetup = () => {
   // binding resolves it once per action and the runner reads the one it is given.
   /** @param {{ suppress?: boolean, automatic?: boolean } | undefined} [options] */
   const refreshCircularRecordOrder = (options) => refreshRecordOrderOfDrawing(options, state.activeDrawing());
+  // R10: the record discovery of one drawing. Each transition that changes
+  // the drawing's discovery inputs calls it for that drawing: a source file,
+  // the input type, the Linear cards, the end of a Load or a Save, and a
+  // History restore of inputs. A drawing switch calls nothing. It is the one
+  // admission of a discovery: none starts while a Load rolls back or a Load
+  // or History restore installs (the semantic file watchers are suppressed);
+  // a Save or Load still pending makes the owners return busy, and its end
+  // calls the discovery again. It writes only `drawing`.
+  /** @param {DrawingState} drawing */
+  const discoverDrawingRecords = (drawing) => {
+    if (state.sessionImportRollbackInProgress.value || state.semanticFileWatchersSuppressed.value) return undefined;
+    if (drawing.mode === 'circular') return refreshRecordOrderOfDrawing({ automatic: true }, drawing);
+    // UJ-08: a discovery that reads every Linear card ends a Generate failure
+    // about those inputs, as the Circular discovery does.
+    return Promise.resolve(linearRecordSelector.refresh(drawing)).then((outcome) => {
+      if (drawing.linearSeqs.every((seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)))) {
+        releaseSourceInputFailure(drawing);
+      }
+      return outcome;
+    });
+  };
   /** @param {string} edgeKey @param {unknown} customName */
   const downloadLosatPair = (edgeKey, customName) => downloadLosatPairOfDrawing(state.activeDrawing(), edgeKey, customName);
   /** @param {string} edgeKey @param {unknown} customName */
@@ -3560,7 +3579,7 @@ export const createAppSetup = () => {
     isCurrentFeature: isCurrentResultFeature,
     // The same discovery that Generate and the File card run for the mode.
     readRecords: () => (mode.value === 'linear'
-      ? linearRecordSelector.refresh()
+      ? linearRecordSelector.refresh(state.activeDrawing())
       : refreshCircularRecordOrder())
   });
   const featureRecordRotation = createFeatureRecordRotationWorkflow({
@@ -3649,16 +3668,6 @@ export const createAppSetup = () => {
     legendLayout,
     resultsManager,
     runLabelReflow,
-    refreshCircularRecordOrder,
-    // UJ-08: a discovery that reads every Linear source ends a Generate
-    // failure about those inputs, as the Circular discovery does.
-    refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
-      const outcome = await linearRecordSelector.refresh(options);
-      const linearDrawing = state.drawingOfMode('linear');
-      const read = linearDrawing.linearSeqs.every((seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)));
-      if (read) releaseSourceInputFailure(linearDrawing);
-      return outcome;
-    },
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
@@ -3724,6 +3733,12 @@ export const createAppSetup = () => {
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
     const result = await loadSessionFromFile(event);
+    // R10: a Load that installed a Session, or rolled back to the previous
+    // one, ends with each drawing's discovery, unless the Session defers it.
+    const recordDiscoveryDeferred = Boolean(result && 'recordDiscoveryDeferred' in result && result.recordDiscoveryDeferred);
+    if (['ok', 'legacy', 'error', 'stale'].includes(String(result?.status)) && !recordDiscoveryDeferred) {
+      state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); });
+    }
     // The notice of an earlier operation does not stand for this load; a
     // Load the user canceled changed nothing, the notice included.
     if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
@@ -4805,7 +4820,7 @@ export const createAppSetup = () => {
     let catalog = getAnnotationRecordCatalog(drawing);
     if (catalog.status !== 'ready') {
       try {
-        await linearRecordSelector.refresh();
+        await linearRecordSelector.refresh(drawing);
       } catch (error) {
         return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
@@ -4830,7 +4845,7 @@ export const createAppSetup = () => {
           if (drawing.importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
             await materializeAutomaticLinearRecords(drawing);
           } else {
-            await linearRecordSelector.refresh();
+            await linearRecordSelector.refresh(drawing);
           }
         }
         if (similarityAlignmentActions?.validateBeforeGenerate) {
@@ -5961,7 +5976,7 @@ export const createAppSetup = () => {
     return history.runUndoable(msg('Rename Session'), () => { sessionTitle.value = title; });
   };
 
-  const saveSessionWithTitle = () => exportSession(null, {
+  const exportShownSession = () => exportSession(null, {
     shownDrawing: state.activeDrawing,
     availability: sessionSaveLoadAvailability,
     askChoice,
@@ -6030,6 +6045,15 @@ export const createAppSetup = () => {
       });
     }
   });
+  // A record read that finished while the Save was pending was deferred: the
+  // end of the Save calls each drawing's discovery again (R10).
+  const saveSessionWithTitle = async () => {
+    try {
+      return await exportShownSession();
+    } finally {
+      state.drawingList().forEach((drawing) => { void discoverDrawingRecords(drawing); });
+    }
+  };
 
   // OV-503: Edit in the Editor drawer's list opens the popup beside the drawer
   // and the toggle on the drawer's edge (OV-505). Without an event the popup
@@ -6216,8 +6240,10 @@ export const createAppSetup = () => {
     const previous = drawing.files[field];
     const nextRef = state.inputFiles.registerFile(nextValue);
     if (previous === nextRef) return;
+    const previousRecordCount = drawing.circularRecordList.value.length;
     changeRecordSources(drawing, () => { bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, field, nextValue); });
     if (nextRef) pendingCircularUpload = nextRef;
+    void discoverDrawingRecords(drawing);
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
     if (!previous) {
@@ -6225,7 +6251,7 @@ export const createAppSetup = () => {
       return;
     }
     if (sourceReplacementRetiresPresentation({
-      removed: !nextValue, previousRecordCount: drawing.circularRecordList.value.length
+      removed: !nextValue, previousRecordCount
     })) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
   });
@@ -6440,6 +6466,7 @@ export const createAppSetup = () => {
       similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
     }
     rebindAnnotationRecords();
+    void discoverDrawingRecords(drawing);
   };
 
   const addLinearSeq = () => shownAction('linear', (drawing) => {
@@ -6750,7 +6777,7 @@ export const createAppSetup = () => {
     deleteRecordSettings,
     // After a Session load the records are read on demand, as Generate reads them.
     prepareRecords: async (listMode) => {
-      if (listMode === 'linear') return linearRecordSelector.refresh();
+      if (listMode === 'linear') return linearRecordSelector.refresh(state.activeDrawing());
       const drawing = shownDrawingOfMode('circular');
       if (!drawing) return null;
       return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
@@ -6823,6 +6850,7 @@ export const createAppSetup = () => {
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
     // The other input's records are not the ones the OFF list names.
     if (drawing.recordsOff.length) drawing.recordsOff.splice(0);
+    void discoverDrawingRecords(drawing);
     return { status: 'ok' };
   };
 
@@ -6836,6 +6864,7 @@ export const createAppSetup = () => {
     if (drawing.inputType.value === next) return false;
     similarityAlignmentActions?.clearForMutation?.(msg('source type changed.'));
     changeRecordSources(drawing, () => { drawing.inputType.value = next; });
+    void discoverDrawingRecords(drawing);
     return true;
   };
 
@@ -7191,7 +7220,8 @@ export const createAppSetup = () => {
     resetLinearRecordDefinition,
     resetLinearRecordSubtitle,
     linearRecordOptions: linearRecordSelector.optionsFor,
-    refreshLinearRecordSelectors: linearRecordSelector.refresh,
+    // The Inspect records button and the test API read the shown drawing's cards.
+    refreshLinearRecordSelectors: () => linearRecordSelector.refresh(state.activeDrawing()),
     linearRecordSelectorDisabled: linearRecordSelector.isDisabled,
     linearRecordSelectorError: linearRecordSelector.errorFor,
     linearRecordSelectorWarning: linearRecordSelector.warningFor,

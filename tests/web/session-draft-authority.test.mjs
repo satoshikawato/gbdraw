@@ -67,9 +67,6 @@ const { createLegendCanvasActions } = await import(
 const { createSessionImportRollbackState } = await import(
   '../../gbdraw/web/js/app/app-setup.js'
 );
-const { runRecordDiscoveryWatcher } = await import(
-  '../../gbdraw/web/js/app/watchers.js'
-);
 
 const compactActiveIntentSnapshot = () => ({
   modeAndInput: {
@@ -1251,39 +1248,6 @@ const rollbackState = () => ({
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
 });
 
-const recordDiscoveryDerivedState = {
-  multiRecordPositions: [{ selector: 'KEEP.1', row: 2 }],
-  circularRecords: ['KEEP.1'],
-  linearSelectorCache: ['KEEP.1']
-};
-const expectedRecordDiscoveryDerivedState = structuredClone(
-  recordDiscoveryDerivedState
-);
-state.sessionImportRollbackInProgress.value = true;
-let guardedRecordDiscoveryResult;
-let recordDiscoveryGeneration = 0;
-try {
-  guardedRecordDiscoveryResult = await runRecordDiscoveryWatcher({
-    rollbackInProgress: state.sessionImportRollbackInProgress,
-    semanticWatchersSuppressed: state.semanticFileWatchersSuppressed,
-    refresh: async ({ suppress }) => {
-      recordDiscoveryGeneration += 1;
-      if (suppress) return;
-      recordDiscoveryDerivedState.multiRecordPositions = [];
-      recordDiscoveryDerivedState.circularRecords = [];
-      recordDiscoveryDerivedState.linearSelectorCache = [];
-      throw new Error('injected restored-file reparse failure');
-    }
-  });
-} finally {
-  state.sessionImportRollbackInProgress.value = false;
-}
-assert.equal(guardedRecordDiscoveryResult, false);
-assert.equal(recordDiscoveryGeneration, 1);
-assert.deepEqual(
-  recordDiscoveryDerivedState,
-  expectedRecordDiscoveryDerivedState
-);
 // F-1 (R11): the rollback installs the captured state as it was, so unset
 // slot sides, lane directions, and axis indexes stay unset and the Result's
 // named stroke color stays named.

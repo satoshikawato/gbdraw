@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingState } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -24,30 +24,6 @@ import {
 } from '../services/drawing/label-tables.js';
 /** @import { FileImportCard } from '../services/file-imports.js' */
 /** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../services/history-files.js' */
-
-/**
- * @typedef {object} RecordDiscoveryWatcherOptions
- * @property {{ readonly value: unknown } | null | undefined} [rollbackInProgress] A Session import is rolling back.
- * @property {{ readonly value: unknown } | null | undefined} [semanticWatchersSuppressed]
- * @property {{ readonly value: unknown } | null | undefined} [sessionResourceDiscoveryDeferred]
- * @property {(options: { suppress: boolean }) => unknown} refresh The record discovery; `suppress` tells it to leave the derived state alone.
- */
-
-/** @param {RecordDiscoveryWatcherOptions} options */
-export const runRecordDiscoveryWatcher = async ({
-  rollbackInProgress,
-  semanticWatchersSuppressed,
-  sessionResourceDiscoveryDeferred,
-  refresh
-}) => {
-  const suppress = Boolean(
-    rollbackInProgress?.value
-    || semanticWatchersSuppressed?.value
-    || sessionResourceDiscoveryDeferred?.value
-  );
-  await refresh({ suppress });
-  return !suppress;
-};
 
 /**
  * The auxiliary file imports still applying (OV-1193). The file watchers
@@ -120,8 +96,6 @@ export const createAuxiliaryFileImports = (reactive, store) => {
  *   removeImportedDefaultColors: (drawing: DrawingState) => void
  * }} resultsManager The Results owner's Default colors file's colors and their Remove (OV-1280).
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
- * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
- * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
@@ -144,8 +118,6 @@ export const setupWatchers = ({
   legendLayout,
   resultsManager,
   runLabelReflow,
-  refreshCircularRecordOrder,
-  refreshLinearRecordSelectors,
   resetPreviewViewport,
   resetRightDrawer,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
@@ -160,7 +132,6 @@ export const setupWatchers = ({
     results,
     svgContent,
     selectedResultIndex,
-    mode,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
@@ -176,8 +147,6 @@ export const setupWatchers = ({
     clickedLabel,
     cardFiles,
     semanticFileWatchersSuppressed,
-    sessionResourceDiscoveryDeferred,
-    sessionImportRollbackInProgress,
     linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
@@ -517,58 +486,6 @@ export const setupWatchers = ({
         syncLabelEditor({ reuseCurrentBinding: true });
       });
     }
-  );
-
-  watch(
-    () => [
-      semanticFileWatchersSuppressed.value,
-      state.sessionSavePending?.value,
-      state.sessionImportPending?.value,
-      mode.value,
-      // The shown drawing's input type and files: the discovery runs for the
-      // shown one.
-      state.activeDrawing().inputType.value,
-      state.activeDrawing().files.c_gb,
-      state.activeDrawing().files.c_gff,
-      state.activeDrawing().files.c_fasta
-    ],
-    async () => {
-      if (typeof refreshCircularRecordOrder !== 'function') return;
-      await runRecordDiscoveryWatcher({
-        rollbackInProgress: sessionImportRollbackInProgress,
-        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
-        sessionResourceDiscoveryDeferred,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress, automatic: true })
-      });
-    }
-  );
-  watch(
-    () => [
-      semanticFileWatchersSuppressed.value,
-      state.sessionSavePending?.value,
-      state.sessionImportPending?.value,
-      mode.value,
-      // Every drawing's input type and cards: the discovery runs for the shown
-      // one.
-      ...state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => [
-        drawing.inputType.value,
-        ...drawing.linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
-          seq.uid,
-          drawing.inputType.value === 'gff' ? seq.gff : seq.gb,
-          drawing.inputType.value === 'gff' ? seq.fasta : null
-        ])
-      ])
-    ],
-    async () => {
-      if (typeof refreshLinearRecordSelectors !== 'function') return;
-      await runRecordDiscoveryWatcher({
-        rollbackInProgress: sessionImportRollbackInProgress,
-        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
-        sessionResourceDiscoveryDeferred,
-        refresh: refreshLinearRecordSelectors
-      });
-    },
-    { immediate: true }
   );
 
   onMounted(async () => {

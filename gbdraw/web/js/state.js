@@ -75,7 +75,6 @@ const sessionTitle = ref('');
 const sessionSavePending = ref(false);
 const sessionImportPending = ref(false);
 const semanticFileWatchersSuppressed = ref(false);
-const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
 
 const results = ref([]);
@@ -1155,7 +1154,6 @@ export const state = Object.freeze({
   errorLog,
   sessionTitle,
   semanticFileWatchersSuppressed,
-  sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
   results,
   selectedResultIndex,
