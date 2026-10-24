@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
     _iter_source_features,
@@ -183,8 +184,8 @@ def source_feature_location_parts(
 
 
 def source_feature_hash_and_parts(
-    feature: Any,
-    record: Any = None,
+    feature: SeqFeature,
+    record: SeqRecord | None = None,
     *,
     record_id: str | None = None,
 ) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
