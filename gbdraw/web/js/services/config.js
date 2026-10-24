@@ -5973,10 +5973,11 @@ const importSessionDocument = async (e, options = {}) => {
     const committedSetDrawingId = projectedDrawingId ?? fileDrawingIdOf(generatedMode);
     const linearPartDrawingId = fileDrawingIdOf('linear');
     /**
-     * Each drawing's draft part of a Session 46-48, by drawing ID: its entry's
-     * (`drawingDraftPartOf`); a drawing the document has none of takes the
-     * file's slice of its mode (D-15-103, D-15-105: until B2d-3 gives it its
-     * mode's defaults). A Session 27-44's parts come from its split, below.
+     * Each drawing's draft part of a Session 46-49, by drawing ID: its entry's
+     * (`drawingDraftPartOf`). A drawing the document has none of takes a
+     * Session 46-48's slice of its mode (D-15-103), and a Session 49's none,
+     * so its mode's defaults install through the same path (D-15-105 (5)).
+     * A Session 27-44's parts come from its split, below.
      * @type {Map<DrawingId, LoadedDraftPart>}
      */
     const draftParts = new Map();
@@ -5984,9 +5985,9 @@ const importSessionDocument = async (e, options = {}) => {
       upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
         slice: drawingDraftPartOf(entry), at: projectedDrawingId !== null ? drawingSetPath(index).slice(0, -1) : `modes.${entry.mode}`
       }));
-      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (data.modes);
+      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (projectedDrawingId === null ? data.modes : null);
       unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
-        slice: isPlainObject(modes?.[mode]) ? modes[mode] : {}, at: `modes.${mode}`
+        slice: isPlainObject(modes?.[mode]) ? modes[mode] : {}, at: projectedDrawingId === null ? `modes.${mode}` : ''
       }));
     }
     /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
