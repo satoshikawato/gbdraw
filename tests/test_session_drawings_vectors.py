@@ -140,16 +140,25 @@ def test_other_mode_input_binding_counts_and_an_empty_sequence_row_does_not() ->
     assert _ids(data) == ["circular", "linear"]
 
 
-def test_the_shown_mode_comes_first_and_is_active() -> None:
+def test_a_shown_mode_without_a_result_opens_the_other_modes_result_first() -> None:
+    # The shown-at-Save mode keeps its drawing; the drawing
+    # with the stored Result opens and comes first.
     data = _load(FIXTURES / "legend-renamed-rows.v46.gbdraw-session.json.gz")
     data["ui"]["mode"] = "linear"
     document, _facts = drawings_document_from_mode_scoped(data)
     SessionDocument(document)
     assert [(drawing["id"], drawing["renderRequest"] is None) for drawing in document["drawings"]] == [
-        ("linear", True),
         ("circular", False),
+        ("linear", True),
     ]
-    assert document["ui"]["activeDrawingId"] == "linear"
+    assert document["ui"]["activeDrawingId"] == "circular"
+
+
+def test_an_integral_float_equals_its_integer_default() -> None:
+    # OV-1668: a Python writer's ``2.0`` is the Web's ``2``; rule d sees the default.
+    data = _settings_only_v48()
+    _slices(data)["linear"]["config"]["adv"]["linear_track_slots_schema_version"] = 2.0
+    assert _ids(data) == ["circular"]
 
 
 def test_session_46_legend_edits_are_keyed_by_row_key() -> None:

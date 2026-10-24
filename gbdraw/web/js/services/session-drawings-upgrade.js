@@ -445,36 +445,31 @@ const usedBySettings = (slices, mode, other) => {
 };
 
 /**
- * Open Product point PQ-B2d-1 (asked of the Owner; this implements today's
- * vectors and Python's rule): the modes that get a drawing, and the active
- * one. The mode shown at Save (`ui.mode`, else the first committed mode)
- * gets a drawing, with its Result or none, and is active; the other mode
- * gets one only when it is used: a Result, a non-null input binding of its
- * mode (rule c), or a registry row that differs from its default and from
- * the shown mode's (rule d).
+ * `_migrated_drawing_modes` with its evidence: the modes of the migrated
+ * drawings, the drawing that opens first. The mode shown at Save (`ui.mode`,
+ * else the first committed mode) always gets a drawing; the other mode gets
+ * one only when it is used: a Result, a non-null input binding of its mode
+ * (rule c), or a registry row that differs from its default and from the
+ * shown mode's (rule d). The shown drawing opens unless it has no stored
+ * Result and the other has one: then the drawing with the Result opens
+ * (the figure the released app showed), and the drawing that opens comes first.
  * @param {Fields} source
  * @param {Map<DrawingMode, Fields>} committed
- * @returns {{ active: DrawingMode, modes: DrawingMode[] }}
+ * @returns {DrawingMode[]}
  */
 const migratedDrawingModes = (source, committed) => {
   const shownMode = mapping(source.ui).mode;
-  const active = isDrawingMode(shownMode) ? shownMode : [...committed.keys()][0];
-  const other = DRAWING_MODES.find((mode) => mode !== active) || active;
+  const shown = isDrawingMode(shownMode) ? shownMode : [...committed.keys()][0];
+  const other = DRAWING_MODES.find((mode) => mode !== shown) || shown;
+  /** @param {DrawingMode} mode */
+  const hasResult = (mode) => mapping(committed.get(mode)).renderRequest != null;
   const slices = mapping(source.modes);
   const used = committed.has(other)
     || bindsInput(mapping(mapping(source.webFiles).bindings), other)
-    || (Object.hasOwn(slices, other) && usedBySettings(slices, other, active));
-  return { active, modes: used ? [active, other] : [active] };
+    || (Object.hasOwn(slices, other) && usedBySettings(slices, other, shown));
+  if (!used) return [shown];
+  return hasResult(other) && !hasResult(shown) ? [other, shown] : [shown, other];
 };
-
-/**
- * Open Product point PQ-B2d-2 (asked of the Owner; this implements today's
- * vectors and Python's order): the tab order of the migrated drawings, the
- * active (shown at Save) drawing first.
- * @param {{ active: DrawingMode, modes: DrawingMode[] }} drawings
- * @returns {DrawingMode[]}
- */
-const migratedTabOrder = ({ active, modes }) => [active, ...modes.filter((mode) => mode !== active)];
 
 /** `_project_of_view`: the Session 49 project fields of a view. @param {Fields} view @returns {Fields} */
 const projectOf = (view) => {
@@ -532,9 +527,8 @@ const drawingOf = (view) => {
 /**
  * The Session 49 of an admitted Session 46-48, and what only the source says
  * (`drawings_document_from_mode_scoped`, gbdraw/session_drawings.py). Each
- * mode's committed set goes to its mode's drawing; the drawings and their
- * order are the two open Product points (`migratedDrawingModes`,
- * `migratedTabOrder`). Each drawing keeps its own mode's slice, input
+ * mode's committed set goes to its mode's drawing; the drawings, their
+ * order and the one that opens are `migratedDrawingModes`'s. Each drawing keeps its own mode's slice, input
  * bindings, request metadata, the file cards' bindings and a copy of the
  * LOSAT artifacts; IDs and names are the modes'. A Session 46 gets its Legend
  * edits keyed by row key first (`sessionLegendEditsByRowKey`). Resources no
@@ -550,8 +544,7 @@ export const upgradeModeScopedSession = (checked, version) => {
   const { session: source } = sessionLegendEditsByRowKey(/** @type {Fields} */ (checked), version);
   const committed = committedViews(source);
   if (!committed.size) throw layoutInvalid();
-  const made = migratedDrawingModes(source, committed);
-  const order = migratedTabOrder(made);
+  const order = migratedDrawingModes(source, committed);
   const views = order.map((mode) => committed.get(mode) || undrawnView(source, mode));
   // The views share their project fields by construction (one source), so
   // the first gives them (`_drawings_document`'s `project_views`).
@@ -560,7 +553,7 @@ export const upgradeModeScopedSession = (checked, version) => {
   const referenced = new Set(migrated.flatMap((drawing) => [...drawingResourceIds(drawing)]));
   project.resources = only(mapping(project.resources), new Set(Object.keys(mapping(project.resources)).filter((id) => referenced.has(id))));
   project.version = LAYOUT.version;
-  project.ui = { ...mapping(project.ui), activeDrawingId: migrated[order.indexOf(made.active)].id };
+  project.ui = { ...mapping(project.ui), activeDrawingId: migrated[0].id };
   project.drawings = migrated;
   const hasDraft = Object.values(mapping(source.modes)).some((value) => isObject(mapping(value).config));
   return {

@@ -41,6 +41,7 @@ from gbdraw.session_io import (
     validate_session,
 )
 from gbdraw.session_drawings import (
+    DRAWING_NAMES,
     DrawingMode,
     SessionDrawingArtifacts,
     SessionDrawingParts,
@@ -1380,11 +1381,19 @@ def upgrade_session_document(
     return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
 
 
-def _drawings_of_current(data: Mapping[str, Any]) -> GbdrawSession49:
-    """A current (46-48) document's data moved to drawings; a refusal is a :class:`SessionConversionError`."""
+def _drawings_of_current(
+    data: Mapping[str, Any],
+    *,
+    stored_results: StoredResults | None = None,
+) -> GbdrawSession49:
+    """A current (46-48) document's data moved to drawings, the drawings of
+    ``stored_results`` counting as drawings with a Result; a refusal is a
+    :class:`SessionConversionError`."""
 
     try:
-        drawings, _source_facts = drawings_document_from_mode_scoped(data)
+        drawings, _source_facts = drawings_document_from_mode_scoped(
+            data, stored_result_modes=frozenset(stored_results or ())
+        )
     except SessionError:
         raise
     except ValidationError as exc:
@@ -1433,7 +1442,7 @@ def drawings_document_from_legacy(
             loaded, temporary_directory, stored_results=stored_results, repairs=repairs,
         ).document.to_dict()
     )
-    drawings = _drawings_of_current(current)
+    drawings = _drawings_of_current(current, stored_results=stored_results)
     drawing_ids = {drawing["id"] for drawing in drawings["drawings"]}
     if not stored_results.keys() <= drawing_ids:
         raise SessionConversionError(
@@ -1476,8 +1485,10 @@ def _request_less_data(
     """The current data of a Session 27-44 whose drawing has no request, not yet checked.
 
     A drawing without a request has no Results' catalog (Session 48 and 49);
-    its Results go to ``stored_results`` when given (Web Load), else stay for
-    the check to refuse.
+    its Results go to ``stored_results`` when given (Web Load), by the ID of
+    the drawing, else stay for the check to refuse. The document keeps the
+    mode shown at Save (``ui.mode``), which is a use of that mode,
+    so the drawing of a set-aside Result may be another mode.
     """
 
     from gbdraw.session_migration import replace_current_derived_feature_state
@@ -1487,8 +1498,11 @@ def _request_less_data(
     if stored_results is not None:
         _set_aside_results(stored_results, drawing.id, state)
     replace_current_derived_feature_state(state, None)
+    ui = state.get("ui")
+    shown = ui.get("mode") if isinstance(ui, Mapping) else None
+    mode = shown if isinstance(shown, str) and shown in DRAWING_NAMES else drawing.mode
     data = _session_data_from_drawings(
-        (_DrawingBuild(mode=drawing.mode, request=None, state=state),),
+        (_DrawingBuild(mode=mode, request=None, state=state),),
         web_file_inventory=web_file_inventory,
         resources=loaded._data.get("resources"),
     )

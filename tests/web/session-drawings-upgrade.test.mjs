@@ -72,14 +72,26 @@ test('an other-mode input binding counts and an empty sequence row does not', ()
   assert.deepEqual(idsOf(data), ['circular', 'linear']);
 });
 
-test('the shown mode comes first and is active', () => {
+test('a shown mode without a Result opens the other mode\'s Result first', () => {
+  // The shown-at-Save mode keeps its drawing; the drawing with
+  // the stored Result opens and comes first.
   const data = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   data.ui.mode = 'linear';
   const { document } = upgradeModeScopedSession(data, data.version);
   assert.deepEqual(document.drawings.map((drawing) => [drawing.id, drawing.renderRequest === null]), [
-    ['linear', true], ['circular', false]
+    ['circular', false], ['linear', true]
   ]);
-  assert.equal(document.ui.activeDrawingId, 'linear');
+  assert.equal(document.ui.activeDrawingId, 'circular');
+});
+
+test('an integral float equals its integer default', () => {
+  // OV-1668: a Python writer's `2.0` parses as `2`; Python's rule d agrees
+  // (tests/test_session_drawings_vectors.py, the same mutation).
+  const data = settingsOnly();
+  data.modes.linear.config.adv.linear_track_slots_schema_version = 2;
+  const text = JSON.stringify(data).replace('"linear_track_slots_schema_version":2', '"linear_track_slots_schema_version":2.0');
+  assert.ok(text.includes('2.0'));
+  assert.deepEqual(idsOf(JSON.parse(text)), ['circular']);
 });
 
 test('source facts name a Session 48 without a Web draft', () => {
