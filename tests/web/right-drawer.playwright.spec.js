@@ -772,6 +772,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
   if (liveCase.viewport) await page.setViewportSize(liveCase.viewport);
   const imported = await loadGallerySession(page, liveCase.session);
   expect(imported.status).toBe('ok');
+  await showPhonePane(page, 'preview');
   await page.locator('.drawer-toggle').click();
   await expect(page.locator('.right-drawer').getByText(/^Features \(\d+\)$/)).toBeVisible();
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
@@ -1186,6 +1187,7 @@ for (const viewport of [
   test(`compact Editor scroll recovery at ${viewport.width}x${viewport.height}`, async ({ page }, info) => {
     await page.setViewportSize(viewport);
     expect((await loadGallerySession(page, 'majanivirus_orthogroup.gbdraw-session.json.gz')).status).toBe('ok');
+    await showPhonePane(page, 'preview');
     const initialPageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const toggle = page.locator('.drawer-toggle');
     await exposeControl(page, toggle);
@@ -1263,6 +1265,7 @@ for (const [mode, session] of [
   test(`compact ${mode} pan zoom and responsive transitions preserve artifact and History`, async ({ page }, info) => {
     await page.setViewportSize({ width: 390, height: 740 });
     expect((await loadGallerySession(page, session)).status).toBe('ok');
+    await showPhonePane(page, 'preview');
     const before = await snapshot(page);
     const beforeHistory = await page.evaluate(() => [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]);
     await page.evaluate(() => {

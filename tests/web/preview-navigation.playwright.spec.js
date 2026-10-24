@@ -3,7 +3,7 @@ const { join } = require('node:path');
 const { writeFile } = require('node:fs/promises');
 const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { seeds, generate, switchMode } = require('./helpers/mode-transition.cjs');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const geometry = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
@@ -298,6 +298,8 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   ];
   for (const [width, height] of matrix) {
     await page.setViewportSize({ width, height });
+    // At <= 768 px the Preview pane is shown by its pane tab (the Load left Settings shown).
+    await showPhonePane(page, 'preview');
     const operations = await page.locator(
       '.preview-feature-search input:not(:disabled), .preview-feature-search select:not(:disabled), '
       + '.preview-feature-search button:not(:disabled), .preview-controls button:not(:disabled)'

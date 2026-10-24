@@ -3,7 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -335,6 +335,8 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await focusAfterHistoryCapture(page, length);
   await length.selectOption('auto');
   await page.setViewportSize({ width: 390, height: 844 });
+  // The Generates above showed the Preview pane; at 390 px it is the one pane shown.
+  await showPhonePane(page, 'settings');
   await titles.press('Enter');
   for (const [field, control, key] of [
     ['Accession', accession, 'Enter'], ['Length / Coordinates', length, 'Space']
@@ -373,6 +375,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await expect(layout).toContainText('no rendered row contains multiple records');
   expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
   // After that Generate the shown Result has Auto's outcome: no future tense.
+  await showPhonePane(page, 'settings');
   await expect(layout).toContainText('Accession and Length / Coordinates: Auto shows these fields throughout the diagram because no rendered row contains multiple records.');
   await expect(labels).toHaveText(await layout.locator('[role="status"]').innerText());
   const beforeNavigation = await snapshot();
