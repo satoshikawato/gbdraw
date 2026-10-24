@@ -2348,6 +2348,77 @@ const readSettingsOnlyMode = (data, repairs) => {
 };
 
 /**
+ * A drawing's input type (OV-594): the stored one, else its request's
+ * (which wins over a stored value of no type), else GenBank; one rule for
+ * every drawing Load projects.
+ * @param {unknown} stored The type the file stores for the drawing.
+ * @param {string | null} requestInputType Its request's type; null: none.
+ * @returns {string}
+ */
+const drawingInputTypeOf = (stored, requestInputType) => {
+  const read = readSessionInputType(stored);
+  return requestInputType && (isUnsetValue(stored) || read.lost) ? requestInputType : read.value;
+};
+
+/**
+ * What only Load knows of a drawing it projects: its file's version and
+ * band, the classification of its comparisons, the draft the projection
+ * reads, and whether its file holds its tables as the cards' files.
+ * @typedef {object} DrawingProjectionFacts
+ * @property {number} sourceSessionVersion
+ * @property {boolean} drawingsBand The file is a Session 49 (a drawing binds its own mode's input).
+ * @property {boolean} currentSession The file is of the current-writer band (45 on) or a Session 49.
+ * @property {ImportedComparisonIntent} comparisonClassification
+ * @property {unknown} storedConfig The draft the projection reads.
+ * @property {boolean} hasStoredDraft
+ * @property {boolean} cardRowsAreFileRows
+ * @property {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
+ */
+/**
+ * The one builder of a drawing's request projection input (B2d-3a-3a): the
+ * committed set of a Session 31-48 and every drawing of a Session 49, opened
+ * or not, from its one-drawing view (`drawingViewOf`).
+ * @param {SessionInput} view
+ * @param {DrawingProjectionFacts} facts
+ * @returns {Parameters<typeof projectCanonicalSessionRequest>[0]}
+ */
+const drawingProjectionInputOf = (view, {
+  sourceSessionVersion, drawingsBand, currentSession, comparisonClassification, storedConfig, hasStoredDraft, cardRowsAreFileRows,
+  sessionResourceTable
+}) => {
+  const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
+  return {
+    // Comparisons that are not editable are not projected.
+    renderRequest: request?.mode === 'linear'
+      && comparisonClassification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
+      ? { ...request, comparisons: [] } : request,
+    resources: view.resources,
+    webFiles: view.webFiles,
+    legacyFiles: view.files,
+    storedConfig,
+    // A Session without a Web draft (written by the CLI or the Python API)
+    // derives its draft from the request (D-02); the comparison plan of a
+    // Python re-save is stated the same way as the CLI's (OV-296).
+    initializeCliInputs: !hasStoredDraft,
+    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
+    linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
+      ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
+      : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
+    repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+    sessionResourceTable,
+    // A Session without a Web draft (CLI, Python) holds its tables only
+    // in the request, so Load reads them; a draft holds them already.
+    deferResourceContent: currentSession && hasStoredDraft,
+    adoptCanonicalPayloads: currentSession,
+    // OV-1280: from Session 48 on, a Session without a draft holds each
+    // table as its card's file (what only the source says, DESIGN §6).
+    markCardFileRows: !hasStoredDraft && cardRowsAreFileRows,
+    // A Session 49 drawing binds its own mode's input.
+    bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (view.ui)?.mode)
+  };
+};
+
+/**
  * What a Session 49 drawing Load does not project gives its drawing
  * (B2d-3a-2): the input files of its request and bindings, read from its
  * one-drawing view as the projected drawing's are (`projectCanonicalSessionRequest`,
@@ -2368,34 +2439,29 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
   const view = /** @type {SessionInput} */ (/** @type {unknown} */ (drawingViewOf(document, drawing)));
   const { mode } = drawing;
   const ui = /** @type {UnvalidatedFields<'cInputType' | 'lInputType'>} */ (view.ui);
-  const storedInputType = readSessionInputType(ui?.[mode === 'linear' ? 'lInputType' : 'cInputType']);
+  const storedInputType = ui?.[mode === 'linear' ? 'lInputType' : 'cInputType'];
   const request = /** @type {UnvalidatedFields<'mode'>} */ (view.renderRequest);
   if (!isPlainObject(request)) {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
-    return { files, comparisonClassification: null, inputType: storedInputType.value };
+    return { files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null) };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
     renderRequest: request, resources: view.resources
   }));
   const config = /** @type {UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>} */ (view.modes)?.[mode]?.config;
   const hasStoredDraft = isPlainObject(config);
-  const projection = projectCanonicalSessionRequest({
-    // As the projected drawing's: comparisons that are not editable are not projected.
-    renderRequest: mode === 'linear' && comparisonClassification.disposition !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-      ? { ...request, comparisons: [] } : request,
-    resources: view.resources,
-    webFiles: view.webFiles,
+  const projection = projectCanonicalSessionRequest(drawingProjectionInputOf(view, {
+    sourceSessionVersion: document.version,
+    drawingsBand: true,
+    currentSession: true,
+    comparisonClassification,
     storedConfig: hasStoredDraft ? config : null,
-    initializeCliInputs: !hasStoredDraft,
-    fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (view.cliInvocation)?.fileBindings,
-    linearTrackSlotSchemaVersion: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-    sessionResourceTable,
-    deferResourceContent: hasStoredDraft,
-    adoptCanonicalPayloads: true,
-    bindingInputSlot: webBindingInputSlot(true, mode)
-  });
-  const inputType = isUnsetValue(ui?.[mode === 'linear' ? 'lInputType' : 'cInputType']) || storedInputType.lost
-    ? String(projection.inputType || storedInputType.value) : storedInputType.value;
+    hasStoredDraft,
+    // A Session 49 holds each table of a drawing without a draft as its card's file (DESIGN §6).
+    cardRowsAreFileRows: true,
+    sessionResourceTable
+  }));
+  const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
   return { files: projection.files, comparisonClassification, inputType };
 };
 
@@ -2558,13 +2624,6 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
-  const projectionRenderRequest = (
-    storedRequest?.mode === 'linear'
-    && comparisonClassification.disposition
-      !== IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE
-  )
-    ? { ...storedRequest, comparisons: [] }
-    : storedRequest;
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
@@ -2611,32 +2670,16 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
   /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
   const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
-    ? {
-        renderRequest: projectionRenderRequest,
-        resources: data.resources,
-        webFiles: data.webFiles,
-        legacyFiles: data.files,
+    ? drawingProjectionInputOf(data, {
+        sourceSessionVersion,
+        drawingsBand,
+        currentSession,
+        comparisonClassification,
         storedConfig: runtimeStoredConfig,
-        // A Session without a Web draft (written by the CLI or the Python API)
-        // derives its draft from the request (D-02); the comparison plan of a
-        // Python re-save is stated the same way as the CLI's (OV-296).
-        initializeCliInputs: !hasStoredDraft,
-        fileBindings: /** @type {UnvalidatedFields<'fileBindings'>} */ (data.cliInvocation)?.fileBindings,
-        linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
-          ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
-          : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
-        repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-        sessionResourceTable: currentResourceTable,
-        // A Session without a Web draft (CLI, Python) holds its tables only
-        // in the request, so Load reads them; a draft holds them already.
-        deferResourceContent: currentSession && hasStoredDraft,
-        adoptCanonicalPayloads: currentSession,
-        // OV-1280: from Session 48 on, a Session without a draft holds each
-        // table as its card's file (what only the source says, DESIGN §6).
-        markCardFileRows: !hasStoredDraft && Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
-        // A Session 49 drawing binds its own mode's input.
-        bindingInputSlot: webBindingInputSlot(drawingsBand, /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode)
-      }
+        hasStoredDraft,
+        cardRowsAreFileRows: Boolean(upgrade?.sourceFacts.cardRowsAreFileRows),
+        sessionResourceTable: currentResourceTable
+      })
     : null;
   /** @type {SessionRequestProjection | null} */
   const canonicalProjection = settingsOnly
@@ -2739,9 +2782,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         }
       : {
           mode: canonicalProjection.mode,
-          config: projectionRenderRequest?.diagramOptions?.config ?? null,
+          config: storedRequest?.diagramOptions?.config ?? null,
           configOverrides:
-            projectionRenderRequest?.diagramOptions?.configOverrides ?? {},
+            storedRequest?.diagramOptions?.configOverrides ?? {},
           source: /** @type {const} */ ('storedRequest')
         }
     : null;
@@ -6005,8 +6048,8 @@ const importSessionDocument = async (e, options = {}) => {
     /** @param {'cInputType' | 'lInputType'} field */
     const requestInputTypeWins = (field) => field === requestInputField && readSessionInputType(ui[field]).lost;
     /** @param {'cInputType' | 'lInputType'} field @returns {string} */
-    const inputTypeOf = (field) => (field === requestInputField && (isUnsetValue(ui[field]) || requestInputTypeWins(field))
-      ? /** @type {string} */ (canonicalProjection?.inputType) : readSessionInputType(ui[field]).value);
+    const inputTypeOf = (field) => drawingInputTypeOf(ui[field],
+      field === requestInputField ? /** @type {string} */ (canonicalProjection?.inputType) : null);
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';

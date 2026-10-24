@@ -824,3 +824,28 @@ test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 
   assert.ok(paths.includes(`drawings[${index}].features.extractedFeatures`), JSON.stringify(paths));
   assert.equal(paths.some((path) => path.includes('orthogroupState')), false, JSON.stringify(paths));
 });
+
+// B2d-3a-3a: one per-drawing projection. Every Session 49 drawing, opened
+// or not, is projected by one function from its own one-drawing view.
+test('one function builds the request projection input of every Session 49 drawing, opened or not', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  // The projection input names the input slot its drawing binds; one builder writes it.
+  assert.equal(source.match(/\bbindingInputSlot:/g)?.length ?? 0, 1, 'one projection-input builder');
+  assert.match(source, /const drawingProjectionInputOf = /);
+  assert.ok((source.match(/\bdrawingProjectionInputOf\(/g)?.length ?? 0) >= 2, 'the opened drawing and every other drawing call it');
+});
+
+test('a Session 49 drawing Load does not open keeps its dormant Similarity group names', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const [first, second] = session.drawings;
+  second.config.webEdits.orthogroupDormantOverrides = { '["a","b"]': { name: 'Dormant of linear-2' } };
+  first.config.webEdits.orthogroupDormantOverrides = { '["c","d"]': { name: 'Dormant of linear' } };
+  for (const opened of [first.id, second.id]) {
+    session.ui.activeDrawingId = opened;
+    resetDrawings();
+    const loaded = await load(session);
+    assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+    assert.deepEqual({ ...state.drawingOf(second.id).orthogroupDormantOverrides }, second.config.webEdits.orthogroupDormantOverrides, opened);
+    assert.deepEqual({ ...state.drawingOf(first.id).orthogroupDormantOverrides }, first.config.webEdits.orthogroupDormantOverrides, opened);
+  }
+});
