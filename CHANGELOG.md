@@ -12,6 +12,9 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Web app: the Editor's "N features ready" shows the feature count of the mode on
+  screen. After a Generate in Circular and another in Linear, switching modes
+  used to leave the other mode's count in the Editor header (OV-1762).
 - Web app: before Generate draws a Circular track row, its **Radius** field says
   "Auto" instead of an estimate that often differed from the drawn radius (for
   example 0.75 R shown and 0.79 R drawn for GC content of E. coli MG1655 after
