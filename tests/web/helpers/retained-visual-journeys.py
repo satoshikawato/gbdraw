@@ -151,7 +151,7 @@ def main():
             return admitted.canonical===null && getCommittedCanonicalSession()===null
               && document.results.length===0 && s.results.value.length===0
               && document.editorState.featureCatalog===null && s.featureCatalog.value===null
-              && !hasBiologicalSessionInputs({...s.files,linearSeqs:s.linearSeqs})
+              && !s.drawingList().some(drawing=>hasBiologicalSessionInputs({...drawing.files,linearSeqs:drawing.linearSeqs}))
               && document.ui.mode===s.mode.value
               && JSON.stringify(document.config)===JSON.stringify(buildConfigData(s.activeDrawing()));
           } catch {return false;}

@@ -20,8 +20,8 @@ import pytest
 
 from gbdraw.contract_shapes import shape_violations
 from gbdraw.exceptions import GbdrawError
-from gbdraw.session_contract import describe_session_admission
 from gbdraw.session_io import FLAT_DRAFT_TOP_LEVEL_FIELDS, load_session
+from tools.generate_web_contracts import web_session_admission
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = json.loads(
@@ -87,7 +87,9 @@ def test_the_web_refuses_only_with_a_class_and_repairs_only_what_python_does_not
             assert set(vector["webRepairs"]) <= web_only, vector["id"]
 
 
-ADMISSION = describe_session_admission()
+# The vectors are shared with the Web, so they cover the bands the Web reads
+# (the generated SESSION_ADMISSION_DESCRIPTION; D-15-81).
+ADMISSION = web_session_admission()
 ADMISSION_TYPES: dict[str, Any] = ADMISSION["types"]
 BAND_ROOT = {version: band["root"] for band in ADMISSION["bands"] for version in band["versions"]}
 Row = tuple[str, str]  # (object type, field), or (object type, "*") for another key of a closed object

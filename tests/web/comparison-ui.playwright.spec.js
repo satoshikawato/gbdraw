@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { answerLoadRepairs, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -74,7 +75,7 @@ ${origin}
 const openLinear = async (page) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect(page.locator('[data-linear-comparison-card]')).toBeVisible();
 };
 
@@ -96,7 +97,7 @@ test('fresh and reset Linear use Curve without overwriting an explicit style', a
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('ribbon');
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('curve');
   await page.evaluate(async () => {
     await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('losat');
@@ -116,7 +117,7 @@ test('fresh and reset Linear use Curve without overwriting an explicit style', a
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
   await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('curve');
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.pairwise_match_style)).toBe('ribbon');
 });
 
@@ -155,7 +156,7 @@ test('Phase 1 keeps secondary controls quiet until they are useful', { tag: '@pr
   const layoutSummary = page.locator('summary[aria-label="Layout"]');
   expect(await layoutSummary.evaluate((summary) => summary.parentElement.open)).toBe(false);
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect(page.getByRole('button', { name: 'Add sequence', exact: true })).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Remove last sequence', exact: true })).toHaveCount(0);
   await expect(page.locator('[data-linear-source-move]')).toHaveCount(0);
@@ -257,10 +258,11 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
   await expectInside(firstUploader, settingsPane);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await expect(commands.getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs', exact: true
@@ -487,10 +489,11 @@ test('imported comparison resolutions are explicit and create one History entry 
   test.setTimeout(300000);
   await openLinear(page);
   await inputAddAction(page).click();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'
@@ -1254,7 +1257,7 @@ test('comparison controls drive appearance and current Session round trips', { t
 
 const configureLinearRecords = (page, records) => page.evaluate((contents) => {
   const app = window.__GBDRAW_APP__;
-  app.lInputType = 'gb';
+  app.setLinearInputType('gb');
   while (app.linearSeqs.length < contents.length) app.addLinearSeq();
   contents.forEach((content, index) => app.setLinearSeqPrimaryFile(
     index,
@@ -1319,7 +1322,7 @@ test('structured comparison errors open and focus their owning disclosure', asyn
   // without a file: No comparison would not let the run succeed.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await configureRecords([makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct'), makeGenbank('ErrorC', 'gga')]);
   const selectedCollinear = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
@@ -1434,7 +1437,7 @@ test('with the icon rail, comparison issues and pair actions show their control 
   // Generate stops on a comparison issue while the rail is alone: Comparison is docked at the setting to change.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect(pane).toHaveAttribute('data-settings-display', 'rail');
   await configureLinearRecords(page, [makeGenbank('ErrorA'), makeGenbank('ErrorB', 'gct'), makeGenbank('ErrorC', 'gga')]);
   await evaluateWithRetainedPromise(page, async () => {
@@ -1799,10 +1802,11 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   await page.setViewportSize({ width: 390, height: 844 });
   await openLinear(page);
   await inputAddAction(page).click();
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.linearSeqs[0].gb = new File(['first'], 'first.gbk', { type: 'text/plain' });
-    app.linearSeqs[1].gb = new File(['second'], 'second.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = bound(new File(['first'], 'first.gbk', { type: 'text/plain' }));
+    app.linearSeqs[1].gb = bound(new File(['second'], 'second.gbk', { type: 'text/plain' }));
   });
   await comparisonCommands(page).getByRole('button', {
     name: 'Run LOSAT for all adjacent pairs'
@@ -1918,7 +1922,7 @@ test('a loaded Session 44 keeps the Collinear Max target seqs through a LOSATP m
   });
   expect(await linearBlastp()).toEqual({ mode: 'collinear', candidateLimit: 7 });
   if (await page.evaluate(() => window.__GBDRAW_APP__.mode) !== 'linear') {
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
   }
   expect(await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatpMode('orthogroup'))).toBe(true);
   expect((await linearBlastp()).mode).toBe('orthogroup');

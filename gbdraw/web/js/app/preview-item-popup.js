@@ -53,9 +53,8 @@ import { msg, t, tn, tm } from '../utils/i18n.js';
  * @property {{ value: PreviewItemPayload | null }} clickedPairwiseMatch The open match-frame popup.
  * @property {{ value: Element | null }} svgContainer The preview's mounted Result.
  * @property {{ value: string }} mode
- * @property {LinearSeq[]} linearSeqs
  * @property {{ value: ReadonlyArray<{ type?: unknown }> }} extractedFeatures
- * @property {() => DrawingState} activeDrawing
+ * @property {() => DrawingState} activeDrawing The shown drawing, whose Result and record rows the popup shows.
  * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
  * @property {{ value: string }} appliedPaletteName The palette of the displayed Result.
  */
@@ -420,7 +419,7 @@ export const createPreviewItemPopup = ({
       ? records.find((entry) => entry.recordKey === row.canonicalRecordKey)
       : byIndex && records[recordIndex]) || null;
     const sequence = record
-      ? state.linearSeqs.find((entry) => entry.uid === text(row ? row.sourceUid : record.recordKey)) || null
+      ? state.activeDrawing().linearSeqs.find((entry) => entry.uid === text(row ? row.sourceUid : record.recordKey)) || null
       : null;
     const group = state.svgContainer.value?.querySelector(
       `[data-gbdraw-role^="record-definition"][data-gbdraw-record-index="${recordIndex}"]`
@@ -451,7 +450,7 @@ export const createPreviewItemPopup = ({
   /** @param {RecordDefinitionView} recordView @returns {Record<string, unknown> | null} */
   const recordTarget = (recordView) => (recordView.scope === 'circular'
     ? state.activeDrawing().form
-    : state.linearSeqs.find((entry) => entry.uid === recordView.draft?.sequenceUid) || null);
+    : state.activeDrawing().linearSeqs.find((entry) => entry.uid === recordView.draft?.sequenceUid) || null);
 
   /**
    * Writes the setting the sidebar field writes; it applies on Generate.

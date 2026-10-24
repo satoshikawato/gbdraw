@@ -5,6 +5,7 @@ const { pathToFileURL } = require('node:url');
 const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
@@ -621,7 +622,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
     await installDiagramRequestObserver(page);
     await openApp(page);
     if (mode === 'linear') {
-      await page.getByRole('button', { name: 'Linear', exact: true }).click();
+      await showDrawing(page, { kind: 'linear' });
     }
     const upload = mode === 'linear'
       ? page.getByTestId('linear-genbank-1')
@@ -760,7 +761,7 @@ test('Linear Record actions rotate a circular record of a loaded Session without
   await installRecordReadCounter(page);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.getByTestId('linear-genbank-1').setInputFiles({
     name: 'loaded-linear.gbk',
     mimeType: 'text/plain',
@@ -868,7 +869,7 @@ test('Linear CLI Session that draws some records of a file loads and generates o
   await loadSessionFile(page, session);
   const linearRows = () => page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
+    return state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map((seq) => [seq.uid, seq.gb?.name, seq.region_record_id]);
   });
   await expect(page.locator('[data-linear-source-records]')).toHaveCount(2);
   expect(await linearRows()).toEqual([

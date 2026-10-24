@@ -1,11 +1,12 @@
 // @ts-check
 /** @import { DrawingState, LinearSeq, WebState } from '../state.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { DrawingId } from '../services/drawing-view.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
-/** @import { CircularDiscoveryState, ParsedSequenceRecord } from '../services/record-discovery.js' */
+/** @import { ParsedSequenceRecord } from '../services/record-discovery.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
@@ -151,6 +152,7 @@ import {
   readOncePerFile,
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
+import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -699,7 +701,7 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 
 /**
  * @param {object} options
- * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `files.linearCanonicalComparisons`.
+ * @param {RequestCanonicalComparison[]} options.canonicalComparisons The draft's `drawing.files.linearCanonicalComparisons`.
  *   The caller's value is untyped (`files` is a Vue reactive object), so this is not checked there; a hand-edited
  *   Session can still put a `null` entry in the list (OV-750), which the `?.` reads below tolerate.
  * @param {CommittedCanonicalSession | null} options.committedSession The committed Session: its request is of the
@@ -1171,7 +1173,7 @@ const readAllLosatFasta = async (file, fmt) => {
   return records.map((record) => buildFastaText(record)).join('');
 };
 /**
- * @param {FileLike | FileLike[] | null | undefined} sourceFiles
+ * @param {InputFileRef | InputFileRef[] | null | undefined} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
  */
 const buildConservationSeries = (sourceFiles, circularConservation) => {
@@ -1457,7 +1459,7 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
  * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
@@ -1469,8 +1471,10 @@ export const executeCanonicalRenderCandidate = async ({
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
  * @property {() => DrawingState} displayedArtifactDrawing The drawing the displayed Result belongs to.
- * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
- * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(drawing: DrawingState) => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
+ *   The artifact owners' values, with the color rules and queued palette of `drawing`.
+ * @property {(ownerSet: Record<string, any>, options: { drawing: DrawingState, selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ *   Installs an owner set as the displayed artifact, its color rules and queued palette into `drawing`.
  * @property {(drawingId: DrawingState['id'], redrawn: RedrawnArtifact, options: { installResults: (results: unknown[]) => void }) => void} installRedrawnArtifact
  *   The artifact owner's install of a label rerender into its Result's drawing (OV-111).
  * @property {(handle: HistoryArtifactHandle) => unknown} restoreGeneratedArtifactHandle
@@ -1486,14 +1490,14 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
- * @property {((discovered: { primaryFile: File | null, pairedFile: File | null, recordCount: number }) => void) | null}
+ * @property {((discovered: { primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
  *   ring row names (D12) and auxiliary file imports still applying (OV-1193).
- * @property {((drawing: DrawingState, state: any) => void) | null} [assertDrawingInputs]
+ * @property {((drawing: DrawingState) => void) | null} [assertDrawingInputs]
  * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
  *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
@@ -1576,8 +1580,6 @@ export const createRunAnalysis = ({
     appliedPaletteName,
     appliedPaletteColors,
     mode,
-    cInputType,
-    lInputType,
     losatCacheInfo,
     losatThreadingStatus,
     losatCache,
@@ -1588,11 +1590,7 @@ export const createRunAnalysis = ({
     orthogroups,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
-    circularRecordList,
-    circularRecordDiscovery,
-    files,
-    // Every Linear record card; a Generate reads the drawn ones (`drawing.drawnLinearSeqs`).
-    linearSeqs: allLinearSeqs,
+    inputFiles,
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
@@ -1626,15 +1624,16 @@ export const createRunAnalysis = ({
    * Generate, a committed rerender and a label reflow render the shown
    * drawing: they name its feature catalog, so a reused build keeps it, and
    * the children texts its Results keep sanitized, so Python omits them.
+   * @param {DrawingState} drawing The drawing the run renders, given by its caller.
    * @param {CanonicalRenderCandidateExecutionOptions} options
    */
-  const executeShownDrawingCandidate = (options) => {
-    const shown = captureGeneratedArtifactOwnerSet();
+  const executeShownDrawingCandidate = (drawing, options) => {
+    const shown = captureGeneratedArtifactOwnerSet(drawing);
     return executeCanonicalRenderCandidate({
       ...options,
       heldFeatureCatalog: shown.featureCatalog ?? null,
       heldResults: shown.results ?? null,
-      drawingId: state.activeDrawingId.value
+      drawingId: drawing.id
     });
   };
   /**
@@ -1708,9 +1707,11 @@ export const createRunAnalysis = ({
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
-  let circularRecordRefreshGeneration = 0;
-  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
-  let activeCircularRecordRefresh = null;
+  // Each drawing's Circular discovery: its read generation and the read still running.
+  /** @type {Map<DrawingId, number>} */
+  const circularRecordRefreshGenerations = new Map();
+  /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<any> | null }>} */
+  const activeCircularRecordRefreshes = new Map();
   /** @type {AbortController | null} */
   let activeLosatAbortController = null;
   /** @type {readonly Record<string, any>[]} */
@@ -1772,11 +1773,12 @@ export const createRunAnalysis = ({
     },
     /**
      * @param {GeneratedArtifactCandidate} candidate
-     * @param {{ selectedResultIndex?: number }} [options]
+     * @param {{ drawing: DrawingState, selectedResultIndex?: number }} options `drawing`: the run's drawing.
      */
-    activate(candidate, { selectedResultIndex = 0 } = {}) {
+    activate(candidate, { drawing, selectedResultIndex = 0 }) {
       recordSessionLifecycleEvent('artifact.activation-started', { selectedResultIndex });
       installGeneratedArtifactOwnerSet(candidate.ownerSet, {
+        drawing,
         selectedResultIndex,
         installResults(nextResults) {
           results.value = nextResults;
@@ -1907,7 +1909,7 @@ export const createRunAnalysis = ({
     if (!sourceInputFailure || sourceInputFailure.mode !== drawing.mode
       || errorLog.value !== sourceInputFailure.error) return;
     try {
-      assertDrawingInputs?.(drawing, state);
+      assertDrawingInputs?.(drawing);
     } catch (_) {
       return;
     }
@@ -1927,7 +1929,7 @@ export const createRunAnalysis = ({
     if (!recovery) {
       try {
         const restored = restore ? await restore() : false;
-        const currentResults = captureGeneratedArtifactOwnerSet().results;
+        const currentResults = captureGeneratedArtifactOwnerSet(displayedArtifactDrawing()).results;
         const unchanged = currentResults.length === previousResults.length
           && currentResults.every((result, index) => result === previousResults[index]);
         recovery = !handle ? (results.value.length ? 'restore-failed' : 'no-result')
@@ -2115,14 +2117,17 @@ export const createRunAnalysis = ({
     );
     return buildLosatFilename(drawing, leftLabel, rightLabel);
   };
-  // LOSAT pairs are the Linear comparisons: their names follow the Linear drawing.
+  // LOSAT pairs are the Linear comparisons: the three pair handlers act for
+  // the drawing their caller (the panel binding) gives, and do nothing for a
+  // Circular one (D-15-89).
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {{ recordId?: string } | null} [queryEntry]
    * @param {{ recordId?: string } | null} [subjectEntry]
    */
-  const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
-    const drawing = state.drawingOfMode('linear');
+  const getLosatPairDefaultName = (drawing, edgeKey, queryEntry = null, subjectEntry = null) => {
+    if (drawing.mode !== 'linear') return '';
     return losatPairDefaultName(drawing, edgeKey, queryEntry, subjectEntry);
   };
 
@@ -2205,11 +2210,12 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {unknown} customName
    */
-  const downloadLosatPair = async (edgeKey, customName) => {
-    const drawing = state.drawingOfMode('linear');
+  const downloadLosatPair = async (drawing, edgeKey, customName) => {
+    if (drawing.mode !== 'linear') return;
     const entry = getLosatCacheInfoEntry(edgeKey);
     const cacheMap = losatCache.value;
     if (!entry || !cacheMap) return;
@@ -2237,13 +2243,14 @@ export const createRunAnalysis = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {string} edgeKey
    * @param {unknown} customName
    */
-  const setLosatPairFilename = (edgeKey, customName) => {
-    const drawing = state.drawingOfMode('linear');
+  const setLosatPairFilename = (drawing, edgeKey, customName) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    if (drawing.mode !== 'linear') return;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
     const defaultName = losatPairDefaultName(drawing, entry.edgeKey || edgeKey);
@@ -2259,14 +2266,13 @@ export const createRunAnalysis = ({
     ));
   };
 
-  // `state` is the state.js object, which holds the members the discovery reads.
-  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(
-    /** @type {CircularDiscoveryState<unknown>} */ (state)
-  ).current;
+  /** @param {DrawingState} drawing */
+  const circularDiscoveryTargetsCurrentInput = (drawing) => circularDiscoveryForInput(drawing).current;
 
-  const circularDiscoveryMatchesCurrentInput = () => (
-    circularRecordDiscovery.status === 'ready' &&
-    circularDiscoveryTargetsCurrentInput()
+  /** @param {DrawingState} drawing */
+  const circularDiscoveryMatchesCurrentInput = (drawing) => (
+    drawing.circularRecordDiscovery.status === 'ready' &&
+    circularDiscoveryTargetsCurrentInput(drawing)
   );
 
   /** @param {DrawingState} drawing */
@@ -2281,22 +2287,22 @@ export const createRunAnalysis = ({
       rows = drawing.drawnLinearSeqs.value.map((seq) => depthFileSlotsFromValue(seq.depth));
     } else {
       const discoveredCount = (
-        circularDiscoveryMatchesCurrentInput() &&
-        Array.isArray(circularRecordList.value)
+        circularDiscoveryMatchesCurrentInput(drawing) &&
+        Array.isArray(drawing.circularRecordList.value)
       )
-        ? circularRecordList.value.length
+        ? drawing.circularRecordList.value.length
         : 0;
       const recordCount = discoveredCount > 0
         ? discoveredCount
         : (
-            isRecordMajorDepthFileMatrix(files.c_depth)
-              ? Math.max(1, files.c_depth.length)
+            isRecordMajorDepthFileMatrix(drawing.files.c_depth)
+              ? Math.max(1, drawing.files.c_depth.length)
               : 1
           );
-      if (isRecordMajorDepthFileMatrix(files.c_depth) && files.c_depth.length !== recordCount) {
-        return `Circular Depth matrix has ${files.c_depth.length} record rows; expected ${recordCount}.`;
+      if (isRecordMajorDepthFileMatrix(drawing.files.c_depth) && drawing.files.c_depth.length !== recordCount) {
+        return `Circular Depth matrix has ${drawing.files.c_depth.length} record rows; expected ${recordCount}.`;
       }
-      rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
+      rows = normalizeRecordMajorDepthFileRows(drawing.files.c_depth, recordCount);
     }
     if (customStack) {
       // An enabled Depth row must reference a logical series with a source in
@@ -2323,42 +2329,42 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
-    const drawing = state.drawingOfMode('circular');
-    // An inactive Circular source keeps its records and Multi-Record Canvas
-    // order; only a read still running for it is superseded.
-    if (mode.value !== 'circular') {
-      if (circularRecordDiscovery.status === 'loading') {
-        circularRecordRefreshGeneration += 1;
-        circularRecordDiscovery.status = 'idle';
-      }
-      return;
-    }
-    if (automatic && circularDiscoveryTargetsCurrentInput()
-      && ['deferred', 'ready', 'error'].includes(circularRecordDiscovery.status)) return;
+  /**
+   * Reads the Circular records of `drawing`'s inputs into its Multi-Record
+   * Canvas order. It writes only `drawing`, shown or not: a read of another
+   * drawing neither supersedes it nor lands in it.
+   * @param {DrawingState} drawing
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options]
+   */
+  const runCircularRecordRefresh = async (drawing, { suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    if (drawing.mode !== 'circular') return;
+    const currentGeneration = () => circularRecordRefreshGenerations.get(drawing.id) ?? 0;
+    if (automatic && circularDiscoveryTargetsCurrentInput(drawing)
+      && ['deferred', 'ready', 'error'].includes(drawing.circularRecordDiscovery.status)) return;
     // Generate reports a final error of these exact files without reading them
     // again; Retry source inspection still reads.
-    if (reuseFinalError && circularDiscoveryTargetsCurrentInput()
-      && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
-    const refreshGeneration = ++circularRecordRefreshGeneration;
+    if (reuseFinalError && circularDiscoveryTargetsCurrentInput(drawing)
+      && drawing.circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(drawing.circularRecordDiscovery.error)) return;
+    const refreshGeneration = currentGeneration() + 1;
+    circularRecordRefreshGenerations.set(drawing.id, refreshGeneration);
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(drawing.adv.multi_record_positions)) {
       drawing.adv.multi_record_positions = [];
     }
-    const inputType = cInputType.value;
-    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+    const inputType = drawing.inputType.value;
+    const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
+    const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
+    const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput(drawing);
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
       [
-        ...(Array.isArray(circularRecordDiscovery.canonicalRecordIdentities)
-          ? circularRecordDiscovery.canonicalRecordIdentities
+        ...(Array.isArray(drawing.circularRecordDiscovery.canonicalRecordIdentities)
+          ? drawing.circularRecordDiscovery.canonicalRecordIdentities
           : []),
-        ...(Array.isArray(circularRecordList.value) ? circularRecordList.value : [])
+        ...drawing.circularRecordList.value
       ]
-        .forEach((record) => {
+        .forEach((/** @type {Readonly<Record<string, unknown>>} */ record) => {
           const recordKey = String(record?.recordKey || '').trim();
           if (!recordKey) return;
           [record?.selector, record?.record_id, record?.recordId]
@@ -2367,46 +2373,47 @@ export const createRunAnalysis = ({
             .forEach((value) => preservedRecordKeys.set(value, recordKey));
         });
     }
-    Object.assign(circularRecordDiscovery, {
-      status: hasCompleteInput ? 'loading' : 'idle',
+    // Without its complete input the drawing holds the idle record a new
+    // drawing holds, so a History restore that runs this again leaves the
+    // record it captured (OV-1669).
+    Object.assign(drawing.circularRecordDiscovery, hasCompleteInput ? {
+      status: 'loading',
       error: '',
       inputType,
-      primaryFile: primaryFile || null,
-      pairedFile: pairedFile || null,
+      primaryFile,
+      pairedFile,
       canonicalRecordIdentities: preserveCanonicalRecordKeys
-        ? circularRecordDiscovery.canonicalRecordIdentities
+        ? drawing.circularRecordDiscovery.canonicalRecordIdentities
         : []
-    });
-    circularRecordList.value = [];
+    } : idleCircularRecordDiscovery());
+    drawing.circularRecordList.value = [];
     if (!hasCompleteInput) {
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       return;
     }
     if (
-      refreshGeneration !== circularRecordRefreshGeneration ||
+      refreshGeneration !== currentGeneration() ||
       recordDiscoverySuppressed() ||
-      mode.value !== 'circular' ||
-      cInputType.value !== inputType ||
-      (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-      (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+      drawing.inputType.value !== inputType ||
+      (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+      (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
     ) return;
 
     try {
       const records = inputType === 'gff'
-        ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
-        : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
+        ? await discoverGffFastaRecords({ gffFile: inputFiles.fileOf(primaryFile), fastaFile: inputFiles.fileOf(pairedFile) })
+        : await discoverSequenceRecords({ file: inputFiles.fileOf(primaryFile), format: 'genbank' });
       if (
-        refreshGeneration !== circularRecordRefreshGeneration ||
+        refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
-        cInputType.value !== inputType ||
-        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+        drawing.inputType.value !== inputType ||
+        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
-        circularRecordDiscovery.status = 'deferred';
-        circularRecordDiscovery.primaryFile = null;
+        drawing.circularRecordDiscovery.status = 'deferred';
+        drawing.circularRecordDiscovery.primaryFile = null;
         return busy;
       }
       const nextRecords = records.map((entry) => {
@@ -2421,10 +2428,10 @@ export const createRunAnalysis = ({
           ...(recordKey ? { recordKey } : {})
         };
       });
-      circularRecordList.value = nextRecords;
-      circularRecordDiscovery.status = 'ready';
+      drawing.circularRecordList.value = nextRecords;
+      drawing.circularRecordDiscovery.status = 'ready';
       // Identity belongs to the source, including while its mode is inactive.
-      circularRecordDiscovery.canonicalRecordIdentities = nextRecords
+      drawing.circularRecordDiscovery.canonicalRecordIdentities = nextRecords
         .filter((record) => record.recordKey)
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
@@ -2433,42 +2440,50 @@ export const createRunAnalysis = ({
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
-        refreshGeneration !== circularRecordRefreshGeneration ||
+        refreshGeneration !== currentGeneration() ||
         recordDiscoverySuppressed() ||
-        mode.value !== 'circular' ||
-        cInputType.value !== inputType ||
-        (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
-        (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
+        drawing.inputType.value !== inputType ||
+        (inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb) !== primaryFile ||
+        (inputType === 'gff' ? drawing.files.c_fasta : null) !== pairedFile
       ) return;
       const busy = state.sessionOperationAvailability?.();
       if (busy) {
-        circularRecordDiscovery.status = 'deferred';
-        circularRecordDiscovery.primaryFile = null;
+        drawing.circularRecordDiscovery.status = 'deferred';
+        drawing.circularRecordDiscovery.primaryFile = null;
         return busy;
       }
 
-      circularRecordList.value = [];
-      circularRecordDiscovery.status = 'error';
-      circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
+      drawing.circularRecordList.value = [];
+      drawing.circularRecordDiscovery.status = 'error';
+      drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       releaseSourceInputFailure(drawing);
       onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
     }
   };
 
-  /** @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean }} [options] */
-  const refreshCircularRecordOrder = (options = {}) => {
+  /**
+   * The owner of the Circular record refresh: it reads the drawing its caller
+   * gives (Generate: the drawing it pinned; a transition that changed the
+   * drawing's inputs: that drawing, R10) and shares a read still running for
+   * the same drawing and inputs. The record editor gives the shown drawing
+   * (app-setup's binding, D-15-89).
+   * @param {{ suppress?: boolean, automatic?: boolean, reuseFinalError?: boolean } | undefined} options
+   * @param {DrawingState} drawing
+   */
+  const refreshCircularRecordOrder = (options, drawing) => {
+    options = options || {};
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const inputType = cInputType.value;
+    const inputType = drawing.inputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
-      mode.value,
+      drawing.id,
       inputType,
-      inputType === 'gff' ? files.c_gff : files.c_gb,
-      inputType === 'gff' ? files.c_fasta : null
+      inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb,
+      inputType === 'gff' ? drawing.files.c_fasta : null
     ];
-    const inflightRefresh = activeCircularRecordRefresh;
+    const inflightRefresh = activeCircularRecordRefreshes.get(drawing.id);
     if (
       inflightRefresh &&
       fingerprint.length === inflightRefresh.fingerprint.length &&
@@ -2480,10 +2495,10 @@ export const createRunAnalysis = ({
       return /** @type {NonNullable<typeof inflightRefresh.promise>} */ (inflightRefresh.promise);
     }
     const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
-    entry.promise = runCircularRecordRefresh(options).finally(() => {
-      if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
+    entry.promise = runCircularRecordRefresh(drawing, options).finally(() => {
+      if (activeCircularRecordRefreshes.get(drawing.id) === entry) activeCircularRecordRefreshes.delete(drawing.id);
     });
-    activeCircularRecordRefresh = entry;
+    activeCircularRecordRefreshes.set(drawing.id, entry);
     return entry.promise;
   };
 
@@ -2569,7 +2584,7 @@ export const createRunAnalysis = ({
           forceEmptyComparison
             ? resolveLinearComparisonPlan({
                 plan: { mode: 'none', defaultSource: 'losat', edges: [] },
-                sequences: allLinearSeqs,
+                sequences: drawing.linearSeqs,
                 recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
@@ -2577,7 +2592,7 @@ export const createRunAnalysis = ({
               })
             : comparisonPlanSnapshot || resolveLinearComparisonPlan({
                 plan: drawing.linearComparisonPlan,
-                sequences: allLinearSeqs,
+                sequences: drawing.linearSeqs,
                 recordsOff: drawing.recordsOff,
                 layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
                 losatProgram: drawing.losatProgram.value,
@@ -2635,7 +2650,7 @@ export const createRunAnalysis = ({
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
       if (!committedArtifactHandle || !activatedGeneratedArtifactCandidate) return false;
-      if (captureGeneratedArtifactOwnerSet().results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
+      if (captureGeneratedArtifactOwnerSet(drawing).results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
       if (acceptedCandidateReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedCandidateReadyReceipt,
@@ -2722,17 +2737,17 @@ export const createRunAnalysis = ({
       linearRecordCatalog = prepared?.catalog || null;
     }
     if (mode.value === 'circular') {
-      const inputType = cInputType.value;
-      const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-      const pairedFile = inputType === 'gff' ? files.c_fasta : null;
+      const inputType = drawing.inputType.value;
+      const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
+      const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
       const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
       if (
         hasCompleteInput &&
-        !circularDiscoveryMatchesCurrentInput()
+        !circularDiscoveryMatchesCurrentInput(drawing)
       ) {
         processingStatus.value = t('Reading input records...');
         try {
-          await refreshCircularRecordOrder({ reuseFinalError: true });
+          await refreshCircularRecordOrder({ reuseFinalError: true }, drawing);
         } finally {
           if (generationToken === latestGenerationToken) {
             processingStatus.value = t('Preparing input files...');
@@ -2746,8 +2761,8 @@ export const createRunAnalysis = ({
             ? finishCanceledManualRun()
             : { status: 'stale' };
         }
-        if (!circularDiscoveryMatchesCurrentInput()) {
-          const message = circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
+        if (!circularDiscoveryMatchesCurrentInput(drawing)) {
+          const message = drawing.circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
           const outcome = await failOperation(message, { handle: committedArtifactHandle,
             restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
           if (activeLosatAbortController === generationAbortController) {
@@ -2934,7 +2949,7 @@ export const createRunAnalysis = ({
         const numeric = Number(value);
         return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
       };
-      /** @param {(FileLike | null)[][]} rows */
+      /** @param {(InputFileRef | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
         (_, index) => {
@@ -3058,7 +3073,7 @@ export const createRunAnalysis = ({
         drawing.adv.circular_label_placement = normalizedCircularLabelPlacement;
         if (drawing.form.multi_record_canvas) {
           const effectiveRecordPositions = mergeCircularRecordPositions(
-            circularRecordList.value,
+            drawing.circularRecordList.value,
             drawing.adv.multi_record_positions
           );
           requireCurrentCircularMultiRecordSizeMode(drawing.adv.multi_record_size_mode);
@@ -3070,20 +3085,20 @@ export const createRunAnalysis = ({
         }
 
         const discoveredCircularRecordCount = (
-          circularDiscoveryMatchesCurrentInput() &&
-          Array.isArray(circularRecordList.value)
+          circularDiscoveryMatchesCurrentInput(drawing) &&
+          Array.isArray(drawing.circularRecordList.value)
         )
-          ? circularRecordList.value.length
+          ? drawing.circularRecordList.value.length
           : 0;
         const circularDepthRecordCount = discoveredCircularRecordCount > 0
           ? discoveredCircularRecordCount
           : (
-              isRecordMajorDepthFileMatrix(files.c_depth)
-                ? Math.max(1, files.c_depth.length)
+              isRecordMajorDepthFileMatrix(drawing.files.c_depth)
+                ? Math.max(1, drawing.files.c_depth.length)
                 : 1
             );
         const circularDepthRows = normalizeRecordMajorDepthFileRows(
-          files.c_depth,
+          drawing.files.c_depth,
           circularDepthRecordCount
         );
         const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
@@ -3122,8 +3137,8 @@ export const createRunAnalysis = ({
           ? 'upload'
           : 'losat';
         const circularConservationSourceFiles = sourceMode === 'upload'
-          ? normalizeFileList(files.c_conservation_blasts)
-          : normalizeFileList(files.c_conservation_fastas);
+          ? normalizeFileList(drawing.files.c_conservation_blasts)
+          : normalizeFileList(drawing.files.c_conservation_fastas);
         const shouldDrawCircularPairwiseComparisons = circularConservationSourceFiles.length > 0;
         setCircularConservationEnabled(drawing, shouldDrawCircularPairwiseComparisons);
 
@@ -3133,7 +3148,7 @@ export const createRunAnalysis = ({
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
 
-          /** @param {OrderedConservationSource[]} comparisonEntries */
+          /** @param {OrderedConservationSource<InputFileRef>[]} comparisonEntries */
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
               drawing.circularConservation.losat_program
@@ -3154,11 +3169,12 @@ export const createRunAnalysis = ({
               return ['--task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
-            const subjectFile = cInputType.value === 'gb' ? files.c_gb : files.c_fasta;
-            const subjectFmt = cInputType.value === 'gb' ? 'genbank' : 'fasta';
+            // Generate checked above that the Circular input is complete.
+            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb' ? drawing.files.c_gb : drawing.files.c_fasta));
+            const subjectFmt = drawing.inputType.value === 'gb' ? 'genbank' : 'fasta';
             const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
               [subjectFile], `ring-subject:${subjectFmt}`, async () => {
-                const fasta = await readAllLosatFasta(/** @type {FileLike} */ (subjectFile), subjectFmt);
+                const fasta = await readAllLosatFasta(subjectFile, subjectFmt);
                 return Object.freeze({ fasta, hash: await hashText(fasta) });
               }
             );
@@ -3176,7 +3192,8 @@ export const createRunAnalysis = ({
             for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
-              const fileObj = comparisonEntry?.file || comparisonEntry;
+              // A ring source names its bound file.
+              const fileObj = /** @type {FileLike} */ (inputFiles.fileOf(comparisonEntry.file));
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
               const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
@@ -3465,7 +3482,7 @@ export const createRunAnalysis = ({
         const reuseResolvedProteinArtifacts = useProteinBlastp
           && !workingLegacyProteinRawCandidates?.entries?.length
           && canReuseResolvedProteinArtifacts({
-            canonicalComparisons: files.linearCanonicalComparisons,
+            canonicalComparisons: drawing.files.linearCanonicalComparisons,
             sequences: linearSeqs,
             committedSession: typeof getCommittedCanonicalSession === 'function'
               ? getCommittedCanonicalSession()
@@ -3552,7 +3569,7 @@ export const createRunAnalysis = ({
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
           // An error names the record card, OFF cards counted.
-          const bounds = resolveLinearRegionBounds(seq, allLinearSeqs.indexOf(seq));
+          const bounds = resolveLinearRegionBounds(seq, drawing.linearSeqs.indexOf(seq));
 
           recordSelectors.push(recordIdRaw || '');
 
@@ -3575,7 +3592,7 @@ export const createRunAnalysis = ({
         // LOSAT reads the drawn records, then the OFF records of the same
         // files, which stay in the searched databases (D-07); an index below
         // `losatSearch.drawnCount` is a position in the drawn list.
-        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? allLinearSeqs : linearSeqs);
+        const losatSearch = losatSearchSequences(linearSeqs, useLosat ? drawing.linearSeqs : linearSeqs);
         const losatSeqs = /** @type {typeof linearSeqs} */ (losatSearch.sequences);
         /**
          * Each record's LOSAT FASTA in this Generate, and the read of its SHA-256 (OV-1594).
@@ -3658,7 +3675,15 @@ export const createRunAnalysis = ({
         let nextResources;
         // The record sources this Generate's request will name, read once (OV-1595).
         const nextRecordResources = () => {
-          if (nextResources === undefined) nextResources = linearRecordSourceResources(linearSeqs, lInputType.value);
+          // The descriptors' payload owners are the cards' files (the store's), not their refs.
+          if (nextResources === undefined) {
+            nextResources = linearRecordSourceResources(linearSeqs.map((seq) => ({
+              ...seq,
+              gb: inputFiles.fileOf(seq.gb),
+              gff: inputFiles.fileOf(seq.gff),
+              fasta: inputFiles.fileOf(seq.fasta)
+            })), drawing.inputType.value);
+          }
           return nextResources;
         };
 
@@ -3686,22 +3711,25 @@ export const createRunAnalysis = ({
           const held = fastaCache.get(idx);
           if (held) return held.entry;
           const startedAt = getNow();
-          const fmt = lInputType.value === 'gb'
+          const fmt = drawing.inputType.value === 'gb'
             ? 'genbank'
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
           // The FASTA readers below count every entry of a GFF3 input's FASTA file (OV-1681).
-          const recordSelector = !useProteinBlastp && lInputType.value === 'gff'
+          const recordSelector = !useProteinBlastp && drawing.inputType.value === 'gff'
             ? await gffFastaReaderSelector({
-                gffFile: losatSeqs[idx]?.gff, fastaFile: losatSeqs[idx]?.fasta, selector: recordSelectors[idx] ?? ''
+                gffFile: inputFiles.fileOf(losatSeqs[idx]?.gff), fastaFile: inputFiles.fileOf(losatSeqs[idx]?.fasta),
+                selector: recordSelectors[idx] ?? ''
               })
             : (recordSelectors[idx] ?? '');
           const reverseFlag = /** @type {string} */ ('0');
-          const sourceFile = lInputType.value === 'gb'
+          // The bytes of the card's files (the card names them by ref); a
+          // searched card holds its source file (Generate checked each card).
+          const sourceFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb'
             ? losatSeqs[idx]?.gb
-            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta);
-          const pairedFastaFile = lInputType.value === 'gff' && useProteinBlastp
-            ? losatSeqs[idx]?.fasta
+            : (useProteinBlastp ? losatSeqs[idx]?.gff : losatSeqs[idx]?.fasta)));
+          const pairedFastaFile = drawing.inputType.value === 'gff' && useProteinBlastp
+            ? inputFiles.fileOf(losatSeqs[idx]?.fasta)
             : null;
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
@@ -3711,7 +3739,7 @@ export const createRunAnalysis = ({
           // extraction, or the LOSAT FASTA of this record and region.
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
-                inputFormat: lInputType.value,
+                inputFormat: drawing.inputType.value,
                 regionSpec,
                 recordSelector,
                 recordInstanceKey,
@@ -3739,7 +3767,7 @@ export const createRunAnalysis = ({
                 nextRecordResources() ?? (
                   typeof getCommittedCanonicalSession === 'function' ? getCommittedCanonicalSession()?.resources : null
                 ),
-                /** @type {FileLike} */ (sourceFile), pairedFastaFile ?? null
+                sourceFile, pairedFastaFile ?? null
               );
               /** @type {{ role: string, bytes: ArrayBuffer }[]} */
               const helperFiles = [];
@@ -3822,7 +3850,7 @@ export const createRunAnalysis = ({
               };
               try {
                 // One parse per file (OV-1556); each card slices its record and region from it.
-                const { records, parsed } = await readParsedSequenceRecords(/** @type {FileLike} */ (sourceFile), fmt);
+                const { records, parsed } = await readParsedSequenceRecords(sourceFile, fmt);
                 if (records) {
                   if (parsed && losatTiming) losatTiming.fastaJsExtractions += 1;
                   return Object.freeze(losatSeqEntryFromRecord(selectParsedRecord(records, recordSelector), regionSpec));
@@ -4895,7 +4923,9 @@ export const createRunAnalysis = ({
           throw diagnosticError('RESULT_INVALID', {}, RING_TABLE_CONVERSION);
         }
         const converted = await convertRingTablesOncePerFrame(
-          /** @type {[FileLike] | [FileLike, FileLike]} */ (cInputType.value === 'gb' ? [files.c_gb] : [files.c_gff, files.c_fasta]),
+          /** @type {[FileLike] | [FileLike, FileLike]} */ (drawing.inputType.value === 'gb'
+            ? [inputFiles.fileOf(drawing.files.c_gb)]
+            : [inputFiles.fileOf(drawing.files.c_gff), inputFiles.fileOf(drawing.files.c_fasta)]),
           {
             renderRequest: canonical.renderRequest,
             // The frame of each drawn record: its source, selector, crop and orientation.
@@ -5000,7 +5030,7 @@ export const createRunAnalysis = ({
       /** @type {TimingEntry[]} */
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeShownDrawingCandidate({
+      const canonicalExecution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: mode.value,
@@ -5113,7 +5143,7 @@ export const createRunAnalysis = ({
       const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
       const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
       const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
-      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet(drawing);
       /** @type {Record<string, any>} */
       let candidateOwnerSet = {
         ...currentOwnerSet,
@@ -5147,7 +5177,7 @@ export const createRunAnalysis = ({
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
         generatedLegendPosition: drawing.form.legend,
-        generatedMode: mode.value,
+        generatedMode: drawing.mode,
         generatedMultiRecordCanvas:
           mode.value === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
         generatedCircularPlotTitlePosition: mode.value === 'circular'
@@ -5217,6 +5247,7 @@ export const createRunAnalysis = ({
       activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
       const previousOrthogroups = orthogroups.value;
       generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
+        drawing,
         selectedResultIndex: nextSelectedResultIndex
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
@@ -5300,7 +5331,7 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
       }
       settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
@@ -5347,7 +5378,7 @@ export const createRunAnalysis = ({
    * @param {HistoryArtifactHandle | null} [generatedArtifactHandle]
    * @param {Record<string, any> | null} [comparisonExecution]
    * @param {{ prepareGenerate?: (() => Promise<Record<string, any>>) | null,
-   *   afterGenerate?: ((outcome: Record<string, any> | null) => any) | null }} [options]
+   *   afterGenerate?: ((outcome: Record<string, any> | null, drawing: DrawingState) => any) | null }} [options]
    */
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
@@ -5410,7 +5441,7 @@ export const createRunAnalysis = ({
       // UI-07: the active mode's input check runs before anything here starts
       // the diagram Worker, so a missing input is named at once.
       try {
-        assertDrawingInputs?.(drawing, state);
+        assertDrawingInputs?.(drawing);
       } catch (cause) {
         outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
           isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
@@ -5502,7 +5533,7 @@ export const createRunAnalysis = ({
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
-      await afterGenerate?.(outcome);
+      await afterGenerate?.(outcome, drawing);
       if (outcome?.status === 'ok') shownGenerateDraft = { results: results.value, signature: readDraftSignature?.() || '' };
       return outcome;
     } catch (cause) {
@@ -5554,7 +5585,7 @@ export const createRunAnalysis = ({
     let acceptedReadyReceipt = null;
     const restoreCommittedArtifact = async () => {
       if (!activatedCandidate) return false;
-      if (captureGeneratedArtifactOwnerSet().results !== activatedCandidate.ownerSet.results) return false;
+      if (captureGeneratedArtifactOwnerSet(drawing).results !== activatedCandidate.ownerSet.results) return false;
       if (acceptedReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedReadyReceipt,
@@ -5592,7 +5623,7 @@ export const createRunAnalysis = ({
       const { canonical, drawnPaint } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeShownDrawingCandidate({
+      const execution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
@@ -5648,7 +5679,7 @@ export const createRunAnalysis = ({
         : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
           : alignmentResetReceipt;
       await validateSimilarityAlignmentResetReceipt(receipt, /** @type {AlignmentResetCanonical} */ (canonical));
-      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet(drawing);
       const candidateOwnerSet = {
         ...currentOwnerSet,
         similarityAlignmentPlan: canonical.renderRequest.layout?.similarityAlignment ?? null,
@@ -5709,6 +5740,7 @@ export const createRunAnalysis = ({
       });
       activatedCandidate = generatedCandidate;
       generatedArtifactTransactionOwner.activate(generatedCandidate, {
+        drawing,
         selectedResultIndex: nextSelectedResultIndex
       });
       if (resultGenerationKey) resultGenerationKey.value += 1;
@@ -5744,7 +5776,7 @@ export const createRunAnalysis = ({
         });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
       }
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;
@@ -5980,7 +6012,7 @@ export const createRunAnalysis = ({
       const { canonical, drawnPaint, rules: candidateRules } = paint;
       /** @type {TimingEntry[]} */
       const timingEntries = [];
-      const execution = await executeShownDrawingCandidate({
+      const execution = await executeShownDrawingCandidate(drawing, {
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,

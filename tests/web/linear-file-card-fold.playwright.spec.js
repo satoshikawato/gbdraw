@@ -10,6 +10,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { answerSessionTitle, evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000 });
 
@@ -37,7 +38,7 @@ const openWithSession = async (page, name = FIVE_FILES) => {
 };
 const openLinear = async (page) => {
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect(cards(page)).toHaveCount(1);
 };
 const chooseGenBank = (card, name, content = genbank) => card.locator('input[type="file"]').first()
@@ -219,9 +220,9 @@ test('Add sequence, an upload, Undo, Redo, a mode switch, and Reset Settings lea
   await expect(cards(page)).toHaveCount(5);
 
   // A mode round trip and Reset Settings.
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await expect(cards(page)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect(cards(page)).toHaveCount(5);
   await expectFolded(page, [true, true, false, true, true]);
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();

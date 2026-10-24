@@ -52,14 +52,15 @@ test('Circular single-record presentation selects, transforms, titles, and round
   });
   await openApp(page, { waitForPalette: false });
 
-  await page.evaluate(({ first, second }) => {
+  await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([`${first}\n${second}`], 'two-records.gbk', {
+    app.setCircularInputType('gb');
+    // The File transition runs the record discovery the record list waits for (R10).
+    app.setCircularSourceFile('c_gb', new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',
       lastModified: 1
-    });
+    }));
     Object.assign(app.form, {
       multi_record_canvas: false,
       suppress_gc: true,
@@ -164,7 +165,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
 const singleSource = readFileSync(join(repoRoot, 'tests/fixtures/sessions/cli-web-mito.gb'), 'utf8');
 const panel = (page) => page.locator('[data-circular-record-presentation]');
 const ready = (page) => expect.poll(() => page.evaluate(async () => (
-  (await import('./js/state.js')).state.circularRecordDiscovery.status
+  (await import('./js/state.js')).state.activeDrawing().circularRecordDiscovery.status
 ))).toBe('ready');
 const nativeUpload = (page, content, name = 'presentation.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(content) });
@@ -263,7 +264,7 @@ test('History restore re-inspects sources and reconciles missing or ambiguous se
   await ready(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('idle');
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.activeDrawing().circularRecordDiscovery.status)).toBe('idle');
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await ready(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(1);

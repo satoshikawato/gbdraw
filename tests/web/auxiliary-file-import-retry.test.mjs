@@ -22,7 +22,7 @@ const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw
 const port = () => new Proxy({}, { get: () => () => {} });
 let inputs = 0;
 const owner = { calls: 0, outcome: /** @type {number | false} */ (false), removal: async () => true };
-const imports = createAuxiliaryFileImports((target) => target);
+const imports = createAuxiliaryFileImports((target) => target, state.inputFiles);
 const { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
   state,
   rulePreparation: /** @type {any} */ ({
@@ -60,7 +60,9 @@ const { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImpo
   previewRuntime: port()
 });
 test('a rules import the owner gave up on keeps Retry through later input changes, and Retry applies it', async () => {
-  const file = { name: 'rules.tsv', text: async () => 'CDS\tproduct\tNADH\t#123456\tImported\n' };
+  const file = { name: 'rules.tsv', size: 1, text: async () => 'CDS\tproduct\tNADH\t#123456\tImported\n' };
+  // The card holds the file's ref in the input file store.
+  const ref = state.inputFiles.registerFile(file);
   state.errorLog.value = null;
   const result = await importAuxiliaryTable('t_color', file);
 
@@ -74,20 +76,20 @@ test('a rules import the owner gave up on keeps Retry through later input change
 
   owner.outcome = 1;
   assert.equal(await retryAuxiliaryImportFailure(), true);
-  assert.deepEqual({ calls: owner.calls, selected: state.files.t_color, error: state.errorLog.value },
-    { calls: 2, selected: file, error: null });
+  assert.deepEqual({ calls: owner.calls, selected: state.cardFiles.t_color, error: state.errorLog.value },
+    { calls: 2, selected: ref, error: null });
 });
 
 // REVIEW-1 N1: Remove on the card while the rule owner refuses to take the
 // rows back (its matching failed, or a Legend row conflicts) leaves the rows,
 // so the card comes back and the error is shown; nothing rejects unhandled.
 test('a Specific rules removal the rule owner refuses brings the card back and reports why', async () => {
-  const file = { name: 'rules.tsv', text: async () => '' };
+  const file = state.inputFiles.registerFile({ name: 'rules.tsv', size: 1, text: async () => '' });
   owner.removal = async () => { throw { code: 'LEGEND_ROW_CONFLICT' }; };
   state.errorLog.value = null;
-  state.files.t_color = file;
+  state.cardFiles.t_color = file;
   assert.equal(await importAuxiliaryTable('t_color', null), false);
-  assert.deepEqual({ selected: state.files.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
+  assert.deepEqual({ selected: state.cardFiles.t_color, operation: state.errorLog.value?.operation, pending: imports.isPending() },
     { selected: file, operation: 'evaluateRules', pending: false });
   owner.removal = async () => true;
 });
@@ -96,7 +98,7 @@ test('a Specific rules removal the rule owner refuses brings the card back and r
 // the drawing that is not shown unchanged, so the card comes back with no
 // half-done removal.
 test('a Specific rules removal the shown drawing refuses never changes the drawing not shown', async () => {
-  const file = { name: 'rules.tsv', text: async () => '' };
+  const file = state.inputFiles.registerFile({ name: 'rules.tsv', size: 1, text: async () => '' });
   const shown = state.activeDrawing();
   /** @type {unknown[]} */
   const removed = [];
@@ -104,8 +106,38 @@ test('a Specific rules removal the shown drawing refuses never changes the drawi
     removed.push(drawing);
     return drawing !== shown;
   };
-  state.files.t_color = file;
+  state.cardFiles.t_color = file;
   assert.equal(await importAuxiliaryTable('t_color', null), false);
-  assert.deepEqual({ removed, selected: state.files.t_color }, { removed: [shown], selected: file });
+  assert.deepEqual({ removed, selected: state.cardFiles.t_color }, { removed: [shown], selected: file });
   owner.removal = async () => true;
+});
+
+// B2b-1a-iii: a table card names its file by the ref of the input file store
+// (`state.inputFiles`); the import reads the bytes through the store.
+test('a table card holds the ref of the file it imported', async () => {
+  const file = { name: 'priority.tsv', size: 1, text: async () => '' };
+  state.errorLog.value = null;
+  await importAuxiliaryTable('qualifier_priority', file);
+  assert.equal(state.cardFiles.qualifier_priority, state.inputFiles.registerFile(file));
+  assert.equal(state.inputFiles.fileOf(state.cardFiles.qualifier_priority), file);
+  assert.equal(imports.wait(file), imports.wait(state.cardFiles.qualifier_priority));
+  state.cardFiles.qualifier_priority = null;
+});
+
+// OV-1674: a failed import leaves the card unbound, so the store may release
+// the file (History's budget keeps only named and bound files); Retry still
+// imports the file the user chose.
+test('Retry imports the chosen rules file after the store released it', async () => {
+  const file = { name: 'rules.tsv', size: 1, text: async () => 'CDS\tproduct\tNADH\t#123456\tImported\n' };
+  state.cardFiles.t_color = null;
+  state.errorLog.value = null;
+  owner.outcome = false;
+  assert.equal(await importAuxiliaryTable('t_color', file), false);
+  assert.equal(state.cardFiles.t_color, null);
+  state.inputFiles.retainOnly(new Set());
+  owner.outcome = 1;
+  assert.equal(await retryAuxiliaryImportFailure(), true);
+  assert.deepEqual({ file: state.inputFiles.fileOf(state.cardFiles.t_color), error: state.errorLog.value },
+    { file, error: null });
+  state.cardFiles.t_color = null;
 });

@@ -16,6 +16,7 @@ import { LABEL_TABLES_SLICE } from '../../../gbdraw/web/js/services/drawing/labe
 import { FEATURE_EDITS_SLICE } from '../../../gbdraw/web/js/services/drawing/feature-edits.js';
 import { PAINT_SLICE } from '../../../gbdraw/web/js/services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../../../gbdraw/web/js/services/drawing/settings.js';
+import { INPUTS_SLICE } from '../../../gbdraw/web/js/services/drawing/inputs.js';
 
 // The slices of a drawing (gbdraw/web/js/services/drawing/), by the name of
 // their handle in `drawing.slices`: the editor slices, which alone write their
@@ -24,7 +25,7 @@ export const DRAWING_SLICES = Object.freeze({
   visibilityRules: VISIBILITY_RULES_SLICE, colorRules: COLOR_RULES_SLICE, palette: PALETTE_SLICE, labelTables: LABEL_TABLES_SLICE,
   annotationSets: ANNOTATION_SETS_SLICE,
   groupNames: GROUP_NAMES_SLICE, canvas: CANVAS_SLICE, featureEdits: FEATURE_EDITS_SLICE, paint: PAINT_SLICE,
-  settings: SETTINGS_SLICE
+  settings: SETTINGS_SLICE, inputs: INPUTS_SLICE
 });
 
 // The calls of a slice module that only read or build a value: each slice's
@@ -39,16 +40,18 @@ export const DRAWING_SLICES = Object.freeze({
 export const SLICE_READERS = Object.freeze([
   'CANVAS_SLICE.capture', 'GROUP_NAMES_SLICE.capture', 'ANNOTATION_SETS_SLICE.capture', 'VISIBILITY_RULES_SLICE.capture',
   'COLOR_RULES_SLICE.capture', 'PALETTE_SLICE.capture', 'LABEL_TABLES_SLICE.capture', 'FEATURE_EDITS_SLICE.capture',
-  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture',
+  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture', 'INPUTS_SLICE.capture',
   'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
   'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
 
-// The members of a drawing, as its slices name them: the settings (the draft
-// keys) and the editor slices' members, in the order the drawing spreads them.
-export const DRAWING_DRAFT_KEYS = SETTINGS_SLICE.members;
+// The members of a drawing, as its slices name them: the members its controls
+// write (the draft keys: the settings, then the inputs) and the editor slices'
+// members, which only their slice writes, in the order the drawing spreads them.
+const CONTROL_WRITTEN_SLICES = Object.freeze(['settings', 'inputs']);
+export const DRAWING_DRAFT_KEYS = Object.freeze(CONTROL_WRITTEN_SLICES.flatMap((name) => DRAWING_SLICES[name].members));
 export const DRAWING_EDITOR_KEYS = Object.freeze(Object.entries(DRAWING_SLICES)
-  .filter(([name]) => name !== 'settings').flatMap(([, slice]) => slice.members));
+  .filter(([name]) => !CONTROL_WRITTEN_SLICES.includes(name)).flatMap(([, slice]) => slice.members));
 
 // Computed from the members above (and project inputs); each drawing derives its own.
 export const DRAWING_DERIVED_KEYS = Object.freeze([
@@ -82,8 +85,7 @@ export const ARTIFACT_KEYS = Object.freeze([
 
 // Inputs and caches that every drawing shares.
 export const PROJECT_KEYS = Object.freeze([
-  'sessionTitle', 'files', 'linearSeqs', 'cInputType', 'lInputType', 'circularRecordList',
-  'circularRecordDiscovery', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
+  'sessionTitle', 'cardFiles', 'inputFiles', 'losatCache', 'losatDerivedCache', 'losatCacheInfo', 'proteinIdentityManifest',
   'legacyProteinRawCandidates', 'legacyProteinDerivedEvidence'
 ]);
 
@@ -100,7 +102,7 @@ export const UI_KEYS = Object.freeze([
 // dialogs, popups, drag and view state, and views derived from the others.
 export const TRANSIENT_KEYS = Object.freeze([
   'loadedFonts', 'processing', 'processingStatus', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
-  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
+  'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
   'isPanning', 'panStart', 'canvasPan', 'canvasContainerRef',
@@ -133,8 +135,12 @@ export const TRANSIENT_KEYS = Object.freeze([
   'filteredEditableLabels', 'ruleMatchingPending'
 ]);
 
-// The drawing store itself.
-export const STORE_KEYS = Object.freeze(['drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing']);
+// The drawing store itself: the drawings by ID, their tab order and names
+// (`drawingTabs`), and the store writers.
+export const STORE_KEYS = Object.freeze([
+  'drawingTabs', 'drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing',
+  'replaceDrawings', 'addDrawing', 'removeDrawing', 'moveDrawing', 'renameDrawing'
+]);
 
 // A `state`-shaped node fixture's drawing: its own drawing members, by reference.
 export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object.fromEntries(
@@ -148,6 +154,12 @@ export const fixtureDrawing = (fixture) => Object.freeze(withSliceHandles(Object
 // its members; a drawing that has handles keeps them.
 const withSliceHandles = (drawing) => {
   if (!drawing || typeof drawing !== 'object' || 'slices' in drawing || Object.isFrozen(drawing)) return drawing;
+  // Every drawing holds its inputs (its record rows: one empty row by
+  // default); a fixture that names none gets the default, not enumerable.
+  const inputs = INPUTS_SLICE.create().view;
+  INPUTS_SLICE.members.filter((key) => !(key in drawing)).forEach((key) => {
+    Object.defineProperty(drawing, key, { value: inputs[key], configurable: true, writable: true });
+  });
   const handles = {};
   const slices = {};
   for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
@@ -190,6 +202,12 @@ export const drawingStore = (circular, linear) => {
 const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(drawingStore(circular, linear))
   .map(([key, value]) => [key, { value, configurable: true }]));
 
+// The project's five card files (state.cardFiles), empty unless the fixture
+// lists them: every `state`-shaped fixture has them, as state.js does.
+const cardFilesProperty = (fixture) => (Object.hasOwn(fixture, 'cardFiles') ? {} : {
+  cardFiles: { value: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null }, configurable: true, writable: true }
+});
+
 // The fixture with the drawing store that services and owners read
 // (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
 // fixture is the drawing of both modes, so a member the test replaces later is
@@ -199,6 +217,7 @@ const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   ...storeProperties(fixture, fixture),
   ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
+  ...cardFilesProperty(fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
@@ -206,5 +225,6 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
 // follows `fixture.mode.value`.
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
   ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
+  ...cardFilesProperty(fixture),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

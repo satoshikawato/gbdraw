@@ -156,23 +156,29 @@ await assert.rejects(
 );
 
 const ref = (value) => ({ value });
+// One drawing per mode, as in state.js: the shown drawing follows `mode` and
+// holds the fixture's rows (`fixture.linearSeqs` is that drawing's array).
+const withShownDrawing = (fixture) => {
+  const shown = () => ({ id: fixture.mode.value, mode: fixture.mode.value, inputType: fixture.inputType, linearSeqs: fixture.linearSeqs });
+  return Object.assign(fixture, { activeDrawing: shown, drawingList: () => [shown()] });
+};
 const fileA = { name: 'a.gb' };
 const fileB = { name: 'b.gb' };
 const state = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'row-a', gb: fileA, fasta: null, region_record_id: '' }]
 };
 const pending = new Map();
 const recordReader = ({ primaryFile }) => new Promise((resolve) => pending.set(primaryFile, resolve));
 const controller = createLinearRecordSelector({
-  state,
+  state: withShownDrawing(state),
   reactive: (value) => value,
   recordReader,
   logger: { warn: () => {} }
 });
 
-const loadingRefresh = controller.refresh();
+const loadingRefresh = controller.refresh(state.activeDrawing());
 assert.deepEqual(controller.optionsFor(state.linearSeqs[0]), [
   { value: '', label: 'Loading records...', synthetic: false }
 ]);
@@ -184,9 +190,9 @@ state.linearSeqs[0].region_record_id = '';
 pending.get(fileA)([{ selector: '#1', recordId: 'Initial', recordLength: 9 }]);
 await loadingRefresh;
 
-const firstRefresh = controller.refresh();
+const firstRefresh = controller.refresh(state.activeDrawing());
 state.linearSeqs[0].gb = fileB;
-const secondRefresh = controller.refresh();
+const secondRefresh = controller.refresh(state.activeDrawing());
 pending.get(fileB)([{ selector: '#1', recordId: 'Current', recordLength: 20 }]);
 await secondRefresh;
 pending.get(fileA)([{ selector: '#1', recordId: 'Stale', recordLength: 10 }]);
@@ -194,7 +200,7 @@ await firstRefresh;
 assert.equal(controller.optionsFor(state.linearSeqs[0])[1].value, 'Current');
 
 state.linearSeqs.push({ uid: 'row-b', gb: fileA, fasta: null, region_record_id: 'Missing' });
-const readyRefresh = controller.refresh();
+const readyRefresh = controller.refresh(state.activeDrawing());
 assert.equal(controller.optionsFor(state.linearSeqs[1])[0].label, 'Loading records...');
 pending.get(fileB)([{ selector: '#1', recordId: 'Current', recordLength: 20 }]);
 await Promise.resolve();
@@ -212,22 +218,22 @@ assert.equal(Object.hasOwn(controller.selectorStateByUid, 'row-a'), true);
 
 const errorState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'error-row', gb: null, fasta: null, region_record_id: 'LegacyRec' }]
 };
 const loggedErrors = [];
 const errorController = createLinearRecordSelector({
-  state: errorState,
+  state: withShownDrawing(errorState),
   reactive: (value) => value,
   recordReader: async () => { throw {code:'INPUT_UNREADABLE',operation:'listSequenceRecords',stage:'helper',message:'PRIVATE_PARSE_SENTINEL'}; },
   logger: { warn: (...args) => loggedErrors.push(args) }
 });
-await errorController.refresh();
+await errorController.refresh(errorState.activeDrawing());
 assert.deepEqual(errorController.optionsFor(errorState.linearSeqs[0]), [
   { value: 'LegacyRec', label: 'Upload a sequence file first', synthetic: true }
 ]);
 errorState.linearSeqs[0].gb = { name: 'bad.gb' };
-await errorController.refresh();
+await errorController.refresh(errorState.activeDrawing());
 assert.match(errorController.errorFor(errorState.linearSeqs[0]), /input could not be read/i);
 assert.equal(errorController.errorModelFor(errorState.linearSeqs[0]).code, 'INPUT_UNREADABLE');
 assert.doesNotMatch(JSON.stringify(loggedErrors), /PRIVATE_PARSE_SENTINEL/);
@@ -238,27 +244,27 @@ assert.equal(loggedErrors.length, 1);
 
 const lazyState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   linearSeqs: [{ uid: 'lazy-row', gb: fileA, fasta: null, region_record_id: '' }]
 };
 let lazyReaderCalls = 0;
 const lazyController = createLinearRecordSelector({
-  state: lazyState,
+  state: withShownDrawing(lazyState),
   reactive: (value) => value,
   recordReader: async () => {
     lazyReaderCalls += 1;
     return [{ selector: '#1', recordId: 'Lazy', recordLength: 42 }];
   }
 });
-const lazyRefresh = lazyController.refresh();
-const duplicateLazyRefresh = lazyController.refresh();
+const lazyRefresh = lazyController.refresh(lazyState.activeDrawing());
+const duplicateLazyRefresh = lazyController.refresh(lazyState.activeDrawing());
 await Promise.all([lazyRefresh, duplicateLazyRefresh]);
 assert.equal(lazyReaderCalls, 1);
 assert.equal(lazyController.optionsFor(lazyState.linearSeqs[0])[1].value, 'Lazy');
 
 const rollbackState = {
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   semanticFileWatchersSuppressed: ref(false),
   sessionImportRollbackInProgress: ref(false),
   linearSeqs: [{
@@ -270,20 +276,20 @@ const rollbackState = {
 };
 let rejectStaleSelectorRead;
 const rollbackController = createLinearRecordSelector({
-  state: rollbackState,
+  state: withShownDrawing(rollbackState),
   reactive: (value) => value,
   recordReader: () => new Promise((_resolve, reject) => {
     rejectStaleSelectorRead = reject;
   }),
   logger: { warn: () => {} }
 });
-const staleSelectorRefresh = rollbackController.refresh();
+const staleSelectorRefresh = rollbackController.refresh(rollbackState.activeDrawing());
 await Promise.resolve();
 const selectorStateBeforeRollback = structuredClone(
   rollbackController.selectorStateByUid['rollback-row']
 );
 rollbackState.semanticFileWatchersSuppressed.value = true;
-await rollbackController.refresh({ suppress: true });
+await rollbackController.refresh(rollbackState.activeDrawing(), { suppress: true });
 rejectStaleSelectorRead(new Error('injected restored-file selector failure'));
 await staleSelectorRefresh;
 assert.deepEqual(
@@ -298,7 +304,7 @@ rollbackState.semanticFileWatchersSuppressed.value = false;
 const reuseFiles = { gff: { name: 'm23.gff3' }, fasta: { name: 'mismatch.fasta' } };
 const reuseState = {
   mode: ref('linear'),
-  lInputType: ref('gff'),
+  inputType: ref('gff'),
   linearSeqs: [{ uid: 'reuse-a', gff: reuseFiles.gff, fasta: reuseFiles.fasta, region_record_id: '' }]
 };
 const reuseReads = [];
@@ -306,7 +312,7 @@ let reuseOutcome = () => {
   throw { code: 'FASTA_REQUIRED', operation: 'listGffFastaRecords', stage: 'helper', context: { reason: 'GFF_FASTA_MATCH' } };
 };
 const reuseController = createLinearRecordSelector({
-  state: reuseState,
+  state: withShownDrawing(reuseState),
   reactive: (value) => value,
   recordReader: async ({ primaryFile, pairedFile }) => {
     reuseReads.push([primaryFile, pairedFile]);
@@ -314,7 +320,7 @@ const reuseController = createLinearRecordSelector({
   },
   logger: { warn: () => {} }
 });
-for (let refresh = 0; refresh < 3; refresh += 1) await reuseController.refresh();
+for (let refresh = 0; refresh < 3; refresh += 1) await reuseController.refresh(reuseState.activeDrawing());
 assert.equal(reuseReads.length, 1);
 assert.deepEqual(
   (({ code, operation, stage, context }) => ({ code, operation, stage, context }))(
@@ -325,22 +331,22 @@ assert.deepEqual(
 assert.match(reuseController.errorFor(reuseState.linearSeqs[0]), /matching FASTA/);
 
 reuseState.linearSeqs[0].fasta = { name: 'mismatch.fasta' };
-await reuseController.refresh();
+await reuseController.refresh(reuseState.activeDrawing());
 assert.equal(reuseReads.length, 2);
 
 reuseOutcome = () => { throw { code: 'WORKER_INIT', operation: 'listGffFastaRecords', stage: 'initialization' }; };
 reuseState.linearSeqs[0].fasta = { name: 'retry.fasta' };
-await reuseController.refresh();
-await reuseController.refresh();
+await reuseController.refresh(reuseState.activeDrawing());
+await reuseController.refresh(reuseState.activeDrawing());
 assert.equal(reuseReads.length, 4);
 reuseOutcome = () => { throw new Error('Diagram generation worker failed.'); };
-await reuseController.refresh();
-await reuseController.refresh();
+await reuseController.refresh(reuseState.activeDrawing());
+await reuseController.refresh(reuseState.activeDrawing());
 assert.equal(reuseReads.length, 6);
 
 const discoveredRows = [];
 const readyController = createLinearRecordSelector({
-  state: reuseState,
+  state: withShownDrawing(reuseState),
   reactive: (value) => value,
   recordReader: async ({ primaryFile, pairedFile }) => {
     reuseReads.push([primaryFile, pairedFile]);
@@ -349,8 +355,8 @@ const readyController = createLinearRecordSelector({
   onRecordsDiscovered: ({ uid, records }) => { discoveredRows.push([uid, records[0].recordId]); }
 });
 reuseState.linearSeqs.push({ uid: 'reuse-b', gff: reuseState.linearSeqs[0].gff, fasta: reuseState.linearSeqs[0].fasta, region_record_id: '' });
-await readyController.refresh();
-await readyController.refresh();
+await readyController.refresh(reuseState.activeDrawing());
+await readyController.refresh(reuseState.activeDrawing());
 assert.equal(reuseReads.length, 7);
 assert.deepEqual(discoveredRows, [
   ['reuse-a', 'NC_001416.1'], ['reuse-b', 'NC_001416.1'],
@@ -374,22 +380,22 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
   const fileA = genbank('RecA');
   const fileB = genbank('RecB');
   const tripState = {
-    lInputType: { value: 'gb' }, mode: { value: 'linear' },
+    inputType: { value: 'gb' }, mode: { value: 'linear' },
     linearSeqs: [{ uid: 'trip-a', gb: fileA }, { uid: 'trip-b', gb: fileB }]
   };
   const trip = createLinearRecordSelector({
-    state: tripState,
+    state: withShownDrawing(tripState),
     reactive: (value) => value,
     recordReader: ({ primaryFile }) => discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
   });
   const generateTransfer = () => [fileA, fileB].forEach((file) => releaseFileContentCache(file));
-  await trip.refresh();
+  await trip.refresh(tripState.activeDrawing());
   assert.equal(fileReads, 2);
   generateTransfer();
   tripState.mode.value = 'circular';
-  await trip.refresh();
+  await trip.refresh(tripState.activeDrawing());
   tripState.mode.value = 'linear';
-  await trip.refresh();
+  await trip.refresh(tripState.activeDrawing());
   assert.equal(fileReads, 2, 'a mode round trip reads no card again');
   assert.equal(trip.optionsFor(tripState.linearSeqs[1])[1].value, 'RecB');
   // The draft Save's private discovery is a lookup.
@@ -452,6 +458,34 @@ assert.equal(readyController.optionsFor(reuseState.linearSeqs[1])[1].value, 'NC_
   });
   assert.deepEqual(formats, ['fasta'], 'the Session resource goes to the Python reader');
   assert.deepEqual(records.map(({ recordId }) => recordId), ['F2']);
+}
+
+// D-15-91 (survey commit 4): a discovery's records go to the drawing it ran
+// for, pinned before its read, also when another drawing of the mode is shown
+// by the time the read ends.
+{
+  let shownId = 'linear';
+  const pinState = {
+    mode: ref('linear'), inputType: ref('gb'),
+    linearSeqs: [{ uid: 'pin-a', gb: { name: 'pin.gb' }, fasta: null, region_record_id: '' }]
+  };
+  pinState.activeDrawing = () => ({ id: shownId, mode: 'linear', inputType: pinState.inputType, linearSeqs: pinState.linearSeqs });
+  pinState.drawingList = () => [pinState.activeDrawing()];
+  /** @type {((records: unknown[]) => void)[]} */
+  const reads = [];
+  const discovered = [];
+  const pinned = createLinearRecordSelector({
+    state: pinState,
+    reactive: (value) => value,
+    recordReader: () => new Promise((resolve) => { reads.push(resolve); }),
+    onRecordsDiscovered: ({ drawingId, uid }) => { discovered.push([drawingId, uid]); }
+  });
+  const refreshing = pinned.refresh(pinState.activeDrawing());
+  while (!reads.length) await new Promise((resolve) => { setImmediate(resolve); });
+  shownId = 'linear-2';
+  reads[0]([{ selector: '#1', recordId: 'Pin', recordLength: 10 }]);
+  await refreshing;
+  assert.deepEqual(discovered, [['linear', 'pin-a']], 'the records name the drawing the discovery ran for');
 }
 
 console.log('record selector tests passed');

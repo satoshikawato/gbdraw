@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 // R-3, Q3 (Owner, 2026-10-04): every edit that changes the direction of a
 // draft feature slot runs through one transition, which asks before it leaves
@@ -294,10 +295,11 @@ test('removing a Circular Depth series outside the Axis keeps the feature row in
     const axis = app.adv.circular_track_slots_axis_index;
     return slots.map((slot, index) => `${slot.id}:${index < axis ? 'outside' : 'inside'}:${slot.params?.lane_direction || ''}`);
   });
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     const depth = (name) => new File(['position\tdepth\n1\t5\n'], name, { type: 'text/tab-separated-values' });
-    app.files.c_depth = [[depth('a.tsv'), depth('b.tsv')]];
+    app.files.c_depth = bound([[depth('a.tsv'), depth('b.tsv')]]);
     Object.assign(app.form, { show_depth: true, track_type: 'tuckin' });
     app.resetCircularTrackSlotsFromSimpleControls();
     app.setCircularTrackSlotsEnabled(true);
@@ -319,7 +321,7 @@ test('Generate with an Overlay Annotations row keeps the Axis, and Outside axis 
   test.setTimeout(240000);
   const data = 'gbdraw/web/tutorial-data/tobacco-plastome-regions/';
   await openApp(page);
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).first().setInputFiles(`${data}NC_001879.gbk`);
   await page.locator('[data-setting="region-annotations"] input[type=file]').first()
     .setInputFiles(`${data}nicotiana-tabacum-regions.tsv`);

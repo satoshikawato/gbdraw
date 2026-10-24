@@ -374,10 +374,8 @@ def test_description_data_renders_any_json_key_but_the_prototype() -> None:
 
 
 def test_the_session_shape_module_is_the_admission_description_as_frozen_data() -> None:
-    from gbdraw.session_contract import describe_session_admission
-
     source = _generator().render_session_shape_module()
-    description = describe_session_admission()
+    description = _generator().web_session_admission()
 
     assert re.findall(r"\bimport\b.*|\bfrom\s+['\"].*", source) == [
         "import { BandedContractDescription } from '../utils/contract-shape.js' */"
@@ -392,11 +390,26 @@ def test_the_session_shape_module_is_the_admission_description_as_frozen_data() 
         ) in source
 
 
-def test_the_session_typedefs_declare_each_band_and_their_union() -> None:
+def test_the_web_contracts_stop_at_the_current_session_version() -> None:
+    """D-15-81: Python reads Session 49 before the flip; the Web contracts list
+    no version newer than CURRENT_SESSION_VERSION until then."""
+    from gbdraw import session_io
     from gbdraw.session_contract import describe_session_admission
 
+    newer = {version for version in session_io.SUPPORTED_SESSION_VERSIONS if version > session_io.CURRENT_SESSION_VERSION}
+    python_bands = describe_session_admission()["bands"]
+    web_bands = _generator().web_session_admission()["bands"]
+    constants = _generator().render_web_contracts_module()
+
+    assert web_bands == [band for band in python_bands if not set(band["versions"]) <= newer]
+    for version in newer:
+        assert f"{version}" not in re.search(r"SUPPORTED_SESSION_VERSIONS = [^;]*;", constants).group(0)
+        assert f"{version}:" not in re.search(r"FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = [^;]*;", constants).group(0)
+
+
+def test_the_session_typedefs_declare_each_band_and_their_union() -> None:
     source = _generator().render_session_typedefs_module()
-    roots = [band["root"] for band in describe_session_admission()["bands"]]
+    roots = [band["root"] for band in _generator().web_session_admission()["bands"]]
 
     assert f"/** @typedef {{{' | '.join(roots)}}} SessionChecked */" in source
     assert " *   otherModeResult?: never,\n" in source  # a literal with no value admits nothing

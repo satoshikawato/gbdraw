@@ -3,6 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const conservationSession = resolve('tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz');
@@ -144,21 +145,22 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await preparePage(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await page.evaluate(() => {
+  await showDrawing(page, { kind: 'linear' });
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     const first = new File(['LOCUS A\n'], 'first.gbk', { type: 'text/plain', lastModified: 1 });
     const last = new File(['LOCUS B\n'], 'last.gbk', { type: 'text/plain', lastModified: 2 });
-    app.linearSeqs[0].gb = first;
+    app.linearSeqs[0].gb = bound(first);
     app.linearSeqs[0].region_record_id = 'A1';
     app.linearSeqs[0].definition = 'First one';
-    app.linearSeqs[0].depth = [new File(['1\t10\n'], 'first.tsv')];
+    app.linearSeqs[0].depth = bound([new File(['1\t10\n'], 'first.tsv')]);
     app.addLinearSeq();
-    app.linearSeqs[1].gb = first;
+    app.linearSeqs[1].gb = bound(first);
     app.linearSeqs[1].region_record_id = 'A2';
     app.linearSeqs[1].definition = 'First two';
     app.addLinearSeq();
-    app.linearSeqs[2].gb = last;
+    app.linearSeqs[2].gb = bound(last);
     app.linearSeqs[2].region_record_id = 'B1';
   });
 
@@ -246,7 +248,14 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   await page.getByRole('group', { name: 'Linear File actions' })
     .getByRole('button', { name: 'Add sequence', exact: true }).click();
   await expect(sources).toHaveCount(3);
-  const beforeBlankRemoval = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  // The input adapter commits a button's step after its click handlers settle
+  // (`app/history-inputs.js`), a few milliseconds after the new card renders:
+  // wait for Add sequence's one step before counting from it (OV-1664).
+  await expect.poll(() => page.evaluate(() => [
+    window.__GBDRAW_HISTORY__.getUndoCount(),
+    window.__GBDRAW_HISTORY__.getRedoCount()
+  ])).toEqual([baseline + 1, 0]);
+  const beforeBlankRemoval = baseline + 1;
   await globalRemove.click();
   await expect(globalDialog).toHaveCount(0);
   await expect(sources).toHaveCount(2);
@@ -267,7 +276,7 @@ const controlState = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   return {
     overlaps: state.drawingOf('circular').adv.resolve_overlaps,
-    input: app.cInputType,
+    input: state.drawingOf('circular').inputType.value,
     prefix: state.drawingOf('circular').form.prefix,
     mode: app.mode,
     labels: state.drawingOf('circular').form.labels_mode
@@ -325,12 +334,12 @@ test('each discrete control change records one step for every input means and fo
   await prefix.click();
   await prefix.press('End');
   await page.keyboard.type('Y');
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   // PD-OI-090: the mode buttons are navigation. The click ends the typed
   // text's step in the Circular History and records no step of its own.
   await expect.poll(() => controlState(page), { message: 'mode button after typed text' })
     .toEqual({ ...states.at(-1), prefix: `${initial.prefix}XY`, mode: 'linear' });
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await expectSteps('the Circular step of the text typed before the switch', { prefix: `${initial.prefix}XY` });
 
   // Undo returns through every recorded state in reverse order.

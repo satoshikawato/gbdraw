@@ -279,6 +279,8 @@ export const parseBlacklistWords = (text) => {
 // Whitelist or priority row without a mark (Sessions before 48, hand rows) is
 // the user's.
 /** @typedef {'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} FileImportCard */
+/** The table cards; each binds one input file (`state.files[card]`). @type {readonly FileImportCard[]} */
+export const FILE_IMPORT_CARDS = Object.freeze(/** @type {FileImportCard[]} */ (['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']));
 /** @typedef {'t_color' | 'whitelist' | 'qualifier_priority'} RowFileCard A card whose file adds rows. */
 /** @typedef {{ fromFile?: boolean, importedFrom?: string }} CardMarkedRow */
 /** @typedef {{ color: string, handColor: string | null }} ImportedDefaultColor */

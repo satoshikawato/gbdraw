@@ -332,7 +332,9 @@ const plain = (value) => {
   if (value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 1 && 'value' in value) return plain(value.value);
   return value;
 };
-const captures = (mode) => JSON.stringify(SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
+// The slices a Session 48 round trip keeps (`ROUND_TRIP_SLICES`, below): a
+// Load binds each input file again, under a new ref.
+const captures = (mode) => JSON.stringify(ROUND_TRIP_SLICES.map(([name, slice]) => slice.capture(modeDrawing(state, mode).slices[name])));
 // Each Save names its own file: Save asks before downloading a file name again.
 let saves = 0;
 const saveSession = async () => {
@@ -342,12 +344,17 @@ const saveSession = async () => {
   return new Blob([gunzipSync(Buffer.from(await saved.blob.arrayBuffer()))], { type: 'application/json' });
 };
 
+// The inputs slice is not in this round trip until Session 49: a Session 48
+// holds one set of record rows (the Linear drawing's), and its reset changes
+// nothing until the card files join it (D-15-91 S-2 A). drawing-inputs.test.mjs
+// pins its install, capture, and writers; the flip (B2d-3) adds its sample.
+const ROUND_TRIP_SLICES = SLICES.filter(([name]) => name !== 'inputs');
 test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', async () => {
-  assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
+  assert.deepEqual(Object.keys(SAMPLES).sort(), ROUND_TRIP_SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
-    for (const [name, slice] of SLICES) {
+    for (const [name, slice] of ROUND_TRIP_SLICES) {
       const drawing = modeDrawing(state, mode);
       const loaded = JSON.stringify(slice.capture(drawing.slices[name]));
       const sample = SAMPLES[name](mode);
@@ -391,7 +398,7 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
       edge('with-file', { file }), edge('with-name', { losatFilename: 'pair.losat' }), edge('empty', { losatFilename: ' ' })
     ] }
   });
-  resetSettings(state);
+  resetSettings(state, modeDrawing(state, 'linear'));
   const after = settings.capture(handle);
   assert.deepEqual([after.form.plot_title, after.losatProgram], ['', 'blastn']);
   assert.deepEqual([after.linearRecordGap, after.linearRecordRows, after.recordsOff], [40, [{ uid: 'card-a', row: 2 }], ['card-b']]);

@@ -75,24 +75,24 @@ const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
 const CASES = [
   // OV-568: a Linear card's crop and genetic code, read once by the Files reader.
   ['so46', `${LINEAR_SEQ}.region_start`, 'abc', ['setting-replaced webFiles.bindings.linearSeqs[0].region_start'],
-    () => assert.equal(state.linearSeqs[0].region_start, null)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_start, null)],
   ['so46', `${LINEAR_SEQ}.region_end`, [1], ['setting-replaced webFiles.bindings.linearSeqs[0].region_end'],
-    () => assert.equal(state.linearSeqs[0].region_end, null)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_end, null)],
   ['so46', `${LINEAR_SEQ}.losat_gencode`, 'x', ['setting-replaced webFiles.bindings.linearSeqs[0].losat_gencode'],
-    () => assert.equal(state.linearSeqs[0].losat_gencode, 1)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].losat_gencode, 1)],
   // An orientation that is no boolean is not used (D1b: changed, U false), its text included.
   ['so46', `${LINEAR_SEQ}.region_reverse`, 'true', ['setting-replaced webFiles.bindings.linearSeqs[0].region_reverse'],
-    () => assert.equal(state.linearSeqs[0].region_reverse, false)],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, false)],
   ['so46', `${LINEAR_SEQ}.definition`, 5, ['setting-replaced webFiles.bindings.linearSeqs[0].definition'],
-    () => assert.equal(state.linearSeqs[0].definition, '')],
+    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].definition, '')],
   ['v30', 'files.linearSeqs.0.losat_gencode', 0, ['setting-replaced files.linearSeqs[0].losat_gencode']],
   // OV-595: the PNG DPI is one of the choices the DPI menu lists.
   ['g47L', 'ui.downloadDpi', 'abc', ['setting-replaced ui.downloadDpi'], () => assert.equal(Number(state.downloadDpi.value), 300)],
   ['g47L', 'ui.downloadDpi', '600', [], () => assert.equal(Number(state.downloadDpi.value), 600)],
   // OV-594: an input type of no kind; the request's own type wins without a row.
-  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.equal(state.cInputType.value, 'gb')],
-  ['g47L', 'ui.lInputType', 5, [], () => assert.equal(state.lInputType.value, 'gb')],
-  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(state.cInputType.value, 'gb')],
+  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
+  ['g47L', 'ui.lInputType', 5, [], () => assert.equal(modeDrawing(state, 'linear').inputType.value, 'gb')],
+  ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
   // K19: a settings-only Session's mode of no mode (the request's mode wins in a full one).
   ['so46', 'ui.mode', 'zigzag', ['setting-replaced ui.mode'], () => assert.equal(state.mode.value, 'circular')],
   ['g47L', 'ui.mode', 'zigzag', [], () => assert.equal(state.mode.value, 'linear')],
@@ -174,7 +174,8 @@ test('K14: record display drafts of no list are listed before the dialog and app
       assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${path}`], label);
       assert.deepEqual(dialogs, [describeLoadRepairs(loaded.repairs)?.items], label);
       assert.ok(dialogs[0].some((line) => line.includes(`(${path})`)), `${label}: ${dialogs[0]}`);
-      assert.deepEqual([...drawing.recordDisplayDrafts], [], label);
+      // A Session Load makes new drawing states; a configuration file keeps the drawing.
+      assert.deepEqual([...modeDrawing(state, mode).recordDisplayDrafts], [], label);
     }
   }
   await saved();
@@ -230,7 +231,7 @@ test('OV-655, TB23: a single file slot keeps the first file it reads and lists t
   const first = session.files.linearSeqs[0].gb;
   session.files.linearSeqs[0].gb = [first, { ...first, name: 'second.gbk' }];
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[0].gb']);
-  assert.equal(state.linearSeqs[0].gb?.name, first.name);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].gb?.name, first.name);
   session = BASES.v30();
   session.files.linearSeqs[1].gb = { bogus: 1 };
   assert.deepEqual(await load(session), ['file-entry-dropped files.linearSeqs[1].gb']);
@@ -304,8 +305,8 @@ test('R1-B1: a dropped comparison sequence binding keeps its place, so no later 
     'file-entry-dropped webFiles.bindings.c_conservation_sequence_sources[1]'
   ]);
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', null, 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', null, 'comparison-d.fasta']);
 });
 
 // OV-893 (E-OD30): a comparison series reads its BLAST table by place too, and
@@ -324,14 +325,14 @@ test('OV-893: a dropped comparison table binding drops its series with its files
   ]);
   assert.ok(dialogs.some((line) => line.includes('"comparison-c"')), JSON.stringify(dialogs));
   const names = (files) => files.map((file) => file?.name ?? null);
-  assert.deepEqual(names(state.files.c_conservation_blasts),
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_blasts),
     ['comparison-b.circular_conservation.losatn.tsv', 'comparison-d.circular_conservation.losatn.tsv']);
-  assert.deepEqual(names(state.files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
-  assert.deepEqual(names(state.files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_fastas), ['comparison-b.fasta', 'comparison-d.fasta']);
+  assert.deepEqual(names(modeDrawing(state, 'circular').files.c_conservation_sequence_sources), ['comparison-b.fasta', 'comparison-d.fasta']);
   const conservation = modeDrawing(state, 'circular').circularConservation;
   assert.deepEqual(conservation.series.map(({ label, sourceIndex }) => [label, sourceIndex]), [['comparison-b', 0], ['comparison-d', 1]]);
-  assert.deepEqual(orderedConservationSources(state.files.c_conservation_blasts, conservation)
-    .map(({ label, file, sourceIndex }) => [label, file.name, state.files.c_conservation_sequence_sources[sourceIndex]?.name]), [
+  assert.deepEqual(orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, conservation)
+    .map(({ label, file, sourceIndex }) => [label, file.name, modeDrawing(state, 'circular').files.c_conservation_sequence_sources[sourceIndex]?.name]), [
     ['comparison-b', 'comparison-b.circular_conservation.losatn.tsv', 'comparison-b.fasta'],
     ['comparison-d', 'comparison-d.circular_conservation.losatn.tsv', 'comparison-d.fasta']
   ]);
@@ -348,7 +349,7 @@ test('a comparison file entry of an older Session that cannot be read is listed'
     'file-entry-dropped files.c_conservation_fastas[0]',
     'file-entry-dropped files.c_conservation_sequence_sources[0]'
   ]);
-  assert.deepEqual(state.files.c_conservation_fastas, [null, null]);
+  assert.deepEqual(modeDrawing(state, 'circular').files.c_conservation_fastas, [null, null]);
 });
 
 // OV-898 (E-OD35): a 27-30 draft without series names its rings by `labels`,
@@ -363,7 +364,7 @@ test('OV-898: a dropped table of a draft without series leaves out its label; la
     session.config.circularConservation.labels = 'a,b';
     return session;
   };
-  const drawn = () => orderedConservationSources(state.files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
+  const drawn = () => orderedConservationSources(modeDrawing(state, 'circular').files.c_conservation_blasts, modeDrawing(state, 'circular').circularConservation)
     .map(({ label, file }) => [label, file.name]);
   for (const entry of [5, null, {}]) {
     const result = await importSession(input(rings(entry)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
@@ -398,7 +399,7 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
   assert.deepEqual(result.repairs.filter(({ code }) => code === 'comparison-series-dropped').map(({ path }) => path),
     [2, 1, 0].map((index) => `config.circularConservation.series[${index}]`));
   const conservation = modeDrawing(state, 'circular').circularConservation;
-  assert.deepEqual([conservation.series.length, state.files.c_conservation_blasts.length], [0, 0]);
+  assert.deepEqual([conservation.series.length, modeDrawing(state, 'circular').files.c_conservation_blasts.length], [0, 0]);
   assert.equal(conservation.enabled, false);
 });
 

@@ -73,7 +73,7 @@
       "replay": [
         {
           "type": "click",
-          "selector": "button.app-mode-button[aria-label=\"Linear\"]"
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"linear\"]"
         }
       ],
       "operations": [

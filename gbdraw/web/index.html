@@ -623,6 +623,18 @@
             border-radius: 0.375rem;
             background: #f8fafc;
         }
+        /* The drawing bar's tab menu opens over the panes, not inside the bar. */
+        .drawing-bar-menu {
+            position: relative;
+        }
+        .drawing-bar-menu > .action-menu-items {
+            position: absolute;
+            z-index: 45;
+            left: 0;
+            min-width: 10rem;
+            background: #fff;
+            box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+        }
         .action-menu-item {
             display: flex;
             align-items: center;
@@ -1549,11 +1561,6 @@
                 height: 2rem !important;
             }
 
-            .mode-switch {
-                order: 1 !important;
-                margin-left: auto !important;
-            }
-
             .app-language {
                 order: 1 !important;
                 flex: 1 1 4.5rem;
@@ -1565,9 +1572,8 @@
                 min-width: 0;
             }
 
-            .app-mode-button {
-                padding: 0.35rem 0.55rem !important;
-                font-size: 0.75rem !important;
+            .drawing-bar {
+                padding: 0.25rem 0.5rem !important;
             }
 
             .app-main {
@@ -2181,10 +2187,6 @@
                     </button>
                 </div>
 
-                <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" data-history-ignore :aria-label="t('Circular')" :aria-pressed="mode === 'circular'" @click="selectDrawing('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-circle" aria-hidden="true"></i> {{ t('Circular') }}</button>
-                    <button type="button" data-history-ignore :aria-label="t('Linear')" :aria-pressed="mode === 'linear'" @click="selectDrawing('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!drawingSwitchAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> {{ t('Linear') }}</button>
-                </div>
                 <!-- PD-OI-106: the UI language. A globe and each language's own name keep it findable in any language; a choice is no History step. The link beside it opens the translation feedback form in a new tab. -->
                 <div class="app-language flex items-center gap-1 text-slate-500" :title="t('Language')">
                     <i class="ph ph-globe text-base" aria-hidden="true"></i>
@@ -2196,6 +2198,30 @@
             </div>
         </div>
     </header>
+
+    <!-- PD-OI-090: the drawing bar, under the header and above both panes. One tab per drawing in tab order, named by
+         the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
+         the focused drawing (manual activation). The tab menu acts on the shown drawing; each item is one History step. -->
+    <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
+        <div class="drawing-bar-tabs flex bg-slate-100 p-1 rounded-lg min-w-0 overflow-x-auto" role="tablist" :aria-label="t('Drawings')" @keydown="moveTabFocus">
+            <button v-for="tab in drawingBarTabs" :key="tab.id" type="button" role="tab" data-history-ignore :data-drawing-id="tab.id"
+                    :aria-selected="tab.selected ? 'true' : 'false'" :tabindex="tab.selected ? 0 : -1" @click="selectDrawing(tab.id)"
+                    :disabled="!drawingSwitchAvailable" :title="drawingSwitchAvailable ? null : drawingSwitchBusyReason"
+                    :class="tab.selected ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'"
+                    class="drawing-tab shrink-0 px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5 max-w-[14rem]">
+                <i :class="['ph', tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler']" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span>
+            </button>
+        </div>
+        <template v-for="tab in drawingBarTabs" :key="tab.id">
+            <action-menu v-if="tab.selected" icon="ph-dots-three-vertical" class="drawing-bar-menu shrink-0" close-on-run
+                         :label="t('Drawing')" :aria-label="t('Drawing menu for {name}', { name: tab.label })" :title="t('Drawing menu for {name}', { name: tab.label })"
+                         :items="[
+                             { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
+                             { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
+                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) }
+                         ]"></action-menu>
+        </template>
+    </div>
 
     <main class="app-main flex-1 min-h-0 px-4 py-3 flex overflow-hidden">
 
@@ -2215,10 +2241,10 @@
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">{{ t('Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.') }}</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="cInputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
-                        <div v-if="cInputType === 'gb'">
+                        <div v-if="inputType === 'gb'">
                             <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
@@ -2232,7 +2258,7 @@
                                 <span v-else-if="circularRecordDiscoveryState.status === 'loading'">{{ t('Inspecting source records…') }}</span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'ready'">{{ tn(circularRecordDiscoveryState.records.length, '{count} source record inspected', '{count} source records inspected') }}<template v-if="circularRecordDiscoveryState.records.length > 1"> · <span data-circular-records-drawn>{{ tn(circularRecordDiscoveryState.records.length, '{drawn} of {count} record drawn', '{drawn} of {count} records drawn', { drawn: circularDrawnRecordCount }) }}</span></template></span>
                                 <span v-else-if="circularRecordDiscoveryState.status === 'error'" class="text-red-600">{{ (circularRecordDiscoveryState.error && errorText(circularRecordDiscoveryState.error.summaryParts)) || t('Source inspection failed. Retry or replace the input.') }}</span>
-                                <span v-else>{{ cInputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
+                                <span v-else>{{ inputType === 'gff' ? t('Upload both GFF3 and FASTA files to inspect records.') : t('Upload a source file to inspect records.') }}</span>
                             </p>
                             <button v-if="circularRecordDiscoveryState.hasInput" data-circular-inspect type="button" data-history-ignore @click="inspectCircularSourceRecords" :aria-disabled="!circularRecordInspectionEnabled" :aria-busy="circularRecordDiscoveryState.status === 'loading'" :class="circularRecordInspectionEnabled ? 'text-blue-600' : 'text-slate-400'" class="text-xs">{{ circularRecordDiscoveryState.status === 'error' ? t('Retry source inspection') : circularRecordDiscoveryState.status === 'ready' ? t('Inspect source records again') : t('Inspect source records') }}</button>
                             </div>
@@ -2483,8 +2509,8 @@
 
                     <div v-if="mode === 'linear'" class="space-y-4">
                         <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
-                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
+                            <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
                             <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
@@ -2560,7 +2586,7 @@
                                         </button>
                                     </div>
                                 </summary>
-                            <div v-if="lInputType === 'gb'" class="space-y-2">
+                            <div v-if="inputType === 'gb'" class="space-y-2">
                                 <file-uploader
                                     :label="t('GenBank / DDBJ File')"
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
@@ -2752,7 +2778,7 @@
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
 
-                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
+                                    <button v-if="(inputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">{{ t('Inspect records') }}</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" data-setting="depth-sources" class="rounded border border-slate-200 bg-white/70 p-2">
@@ -4602,7 +4628,7 @@
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
                                                 @click="refreshCircularRecordOrder"
-                                                :disabled="!semanticMutationAvailable || (cInputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
+                                                :disabled="!semanticMutationAvailable || (inputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
                                             >
                                                 {{ t('Reload Records') }}
                                             </button>
@@ -4907,7 +4933,7 @@
                                     </button>
                                 </div>
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Default colors file')" :model-value="files.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Default colors file')" :model-value="cardFiles.d_color" @update:model-value="importAuxiliaryTable('d_color', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('Tab-separated value (TSV) file of feature type and color. Feature types not listed keep the selected palette colors.')"></help-tip>
                                         {{ t('Optional TSV of default colors.') }}
@@ -4953,7 +4979,7 @@
                                     @edit-pattern="editSpecificRulePattern" @retry-pattern="retrySpecificRulePattern" @revert-pattern="revertSpecificRulePattern"></specific-rule-rows>
 
                                 <div class="mt-2">
-                                    <file-uploader :label="t('Specific rules file')" :model-value="files.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Specific rules file')" :model-value="cardFiles.t_color" @update:model-value="importAuxiliaryTable('t_color', $event)" :after-change="waitForAuxiliaryFileImport" :project-history="true" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     <div class="ui-hint mt-1">
                                         <help-tip :text="t('TSV file of rules: feature type, qualifier, regular expression, color, and optional legend name.')"></help-tip>
                                         {{ t('Optional TSV of specific rules.') }}
@@ -5213,7 +5239,7 @@
                                         <p class="ui-hint">{{ t('Exclude labels containing these keywords.') }}</p>
                                         <textarea :value="manualBlacklist" @input="setBlacklistText($event.target.value)" class="form-input h-20" :placeholder="t('hypothetical, unknown')" :disabled="!semanticMutationAvailable"></textarea>
                                         <div class="ui-hint text-center">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Blacklist File')" :model-value="files.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Blacklist File')" :model-value="cardFiles.blacklist" @update:model-value="importAuxiliaryTable('blacklist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".txt,.tsv,.tab,text/plain,text/tab-separated-values,text/*" :small="true"></file-uploader>
                                     </div>
 
                                     <div v-if="filterMode === 'Whitelist'" class="space-y-2 bg-white p-2 rounded border">
@@ -5226,7 +5252,7 @@
                                         </div>
                                         <button @click="addWhitelistRule" :disabled="!semanticMutationAvailable" class="text-xs text-blue-600 font-bold">{{ t('+ Add Rule') }}</button>
                                         <div class="ui-hint text-center mt-2">{{ t('- OR -') }}</div>
-                                        <file-uploader :label="t('Whitelist File')" :model-value="files.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                        <file-uploader :label="t('Whitelist File')" :model-value="cardFiles.whitelist" @update:model-value="importAuxiliaryTable('whitelist', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                     </div>
                                 </div>
 
@@ -5253,7 +5279,7 @@
                                     </div>
 
                                     <div class="ui-hint text-center mb-1">{{ t('- OR UPLOAD FILE -') }}</div>
-                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="files.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
+                                    <file-uploader :label="t('Priority File (TSV)')" :model-value="cardFiles.qualifier_priority" @update:model-value="importAuxiliaryTable('qualifier_priority', $event)" :project-history="true" :after-change="waitForAuxiliaryFileImport" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*" :small="true"></file-uploader>
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">

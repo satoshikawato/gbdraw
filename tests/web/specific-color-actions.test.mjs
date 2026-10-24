@@ -95,6 +95,13 @@ const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = 
   projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;},isRedrawOwed:()=>false}, nextTick:async()=>{}, watch, ...options});
   return {state,actions,history,preparation,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rekeyed:()=>lastRekeyed, rerenders:()=>rerenders, setRerendering};
 };
+// Waits until a held Legend preparation has started (`ready`). A commit that
+// ends or throws before its Legend step fails the test at once instead of
+// leaving it waiting on `ready` until the runner's limit (OV-1671).
+/** @param {Promise<unknown>} ready @param {Promise<unknown>} pending */
+const untilHeld = (ready, pending) => Promise.race([ready, pending.then((outcome) => {
+  assert.fail(`the commit ended before its Legend preparation: ${JSON.stringify(outcome)}`);
+})]);
 // Review 3 (OV-262 in the Features drawer): with the type's default color
 // Auto, the drawer's color input shows the applied palette's color, as
 // Generate draws it.
@@ -118,7 +125,7 @@ test('rule action admits full canonical rules and legend in one transaction afte
   const ready=new Promise(resolve=>{started=resolve;});
   s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
   const pending=s.actions.commitSpecificRules(() => rules);
-  await ready;
+  await untilHeld(ready, pending);
   assert.deepEqual(s.state.manualSpecificRules,[]);
   assert.equal(s.state.results.value[0].content,'before');
   assert.deepEqual(s.state.legendEntries.value,[]);
@@ -870,14 +877,14 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   const group = { querySelectorAll: () => shownKeys.map(row) };
   const svg = { getElementById: (id) => (id === 'legend' ? { querySelector: (selector) => (selector === '#feature_legend' ? group : null) } : null) };
   const state = {
-    featureCatalog: { value: catalog }, generatedMode: { value: 'circular' }, selectedResultIndex: { value: 0 },
+    featureCatalog: { value: catalog }, selectedResultIndex: { value: 0 },
     results: { value: [{ name: 'result-0.svg', content: '<svg />' }] }, svgContainer: { value: { querySelector: () => svg } },
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
     extractedFeatures: { value: [] }
   };
-  state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
+  state.extractedFeatures.value = [...resultCatalogFeatures(state, 'circular').renderedByIdentity.values()];
   const drawingState = withDrawings(state);
   let rerenders = 0;
   const actions = createFeatureRuleActions({
@@ -939,7 +946,7 @@ const queuedRuleWrites = (options) => {
   let release, started;
   const ready=new Promise(resolve=>{started=resolve;});
   s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
-  const held=async(pending)=>{ await ready; s.setLegendPreparation(async()=>{}); return [pending,()=>release()]; };
+  const held=async(pending)=>{ await untilHeld(ready, pending); s.setLegendPreparation(async()=>{}); return [pending,()=>release()]; };
   const table=()=>s.state.manualSpecificRules.map(rule=>`${rule.val} ${rule.color} ${rule.cap}`);
   return {s,held,table};
 };
@@ -1282,7 +1289,7 @@ test('a rule commit writes its own drawing and is pending until it ends', async 
   s.setLegendPreparation(() => new Promise(resolve => { release = resolve; started(); }));
   assert.equal(s.actions.ruleWritePending(), false);
   const pending = s.actions.commitSpecificRules(() => [{ feat: 'CDS', qual: 'gene', val: 'b', color: '#112233', cap: 'B' }]);
-  await ready;
+  await untilHeld(ready, pending);
   assert.equal(s.actions.ruleWritePending(), true, 'a switch waits for the rule being matched');
   s.state.mode.value = 'linear';
   s.setLegendPreparation(async () => {});

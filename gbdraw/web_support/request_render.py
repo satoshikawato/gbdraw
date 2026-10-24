@@ -34,6 +34,7 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.render_stages import render_stage_revision
 from gbdraw.session import with_request_output
+from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.session_request_codec import decode_canonical_request
 from gbdraw.session_io import materialize_embedded_file, safe_embedded_filename
 from gbdraw.web_support.feature_catalog import (
@@ -100,7 +101,6 @@ def _label_fit_mode_of(request: DiagramRequest) -> LabelFitMode:
     return "linear" if isinstance(request, LinearDiagramRequest) else "circular"
 
 
-_RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 # The sha256 hex of the resource bytes (gbdraw/web/js/services/file-content-cache.js).
 _RESOURCE_CACHE_TOKEN_RE = re.compile(r"^[0-9a-f]{64}$")
 _STAGED_WORKSPACE_RE = re.compile(r"^gbdraw-web-render-[1-9][0-9]*$")
@@ -470,7 +470,7 @@ def render_embedded_canonical_web_request(
         for resource_id, entry in resources.items():
             if (
                 not isinstance(resource_id, str)
-                or not _RESOURCE_ID_RE.fullmatch(resource_id)
+                or not SESSION_ID_RE.fullmatch(resource_id)
             ):
                 raise ValidationError(
                     f"Invalid Web render resource ID: {resource_id!r}."
@@ -589,7 +589,7 @@ def _render_staged_canonical_web_request_with_prepared_inputs(
         for resource_id, raw_path in resource_paths.items():
             if (
                 not isinstance(resource_id, str)
-                or not _RESOURCE_ID_RE.fullmatch(resource_id)
+                or not SESSION_ID_RE.fullmatch(resource_id)
             ):
                 raise ValidationError(
                     f"Invalid staged Web render resource ID: {resource_id!r}."
@@ -716,7 +716,7 @@ def _validate_prepared_resource_identities(
     for resource_id, raw_identity in value.items():
         if (
             not isinstance(resource_id, str)
-            or not _RESOURCE_ID_RE.fullmatch(resource_id)
+            or not SESSION_ID_RE.fullmatch(resource_id)
             or not isinstance(raw_identity, Mapping)
             or set(raw_identity) != {"cacheToken", "size"}
         ):
@@ -773,7 +773,7 @@ def _validate_prepared_input_retention(
         not isinstance(value, Mapping)
         or set(value) != {"drawing", "resourceTokens"}
         or not isinstance(drawing, str)
-        or not _RESOURCE_ID_RE.fullmatch(drawing)
+        or not SESSION_ID_RE.fullmatch(drawing)
         or not isinstance(tokens, list)
         or not all(
             isinstance(token, str) and _RESOURCE_CACHE_TOKEN_RE.fullmatch(token)

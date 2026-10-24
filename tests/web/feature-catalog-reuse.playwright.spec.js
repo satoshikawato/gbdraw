@@ -147,8 +147,9 @@ test('a Generate keeps the held catalog only while its build is current', async 
   const page = await start(browser);
   try {
     await page.evaluate(async (content) => {
+      const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
       const app = window.__GBDRAW_APP__;
-      app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+      app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
       // The title has its place from the start: moving it there moves the
       // records too, which builds the catalog items again.
       app.adv.plot_title_position = 'top';
@@ -226,7 +227,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     await switchMode(page, 'linear');
     await evaluateWithRetainedPromise(page, async (content) => {
       const app = window.__GBDRAW_APP__;
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       if (!app.linearSeqs.length) app.addLinearSeq();
       app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'linear.gbk', { type: 'text/plain', lastModified: 1 }));
       await app.refreshLinearRecordSelectors();

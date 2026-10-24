@@ -25,7 +25,7 @@ const capture = page => page.evaluate(async () => {
     canonical: config.getCommittedCanonicalSession(),
     request: config.getCommittedCanonicalRenderRequest(),
     resources: config.getCommittedCanonicalSession()?.resources,
-    results: state.results.value, file: state.files.c_gb,
+    results: state.results.value, file: state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: state.losatCache.value, evidence: state.proteinIdentityManifest.value,
     undo: history.getUndoCount(), redo: history.getRedoCount(),
     config: JSON.stringify(config.buildConfigData(state.activeDrawing()))
@@ -41,7 +41,7 @@ const intact = page => page.evaluate(async () => {
     request: before.request === config.getCommittedCanonicalRenderRequest(),
     resources: before.resources === config.getCommittedCanonicalSession()?.resources,
     results: before.results === state.results.value,
-    file: before.file === state.files.c_gb,
+    file: before.file === state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb,
     cache: before.cache === state.losatCache.value,
     evidence: before.evidence === state.proteinIdentityManifest.value,
     history: before.undo === history.getUndoCount() && before.redo === history.getRedoCount(),
@@ -315,10 +315,11 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const text = readFileSync('tests/fixtures/sessions/cli-web-mito.gb', 'utf8');
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
     app.sessionTitle = 'Private draft';
-    app.linearSeqs[0].gb = new File([text, text], 'two-records.gb');
+    app.linearSeqs[0].gb = bound(new File([text, text], 'two-records.gb'));
     window.draftSource = app.linearSeqs[0];
     window.privateSaveEvents = [];
     window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent: event => {

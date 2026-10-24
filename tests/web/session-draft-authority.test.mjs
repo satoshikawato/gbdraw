@@ -67,16 +67,13 @@ const { createLegendCanvasActions } = await import(
 const { createSessionImportRollbackState } = await import(
   '../../gbdraw/web/js/app/app-setup.js'
 );
-const { runRecordDiscoveryWatcher } = await import(
-  '../../gbdraw/web/js/app/watchers.js'
-);
 
 const compactActiveIntentSnapshot = () => ({
   modeAndInput: {
     mode: state.mode.value,
     inputType: state.mode.value === 'circular'
-      ? state.cInputType.value
-      : state.lInputType.value
+      ? modeDrawing(state, 'circular').inputType.value
+      : modeDrawing(state, 'linear').inputType.value
   },
   palette: {
     selected: state.activeDrawing().selectedPalette.value,
@@ -594,7 +591,7 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   hasCommittedComparison: true
 });
 assert.equal(state.results.value.length, divergentSession.results.length);
-assert.deepEqual(state.files.linearCanonicalComparisons, []);
+assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
   mode: 'adjacent',
@@ -1118,16 +1115,17 @@ state.matchSequenceRegistry.reset([{
   recordIndex: 0,
   sourceIndex: null
 }]);
-state.circularRecordList.value = [{
+const circularDrawing = modeDrawing(state, 'circular');
+circularDrawing.circularRecordList.value = [{
   selector: '#1',
   record_id: 'KEEP.1',
   record_length: 8
 }];
-Object.assign(state.circularRecordDiscovery, {
+Object.assign(circularDrawing.circularRecordDiscovery, {
   status: 'ready',
   error: '',
   inputType: 'gb',
-  primaryFile: state.files.c_gb,
+  primaryFile: circularDrawing.files.c_gb,
   pairedFile: null
 });
 const diagramElement = { id: 'keep-diagram-element' };
@@ -1165,7 +1163,7 @@ const selectedPairwiseBlockOrthogroupId = { value: 'keep-orthogroup' };
 const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const artifactSlots = createArtifactSlotStore();
-artifactSlots.replaceLoaded(stashedLinearArtifact);
+artifactSlots.replaceLoaded([stashedLinearArtifact]);
 const displayedArtifact = Object.freeze({ drawingId: 'circular' });
 const installedArtifacts = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
@@ -1227,8 +1225,8 @@ const rollbackState = () => ({
   featureExtractionError: state.featureExtractionError.value,
   featureEditorStatus: structuredClone(state.featureEditorStatus),
   matchSequenceSources: structuredClone(state.matchSequenceRegistry.values()),
-  circularRecordList: structuredClone(state.circularRecordList.value),
-  circularRecordDiscovery: { ...state.circularRecordDiscovery },
+  circularRecordList: structuredClone(circularDrawing.circularRecordList.value),
+  circularRecordDiscovery: { ...circularDrawing.circularRecordDiscovery },
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
   diagramElementOriginalTransforms: [...state.diagramElementOriginalTransforms.value],
@@ -1250,39 +1248,6 @@ const rollbackState = () => ({
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
 });
 
-const recordDiscoveryDerivedState = {
-  multiRecordPositions: [{ selector: 'KEEP.1', row: 2 }],
-  circularRecords: ['KEEP.1'],
-  linearSelectorCache: ['KEEP.1']
-};
-const expectedRecordDiscoveryDerivedState = structuredClone(
-  recordDiscoveryDerivedState
-);
-state.sessionImportRollbackInProgress.value = true;
-let guardedRecordDiscoveryResult;
-let recordDiscoveryGeneration = 0;
-try {
-  guardedRecordDiscoveryResult = await runRecordDiscoveryWatcher({
-    rollbackInProgress: state.sessionImportRollbackInProgress,
-    semanticWatchersSuppressed: state.semanticFileWatchersSuppressed,
-    refresh: async ({ suppress }) => {
-      recordDiscoveryGeneration += 1;
-      if (suppress) return;
-      recordDiscoveryDerivedState.multiRecordPositions = [];
-      recordDiscoveryDerivedState.circularRecords = [];
-      recordDiscoveryDerivedState.linearSelectorCache = [];
-      throw new Error('injected restored-file reparse failure');
-    }
-  });
-} finally {
-  state.sessionImportRollbackInProgress.value = false;
-}
-assert.equal(guardedRecordDiscoveryResult, false);
-assert.equal(recordDiscoveryGeneration, 1);
-assert.deepEqual(
-  recordDiscoveryDerivedState,
-  expectedRecordDiscoveryDerivedState
-);
 // F-1 (R11): the rollback installs the captured state as it was, so unset
 // slot sides, lane directions, and axis indexes stay unset and the Result's
 // named stroke color stays named.
@@ -1328,7 +1293,7 @@ try {
       afterLoad: async () => {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
-        artifactSlots.replaceLoaded(null);
+        artifactSlots.replaceLoaded([]);
         depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;

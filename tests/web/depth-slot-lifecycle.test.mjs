@@ -64,7 +64,7 @@ const MODES = {
   circular: {
     create: (rows, sourced, width) => {
       const state = {
-        mode: { value: 'circular' },
+        mode: 'circular',
         form: { track_type: 'tuckin', show_depth: true, suppress_gc: false, suppress_skew: true, show_scale: true, separate_strands: true },
         adv: {
           circular_track_slots_enabled: true,
@@ -92,11 +92,11 @@ const MODES = {
         circularRecordList: { value: [] }
       };
       const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
-      editor.normalizeCircularTrackSlots();
+      editor.normalizeCircularTrackSlots(state);
       return {
         state,
         slots: () => state.adv.circular_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(() => {
+        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(state, () => {
           state.files.c_depth = sourceRow(nextSourced, nextWidth);
         }),
         issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
@@ -107,7 +107,7 @@ const MODES = {
   linear: {
     create: (rows, sourced, width) => {
       const state = {
-        form: { linear_track_layout: 'middle', show_depth: true, show_gc: true, show_skew: false },
+        mode: 'linear', form: { linear_track_layout: 'middle', show_depth: true, show_gc: true, show_skew: false },
         adv: {
           nt: 'GC',
           linear_track_slots_enabled: true,
@@ -129,7 +129,7 @@ const MODES = {
       return {
         state,
         slots: () => state.adv.linear_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(() => {
+        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(state, () => {
           // PD-OI-025: clearing a source keeps the logical series width.
           state.linearSeqs[0].depth = sourceRow(nextSourced, nextWidth);
         }),

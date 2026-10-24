@@ -20,8 +20,19 @@ import {
 
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { EncodedFilePayload } from './file-content-cache.js' */
-/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
+/** @import { BoundFileValue, CardInputFiles, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
+/**
+ * What a Session binds of a drawing (`webBindings`): a Circular drawing's input
+ * fields, a Linear drawing's record rows and comparison plan.
+ * @typedef {{
+ *   readonly mode: string, readonly files: Readonly<Partial<DrawingInputFiles>>,
+ *   readonly linearSeqs: readonly Readonly<LinearSeq>[],
+ *   readonly linearComparisonPlan?: { readonly edges?: readonly LinearComparisonEdge[] } | null
+ * }} SessionBindingDrawing
+ */
 /** @import { LinearComparisonEdge } from './linear-comparisons.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 /**
  * What the allocator reads of a resource's source: a Session resource
@@ -183,17 +194,22 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * allocated through the same content-deduplicating allocator, so equal bytes
  * share one resource and a positional ID that names different bytes in the
  * two requests gets a new ID; each request's references are rewritten.
- * `state` holds the Files and the Linear records; `drawing` holds the Linear
- * comparison plan, whose uploaded comparison files the Session also binds.
+ * `state` holds the card files and the store. A Session 48 binds one input
+ * set: the Circular drawing of `drawings` gives its input fields, the Linear
+ * drawing its records and comparison plan, whose uploaded comparison files
+ * the Session also binds.
  * @param {Record<string, any>} state
  * @param {Record<string, any> | null} committedRequest
- * @param {Record<string, any>} [drawing]
+ * @param {readonly SessionBindingDrawing[]} [drawings] `state.drawingList()`
  * @param {Record<string, any> | null} [otherCommittedRequest]
  */
-export const buildSessionResources = async (state, committedRequest, drawing, otherCommittedRequest = null) => {
+export const buildSessionResources = async (state, committedRequest, drawings = [], otherCommittedRequest = null) => {
+  const circularFiles = drawings.find((drawing) => drawing.mode === 'circular')?.files ?? {};
+  const linearDrawing = drawings.find((drawing) => drawing.mode === 'linear');
+  const linearSeqs = linearDrawing?.linearSeqs ?? [];
   if (
     committedRequest === null
-      ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
+      ? hasBiologicalSessionInputs({ ...circularFiles, linearSeqs })
         || Boolean(state?.results?.value?.length)
       : (!committedRequest
         || typeof committedRequest !== 'object'
@@ -440,8 +456,14 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   const bindSource = async (source, metadata) => bindingForFile(
     metadata, await allocate(source, metadata, source.resourceId)
   );
-  /** @param {FileLike | null | undefined} file */
-  const bindFile = async file => {
+  /** @type {Pick<InputFileStore, 'fileOf'>} */
+  const inputFiles = state.inputFiles;
+  /**
+   * The binding of one input file: a binding names it by ref (`state.inputFiles`).
+   * @param {InputFileRef | null | undefined} ref
+   */
+  const bindFile = async (ref) => {
+    const file = inputFiles.fileOf(ref);
     if (!file) return null;
     const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
     if (Array.isArray(source?.descriptors)) {
@@ -459,21 +481,20 @@ export const buildSessionResources = async (state, committedRequest, drawing, ot
   };
 
   /**
-   * @param {FileLike | FileLike[] | null | undefined} value
+   * @param {BoundFileValue} value
    * @returns {Promise<unknown>}
    */
   const bindFileValue = async (value) => {
     if (Array.isArray(value)) {
       return Promise.all(value.map((item) => bindFileValue(item)));
     }
-    return bindFile(value);
+    // `Array.isArray` does not narrow a readonly list out of the union.
+    return bindFile(/** @type {InputFileRef | null | undefined} */ (value));
   };
 
-  const files = state?.files || {};
-  const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const linearComparisons = Array.isArray(drawing?.linearComparisonPlan?.edges)
-    ? drawing.linearComparisonPlan.edges
-    : [];
+  /** @type {Readonly<Partial<DrawingInputFiles> & Partial<CardInputFiles>>} */
+  const files = { ...circularFiles, ...state.cardFiles };
+  const linearComparisons = linearDrawing?.linearComparisonPlan?.edges ?? [];
 
   const bindings = {
     schema: 2,

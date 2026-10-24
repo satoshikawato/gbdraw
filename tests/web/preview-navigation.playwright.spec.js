@@ -3,6 +3,7 @@ const { join } = require('node:path');
 const { writeFile } = require('node:fs/promises');
 const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { seeds, generate, switchMode } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const geometry = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
@@ -494,11 +495,11 @@ test('the Preview feature search is kept per diagram mode', async ({ page }) => 
     query: window.__GBDRAW_APP__.previewFeatureSearchQuery
   }));
 
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   expect(await searchState()).toEqual({ input: '', query: '' });
 
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'circular' });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
   await expect(search).toHaveValue('tRNA');
   expect(await searchState()).toEqual({ input: 'tRNA', query: 'tRNA' });

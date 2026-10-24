@@ -54,7 +54,8 @@ def test_sessions_that_python_upgrades_match_the_description() -> None:
     upgraded = 0
     problems: dict[str, list[str]] = {}
     for name, session in _stored_sessions():
-        if session.get("version") == CURRENT_SESSION_VERSION:
+        # A Session 49 is newer than the current version until the flip; its band checks it.
+        if isinstance(session.get("version"), int) and session["version"] >= CURRENT_SESSION_VERSION:
             continue
         try:
             document = upgrade_session_document(session).document
@@ -302,7 +303,7 @@ def test_every_supported_version_has_an_admission_band_and_a_base() -> None:
     assert [band["minVersion"] for band in ADMISSION["bands"]] == [
         min(session_io.SUPPORTED_SESSION_VERSIONS), session_io.CANONICAL_SESSION_MIN_VERSION,
         session_io.CURRENT_ARTIFACT_SESSION_MIN_VERSION, session_io.CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-        session_io.MODE_SCOPED_SESSION_MIN_VERSION,
+        session_io.MODE_SCOPED_SESSION_MIN_VERSION, session_io.DRAWINGS_SESSION_MIN_VERSION,
     ]
     based = {session["version"] for _name, session in _admission_bases()}
     assert session_io.SUPPORTED_SESSION_VERSIONS - based <= VERSIONS_WITHOUT_A_BASE

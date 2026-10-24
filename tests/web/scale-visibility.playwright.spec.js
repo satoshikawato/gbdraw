@@ -43,13 +43,14 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   await openApp(page);
 
   await page.evaluate(async (genbankText) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
+    app.setCircularInputType('gb');
+    app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 1
-    });
+    }));
     app.form.show_scale = true;
     app.form.labels_mode = 'none';
     app.setCircularTrackSlotsEnabled(false);
@@ -113,7 +114,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 2
@@ -164,13 +165,14 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   await openApp(page);
 
   await page.evaluate(async (genbankText) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
+    app.setCircularInputType('gb');
+    app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 31
-    });
+    }));
     app.adv.features.splice(0, app.adv.features.length, 'CDS');
     app.form.labels_mode = 'none';
     app.form.suppress_gc = true;
@@ -242,7 +244,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
       lastModified: 32

@@ -4,14 +4,15 @@ const { gunzipSync } = require('node:zlib');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { buildConfigData, getCommittedCanonicalSession } = await import('./js/services/config.js');
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.files[key])),
-    linearSources: s.linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
+    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.drawingOfMode('circular').files[key])),
+    linearSources: s.drawingOfMode('linear').linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
   };
@@ -136,9 +137,9 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     assertSourceFree(await snapshot(page));
     await (await reveal(page.locator('#circular-label-mode'))).selectOption('both');
     await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
-    await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: 'linear' });
     await (await reveal(page.locator('#linear-show-labels'))).selectOption('all');
-    await page.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(page, { kind: 'circular' });
     const before = await snapshot(page);
     expect(before.config.form.labels_mode).toBe('both');
     expect(before.config.form.track_type).toBe('middle');
@@ -175,9 +176,9 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const again = await save(restored, testInfo, 'second');
     expect(again.document.modes).toEqual(saved.document.modes);
     expect(again.document.resources).toEqual(saved.document.resources);
-    await restored.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(restored, { kind: 'linear' });
     expect((await snapshot(restored)).config.form.show_labels_linear).toBe('all');
-    await restored.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.form.labels_mode).toBe('both');
     await assertDiagramWorkerIdle(restored);
     // Original J08's real source/Generate/Undo/Redo suffix, with restored
@@ -188,7 +189,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     await restored.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(
       path.join(process.cwd(), 'tests/fixtures/sessions/cli-web-mito.gb'));
     await restored.waitForFunction(async () =>
-      (await import('./js/state.js')).state.circularRecordDiscovery.status !== 'loading');
+      (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status !== 'loading');
     await generateAndWaitForResult(restored);
     const generated = await snapshot(restored);
     expect(generated.committed.renderRequest.diagramOptions.configOverrides['canvas.circular.track_type']).toBe('middle');
@@ -236,7 +237,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // Save writes the loaded Gallery request (schema 8) in the current schema.
   const promoted = { ...committed, schema: CURRENT_REQUEST_SCHEMA,
     diagramOptions: { ...committed.diagramOptions, featureOverrides: [] } };
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await settle(page);
   const inactive = await snapshot(page);
   expect(inactive.circularSources[0]).toBe(true);
@@ -322,13 +323,14 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   await openApp(page);
   // Distinct explicit values in each mode's drawing.
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#13579b'; });
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await (await reveal(page.locator('#linear-show-labels'))).selectOption('all');
   await page.evaluate(() => { window.__GBDRAW_APP__.adv.axis_stroke_color = '#2468ac'; });
   // Empty input rows can carry auxiliary depth files and retain their identity.
   await page.getByRole('button', { name: 'Add sequence', exact: true }).first().click();
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.linearSeqs[1].depth = new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 });
+  await page.evaluate(async () => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    window.__GBDRAW_APP__.linearSeqs[1].depth = bound(new File(['chr1\t1\t10\n'], 'depth.tsv', { lastModified: 123 }));
   });
   const bytes = Buffer.from('CDS\tgene,product,locus_tag\r\n');
   await page.getByLabel('Priority File (TSV)', { exact: true }).setInputFiles({
@@ -354,9 +356,9 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
     expect(again.document.modes).toEqual(original.document.modes);
     expect(again.document.webFiles).toEqual(original.document.webFiles);
     expect(again.document.resources).toEqual(original.document.resources);
-    await restored.getByRole('button', { name: 'Circular', exact: true }).click();
+    await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#13579b');
-    await restored.getByRole('button', { name: 'Linear', exact: true }).click();
+    await showDrawing(restored, { kind: 'linear' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#2468ac');
     await assertDiagramWorkerIdle(restored);
   } finally { await context.close(); }

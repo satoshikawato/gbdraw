@@ -47,7 +47,7 @@ for (const filename of [
 }
 
 const { createHistoryManager, createHistoryRouter } = await import(pathToFileURL(join(tempDir, 'services', 'history.js')));
-const { createHistoryFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
+const { createInputFileStore } = await import(pathToFileURL(join(tempDir, 'services', 'history-files.js')));
 const { createHistorySnapshotService } = await import(
   pathToFileURL(join(tempDir, 'services', 'history-snapshot.js'))
 );
@@ -775,16 +775,16 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const file = makeFile('a.gb', 100);
-  const first = fileStore.describeFile(file);
-  const second = fileStore.describeFile(file);
+  const first = fileStore.registerFile(file);
+  const second = fileStore.registerFile(file);
   assert.equal(first.fileId, second.fileId);
 
   let currentFile = file;
-  const buildState = async () => ({ file: fileStore.describeFile(currentFile) });
+  const buildState = async () => ({ file: fileStore.registerFile(currentFile) });
   const applyState = async (snapshot) => {
-    currentFile = fileStore.restoreFile(snapshot.file);
+    currentFile = fileStore.fileOf(snapshot.file);
   };
   const history = createHistoryManager({
     maxActions: 0,
@@ -975,7 +975,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const file = makeFile('restore.gb', 25);
   const proteinTable = makeFile('resolved-protein.tsv', 40);
   const orthogroupsJson = makeFile('orthogroups.json', 50);
@@ -1045,31 +1045,31 @@ const createLayoutPreferences = () => ({
       ]
     },
     files: {
-      c_gb: file,
+      c_gb: fileStore.registerFile(file),
       c_gff: null,
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [null, makeFile('comparison-2.fa', 30)],
+      c_conservation_fastas: [null, fileStore.registerFile(makeFile('comparison-2.fa', 30))],
       linearCanonicalComparisons: [
         {
           kind: 'precomputedProteinComparison',
           encoding: 'canonicalTsv',
           queryRecordIndex: 0,
           subjectRecordIndex: 2,
-          file: proteinTable
+          file: fileStore.registerFile(proteinTable)
         },
         {
           kind: 'orthogroupResult',
           encoding: 'canonicalJson',
-          file: orthogroupsJson
+          file: fileStore.registerFile(orthogroupsJson)
         },
         {
           kind: 'collinearityResult',
           encoding: 'canonicalJson',
           valueKind: 'blocks',
-          file: collinearityJson
+          file: fileStore.registerFile(collinearityJson)
         },
         {
           kind: 'generatedProteinComparison',
@@ -1077,13 +1077,9 @@ const createLayoutPreferences = () => ({
           pairs: [],
           settings: { alignOrthogroupFeature: 'feature-anchor' }
         }
-      ],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      ]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [
       { uid: 'record-a', gb: null, gff: null, fasta: null, depth: null },
       { uid: 'record-b', gb: null, gff: null, fasta: null, depth: null }
@@ -1099,7 +1095,7 @@ const createLayoutPreferences = () => ({
         fileActive: true,
         losatFilenameActive: true,
         source: 'upload',
-        file: comparisonUpload,
+        file: fileStore.registerFile(comparisonUpload),
         losatFilename: 'custom-query.fna'
       }]
     },
@@ -1252,30 +1248,30 @@ const createLayoutPreferences = () => ({
   assert.equal(state.form.show_scale, true);
   assert.equal(state.results.value, stableResults);
   assert.equal(state.extractedFeatures.value, stableExtractedFeatures);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   const serializedAfterConfigUndo = await snapshots.drawingHistory('linear').buildCheckpoint();
   assert.equal(
-    fileStore.restoreValue(serializedAfterConfigUndo.files.linearComparisons[0].file),
+    fileStore.fileOf(serializedAfterConfigUndo.files.linearComparisons[0].file),
     comparisonUpload
   );
   await history.redo();
   assert.equal(state.form.show_scale, false);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   await history.undo();
   assert.equal(state.form.show_scale, true);
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
 
   const replacementComparisonUpload = makeFile('replacement-comparison.tsv', 39);
   await history.runUndoable('Replace comparison upload', () => {
-    state.linearComparisonPlan.edges[0].file = replacementComparisonUpload;
+    state.linearComparisonPlan.edges[0].file = fileStore.registerFile(replacementComparisonUpload);
   });
-  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
   await history.undo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
   await history.redo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, replacementComparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), replacementComparisonUpload);
   await history.undo();
-  assert.equal(state.linearComparisonPlan.edges[0].file, comparisonUpload);
+  assert.equal(fileStore.fileOf(state.linearComparisonPlan.edges[0].file), comparisonUpload);
 
   await history.runUndoable('Edit arrow geometry', () => {
     state.adv.arrow_head_length_ratio = 2;
@@ -1354,7 +1350,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   let pendingModeReset = false;
   const mode = {
     _value: 'circular',
@@ -1375,13 +1371,9 @@ const createLayoutPreferences = () => ({
       c_fasta: null,
       c_depth: null,
       c_conservation_blasts: [],
-      c_conservation_fastas: [],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      c_conservation_fastas: []
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [],
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -1537,7 +1529,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   let forbiddenArtifactBuilds = 0;
   const state = {
     form: { setting: 1 },
@@ -1550,14 +1542,10 @@ const createLayoutPreferences = () => ({
       c_conservation_blasts: [],
       c_conservation_blasts_source: 'losat-cache',
       c_conservation_fastas: [],
-      c_conservation_sequence_sources: [makeFile('generated-source.fa', 9_000_000)],
-      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+      c_conservation_sequence_sources: [fileStore.registerFile(makeFile('generated-source.fa', 9_000_000))],
+      linearCanonicalComparisons: [{ kind: 'generated', pairs: ['x'.repeat(100_000)] }]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([{ name: 'large.svg', content: '<svg>' + 'x'.repeat(100_000) + '</svg>' }]),
@@ -1642,7 +1630,7 @@ const createLayoutPreferences = () => ({
   assert.deepEqual(intent.files.c_conservation_blasts, []);
   assert.deepEqual(
     Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
-    ['fileId', 'lastModified', 'name', 'size', 'type']
+    ['fileId', 'lastModified', 'name', 'size', 'sourceId', 'type']
   );
 
   // B21: with uploaded BLAST rows, the optional comparison sequence is a user
@@ -1657,9 +1645,10 @@ const createLayoutPreferences = () => ({
   // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
   // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
   // and their comparison sequences with the ring files.
-  const derivedBlasts = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.losatn.tsv`, 60));
-  const derivedSources = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
-  const ringFastas = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  // The bindings hold refs of the store, as the app's writers bind them.
+  const derivedBlasts = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.losatn.tsv`, 60)));
+  const derivedSources = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
+  const ringFastas = ['b', 'c', 'd'].map((id) => fileStore.registerFile(makeFile(`comparison-${id}.fasta`, 1234)));
   Object.assign(state.files, {
     c_conservation_blasts: [...derivedBlasts],
     c_conservation_blasts_source: 'losat-cache',
@@ -1699,7 +1688,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const circularPrimary = makeFile('circular-primary.gb', 101);
   const circularDepth = makeFile('circular-depth.tsv', 102);
   const conservationBlast = makeFile('derived-conservation.tsv', 103);
@@ -1725,40 +1714,38 @@ const createLayoutPreferences = () => ({
     canonicalOrthogroups,
     canonicalCollinearity
   ];
-  const retainedIds = retainedFiles.map((file) => fileStore.describeFile(file).fileId);
-  const unreferencedId = fileStore.describeFile(unreferenced).fileId;
+  const retainedIds = retainedFiles.map((file) => fileStore.registerFile(file).fileId);
+  const unreferencedId = fileStore.registerFile(unreferenced).fileId;
+  // The bindings hold the store's refs, as the app's writers bind them.
+  const ref = (file) => fileStore.registerFile(file);
   const state = {
     files: {
-      c_gb: circularPrimary,
+      c_gb: ref(circularPrimary),
       c_gff: null,
       c_fasta: null,
-      c_depth: [circularDepth],
-      c_conservation_blasts: [conservationBlast],
+      c_depth: [ref(circularDepth)],
+      c_conservation_blasts: [ref(conservationBlast)],
       c_conservation_blasts_source: 'losat-cache',
-      c_conservation_fastas: [conservationFasta],
-      c_conservation_sequence_sources: [conservationSequenceSource],
+      c_conservation_fastas: [ref(conservationFasta)],
+      c_conservation_sequence_sources: [ref(conservationSequenceSource)],
       linearCanonicalComparisons: [
-        { kind: 'precomputedProteinComparison', file: canonicalProtein },
-        { kind: 'orthogroupResult', file: canonicalOrthogroups },
-        { kind: 'collinearityResult', file: canonicalCollinearity }
-      ],
-      d_color: null,
-      t_color: null,
-      blacklist: null,
-      whitelist: null,
-      qualifier_priority: null
+        { kind: 'precomputedProteinComparison', file: ref(canonicalProtein) },
+        { kind: 'orthogroupResult', file: ref(canonicalOrthogroups) },
+        { kind: 'collinearityResult', file: ref(canonicalCollinearity) }
+      ]
     },
+    cardFiles: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null },
     linearSeqs: [{
       uid: 'linear-a',
-      gb: linearPrimary,
+      gb: ref(linearPrimary),
       gff: null,
       fasta: null,
-      depth: [linearDepth]
+      depth: [ref(linearDepth)]
     }],
     linearComparisonPlan: {
       mode: 'selected',
       defaultSource: 'upload',
-      edges: [{ id: 'edge-a-b', file: linearComparison }]
+      edges: [{ id: 'edge-a-b', file: ref(linearComparison) }]
     }
   };
   let setting = 'loaded';
@@ -1795,11 +1782,12 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const state = {
     form: {},
     adv: {},
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([]),
@@ -1894,7 +1882,7 @@ const createLayoutPreferences = () => ({
 }
 
 {
-  const fileStore = createHistoryFileStore();
+  const fileStore = createInputFileStore();
   const resultA = { name: 'a.svg', content: '<svg id="a" />' };
   const extractedA = [{ svg_id: 'feature-a', payload: 'x'.repeat(100_000) }];
   const biologicalA = [{ biological_feature_id: 'bio-a', payload: 'y'.repeat(100_000) }];
@@ -1916,6 +1904,7 @@ const createLayoutPreferences = () => ({
   }];
   const state = {
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     mode: ref('circular'),
@@ -2077,13 +2066,13 @@ const createLayoutPreferences = () => ({
     // A reused Generate's commit: new Results with the shown groups array.
     const clears = copyFeedbackClears;
     const reusedGenerate = { ...handleA.ownerSet, results: [{ ...resultA }] };
-    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate, { drawing: state.activeDrawing() });
     assert.equal(state.orthogroups.value, groupsA);
     assert.equal(copyFeedbackClears, clears + 1);
     // Installing the shown owner set again (a rollback before activation): no clear.
-    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate);
+    snapshots.installGeneratedArtifactOwnerSet(reusedGenerate, { drawing: state.activeDrawing() });
     assert.equal(copyFeedbackClears, clears + 1);
-    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet);
+    snapshots.installGeneratedArtifactOwnerSet(handleA.ownerSet, { drawing: state.activeDrawing() });
     assert.equal(copyFeedbackClears, clears + 2);
     assert.equal(state.results.value, handleA.ownerSet.results);
   }
@@ -2118,7 +2107,7 @@ const createLayoutPreferences = () => ({
   state.zoom.value = 1;
   state.canvasPan.x = 0;
 
-  const originalOwnerSet = snapshots.captureGeneratedArtifactOwnerSet();
+  const originalOwnerSet = snapshots.captureGeneratedArtifactOwnerSet(state.activeDrawing());
   const poisonResult = { name: 'poison.svg' };
   Object.defineProperty(poisonResult, 'content', {
     get() { throw new Error('Result content must not be read during capture.'); }
@@ -2191,6 +2180,7 @@ const createLayoutPreferences = () => ({
   );
   let installedResults = null;
   snapshots.installGeneratedArtifactOwnerSet(originalOwnerSet, {
+    drawing: state.activeDrawing(),
     installResults: (nextResults) => {
       installedResults = nextResults;
       state.results.value = nextResults;
@@ -2318,6 +2308,7 @@ const createLayoutPreferences = () => ({
   await snapshots.restoreGeneratedArtifactHandle(handleA);
   const installAuthorityOwnersB = () => {
     snapshots.installGeneratedArtifactOwnerSet(handleB.ownerSet, {
+      drawing: state.activeDrawing(),
       selectedResultIndex: handleB.mutableIntent.ui.selectedResultIndex
     });
     snapshots.setGeneratedArtifactIdentity({
@@ -2519,7 +2510,7 @@ for (const previousSuppressed of [false, true]) {
   const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createHistoryFileStore(),
+    fileStore: createInputFileStore(),
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);
       throw new Error('restore did not settle');
@@ -3423,6 +3414,7 @@ for (const previousSuppressed of [false, true]) {
     form: {},
     adv: {},
     files: {},
+    cardFiles: {},
     linearSeqs: [],
     linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] },
     results: ref([]),
@@ -3456,7 +3448,7 @@ for (const previousSuppressed of [false, true]) {
   };
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
-    fileStore: createHistoryFileStore(),
+    fileStore: createInputFileStore(),
     nextTick: async () => {},
     buildConfigData: () => ({ form: state.form, adv: state.adv })
   });
@@ -3507,7 +3499,7 @@ for (const previousSuppressed of [false, true]) {
   const fileA = makeFile('a.gb', 10);
   const fileB = makeFile('b.gb', 10);
   const makeRouter = (maxBytes) => {
-    const fileStore = createHistoryFileStore();
+    const fileStore = createInputFileStore();
     const shown = ref('linear');
     const values = { circular: '', linear: '' };
     const files = { circular: null, linear: null };
@@ -3523,11 +3515,11 @@ for (const previousSuppressed of [false, true]) {
       managerOptions: (drawingId) => {
         const buildState = () => ({
           value: values[drawingId],
-          file: files[drawingId] ? fileStore.describeFile(files[drawingId]) : null
+          file: files[drawingId] ? fileStore.registerFile(files[drawingId]) : null
         });
         const applyState = (snapshot) => {
           values[drawingId] = snapshot.value;
-          files[drawingId] = snapshot.file ? fileStore.restoreFile(snapshot.file) : null;
+          files[drawingId] = snapshot.file ? fileStore.fileOf(snapshot.file) : null;
         };
         return { buildIntent: buildState, applyIntent: applyState, buildCheckpoint: buildState, applyCheckpoint: applyState };
       }
@@ -3662,4 +3654,29 @@ for (const previousSuppressed of [false, true]) {
   await redoing;
   assert.equal(router.traversalPending(), false);
   console.log('history router traversal pending tests passed');
+}
+
+// A Generate handle restores its owner set into the drawing that owns the
+// handle (`handle.drawingId`), not into a drawing named by the owner set's
+// `generatedMode`: a handle without that key keeps its drawing.
+{
+  const drawingFixture = (id) => ({
+    id, mode: id, manualSpecificRules: [], pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+  });
+  const circular = drawingFixture('circular');
+  const linear = drawingFixture('linear');
+  const state = withModeDrawings({
+    mode: ref('linear'), results: ref([]), generatedMode: ref(null), semanticFileWatchersSuppressed: ref(false),
+    files: {}, cardFiles: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
+  }, { circular, linear });
+  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), nextTick: async () => {} });
+  const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };
+  linear.manualSpecificRules.push(rule);
+  const handle = snapshots.captureGeneratedArtifactHandle(state.drawingOf('linear'));
+  assert.equal(handle.ownerSet.generatedMode, null);
+  assert.deepEqual(handle.ownerSet.specificRules, [rule], 'the handle holds the rules of its drawing');
+  linear.manualSpecificRules.splice(0);
+  await snapshots.restoreGeneratedArtifactHandle(handle);
+  assert.deepEqual([linear.manualSpecificRules, circular.manualSpecificRules], [[rule], []]);
+  console.log('history owner set drawing tests passed');
 }

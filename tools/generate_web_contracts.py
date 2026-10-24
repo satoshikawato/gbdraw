@@ -75,6 +75,7 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("EXPECTED_WEB_RUNTIME_CAPABILITIES", "gbdraw.web_support.capabilities", "get_web_runtime_capabilities"),
     ("CONFIG_UNSET_NUMBER_PATHS", "gbdraw.config.modify", "config_paths_reading_unset_spellings"),
     ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
+    ("SESSION_DRAWINGS_LAYOUT", "gbdraw.session_drawings", "describe_session_drawings_layout"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's
@@ -156,6 +157,42 @@ def _literal_field_declaration(web_name: str, owner: type, field_name: str) -> s
     )
 
 
+# The Web reads Sessions up to CURRENT_SESSION_VERSION; Python may read a later
+# version first (Session 49 before the flip, B2d-3, D-15-81). So every generated
+# value that lists Session versions stops at CURRENT_SESSION_VERSION: these
+# version-keyed constants and the admission bands. At the flip the cut is a
+# no-op (no supported version is newer than the current one); remove it then.
+_SESSION_VERSION_KEYED = frozenset({"SUPPORTED_SESSION_VERSIONS", "FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION"})
+
+
+def web_session_versions(value: Any) -> Any:
+    """``value`` (a set of Session versions, or a mapping keyed by them) without
+    the versions newer than the Web reads."""
+    from gbdraw.session_io import CURRENT_SESSION_VERSION
+
+    if isinstance(value, dict):
+        return {version: item for version, item in value.items() if version <= CURRENT_SESSION_VERSION}
+    return frozenset(version for version in value if version <= CURRENT_SESSION_VERSION)
+
+
+def web_session_admission() -> dict[str, Any]:
+    """describe_session_admission() without the bands of versions the Web does not read yet."""
+    from gbdraw.session_contract import describe_session_admission
+
+    admission = describe_session_admission()
+    bands = [band for band in admission["bands"] if web_session_versions(band["versions"])]
+    reachable: set[str] = set()
+    pending = [band["root"] for band in bands]
+    while pending:
+        name = pending.pop()
+        if name not in reachable:
+            reachable.add(name)
+            pending.extend(_references(admission["types"][name]))
+    return {**admission, "bands": bands, "types": {
+        name: shape for name, shape in admission["types"].items() if name in reachable
+    }}
+
+
 def render_web_contracts_module() -> str:
     parts = [
         "// @ts-check\n"
@@ -164,6 +201,8 @@ def render_web_contracts_module() -> str:
     ]
     for web_name, module, name in _CONSTANTS:
         value = getattr(importlib.import_module(module), name)
+        if name in _SESSION_VERSION_KEYED:
+            value = web_session_versions(value)
         parts.append(_owner(module, name) + _declaration(web_name, value))
     for web_name, module, name in _DERIVED:
         value = getattr(importlib.import_module(module), name)()
@@ -298,12 +337,12 @@ def _references(shape: object) -> set[str]:
 
 
 def render_session_typedefs_module() -> str:
-    from gbdraw.session_contract import describe_session_admission, describe_session_document
+    from gbdraw.session_contract import describe_session_document
     from gbdraw.session_request_codec import describe_canonical_request
 
     description = describe_session_document()
     types = description["types"]
-    admission = describe_session_admission()
+    admission = web_session_admission()
     shared = set(types) & set(admission["types"])
     if shared:
         raise RuntimeError(f"The admission description reuses writer type name(s): {sorted(shared)}")
@@ -407,10 +446,8 @@ def render_request_shape_module() -> str:
 
 
 def render_session_shape_module() -> str:
-    from gbdraw.session_contract import describe_session_admission
-
     return render_description_module(
-        describe_session_admission(),
+        web_session_admission(),
         export_name="SESSION_ADMISSION_DESCRIPTION",
         owner="describe_session_admission() in gbdraw/session_contract.py",
         description_type="BandedContractDescription",

@@ -26,12 +26,12 @@ for (const sample of cases) {
       const values = { d_color: a.currentColors.CDS, t_color: a.manualSpecificRules,
         qualifier_priority: a.manualPriorityRules, whitelist: a.manualWhitelist,
         blacklist: a.manualBlacklist };
-      return { file: a.files[key]?.name || null, value: JSON.parse(JSON.stringify(values[key])) };
+      return { file: a.cardFiles[key]?.name || null, value: JSON.parse(JSON.stringify(values[key])) };
     }, sample.key);
     const before = await inspect();
     const expected = sample.key === 'blacklist' ? `${before.value}, mygene` : sample.expected;
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: 'import.tsv', mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
-    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles[key]); }, sample.key);
     await expect.poll(inspect).toEqual({ file: 'import.tsv', value: expected });
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
@@ -71,7 +71,7 @@ for (const sample of removeCases) {
         whitelist: () => a.manualWhitelist.map((rule) => [rule.key, rule.importedFrom ?? null]),
         blacklist: () => a.manualBlacklist
       };
-      return { file: a.files[key]?.name || null, value: values[key]() };
+      return { file: a.cardFiles[key]?.name || null, value: values[key]() };
     }, sample.key);
     // A hand edit before the load.
     await evaluateWithRetainedPromise(page, async (key) => {
@@ -100,7 +100,7 @@ for (const sample of removeCases) {
     }, sample.key);
     const before = await inspect();
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: 'import.tsv', mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
-    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles[key]); }, sample.key);
     // The card's section may be closed; its file input names the card.
     await reveal(page.getByLabel(sample.label, { exact: true }));
     // A hand edit after the load, of a value the file set where there is one.
@@ -160,7 +160,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
     await a.addSpecificRule();
   });
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'rules.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#123456\tImported\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles.t_color); });
   const loaded = { rules: [['cytochrome', false], ['NADH', true]], legend: ['Hand', 'Imported'] };
   await expect.poll(circular).toEqual(loaded);
   if (drawn) await generate(page);
@@ -168,7 +168,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   await switchMode(page, 'linear');
   await page.evaluate(async (content) => {
     const app = window.__GBDRAW_APP__;
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     if (!app.linearSeqs.length) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'lambda.gbk', { type: 'text/plain', lastModified: 1 }));
     await app.refreshLinearRecordSelectors();
@@ -193,7 +193,7 @@ for (const drawn of [false, true]) test(`Remove on the Specific rules card while
   // One step: Undo brings back the card and the Circular rows.
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   await expect.poll(circular).toEqual(loaded);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.files.t_color?.name ?? null)).toBe('rules.tsv');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.cardFiles.t_color?.name ?? null)).toBe('rules.tsv');
   await page.getByRole('button', { name: 'Redo', exact: true }).click();
   await expect.poll(circular).toEqual(removed);
   // Shown again, the Circular figure is drawn without the file's row.
@@ -228,7 +228,7 @@ test('Reset Settings removes each table card with the settings it loaded, and Un
     const a = window.__GBDRAW_APP__;
     const plain = (value) => JSON.parse(JSON.stringify(value));
     return {
-      files: ['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => a.files[key]?.name || null),
+      files: ['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => a.cardFiles[key]?.name || null),
       values: plain([a.currentColors.CDS, a.manualSpecificRules, a.manualPriorityRules, a.manualWhitelist, a.manualBlacklist])
     };
   });
@@ -241,7 +241,7 @@ test('Reset Settings removes each table card with the settings it loaded, and Un
       if (key === 'blacklist') a.setLabelFilterMode('Blacklist');
     }, sample.key);
     await page.getByLabel(sample.label, { exact: true }).setInputFiles({ name: `${sample.key}.tsv`, mimeType: 'text/plain', buffer: Buffer.from(sample.text) });
-    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files[key]); }, sample.key);
+    await page.evaluate(async (key) => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles[key]); }, sample.key);
   }
   const loaded = await inspect();
   expect(loaded.files).toEqual(['d_color.tsv', 't_color.tsv', 'qualifier_priority.tsv', 'whitelist.tsv', 'blacklist.tsv']);
@@ -269,13 +269,13 @@ test('a slow earlier specific table cannot overwrite a later uploaded table', as
   await upload.setInputFiles({ name: 'older.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#ff0000\tOlder\n') });
   await page.waitForFunction(() => window.__RELEASE_READ__);
   await upload.setInputFiles({ name: 'newer.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#0000ff\tNewer\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles.t_color); });
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules[0]?.cap)).toBe('Newer');
   await page.evaluate(async () => {
     window.__RELEASE_READ__();
     await window.__GBDRAW_APP__.waitForAuxiliaryFileImport(window.__HELD_FILE__);
   });
-  expect(await page.evaluate(() => ({ file: window.__GBDRAW_APP__.files.t_color.name, captions: window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.cap) }))).toEqual({ file: 'newer.tsv', captions: ['Newer'] });
+  expect(await page.evaluate(() => ({ file: window.__GBDRAW_APP__.cardFiles.t_color.name, captions: window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.cap) }))).toEqual({ file: 'newer.tsv', captions: ['Newer'] });
 });
 
 // H-GUI-16: a Specific rules import still applying keeps History's checkpoint
@@ -316,7 +316,7 @@ test('Generate waits for the Specific rules and Priority File imports still appl
   await page.evaluate(async () => {
     const a = window.__GBDRAW_APP__;
     window.__RELEASE__['held-rules.tsv']();
-    await a.waitForAuxiliaryFileImport(a.files.t_color);
+    await a.waitForAuxiliaryFileImport(a.cardFiles.t_color);
   });
   // Generate starts building its request only after the Priority File applies;
   // one that did not wait would start once the rules applied (`generate-start`).
@@ -363,11 +363,11 @@ test('a Priority File uploaded while the Specific rules are evaluated leaves the
   const applied = await page.evaluate(async () => {
     const a = window.__GBDRAW_APP__;
     window.__RELEASE_EVALUATION__();
-    return [await a.waitForAuxiliaryFileImport(a.files.t_color), await a.waitForAuxiliaryFileImport(a.files.qualifier_priority)];
+    return [await a.waitForAuxiliaryFileImport(a.cardFiles.t_color), await a.waitForAuxiliaryFileImport(a.cardFiles.qualifier_priority)];
   });
   expect(applied).toEqual([true, true]);
   expect(await page.evaluate(() => {
     const a = window.__GBDRAW_APP__;
-    return { file: a.files.t_color?.name || null, rules: a.manualSpecificRules.map((rule) => rule.cap), error: a.errorLog };
+    return { file: a.cardFiles.t_color?.name || null, rules: a.manualSpecificRules.map((rule) => rule.cap), error: a.errorLog };
   })).toEqual({ file: 'rules.tsv', rules: ['Imported'], error: null });
 });

@@ -1,0 +1,25 @@
+{
+  "purpose": "Positive fixture of the Session 49 drawings layout (DESIGN §1, D-15-79, D-15-83)",
+  "source": "tests/fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz",
+  "edits": "its settings-only Circular drawing written twice, as circular (active, keeps the five file cards) and circular-2 (the five card slots null); neither drawing has a request",
+  "writer": "gbdraw.session_drawings.write_session_drawings(version=49), resources no drawing names left out",
+  "writerCommit": "the commit that adds this file, on 102283614ccfad399253dbdd0b0446c01c899682 (branch wip/drawings-b2a)",
+  "script": "/home/kawato/gbdraw-baselines/multi-drawing-project-20261007/b2/write_v49_fixtures.py",
+  "command": "PYTHONPATH=$PWD python /home/kawato/gbdraw-baselines/multi-drawing-project-20261007/b2/write_v49_fixtures.py (from the repository root)",
+  "drawings": [
+    {
+      "id": "circular",
+      "name": "Circular",
+      "mode": "circular"
+    },
+    {
+      "id": "circular-2",
+      "name": "Circular 2",
+      "mode": "circular"
+    }
+  ],
+  "activeDrawingId": "circular",
+  "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
+  "decompressedSha256": "67513b93734bc39a8a6133955b70f4bacb34258f63ec5ac9a36f18580d6da265",
+  "sessionVersion": 49
+}

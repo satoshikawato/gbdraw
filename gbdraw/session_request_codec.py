@@ -73,6 +73,7 @@ from gbdraw.session_legacy_values import (
     LEGACY_MULTI_RECORD_SIZE_MODE_RENAMES,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import (
     _LANE_SIDES,
@@ -240,7 +241,6 @@ class _LegacyStandardCollinearityPayload:
         )
 
 
-_RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _TOP_LEVEL_FIELDS = frozenset(
     {"schema", "mode", "records", "diagramOptions", "layout", "comparisons", "output"}
 )
@@ -621,7 +621,7 @@ class CanonicalRequestResource:
     content: bytes | None = None
 
     def __post_init__(self) -> None:
-        if not _RESOURCE_ID_RE.fullmatch(self.resource_id):
+        if not SESSION_ID_RE.fullmatch(self.resource_id):
             raise CanonicalRequestEncodingError(
                 f"Invalid canonical resource ID: {self.resource_id!r}."
             )
@@ -4792,7 +4792,7 @@ def _resolve_resource(
     path: str,
     resource_paths: Mapping[str, str | Path],
 ) -> Path:
-    if not isinstance(resource_id, str) or not _RESOURCE_ID_RE.fullmatch(resource_id):
+    if not isinstance(resource_id, str) or not SESSION_ID_RE.fullmatch(resource_id):
         raise CanonicalRequestDecodingError(f"Invalid resource ID at {path}.")
     if resource_id not in resource_paths:
         raise CanonicalRequestDecodingError(

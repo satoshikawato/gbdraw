@@ -4,8 +4,9 @@ import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
-/** @import { LinearSeq, DiagramMode, SessionBusy } from '../state.js' */
-/** @import { FileLike } from '../services/session-resource-backing.js' */
+/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingId } from '../services/drawing-view.js' */
+/** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
@@ -32,8 +33,8 @@ export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
  * @property {SequenceRecord[]} records
  * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
  * @property {string} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  */
 
 /**
@@ -44,6 +45,7 @@ export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
 
 /** @typedef {Partial<LinearSeq> | null | undefined} LinearSeqLike A row, or a partial one. */
 /** @typedef {{ suppress?: boolean }} RefreshOptions */
+/** @typedef {Pick<DrawingState, 'id' | 'mode' | 'linearSeqs' | 'inputType'>} LinearDiscoveryDrawing The drawing a discovery runs for, over its record rows and input type. */
 /** @typedef {SessionBusy | true | undefined} RefreshOutcome What a refresh settles to: a busy outcome, true when it expanded the rows and restarts, or nothing. */
 
 /** @param {LinearSeqLike} seq */
@@ -99,8 +101,8 @@ const sanitizePathSegment = (value) =>
 /**
  * @typedef {Object} LinearRecordReadRequest
  * @property {string} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  * @property {string} temporaryPathPrefix
  */
 
@@ -109,9 +111,8 @@ const sanitizePathSegment = (value) =>
  * the whole state. The two suppression flags and `sessionOperationAvailability`
  * are absent in a test state.
  * @typedef {object} LinearRecordSelectorState
- * @property {{ value: string }} lInputType
- * @property {{ value: DiagramMode }} mode
- * @property {LinearSeq[]} linearSeqs
+ * @property {() => readonly Pick<DrawingState, 'linearSeqs' | 'inputType'>[]} drawingList every drawing, whose rows
+ *   keep their selector state, each read with its drawing's input type
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
  * @property {{ value: boolean }} [sessionImportRollbackInProgress]
  * @property {() => SessionBusy | null} [sessionOperationAvailability]
@@ -122,8 +123,9 @@ const sanitizePathSegment = (value) =>
  * @property {LinearRecordSelectorState} state
  * @property {(initial: Record<string, RecordSelectorState>) => Record<string, RecordSelectorState>} reactive
  * @property {(request: LinearRecordReadRequest) => Promise<SequenceRecord[]>} recordReader
- * @property {((discovered: { uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
- *   Returns true when it expanded the rows, which restarts the refresh.
+ * @property {((discovered: { drawingId: DrawingId, uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
+ *   The records of one card, for the drawing the discovery ran for. Returns
+ *   true when it expanded the rows, which restarts the refresh.
  * @property {{ warn?: (...args: unknown[]) => void }} [logger]
  */
 
@@ -136,9 +138,11 @@ export const createLinearRecordSelector = ({
   logger = console
 }) => {
   const selectorStateByUid = reactive({});
-  let refreshGeneration = 0;
-  /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null } | null} */
-  let activeRefresh = null;
+  // Each drawing's discovery: its read generation and the refresh still running.
+  /** @type {Map<DrawingId, number>} */
+  const refreshGenerations = new Map();
+  /** @type {Map<DrawingId, { fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }>} */
+  const activeRefreshes = new Map();
   const recordDiscoverySuppressed = () => Boolean(
     state.semanticFileWatchersSuppressed?.value ||
     state.sessionImportRollbackInProgress?.value
@@ -148,10 +152,10 @@ export const createLinearRecordSelector = ({
   const uidFor = (seq) => String(seq?.uid ?? '').trim();
   /**
    * @param {LinearSeqLike} seq
-   * @param {string} [inputType]
-   * @returns {{ primaryFile: FileLike | null, pairedFile: FileLike | null }}
+   * @param {string} inputType the input type of the row's drawing
+   * @returns {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null }}
    */
-  const sourceFilesFor = (seq, inputType = state.lInputType.value) => (
+  const sourceFilesFor = (seq, inputType) => (
     inputType === 'gff'
       ? { primaryFile: seq?.gff || null, pairedFile: seq?.fasta || null }
       : { primaryFile: seq?.gb || null, pairedFile: null }
@@ -163,8 +167,12 @@ export const createLinearRecordSelector = ({
    */
   const stateFor = (seq) => {
     const uid = uidFor(seq);
-    const stored = (uid && selectorStateByUid[uid]) || emptySelectorState();
-    const inputType = state.lInputType.value;
+    // The row's drawing, found by the row's uid: its input type says which
+    // files the row's records come from. A row no drawing holds has none.
+    const drawing = uid ? state.drawingList().find((candidate) => candidate.linearSeqs.some((row) => uidFor(row) === uid)) : undefined;
+    if (!drawing) return emptySelectorState();
+    const stored = selectorStateByUid[uid] || emptySelectorState();
+    const inputType = drawing.inputType.value;
     const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
     if (
       stored.inputType !== inputType ||
@@ -201,8 +209,8 @@ export const createLinearRecordSelector = ({
   // an error the reader reported for those bytes. A refresh reuses it.
   /**
    * @param {string} inputType
-   * @param {FileLike | null} primaryFile
-   * @param {FileLike | null} pairedFile
+   * @param {InputFileRef | null} primaryFile
+   * @param {InputFileRef | null} pairedFile
    */
   const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
     .find((stored) => (
@@ -211,33 +219,38 @@ export const createLinearRecordSelector = ({
     )) || null;
 
   const purgeInactiveState = () => {
-    const activeUids = new Set(state.linearSeqs.map(uidFor).filter(Boolean));
+    const activeUids = new Set(state.drawingList().flatMap((drawing) => drawing.linearSeqs).map(uidFor).filter(Boolean));
     Object.keys(selectorStateByUid).forEach((uid) => {
       if (!activeUids.has(uid)) delete selectorStateByUid[uid];
     });
   };
 
-  /** @param {{ generation: number, uid: string, primaryFile: FileLike | null, pairedFile: FileLike | null, inputType: string }} request */
-  const isCurrentRequest = ({ generation, uid, primaryFile, pairedFile, inputType }) => {
-    if (generation !== refreshGeneration) return false;
+  /**
+   * @param {LinearDiscoveryDrawing} drawing the drawing the discovery runs for
+   * @param {{ generation: number, uid: string, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, inputType: string }} request
+   */
+  const isCurrentRequest = (drawing, { generation, uid, primaryFile, pairedFile, inputType }) => {
+    if (generation !== refreshGenerations.get(drawing.id)) return false;
     if (recordDiscoverySuppressed()) return false;
-    if (state.mode.value !== 'linear' || state.lInputType.value !== inputType) return false;
-    const currentSeq = state.linearSeqs.find((seq) => uidFor(seq) === uid);
+    if (drawing.inputType.value !== inputType) return false;
+    const currentSeq = drawing.linearSeqs.find((seq) => uidFor(seq) === uid);
     if (!currentSeq) return false;
     const currentFiles = sourceFilesFor(currentSeq, inputType);
     return currentFiles.primaryFile === primaryFile && currentFiles.pairedFile === pairedFile;
   };
 
-  /** @param {RefreshOptions} [options] */
-  const refreshFingerprint = ({ suppress = false } = {}) => [
-    Boolean(suppress || recordDiscoverySuppressed()),
-    state.mode.value,
-    state.lInputType.value,
-    ...state.linearSeqs.flatMap((seq) => {
-      const { primaryFile, pairedFile } = sourceFilesFor(seq);
-      return [uidFor(seq), primaryFile, pairedFile];
-    })
-  ];
+  /** @param {LinearDiscoveryDrawing} drawing @param {RefreshOptions} [options] */
+  const refreshFingerprint = (drawing, { suppress = false } = {}) => {
+    const inputType = drawing.inputType.value;
+    return [
+      Boolean(suppress || recordDiscoverySuppressed()),
+      inputType,
+      ...drawing.linearSeqs.flatMap((seq) => {
+        const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
+        return [uidFor(seq), primaryFile, pairedFile];
+      })
+    ];
+  };
   /**
    * @param {readonly unknown[]} left
    * @param {readonly unknown[]} right
@@ -247,21 +260,21 @@ export const createLinearRecordSelector = ({
   );
 
   /**
+   * @param {LinearDiscoveryDrawing} drawing the drawing whose cards it reads; its records land only in that drawing
    * @param {RefreshOptions} [options]
    * @returns {Promise<RefreshOutcome>}
    */
-  const runRefresh = async ({ suppress = false } = {}) => {
-    const generation = ++refreshGeneration;
+  const runRefresh = async (drawing, { suppress = false } = {}) => {
+    const generation = (refreshGenerations.get(drawing.id) ?? 0) + 1;
+    refreshGenerations.set(drawing.id, generation);
     if (suppress || recordDiscoverySuppressed()) return;
     purgeInactiveState();
+    if (drawing.mode !== 'linear') return;
 
-    // An inactive Linear source keeps its records, as an inactive Circular one does.
-    if (state.mode.value !== 'linear') return;
-
-    const inputType = state.lInputType.value;
-    /** @type {{ uid: string, primaryFile: FileLike, pairedFile: FileLike | null }[]} */
+    const inputType = drawing.inputType.value;
+    /** @type {{ uid: string, primaryFile: InputFileRef, pairedFile: InputFileRef | null }[]} */
     const targets = [];
-    for (const seq of state.linearSeqs) {
+    for (const seq of drawing.linearSeqs) {
       const uid = uidFor(seq);
       if (!uid) continue;
       const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
@@ -289,7 +302,7 @@ export const createLinearRecordSelector = ({
           pairedFile,
           temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
-        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
           replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
@@ -298,9 +311,9 @@ export const createLinearRecordSelector = ({
         replaceState(uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
-        if (onRecordsDiscovered?.({ uid, records }) === true) return true;
+        if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
       } catch (error) {
-        if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
           replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
@@ -320,25 +333,30 @@ export const createLinearRecordSelector = ({
   };
 
   /**
+   * The discovery of one drawing's cards (R10: the transition that changed
+   * them calls it for that drawing). It shares a refresh still running for
+   * the same drawing and sources.
+   * @param {LinearDiscoveryDrawing} drawing
    * @param {RefreshOptions} [options]
    * @returns {SessionBusy | Promise<RefreshOutcome>}
    */
-  const refresh = (options = {}) => {
+  const refresh = (drawing, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const fingerprint = refreshFingerprint(options);
+    const fingerprint = refreshFingerprint(drawing, options);
+    const activeRefresh = activeRefreshes.get(drawing.id);
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       // An entry is stored only after its promise is assigned (below).
       return /** @type {Promise<RefreshOutcome>} */ (activeRefresh.promise);
     }
     /** @type {{ fingerprint: unknown[], promise: Promise<RefreshOutcome> | null }} */
     const entry = { fingerprint, promise: null };
-    entry.promise = runRefresh(options).then((expanded) => {
-      if (expanded) return refresh(options);
+    entry.promise = runRefresh(drawing, options).then((expanded) => {
+      if (expanded) return refresh(drawing, options);
     }).finally(() => {
-      if (activeRefresh === entry) activeRefresh = null;
+      if (activeRefreshes.get(drawing.id) === entry) activeRefreshes.delete(drawing.id);
     });
-    activeRefresh = entry;
+    activeRefreshes.set(drawing.id, entry);
     // The promise was assigned above.
     return /** @type {Promise<RefreshOutcome>} */ (entry.promise);
   };

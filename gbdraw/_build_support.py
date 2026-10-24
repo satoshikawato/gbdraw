@@ -24,6 +24,7 @@ _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
     "data/config.toml",
     "data/losat-release.json",
+    "data/mode-slice-defaults.json",
     "data/*.ttf",
     "web/js/services/standalone-interactivity-assets.js",
 ]

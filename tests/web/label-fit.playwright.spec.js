@@ -9,6 +9,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const ROW_KINDS = ['outward_both', 'outward_vertical', 'outward_horizontal', 'smaller_font', 'tighter_rows', 'combination'];
 const SCREENSHOTS = process.env.GBDRAW_LABEL_FIT_SCREENSHOTS || '';
@@ -224,7 +225,7 @@ const generateLinear = async (page, name, features, regions, { separateStrands =
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
   await page.evaluate(async ({ text, file, separate }) => {
     const app = window.__GBDRAW_APP__;

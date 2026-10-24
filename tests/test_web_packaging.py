@@ -273,6 +273,7 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
         include_browser_wheel=True
     )
     assert "data/losat-release.json" in package_data_patterns
+    assert "data/mode-slice-defaults.json" in package_data_patterns
     assert not any(pattern.startswith("bin/") for pattern in package_data_patterns)
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=True)
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)

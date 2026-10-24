@@ -4,6 +4,8 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+/** @import { DrawingId } from './drawing-view.js' */
 
 // tests/web/history-inputs.test.mjs loads this module with its own imports
 // only, so it declares the key marker of utils/i18n.js itself.
@@ -415,6 +417,9 @@ const checkpointSvgBytes = (checkpoint) => (
  * The byte budget and file retention of every drawing's History (OV-112).
  * @typedef {object} HistoryBudget
  * @property {(member: HistoryBudgetMember) => void} join
+ * @property {(member: HistoryBudgetMember) => void} leave
+ *   The member's bytes and files no longer count (a History the router replaced
+ *   or handed to the project step that holds it, R16-3).
  * @property {(kept?: object | null) => void} enforce
  *   Drops steps until the retained bytes fit, oldest first, from the members in
  *   `evictionOrder`, keeping `kept` (OV-1260); then releases the files no member names.
@@ -474,7 +479,12 @@ export const createHistoryBudget = ({
     });
     releaseUnreferencedFiles();
   };
-  return { join: (member) => { members.add(member); }, enforce, releaseUnreferencedFiles };
+  return {
+    join: (member) => { members.add(member); },
+    leave: (member) => { members.delete(member); },
+    enforce,
+    releaseUnreferencedFiles
+  };
 };
 
 /** @param {HistoryManagerOptions} options */
@@ -2115,27 +2125,44 @@ export const createHistoryManager = ({
 };
 
 /**
- * @typedef {{ drawingId: string, entry: IntentEntry | CheckpointEntry }} ProjectPart
+ * @typedef {{ drawingId: DrawingId, entry: IntentEntry | CheckpointEntry }} ProjectPart
+ * @typedef {object} ProjectListStep
+ *   An operation on the drawing list (R11): its owner (`app/drawing-list.js`)
+ *   applies it with `apply`, takes it back with `undo`, and applies it again
+ *   with `redo`, each in one call, the switch of the shown drawing included
+ *   (R16-2). The router moves the Histories on `undo` and `redo`.
+ * @property {() => void} [apply] The first application, which gives a new drawing its History; `redo` when absent.
+ * @property {() => void} redo
+ * @property {() => void} undo
+ * @property {() => Iterable<string>} [fileIds] After `apply`: the files a drawing it takes out binds, which
+ *   the step keeps stored until it is evicted (R11, R16-3).
+ * @typedef {{ redo: () => void, undo: () => void, added: DrawingId[], removed: DrawingId[] }} ProjectListPart
+ *   A list step with the drawings it gave a History (`addMember`) and took one
+ *   from (`removeMember`) when it was applied.
  * @typedef {{
  *   type: 'project', label: string, sequence: number, parts: ProjectPart[], session: IntentEntry | null,
- *   byteSize: number, fileIds: Set<string>
+ *   list: ProjectListPart | null, byteSize: number, fileIds: Set<string>
  * }} ProjectEntry
  *   A step of the project stream: its part in each drawing it changed (Reset
- *   all drawings) and the Session-level values it changed (R15-23).
+ *   all drawings), the Session-level values it changed (R15-23), or an
+ *   operation on the drawing list. The router keeps beside it the Histories
+ *   of the drawings that are out of the list while the step is as it is.
  * @typedef {object} SessionHistoryPorts
  *   The capture and restore of the Session-level values, which no drawing owns.
  * @property {() => HistoryIntent} buildIntent Synchronous: a step's end reads it.
  * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo' }) => unknown} applyIntent
  * @typedef {HistoryBudgetOptions & {
- *   drawingIds: readonly string[],
- *   activeDrawingId: () => string,
- *   managerOptions: (drawingId: string) => HistoryManagerOptions,
+ *   drawingIds: readonly DrawingId[],
+ *   activeDrawingId: () => DrawingId,
+ *   managerOptions: (drawingId: DrawingId) => HistoryManagerOptions,
  *   sessionHistory: SessionHistoryPorts,
  *   makeRef?: <T>(value: T) => { value: T },
  *   maxActions?: number,
  *   onHistoryLimit?: (message: string) => void
  * }} HistoryRouterOptions
- *   The drawings, each with its own History; the shown drawing, whose History
+ *   The drawings at start, each with its own History (the router's members
+ *   change with `addMember`, `removeMember`, and `replaceMembers`; the
+ *   factory makes the options of each member's History); the shown drawing, whose History
  *   Undo and Redo walk; the capture and restore of one drawing's History and
  *   of the Session-level values; and the budget every History shares.
  */
@@ -2162,6 +2189,13 @@ const PROJECT_STREAM = Symbol('project stream');
 // top steps, Redo the older. A new project step clears every Redo; a new
 // drawing step clears its own and the project's. Eviction drops hidden
 // drawings' steps first, then project steps, then the shown drawing's.
+//
+// R11, R16-3: the router owns which drawings have a History. `addMember`
+// gives a new drawing an empty History; `removeMember` hands a drawing's
+// History to the open project step that removes it, which holds it, its
+// bytes, and its files until the step is evicted (a step that is not recorded
+// gives it back); `replaceMembers` (a Load) clears the project stream and
+// every History, then installs the new list.
 /** @param {HistoryRouterOptions} options */
 export const createHistoryRouter = ({
   drawingIds,
@@ -2173,7 +2207,7 @@ export const createHistoryRouter = ({
   onHistoryLimit = () => {},
   ...budgetOptions
 }) => {
-  /** @type {Map<HistoryBudgetMember, string | typeof PROJECT_STREAM>} The stream of each budget member. */
+  /** @type {Map<HistoryBudgetMember, DrawingId | typeof PROJECT_STREAM>} The stream of each budget member. */
   const memberStreams = new Map();
   /** @param {HistoryBudgetMember} member */
   const evictionRank = (member) => {
@@ -2185,8 +2219,12 @@ export const createHistoryRouter = ({
     ...budgetOptions,
     evictionOrder: (members) => [...members].sort((left, right) => evictionRank(left) - evictionRank(right))
   });
-  /** @param {string | typeof PROJECT_STREAM} stream @param {HistoryBudgetMember} member */
+  /** @param {DrawingId | typeof PROJECT_STREAM} stream @param {HistoryBudgetMember} member */
   const joinBudget = (stream, member) => { memberStreams.set(member, stream); budget.join(member); };
+  /** @param {DrawingId} drawingId @returns {HistoryBudgetMember[]} The members that left. */
+  const leaveBudget = (drawingId) => [...memberStreams]
+    .filter(([, stream]) => stream === drawingId)
+    .map(([member]) => { memberStreams.delete(member); budget.leave(member); return member; });
 
   let sequence = 0;
   /** @type {ProjectEntry[]} */
@@ -2234,18 +2272,26 @@ export const createHistoryRouter = ({
       ? { type: 'intent', label, changes, byteSize: JSON.stringify(changes).length * 2, fileIds: new Set() }
       : null;
   };
-  // The project step of a step's end: its parts and the Session-level values
-  // it changed; none when it has neither.
-  /** @param {string} label @param {number} stamp @param {ProjectPart[]} parts @param {IntentEntry | null} session */
-  const recordProjectStep = (label, stamp, parts, session) => {
-    if (!session && parts.length === 0) return;
+  // The project step of a step's end: its parts, the Histories it removed,
+  // and the Session-level values it changed; none when it has none of them.
+  /**
+   * @param {string} label @param {number} stamp @param {ProjectPart[]} parts @param {IntentEntry | null} session
+   * @param {HeldHistory[]} [held] @param {ProjectListPart | null} [list]
+   * @param {Iterable<string>} [heldFileIds] The files of the drawings a list step took out.
+   */
+  const recordProjectStep = (label, stamp, parts, session, held = [], list = null, heldFileIds = []) => {
+    if (!session && parts.length === 0 && held.length === 0 && !list) return;
     /** @type {Set<string>} */
     const fileIds = new Set();
     parts.forEach(({ entry }) => entry.fileIds.forEach((id) => fileIds.add(id)));
-    pushProject({
-      type: 'project', label, sequence: stamp, parts, session, fileIds,
-      byteSize: parts.reduce((bytes, { entry }) => bytes + entry.byteSize, session?.byteSize ?? 0)
-    });
+    for (const id of heldFileIds) fileIds.add(id);
+    /** @type {ProjectEntry} */
+    const entry = {
+      type: 'project', label, sequence: stamp, parts, session, list, fileIds,
+      byteSize: parts.reduce((bytes, { entry: part }) => bytes + part.byteSize, session?.byteSize ?? 0)
+    };
+    if (held.length > 0) heldBy.set(entry, held);
+    pushProject(entry);
   };
   /** @param {HistoryEntry | null} entry @param {string} label @param {SessionMark | null} mark @returns {IntentEntry | null} */
   const stepEnded = (entry, label, mark) => {
@@ -2260,7 +2306,16 @@ export const createHistoryRouter = ({
     return session;
   };
 
-  const managers = new Map(drawingIds.map((drawingId) => /** @type {const} */ ([drawingId, createHistoryManager({
+  /**
+   * A refusal of a membership call, through the diagnostic owner (R6).
+   * @param {string} operation @param {'UNKNOWN_DRAWING' | 'DUPLICATE_DRAWING' | 'NO_PROJECT_STEP'} reason
+   * @param {DrawingId} drawingId
+   */
+  const membershipError = (operation, reason, drawingId) => diagnosticError(
+    'INPUT_INVALID', { field: 'drawing', reason, drawingId }, { stage: 'history-router', operation }
+  );
+  /** @param {DrawingId} drawingId A new History of the drawing, empty (R11). */
+  const memberHistory = (drawingId) => createHistoryManager({
     ...managerOptions(drawingId),
     onHistoryLimit,
     stepOpened: sessionRecord,
@@ -2274,24 +2329,87 @@ export const createHistoryRouter = ({
       // the shown drawing (A3 review Low 4).
       enforce: (kept) => budget.enforce(drawingId === activeDrawingId() ? kept : null)
     }
-  })])));
-  /** @param {string} drawingId */
+  });
+  /**
+   * @typedef {ReturnType<typeof memberHistory>} DrawingHistory One drawing's History.
+   * @typedef {{ drawingId: DrawingId, history: DrawingHistory, budgetMembers: HistoryBudgetMember[] }} HeldHistory
+   *   The History of a drawing that a project step removed (R16-3): no call
+   *   reaches it, and the step that holds it counts its bytes and files.
+   */
+  /** @type {Map<DrawingId, DrawingHistory>} The History of each member drawing. */
+  const managers = new Map();
+  /** @type {WeakMap<ProjectEntry, HeldHistory[]>} The Histories each project step holds. */
+  const heldBy = new WeakMap();
+  /** @type {Parameters<DrawingHistory['setSettingsStepListener']>[0] | null} */
+  let settingsStepListener = null;
+  /** @param {DrawingId} drawingId @param {DrawingHistory} manager */
+  const listenToSettingsSteps = (drawingId, manager) => {
+    const listener = settingsStepListener;
+    if (listener) manager.setSettingsStepListener((changes) => { if (drawingId === activeDrawingId()) listener(changes); });
+  };
+  /** @param {DrawingId} drawingId An empty History for a drawing that has none (R11). */
+  const installMember = (drawingId) => {
+    const manager = memberHistory(drawingId);
+    listenToSettingsSteps(drawingId, manager);
+    managers.set(drawingId, manager);
+  };
+  /** @param {readonly DrawingId[]} drawingIds @param {string} operation Refuses a repeated ID. */
+  const requireDistinct = (drawingIds, operation) => {
+    const repeated = drawingIds.find((drawingId, index) => drawingIds.indexOf(drawingId) !== index);
+    if (repeated !== undefined) throw membershipError(operation, 'DUPLICATE_DRAWING', repeated);
+  };
+  requireDistinct(drawingIds, 'createHistoryRouter');
+  drawingIds.forEach(installMember);
+  /** @param {DrawingId} drawingId */
   const managerOf = (drawingId) => {
     const manager = managers.get(drawingId);
-    if (!manager) throw new Error(`No History exists for drawing ${drawingId}.`);
+    if (!manager) throw membershipError('managerOf', 'UNKNOWN_DRAWING', drawingId);
     return manager;
   };
   const every = () => [...managers.values()];
   const others = () => [...managers].filter(([drawingId]) => drawingId !== activeDrawingId()).map(([, manager]) => manager);
+  // The manager API the router routes; every member has the same.
   const template = managerOf(drawingIds[0]);
-  /** @typedef {typeof template} DrawingHistory */
   const projectEntries = () => [...projectUndo, ...projectRedo];
+  // The removals of each open project step (R16-3); a removal joins the newest.
+  /** @type {HeldHistory[][]} */
+  const openRemovals = [];
+  // The budget members of the held Histories: those the project steps hold
+  // and those an open project step removed.
+  const heldHistories = () => [...projectEntries().flatMap((entry) => heldBy.get(entry) ?? []), ...openRemovals.flat()];
+  const heldMembers = () => heldHistories()
+    .flatMap(({ budgetMembers }) => budgetMembers);
+  /** @param {HeldHistory} held Gives a held History back to the router. */
+  const reinstate = ({ drawingId, history, budgetMembers }) => {
+    managers.set(drawingId, history);
+    budgetMembers.forEach((member) => joinBudget(drawingId, member));
+  };
+  /** @param {DrawingId} drawingId @returns {HeldHistory} A member's History, out of the router. */
+  const takeOut = (drawingId) => {
+    const history = managerOf(drawingId);
+    managers.delete(drawingId);
+    return { drawingId, history, budgetMembers: leaveBudget(drawingId) };
+  };
+  // A list step's Undo or Redo: the Histories it holds come back first (the
+  // drawings it brings back), and those of the drawings it takes out leave
+  // last, held by the step for the other direction (R16-3).
+  /** @param {ProjectEntry} entry @param {ProjectListPart} list @param {'undo' | 'redo'} direction */
+  const traverseList = (entry, list, direction) => {
+    (heldBy.get(entry) ?? []).forEach(reinstate);
+    heldBy.delete(entry);
+    if (direction === 'undo') list.undo(); else list.redo();
+    const held = (direction === 'undo' ? list.added : list.removed).map(takeOut);
+    if (held.length > 0) heldBy.set(entry, held);
+  };
   joinBudget(PROJECT_STREAM, {
-    entryBytes: () => projectEntries().reduce((bytes, entry) => bytes + entry.byteSize, 0),
+    entryBytes: () => heldMembers().reduce(
+      (bytes, member) => bytes + member.entryBytes(), projectEntries().reduce((bytes, entry) => bytes + entry.byteSize, 0)
+    ),
     retainedFileIds: () => {
       /** @type {Set<string>} */
       const ids = new Set();
       projectEntries().forEach((entry) => entry.fileIds.forEach((id) => ids.add(id)));
+      heldMembers().forEach((member) => member.retainedFileIds().forEach((id) => ids.add(id)));
       return ids;
     },
     dropOldestStep: (kept) => {
@@ -2331,7 +2449,10 @@ export const createHistoryRouter = ({
     if (every().some((manager) => manager.restoring.value) || from[from.length - 1] !== entry) return false;
     const shownId = activeDrawingId();
     const shown = managerOf(shownId);
-    await shown.restoreWith(async () => {
+    if (entry.list) {
+      if (entry.session) await applySession(entry.session, direction);
+      traverseList(entry, entry.list, direction);
+    } else await shown.restoreWith(async () => {
       if (entry.session) await applySession(entry.session, direction);
       for (const part of entry.parts) {
         if (part.drawingId !== shownId) await managerOf(part.drawingId).applyProjectPart(part.entry, direction, false);
@@ -2438,21 +2559,31 @@ export const createHistoryRouter = ({
      */
     runProjectStep: (label, fn, { shouldCommit = () => true } = {}) => {
       const shownId = activeDrawingId();
+      /** @type {HeldHistory[]} */
+      const removed = [];
+      openRemovals.push(removed);
+      const isRemoved = (/** @type {DrawingId} */ drawingId) => removed.some((held) => held.drawingId === drawingId);
+      // The shown drawing's part may come after the step is recorded: the
+      // entry keeps this list. A removed drawing has no part.
       /** @type {ProjectPart[]} */
       const parts = [];
-      /** @param {string} drawingId @returns {(entry: HistoryEntry | null) => void} */
+      /** @param {DrawingId} drawingId @returns {(entry: HistoryEntry | null) => void} */
       const take = (drawingId) => (entry) => {
-        if (entry?.type === 'intent' || entry?.type === 'checkpoint') parts.push({ drawingId, entry });
+        if ((entry?.type === 'intent' || entry?.type === 'checkpoint') && !isRemoved(drawingId)) parts.push({ drawingId, entry });
       };
       const hidden = [...managers].filter(([drawingId]) => drawingId !== shownId);
       const opening = hidden.map(([drawingId, manager]) => manager.begin(label, { source: 'project', takeEntry: take(drawingId) }));
+      // A removed drawing's open step ends without an entry; its History is
+      // the step's whole record of it.
       /** @param {boolean} applied */
       const settle = async (applied) => {
         const steps = await Promise.all(opening);
-        for (const [index, [, manager]] of hidden.entries()) {
-          if (applied) await manager.commit(steps[index]); else manager.cancel(steps[index]);
+        for (const [index, [drawingId, manager]] of hidden.entries()) {
+          if (applied && !isRemoved(drawingId)) await manager.commit(steps[index]); else manager.cancel(steps[index]);
         }
-        if (applied) recordProjectStep(label, ++sequence, parts, sessionStep(label));
+        openRemovals.splice(openRemovals.indexOf(removed), 1);
+        if (!applied) { removed.forEach(reinstate); return; }
+        recordProjectStep(label, ++sequence, parts, sessionStep(label), removed);
       };
       /** @type {ReturnType<DrawingHistory['runUndoableCheckpoint']>} */
       let result;
@@ -2470,6 +2601,30 @@ export const createHistoryRouter = ({
         async (value) => { await settle(shouldCommit(value)); return value; },
         async (error) => { await settle(false); throw error; }
       );
+    },
+    // R11, R16-2: an operation on the drawing list (New, Rename, Move, and
+    // Delete) is one project step. `step.apply` applies it now; a drawing it
+    // gives a History (`addMember`) or takes one from (`removeMember`) is the
+    // step's, so its Undo and Redo move those Histories with the drawings.
+    /** @param {string} label @param {ProjectListStep} step */
+    runListStep: (label, step) => {
+      const before = new Set(managers.keys());
+      /** @type {HeldHistory[]} */
+      const removed = [];
+      openRemovals.push(removed);
+      try {
+        (step.apply ?? step.redo)();
+      } catch (error) {
+        [...managers.keys()].filter((drawingId) => !before.has(drawingId)).forEach(takeOut);
+        removed.forEach(reinstate);
+        throw error;
+      } finally {
+        openRemovals.splice(openRemovals.indexOf(removed), 1);
+      }
+      const added = [...managers.keys()].filter((drawingId) => !before.has(drawingId));
+      recordProjectStep(label, ++sequence, [], sessionStep(label), removed, {
+        redo: step.redo, undo: step.undo, added, removed: removed.map((held) => held.drawingId)
+      }, step.fileIds?.() ?? []);
     },
     markSavePoint: () => {
       every().forEach((manager) => manager.markSavePoint());
@@ -2490,11 +2645,14 @@ export const createHistoryRouter = ({
         if (mark) Object.assign(mark, patchedRecord(mark, changes));
       });
     },
-    // OV-110: the Result identities any drawing's History holds.
+    // OV-110: the Result identities any drawing's History holds, a History a
+    // project step holds included (R16-3).
     heldIdentities: () => {
       /** @type {Set<string>} */
       const ids = new Set();
       managers.forEach((manager, drawingId) => manager.heldIdentities(projectPartsOf(drawingId)).forEach((id) => ids.add(id)));
+      heldHistories().forEach(({ drawingId, history }) => (
+        history.heldIdentities(projectPartsOf(drawingId)).forEach((id) => ids.add(id))));
       return ids;
     },
     // D-15-53: a Session-level value changed outside any step is no change
@@ -2512,9 +2670,34 @@ export const createHistoryRouter = ({
       return false;
     },
     /** @param {Parameters<DrawingHistory['setSettingsStepListener']>[0]} listener */
-    setSettingsStepListener: (listener) => managers.forEach((manager, drawingId) => manager.setSettingsStepListener(
-      (changes) => { if (drawingId === activeDrawingId()) listener(changes); }
-    )),
+    setSettingsStepListener: (listener) => {
+      settingsStepListener = listener;
+      managers.forEach((manager, drawingId) => listenToSettingsSteps(drawingId, manager));
+    },
+    /** @param {DrawingId} drawingId A new drawing: its History starts empty (R11). */
+    addMember: (drawingId) => {
+      if (managers.has(drawingId)) throw membershipError('addMember', 'DUPLICATE_DRAWING', drawingId);
+      installMember(drawingId);
+    },
+    // R16-3: a drawing's History leaves the router for the open project step
+    // that removes it, which holds it until the step is evicted.
+    /** @param {DrawingId} drawingId */
+    removeMember: (drawingId) => {
+      managerOf(drawingId); // An unknown drawing is refused first.
+      const step = openRemovals[openRemovals.length - 1];
+      if (!step) throw membershipError('removeMember', 'NO_PROJECT_STEP', drawingId);
+      step.push(takeOut(drawingId));
+    },
+    // A Load: the project stream and every History are cleared, and each
+    // drawing of the new list starts with an empty History.
+    /** @param {readonly DrawingId[]} drawingIds */
+    replaceMembers: (drawingIds) => {
+      requireDistinct(drawingIds, 'replaceMembers');
+      [...managers.keys()].forEach(leaveBudget);
+      managers.clear();
+      drawingIds.forEach(installMember);
+      resetProjectStream();
+    },
     mutationPending: () => every().some((manager) => manager.mutationPending()),
     traversalPending: () => projectTraversals.value > 0 || every().some((manager) => manager.traversalPending())
   };

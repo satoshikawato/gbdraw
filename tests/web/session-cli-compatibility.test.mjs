@@ -101,7 +101,7 @@ const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 const assertNoReplacementDraft = () => {
   assert.deepEqual(state.activeDrawing().linearComparisonPlan, DEFAULT_PLAN);
   const draft = resolveLinearComparisonPlan({
-    plan: state.activeDrawing().linearComparisonPlan, sequences: state.linearSeqs, layout: [],
+    plan: state.activeDrawing().linearComparisonPlan, sequences: modeDrawing(state, 'linear').linearSeqs, layout: [],
     losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
   });
   assert.equal(draft.valid && draft.hasComparisonIntent, false);
@@ -128,7 +128,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         const result = await load(bytes);
         assert.equal(result.status, 'ok', result.error?.stack);
         assert.equal(state.mode.value, mode);
-        assert.equal((mode === 'circular' ? state.cInputType : state.lInputType).value, label === 'gff' ? 'gff' : 'gb');
+        assert.equal(modeDrawing(state, mode).inputType.value, label === 'gff' ? 'gff' : 'gb');
+        assert.equal(modeDrawing(state, mode === 'circular' ? 'linear' : 'circular').inputType.value, 'gb', 'the other mode drawing keeps its input type');
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
         assert.ok(state.results.value.length > 0);
@@ -136,7 +137,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(session.renderRequest.diagramOptions.output.legend, legend);
         assert.equal(state.activeDrawing().form.legend, legend);
         if (mode === 'linear') {
-          assert.deepEqual(state.linearSeqs.map(seq => seq.uid), fileRecordKeys(session.renderRequest));
+          assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => seq.uid), fileRecordKeys(session.renderRequest));
           // B13: without -b the CLI commits only a disabled protein pipeline
           // (mode `none`, no pairs). The Web draft has no comparison, so the
           // request Generate builds has no comparison and starts no LOSAT run.
@@ -154,10 +155,10 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
-        const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
-          : label === 'gff' ? [] : [state.files.c_gb];
-        const sources = projectedFiles.filter(Boolean).flatMap(file => {
-          const source = getSessionResourceSource(file);
+        const projectedFiles = mode === 'linear' ? modeDrawing(state, 'linear').linearSeqs.map(seq => seq.gb)
+          : label === 'gff' ? [] : [modeDrawing(state, 'circular').files.c_gb];
+        const sources = projectedFiles.filter(Boolean).flatMap(ref => {
+          const source = getSessionResourceSource(state.inputFiles.fileOf(ref));
           return source.descriptors || [source];
         });
         assert.equal(sources.length, sourcePaths.length);
@@ -166,8 +167,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.ok(session.resources[source.resourceId]);
         }
         if (label === 'gff') {
-          assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
-          assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_gff))), hash(await readFile(args[1])));
+          assert.equal(hash(await readFileBytes(state.inputFiles.fileOf(modeDrawing(state, 'circular').files.c_fasta))), hash(await readFile(args[3])));
         }
         // A draft in its retired home outside `modes` is dropped with no row
         // (A7f, E-OD03: the slice fills its place); Save still refuses it.
@@ -203,7 +204,7 @@ await test('a main v42 CLI Linear BLAST sidecar keeps a read-only comparison wit
   const result = await load(bytes);
   assert.equal(result.status, 'ok', result.error?.stack);
   assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
-  assert.deepEqual(state.linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
+  assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => seq.uid), ['record-1', 'record-2']);
   assert.deepEqual(fileRecordKeys(getCommittedCanonicalRenderRequest()), ['record-1', 'record-2']);
   assertNoReplacementDraft();
 });
@@ -249,8 +250,8 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
       ['record-1:1', 'record-1:2']);
     assert.deepEqual(records.map(record => [record.cardinality, record.selector]),
       session.renderRequest.records.map(record => ['exactly_one', record.selector]));
-    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
-    const [first, second] = state.linearSeqs.map(seq => getSessionResourceSource(seq.gb));
+    assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', 'R2c'], ['record-1:2', 'R3c']]);
+    const [first, second] = modeDrawing(state, 'linear').linearSeqs.map(seq => getSessionResourceSource(state.inputFiles.fileOf(seq.gb)));
     assert.equal(first.resourceId, second.resourceId);
     assert.equal(hash(Buffer.from(first.descriptor.data, 'base64')),
       hash(await readFile(path.join(root, 'tests/fixtures/web_comparison_shared_block.gb'))));
@@ -259,7 +260,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     const copies = { ...session, renderRequest: { ...session.renderRequest,
       records: session.renderRequest.records.map(record => ({ ...record, selector: null })) } };
     assert.equal((await load(JSON.stringify(copies))).status, 'ok');
-    assert.deepEqual(state.linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
+    assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map(seq => [seq.uid, seq.region_record_id]), [['record-1:1', '#1'], ['record-1:2', '#2']]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

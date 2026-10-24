@@ -52,6 +52,7 @@ from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
     SessionDrawingSpec,
+    SessionVersionError,
     build_session_document,
     load_session_document,
     materialize_session,
@@ -115,6 +116,13 @@ _RELEASE_0_13_0_RECORD_X = (
     1015.6834700590497,
     687.4823049181628,
     907.333293702691,
+)
+# Session 48 of the released v0.14.0 Web app with both modes used, Linear shown.
+_TWO_MODE_V48_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "two-mode-linear-shown.v48.gbdraw-session.json.gz"
 )
 _SYNTHETIC_CONSERVATION_SESSION = (
     Path(__file__).parent
@@ -2426,3 +2434,75 @@ def test_an_upgrade_of_a_session_40_refuses_a_result_matching_neither_frame(tmp_
     )
     with pytest.raises(SessionConversionError, match="matches neither strand"):
         upgrade_session_document(data, temporary_directory=tmp_path)
+
+
+def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> None:
+    from gbdraw.session_drawings import drawings_document_from_mode_scoped
+    from gbdraw.session_io import WEB_BINDING_CARD_SLOTS, WEB_BINDING_MODE_SLOTS
+
+    with gzip.open(_TWO_MODE_V48_SESSION, "rt", encoding="utf-8") as handle:
+        source = json.load(handle)
+    document, facts = drawings_document_from_mode_scoped(source)
+    SessionDocument(document)
+
+    linear, circular = document["drawings"]
+    # Linear was shown at Save; Circular is kept because its genome binding
+    # and its settings are used, although Session 48 kept no Circular Result.
+    assert [(drawing["id"], drawing["name"], drawing["mode"]) for drawing in (linear, circular)] == [
+        ("linear", "Linear", "linear"),
+        ("circular", "Circular", "circular"),
+    ]
+    assert document["ui"]["activeDrawingId"] == "linear"
+    assert facts == {"cardRowsAreFileRows": False, "proteinResultsInDrawnFrame": False}
+    assert linear["renderRequest"] == source["renderRequest"]
+    assert linear["results"] == source["results"]
+    assert circular["renderRequest"] is None and circular["results"] == []
+    for drawing in (linear, circular):
+        mode_slice = source["modes"][drawing["mode"]]
+        assert drawing["config"] == mode_slice["config"]
+        assert drawing["features"] == mode_slice["features"]
+        for key, value in mode_slice["editorState"]["legend"].items():
+            assert drawing["editorState"]["legend"][key] == value
+        assert drawing["editorState"]["featureStrokes"] == mode_slice["editorState"]["featureStrokes"]
+        assert {key: drawing["ui"][key] for key in mode_slice["ui"]} == mode_slice["ui"]
+        # Each drawing keeps the LOSAT entry; its next Generate prunes it.
+        assert drawing["losatCache"] == source["losatCache"]
+        assert len(drawing["losatCache"]["entries"]) == 1
+    assert circular["config"]["fileImports"] == {"d_color": {
+        "CDS": {"color": "#123456", "handColor": None}, "tRNA": {"color": "#654321", "handColor": None},
+    }}
+    bindings = source["webFiles"]["bindings"]
+    for drawing in (linear, circular):
+        slots = {"schema"} | WEB_BINDING_CARD_SLOTS | WEB_BINDING_MODE_SLOTS[drawing["mode"]]
+        assert drawing["webFiles"]["bindings"] == {key: value for key, value in bindings.items() if key in slots}
+    assert set(linear["webFiles"]["bindings"]) | set(circular["webFiles"]["bindings"]) == set(bindings)
+    assert linear["webFiles"]["linearRecordMetadata"] == source["webFiles"]["linearRecordMetadata"]
+    assert document["webFiles"] == {"resourceOriginalNames": source["webFiles"]["resourceOriginalNames"]}
+    assert document["resources"] == source["resources"]
+    assert document["ui"]["losatExecution"] == source["ui"]["losatExecution"]
+
+
+def test_two_mode_session_48_linear_drawing_replays_as_the_old_session(tmp_path: Path) -> None:
+    # OIC-030: the first drawing renders as the old Session replays.
+    upgraded = upgrade_session_document(_TWO_MODE_V48_SESSION, temporary_directory=tmp_path, version=49).document
+    assert upgraded.version == 49
+    with materialize_session(_TWO_MODE_V48_SESSION, output_directory=tmp_path / "v48") as materialized:
+        old = render_session(materialized)
+    with materialize_session(upgraded, output_directory=tmp_path / "v49") as materialized:
+        new = render_session(materialized, drawing="linear")
+    assert len(old.output_paths) == len(new.output_paths) == 1
+    assert new.output_paths[0].read_text(encoding="utf-8") == old.output_paths[0].read_text(encoding="utf-8")
+
+
+def test_upgrade_to_session_49_moves_a_session_47_after_its_current_upgrade(tmp_path: Path) -> None:
+    source = Path(__file__).parent / "fixtures" / "sessions" / "cli-linear-blacklist-file.v47.gbdraw-session.json.gz"
+    current = upgrade_session_document(source, temporary_directory=tmp_path).document
+    assert current.version == CURRENT_SESSION_VERSION
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path, version=49).document
+    data = upgraded.to_dict()
+    assert data["version"] == 49
+    assert [drawing["id"] for drawing in data["drawings"]] == ["linear"]
+    assert data["drawings"][0]["renderRequest"] == current.to_dict()["renderRequest"]
+    assert upgrade_session_document(upgraded, version=49).document.to_dict() == data
+    with pytest.raises(SessionVersionError):
+        upgrade_session_document(source, version=47)

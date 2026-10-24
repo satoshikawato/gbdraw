@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const genbank = (topology, length = 120) => `LOCUS       same                     ${length} bp    DNA     ${topology.padEnd(8)} UNA 01-JAN-2000
 DEFINITION  Source discovery regression fixture.
@@ -26,7 +27,7 @@ for (const mode of ['circular', 'linear']) {
       return route.abort();
     });
     await openApp(page);
-    if (mode === 'linear') await page.getByRole('button', { name: 'Linear', exact: true }).click();
+    if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
     const upload = mode === 'linear' ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
     await upload.setInputFiles({ name: 'same.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank('circular') + genbank('linear')) });
     if (mode === 'linear') {
@@ -38,7 +39,8 @@ for (const mode of ['circular', 'linear']) {
     }
     const discovery = await page.evaluate(async mode => {
       const app = window.__GBDRAW_APP__;
-      const file = mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb;
+      const { state } = await import('./js/state.js');
+      const file = state.inputFiles.fileOf(mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb);
       const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/services/record-discovery.js');
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
@@ -71,11 +73,13 @@ const {
 const fixture = (path) => join(process.cwd(), path);
 const snapshot = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
+  const circular = state.drawingList().find((drawing) => drawing.mode === 'circular');
+  const fileName = (ref) => (ref ? state.inputFiles.fileOf(ref).name : null);
   return {
-    status: state.circularRecordDiscovery.status,
+    status: circular.circularRecordDiscovery.status,
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
-    rows: state.circularRecordList.value.map(row => [row.selector, row.record_id]),
-    primary: state.files.c_gb?.name || state.files.c_gff?.name || null,
+    rows: circular.circularRecordList.value.map(row => [row.selector, row.record_id]),
+    primary: fileName(circular.files.c_gb) || fileName(circular.files.c_gff) || null,
     result: state.results.value[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
@@ -83,7 +87,7 @@ const snapshot = (page) => page.evaluate(async () => {
   };
 });
 const waitStatus = (page, status) => expect.poll(() => page.evaluate(async () => (
-  (await import('./js/state.js')).state.circularRecordDiscovery.status
+  (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordDiscovery.status
 )), { timeout: 180000 }).toBe(status);
 const uploadNative = (page, text, name = 'native.gb') => page.getByLabel('GenBank/DDBJ File', { exact: true })
   .setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
@@ -134,8 +138,8 @@ test('saved preview remains deferred across disclosure and mode changes; Inspect
   const summary = page.getByLabel('Circular record presentation', { exact: true });
   await summary.click();
   await summary.click();
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
+  await showDrawing(page, { kind: 'circular' });
   expect((await snapshot(page)).status).toBe('deferred');
   await assertSessionLoadLeftWorkerIdle(page);
   const inspectionHistory = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
@@ -193,11 +197,10 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await openApp(page);
   const delay = async () => {
     await page.evaluate(async text => {
-      const { state } = await import('./js/state.js');
       const source = new File([text], 'slow.gb');
       const pending = new Promise(resolve => { window.__releaseSlow = () => resolve(new TextEncoder().encode(text).buffer); });
       source.arrayBuffer = () => pending;
-      state.files.c_gb = source;
+      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.getByLabel('Circular record', { exact: true })).toBeDisabled();
@@ -208,14 +211,18 @@ test('rapid replace/remove, mode and input-type changes reject delayed native co
   await page.evaluate(() => window.__releaseSlow());
   expect((await snapshot(page)).rows).toEqual([['#1', 'new']]);
   await delay();
-  await page.evaluate(() => { window.__GBDRAW_APP__.files.c_gb = null; window.__releaseSlow(); });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setCircularSourceFile('c_gb', null); window.__releaseSlow(); });
   await waitStatus(page, 'idle');
   expect((await snapshot(page)).rows).toEqual([]);
   await delay();
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  // Each drawing owns its discovery and a drawing switch runs none: the
+  // Circular source is still current while Linear is shown, so its reply
+  // settles the Circular drawing and is shown on return.
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(() => window.__releaseSlow());
-  await waitStatus(page, 'idle');
-  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await waitStatus(page, 'ready');
+  expect((await snapshot(page)).rows).toEqual([['#1', 'same']]);
+  await showDrawing(page, { kind: 'circular' });
   await waitStatus(page, 'ready');
   await delay();
   await page.locator('input[type=radio][value=gff]').first().check();
@@ -241,7 +248,6 @@ test('existing helper stays loading until settlement and rejects superseded sour
   await openApp(page);
   const helperSource = async () => {
     await page.evaluate(async text => {
-      const { state } = await import('./js/state.js');
       const source = new File([text], 'helper.gb');
       const read = source.arrayBuffer.bind(source);
       let first = true;
@@ -250,7 +256,7 @@ test('existing helper stays loading until settlement and rejects superseded sour
         return read();
       };
       window.__holdHelper = true;
-      state.files.c_gb = source;
+      window.__GBDRAW_APP__.setCircularSourceFile('c_gb', source);
     }, genbank('circular'));
     await waitStatus(page, 'loading');
     await expect(page.locator('[data-circular-inspect]')).toHaveAttribute('aria-disabled', 'true');

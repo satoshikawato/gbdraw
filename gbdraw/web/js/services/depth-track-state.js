@@ -3,12 +3,26 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 import { isUnsetValue, positiveNumberOrNull } from '../utils/field-reading.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 
-/** @import { FileLike } from './session-resource-backing.js' */
+/**
+ * What a Depth slot holds: an `InputFileRef` in the project's bindings, a File
+ * or Session resource view while a Session is decoded. The helpers here read
+ * only its name.
+ * @typedef {{ readonly name?: string }} DepthSlotFile
+ */
 /** @import { FieldLeaf, FieldReading } from '../utils/field-reading.js' */
 
 /**
  * The Depth file slots of one record: one file, or a list indexed by series.
- * @typedef {FileLike | (FileLike | null)[] | null | undefined} DepthFileSlots
+ * `F` is what a slot holds: an `InputFileRef` in the project's bindings, a
+ * File or Session resource view while a Session is decoded.
+ * @template {DepthSlotFile} [F=DepthSlotFile]
+ * @typedef {F | (F | null)[] | null | undefined} DepthFileSlots
+ */
+/**
+ * One record's slots, or the record-major rows of them. The rows are spelled
+ * out so a caller's `F` is inferred from either shape.
+ * @template {DepthSlotFile} [F=DepthSlotFile]
+ * @typedef {F | (F | null | undefined)[] | (F | (F | null)[] | null | undefined)[] | null | undefined} DepthFileSlotsOrRows
  */
 
 /**
@@ -179,7 +193,7 @@ export const importedDepthSeriesColor = (color, depthColor) => (
   typeof color === 'string' && color ? color : depthColor
 );
 
-/** @param {FileLike | null | undefined} file */
+/** @param {DepthSlotFile | null | undefined} file */
 const depthFileBaseName = (file) => {
   // split always returns at least one element, so pop is not undefined.
   const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
@@ -189,7 +203,7 @@ const depthFileBaseName = (file) => {
 
 /**
  * @param {unknown} label
- * @param {FileLike | null | undefined} file
+ * @param {DepthSlotFile | null | undefined} file
  */
 const depthLabelMatchesFile = (label, file) => {
   const labelText = String(label || '').toLowerCase();
@@ -201,8 +215,9 @@ const depthLabelMatchesFile = (label, file) => {
 };
 
 /**
- * @param {DepthFileSlots} value
- * @returns {(FileLike | null)[]}
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlots<F>} value
+ * @returns {(F | null)[]}
  */
 export const depthFileSlotsFromValue = (value) => {
   if (Array.isArray(value)) return value.slice();
@@ -210,8 +225,9 @@ export const depthFileSlotsFromValue = (value) => {
 };
 
 /**
- * @param {unknown} value
- * @returns {value is DepthFileSlots[]}
+ * @template {DepthSlotFile} [F=DepthSlotFile]
+ * @param {DepthFileSlotsOrRows<F>} value
+ * @returns {value is DepthFileSlots<F>[]}
  */
 export const isRecordMajorDepthFileMatrix = (value) => (
   Array.isArray(value) && value.every((row) => Array.isArray(row))
@@ -240,9 +256,10 @@ export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') =
 };
 
 /**
- * @param {DepthFileSlots | DepthFileSlots[]} value
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlotsOrRows<F>} value
  * @param {unknown} [recordCount]
- * @returns {(FileLike | null)[][]}
+ * @returns {(F | null)[][]}
  */
 export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
   const requestedCount = Math.max(1, Number(recordCount) || 1);
@@ -260,12 +277,15 @@ export const normalizeRecordMajorDepthFileRows = (value, recordCount = 1) => {
 };
 
 /**
- * @param {DepthFileSlots | DepthFileSlots[]} value
- * @returns {(FileLike | null)[]}
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlotsOrRows<F>} value
+ * @returns {(F | null)[]}
  */
 export const representativeDepthFiles = (value) => {
+  /** @type {(F | null)[][]} */
   const rows = isRecordMajorDepthFileMatrix(value)
-    ? normalizeRecordMajorDepthFileRows(value, value.length)
+    // `F` is not inferred through the narrowed rows; the rows hold the caller's `F`.
+    ? /** @type {(F | null)[][]} */ (normalizeRecordMajorDepthFileRows(value, value.length))
     : [depthFileSlotsFromValue(value)];
   const width = depthTrackMatrixWidth(rows);
   return Array.from({ length: width }, (_, trackIndex) => (
@@ -273,7 +293,11 @@ export const representativeDepthFiles = (value) => {
   ));
 };
 
-/** @param {DepthFileSlots} slots */
+/**
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlots<F>} slots
+ * @returns {(F | null)[]}
+ */
 export const compactDepthFileSlots = (slots) => {
   const next = depthFileSlotsFromValue(slots);
   while (next.length > 0 && !next[next.length - 1]) {
@@ -282,7 +306,7 @@ export const compactDepthFileSlots = (slots) => {
   return next;
 };
 
-/** @param {DepthFileSlots} value */
+/** @param {DepthFileSlots<DepthSlotFile>} value */
 export const uploadedDepthFileCount = (value) => (
   depthFileSlotsFromValue(value).filter(Boolean).length
 );
@@ -321,8 +345,10 @@ export const depthTrackCoverageCount = (rows, trackIndex) => {
 };
 
 /**
- * @param {DepthFileSlots} value
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlots<F>} value
  * @param {unknown} width
+ * @returns {(F | null)[]}
  */
 export const padDepthFileSlots = (value, width) => {
   const next = depthFileSlotsFromValue(value);
@@ -332,9 +358,11 @@ export const padDepthFileSlots = (value, width) => {
 };
 
 /**
- * @param {DepthFileSlots} value
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlots<F>} value
  * @param {unknown} trackIndex
  * @param {number | null} [width]
+ * @returns {(F | null)[]}
  */
 export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
   const idx = Number(trackIndex);
@@ -348,8 +376,10 @@ export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
 };
 
 /**
- * @param {DepthFileSlots[] | null | undefined} rows
+ * @template {DepthSlotFile} F
+ * @param {DepthFileSlots<F>[] | null | undefined} rows
  * @param {unknown} trackIndex
+ * @returns {(F | null)[][]}
  */
 export const removeDepthTrackColumnAt = (rows, trackIndex) => {
   const idx = Number(trackIndex);
@@ -861,7 +891,7 @@ export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
  * a series without a source by `keepsDepthRowWithoutSource`. Pure: Load lists
  * what it turns off before the commit (B45) and installs it after.
  * @param {{ mode: 'circular' | 'linear', adv: DrawingDepthState, circularFiles: DepthFileSlots | DepthFileSlots[],
- *   linearRows: (FileLike | null)[][] }} input
+ *   linearRows: (DepthSlotFile | null)[][] }} input
  * @returns {DepthSourceFit}
  */
 export const fitDepthStateToSources = ({ mode, adv, circularFiles, linearRows }) => {

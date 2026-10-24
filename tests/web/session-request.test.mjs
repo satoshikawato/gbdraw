@@ -390,8 +390,7 @@ assert.throws(
 const ref = (value) => ({ value });
 const state = {
   mode: ref('circular'),
-  cInputType: ref('gb'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   circularRecordList: ref([]),
   form: {
     prefix: 'web-session', species: '', strain: '', plot_title: '', legend: 'right',
@@ -453,8 +452,7 @@ const stateForCanonicalProjection = (projection) => {
   return {
     ...state,
     mode: ref(projection.mode),
-    cInputType: ref(projection.inputType),
-    lInputType: ref(projection.inputType),
+    inputType: ref(projection.inputType),
     form: { ...state.form, ...structuredClone(config.form || {}) },
     adv: { ...state.adv, ...structuredClone(config.adv || {}) },
     losat: structuredClone(config.losat || { threadsPerJob: 'auto', blastp: {} }),
@@ -2167,7 +2165,7 @@ assert.match(combinedCircularGenbank, /WEBTEST/);
 assert.match(combinedCircularGenbank, /WEBTWO/);
 
 state.mode.value = 'linear';
-state.lInputType.value = 'gb';
+state.inputType.value = 'gb';
 state.linearComparisonPlan = {
   mode: 'adjacent',
   defaultSource: 'losat',
@@ -4318,7 +4316,7 @@ const circularRequestState = ({
 } = {}) => ({
   ...state,
   mode: ref('circular'),
-  cInputType: ref('gb'),
+  inputType: ref('gb'),
   form: {
     ...state.form,
     show_depth: false,
@@ -4713,7 +4711,7 @@ assert.deepEqual(
 const linearP3State = {
   ...state,
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   form: {
     ...state.form,
     show_depth: false,
@@ -5001,7 +4999,7 @@ assert.equal(
 const comparisonContractState = {
   ...state,
   mode: ref('linear'),
-  lInputType: ref('gb'),
+  inputType: ref('gb'),
   form: { ...state.form, prefix: 'comparison-contract', show_depth: false },
   adv: {
     ...state.adv,

@@ -303,7 +303,7 @@ test('table import failures retain exact cause and concrete retry without a draf
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
   await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
   await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
-  await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.files.t_color);
+  await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.cardFiles.t_color);
   await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   expect(await page.evaluate(()=>window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(()=>JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules))).toBe(before.rules);

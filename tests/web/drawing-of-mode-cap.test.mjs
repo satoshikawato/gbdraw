@@ -20,7 +20,7 @@ const webModules = (url = JS, prefix = '') => readdirSync(url, { withFileTypes: 
   return entry.name.endsWith('.js') ? [path] : [];
 });
 
-const DRAWING_OF_MODE_CAP = 203;
+const DRAWING_OF_MODE_CAP = 5;
 const ID_BY_MODE_OWNERS = Object.freeze(['state.js', 'services/drawing-view.js']);
 test('a drawing is resolved by mode only through state.drawingOfMode, within a falling cap', () => {
   const sources = webModules().map((file) => [file, readFileSync(new URL(file, JS), 'utf8')]);

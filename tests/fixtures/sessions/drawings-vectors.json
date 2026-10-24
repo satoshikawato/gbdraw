@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "ids": [
+    { "mode": "circular", "taken": [], "id": "circular" },
+    { "mode": "linear", "taken": ["circular"], "id": "linear" },
+    { "mode": "linear", "taken": ["linear"], "id": "linear-2" },
+    { "mode": "linear", "taken": ["circular", "linear", "linear-2"], "id": "linear-3" },
+    { "mode": "linear", "taken": ["linear", "linear-3"], "id": "linear-2" },
+    { "mode": "circular", "taken": ["linear", "linear-2"], "id": "circular" },
+    { "mode": "circular", "taken": ["circular-2"], "id": "circular" },
+    { "mode": "circular", "taken": ["circular", "circular-2", "circular-4"], "id": "circular-3" }
+  ],
+  "names": {
+    "defaults": [
+      { "mode": "circular", "taken": [], "id": "circular", "name": "Circular" },
+      { "mode": "linear", "taken": ["circular"], "id": "linear", "name": "Linear" },
+      { "mode": "linear", "taken": ["linear"], "id": "linear-2", "name": "Linear 2" },
+      { "mode": "circular", "taken": ["circular", "circular-2"], "id": "circular-3", "name": "Circular 3" },
+      { "mode": "linear", "taken": ["linear", "linear-2", "linear-3", "linear-4", "linear-5", "linear-6", "linear-7", "linear-8", "linear-9"], "id": "linear-10", "name": "Linear 10" }
+    ],
+    "identities": [
+      { "names": ["Circular", "Linear"], "valid": true },
+      { "names": ["Circular"], "valid": true },
+      { "names": ["Circular", "circular"], "valid": false },
+      { "names": ["Linear 2", "LINEAR 2"], "valid": false },
+      { "names": ["Circular", ""], "valid": false },
+      { "names": ["Circular", "  "], "valid": false },
+      { "names": ["Linear", "Linear "], "valid": true },
+      { "names": ["Straße", "STRASSE"], "valid": false },
+      { "names": ["ς", "Σ"], "valid": false },
+      { "names": ["Linear 2", "Linear 3"], "valid": true }
+    ]
+  },
+  "upgrades": [
+    {"name": "BGC0000708-BGC0000713.v47", "input": "tests/fixtures/sessions/BGC0000708-BGC0000713.v47.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "cli-linear-blacklist-file.v47", "input": "tests/fixtures/sessions/cli-linear-blacklist-file.v47.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["cliInvocation", "editorState", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "file-card-imports-circular.v48", "input": "tests/fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz", "drawings": [{"id": "circular", "mode": "circular", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "ui", "webFiles"]}], "activeDrawingId": "circular", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": false}},
+    {"name": "font-family-preserved.v46", "input": "tests/fixtures/sessions/font-family-preserved.v46.gbdraw-session.json.gz", "drawings": [{"id": "circular", "mode": "circular", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "circular", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "legend-renamed-rows.v46", "input": "tests/fixtures/sessions/legend-renamed-rows.v46.gbdraw-session.json.gz", "drawings": [{"id": "circular", "mode": "circular", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "circular", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "majanivirus_collinear-rc.v47", "input": "tests/fixtures/sessions/majanivirus_collinear-rc.v47.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "rule-captions-with-color-id.v46", "input": "tests/fixtures/sessions/rule-captions-with-color-id.v46.gbdraw-session.json.gz", "drawings": [{"id": "circular", "mode": "circular", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}], "activeDrawingId": "circular", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": true}},
+    {"name": "two-mode-linear-shown.v48", "input": "tests/fixtures/sessions/two-mode-linear-shown.v48.gbdraw-session.json.gz", "drawings": [{"id": "linear", "mode": "linear", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "runMetadata", "ui", "webFiles"]}, {"id": "circular", "mode": "circular", "keys": ["config", "editorState", "features", "id", "losatCache", "losatDerivedCache", "mode", "name", "orthogroupState", "proteinIdentityManifest", "renderRequest", "results", "ui", "webFiles"]}], "activeDrawingId": "linear", "sourceFacts": {"cardRowsAreFileRows": false, "proteinResultsInDrawnFrame": false}}
+  ]
+}

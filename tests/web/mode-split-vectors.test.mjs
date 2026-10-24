@@ -41,7 +41,8 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
   }
 };
 
-const { sessionLegendEditsByRowKey, splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const { splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
+const { sessionLegendEditsByRowKey } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
   buildModeSliceData,

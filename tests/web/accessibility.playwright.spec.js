@@ -11,6 +11,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { seeds, load, popup } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const genbank = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_012920.1\t8000\t20', ''].join('\n');
@@ -22,7 +23,7 @@ const loadMode = async (page, mode) => {
     const file = (text, name) => new File([text], name, { type: 'text/plain' });
     if (mode === 'linear') {
       app.selectDrawing('linear');
-      app.lInputType = 'gb';
+      app.setLinearInputType('gb');
       app.setLinearSeqPrimaryFile(0, 'gb', file(genbank, 'HmmtDNA.gbk'));
       app.setLinearDepthFile(app.linearSeqs[0], 0, file(depthTsv, 'sample.depth.tsv'));
     } else {
@@ -155,8 +156,7 @@ const auditStateNames = async (page) => {
   const stamped = await page.evaluate(() => {
     const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
     const buttons = Array.from(document.querySelectorAll('button[aria-expanded], button[aria-pressed]'))
-      .filter((button) => visible(button) && !button.disabled && !button.closest('.help-tip, .app-mode-button')
-        && !button.classList.contains('app-mode-button'));
+      .filter((button) => visible(button) && !button.disabled && !button.closest('.help-tip'));
     buttons.forEach((button, index) => button.setAttribute('data-name-probe', String(index)));
     return buttons.length;
   });
@@ -510,7 +510,7 @@ test('the Generate bar is the last settings Tab stop in both modes and stays fix
     ['rail alone', () => page.getByRole('button', { name: 'Close section', exact: true }).click()]
   ];
   for (const mode of ['circular', 'linear']) for (const [display, show] of DISPLAYS) {
-    await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+    await showDrawing(page, { kind: mode });
     await show();
     const order = await page.evaluate(() => {
       const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
@@ -537,7 +537,7 @@ test('the icon rail buttons have stable author-provided names', async ({ page })
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
-  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await showDrawing(page, { kind: 'linear' });
   const problems = [];
   const record = async (label) => {
     const audit = await auditButtons(page);

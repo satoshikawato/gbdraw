@@ -409,7 +409,7 @@ test('a saved comparison entry that is neither resource-backed nor a generated c
     session.files = { ...(session.files || {}), linearCanonicalComparisons: value };
     const { result, dialogs } = await load(session);
     assert.equal(result.status, 'ok', JSON.stringify(result.error));
-    assert.deepEqual(state.files.linearCanonicalComparisons, [], JSON.stringify(value));
+    assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, [], JSON.stringify(value));
     assert.ok(result.repairs.some(({ code, path }) => code === 'setting-entries-dropped'
       && path === 'files.linearCanonicalComparisons'), JSON.stringify(value));
     assert.ok(dialogs.flat().some((line) => line.includes('files.linearCanonicalComparisons')));

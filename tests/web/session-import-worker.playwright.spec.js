@@ -33,14 +33,14 @@ const retained = page => page.evaluate(async () => {
   const service = await import('/gbdraw/web/js/services/config.js');
   const history = window.__GBDRAW_HISTORY__;
   window.__beforeImport = { results: state.results.value, canonical: service.getCommittedCanonicalSession(),
-    file: state.files.c_gb, cache: state.losatCache.value, undo: history.getUndoCount(), redo: history.getRedoCount() };
+    file: state.activeDrawing().files.c_gb, cache: state.losatCache.value, undo: history.getUndoCount(), redo: history.getRedoCount() };
 });
 const expectRetained = async page => expect(await page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const service = await import('/gbdraw/web/js/services/config.js');
   const history = window.__GBDRAW_HISTORY__, before = window.__beforeImport;
   return before.results === state.results.value && before.canonical === service.getCommittedCanonicalSession()
-    && before.file === state.files.c_gb && before.cache === state.losatCache.value
+    && before.file === state.activeDrawing().files.c_gb && before.cache === state.losatCache.value
     && before.undo === history.getUndoCount() && before.redo === history.getRedoCount();
 })).toBe(true);
 

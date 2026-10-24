@@ -10,6 +10,7 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { DrawingState, LinearSeq } from '../state.js' */
 /** @import { RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
@@ -273,19 +274,25 @@ export const createRulePreparation = ({
     biology: state.biologicalFeatures?.value,
     result: state.svgResultIdentity?.value,
     mode: state.mode?.value,
-    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
-    file: state.files?.t_color,
-    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
+    // Every drawing's input type, in tab order.
+    inputKinds: JSON.stringify(state.drawingList().map((/** @type {DrawingState} */ drawing) => drawing.inputType.value)),
+    file: state.cardFiles.t_color,
+    // Every drawing's cards, in tab order: the same invalidation as the
+    // project's rows had.
+    linearFiles: state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs)
+      .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
     resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
     selectedResult: state.selectedResultIndex?.value,
     ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
     // Physical source, palette, and selector inputs retain their identity while
     // request-owned comparison artifacts are published independently.
     inputFiles: [
-      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
-      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
-      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
-      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
+      ...state.drawingList().flatMap((/** @type {DrawingState} */ { files }) => [
+        files.c_gb, files.c_gff, files.c_fasta, files.c_depth,
+        files.c_conservation_blasts, files.c_conservation_blasts_source,
+        files.c_conservation_fastas, files.c_conservation_sequence_sources
+      ]),
+      state.cardFiles.d_color, state.cardFiles.blacklist, state.cardFiles.whitelist, state.cardFiles.qualifier_priority
     ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
   });
   /** @type {RulePreparation['isCurrent']} */

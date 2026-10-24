@@ -61,7 +61,7 @@ const openLinear = async (page) => {
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('linear');
-    app.lInputType = 'gb';
+    app.setLinearInputType('gb');
     Object.assign(app.form, { show_gc: false, show_skew: false, show_labels_linear: 'none' });
   });
 };

@@ -345,3 +345,29 @@ Circular holds no genome, the five file cards, and hand edits made before and
 after each load. It pins the rows each card marks, the Default colors and
 Blacklist words in `config.fileImports`, and the rows a hand edit made the
 user's. The steps and inputs are in `file-card-imports.provenance.json`.
+
+`two-mode-linear-shown.v48.gbdraw-session.json.gz` is a Web **Save Session**
+download of the released v0.14.0 app (Session 48, tag `v0.14.0`) with both
+modes used and Linear shown: Circular holds a genome, a Default colors file
+and a changed setting, and has a Result that Session 48 does not keep;
+Linear holds two genomes, a LOSAT comparison (one `losatCache` entry), a
+Blacklist file and its Result. It is the positive fixture of the move of a
+Session 48 to drawings (`tests/test_session_compat.py`,
+`drawings-vectors.json` `upgrades`). The route, inputs and checks are in
+`two-mode-linear-shown.v48.provenance.json`.
+
+The four `drawings-v49/drawings-*.v49.gbdraw-session.json.gz` files are Session 49
+(`drawings`, DESIGN §1), which Python reads before the Web does (D-15-81).
+They stay in `drawings-v49/`, which the Web's fixture walks do not list, until
+the Web reads Session 49.
+`gbdraw.session_drawings.write_session_drawings(version=49)` wrote each from a
+fixture above, upgraded to Session 48 first, leaving out the resources no
+drawing names: `circular-only` (one Circular drawing,
+`font-family-preserved.v46`), `circular-linear` (both Gallery drawings of
+`tests/utils/two_mode_session.py`, Linear active), `linear-pair-losat`
+(`q-frame-main-web-losatn.v42` drawn twice: `linear` keeps its LOSATN entry,
+`linear-2` has none) and `per-drawing-cards` (`file-card-imports-circular.v48`
+drawn twice: `circular` keeps the five file cards, `circular-2` has none).
+Each `.provenance.json` names the source, the edits, the script and the
+decompressed SHA-256; `tests/test_session_admission_49.py` admits them and
+writes each again unchanged.

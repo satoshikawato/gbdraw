@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Mapping, NamedTuple, Sequence, cast
+from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
@@ -315,6 +315,34 @@ def read_legacy_source_features(
     return read_again
 
 
+class DraftMigrationRepair(TypedDict):
+    """What a draft migration could not keep as stored, as the Web's Load
+    repair record (``LoadRepair`` in ``web/js/utils/load-repairs.js``) that
+    Web Load reports for the same migration."""
+
+    code: Literal["feature-edit-unmatched", "feature-visibility-narrowed", "hash-selector-unmapped"]
+    path: Literal["features", "features.featureVisibilityOverrides", "config.rules"]
+    effect: Literal["dropped", "changed"]
+    count: int
+
+
+def session_draft_migration_repairs(migration: SessionDraftMigration) -> tuple[DraftMigrationRepair, ...]:
+    """The Load repairs of the draft migrations that
+    :func:`log_session_draft_migration` reports as warnings."""
+
+    repairs: list[DraftMigrationRepair] = []
+    if migration.dropped_feature_edit_count:
+        repairs.append({"code": "feature-edit-unmatched", "path": "features", "effect": "dropped",
+                        "count": migration.dropped_feature_edit_count})
+    if migration.narrowed_visibility_count:
+        repairs.append({"code": "feature-visibility-narrowed", "path": "features.featureVisibilityOverrides",
+                        "effect": "changed", "count": migration.narrowed_visibility_count})
+    if migration.unmapped_hash_selector_count:
+        repairs.append({"code": "hash-selector-unmapped", "path": "config.rules", "effect": "changed",
+                        "count": migration.unmapped_hash_selector_count})
+    return tuple(repairs)
+
+
 def log_session_draft_migration(migration: SessionDraftMigration, source_version: int) -> None:
     """Report what the draft migrations of a Session 27-44 changed or could not move."""
 
@@ -356,12 +384,14 @@ def project_session_adjunct_for_current_write(
     *,
     source_version: int,
     source_features: Mapping[str, Any] | None = None,
+    repairs: list[DraftMigrationRepair] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Detach non-canonical state and migrate released Web-owned field names.
 
     ``source_features`` are the Session's sources read again
     (:func:`read_legacy_source_features`) for the rendered-ID edits of a
-    Session without a feature catalog.
+    Session without a feature catalog. The Load repairs of the draft
+    migrations are added to ``repairs`` when it is given.
     """
 
     adjunct = {
@@ -391,6 +421,8 @@ def project_session_adjunct_for_current_write(
             else:
                 adjunct.pop(key, None)
         log_session_draft_migration(migration, source_version)
+        if repairs is not None:
+            repairs.extend(session_draft_migration_repairs(migration))
     orthogroup_state = adjunct.get("orthogroupState")
     if isinstance(orthogroup_state, Mapping):
         projected_orthogroup_state = dict(orthogroup_state)
@@ -606,11 +638,13 @@ def with_current_artifacts(
 
 
 __all__ = [
+    "DraftMigrationRepair",
     "LegacySourceRead",
     "legacy_source_reads",
     "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
     "read_legacy_source_features",
     "replace_current_derived_feature_state",
+    "session_draft_migration_repairs",
     "with_current_artifacts",
 ]

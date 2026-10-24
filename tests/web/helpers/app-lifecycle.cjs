@@ -645,8 +645,8 @@ const readWarmFacts = async (page) => ({
       choicePrompt: Boolean(document.querySelector('[data-choice-prompt]')),
       zoom: app.zoom,
       pan: { ...app.canvasPan },
-      inputs: describe(state.files),
-      linearSources: state.linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
+      inputs: describe({ ...state.cardFiles, ...state.drawingOfMode('circular').files }),
+      linearSources: state.drawingOfMode('linear').linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
       openSections: [...document.querySelectorAll('details[open] > summary')].map((summary) => summary.textContent.trim()),
       globals: Object.fromEntries(Object.keys(window).sort().map((key) => [key, typeof window[key]])),
       testHooks: Object.entries(window.__GBDRAW_TEST_HOOKS__ || {}).map(([name, hook]) => `${name}: ${hook}`).sort(),
@@ -704,14 +704,23 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   // drafts and settings (Reset Settings), and the settings of both drawings as
   // the boot read them. The UI part follows the Multi-Record Canvas watcher,
   // which writes layout defaults when the reset turns the canvas back on.
-  await evaluateWithRetainedPromise(page, async (drawings) => {
+  await evaluateWithRetainedPromise(page, async ({ drawings, shownAtBoot }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const config = await import('/gbdraw/web/js/services/config.js');
     const app = window.__GBDRAW_APP__;
-    for (let index = state.linearSeqs.length - 1; index >= 0; index -= 1) {
-      for (const field of ['gb', 'gff', 'fasta']) {
-        if (state.linearSeqs[index]?.[field]) await app.setLinearSeqPrimaryFile(index, field, null);
+    // The source setter acts on the shown drawing, so the Linear drawing is
+    // shown while its sources are removed.
+    const linear = state.drawingOfMode('linear');
+    const linearSeqs = linear.linearSeqs;
+    if (linearSeqs.some((seq) => seq.gb || seq.gff || seq.fasta)) {
+      app.selectDrawing(linear.id);
+      for (let index = linearSeqs.length - 1; index >= 0; index -= 1) {
+        for (const field of ['gb', 'gff', 'fasta']) {
+          if (linearSeqs[index]?.[field]) await app.setLinearSeqPrimaryFile(index, field, null);
+        }
       }
+      app.selectDrawing(shownAtBoot);
+      await window.Vue.nextTick();
     }
     await app.resetSettings();
     for (const [mode, { config: settings }] of Object.entries(drawings)) {
@@ -721,7 +730,7 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     for (const [mode, { ui }] of Object.entries(drawings)) {
       config.applyUiStateData(state.drawingOf(mode), ui, { restorePreviewNavigation: false });
     }
-  }, restorePoint.drawings);
+  }, { drawings: restorePoint.drawings, shownAtBoot });
   await settleLive(page);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.captureBaseline('Initial state'));
   await settleLive(page);

@@ -11,6 +11,7 @@ const { basename } = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
 const LAMBDA = 'tests/test_inputs/NC_001416.gb';
@@ -30,8 +31,7 @@ const committed = (page, id) => page.evaluate(async (featureId) => {
 }, id);
 
 const switchMode = async (page, mode) => {
-  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
-  await page.waitForFunction((expected) => window.__GBDRAW_APP__?.mode === expected, mode);
+  await showDrawing(page, { kind: mode });
   await settle(page);
 };
 

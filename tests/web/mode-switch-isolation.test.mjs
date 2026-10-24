@@ -134,7 +134,7 @@ test('an auxiliary table imports through its file input, into the drawing shown 
   const imported = importAuxiliaryTable('blacklist', new File(['M3_12_WORD\n'], 'blacklist.txt', { type: 'text/plain' }));
   installShownDrawing('circular');
   assert.equal(await imported, true);
-  assert.equal(state.files.blacklist?.name, 'blacklist.txt');
+  assert.equal(state.inputFiles.fileOf(state.cardFiles.blacklist)?.name, 'blacklist.txt');
   assert.match(modeDrawing(state, 'linear').manualBlacklist.value, /M3_12_WORD/);
   assert.equal(modeDrawing(state, 'circular').manualBlacklist.value, before);
 });

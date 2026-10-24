@@ -15,10 +15,10 @@ const routerOver = (snapshotService, options = {}) => createHistoryRouter({
   managerOptions: (drawingId) => ({ ...snapshotService.drawingHistory(drawingId), ...options }),
   sessionHistory: snapshotService.sessionHistory()
 });
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
+  state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
 const history = routerOver(snapshots, {
   buildCheckpoint: () => assert.fail('Form edits must use intent History'),
@@ -85,7 +85,7 @@ for (const [domain, key, first, second] of [
   const { RECORD_SETTINGS_DEFAULTS, removeRecordEdits } = await import('../../gbdraw/web/js/services/record-draw-selection.js');
   const { removeAnnotations } = await import('../../gbdraw/web/js/services/drawing/annotation-sets.js');
   const editorSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildFeatureStateData: config.buildFeatureStateData, applyFeatureStateData: config.applyFeatureStateData,
     buildEditorStateData: config.buildEditorStateData, applyEditorStateData: config.applyEditorStateData
   });
@@ -96,7 +96,7 @@ for (const [domain, key, first, second] of [
   // The record settings are the Linear drawing's: its History records them.
   installShownDrawing('linear');
   const drawing = modeDrawing(state, 'linear');
-  const card = state.linearSeqs[0];
+  const card = modeDrawing(state, 'linear').linearSeqs[0];
   const uid = card.uid;
   card.definition = 'Kept organism';
   card.losat_gencode = 11;
@@ -120,7 +120,7 @@ for (const [domain, key, first, second] of [
   assert.equal(drawing.featureOverrides[key], undefined);
   assert.equal(drawing.annotationSets[0].annotations.length, 0);
   await editorHistory.undo();
-  const restored = state.linearSeqs.find((sequence) => sequence.uid === uid);
+  const restored = modeDrawing(state, 'linear').linearSeqs.find((sequence) => sequence.uid === uid);
   assert.equal(restored.definition, 'Kept organism');
   assert.equal(restored.losat_gencode, 11);
   assert.equal(drawing.featureOverrides[key]?.featureVisibility, 'off');
@@ -217,7 +217,7 @@ console.log('History restores nullable config values and preserves key guards.')
   assert.strictEqual(liveCatalog(), catalog);
 
   const artifactSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildEditorStateData, applyEditorStateData
   });
   const artifactHistory = createHistoryManager({
@@ -283,7 +283,7 @@ console.log('History restores nullable config values and preserves key guards.')
     config: buildConfigData(state.activeDrawing()), layoutPreferences: buildUiStateData(state.activeDrawing()).layoutPreferences
   });
   const restoreSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
+    state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData,
     buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
   });
   const restoreHistory = createHistoryManager({
@@ -340,7 +340,7 @@ console.log('History restores nullable config values and preserves key guards.')
   const { readFile } = await import('node:fs/promises');
   const { buildUiStateData, applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
   const preferenceSnapshots = createHistorySnapshotService({
-    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
+    state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData
   });
   const preferenceHistory = createHistoryManager({
     ...preferenceSnapshots.drawingHistory(state.activeDrawing().id),

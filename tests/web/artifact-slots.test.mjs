@@ -16,10 +16,10 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { adoptCanonicalRenderArtifacts, canonicalRenderArtifactOwner, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { readFile } = await import('node:fs/promises');
 
-const snapshots = createHistorySnapshotService({ state, fileStore: createHistoryFileStore() });
+const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
 snapshots.setGeneratedArtifactRuntimeOwner({
   capture: () => ({ canonical: canonicalRenderArtifactOwner.capture(), cli: 'circular helper files' }),
   restore: (runtime) => { canonicalRenderArtifactOwner.restore(runtime?.canonical ?? null); }
@@ -74,7 +74,7 @@ const fillCircularArtifact = async () => {
   };
   Object.entries(kept).forEach(([key, value]) => { memberOf(key).value = value; });
   state.activeDrawing().manualSpecificRules.splice(0, state.activeDrawing().manualSpecificRules.length, { qual: 'product', val: 'x', color: '#333333', cap: 'X' });
-  state.linearSeqs.splice(0, state.linearSeqs.length, { uid: 'seq-1', region_reverse: true });
+  modeDrawing(state, 'linear').linearSeqs.splice(0, modeDrawing(state, 'linear').linearSeqs.length, { uid: 'seq-1', region_reverse: true });
   state.matchSequenceRegistry.register({ origin: 'linear-record', sourceKey: 'k1', recordId: 'R1', sequence: 'ACGT' });
   return { values, kept };
 };
@@ -108,7 +108,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // Draft and project state stays.
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
   assert.deepEqual(state.activeDrawing().manualSpecificRules, rules);
-  assert.equal(state.linearSeqs[0].region_reverse, true);
+  assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, true);
 
   // The displayed artifact is the Linear drawing's now (its mode is linear; the test installs it without a switch).
   const linear = snapshots.captureArtifactSlot();
@@ -186,7 +186,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   assert.equal(kept.drawingId, 'linear');
   assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
   const slots = createArtifactSlotStore();
-  slots.replaceLoaded(kept);
+  slots.replaceLoaded([kept]);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */
   const selected = (id, shownId, shown) => slots.readOfDrawing(id, shownId, () => shown,
     (slot) => slot.values.results[slot.values.selectedResultIndex]);
@@ -201,7 +201,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
 // it does not fall back to the drawing's draft palette.
 test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
   const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
-  const service = createHistorySnapshotService({ state, fileStore: createHistoryFileStore(), applyUiStateData });
+  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), applyUiStateData });
   installShownDrawing('circular');
   const drawing = modeDrawing(state, 'circular');
   const draftPalette = drawing.selectedPalette.value;
@@ -244,7 +244,7 @@ test('the slot store keeps a hidden drawing\'s artifact through its named operat
   assert.strictEqual(written.values.results, linearSlot.values.results, 'the other values stay by reference');
   store.writeValues(circular, { appliedPaletteName: 'Vivid' });
   assert.deepEqual(store.kept().map((slot) => slot.drawingId), ['linear', 'circular'], 'an empty slot takes the values');
-  store.replaceLoaded(null);
+  store.replaceLoaded([]);
   assert.deepEqual(store.kept(), []);
   store.restore(before);
   assert.deepEqual(store.kept(), [linearSlot]);

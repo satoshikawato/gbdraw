@@ -1,17 +1,15 @@
 // @ts-check
 /** @import { LinearSeq } from '../state.js' */
-/** @import { FileLike } from './session-resource-backing.js' */
-import { getSessionResourceSource } from './file-content-cache.js';
+/** @import { InputFileRef } from './history-files.js' */
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 
-// A composite backing carries `descriptors` and no single `descriptor`.
-/** @param {FileLike | null | undefined} file */
-const sourceFileIdentity = (file) => (
-  /** @type {{ descriptor?: unknown } | null} */ (getSessionResourceSource(file))?.descriptor || file
-);
+// Two Session resource views of one stored resource are one source (`sourceId`).
+/** @param {InputFileRef | null | undefined} file */
+const sourceFileIdentity = (file) => file?.sourceId || null;
 
+/** The texts of a record card, as a draft or a request row holds them. @typedef {Partial<Pick<LinearSeq, 'definition' | 'record_subtitle' | 'file_definition' | 'file_subtitle' | 'inferred_definition'>>} LinearSeqTexts */
 /**
  * An entry of a File's `records`: a record card and its position in the grouped list.
  * @template {Partial<LinearSeq>} [S=LinearSeq]
@@ -270,7 +268,7 @@ export const linearFileCardRecord = (source) => {
 // A record draws its own Definition, else the File default the user entered,
 // else the definition inferred from that record (D-12).
 /**
- * @param {Partial<LinearSeq>} sequence
+ * @param {LinearSeqTexts} sequence
  * @param {LinearSourceView | null} [source]
  */
 export const resolveLinearRecordEffectiveDefinition = (sequence, source = null) => {
@@ -321,7 +319,7 @@ export const inferredDefinitionForRecord = (records, selector) => {
 };
 
 /**
- * @param {Partial<LinearSeq>} sequence
+ * @param {LinearSeqTexts} sequence
  * @param {LinearSourceView | null} [source]
  */
 export const resolveLinearRecordEffectiveSubtitle = (sequence, source = null) => {

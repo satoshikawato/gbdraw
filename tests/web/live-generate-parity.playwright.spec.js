@@ -1249,7 +1249,7 @@ test.describe('the warm app page', () => {
     return {
       mode: app.mode,
       results: app.results.length,
-      linearSources: state.linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
+      linearSources: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
       showLabelsLinear: state.drawingOf('linear').form.show_labels_linear,
       undo: window.__GBDRAW_HISTORY__.getUndoCount(),
       leftByCase: window.leftByCase ?? null

@@ -256,8 +256,9 @@ test('a double press on Generate starts one operation', async ({ page }) => {
   await install(page);
   await openApp(page);
   await page.evaluate(async (content) => {
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.files.c_gb = new File([content], 'HmmtDNA.gbk', { type: 'text/plain' });
+    app.files.c_gb = bound(new File([content], 'HmmtDNA.gbk', { type: 'text/plain' }));
     await window.Vue.nextTick();
   }, source);
   const before = await getDiagramWorkerActivity(page);

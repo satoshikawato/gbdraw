@@ -82,15 +82,14 @@ const ANNOTATION_MARK_OPTIONS = Object.freeze([
   'highlight'
 ]);
 
-/** @param {{ linearSeqs?: { depth?: DepthFileSlots }[] } | null | undefined} state */
-export const linearAvailableDepthTrackCountForState = (state) => {
-  const seqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  return depthTrackMatrixWidth(seqs.map((seq) => seq?.depth));
-};
+/** The Depth series a Linear drawing's rows hold. @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
+const linearAvailableDepthTrackCountForDrawing = (drawing) => (
+  depthTrackMatrixWidth(drawing.linearSeqs.map((seq) => seq.depth))
+);
 
-/** @param {{ linearSeqs?: { depth?: DepthFileSlots }[] } | null | undefined} state */
-const linearSourcedDepthTrackIndexesForState = (state) => (
-  activeDepthTrackIndices((Array.isArray(state?.linearSeqs) ? state.linearSeqs : []).map((seq) => seq?.depth))
+/** @param {{ linearSeqs: readonly { depth?: DepthFileSlots }[] }} drawing */
+const linearSourcedDepthTrackIndexesForDrawing = (drawing) => (
+  activeDepthTrackIndices(drawing.linearSeqs.map((seq) => seq.depth))
 );
 
 /** @param {(LinearTrackSlotInput | null | undefined)[] | null | undefined} slots @param {unknown} renderer */
@@ -262,15 +261,25 @@ export const createLinearTrackSlotEditor = ({
     slots: drawing.adv.linear_track_slots,
     axisIndex: drawing.adv.linear_track_slots_axis_index,
     trackType: drawing.form.linear_track_layout,
-    depthTrackCount: linearAvailableDepthTrackCountForState(state),
-    depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForState(state),
+    depthTrackCount: linearAvailableDepthTrackCountForDrawing(drawing),
+    depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForDrawing(drawing),
     annotationSetIds: annotationSetIds(drawing),
     conservationSeries: []
   });
 
+  // The shown drawing when it is a Linear one, else null: a template or
+  // computed helper may run while a Circular drawing is shown and then returns
+  // its neutral value. Resolved at each read, never cached.
+  /** @returns {DrawingState | null} */
+  const shownLinearDrawing = () => {
+    const drawing = state.activeDrawing();
+    return drawing.mode === 'linear' ? drawing : null;
+  };
+
   /** @param {OptionalLinearSlot} slot @param {unknown} [index] */
   const linearTrackSlotIssue = (slot, index = null) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownLinearDrawing();
+    if (drawing === null) return '';
     const resolvedIndex = Number.isInteger(Number(index))
       ? Number(index)
       : drawing.adv.linear_track_slots.findIndex((/** @type {unknown} */ candidate) => candidate === slot);
@@ -280,16 +289,20 @@ export const createLinearTrackSlotEditor = ({
   };
 
   /** The plan's issues, each shown as `errorText(issue.parts)` and keyed by its code (codes do not repeat). */
-  const linearTrackGlobalIssues = () => linearTrackValidationPlan(state.drawingOfMode('linear')).globalIssues;
+  const linearTrackGlobalIssues = () => {
+    const drawing = shownLinearDrawing();
+    return drawing === null ? [] : linearTrackValidationPlan(drawing).globalIssues;
+  };
 
   /**
    * The slots an Overlay annotation row may name: for its anchor, every
    * enabled slot with a band; for Extend to, the same without its anchor.
+   * @param {DrawingState} drawing
    * @param {OptionalLinearSlot} [slot]
    * @param {OverlaySlotReference} [key]
    */
-  const linearAnnotationAnchorOptions = (slot = null, key = 'anchor_slot') => (
-    state.drawingOfMode('linear').adv.linear_track_slots
+  const anchorOptionsOf = (drawing, slot = null, key = 'anchor_slot') => (
+    drawing.adv.linear_track_slots
       .filter((/** @type {OptionalLinearSlot} */ candidate) => (
         candidate &&
         candidate !== slot &&
@@ -303,6 +316,12 @@ export const createLinearTrackSlotEditor = ({
         label: `${String(candidate.id).trim()} · ${linearTrackRendererLabel(candidate.renderer)}`
       }))
   );
+
+  /** @param {OptionalLinearSlot} [slot] @param {OverlaySlotReference} [key] */
+  const linearAnnotationAnchorOptions = (slot = null, key = 'anchor_slot') => {
+    const drawing = shownLinearDrawing();
+    return drawing === null ? [] : anchorOptionsOf(drawing, slot, key);
+  };
 
   /** @param {OptionalLinearSlot} slot @param {OverlaySlotReference} [key] */
   const linearAnnotationAnchorIsKnown = (slot, key = 'anchor_slot') => {
@@ -319,7 +338,7 @@ export const createLinearTrackSlotEditor = ({
   const bindOnlyLinearAnnotationAnchor = (drawing, slot) => {
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
     slot.params = cloneParams(slot.params);
-    const options = linearAnnotationAnchorOptions(slot);
+    const options = anchorOptionsOf(drawing, slot);
     const current = String(slot.params.anchor_slot || '').trim();
     if (!options.some((/** @type {{ id: string }} */ option) => option.id === current)) {
       if (options.length === 1) slot.params.anchor_slot = options[0].id;
@@ -335,20 +354,20 @@ export const createLinearTrackSlotEditor = ({
    * @param {unknown} value
    */
   const setLinearOverlayAnnotationParam = (slot, key, value) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot || normalizeRenderer(slot.renderer) !== 'annotations') return;
-    setOverlayAnnotationParam(slot, state.drawingOfMode('linear').adv.linear_track_slots, key, value);
+    setOverlayAnnotationParam(slot, drawing.adv.linear_track_slots, key, value);
   };
 
-  /** Why Add track cannot add this renderer, or '' (OV-1254). @param {unknown} renderer */
-  const linearTrackAddBlockReason = (renderer) => {
-    const drawing = state.drawingOfMode('linear');
+  /** Why Add track cannot add this renderer, or '' (OV-1254). @param {DrawingState} drawing @param {unknown} renderer */
+  const addBlockReasonOf = (drawing, renderer) => {
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
     return trackAddBlockReason(normalizedRenderer, {
       supported: true,
       annotationSetCount: annotationSetIds(drawing).length,
-      depthSeriesCount: linearAvailableDepthTrackCountForState(state),
+      depthSeriesCount: linearAvailableDepthTrackCountForDrawing(drawing),
       featuresRowEnabled: drawing.adv.linear_track_slots.some((/** @type {OptionalLinearSlot} */ slot) => (
         slot?.enabled !== false && normalizeRenderer(slot?.renderer) === 'features'
       ))
@@ -356,19 +375,33 @@ export const createLinearTrackSlotEditor = ({
   };
 
   /** @param {unknown} renderer */
-  const canAddLinearTrackRenderer = (renderer) => linearTrackAddBlockReason(renderer) === '';
+  const linearTrackAddBlockReason = (renderer) => {
+    const drawing = shownLinearDrawing();
+    return drawing === null ? '' : addBlockReasonOf(drawing, renderer);
+  };
+
+  /** @param {unknown} renderer */
+  const canAddLinearTrackRenderer = (renderer) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && addBlockReasonOf(drawing, renderer) === '';
+  };
 
   // Duplicate shares the availability of the other row controls (GX-01).
-  /** @param {OptionalLinearSlot} slot */
-  const canDuplicateLinearTrackSlot = (slot) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
+  const duplicableSlotOf = (drawing, slot) => {
     if (!slot || state.sessionOperationAvailability?.()) return false;
     if (slot.enabled === false) return true;
     const renderer = normalizeRenderer(slot.renderer);
     if (renderer === 'features') return false;
     if (renderer === 'annotations') return annotationSetIds(drawing).length > 0;
-    if (renderer === 'depth') return linearAvailableDepthTrackCountForState(state) > 0;
+    if (renderer === 'depth') return linearAvailableDepthTrackCountForDrawing(drawing) > 0;
     return true;
+  };
+
+  /** @param {OptionalLinearSlot} slot */
+  const canDuplicateLinearTrackSlot = (slot) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && duplicableSlotOf(drawing, slot);
   };
 
   /** @param {OptionalLinearSlot} slot @param {string} mark */
@@ -449,8 +482,8 @@ export const createLinearTrackSlotEditor = ({
     drawing.form.linear_track_layout
   );
 
-  const normalizeCurrentSlots = () => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing */
+  const normalizeCurrentSlots = (drawing) => {
     const normalized = normalizeLinearTrackSlots(drawing.adv.linear_track_slots, drawing.adv.nt, drawing.form.linear_track_layout);
     const axis = axisIndexForCurrentLinearSlots(drawing, normalized);
     syncLinearSlotsFromAxisIndex(normalized, axis);
@@ -469,11 +502,11 @@ export const createLinearTrackSlotEditor = ({
   };
 
   const resetLinearTrackSlotsFromSimpleControls = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
-    const depthTrackCount = linearAvailableDepthTrackCountForState(state);
+    const depthTrackCount = linearAvailableDepthTrackCountForDrawing(drawing);
     const slots = createDefaultLinearTrackSlots({
       showDepth: depthTrackCount > 0,
       depthTrackCount,
@@ -494,7 +527,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {unknown} enabled */
   const setLinearTrackSlotsEnabled = (enabled) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     drawing.adv.linear_track_slots_enabled = Boolean(enabled);
@@ -505,12 +538,12 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {unknown} [renderer] */
   const addLinearTrackSlot = (renderer = 'spacer') => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const normalizedRenderer = normalizeRenderer(renderer, 'spacer');
-    if (!canAddLinearTrackRenderer(normalizedRenderer)) return;
-    normalizeCurrentSlots();
+    if (addBlockReasonOf(drawing, normalizedRenderer) !== '') return;
+    normalizeCurrentSlots(drawing);
     const slot = defaultSlot(normalizedRenderer, {
       id: nextLinearTrackSlotId(drawing, normalizedRenderer),
       side: normalizedRenderer === 'spacer' ? 'below' : undefined,
@@ -525,7 +558,7 @@ export const createLinearTrackSlotEditor = ({
         : {}
     });
     if (normalizedRenderer === 'depth') {
-      const available = linearAvailableDepthTrackCountForState(state);
+      const available = linearAvailableDepthTrackCountForDrawing(drawing);
       const claimed = new Set(
         drawing.adv.linear_track_slots
           .filter((/** @type {OptionalLinearSlot} */ candidate) => candidate?.enabled !== false && normalizeRenderer(candidate?.renderer) === 'depth')
@@ -537,15 +570,15 @@ export const createLinearTrackSlotEditor = ({
       slot.params.track_index = trackIndex < available ? trackIndex : 0;
     }
     drawing.adv.linear_track_slots.push(slot);
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   /** @param {unknown} index */
   const duplicateLinearTrackSlot = (index) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
     const idx = Number(index);
     const source = drawing.adv.linear_track_slots[idx];
     if (!source) return;
@@ -558,7 +591,7 @@ export const createLinearTrackSlotEditor = ({
     drawing.adv.linear_track_slots.splice(idx + 1, 0, copy);
     const axis = axisIndexForCurrentLinearSlots(drawing, drawing.adv.linear_track_slots);
     if (idx < axis) drawing.adv.linear_track_slots_axis_index = axis + 1;
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   /** @param {OptionalLinearSlot} slot @param {unknown} enabled */
@@ -571,10 +604,10 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {unknown} index */
   const removeLinearTrackSlot = (index) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.linear_track_slots.length) return;
     const axis = axisIndexForCurrentLinearSlots(drawing, drawing.adv.linear_track_slots);
@@ -582,7 +615,7 @@ export const createLinearTrackSlotEditor = ({
     drawing.adv.linear_track_slots_axis_index = idx < axis
       ? Math.max(0, axis - 1)
       : Math.min(axis, drawing.adv.linear_track_slots.length);
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   /** @param {DrawingState} drawing @param {unknown} fromIndex @param {unknown} toIndex */
@@ -609,9 +642,8 @@ export const createLinearTrackSlotEditor = ({
     return (from < axis) !== (to < axis);
   };
 
-  /** @param {unknown} index @param {unknown} direction */
-  const canMoveLinearTrackSlot = (index, direction) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {unknown} index @param {unknown} direction */
+  const canMoveSlotOf = (drawing, index, direction) => {
     const idx = Number(index);
     const step = Number(direction);
     if (!Number.isInteger(idx) || !Number.isInteger(step) || step === 0) return false;
@@ -621,11 +653,11 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {unknown} fromIndex @param {unknown} toIndex */
   const moveLinearTrackSlot = (fromIndex, toIndex) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (wouldLinearTrackSlotMoveCrossAxis(drawing, fromIndex, toIndex)) return;
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
     const from = Number(fromIndex);
     const to = Number(toIndex);
     if (
@@ -641,12 +673,11 @@ export const createLinearTrackSlotEditor = ({
     }
     const [slot] = drawing.adv.linear_track_slots.splice(from, 1);
     drawing.adv.linear_track_slots.splice(to, 0, slot);
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
-  /** @param {unknown} index */
-  const canMoveLinearTrackSlotAbove = (index) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {unknown} index */
+  const canMoveSlotAboveOf = (drawing, index) => {
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
@@ -654,9 +685,8 @@ export const createLinearTrackSlotEditor = ({
     return idx >= axisIndexForCurrentLinearSlots(drawing, normalized);
   };
 
-  /** @param {unknown} index */
-  const canMoveLinearTrackSlotBelow = (index) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {unknown} index */
+  const canMoveSlotBelowOf = (drawing, index) => {
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
@@ -664,14 +694,34 @@ export const createLinearTrackSlotEditor = ({
     return idx < axisIndexForCurrentLinearSlots(drawing, normalized);
   };
 
-  /** @param {unknown} index */
-  const canMoveLinearTrackSlotToAxis = (index) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {unknown} index */
+  const canMoveSlotToAxisOf = (drawing, index) => {
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
     const slot = normalized[idx];
     return ['features', 'annotations'].includes(slot?.renderer) && effectiveLinearSlotPlacement(slot) !== 'overlay';
+  };
+
+  /** @param {unknown} index @param {unknown} direction */
+  const canMoveLinearTrackSlot = (index, direction) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && canMoveSlotOf(drawing, index, direction);
+  };
+  /** @param {unknown} index */
+  const canMoveLinearTrackSlotAbove = (index) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && canMoveSlotAboveOf(drawing, index);
+  };
+  /** @param {unknown} index */
+  const canMoveLinearTrackSlotBelow = (index) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && canMoveSlotBelowOf(drawing, index);
+  };
+  /** @param {unknown} index */
+  const canMoveLinearTrackSlotToAxis = (index) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && canMoveSlotToAxisOf(drawing, index);
   };
 
   /** @param {DrawingState} drawing @param {unknown} index @param {unknown} placement */
@@ -680,7 +730,7 @@ export const createLinearTrackSlotEditor = ({
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.adv.linear_track_slots.length) return;
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
     if (idx >= drawing.adv.linear_track_slots.length) return;
     const targetPlacement = normalizePlacement(placement);
     const movingSlot = drawing.adv.linear_track_slots[idx];
@@ -694,7 +744,7 @@ export const createLinearTrackSlotEditor = ({
       syncLinearSlotPlacementFromSide(movingSlot, 'overlay');
       movingSlot.params = cloneParams(movingSlot.params);
       bindOnlyLinearAnnotationAnchor(drawing, movingSlot);
-      normalizeCurrentSlots();
+      normalizeCurrentSlots(drawing);
       return;
     }
 
@@ -713,7 +763,7 @@ export const createLinearTrackSlotEditor = ({
         drawing.adv.linear_track_slots[existingAxisIndex] = movingSlot;
         drawing.adv.linear_track_slots[idx] = existingAxisSlot;
         drawing.adv.linear_track_slots_axis_index = existingAxisIndex;
-        normalizeCurrentSlots();
+        normalizeCurrentSlots(drawing);
         return;
       }
     }
@@ -742,38 +792,41 @@ export const createLinearTrackSlotEditor = ({
       drawing.adv.linear_track_slots.splice(insertIndex, 0, slot);
       drawing.adv.linear_track_slots_axis_index = adjustedOnAxisIndex >= 0 ? adjustedOnAxisIndex : axis;
     }
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   /** @param {unknown} index */
   const moveLinearTrackSlotAbove = (index) => {
-    const drawing = state.drawingOfMode('linear');
-    if (!canMoveLinearTrackSlotAbove(index)) return;
+    const drawing = state.activeDrawing();
+    if (!canMoveSlotAboveOf(drawing, index)) return;
     moveLinearTrackSlotToPlacement(drawing, index, 'above');
   };
 
   /** @param {unknown} index */
   const moveLinearTrackSlotBelow = (index) => {
-    const drawing = state.drawingOfMode('linear');
-    if (!canMoveLinearTrackSlotBelow(index)) return;
+    const drawing = state.activeDrawing();
+    if (!canMoveSlotBelowOf(drawing, index)) return;
     moveLinearTrackSlotToPlacement(drawing, index, 'below');
   };
 
   /** @param {unknown} index */
   const moveLinearTrackSlotToAxis = (index) => {
-    const drawing = state.drawingOfMode('linear');
-    if (!canMoveLinearTrackSlotToAxis(index)) return;
+    const drawing = state.activeDrawing();
+    if (!canMoveSlotToAxisOf(drawing, index)) return;
     moveLinearTrackSlotToPlacement(drawing, index, 'overlay');
   };
 
   // The dinucleotide of the Linear drawing: what a content or skew slot that
   // sets none draws with. The placeholders of a slot's fields name it from here.
   /** @returns {string} */
-  const linearDrawingDinucleotide = () => normalizeNt(state.drawingOfMode('linear').adv.nt);
+  const linearDrawingDinucleotide = () => {
+    const drawing = shownLinearDrawing();
+    return normalizeNt(drawing === null ? '' : drawing.adv.nt);
+  };
 
   /** @param {OptionalLinearSlot} slot @param {unknown} [renderer] */
   const updateLinearTrackSlotRenderer = (slot, renderer = slot?.renderer) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
@@ -786,7 +839,7 @@ export const createLinearTrackSlotEditor = ({
       slot.params.track_index = normalizeTrackIndex(slot.params.track_index) ?? 0;
     }
     if (slot.renderer === 'dinucleotide_content' || slot.renderer === 'dinucleotide_skew') {
-      slot.params.nt = normalizeNt(slot.params.nt, linearDrawingDinucleotide());
+      slot.params.nt = normalizeNt(slot.params.nt, normalizeNt(drawing.adv.nt));
     }
     if (slot.renderer === 'annotations') {
       slot.side = slot.side === 'overlay' ? 'overlay' : 'above';
@@ -796,12 +849,12 @@ export const createLinearTrackSlotEditor = ({
       slot.params.layer = 'foreground';
     }
     if (slot.renderer !== 'features' && slot.renderer !== 'annotations' && slot.side === 'overlay') slot.side = 'below';
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   /** @param {OptionalLinearSlot} slot @param {unknown} placement */
   const updateLinearTrackSlotPlacement = (slot, placement) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
@@ -819,7 +872,7 @@ export const createLinearTrackSlotEditor = ({
         OVERLAY_ANNOTATION_PARAMS.forEach((key) => { delete slot.params[key]; });
       }
     }
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   // Managed Depth rows follow Depth sources (PD-OI-058), as in Circular. A
@@ -832,7 +885,7 @@ export const createLinearTrackSlotEditor = ({
     const { slots: nextSlots, additions } = reconcileManagedDepthSlots(/** @type {any} */ ({
       slots,
       previousSourced,
-      sourced: linearSourcedDepthTrackIndexesForState(state),
+      sourced: linearSourcedDepthTrackIndexesForDrawing(drawing),
       managedPredicate: (/** @type {OptionalLinearSlot} */ slot) => isDefaultManagedLinearSlot(slot, 'depth')
     }));
     if (additions.length === 0 && nextSlots.length === slots.length) return;
@@ -843,7 +896,7 @@ export const createLinearTrackSlotEditor = ({
         .filter((/** @type {typeof nextSlots[number]} */ slot) => !nextSlots.includes(slot)).length;
       drawing.adv.linear_track_slots_axis_index = previousAxisIndex - removedBeforeAxis;
     }
-    const seriesCount = linearAvailableDepthTrackCountForState(state);
+    const seriesCount = linearAvailableDepthTrackCountForDrawing(drawing);
     /** @type {{ id?: unknown }[]} */
     const takenSlots = [...nextSlots];
     const newSlots = additions.map((trackIndex) => {
@@ -853,23 +906,23 @@ export const createLinearTrackSlotEditor = ({
       return slot;
     });
     drawing.adv.linear_track_slots.splice(0, slots.length, ...nextSlots, ...newSlots);
-    normalizeCurrentSlots();
+    normalizeCurrentSlots(drawing);
   };
 
   // The only entry for Depth source changes: run the change, then reconcile.
   // The Linear drawing's Show Depth goes off with its last Depth
   // source; the other mode's drawing is not touched (OV-82, OV-101).
-  /** @param {() => unknown} mutate */
-  const changeLinearDepthSources = (mutate) => {
-    const drawing = state.drawingOfMode('linear');
-    const previousSourced = linearSourcedDepthTrackIndexesForState(state);
+  /** @param {DrawingState} drawing @param {() => unknown} mutate */
+  const changeLinearDepthSources = (drawing, mutate) => {
+    const previousSourced = linearSourcedDepthTrackIndexesForDrawing(drawing);
     mutate();
     reconcileLinearDepthSlots(drawing, previousSourced);
-    if (previousSourced.length > 0 && linearSourcedDepthTrackIndexesForState(state).length === 0) drawing.form.show_depth = false;
+    if (previousSourced.length > 0 && linearSourcedDepthTrackIndexesForDrawing(drawing).length === 0) drawing.form.show_depth = false;
   };
 
   const linearTrackStackEntries = () => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownLinearDrawing();
+    if (drawing === null) return [];
     const slots = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
     const axisIndex = axisIndexForCurrentLinearSlots(drawing, slots);
     /** @type {LinearStackEntry[]} */
@@ -947,7 +1000,7 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {number | null} [trackIndex] */
   const syncLinearDepthSlotHeightsFromDepthTracks = (trackIndex = null) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const slots = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
     slots.forEach((/** @type {LinearTrackSlot} */ slot) => {
       const slotTrackIndex = linearDepthTrackIndexForSlot(slot);
@@ -957,9 +1010,8 @@ export const createLinearTrackSlotEditor = ({
     });
   };
 
-  /** @param {OptionalLinearSlot} slot */
-  const linearTrackSlotHeightValue = (slot) => {
-    const drawing = state.drawingOfMode('linear');
+  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot */
+  const heightValueOf = (drawing, slot) => {
     if (normalizeRenderer(slot?.renderer) !== 'depth') {
       return String(slot?.height || '');
     }
@@ -968,10 +1020,16 @@ export const createLinearTrackSlotEditor = ({
     return heightTextFromDepthTrackConfig(drawing, trackIndex);
   };
 
-  /** @param {OptionalLinearSlot} slot @param {string} field */
-  const linearSlotManualValue = (slot, field) => {
+  /** @param {OptionalLinearSlot} slot */
+  const linearTrackSlotHeightValue = (slot) => {
+    const drawing = shownLinearDrawing();
+    return drawing === null ? String(slot?.height || '') : heightValueOf(drawing, slot);
+  };
+
+  /** @param {DrawingState} drawing @param {OptionalLinearSlot} slot @param {string} field */
+  const linearSlotManualValue = (drawing, slot, field) => {
     if (!slot) return '';
-    if (field === 'height') return linearTrackSlotHeightValue(slot);
+    if (field === 'height') return heightValueOf(drawing, slot);
     if (field === 'spacing') return slot.spacing;
     return '';
   };
@@ -1019,8 +1077,8 @@ export const createLinearTrackSlotEditor = ({
   // found by slot ID alone.
   /** @param {OptionalLinearSlot} slot @param {unknown} _slotIndex @param {string} field */
   const linearTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
-    const drawing = state.drawingOfMode('linear');
-    if (isManualSlotValue(linearSlotManualValue(slot, field))) return '';
+    const drawing = shownLinearDrawing();
+    if (drawing === null || isManualSlotValue(linearSlotManualValue(drawing, slot, field))) return '';
     const resolved = linearResolvedSlotGeometry(slot);
     const follows = !resolved && field === 'height' ? overlayFollowsNote(slot) : '';
     if (follows) return follows;
@@ -1037,19 +1095,22 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} field */
   const linearTrackSlotGeometryUnitSuffix = (slot, field) => {
-    const text = String(linearSlotManualValue(slot, field) ?? '').trim();
+    const drawing = shownLinearDrawing();
+    if (drawing === null) return '';
+    const text = String(linearSlotManualValue(drawing, slot, field) ?? '').trim();
     if (!text || /px$/i.test(text)) return '';
     return 'px';
   };
 
   /** @param {OptionalLinearSlot} slot @param {string} field */
-  const linearTrackSlotGeometryHasManual = (slot, field) => (
-    isManualSlotValue(linearSlotManualValue(slot, field))
-  );
+  const linearTrackSlotGeometryHasManual = (slot, field) => {
+    const drawing = shownLinearDrawing();
+    return drawing !== null && isManualSlotValue(linearSlotManualValue(drawing, slot, field));
+  };
 
   /** @param {OptionalLinearSlot} slot @param {unknown} value */
   const setLinearTrackSlotHeight = (slot, value) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
@@ -1060,7 +1121,7 @@ export const createLinearTrackSlotEditor = ({
     if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
     // A row whose series the drawing does not have keeps its own height only (TK-03).
     const config = depthTrackConfigForEdit(
-      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForState(state), depthTrackEditDefaults(drawing.adv)
+      drawing.adv.depth_tracks, trackIndex, linearAvailableDepthTrackCountForDrawing(drawing), depthTrackEditDefaults(drawing.adv)
     );
     if (!config) return;
     try {
@@ -1078,7 +1139,8 @@ export const createLinearTrackSlotEditor = ({
 
   /** @param {OptionalLinearSlot} slot @param {string} key */
   const linearTrackSlotSkewColorValue = (slot, key) => {
-    const drawing = state.drawingOfMode('linear');
+    const drawing = shownLinearDrawing();
+    if (drawing === null) return '';
     return resolveTrackSlotSkewColorValue(/** @type {any} */ ({
       slot,
       key,
@@ -1112,7 +1174,7 @@ export const createLinearTrackSlotEditor = ({
     linearTrackRenderers,
     linearTrackSlotEditorKey,
     linearTrackRendererLabel,
-    normalizeLinearTrackSlots: normalizeCurrentSlots,
+    normalizeLinearTrackSlots: () => normalizeCurrentSlots(state.activeDrawing()),
     changeLinearDepthSources,
     ...featureSlotEdits(trackLayoutWithVisibility(changeTrackLayout, changeTrackVisibility), {
       resetLinearTrackSlotsFromSimpleControls,
@@ -1160,7 +1222,8 @@ export const createLinearTrackSlotEditor = ({
     clearLinearTrackSlotSkewColor,
     syncLinearDepthSlotHeightsFromDepthTracks,
     linearTrackSlots: () => {
-      const drawing = state.drawingOfMode('linear');
+      const drawing = shownLinearDrawing();
+      if (drawing === null) return [];
       return Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
     },
     linearTrackStackEntries,

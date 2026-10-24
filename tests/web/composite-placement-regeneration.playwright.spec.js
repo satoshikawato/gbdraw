@@ -100,10 +100,10 @@ for (const composite of [false, true]) {
         const config = await import('./js/services/config.js');
         const { getSessionResourceSource } = await import('./js/services/file-content-cache.js');
         const session = config.getCommittedCanonicalSession();
-        const binding = getSessionResourceSource(state.files.c_gb);
-        return { records: state.circularRecordList.value, request: session.renderRequest,
+        const binding = getSessionResourceSource(state.inputFiles.fileOf(state.activeDrawing().files.c_gb));
+        return { records: state.activeDrawing().circularRecordList.value, request: session.renderRequest,
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
-          source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
+          source: { name: state.activeDrawing().files.c_gb.name, size: state.activeDrawing().files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
           form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
           catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
@@ -175,13 +175,13 @@ for (const composite of [false, true]) {
         const old = await features();
         const source = await page.evaluate(async () => {
           const { state } = await import('./js/state.js');
-          return { name: state.files.c_gb.name, mimeType: state.files.c_gb.type,
-            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.files.c_gb)] };
+          return { name: state.activeDrawing().files.c_gb.name, mimeType: state.activeDrawing().files.c_gb.type,
+            bytes: [...await (await import('./js/services/file-content-cache.js')).readFileBytes(state.inputFiles.fileOf(state.activeDrawing().files.c_gb))] };
         });
         await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
           name: source.name, mimeType: source.mimeType, buffer: Buffer.from(source.bytes) });
         await expect.poll(() => page.evaluate(async () => (await import('./js/state.js'))
-          .state.circularRecordDiscovery.status)).toBe('ready');
+          .state.activeDrawing().circularRecordDiscovery.status)).toBe('ready');
         expect((await check('P7-replaced-before-Generate', [], old)).placements).toEqual({});
         await generate();
         await check('P7-replaced-after-Generate');

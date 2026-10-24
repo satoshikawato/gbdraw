@@ -11,7 +11,7 @@ const {
   getCommittedCanonicalRenderRequest, buildConfigData, applyCapturedConfigData
 } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
-const { createHistoryFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const empty = canonicalRenderArtifactOwner.capture();
@@ -28,7 +28,7 @@ assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanoni
 state.activeDrawing().form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
+  state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
 });
 snapshots.setGeneratedArtifactRuntimeOwner(canonicalRenderArtifactOwner);
 const history = createHistoryManager({

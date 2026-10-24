@@ -88,9 +88,8 @@ const EXPLICIT_ANY_BASELINE = {
   'services/file-imports.js': 1,
   'services/gallery-session-migration.js': 12,
   'services/gallery-session-publication.js': 10,
-  'services/history-snapshot.js': 27,
+  'services/history-snapshot.js': 22,
   'services/history.js': 9,
-  'services/linear-comparisons.js': 2,
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
   'services/match-sequences.js': 11,
@@ -105,7 +104,6 @@ const EXPLICIT_ANY_BASELINE = {
   'services/session-resources.js': 4,
   'services/specific-color-rules.js': 1,
   'services/svg-result-ingestion.js': 3,
-  'state.js': 5,
   'utils/error-normalization.js': 4
 };
 

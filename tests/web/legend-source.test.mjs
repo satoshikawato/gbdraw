@@ -47,14 +47,13 @@ const stateOf = (featureOverrides = {}, rules = []) => ({
   featureCatalog: { value: catalog },
   results: { value: [{ name: 'result-0.svg', content: '<svg />' }] },
   selectedResultIndex: { value: 0 },
-  generatedMode: { value: 'circular' },
   featureOverrides,
   featureVisibilityManualRules: [],
   manualSpecificRules: rules
 });
 const sourcesOf = (hidden = [], rules = []) => {
   const featureOverrides = {};
-  const { biological: features } = resultCatalogFeatures(stateOf());
+  const { biological: features } = resultCatalogFeatures(stateOf(), 'circular');
   hidden.forEach((id) => setFeatureVisibilityOverride(
     editsOf(featureOverrides), features.find((feature) => feature.biological_feature_id === id), 'off'
   ));
@@ -63,7 +62,7 @@ const sourcesOf = (hidden = [], rules = []) => {
     ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
     colorRules: rules
   };
-  return resultLegendSources(state, context);
+  return resultLegendSources(state, 'circular', context);
 };
 const rule = (cap, color = '#ff0000') => ({ feat: 'CDS', qual: 'locus_tag', val: '^A$', color, cap });
 
@@ -124,7 +123,6 @@ const batchStateOf = (rows, rules) => {
     featureCatalog: { value: { schema: 5, items } },
     results: { value: rows.map((_, index) => ({ name: `result-${index}.svg`, content: '<svg />' })) },
     selectedResultIndex: { value: 0 },
-    generatedMode: { value: 'circular' },
     featureOverrides: {},
     featureVisibilityManualRules: [],
     manualSpecificRules: rules
@@ -135,7 +133,7 @@ const tagRule = (pattern, cap, color = '#ff0000') => ({ feat: 'CDS', qual: 'locu
 // rule preparation does with Python's answers.
 const prepareMatches = (state, rules) => {
   state.results.value.forEach((_, index) => {
-    const features = [...resultCatalogFeatures(state, index).renderedByIdentity.values()];
+    const features = [...resultCatalogFeatures(state, 'circular', index).renderedByIdentity.values()];
     const keys = rules.map(ruleKey);
     recordRuleMatches(features, keys, (featureIndex) => {
       const tag = features[featureIndex].locus_tag || features[featureIndex].biological_feature_id;
@@ -153,7 +151,7 @@ const rowKeysOf = (rows, rules, { prepared = true, byColor = true } = {}) => {
     ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
     colorRules: rules
   };
-  return resultLegendRowKeys(state, context, { byColor });
+  return resultLegendRowKeys(state, 'circular', context, { byColor });
 };
 /** @param {string[]} shown */
 const showing = (shown) => (key) => shown.includes(key);
@@ -298,11 +296,11 @@ test('hiding the only feature of one color of a caption written in several color
   const sourcesWith = (rules, hidden = []) => {
     const state = batchStateOf(ONE, rules);
     prepareMatches(state, rules);
-    const { biological: features } = resultCatalogFeatures(state);
+    const { biological: features } = resultCatalogFeatures(state, 'circular');
     hidden.forEach((id) => setFeatureVisibilityOverride(
       editsOf(state.featureOverrides), features.find((feature) => feature.biological_feature_id === id), 'off'
     ));
-    return resultLegendSources(state, {
+    return resultLegendSources(state, 'circular', {
       ...featureDrawnContext(state, { diagramOptions: { selectedFeaturesSet: ['CDS', 'repeat_region'] } }),
       colorRules: rules
     });

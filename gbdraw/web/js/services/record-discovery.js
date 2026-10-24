@@ -14,6 +14,7 @@ import {
 } from './file-content-cache.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { InputFileRef } from './history-files.js' */
 /** @import { GenBankHeader } from './genbank-header.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 
@@ -24,8 +25,8 @@ import {
  * @property {'idle' | 'loading' | 'deferred' | 'ready' | 'error'} status
  * @property {UserFacingError | ''} error The reader's error, or '' when there is none.
  * @property {'' | 'gb' | 'gff'} inputType
- * @property {FileLike | null} primaryFile
- * @property {FileLike | null} pairedFile
+ * @property {InputFileRef | null} primaryFile
+ * @property {InputFileRef | null} pairedFile
  * @property {{ selector: string, record_id: string, recordKey: string }[]} canonicalRecordIdentities
  */
 
@@ -72,35 +73,35 @@ export const discoveryErrorIsFinal = (error) => typeof error === 'object' && err
   && Boolean(error.code) && error.code !== 'UNKNOWN' && error.stage === 'helper';
 
 /**
- * The members of the `state.js` state that `circularDiscoveryForInput` reads;
- * the record list passes through.
+ * The members of a drawing that `circularDiscoveryForInput` reads (its inputs
+ * slice); the record list passes through.
  * @template Entry
  * @typedef {{
- *   cInputType: { value: string },
- *   files: { c_gb: FileLike | null, c_gff: FileLike | null, c_fasta: FileLike | null },
+ *   inputType: { value: string },
+ *   files: { c_gb: InputFileRef | null, c_gff: InputFileRef | null, c_fasta: InputFileRef | null },
  *   circularRecordDiscovery: CircularRecordDiscovery,
  *   circularRecordList: { value: Entry[] }
- * }} CircularDiscoveryState
+ * }} CircularDiscoveryDrawing
  */
 
 /**
  * A catalog is current only for the exact active source instance and input type.
  * @template Entry
- * @param {CircularDiscoveryState<Entry>} state
+ * @param {CircularDiscoveryDrawing<Entry>} drawing
  */
-export const circularDiscoveryForInput = (state) => {
-  const inputType = state.cInputType.value;
-  const primaryFile = inputType === 'gff' ? state.files.c_gff : state.files.c_gb;
-  const pairedFile = inputType === 'gff' ? state.files.c_fasta : null;
+export const circularDiscoveryForInput = (drawing) => {
+  const inputType = drawing.inputType.value;
+  const primaryFile = inputType === 'gff' ? drawing.files.c_gff : drawing.files.c_gb;
+  const pairedFile = inputType === 'gff' ? drawing.files.c_fasta : null;
   const hasInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-  const discovery = state.circularRecordDiscovery;
+  const discovery = drawing.circularRecordDiscovery;
   const current = discovery.inputType === inputType
     && discovery.primaryFile === primaryFile && discovery.pairedFile === pairedFile;
   return {
     hasInput, current, primaryFile, pairedFile, inputType,
     status: hasInput ? (current ? discovery.status : 'deferred') : 'idle',
     error: current ? discovery.error : '',
-    records: current && discovery.status === 'ready' ? state.circularRecordList.value : []
+    records: current && discovery.status === 'ready' ? drawing.circularRecordList.value : []
   };
 };
 

@@ -4,7 +4,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { withDrawings } from './helpers/drawing-state.mjs';
+import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
@@ -269,20 +269,22 @@ test('late source discovery cannot expand the live source set during Session', a
   let expanded = 0;
   const file = {};
   const source = { uid: 'source', gb: file, region_record_id: '' };
+  const linear = { id: 'linear', mode: 'linear', inputType: { value: 'gb' }, linearSeqs: [source] };
   const selector = createLinearRecordSelector({
-    state: { mode: { value: 'linear' }, lInputType: { value: 'gb' },
-      linearSeqs: [source], sessionOperationAvailability },
+    state: withModeDrawings({ mode: { value: 'linear' }, cardFiles: {}, sessionOperationAvailability }, {
+      circular: {}, linear
+    }),
     reactive: value => value, recordReader: () => read.promise,
     onRecordsDiscovered: () => { expanded += 1; }
   });
-  const pending = selector.refresh();
+  const pending = selector.refresh(linear);
   state.sessionSavePending.value = true;
   read.release([{ selector: '#1', recordId: 'first', recordLength: 100 }]);
   assert.deepEqual(await pending, saving);
   assert.equal(expanded, 0);
   assert.equal(selector.statusFor(source), 'deferred');
   state.sessionSavePending.value = false;
-  await selector.refresh();
+  await selector.refresh(linear);
   assert.equal(selector.statusFor(source), 'ready');
   assert.equal(expanded, 1);
 });
@@ -292,7 +294,7 @@ test('late rule helper replies cannot publish cache entries while Session is pen
   const feature = { type: 'CDS', record: 'record', id: 'gene', qualifiers: {} };
   const rule = { feat: '*', qual: 'product', val: 'gene' };
   const owner = createRulePreparation({
-    state: withDrawings({ extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
+    state: withDrawings({ cardFiles: {}, extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
     evaluate: () => reply.promise
   });
   const pending = owner.prepare([rule]);

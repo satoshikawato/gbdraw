@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DrawingState } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -22,50 +22,28 @@ import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js
 import {
   replacePriorityRules, replaceWhitelistRules, setBlacklistText
 } from '../services/drawing/label-tables.js';
-/** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FileImportCard } from '../services/file-imports.js' */
-
-/**
- * @typedef {object} RecordDiscoveryWatcherOptions
- * @property {{ readonly value: unknown } | null | undefined} [rollbackInProgress] A Session import is rolling back.
- * @property {{ readonly value: unknown } | null | undefined} [semanticWatchersSuppressed]
- * @property {{ readonly value: unknown } | null | undefined} [sessionResourceDiscoveryDeferred]
- * @property {(options: { suppress: boolean }) => unknown} refresh The record discovery; `suppress` tells it to leave the derived state alone.
- */
-
-/** @param {RecordDiscoveryWatcherOptions} options */
-export const runRecordDiscoveryWatcher = async ({
-  rollbackInProgress,
-  semanticWatchersSuppressed,
-  sessionResourceDiscoveryDeferred,
-  refresh
-}) => {
-  const suppress = Boolean(
-    rollbackInProgress?.value
-    || semanticWatchersSuppressed?.value
-    || sessionResourceDiscoveryDeferred?.value
-  );
-  await refresh({ suppress });
-  return !suppress;
-};
+/** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../services/history-files.js' */
 
 /**
  * The auxiliary file imports still applying (OV-1193). The file watchers
  * track them; Save and Load read whether one is pending, and Generate waits
  * for them. The composition root creates it before all of them.
  * @typedef {object} AuxiliaryFileImports
- * @property {(file: FileLike, pending: Promise<boolean>) => void} track Holds `file`'s import until it settles.
- * @property {(file: FileLike) => Promise<boolean> | undefined} wait The import of `file`, or its removal (OV-1280), while it applies.
+ * @property {(file: InputFileRef, pending: Promise<boolean>) => void} track Holds the import of the card's bound file until it settles.
+ * @property {(file: InputFileCandidate) => Promise<boolean> | undefined} wait The import of `file` (the File the card's
+ *   input chose, or the ref it removed), or its removal (OV-1280), while it applies.
  * @property {() => boolean} isPending
  * @property {() => Promise<void>} settle Waits until no import is pending, including one that starts meanwhile.
  */
 
 /**
  * @param {<T extends object>(target: T) => T} reactive Vue `reactive`, so the readers' computeds follow the imports.
+ * @param {Pick<InputFileStore, 'registerFile'>} store The input file store; an import is held by its file's ref.
  * @returns {AuxiliaryFileImports}
  */
-export const createAuxiliaryFileImports = (reactive) => {
-  /** @type {Map<FileLike, Promise<boolean>>} */
+export const createAuxiliaryFileImports = (reactive, store) => {
+  /** @type {Map<InputFileRef, Promise<boolean>>} */
   const pending = reactive(new Map());
   return {
     track: (file, promise) => {
@@ -74,7 +52,10 @@ export const createAuxiliaryFileImports = (reactive) => {
         if (pending.get(file) === promise) pending.delete(file);
       });
     },
-    wait: (file) => pending.get(file),
+    wait: (file) => {
+      const ref = store.registerFile(file);
+      return ref ? pending.get(ref) : undefined;
+    },
     isPending: () => pending.size > 0,
     settle: async () => {
       while (pending.size > 0) await Promise.allSettled([...pending.values()]);
@@ -115,8 +96,6 @@ export const createAuxiliaryFileImports = (reactive) => {
  *   removeImportedDefaultColors: (drawing: DrawingState) => void
  * }} resultsManager The Results owner's Default colors file's colors and their Remove (OV-1280).
  * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
- * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any> | SessionBusy) | null} [refreshCircularRecordOrder]
- * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
@@ -139,8 +118,6 @@ export const setupWatchers = ({
   legendLayout,
   resultsManager,
   runLabelReflow,
-  refreshCircularRecordOrder,
-  refreshLinearRecordSelectors,
   resetPreviewViewport,
   resetRightDrawer,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
@@ -155,9 +132,6 @@ export const setupWatchers = ({
     results,
     svgContent,
     selectedResultIndex,
-    mode,
-    cInputType,
-    lInputType,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
@@ -171,11 +145,8 @@ export const setupWatchers = ({
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
-    files,
+    cardFiles,
     semanticFileWatchersSuppressed,
-    sessionResourceDiscoveryDeferred,
-    sessionImportRollbackInProgress,
-    linearSeqs,
     linearReorderNotice,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
@@ -288,7 +259,7 @@ export const setupWatchers = ({
   const auxiliaryImportFailure = ref(null);
   const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
     && errorLog.value === auxiliaryImportFailure.value.error
-    && files[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
+    && cardFiles[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
     && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
   const retryAuxiliaryImportFailure = () => {
     const busy = state.sessionOperationAvailability?.();
@@ -380,9 +351,9 @@ export const setupWatchers = ({
   /**
    * Reads `file` and applies it to the drawing shown now; a rejected file
    * gives the input its previous file back.
-   * @param {string} key The `files` member of the auxiliary table.
-   * @param {FileLike | null | undefined} file
-   * @param {FileLike | null | undefined} previousFile
+   * @param {string} key The `cardFiles` member of the auxiliary table.
+   * @param {InputFileRef | null} file
+   * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean> | undefined}
    */
   const applyFileImport = (key, file, previousFile) => {
@@ -412,7 +383,7 @@ export const setupWatchers = ({
    * The removal waits for the imports still applying, as they wait for each
    * other; a removal that cannot apply brings the card back.
    * @param {FileImportCard} key
-   * @param {FileLike} file The removed file.
+   * @param {InputFileRef} file The removed file.
    * @returns {Promise<boolean>}
    */
   const startFileRemoval = (key, file) => {
@@ -424,7 +395,7 @@ export const setupWatchers = ({
         // is reported as the import's would be (REVIEW-1 N1).
         errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       }
-      if (files[key] === null) files[key] = file;
+      if (cardFiles[key] === null) cardFiles[key] = file;
       return false;
     });
     fileImportApplications = pending.catch(() => {});
@@ -433,8 +404,8 @@ export const setupWatchers = ({
   };
   /**
    * @param {string} key
-   * @param {FileLike} file
-   * @param {FileLike | null | undefined} previousFile
+   * @param {InputFileRef} file
+   * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean>}
    */
   const startFileImport = (key, file, previousFile) => {
@@ -444,20 +415,26 @@ export const setupWatchers = ({
     // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
     // the rules on the inputs current when it runs; one it gives up on comes
     // back as false with no error, and is reported here with Retry.
-    const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+    const isCurrent = () => cardFiles[key] === file && !semanticFileWatchersSuppressed.value
       && !state.sessionOperationAvailability?.();
     const previousError = errorLog.value;
+    // The card names its file by ref; the bytes are the store's. A failure
+    // unbinds the card, and the store may then release the file (OV-1674), so
+    // Retry keeps the file itself and binds it again.
+    const source = state.inputFiles.fileOf(file);
     // A Specific rules failure found on given inputs offers Retry while they
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
-      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
+      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: cardFiles[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          files[key] = file;
-          return startFileImport(key, file, previousFile);
+          const retried = state.inputFiles.registerFile(source);
+          if (!retried) return false;
+          cardFiles[key] = retried;
+          return startFileImport(key, retried, previousFile);
         } };
     };
-    const pending = readFileText(file).then((text) => {
+    const pending = readFileText(source).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
         if (!isCurrent()) return false;
@@ -467,10 +444,10 @@ export const setupWatchers = ({
             errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
               { operation: 'evaluateRules', stage: 'rule-validation' }));
           }
-          files[key] = previousFile;
+          cardFiles[key] = previousFile;
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
-        } else if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+        } else if (cardFiles[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
           errorLog.value = null;
           auxiliaryImportFailure.value = null;
         }
@@ -481,7 +458,7 @@ export const setupWatchers = ({
     }).catch((error) => {
       if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
-        files[key] = previousFile;
+        cardFiles[key] = previousFile;
         retainFailure();
       }
       return false;
@@ -493,15 +470,16 @@ export const setupWatchers = ({
   // Priority, Whitelist, Blacklist): it stores the file and imports it into
   // the shown drawing. The `file-uploader` owns its History step and waits
   // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
-  // restore sets `files` without importing.
+  // restore sets `cardFiles` without importing. The card holds the file's ref.
   /**
    * @param {string} key
-   * @param {FileLike | null | undefined} file
+   * @param {InputFileCandidate} file
    */
   const importAuxiliaryTable = (key, file) => {
-    const previousFile = files[key];
-    files[key] = file;
-    return applyFileImport(key, file, previousFile);
+    const previousFile = cardFiles[key];
+    const ref = state.inputFiles.registerFile(file);
+    cardFiles[key] = ref;
+    return applyFileImport(key, ref, previousFile);
   };
 
   watch(
@@ -513,52 +491,6 @@ export const setupWatchers = ({
         syncLabelEditor({ reuseCurrentBinding: true });
       });
     }
-  );
-
-  watch(
-    () => [
-      semanticFileWatchersSuppressed.value,
-      state.sessionSavePending?.value,
-      state.sessionImportPending?.value,
-      mode.value,
-      cInputType.value,
-      files.c_gb,
-      files.c_gff,
-      files.c_fasta
-    ],
-    async () => {
-      if (typeof refreshCircularRecordOrder !== 'function') return;
-      await runRecordDiscoveryWatcher({
-        rollbackInProgress: sessionImportRollbackInProgress,
-        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
-        sessionResourceDiscoveryDeferred,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress, automatic: true })
-      });
-    }
-  );
-  watch(
-    () => [
-      semanticFileWatchersSuppressed.value,
-      state.sessionSavePending?.value,
-      state.sessionImportPending?.value,
-      mode.value,
-      lInputType.value,
-      ...linearSeqs.flatMap((/** @type {LinearSeq} */ seq) => [
-        seq.uid,
-        lInputType.value === 'gff' ? seq.gff : seq.gb,
-        lInputType.value === 'gff' ? seq.fasta : null
-      ])
-    ],
-    async () => {
-      if (typeof refreshLinearRecordSelectors !== 'function') return;
-      await runRecordDiscoveryWatcher({
-        rollbackInProgress: sessionImportRollbackInProgress,
-        semanticWatchersSuppressed: semanticFileWatchersSuppressed,
-        sessionResourceDiscoveryDeferred,
-        refresh: refreshLinearRecordSelectors
-      });
-    },
-    { immediate: true }
   );
 
   onMounted(async () => {

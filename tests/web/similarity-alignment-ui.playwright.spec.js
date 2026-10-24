@@ -687,7 +687,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return {
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
       results: state.results.value.map(({ name, content }) => ({ name, content }))
@@ -721,7 +721,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return {
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
       results: state.results.value.map(({ name, content }) => ({ name, content })),
@@ -1335,7 +1335,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
       receipt: JSON.parse(JSON.stringify(state.similarityAlignmentResetReceipt.value)),
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      orientations: state.linearSeqs.map(({ uid, region_reverse }) => ({
+      orientations: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.map(({ uid, region_reverse }) => ({
         recordKey: uid, reverseComplement: Boolean(region_reverse)
       })),
       results: state.results.value.map(({ name, content }) => ({ name, content })),
@@ -2972,7 +2972,7 @@ const recolorCds = async (page, color) => {
   await roomSettled(page);
 };
 // Whether each Linear record is drawn reversed.
-const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.linearSeqs
+const recordOrientations = (page) => page.evaluate(async () => (await import('./js/state.js')).state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs
   .map(({ uid, region_reverse: reverse }) => [uid, Boolean(reverse)]));
 // The Result and the figure draw the color the setting shows (PD-OI-102).
 const expectCdsColorDrawn = async (page, color) => {

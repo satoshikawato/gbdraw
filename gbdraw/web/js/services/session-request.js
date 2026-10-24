@@ -347,8 +347,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * What the request reads of `state` (state.js), or of the state a Gallery
  * Session's request is rebuilt from (`buildCanonicalRequestState`).
  * @typedef {RequestTableState & {
- *   mode: ExportRef<ModeProfileName>, cInputType: ExportRef<string>, lInputType: ExportRef<string>,
- *   circularRecordList: ExportRef<CircularRequestRecordSetOptions['records']>,
+ *   mode: ExportRef<ModeProfileName>,
  *   losatExecution?: { threadsPerJob?: unknown }
  * }} RequestState
  */
@@ -1324,7 +1323,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     );
     /** @type {RequestDraftRecord[]} */
     const records = (filesData.linearSeqs || []).map((seq, index) => {
-      const source = linearRecordSource(resources, state.lInputType.value, seq, index);
+      const source = linearRecordSource(resources, drawing.inputType.value, seq, index);
       const region = linearRegionPayload(seq);
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
@@ -1383,9 +1382,9 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
       const requestedSelector = String(
         drawing.form.circular_record_selector || savedSelector || ''
       ).trim();
-      const knownRecords = (Array.isArray(state.circularRecordList.value)
-        ? state.circularRecordList.value
-        : []).map((entry) => ({
+      /** @type {CircularRequestRecordSetOptions['records']} */
+      const circularRecordList = drawing.circularRecordList.value;
+      const knownRecords = (Array.isArray(circularRecordList) ? circularRecordList : []).map((entry) => ({
           ...entry,
           recordId: entry?.record_id ?? entry?.recordId
         }));
@@ -1427,7 +1426,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     };
   }
   /** @type {CanonicalRecord['source']} */
-  const source = state.cInputType.value === 'gff'
+  const source = drawing.inputType.value === 'gff'
     ? {
         kind: 'gffFasta',
         gffResourceId: resources.addFile('record-1-gff3', 'gff3', filesData.c_gff),
@@ -1438,7 +1437,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
   // The drawing is the Circular drawing of `state.js`, which holds every field the record set reads.
-  const recordSet = circularDrawingRecordSet(state.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
+  const recordSet = circularDrawingRecordSet(drawing.circularRecordList.value, /** @type {CircularRecordDrawing} */ (drawing));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
@@ -1935,7 +1934,7 @@ const ALL_GENERATED_TABLES = Object.freeze({
 export const requestLabelProjection = (state, drawing) => {
   const bulk = drawing.labelTextBulkOverrides || {};
   if (Object.keys(bulk).length === 0) return { bulkLabelText: {}, rows: [] };
-  const displayed = resultRenderedFeatures(state);
+  const displayed = resultRenderedFeatures(state, drawing.mode);
   const labelTargets = (state.editableLabels?.value || []).map((entry) => ({
     identityKey: featureIdentityKeyOf(displayed?.get(String(entry?.featureId || '').trim())),
     sourceText: entry?.sourceText
@@ -3063,14 +3062,15 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
     // A row is unvalidated: one without a label, null included, gives an empty label (OV-963).
     conservation.labels = conservation.series.map((/** @type {UnvalidatedFields<'label'>} */ row) => String(row?.label || '').trim()).join(',');
   const stateRefs = {
-    mode: projection.mode, cInputType: session?.ui?.cInputType || projection.inputType,
-    lInputType: session?.ui?.lInputType || projection.inputType,
-    circularRecordList,
+    mode: projection.mode,
     paletteDefinitions: { [palette]: {} }, editableLabels: [],
     similarityAlignmentPlan: canonicalLayout.similarityAlignment || null,
     linearRecordTranslations: publicationClone(canonicalLayout.recordTranslations || [])
   };
   const drawingRefs = {
+    // The drawing's input type: its mode's Session 48 field, else the request's.
+    inputType: (projection.mode === 'linear' ? session?.ui?.lInputType : session?.ui?.cInputType) || projection.inputType,
+    circularRecordList,
     currentColors: colorOverridesChanged ? activeColors : config.colors || {},
     selectedPalette: palette, featureVisibilityRules: publicationClone(features.featureVisibilityManualRules || []),
     filterMode: config.filterMode || 'None', manualBlacklist: String(config.blacklistText || ''),
@@ -3243,8 +3243,8 @@ const projectCanonicalRenderInput = ({
   if (state.mode.value === 'circular') {
     webFiles.circularOutputPrefixExplicit = explicitPrefix !== null;
   }
-  const knownCircularRecords = Array.isArray(state.circularRecordList.value)
-    ? state.circularRecordList.value
+  const knownCircularRecords = Array.isArray(drawing.circularRecordList.value)
+    ? drawing.circularRecordList.value
     : [];
   const knownCircularEntries = buildDisambiguatedRecordEntries(
     knownCircularRecords.map((/** @type {{ record_id?: unknown, recordId?: unknown } | null} */ record) => ({
@@ -3445,7 +3445,7 @@ const projectCanonicalRenderInput = ({
   if (Object.keys(resources.resourceOriginalNames).length > 0) {
     webFiles.resourceOriginalNames = { ...resources.resourceOriginalNames };
   }
-  if (state.mode.value === 'circular' && state.cInputType.value === 'gb') {
+  if (state.mode.value === 'circular' && drawing.inputType.value === 'gb') {
     const circularInputOriginalName = normalizeOriginalResourceName(filesData.c_gb?.name);
     if (circularInputOriginalName) webFiles.circularInputOriginalName = circularInputOriginalName;
   }
