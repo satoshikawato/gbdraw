@@ -189,3 +189,46 @@ test('a Cancel rejects auxiliary requests too, and a second Cancel during the dr
   assert.equal(worker.terminated, undefined);
   assert.equal(listenerCount(worker), 0);
 });
+
+test('a Generate that waits for the drain and is disposed boots no Worker', async () => {
+  const worker = await warmWorker();
+  const canceled = runDiagramGeneration(payload('AAAA'));
+  await runsSent(worker, 2);
+  const rejected = assert.rejects(canceled, /canceled/);
+  cancelDiagramGeneration();
+  await rejected;
+  const waiting = runDiagramGeneration(payload('AAAA'));
+  const waitingRejected = assert.rejects(waiting, /disposed/);
+  await flush();
+  const helper = runDiagramHelperOperation('evaluateRules', { rules: [] });
+  const helperRejected = assert.rejects(helper, /disposed/);
+  await flush();
+  const constructed = ControlledWorker.instances.length;
+  disposeDiagramGenerationWorker();
+  await Promise.all([waitingRejected, helperRejected]);
+  await flush();
+  assert.equal(worker.terminated, true);
+  assert.equal(ControlledWorker.instances.length, constructed, 'no Worker boots for a request that no longer exists');
+});
+
+test('a second Cancel during the drain, then the timeout, boots no Worker for the canceled requests', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const worker = await warmWorker();
+  const canceled = runDiagramGeneration(payload('AAAA'));
+  await runsSent(worker, 2);
+  const rejected = assert.rejects(canceled, /canceled/);
+  cancelDiagramGeneration();
+  await rejected;
+  const waiting = runDiagramGeneration(payload('AAAA'));
+  const helper = runDiagramHelperOperation('evaluateRules', { rules: [] });
+  const waitingRejected = Promise.all([assert.rejects(waiting, /canceled/), assert.rejects(helper, /canceled/)]);
+  await flush();
+  assert.equal(cancelDiagramGeneration(), true);
+  await waitingRejected;
+  const constructed = ControlledWorker.instances.length;
+  t.mock.timers.tick(DIAGRAM_WORKER_CANCEL_TIMEOUT_MS);
+  await flush();
+  assert.equal(worker.terminated, true);
+  assert.deepEqual(drainOutcomes(), ['terminated']);
+  assert.equal(ControlledWorker.instances.length, constructed, 'no Worker boots for a request that no longer exists');
+});

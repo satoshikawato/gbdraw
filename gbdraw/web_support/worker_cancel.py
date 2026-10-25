@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from types import FrameType
 
+# The message of the KeyboardInterrupt a checkpoint raises; a SIGINT that
+# Python's default handler turns into KeyboardInterrupt has none.
+CHECKPOINT_STOP_MESSAGE = "Canceled at a checkpoint"
+
 
 class WorkerCancelRequest:
     """Whether the page has canceled the Worker's current requests."""
@@ -30,7 +34,7 @@ class WorkerCancelRequest:
         """Raise ``KeyboardInterrupt`` at a checkpoint while a cancel is requested."""
 
         if self._requested:
-            raise KeyboardInterrupt
+            raise KeyboardInterrupt(CHECKPOINT_STOP_MESSAGE)
 
     def clear(self) -> None:
         """The drain step: later requests run again."""

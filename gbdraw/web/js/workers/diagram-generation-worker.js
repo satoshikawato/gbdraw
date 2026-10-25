@@ -1251,6 +1251,14 @@ const runGeneration = async ({
       )
     });
   } catch (error) {
+    // A Cancel stops Python with KeyboardInterrupt (the cancel message is read
+    // only after this run); tests read where it stopped: the traceback's last line.
+    const pythonError = /** @type {{ type?: unknown, message?: unknown }} */ (error);
+    if (pythonError?.type === 'KeyboardInterrupt') {
+      emitTestLifecycle(testLifecycleEnabled, requestId, 'python-keyboard-interrupt', {
+        pythonError: String(pythonError.message ?? '').trim().split('\n').at(-1)
+      });
+    }
     primaryError = serializeError(error, { operation: 'generate', stage: failureStage });
   }
   emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-start');

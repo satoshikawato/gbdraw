@@ -29,7 +29,7 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
-/** @import { DiagramWorkerCancelMessage, DiagramWorkerInitMessage } from './diagram-worker-protocol.js' */
+/** @import { DiagramWorkerCancelMessage, DiagramWorkerCancelReply, DiagramWorkerInitMessage } from './diagram-worker-protocol.js' */
 /** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
@@ -440,11 +440,17 @@ let workerInterruptBuffer = null;
  */
 export const DIAGRAM_WORKER_CANCEL_TIMEOUT_MS = 3000;
 /**
- * The kept Worker's drain after a Cancel: settled when the Worker answers,
- * or when it is terminated. Null while no drain runs.
+ * A request sent after a Cancel, waiting for the kept Worker's drain.
+ * @typedef {{ resolve: () => void, reject: (error: unknown) => void }} DrainWaiter
+ */
+/**
+ * The kept Worker's drain after a Cancel. It finishes when the Worker
+ * answers, or when the Worker is terminated: its waiters then go on (a new
+ * Worker boots for them), unless the termination carries an error (dispose),
+ * which rejects them, as it rejects a pending initialization.
  * @typedef {object} WorkerDrain
- * @property {Promise<void>} promise Never rejects.
- * @property {(outcome: 'drained' | 'terminated') => void} finish
+ * @property {Set<DrainWaiter>} waiters
+ * @property {(outcome: 'drained' | 'terminated', error?: unknown) => void} finish
  */
 /** @type {WorkerDrain | null} */
 let drainState = null;
@@ -640,7 +646,7 @@ const terminateWorker = (error = null) => {
   workerCapabilities = null;
   workerInterruptBuffer = null;
   resourceTransport.reset();
-  drainState?.finish('terminated');
+  drainState?.finish('terminated', error);
 };
 
 /**
@@ -654,36 +660,57 @@ const terminateWorker = (error = null) => {
  */
 const drainWorker = (currentWorker, buffer) => {
   const id = `diagram-cancel-${Date.now()}-${nextRequestId}`;
-  // The Promise executor runs synchronously and assigns it before anything reads it.
-  /** @type {() => void} */
-  let resolveDrain = () => {};
-  /** @type {Promise<void>} */
-  const promise = new Promise((resolve) => { resolveDrain = resolve; });
+  /** @type {Set<DrainWaiter>} */
+  const waiters = new Set();
   /** @param {MessageEvent} event */
   const handleMessage = (event) => {
-    const data = event.data || {};
+    const data = /** @type {Partial<DiagramWorkerCancelReply>} */ (event.data || {});
     if (data.type === 'cancel' && data.id === id) finish('drained');
   };
   const terminate = () => {
     if (worker === currentWorker) terminateWorker();
   };
   const timer = setTimeout(terminate, DIAGRAM_WORKER_CANCEL_TIMEOUT_MS);
-  /** @param {'drained' | 'terminated'} outcome */
-  const finish = (outcome) => {
+  /** @param {'drained' | 'terminated'} outcome @param {unknown} [error] */
+  const finish = (outcome, error = null) => {
     clearTimeout(timer);
     currentWorker.removeEventListener('message', handleMessage);
     currentWorker.removeEventListener('error', terminate);
     drainState = null;
     recordStructuralMetric('workerCancelDrain', 1, { outcome });
-    resolveDrain();
+    for (const waiter of waiters) {
+      if (error) waiter.reject(error);
+      else waiter.resolve();
+    }
   };
   currentWorker.addEventListener('message', handleMessage);
   currentWorker.addEventListener('error', terminate);
-  drainState = { promise, finish };
+  drainState = { waiters, finish };
   Atomics.store(buffer, 0, DIAGRAM_WORKER_INTERRUPT_SIGNAL);
   /** @type {DiagramWorkerCancelMessage} */
   const message = { type: 'cancel', id, through: nextRequestId - 1 };
   currentWorker.postMessage(message);
+};
+
+/**
+ * Wait for the kept Worker's drain, if one runs (D7). A request checks that
+ * it is still live after this wait, before it boots or uses a Worker.
+ * @returns {Promise<void>}
+ */
+const awaitDrain = () => new Promise((resolve, reject) => {
+  if (drainState) drainState.waiters.add({ resolve, reject });
+  else resolve();
+});
+
+/**
+ * Reject the requests that wait for the drain: a second Cancel cancels them
+ * too, as a Cancel rejects a request that waits for an initialization.
+ * @param {unknown} error
+ */
+const rejectDrainWaiters = (error) => {
+  const waiters = [...(drainState?.waiters ?? [])];
+  drainState?.waiters.clear();
+  waiters.forEach((waiter) => waiter.reject(error));
 };
 
 /**
@@ -693,8 +720,6 @@ const drainWorker = (currentWorker, buffer) => {
  * @returns {Promise<Worker>}
  */
 const ensureWorkerInitialized = (onStep = null) => {
-  // After a Cancel, the kept Worker answers first; if it is terminated instead, a new one boots.
-  if (drainState) return drainState.promise.then(() => ensureWorkerInitialized(onStep));
   const currentWorker = getWorker();
   if (workerInitialized) return Promise.resolve(currentWorker);
   if (initState?.promise) {
@@ -870,6 +895,12 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
       const initializationWasWarm = workerInitialized && !drainState;
       if (!workerInitialized) reportProgress('preparing-runtime');
       const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
+      if (drainState) {
+        await awaitDrain();
+        if (request.settled || activeRequest !== request) return;
+        // The drain ended by termination: a new Worker boots.
+        if (!workerInitialized) reportProgress('preparing-runtime');
+      }
       const currentWorker = await ensureWorkerInitialized((step) => reportProgress('preparing-runtime', step));
       recordSessionLifecycleEvent('worker-initialization-resolved', {
         reused: initializationWasWarm,
@@ -1039,6 +1070,7 @@ const runAuxiliaryWorkerRequest = ({
     try {
       const reportStep = typeof onProgress === 'function'
         ? (/** @type {RuntimePreparationStep | null} */ step) => onProgress({ requestId, stage: 'preparing-runtime', ...(step || {}) }) : null;
+      if (drainState) await awaitDrain();
       if (!workerInitialized) reportStep?.(null);
       const currentWorker = await ensureWorkerInitialized(reportStep);
       request = {
@@ -1186,6 +1218,7 @@ export const cancelDiagramGeneration = () => {
     return true;
   }
   rejectWorkerRequests(error);
+  rejectDrainWaiters(error);
   // The Worker pruned its resources for the canceled request: send every byte again.
   resourceTransport.reset();
   if (!drainState) drainWorker(currentWorker, workerInterruptBuffer);

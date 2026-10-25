@@ -3,12 +3,13 @@
 /** @import { FontIdentity } from './font-store.js' */
 
 /**
- * A font the page replays into a new Worker: the identity of its bytes, its
- * file or face name, and the bytes (one copy, made by postMessage).
- * @typedef {object} DiagramWorkerFontFile
+ * A font file the page sends a Worker (init `fonts`, and each font it
+ * registers later): the identity of its bytes, its file name or installed
+ * face name, and the bytes. The Worker's font registry reads it.
+ * @typedef {object} WorkerFontFile
  * @property {FontIdentity} identity
  * @property {string} label
- * @property {ArrayBuffer} bytes
+ * @property {ArrayBuffer | ArrayBufferView} bytes
  */
 
 /**
@@ -17,7 +18,7 @@
  * through which a Cancel stops Python (D7); `null` elsewhere, where a Cancel
  * terminates the Worker.
  * @typedef {ReturnType<typeof buildPyodideAssetManifest> & {
- *   type: 'init', id: string, fonts: DiagramWorkerFontFile[], interruptBuffer: Uint8Array | null
+ *   type: 'init', id: string, fonts: WorkerFontFile[], interruptBuffer: Uint8Array | null
  * }} DiagramWorkerInitMessage
  */
 

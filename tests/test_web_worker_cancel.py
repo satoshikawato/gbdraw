@@ -21,7 +21,7 @@ from gbdraw.api.prepared import (
     cancel_checkpoint,
     get_or_build_parsed_source,
 )
-from gbdraw.web_support.worker_cancel import WorkerCancelRequest
+from gbdraw.web_support.worker_cancel import CHECKPOINT_STOP_MESSAGE, WorkerCancelRequest
 from tests.test_web_render_preparation_cache import (
     _document,
     _metrics,
@@ -105,7 +105,7 @@ def test_the_cancel_request_records_sigint_and_raises_only_at_a_check() -> None:
     previous = signal.signal(signal.SIGINT, cancel.on_signal)
     try:
         signal.raise_signal(signal.SIGINT)
-        with pytest.raises(KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt, match=f"^{CHECKPOINT_STOP_MESSAGE}$"):
             cancel.check()
         # It stays requested until the drain clears it.
         with pytest.raises(KeyboardInterrupt):
