@@ -2469,7 +2469,7 @@ const projectedDrawingView = (data) => {
 
 /**
  * Where the file holds the drawing Load opens: a Session 49's place in its
- * list of drawings (`drawings[i].`, found by the opened drawing's ID), a
+ * list of drawings (`drawingSetPath`, found by the opened drawing's ID), a
  * Session 27-48's top level. Its parts' rows take it as their paths' prefix,
  * so they name the file's own paths (OV-1791, OV-1797).
  * @typedef {'' | DrawingSetPath} OpenedDrawingPath
@@ -2478,6 +2478,8 @@ const projectedDrawingView = (data) => {
 const openedDrawingPathOf = (sessionData) => {
   if (!isDrawingsBand(sessionData)) return '';
   const document = /** @type {Session49} */ (/** @type {unknown} */ (sessionData));
+  // A Session 49 whose every drawing was dropped opens none; Load refuses it (R4, `restoresNothing`).
+  if (document.drawings.length === 0) return '';
   const openedId = openedDrawingOf(document).id;
   return drawingSetPath(document.drawings.findIndex((entry) => entry.id === openedId));
 };
