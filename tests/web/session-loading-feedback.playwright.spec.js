@@ -81,7 +81,7 @@ const installLifecycleProbe = async (page) => {
 
 const importSnapshot = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const selected = app.results?.[Number(app.selectedResultIndex) || 0] || null;
+  const selected = app.currentResults()[Number(app.selectedResultIndex) || 0] || null;
   const preview = document.querySelector('.shadow-xl.origin-top > svg');
   return {
     title: String(app.sessionTitle || ''),

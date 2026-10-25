@@ -197,7 +197,7 @@ const generateThroughUi = async (page) => {
         };
       };
       const app = window.__GBDRAW_APP__;
-      const selected = app.results?.[app.selectedResultIndex];
+      const selected = app.currentResults()[app.selectedResultIndex];
       const resultSvg = new DOMParser().parseFromString(
         String(selected?.content || ''),
         'image/svg+xml'

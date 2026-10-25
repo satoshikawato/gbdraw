@@ -152,7 +152,7 @@ const snapshot = page => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   // A mode without its own Result shows the empty Preview (E1).
   const root = s.svgContainer.value?.querySelector('svg') || null;
-  const result = s.results.value[s.selectedResultIndex.value] || null;
+  const result = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value] || null;
   return {
     mode: s.mode.value, generation: s.resultGenerationKey.value,
     // Per-feature edits by identity key, one map per edited field.

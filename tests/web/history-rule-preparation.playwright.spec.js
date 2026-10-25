@@ -7,7 +7,7 @@ const { appAction, history } = require('./helpers/live-generate-parity-steps.cjs
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
 
 const visibleRuleColor = (page, color = '#ff0000') => page.evaluate(color => {
-  const svg = (window.__GBDRAW_APP__.results?.[0]?.content || '').toLowerCase();
+  const svg = (window.__GBDRAW_APP__.currentResults()[0]?.content || '').toLowerCase();
   const mounted = [...document.querySelectorAll('svg [fill], svg [style]')]
     .filter(node => `${node.getAttribute('fill') || ''} ${node.getAttribute('style') || ''}`.toLowerCase().includes(color));
   return { result: svg.split(color).length - 1, mounted: mounted.length };

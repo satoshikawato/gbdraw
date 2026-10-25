@@ -634,7 +634,9 @@ test('Circular batch: Undo past a Generate returns a dragged Result to its first
 // written once, when something reads it. Each reader that needs the text gets
 // the edit: Save (and a fresh Load of that Session), a Result switch, a
 // drawing switch, Export SVG, and the Undo of a Generate. A Legend color edit
-// records a patch step, so no History checkpoint reads the text for it.
+// records a patch step, so no History checkpoint reads the text for it. The
+// binder shows the color again on every display (D-07), so after each reader
+// the stored text (`results`, not `currentResults()`) is what is checked.
 test('Circular batch: an edit is written into the Result text only when read, and every reader gets it', async ({ page, browser }, testInfo) => {
   test.setTimeout(600_000);
   await openBatch(page);
@@ -672,6 +674,8 @@ test('Circular batch: an edit is written into the Result text only when read, an
     const app = window.__GBDRAW_APP__;
     return app.results[app.selectedResultIndex].content;
   });
+  // A Result's text as stored, read without writing the shown root.
+  const storedTextOf = (target, index) => target.evaluate((at) => window.__GBDRAW_APP__.results[at].content, index);
 
   // Live edits serialize nothing; the stored text still lacks them.
   const before = await storedText();
@@ -703,7 +707,7 @@ test('Circular batch: an edit is written into the Result text only when read, an
   try {
     await settle(fresh);
     expect(await fresh.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(1);
-    expect(await trnaFillIn(fresh, await shownTextOf(fresh))).toBe('#e76f51');
+    expect(await trnaFillIn(fresh, await storedTextOf(fresh, 1)), 'the Session holds the edit').toBe('#e76f51');
   } finally {
     await fresh.context().close();
   }
@@ -712,6 +716,7 @@ test('Circular batch: an edit is written into the Result text only when read, an
   await recolorTrna(page, '#264653');
   await settle(page);
   await show(page, 0);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'the release wrote Result 2').toBe('#264653');
   await show(page, 1);
   expect(await trnaFillIn(page, null)).toBe('#264653');
   expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#264653');
@@ -723,6 +728,7 @@ test('Circular batch: an edit is written into the Result text only when read, an
   await switchMode(page, 'circular');
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(1);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'the kept slot holds the edit').toBe('#8338ec');
   expect(await trnaFillIn(page, null)).toBe('#8338ec');
   expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#8338ec');
 
@@ -734,6 +740,7 @@ test('Circular batch: an edit is written into the Result text only when read, an
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   await show(page, 1);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'Undo restores the edited text').toBe('#ff006e');
   expect(await trnaFillIn(page, null)).toBe('#ff006e');
   expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#ff006e');
 });

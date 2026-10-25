@@ -150,8 +150,7 @@ for (const mode of ['circular', 'linear']) {
     await page.getByRole('button', { name: /^Redo/ }).first().click();
     await expect(start).toHaveValue('91');
     const savedResult = await page.evaluate(async () => {
-      const { serializeResults } = await import('./js/services/config.js');
-      return serializeResults()[0].content;
+      return window.__GBDRAW_APP__.currentResults()[0].content;
     });
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'Joint surfaces'; });
     const downloadPromise = page.waitForEvent('download');
