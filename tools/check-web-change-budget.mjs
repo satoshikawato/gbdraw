@@ -1522,11 +1522,38 @@ const baseAncestry = () => {
   return baseAncestryResult;
 };
 const vendorMergeBase = changedVendorPaths.length ? baseAncestry().mergeBase : null;
+// Files the trusted base pins in the immutable-asset manifest are served for a year at their
+// URL, so a replace would never reach returning visitors: new bytes need a new path.
+const immutableAssetsManifestPath = 'tools/immutable-web-assets.json';
+const readPinnedImmutablePaths = () => {
+  const bytes = readRevisionBytes(base, immutableAssetsManifestPath);
+  if (bytes === null) return { paths: new Set(), error: null };
+  try {
+    const { files } = JSON.parse(bytes.toString('utf8'));
+    if (!files || typeof files !== 'object' || Array.isArray(files)) {
+      throw new Error('"files" must be an object');
+    }
+    return { paths: new Set(Object.keys(files).map((path) => `gbdraw/web/${path}`)), error: null };
+  } catch (error) {
+    return { paths: new Set(), error: `${immutableAssetsManifestPath} in the base is malformed: ${error.message}` };
+  }
+};
+const pinnedImmutable = changedVendorPaths.some((path) => changed.get(path) === 'M')
+  ? readPinnedImmutablePaths()
+  : { paths: new Set(), error: null };
 const vendorChanges = changedVendorPaths.map((path) => {
   const status = changed.get(path);
   const change = vendorChangeKindByStatus[status] || `unsupported status ${status}`;
   const entry = trustedVendorListing.entries.find((candidate) => candidate.path === path);
   if (!entry) return { path, change, reason: 'not listed' };
+  if (change === 'replace' && pinnedImmutable.paths.has(path)) {
+    return {
+      path,
+      change,
+      reason: `pinned in ${immutableAssetsManifestPath} and served as immutable; `
+        + 'publish the new bytes under a new path instead of replacing this file'
+    };
+  }
   const pinned = sha256OfBytes(
     change === 'remove' ? readRevisionBytes(base, path) : readHeadBytes(path)
   );
@@ -2737,6 +2764,7 @@ if (unlistedVendorChanges.length) {
     + `${unlistedVendorChanges.map(({ path, reason }) => `${path}: ${reason}`).join('; ')})`
   );
 }
+if (pinnedImmutable.error) blockingViolations.push(pinnedImmutable.error);
 blockingViolations.push(...trustedVendorListing.errors.map((error) => (
   `trusted vendored runtime listing: ${error}`
 )));
