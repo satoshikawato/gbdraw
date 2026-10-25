@@ -526,15 +526,9 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
             value.source_features if isinstance(value, ParsedRecordInputs)
             else tuple(item.source_features for item in getattr(value, "provenance", ()))
         )
-        # A catalog holds its captured features; its entries stay cached once a reader builds them.
+        # A catalog holds its captured features; entries are built on demand.
         for catalog in catalogs:
             total += sum(128 + len(item.location_parts) * 96 for item in catalog.captured)
-            if "entries" in vars(catalog):
-                total += sum(
-                    256 + len(entry.location_parts) * 96
-                    + sum(len(key) + sum(len(text) for text in values) for key, values in entry.qualifiers)
-                    for entry in catalog.entries
-                )
         return total
     return source_bytes
 

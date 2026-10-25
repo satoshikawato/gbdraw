@@ -9,7 +9,9 @@ entries only when a reader asks for them.
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import pickle
 import re
 import types
 from pathlib import Path
@@ -345,20 +347,11 @@ def test_a_stamp_is_refused_for_a_changed_type_and_carried_to_a_copy_only_while_
     assert not hasattr(stale_copy, _STAMP_ATTR)
 
 
-def test_the_catalog_source_hashes_are_read_only() -> None:
-    from gbdraw.features.source import capture_source_features
-
-    catalog = capture_source_features(_record())
-    with pytest.raises(TypeError):
-        catalog.source_hashes[0] = "x"  # type: ignore[index]
-
-
-def test_retained_bytes_count_the_catalog_entries_once_a_reader_builds_them() -> None:
-    from gbdraw.api.prepared import _retained_bytes
-    from gbdraw.api.record_planning import ResolvedRecordCollection
-
+def test_a_plan_and_its_catalog_survive_deepcopy_and_pickle() -> None:
     plan = plan_request(_circular_request(InMemoryRecordSource(_record())))
-    collection = ResolvedRecordCollection(plan.records, plan.provenance)
-    before = _retained_bytes(collection, 0)
-    assert plan.provenance[0].source_features.entries
-    assert _retained_bytes(collection, 0) > before
+    catalog = plan.provenance[0].source_features
+    assert catalog.entries
+    for value in (catalog, plan.provenance[0], plan):
+        copy.deepcopy(value)
+        pickle.loads(pickle.dumps(value))
+    assert pickle.loads(pickle.dumps(catalog)).source_hashes == catalog.source_hashes

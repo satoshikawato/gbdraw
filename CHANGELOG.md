@@ -12,25 +12,23 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Fix (Python API): a source feature's stored hash (added by the previous performance change) is used only while the
-  feature has the type and the location object it was computed for. A feature whose location was reassigned after
-  `CircularRequestPlan` / `LinearRequestPlan` was built from bare records, or after it was planned and then planned
-  again with `InMemoryRecordSource(..., source_features=...)`, is drawn with the hash of its current location again.
-  A plan built from bare records no longer writes attributes on your records. Typed API:
-  `SourceFeatureCatalog.source_hashes` is read-only. An in-place change of a location object (for example setting its
-  strand) is not detected.
 - Performance (CLI): the installed `gbdraw` command now starts through a private `_gbdraw_console.py` module that sets
   `OPENBLAS_NUM_THREADS=1` before NumPy loads, only when you have not set the variable yourself. A one-shot render no
   longer starts an OpenBLAS thread pool it does not use (NC_010162 circular: user CPU 5.2 s -> 1.9 s, wall 1.87 s ->
-  1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line
-  names `_gbdraw_console:main`.
+  1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda
+  recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line names
+  `_gbdraw_console:main`.
 - Performance (CLI, Python, web app): each source feature's hash is computed
   once, when its source loads, and read back by the drawing, the shared-hash
   count, the interactive context and the protein extraction; the source feature
   catalog builds its entries only when a selector, an identity table or a
   similarity alignment reads them. NC_010162 circular computed 19,515 feature
   hashes instead of 48,787 and normalized no qualifiers instead of 120,771, and
-  took 1.41 s instead of 1.67 s. Output bytes are unchanged. Typed API:
+  took 1.41 s instead of 1.67 s. Output bytes are unchanged. The stored hash is
+  used only while the feature keeps the type and the location object it was
+  computed for (an in-place change of a location object, such as setting its
+  strand, is not detected), and a plan built from bare records writes nothing
+  on your records. Typed API:
   `InMemoryRecordSource.source_feature_catalog` is now `source_features` and
   takes a `SourceFeatureCatalog` (from `capture_source_features`), which
   replaces `build_source_feature_catalog`;

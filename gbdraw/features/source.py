@@ -8,7 +8,6 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from types import MappingProxyType
 from typing import Literal, NamedTuple, overload
 
 from Bio.SeqFeature import SeqFeature
@@ -131,7 +130,7 @@ def capture_source_features(record: SeqRecord, *, stamp: bool = True) -> SourceF
         raise ValidationError(
             "Source feature catalog contains duplicate source feature indexes."
         )
-    return SourceFeatureCatalog(str(record.id), MappingProxyType(source_hashes), tuple(captured))
+    return SourceFeatureCatalog(str(record.id), source_hashes, tuple(captured))
 
 
 @dataclass(frozen=True)
