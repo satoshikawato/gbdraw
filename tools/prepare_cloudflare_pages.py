@@ -5,8 +5,10 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
+from collections import deque
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -87,6 +89,43 @@ def verify_immutable_assets(web_root: Path) -> None:
             + "\nA file whose bytes change needs a new URL (a new file name or folder); "
             "then record the new path and SHA-256 in the manifest."
         )
+
+
+# The page's module entry and its static imports (`import ... from`, a bare
+# `import '...'`, `export ... from`); dynamic `import()` is not preloaded.
+# tests/web/module-preload-closure.test.mjs compares the closure with V8's parser.
+MODULE_ENTRY = "js/app.js"
+_STATIC_IMPORT_RE = re.compile(
+    r"""(?:^|[;}])[ \t]*(?:import|export)[ \t]+(?:[\w$*{}\s,]+?\s+from\s*)?['"]([^'"\n]+)['"]""",
+    re.MULTILINE,
+)
+
+
+def module_preload_paths(web_root: Path) -> list[str]:
+    """The modules js/app.js imports statically, nearest first, without the entry."""
+    seen = {MODULE_ENTRY}
+    order: list[str] = []
+    pending = deque([MODULE_ENTRY])
+    while pending:
+        module = pending.popleft()
+        source = (web_root / module).read_text(encoding="utf-8")
+        for specifier in _STATIC_IMPORT_RE.findall(source):
+            if not specifier.startswith("."):
+                raise RuntimeError(f"{module} imports {specifier!r}, which is not a relative path")
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(module), specifier))
+            if target not in seen:
+                seen.add(target)
+                order.append(target)
+                pending.append(target)
+    return order
+
+
+def add_module_preloads(index_html: str, web_root: Path) -> str:
+    """Let the browser fetch the whole module graph at once instead of level by level."""
+    links = "".join(
+        f'    <link rel="modulepreload" href="./{path}">\n' for path in module_preload_paths(web_root)
+    )
+    return _replace_once(index_html, "</head>", f"{links}</head>")
 
 
 def _load_repo_module(module_path: Path, module_name: str):
@@ -213,6 +252,7 @@ def build_cloudflare_pages_bundle(
         "connect-src 'self';",
         "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
     )
+    index_html = add_module_preloads(index_html, output_root)
     index_path.write_text(index_html, encoding="utf-8")
     stamp_web_build_module = _load_stamp_web_build_module()
     resolved_commit_sha = str(commit_sha or stamp_web_build_module.resolve_commit_sha()).strip()

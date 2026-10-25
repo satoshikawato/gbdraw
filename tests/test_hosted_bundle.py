@@ -95,3 +95,36 @@ def test_immutable_vendor_file_changed_in_place_fails(tmp_path: Path) -> None:
     message = str(failure.value)
     assert "vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl" in message
     assert "vendor/fonts/inter/inter-latin-800-normal.woff2" in message
+
+
+def test_module_preloads_are_the_static_import_closure_of_app_js() -> None:
+    # tests/web/module-preload-closure.test.mjs compares the same list with
+    # the closure V8's module parser finds.
+    cloudflare = _load_cloudflare_module()
+    paths = cloudflare.module_preload_paths(WEB_ROOT)
+    assert "js/app/app-setup.js" in paths
+    assert "js/app.js" not in paths
+    assert len(paths) == len(set(paths))
+    assert all((WEB_ROOT / path).is_file() for path in paths)
+
+
+def test_module_preload_of_a_missing_module_fails(tmp_path: Path) -> None:
+    cloudflare = _load_cloudflare_module()
+    (tmp_path / "js").mkdir()
+    (tmp_path / "js" / "app.js").write_text(
+        "import { a } from './present.js';\nexport * from \"./gone.js\";\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "js" / "present.js").write_text("export const a = 1;\n", encoding="utf-8")
+    with pytest.raises(FileNotFoundError):
+        cloudflare.module_preload_paths(tmp_path)
+
+
+def test_bundle_index_preloads_every_static_module() -> None:
+    cloudflare = _load_cloudflare_module()
+    source = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    assert 'rel="modulepreload"' not in source
+    rendered = cloudflare.add_module_preloads(source, WEB_ROOT)
+    head = rendered.split("</head>", 1)[0]
+    for path in cloudflare.module_preload_paths(WEB_ROOT):
+        assert f'<link rel="modulepreload" href="./{path}">' in head
