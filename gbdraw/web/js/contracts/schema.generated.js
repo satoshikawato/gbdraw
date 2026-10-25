@@ -305,7 +305,7 @@ export const ORGANISM_NAME_RULE = Object.freeze({
       flags: ''
     }),
     botanical: Object.freeze({
-      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales|phyta)',
+      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales)',
       flags: ''
     }),
     prokaryotic: Object.freeze({
@@ -313,7 +313,7 @@ export const ORGANISM_NAME_RULE = Object.freeze({
       flags: ''
     }),
     any: Object.freeze({
-      source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|opsida|phyceae|mycetes|mycota|ales|phyta)',
+      source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|opsida|phyceae|mycetes|mycota|ales)',
       flags: ''
     })
   }),
@@ -323,7 +323,7 @@ export const ORGANISM_NAME_RULE = Object.freeze({
       flags: ''
     }),
     botanical: Object.freeze({
-      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales|phyta)',
+      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales)',
       flags: ''
     })
   }),

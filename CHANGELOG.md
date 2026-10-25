@@ -31,8 +31,8 @@ write-up of a release.
   written; other placeholders stay upright. The endings that
   mark a name above the genus follow the nomenclature code of the record's
   GenBank lineage: `-idae`, `-inae` for Metazoa; `-aceae`, `-ineae`, `-inae`,
-  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota`, `-ales`, `-phyta`
-  for Viridiplantae, Fungi, Rhodophyta and Ochrophyta, so
+  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota`, `-ales` for
+  Viridiplantae, Fungi, Rhodophyta and Ochrophyta, so
   `Helotiales sp. EF0021` stays whole (OV-1834); `-aceae`, `-ales`, `-ineae`,
   `-idae` for Bacteria and Archaea; all of them for other lineages and
   records without one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the

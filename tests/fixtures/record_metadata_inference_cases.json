@@ -1206,31 +1206,35 @@
       ]
     },
     {
-      "name": "OV-1834: a division name under the botanical code stays whole",
-      "organism": "Chlorophyta sp. CCMP1407",
-      "strain": "",
-      "lineage": [
-        "Eukaryota",
-        "Viridiplantae"
-      ],
-      "expected": "Chlorophyta sp. CCMP1407",
-      "lines": [
-        "Chlorophyta sp. CCMP1407",
-        ""
-      ]
-    },
-    {
-      "name": "OV-1834: a division placeholder in its lineage",
-      "organism": "Chlorophyta sp. CCMP1407",
-      "strain": "",
+      "name": "OV-1835: a genus ending in -phyta is read as a genus",
+      "organism": "Xerophyta viscosa",
+      "strain": "XV2016PP",
       "lineage": [
         "Eukaryota",
         "Viridiplantae",
-        "Chlorophyta"
+        "Streptophyta",
+        "Embryophyta",
+        "Tracheophyta",
+        "Spermatophyta",
+        "Magnoliopsida",
+        "Liliopsida",
+        "Pandanales",
+        "Velloziaceae",
+        "Xerophyta"
       ],
-      "expected": "<i>Chlorophyta</i> sp. CCMP1407",
+      "expected": "<i>Xerophyta viscosa</i> XV2016PP",
       "lines": [
-        "<i>Chlorophyta</i> sp. CCMP1407",
+        "<i>Xerophyta viscosa</i>",
+        "XV2016PP"
+      ]
+    },
+    {
+      "name": "OV-1835: a genus ending in -phyta without a lineage",
+      "organism": "Symphyta nephelodes",
+      "strain": "",
+      "expected": "<i>Symphyta nephelodes</i>",
+      "lines": [
+        "<i>Symphyta nephelodes</i>",
         ""
       ]
     }

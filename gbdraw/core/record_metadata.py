@@ -429,11 +429,12 @@ _CODE_LINEAGES: dict[str, _NomenclatureCode] = {
 }
 # Endings of names above genus under each code: such a first word is no genus.
 # "any" takes every ending, so a name of unknown code stays whole and upright.
-# The botanical list holds the ICN order (-ales) and division (-phyta) endings
-# too, so "Helotiales sp. EF0021" stays whole (OV-1834).
+# The botanical list holds the ICN order ending (-ales) too, so "Helotiales sp.
+# EF0021" stays whole (OV-1834). The division ending -phyta is left out: plant
+# and insect genera end in it (Xerophyta, Leucophyta, Symphyta; OV-1835).
 _ABOVE_GENUS_ENDINGS: dict[_NomenclatureCode, tuple[str, ...]] = {
     "zoological": ("idae", "inae"),
-    "botanical": ("aceae", "ineae", "inae", "idae", "opsida", "phyceae", "mycetes", "mycota", "ales", "phyta"),
+    "botanical": ("aceae", "ineae", "inae", "idae", "opsida", "phyceae", "mycetes", "mycota", "ales"),
     "prokaryotic": ("aceae", "ales", "ineae", "idae"),
 }
 _ABOVE_GENUS_ENDINGS[_ANY_CODE] = tuple(dict.fromkeys(e for endings in _ABOVE_GENUS_ENDINGS.values() for e in endings))
