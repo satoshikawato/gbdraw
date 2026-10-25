@@ -139,8 +139,7 @@ def test_rotated_record_definition_matches_unrotated(mode, reverse):
 def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, monkeypatch):
     import gbdraw.api.diagram as api_owner
     import gbdraw.diagrams.linear.assemble as linear_owner
-    import gbdraw.svg.circular_tracks as circular_paths
-    import gbdraw.svg.linear_tracks as linear_paths
+    import gbdraw.layout.scalar_axis as scalar_axis
     frame = pd.DataFrame({"GC content": [.1, .3, .8, .6], "GC skew": [.4, -.6, .2, -.2]},
                          index=[0, 2500, 5000, 7500])
     before = frame.copy(deep=True)
@@ -148,15 +147,14 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
     monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_content_dataframes", lambda *a, **k: {"GC": frame})
     monkeypatch.setattr(api_owner, "_build_circular_dinucleotide_skew_dataframes", lambda *a, **k: {"GC": frame})
     monkeypatch.setattr(linear_owner, "skew_df", lambda *a, **k: frame)
-    owner = circular_paths if mode == "circular" else linear_paths
-    project = owner.project_scalar_samples
+    project = scalar_axis.project_scalar_samples
     observed = []
     def capture(positions, values, transform):
         values = list(values)
         result = project(positions, values, transform)
         observed.append((list(positions), values, result))
         return result
-    monkeypatch.setattr(owner, "project_scalar_samples", capture)
+    monkeypatch.setattr(scalar_axis, "project_scalar_samples", capture)
     depth = pd.DataFrame({"reference_name": ["duplicate"] * 10000,
                           "position": range(1, 10001),
                           "depth": [10.] * 2500 + [30.] * 2500 + [80.] * 2500 + [60.] * 2500})
@@ -203,7 +201,9 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                 assert all(b[0] >= a[0] or a[1] == pytest.approx(b[1])
                            for a, b in zip(points, points[1:]))
                 width = max(x for x, _ in points)
-                for offset in offsets:
+                # The path keeps both ends of the drawn segment; a sample on a straight stretch between its
+                # neighbours may be dropped (track paths keep a point only where the outline needs it).
+                for offset in (0, 10000):
                     assert any(x == pytest.approx(offset * width / 10000, abs=PATH_ROUNDING) for x, _ in points)
             elif name != "depth":
                 # The outer ring meets itself at the duplicated seam value.
@@ -338,10 +338,8 @@ def test_multi_record_consumers_keep_instance_order_and_sparse_depth(mode, layou
     from gbdraw.api.options import CircularMultiRecordOptions, LinearMultiRecordOptions
     import gbdraw.render.drawers.circular.depth as circular_depth
     import gbdraw.render.drawers.linear.depth as linear_depth
-    import gbdraw.svg.circular_tracks as circular_paths
-    import gbdraw.svg.linear_tracks as linear_paths
-    owner = circular_paths if mode == "circular" else linear_paths
-    project = owner.project_scalar_samples
+    import gbdraw.layout.scalar_axis as scalar_axis
+    project = scalar_axis.project_scalar_samples
     depth_owner, depth_name = ((circular_depth, "generate_circular_depth_path_desc") if mode == "circular"
                                else (linear_depth, "calculate_depth_path_desc"))
     draw_depth = getattr(depth_owner, depth_name)
@@ -357,7 +355,7 @@ def test_multi_record_consumers_keep_instance_order_and_sparse_depth(mode, layou
         observed.append((transform.length, transform.start_coordinate, transform.source_step, bool(drawing_depth)))
         return project(positions, values, transform)
     monkeypatch.setattr(depth_owner, depth_name, capture_depth)
-    monkeypatch.setattr(owner, "project_scalar_samples", capture)
+    monkeypatch.setattr(scalar_axis, "project_scalar_samples", capture)
     first = _request(mode, _record(), 4001, overrides={"canvas.show_gc": True, "canvas.show_skew": True})
     second = replace(first.records[0], source=InMemoryRecordSource(_record(12000)), record_key="second",
                      display=RecordDisplayOptions(start_coordinate=12000), presentation=RecordPresentation(reverse_complement=True))

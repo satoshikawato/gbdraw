@@ -1698,17 +1698,21 @@ def _assert_quantitative_tracks(
                 for child in slot.iter()
                 if child.tag.rsplit("}", 1)[-1] == "path"
             ]
+    # A track path keeps a sample only where dropping it would move the outline by more than 0.02 SVG px
+    # (tests/test_track_paths.py pins that bound), so the point count is at most one per bin. The depth area
+    # closes on its baseline with two arcs.
     depth_paths = paths_by_slot.get("depth_1", [])
     if (
         len(depth_paths) != 1
         or depth_paths[0].attrib.get("fill") != "#2563EB"
-        or depth_paths[0].attrib.get("d", "").count("L") != 1214
+        or not 2 < depth_paths[0].attrib.get("d", "").count("L") <= 607 + 1
+        or depth_paths[0].attrib.get("d", "").count("A") != 2
     ):
         raise RecipeContractError(f"{scenario_id} depth series geometry changed.")
-    if [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("gc_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError(f"{scenario_id} GC-skew series changed.")
-    if include_at_skew and [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("at_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError(f"{scenario_id} AT-skew series changed.")
+    for skew_slot in ["gc_skew"] + (["at_skew"] if include_at_skew else []):
+        skew_counts = [path.attrib.get("d", "").count("L") for path in paths_by_slot.get(skew_slot, [])[1:]]
+        if len(skew_counts) != 2 or len(set(skew_counts)) != 1 or not 2 < skew_counts[0] <= 607:
+            raise RecipeContractError(f"{scenario_id} {skew_slot} series changed.")
     required_text = {
         "0x",
         "20x",

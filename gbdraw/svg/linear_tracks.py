@@ -1,37 +1,51 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Iterable, cast
-
-from pandas import DataFrame
+import numpy as np
+from numpy.typing import ArrayLike
+from pandas import DataFrame, Series
 
 from ..layout.linear_coords import normalize_position_to_linear_track
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import project_scalar_samples
+from ..layout.scalar_axis import ProjectedScalarLine, project_scalar_line
 from .path_data import path_line_to, path_number
+from .track_paths import track_line_to
 
-def calculate_corrdinate(
-    index: int,
-    value: float,
-    mean: float,
+def _samples(
+    positions: ArrayLike, values: ArrayLike, record_transform: RecordDisplayTransform | None
+) -> ProjectedScalarLine:
+    """The samples a Linear track path draws, in display order (projected when the record is transformed)."""
+
+    if record_transform is not None and record_transform.start_coordinate is not None:
+        return project_scalar_line(positions, values, record_transform)
+    return ProjectedScalarLine(np.asarray(positions, dtype=float), np.asarray(values, dtype=float), ())
+
+
+def _deviation_path_desc(
+    start_x: float,
+    start_y: float,
+    series: Series,
     max_diff: float,
     record_len: int,
     alignment_width: float,
     track_height: float,
-):
-    diff: float = value - mean
-    x_corrdinate: float = normalize_position_to_linear_track(
-        index, record_len, alignment_width
+    record_transform: RecordDisplayTransform | None,
+) -> str:
+    """A GC content (deviation) or skew path: the line of each sample's deviation from the mean, closed to
+    the baseline at ``start_y``."""
+
+    positions, values, segment_starts = _samples(series.index, series, record_transform)
+    xs = normalize_position_to_linear_track(positions, record_len, alignment_width)
+    # A completely flat series draws a flat line (no division by zero).
+    ys = np.zeros_like(values) if max_diff == 0 else -(0.5 * track_height * ((values - float(series.mean())) / max_diff))
+    return (
+        f"M{path_number(start_x)} {path_number(start_y)}"
+        + track_line_to(xs, ys, segment_starts)
+        + path_line_to([xs[-1] if len(xs) else start_x, start_x], [start_y, start_y])
+        + "z"
     )
-    # If the series is completely flat, avoid division by zero and draw a flat line.
-    if max_diff == 0:
-        y_corrdinate = 0.0
-    else:
-        y_corrdinate = -(0.5 * track_height * (diff / max_diff))
-    corrdinate: str = f"L{path_number(x_corrdinate)} {path_number(y_corrdinate)}"
-    return corrdinate, x_corrdinate
 
 
 def calculate_gc_content_path_desc(
@@ -46,30 +60,11 @@ def calculate_gc_content_path_desc(
 ) -> str:
     if gc_df.empty:
         return ""
-    coodinates_list: list[str] = []
-    start_position: str = f"M{path_number(start_x)} {path_number(start_y)}"
-    coodinates_list.append(start_position)
-    column: str = f"{dinucleotide} content"
-    mean = float(gc_df[column].mean())
-    max_diff = float((gc_df[column] - mean).abs().max())
-    samples = gc_df[column].items()
-    if record_transform is not None and record_transform.start_coordinate is not None:
-        samples = ((p.position, p.value) for segment in project_scalar_samples(
-            gc_df.index, gc_df[column], record_transform) for p in segment.points)
-    x_corrdinate = start_x
-    for index, value in samples:
-        value = float(value)
-        corrdinate, x_corrdinate = calculate_corrdinate(
-            index, value, mean, max_diff, record_len, alignment_width, track_height
-        )
-        coodinates_list.append(corrdinate)
-    penultimate_coordinate: str = f"L{path_number(x_corrdinate)} {path_number(start_y)}"
-    coodinates_list.append(penultimate_coordinate)
-    end_coordinate: str = f"L{path_number(start_x)} {path_number(start_y)}"
-    coodinates_list.append(end_coordinate)
-    gc_content_desc: str = "{}".format("".join(coodinates_list))
-    gc_content_desc += "z"
-    return gc_content_desc
+    series = gc_df[f"{dinucleotide} content"]
+    max_diff = float((series - float(series.mean())).abs().max())
+    return _deviation_path_desc(
+        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform
+    )
 
 
 def calculate_gc_skew_path_desc(
@@ -83,32 +78,12 @@ def calculate_gc_skew_path_desc(
 ) -> str:
     if skew_df.empty:
         return ""
-    coodinates_list: list[str] = []
-    start_position: str = f"M{path_number(start_x)} {path_number(start_y)}"
-    coodinates_list.append(start_position)
     column = [col for col in skew_df.columns if "skew" in col and "cumulative" not in col.lower()][0]
-    mean = float(skew_df[column].mean())
-    max_diff = float((skew_df[column] - mean).abs().max()) if float((skew_df[column] - mean).abs().max()) > 0 else 1.0
-
-    samples = skew_df[column].items()
-    if record_transform is not None and record_transform.start_coordinate is not None:
-        samples = ((p.position, p.value) for segment in project_scalar_samples(
-            skew_df.index, skew_df[column], record_transform) for p in segment.points)
-    x_corrdinate = start_x
-    for index, value in samples:
-        value = float(value)
-        corrdinate, x_corrdinate = calculate_corrdinate(
-            index, value, mean, max_diff, record_len, alignment_width, track_height
-        )
-        coodinates_list.append(corrdinate)
-
-    penultimate_coordinate: str = f"L{path_number(x_corrdinate)} {path_number(start_y)}"
-    coodinates_list.append(penultimate_coordinate)
-    end_coordinate: str = f"L{path_number(start_x)} {path_number(start_y)}"
-    coodinates_list.append(end_coordinate)
-    gc_skew_desc: str = "{}".format("".join(coodinates_list))
-    gc_skew_desc += "z"
-    return gc_skew_desc
+    series = skew_df[column]
+    max_diff = float((series - float(series.mean())).abs().max()) or 1.0
+    return _deviation_path_desc(
+        start_x, start_y, series, max_diff, record_len, alignment_width, track_height, record_transform
+    )
 
 
 def calculate_linear_scalar_area_path_desc(
@@ -129,34 +104,24 @@ def calculate_linear_scalar_area_path_desc(
         return ""
 
     baseline_y = float(start_y) + float(track_height)
-    x_values: list[float] = []
-    y_values: list[float] = []
-    samples: Iterable[tuple[float, float]] = zip(scalar_df[position_column], scalar_df[value_column], strict=True)
-    projected = record_transform is not None and record_transform.start_coordinate is not None
-    if projected and record_transform is not None:
-        samples = ((p.position, p.value) for segment in project_scalar_samples(
-            scalar_df[position_column], scalar_df[value_column], record_transform)
-            for p in segment.points)
-    for position, value in samples:
-        position = float(position) if projected else int(position)
-        value = max(0.0, min(1.0, float(value)))
-        x_value = normalize_position_to_linear_track(
-            # The helper is annotated int but computes with floats; projected positions are float.
-            cast(int, position), record_len, alignment_width
-        )
-        y_value = baseline_y - (float(track_height) * value)
-        x_values.append(float(x_value))
-        y_values.append(float(y_value))
-
-    if not x_values:
+    positions, values, segment_starts = _samples(
+        # Unprojected positions are whole bases.
+        scalar_df[position_column] if record_transform is not None and record_transform.start_coordinate is not None
+        else scalar_df[position_column].to_numpy().astype(np.int64),
+        scalar_df[value_column],
+        record_transform,
+    )
+    if not len(positions):
         return ""
+    x_values = normalize_position_to_linear_track(positions, record_len, alignment_width)
+    y_values = baseline_y - (float(track_height) * np.clip(values, 0.0, 1.0))
 
     final_x = normalize_position_to_linear_track(
         record_len, record_len, alignment_width
     )
     path_segments = [
         f"M{path_number(start_x)} {path_number(baseline_y)}",
-        path_line_to(x_values, y_values),
+        track_line_to(x_values, y_values, segment_starts),
         path_line_to([final_x, final_x, start_x], [y_values[-1], baseline_y, baseline_y]),
         "z",
     ]
@@ -187,7 +152,6 @@ def calculate_depth_path_desc(
 
 
 __all__ = [
-    "calculate_corrdinate",
     "calculate_depth_path_desc",
     "calculate_gc_content_path_desc",
     "calculate_gc_skew_path_desc",
