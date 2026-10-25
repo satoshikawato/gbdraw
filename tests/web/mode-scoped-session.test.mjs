@@ -904,3 +904,28 @@ test('a Session 49 drawing gets the same settings whichever drawing Load opens (
   })));
   assert.deepEqual(differs, []);
 });
+
+// DESIGN §6 (B2-D6): after the Session 46-48 upgrade, a 46-48 file and a 49
+// file are both a Session 49, so no Load reader compares a Session version
+// with a 46-48 threshold. Only `sourceFacts` (session-drawings-upgrade.js)
+// carries a source version; the band of a file is read through the
+// session-authority band predicates. Thresholds of 44 and below serve the
+// Session 27-44 path until Python converts it (B2d-4) and are not counted.
+test('no Load reader compares a Session version with a Session 46-48 threshold', () => {
+  const read = (name) => readFileSync(new URL(`../../gbdraw/web/js/services/${name}`, import.meta.url), 'utf8');
+  const THRESHOLD = String.raw`(?:MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
+    + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version|4[6-8])\b`;
+  const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`);
+  const frame = read('main-session-comparison-frame.js');
+  const converterStart = frame.indexOf('export const convertStoredProteinResultFrames = ');
+  assert.ok(converterStart >= 0);
+  const readers = {
+    'config.js': read('config.js'),
+    'main-session-comparison-frame.js convertStoredProteinResultFrames':
+      frame.slice(converterStart, frame.indexOf('\n};\n', converterStart))
+  };
+  const found = Object.entries(readers).flatMap(([name, source]) => source.split('\n')
+    .map((line, index) => ({ line: line.trim(), at: `${name}:${index + 1}` }))
+    .filter(({ line }) => !/^(\/\/|\*|\/\*\*)/.test(line) && compare.test(line)).map(({ at, line }) => `${at} ${line}`));
+  assert.deepEqual(found, []);
+});

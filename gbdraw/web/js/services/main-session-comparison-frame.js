@@ -225,20 +225,26 @@ export const storesDrawnFrameProteinResults = (data) => {
 const PROTEIN_RESULT_CONVERSION = /** @type {const} */ ({ stage: 'helper', operation: 'convertStoredProteinResultFrames' });
 
 /**
+ * The file a Load converts protein results of: its version, which Python's
+ * converter reads, and whether it keeps them in the drawn frame
+ * (`SourceFacts.proteinResultsInDrawnFrame`; a Session 27-44 does).
+ * @typedef {{ version: number, inDrawnFrame: boolean }} ProteinFrameSource
+ */
+/**
  * B-LOAD (D-128): the protein results that each committed drawing of a
  * Session up to 47 stored for a reversed record, in the search frame. Python
  * converts each drawing whose results touch one (one converter, no JS copy);
  * the bytes come back by stored resource ID. A failure throws, so the Load
  * changes nothing (PD-OI-046).
- * @param {number} version
+ * @param {ProteinFrameSource} source
  * @param {ReadonlyArray<StoredDrawing | null | undefined>} drawings
  * @param {{ convert?: typeof proteinResultConverter }} [options]
  * @returns {Promise<Map<string, ConvertedResource>>} empty when no drawing needs it
  */
-export const convertStoredProteinResultFrames = async (version, drawings, { convert = proteinResultConverter } = {}) => {
+export const convertStoredProteinResultFrames = async ({ version, inDrawnFrame }, drawings, { convert = proteinResultConverter } = {}) => {
   /** @type {Map<string, ConvertedResource>} */
   const converted = new Map();
-  if (!(version <= DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION)) return converted;
+  if (!inDrawnFrame) return converted;
   for (const drawing of drawings) {
     const resources = drawing?.resources ?? {};
     if (!drawing || !storesReversedProteinResult(drawing.renderRequest, resources)) continue;

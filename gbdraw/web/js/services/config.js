@@ -211,6 +211,9 @@ import {
   isAuthorityBand,
   isDrawingsBand,
   isCanonicalBand,
+  isModeScopedBand,
+  isModeScopedVersion,
+  holdsCaptionLegendRows,
   hasBiologicalSessionInputs,
   holdsNothing,
   hasSettingsOnlyForm,
@@ -266,8 +269,6 @@ import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
-  MODE_SCOPED_SESSION_VERSION,
-  ROW_KEYED_LEGEND_SESSION_VERSION,
   SESSION_VERSION,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -318,7 +319,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SettingLoss, SettingsContainers } from './config-field-readers.js' */
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { StoredDrawing } from './main-session-comparison-frame.js' */
+/** @import { ProteinFrameSource, StoredDrawing } from './main-session-comparison-frame.js' */
 /** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
@@ -726,9 +727,9 @@ const normalizeSessionLegendEntries = (entries, list, { repairs, path, sessionVe
     if (!isUnsetValue(entries)) repairs?.push(...notedLossRepairs([{ at: list, stored: entries, used: [] }], path));
     return [];
   }
-  const rowOf = sessionVersion >= ROW_KEYED_LEGEND_SESSION_VERSION
-    ? (/** @type {Record<string, unknown>} */ entry) => legendEntryKey(entry)
-    : (/** @type {Record<string, unknown>} */ entry) => String(entry.caption || '').trim();
+  const rowOf = holdsCaptionLegendRows({ format: 'gbdraw-session', version: sessionVersion })
+    ? (/** @type {Record<string, unknown>} */ entry) => String(entry.caption || '').trim()
+    : (/** @type {Record<string, unknown>} */ entry) => legendEntryKey(entry);
   /** @type {Record<string, unknown>[]} */
   const normalized = [];
   /** @type {Set<string>} */
@@ -2587,7 +2588,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // the file is its own entry, found by drawing ID, and so is where the file
   // holds its saved Result set (`setSources`). Its Legend edits were read by
   // row key above.
-  if (!drawingsBand && sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION) {
+  if (isModeScopedBand(sessionData)) {
     upgrade = upgradeRowKeyedModeScopedSession(/** @type {SessionChecked46} */ (/** @type {unknown} */ (data)), sourceSessionVersion);
   }
   const storedRequest = /** @type {UnvalidatedFields<'mode'>
@@ -2599,6 +2600,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
+  // Session 46 keeps each mode's draft in its slice (PD-OI-086); a Session
+  // 27-44 keeps one flat draft.
+  const modeScopedSession = isModeScopedVersion(sessionData);
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
@@ -2611,18 +2615,16 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   }
   // A Session 41-44 placement row reached both modes; the migration names
   // its mode (Main rows both), and the Session 46 split moves it there (R2).
-  if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION && isPlainObject(currentStoredConfig)
+  if (!modeScopedSession && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'featurePlacementOverrides')) {
     currentStoredConfig = {
       ...currentStoredConfig,
       featurePlacementOverrides: migrateSessionFeaturePlacements(currentStoredConfig.featurePlacementOverrides)
     };
   }
-  // Session 46 keeps each mode's draft in its slice (PD-OI-086): the committed
-  // request's projection reads the slice of the request's mode as a Session
-  // 40-44 read its stored draft, and a Session without slices is a CLI or
-  // Python writer's.
-  const modeScopedSession = sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION;
+  // The committed request's projection reads the slice of the request's mode
+  // as a Session 40-44 read its stored draft, and a Session without slices is
+  // a CLI or Python writer's.
   const committedSliceConfig = modeScopedSession
     ? /** @type {UnvalidatedFields<'circular' | 'linear', UnvalidatedFields<'config'>>} */ (data.modes)
       ?.[storedRequest?.mode === 'linear' ? 'linear' : 'circular']?.config
@@ -2766,6 +2768,13 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   return {
     data,
     sourceSessionVersion,
+    modeScopedSession,
+    // Sessions 27-47 keep protein results in the drawn frame (a Session 27-44
+    // until Python converts it, B2d-4); a Session 49 holds none.
+    /** @type {ProteinFrameSource} */
+    proteinFrameSource: {
+      version: sourceSessionVersion, inDrawnFrame: upgrade ? upgrade.sourceFacts.proteinResultsInDrawnFrame : true
+    },
     canonicalProjection,
     canonicalProjectionInput,
     restoredConfig,
@@ -2842,7 +2851,7 @@ const restoreLoadedSetSequenceSources = async ({
 export const savedResultEdits = (data, mode, setEditorState, sessionVersion, storedRules) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
-  const slice = sessionVersion >= MODE_SCOPED_SESSION_VERSION
+  const slice = isModeScopedVersion({ format: 'gbdraw-session', version: sessionVersion })
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
@@ -4233,18 +4242,18 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * IDs in the shown artifact, each kept one and each Linear drawing's views of
  * them, before History takes its base. Each resources object and resource
  * table is replaced once. A failure throws, and the Load rolls back (PD-OI-046).
- * @param {number} version
+ * @param {ProteinFrameSource} source
  * @param {readonly Readonly<ArtifactSlot>[]} keptSlots The artifacts of the drawings not shown.
  * @param {DrawingState} shownDrawing The drawing of the shown artifact.
  * @returns {Promise<Readonly<ArtifactSlot>[] | null>} Every kept artifact, the changed ones holding the converted bytes; null when none changed.
  */
-const convertLoadedProteinResultFrames = async (version, keptSlots, shownDrawing) => {
+const convertLoadedProteinResultFrames = async (source, keptSlots, shownDrawing) => {
   /** @typedef {{ committedCanonicalSession: typeof committedCanonicalSession, activeSessionResourceTable: typeof activeSessionResourceTable }} CanonicalHolder */
   /** @type {(CanonicalHolder | null)[]} */
   const kept = keptSlots.map((slot) => slot.runtimeState?.canonical ?? null);
   /** @type {CanonicalHolder} */
   const shown = { committedCanonicalSession, activeSessionResourceTable };
-  const converted = await convertStoredProteinResultFrames(version, [
+  const converted = await convertStoredProteinResultFrames(source, [
     shown.committedCanonicalSession, ...kept.map((holder) => holder?.committedCanonicalSession)
   ]);
   if (converted.size === 0) return null;
@@ -4303,14 +4312,14 @@ const convertLoadedProteinResultFrames = async (version, keptSlots, shownDrawing
  * with the input Load projected them with. A failure throws, and the Load
  * rolls back (PD-OI-046).
  * @template {{ renderRequest?: unknown, resources?: unknown }} T
- * @param {number} version
+ * @param {ProteinFrameSource} source
  * @param {T} committed
  * @param {Parameters<typeof projectCanonicalSessionRequest>[0] | null} projectionInput
  * @param {DrawingState} linearDrawing The Linear drawing the Load installed, whose comparisons are projected again.
  * @returns {Promise<T>} `committed` itself when nothing is converted
  */
-const convertDetachedProteinResultFrames = async (version, committed, projectionInput, linearDrawing) => {
-  const converted = await convertStoredProteinResultFrames(version, [/** @type {StoredDrawing} */ (committed)]);
+const convertDetachedProteinResultFrames = async (source, committed, projectionInput, linearDrawing) => {
+  const converted = await convertStoredProteinResultFrames(source, [/** @type {StoredDrawing} */ (committed)]);
   if (converted.size === 0) return committed;
   const resources = await withConvertedResources(/** @type {Record<string, unknown>} */ (committed.resources), converted);
   const mode = /** @type {UnvalidatedFields<'mode'> | undefined} */ (committed.renderRequest)?.mode;
@@ -5878,6 +5887,8 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('current-session-preflight-end');
     const {
       sourceSessionVersion,
+      modeScopedSession,
+      proteinFrameSource,
       canonicalProjection,
       canonicalProjectionInput,
       restoredConfig,
@@ -5895,7 +5906,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (restoredConfig && unmanagedConfigValidation) {
       // A stored draft's overrides are read; a request's are checked.
       restoredConfig.unmanagedConfigOverrides = unmanagedConfigValidation.source === 'draft'
-        ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION
+        ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, modeScopedSession
           ? `modes.${unmanagedConfigValidation.mode}.config.unmanagedConfigOverrides` : 'config.unmanagedConfigOverrides', repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
@@ -5946,7 +5957,6 @@ const importSessionDocument = async (e, options = {}) => {
     // in its slice; the committed mode's slice lies over its request's
     // projection (`restoredConfig`, plan 4.1). A Session 27-44 has one flat
     // draft, split below once its edits are migrated.
-    const modeScopedSession = sourceSessionVersion >= MODE_SCOPED_SESSION_VERSION;
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
     const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
@@ -6366,7 +6376,7 @@ const importSessionDocument = async (e, options = {}) => {
     // one through its sources read again with its crops and orientations (the
     // saved metadata when they cannot be read), once (design Q4 4.3).
     let migratedAnnotationTargetCount = 0;
-    if (sourceSessionVersion < MODE_SCOPED_SESSION_VERSION) {
+    if (!modeScopedSession) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sessionMode = data.renderRequest?.mode || generatedMode;
       const hashColorRules = sourceSessionVersion <= DRAWN_HASH_RULE_SESSION_MAX_VERSION
@@ -7048,7 +7058,7 @@ const importSessionDocument = async (e, options = {}) => {
       const stored = canonicalSession ? cloneCanonicalSession(data) : null;
       // OV-1181 B-LOAD: after the stored figure, before History's base (`afterImport`).
       const committed = stored && await convertDetachedProteinResultFrames(
-        sourceSessionVersion, stored, canonicalProjectionInput, linearDrawing
+        proteinFrameSource, stored, canonicalProjectionInput, linearDrawing
       );
       if (!committed && logicalImportedResults.length > 0) {
         const { adv } = shownDrawing;
@@ -7062,7 +7072,7 @@ const importSessionDocument = async (e, options = {}) => {
       activeSessionResourceTable = null;
     } else {
       // OV-1145 B-LOAD: after the stored figure, before History's base (`afterImport`).
-      const convertedKeptSlots = await convertLoadedProteinResultFrames(sourceSessionVersion, stashedSlots, shownDrawing);
+      const convertedKeptSlots = await convertLoadedProteinResultFrames(proteinFrameSource, stashedSlots, shownDrawing);
       if (convertedKeptSlots && options.isCurrent()) installLoadedArtifactSlots?.({ opening: null, stashed: convertedKeptSlots });
     }
     recordSessionLifecycleEvent('interactiveReady', {
