@@ -2611,6 +2611,20 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
   const cacheData = await readSessionLosatArtifacts(promotedData, sourceSessionVersion, repairs, openedDrawingAt);
+  // Every other Session 49 drawing's caches go through the same reader, at
+  // its own path; the opened drawing's are its view's, read above.
+  if (drawingsBand && upgrade) {
+    const { document } = upgrade;
+    const openedId = openedDrawingOf(document).id;
+    /** @type {SessionDrawing49[]} */
+    const drawings = [];
+    for (const [index, entry] of document.drawings.entries()) {
+      drawings.push(entry.id === openedId ? entry : /** @type {SessionDrawing49} */ (/** @type {unknown} */ (
+        await readSessionLosatArtifacts(/** @type {SessionInput} */ (/** @type {unknown} */ (entry)),
+          sourceSessionVersion, repairs, drawingSetPath(index)))));
+    }
+    upgrade = { ...upgrade, document: { ...document, drawings } };
+  }
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
@@ -7034,7 +7048,8 @@ const importSessionDocument = async (e, options = {}) => {
       draftConfigOf(drawing.id)?.importedComparisonResolution
     ));
     /**
-     * Each drawing's saved raw LOSAT entries: a Session 49's by drawing, the
+     * Each drawing's saved raw LOSAT entries as the preflight read them
+     * (`readSessionLosatArtifacts`): a Session 49's by drawing, the
      * projected one first (its own are its view's), merged into the one
      * cache (DESIGN §4.1); a Session 27-48's one list, its Linear part's.
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field

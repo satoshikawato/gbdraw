@@ -61,3 +61,17 @@ for (const opened of ['circular', 'linear']) {
     assert.deepEqual(rowsAt(loaded, 'losatCache'), [`cache-entry-dropped drawings[${index}].losatCache.entries[0]`]);
   });
 }
+
+// N1: the drawings Load does not open read their LOSAT caches through the
+// one reader too, each at its own path.
+test('a Session 49 Load reads every drawing\'s LOSAT caches, each at its drawings[i] path', async () => {
+  const session = v49Session('drawings-circular-linear');
+  session.drawings.forEach((entry) => {
+    entry.losatCache.entries = [{ no: 'entry' }];
+    entry.losatDerivedCache = [];
+  });
+  const loaded = await load(session);
+  assert.deepEqual([...rowsAt(loaded, 'losatCache'), ...rowsAt(loaded, 'losatDerivedCache')].sort(), session.drawings
+    .flatMap((_, index) => [`cache-entry-dropped drawings[${index}].losatCache.entries[0]`, `cache-entry-dropped drawings[${index}].losatDerivedCache`])
+    .sort());
+});
