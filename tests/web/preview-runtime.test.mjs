@@ -31,6 +31,8 @@ const serviceNames = [
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
+// svg-result-ingestion reads the mode-scoped Session version from the generated schema.
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), join(tempDir, 'contracts', 'schema.generated.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app'), { recursive: true });
 await mkdir(join(tempDir, 'services', 'drawing'), { recursive: true });
