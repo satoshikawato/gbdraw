@@ -176,6 +176,12 @@ def build_cloudflare_pages_bundle(
         output_root,
         commit_sha=resolved_commit_sha,
     )
+    build_support = _load_build_support_module()
+    served_wheel = output_root / build_support.expected_browser_wheel_name()
+    build_support.write_wheel_cache_bust(
+        output_root / "js" / "config.js",
+        build_support.browser_wheel_cache_bust_token(served_wheel),
+    )
     (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
@@ -191,12 +197,11 @@ def build_cloudflare_pages_bundle(
 
 def prepare_cloudflare_pages(
     *,
-    refresh_cache_bust: bool = False,
     google_analytics_measurement_id: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
-    prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
+    prepare_browser_wheel_module.prepare_browser_wheel()
     build_support = _load_build_support_module()
     build_support.refresh_open_source_notices()
     measurement_id = (
@@ -214,13 +219,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the Cloudflare Pages bundle in dist/cloudflare-pages with the browser wheel, "
-            "Google Analytics 4 tag, the hosted-site analytics flag, and build label."
+            "Google Analytics 4 tag, the hosted-site analytics flag, build label, and the "
+            "wheel's content-hash cache-bust token."
         )
-    )
-    parser.add_argument(
-        "--refresh-cache-bust",
-        action="store_true",
-        help="Refresh GBDRAW_WHEEL_CACHE_BUST while preparing the browser wheel.",
     )
     parser.add_argument(
         "--google-analytics-id",
@@ -231,7 +232,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     output_root = prepare_cloudflare_pages(
-        refresh_cache_bust=args.refresh_cache_bust,
         google_analytics_measurement_id=args.google_analytics_id,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")

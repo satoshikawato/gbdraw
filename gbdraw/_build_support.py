@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sys
 import zipfile
-from datetime import datetime
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -18,7 +18,11 @@ BROWSER_WHEEL_BUILD_ENV = "GBDRAW_BUILDING_BROWSER_WHEEL"
 
 _PROJECT_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 _WHEEL_NAME_RE = re.compile(r'^(export const GBDRAW_WHEEL_NAME\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
-_WHEEL_CACHE_BUST_RE = re.compile(r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
+_WHEEL_CACHE_BUST_RE = re.compile(
+    r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*)(?:null|"[^"]*")(;\s*)$', re.MULTILINE
+)
+# Hex digits of the wheel's SHA-256 that the hosted bundle puts in the wheel URL.
+_WHEEL_CACHE_BUST_DIGITS = 16
 
 _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
@@ -150,11 +154,28 @@ def read_browser_wheel_name_from_config() -> str:
     return value.strip().strip(";").strip().strip('"').strip("'")
 
 
-def generate_cache_bust_token() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+def browser_wheel_cache_bust_token(wheel_path: Path) -> str:
+    """The `?v=` token of the served gbdraw wheel: its content hash.
+
+    A new wheel always gets a new URL, so no HTTP cache serves an older one.
+    """
+    return hashlib.sha256(wheel_path.read_bytes()).hexdigest()[:_WHEEL_CACHE_BUST_DIGITS]
 
 
-def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = None) -> None:
+def write_wheel_cache_bust(config_path: Path, token: str) -> None:
+    """Write `token` as GBDRAW_WHEEL_CACHE_BUST into a bundle's copy of config.js."""
+    config_text = config_path.read_text(encoding="utf-8")
+    updated_text, replacements = _WHEEL_CACHE_BUST_RE.subn(
+        lambda match: f'{match.group(1)}"{token}"{match.group(2)}',
+        config_text,
+        count=1,
+    )
+    if replacements != 1:
+        raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {config_path}")
+    config_path.write_text(updated_text, encoding="utf-8")
+
+
+def update_browser_wheel_config(*, wheel_name: str) -> None:
     config_text = CONFIG_PATH.read_text(encoding="utf-8")
     updated_text, replacements = _WHEEL_NAME_RE.subn(
         lambda match: f'{match.group(1)}{wheel_name}{match.group(2)}',
@@ -163,14 +184,6 @@ def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = Non
     )
     if replacements != 1:
         raise RuntimeError(f"Could not update GBDRAW_WHEEL_NAME in {CONFIG_PATH}")
-    if cache_bust is not None:
-        updated_text, cache_bust_replacements = _WHEEL_CACHE_BUST_RE.subn(
-            lambda match: f'{match.group(1)}{cache_bust}{match.group(2)}',
-            updated_text,
-            count=1,
-        )
-        if cache_bust_replacements != 1:
-            raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {CONFIG_PATH}")
     if updated_text != config_text:
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
 
