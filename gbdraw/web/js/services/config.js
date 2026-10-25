@@ -5717,6 +5717,23 @@ const artifactUiState = (view) => ({
  */
 
 /**
+ * The raw LOSAT entries Save writes into one Session 49 drawing (DESIGN §1,
+ * K-3): an entry that names its pair's Linear rows goes to each drawing that
+ * holds both rows, so an entry two drawings use is written in both; an entry
+ * that names no row (a Circular conservation pair) cannot tell its drawing
+ * and goes to every drawing. Load merges every drawing's entries into the one
+ * cache.
+ * @param {DrawingState} drawing
+ * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
+ * @returns {Record<string, unknown>[]}
+ */
+const losatEntriesOfDrawing = (drawing, entries) => {
+  const rows = new Set(drawing.linearSeqs.map((sequence) => String(sequence.uid)));
+  return entries.filter(({ queryUid, subjectUid }) => (typeof queryUid !== 'string' || typeof subjectUid !== 'string'
+    || (rows.has(queryUid) && rows.has(subjectUid))));
+};
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  * @returns {Promise<SessionSaveResult>}
@@ -5896,7 +5913,7 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntries },
+        losatCache: { entries: losatEntriesOfDrawing(saved, losatEntries) },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
         ...(cliInvocation ? { cliInvocation } : {})

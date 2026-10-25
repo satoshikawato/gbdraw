@@ -1043,6 +1043,26 @@ test('Save checks each Session 49 drawing it writes with Save\'s checks, not Loa
   );
 });
 
+test('Save writes into each Session 49 drawing the LOSAT entries of its own Linear rows (K-3)', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const first = session.drawings.find((entry) => entry.id === 'linear');
+  const entry = first.losatCache.entries[0];
+  // linear-2 holds other rows: each uid of linear's renamed throughout it, with its own entry.
+  const renamed = (text) => text.replaceAll(entry.queryUid, `${entry.queryUid}-2`).replaceAll(entry.subjectUid, `${entry.subjectUid}-2`);
+  const index = session.drawings.findIndex((candidate) => candidate.id === 'linear-2');
+  session.drawings[index] = JSON.parse(renamed(JSON.stringify(session.drawings[index])));
+  session.drawings[index].losatCache.entries = [JSON.parse(renamed(JSON.stringify({ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' })))];
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, loaded);
+  const result = await exportSession('losat-entries', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
+  assert.deepEqual(keysOf('linear'), [entry.key]);
+  assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
+});
+
 // OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
 // Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
 test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {
