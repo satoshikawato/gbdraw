@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, TypeAlias, cast, get_args
+from typing import Final, Literal, TypeAlias, cast, get_args
 
 from ..exceptions import ValidationError
 
@@ -53,6 +53,12 @@ GAP_STOP_EM = 0.20
 # Neighbouring Linear feature labels in one label row keep at least this many font sizes between them
 # (each label half of it on each side, of its own font size), so two names never read as one word.
 ROW_LABEL_GAP_EM = 0.25
+# Feature labels are laid out in the box their text is drawn in (``core.text.drawn_text_box``: the drawn
+# width, the face's line box) plus these margins, in font sizes (OV-165). A Circular label reserves
+# ``CIRCULAR_LABEL_GAP_EM`` more width, the room the placer keeps between rim neighbours; a Linear label
+# ``LINEAR_LABEL_HEIGHT_MARGIN_EM`` more height (none: its row gap is ``ROW_LABEL_GAP_EM``).
+CIRCULAR_LABEL_GAP_EM: Final = 0.30
+LINEAR_LABEL_HEIGHT_MARGIN_EM: Final = 0.0
 # Leader and underline width: max(LEADER_MIN_PX, LEADER_EM x font size).
 LEADER_MIN_PX = 1.0
 LEADER_EM = 0.07
@@ -123,6 +129,7 @@ def normalize_label_protection(value: object, *, path: str) -> LabelProtection:
 
 __all__ = [
     "BOX_OPACITY",
+    "CIRCULAR_LABEL_GAP_EM",
     "DEFAULT_LABEL_LINE",
     "DEFAULT_LABEL_PROTECTION",
     "FeatureLabelStyle",
@@ -131,6 +138,7 @@ __all__ = [
     "HALO_WIDTH_EM",
     "LABEL_LINES",
     "LABEL_PROTECTIONS",
+    "LINEAR_LABEL_HEIGHT_MARGIN_EM",
     "LEADER_EM",
     "LEADER_MIN_PX",
     "LabelLine",

@@ -12,7 +12,6 @@ from ....layout.circular import calculate_feature_position_factors_circular
 from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
 from ....svg.text_path import generate_text_path
-from ....core.text import calculate_bbox_dimensions
 from ....labels.circular_leaders import TextAnchor, TextBaseline, horizontal_label_alignment, rim_text_placement
 from ....labels.circular_types import CircularLabel
 from ...label_binding import bind_label_part
@@ -68,9 +67,8 @@ class LabelDrawer:
         else:
             label_radius = float(explicit_center_radius)
         angle = 360.0 * (label["middle"] / record_length)
-        font_px = float(str(self.font_size).rstrip("ptpx"))
-        _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)
-        center_offset = bbox_h / 4
+        # A quarter of the label's line box: the same offset for every label of one face and size (OV-1743).
+        center_offset = float(label["height_px"]) / 4
 
         # The text path runs in reading order: clockwise from the label start, or anticlockwise from its end
         # in the lower half so the text stays upright.

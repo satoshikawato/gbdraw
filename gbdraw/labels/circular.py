@@ -17,11 +17,12 @@ from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
 from .circular_types import CircularLabel, CircularLabelCandidateCache
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
+from .label_style import CIRCULAR_LABEL_GAP_EM
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from ..diagrams.circular.presets import CircularTrackPreset, circular_feature_lane_direction_for_preset
 from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
@@ -282,6 +283,13 @@ def circular_label_shape(label: CircularLabel, total_length: int) -> LabelShape:
     parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
     kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
     return LabelShape(kind, parts, leader_polyline(label))
+
+
+def _circular_label_box(text: str, font_family: str, font_size: float) -> tuple[float, float]:
+    """The box a Circular feature label is laid out in: its drawn box, ``CIRCULAR_LABEL_GAP_EM`` wider."""
+
+    width, height = drawn_text_box(text, font_family, font_size)
+    return width + CIRCULAR_LABEL_GAP_EM * float(font_size), height
 
 
 def circular_label_fits(
@@ -4965,7 +4973,6 @@ def prepare_label_list(
         if label_font_size is not None
         else circular_label_font_size(cfg, total_length)
     )
-    interval = cfg.canvas.dpi
     label_spacing_px = float(cfg.labels.spacing.circular)
 
     track_ratio_factor = (
@@ -5005,12 +5012,7 @@ def prepare_label_list(
             label_filtering,
             font_family=font_family,
             font_size=font_size,
-            measure_text=lambda text, family, size: calculate_bbox_dimensions(
-                text,
-                family,
-                size,
-                interval,
-            ),
+            measure_text=_circular_label_box,
             record_transform=record_transform,
             overrides_only=profile.labels_overrides_only,
         )
