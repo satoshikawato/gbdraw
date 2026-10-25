@@ -688,11 +688,14 @@ def _plan_session_drawings(
 
 @contextmanager
 def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
-    """Parse each materialized resource once for every drawing of one call.
+    """Decode and parse each materialized resource once for every drawing of one call.
 
     One ``PreparedBiologicalInputCache`` transaction spans the call, so its
     retention is the selected drawings' resources; the cache ends with the
-    call.
+    call. The drawings are decoded inside it, as a Worker Generate decodes
+    inside its transaction, so a decoded resource is keyed by its resource
+    identity instead of by its value. An error of the body keeps its own
+    type; opening or committing the cache raises :class:`SessionRenderError`.
     """
 
     from gbdraw.api.prepared import (
@@ -700,19 +703,33 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         PreparedResourceIdentity,
     )
 
-    identities: dict[str | Path, PreparedResourceIdentity] = {
-        path: PreparedResourceIdentity(
-            resource_id=resource_id,
-            cache_token=f"session-{resource_id}",
-            size=path.stat().st_size,
-        )
-        for resource_id, path in materialized.resource_paths.items()
-    }
-    with PreparedBiologicalInputCache().transaction(
-        resource_paths=identities,
-        diagnostics=None,
-    ):
-        yield
+    # Before the files are read: a closed materialization is a resource error.
+    _active_materialization(materialized)
+    body_failed = False
+    try:
+        identities: dict[str | Path, PreparedResourceIdentity] = {
+            path: PreparedResourceIdentity(
+                resource_id=resource_id,
+                cache_token=f"session-{resource_id}",
+                size=path.stat().st_size,
+            )
+            for resource_id, path in materialized.resource_paths.items()
+        }
+        with PreparedBiologicalInputCache().transaction(
+            resource_paths=identities,
+            diagnostics=None,
+        ):
+            try:
+                yield
+            except BaseException:
+                body_failed = True
+                raise
+    except SessionError:
+        raise
+    except Exception as exc:
+        if body_failed:
+            raise
+        raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
 def _render_session_drawing_plans(
@@ -721,20 +738,19 @@ def _render_session_drawing_plans(
     *,
     include_feature_catalog: bool = False,
 ) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
-    """Render planned drawings in one parse-cache transaction."""
+    """Render planned drawings inside the call's :func:`_session_parse_cache`."""
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
     _active_materialization(materialized)
     results: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
     try:
-        with _session_parse_cache(materialized):
-            for plan in plans:
-                results[plan.drawing.id] = render_session_compatible_request(
-                    plan.request,
-                    plan.drawing.artifacts,
-                    include_feature_catalog=include_feature_catalog,
-                )
+        for plan in plans:
+            results[plan.drawing.id] = render_session_compatible_request(
+                plan.request,
+                plan.drawing.artifacts,
+                include_feature_catalog=include_feature_catalog,
+            )
     except SessionError:
         raise
     except Exception as exc:
@@ -753,10 +769,10 @@ def render_session(
     have one drawing.
     """
 
-    _active_materialization(materialized)
-    selected = materialized.document._drawing_parts(drawing)
-    plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
-    return _render_session_drawing_plans(materialized, (plan,))[selected.id]
+    with _session_parse_cache(materialized):
+        selected = materialized.document._drawing_parts(drawing)
+        plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
+        return _render_session_drawing_plans(materialized, (plan,))[selected.id]
 
 
 def render_session_drawings(
@@ -784,19 +800,20 @@ def render_session_drawings(
 
     from gbdraw.api.request_render import preflight_diagram_request_outputs
 
-    plans = _plan_session_drawings(
-        materialized,
-        drawings,
-        output_prefix=output_prefix,
-        formats=formats,
-        overwrite=overwrite,
-    )
-    try:
-        preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
-    except ValidationError as exc:
-        raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
-    # A copy typed as the public union (``dict`` is invariant in its values).
-    return dict(_render_session_drawing_plans(materialized, plans))
+    with _session_parse_cache(materialized):
+        plans = _plan_session_drawings(
+            materialized,
+            drawings,
+            output_prefix=output_prefix,
+            formats=formats,
+            overwrite=overwrite,
+        )
+        try:
+            preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
+        except ValidationError as exc:
+            raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
+        # A copy typed as the public union (``dict`` is invariant in its values).
+        return dict(_render_session_drawing_plans(materialized, plans))
 
 
 @dataclass(frozen=True)
