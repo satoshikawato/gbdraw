@@ -14,12 +14,13 @@ the placed groups of a drawing in document order.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 from types import MappingProxyType
-from typing import Callable, Mapping, ParamSpec, Protocol
+from typing import Callable, Mapping, ParamSpec, Protocol, cast
 from xml.etree.ElementTree import Element
 
 from svgwrite import Drawing
@@ -167,6 +168,51 @@ def start_tag(element: BaseElement) -> str:
     if not text.endswith(" />"):  # pragma: no cover - ElementTree writes empty elements so
         raise ValueError(f"unexpected empty-element text for <{element.elementname}>")
     return text[:-3] + ">"
+
+
+# Values an element keeps that nothing changes in place: shared by a copy.
+_SHARED_VALUES = (str, int, float, bool, bytes, type(None), Parameter)
+
+
+def copy_element_tree(element: BaseElement) -> BaseElement:
+    """A copy of ``element`` and its subtree that shares nothing a later step changes.
+
+    Every element is a new object with a new ``attribs`` dict, a new
+    ``elements`` list and new copies of the other lists, dicts and objects it
+    keeps (``Path.commands``; a ``TextPath``'s ``href`` element). As with
+    ``copy.deepcopy`` of the element, an element referenced twice in the copy
+    (a ``TextPath``'s path that is also a child) is copied once, and an element
+    referenced from outside the subtree is copied apart from it. Strings,
+    numbers and svgwrite's per-element ``Parameter`` (debug flag and profile,
+    which elements a ``Drawing`` creates share and nothing changes) are
+    shared. A value of any other type is copied with ``copy.deepcopy``.
+    """
+
+    return _copy_element(element, {})
+
+
+def _copy_element(element: BaseElement, memo: dict[int, object]) -> BaseElement:
+    found = memo.get(id(element))
+    if found is not None:
+        return cast(BaseElement, found)
+    duplicate = object.__new__(type(element))
+    memo[id(element)] = duplicate
+    state = duplicate.__dict__
+    for name, value in element.__dict__.items():
+        state[name] = _copy_value(value, memo)
+    return duplicate
+
+
+def _copy_value(value: object, memo: dict[int, object]) -> object:
+    if isinstance(value, _SHARED_VALUES):
+        return value
+    if isinstance(value, BaseElement):
+        return _copy_element(value, memo)
+    if type(value) is list:
+        return [_copy_value(item, memo) for item in value]
+    if type(value) is dict:
+        return {key: _copy_value(item, memo) for key, item in value.items()}
+    return copy.deepcopy(value, memo)
 
 
 def _childless(element: BaseElement) -> BaseElement:
@@ -394,6 +440,7 @@ __all__ = [
     "RenderedGroup",
     "add_content_definitions",
     "build_group_content",
+    "copy_element_tree",
     "element_text",
     "empty_element_markup",
     "group_manifest",
