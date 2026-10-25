@@ -34,6 +34,7 @@ import { File, Blob } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { modeDrawing } from './drawing-state.mjs';
+import { savedDrawingView } from './saved-drawing-view.mjs';
 import { callerSession } from './session-caller.mjs';
 import { sessionRollbackPort } from './session-rollback-port.mjs';
 
@@ -262,7 +263,9 @@ try {
   if (result?.status === 'saved') {
     const compressed = new Uint8Array(await result.blob.arrayBuffer());
     const raw = isGzip(compressed) ? gunzipSync(compressed) : Buffer.from(compressed);
-    const document = JSON.parse(raw.toString('utf8'));
+    // Save writes a Session 49; the oracle reads the shown drawing as its one-drawing view.
+    const saved49 = JSON.parse(raw.toString('utf8'));
+    const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     const request = document.renderRequest;
     const otherRequest = document.otherModeResult?.renderRequest;
     delete document.renderRequest;
