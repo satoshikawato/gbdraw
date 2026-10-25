@@ -14,6 +14,7 @@ import { msg, t, textParts, tm, uiLocale } from './utils/i18n.js';
 import { getLinearSourceDefaultDefinition, getLinearSourceDefaultSubtitle, resolveLinearRecordEffectiveDefinition } from './services/linear-sources.js';
 import { SETTINGS_SECTIONS, settingsEntriesOf, settingsEntryOf, settingsSectionElement, settingsShortText, settingsView } from './services/settings-sections.js';
 import { SETTING_NOTE_APPLIES, settingApplicationNote } from './services/setting-application.js';
+import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
@@ -826,6 +827,8 @@ export const FileUploader = {
       const busy = state.sessionOperationAvailability();
       if (busy) { e.target.value = ''; return busy; }
       const nextFiles = Array.from(e.target.files || []);
+      // A chosen input file makes a Generate likely: download the Worker's boot files now.
+      if (nextFiles.length) prefetchPyodideBootAssets();
       const update = () => {
         if (props.multiple) {
           emit('update:modelValue', nextFiles);

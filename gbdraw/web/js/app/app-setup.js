@@ -35,6 +35,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -3690,6 +3691,8 @@ export const createAppSetup = () => {
   /** @param {SessionFileInput} event */
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
+    // A chosen Session makes a Generate likely: download the Worker's boot files now.
+    if (name) prefetchPyodideBootAssets();
     const result = await loadSessionFromFile(event);
     // The notice of an earlier operation does not stand for this load; a
     // Load the user canceled changed nothing, the notice included.

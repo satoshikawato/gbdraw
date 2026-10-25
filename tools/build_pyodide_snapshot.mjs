@@ -8,7 +8,7 @@
 //
 // Usage: node tools/build_pyodide_snapshot.mjs <output directory>
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -33,19 +33,11 @@ const main = async () => {
   } = await importWeb('js/workers/pyodide-snapshot.js');
   const indexURL = `${join(web, PYODIDE_INDEX_URL)}/`;
   const { loadPyodide } = await import(pathToFileURL(join(indexURL, 'pyodide.mjs')).href);
-  const localWheels = PYODIDE_LOCAL_WHEELS.map((/** @type {string} */ path) => join(web, path));
-  const gbdrawWheel = join(web, GBDRAW_WHEEL_NAME);
+  const wheels = [...PYODIDE_LOCAL_WHEELS.map((/** @type {string} */ path) => join(web, path)), join(web, GBDRAW_WHEEL_NAME)]
+    .map((source) => ({ source, bytes: new Uint8Array(readFileSync(source)) }));
 
   const pyodide = await loadPyodide({ indexURL, _makeSnapshot: true });
-  // micropip reads a local wheel from the Emscripten file system (`emfs:`).
-  pyodide.FS.mkdirTree('/tmp/wheels');
-  /** @param {string} path */
-  const emfsWheel = (path) => {
-    const target = `/tmp/wheels/${basename(path)}`;
-    pyodide.FS.writeFile(target, readFileSync(path));
-    return `emfs:${target}`;
-  };
-  await installRuntimePackages(pyodide, { localWheels: localWheels.map(emfsWheel), gbdrawWheel: emfsWheel(gbdrawWheel) });
+  await installRuntimePackages(pyodide, { wheels });
   await pyodide.runPythonAsync(PYTHON_HELPERS);
   // Every requirement of every installed distribution is installed: a
   // dependency the recipe misses fails the build, not a later Generate.
@@ -61,8 +53,8 @@ json.dumps(sorted({f"{d.metadata['Name']} requires {r}" for d in md.distribution
   if (missing.length) throw new Error(`The snapshot runtime misses dependencies: ${missing.join('; ')}`);
   pyodide.runPython('import gc; gc.collect()');
   const key = await pyodideSnapshotKey({
-    localWheels: localWheels.map((path) => /** @type {const} */ ([path, readFileSync(path)])),
-    gbdrawWheel: readFileSync(gbdrawWheel),
+    localWheels: wheels.slice(0, -1).map(({ source }) => /** @type {const} */ ([source, readFileSync(source)])),
+    gbdrawWheel: readFileSync(wheels[wheels.length - 1].source),
     helperFile: readFileSync(PYTHON_HELPER_FILE)
   });
   const { memory, state, files } = capturePyodideSnapshot(pyodide, key);
