@@ -134,7 +134,7 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   await shot(notice, 'label-fit-notice.png');
 
   const before = { undo: await undoCount(page), settings: await labelSettings(page),
-    result: await page.evaluate(() => window.__GBDRAW_APP__.results[0].content) };
+    result: await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content) };
   await notice.getByRole('button', { name: 'Choose a fix', exact: true }).click();
   const dialog = page.locator('[data-label-fit-dialog]');
   await expect(dialog).toBeVisible();
@@ -151,7 +151,7 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   await expect(notice).toBeVisible();
   expect(await undoCount(page)).toBe(before.undo);
   expect(await labelSettings(page)).toEqual(before.settings);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
 });
 
 // D-12, D-18 (OV-1606): AP027131 at the Web defaults (separate strands) touches the GC skew area with its bold
@@ -280,7 +280,7 @@ test('a Circular region label longer than its circle: the notice counts it as cu
     return state.labelFitReports.value[0].report.rows.length;
   })).toBe(0);
   const shown = await page.evaluate(() => {
-    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
     return svg.querySelector('[data-gbdraw-annotation-id] textPath')?.textContent ?? '';
   });
   expect(shown.startsWith('a long region label')).toBe(true);

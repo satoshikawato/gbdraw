@@ -90,13 +90,13 @@ test('a live stroke edit leaves the committed Result unchanged until Generate', 
   test.setTimeout(300_000);
   await openWithGenBank(page, HMMT);
   await generateAndWaitForResult(page);
-  const committed = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const committed = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   const input = await reveal(page.getByLabel('Block Stroke Width', { exact: true }).first());
   await input.fill('5');
   await input.fill('');
   const rewritten = await withBoundedWait(
     page,
-    (original) => window.__GBDRAW_APP__.results[0].content !== original,
+    (original) => window.__GBDRAW_APP__.currentResults()[0].content !== original,
     committed
   );
   expect(rewritten).toBe(false);

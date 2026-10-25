@@ -137,7 +137,7 @@ const strokeOf = (page, key) => page.evaluate(async ({ strokeKey, strokeColor, s
   const { getFeatureElements } = await import('./js/services/feature-dom.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.stable_override_key === strokeKey);
-  const content = String(app.results[app.selectedResultIndex]?.content || '');
+  const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const elements = feature ? getFeatureElements(svg, feature.svg_id) : [];
   const override = app.featureStrokeOverrides[strokeKey];
@@ -221,7 +221,7 @@ test('a feature stroke on a replaced Circular file is retired without failing Ge
     await loadStrokeInput(page, 'circular', LAMBDA);
     await generateAndWaitForResult(page);
     expect(await strokeOf(page, key)).toEqual({ override: null, drawn: false });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content.includes('stroke="#ff0000"'))).toBe(false);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content.includes('stroke="#ff0000"'))).toBe(false);
     expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [key], 'replaced-stroke'))
       .toEqual({ [key]: null });
 

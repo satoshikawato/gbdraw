@@ -29,7 +29,7 @@ for (const mode of ['circular', 'linear']) {
     };
     const artifact = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      return { results: window.__GBDRAW_APP__.results.map((result) => result.content),
+      return { results: window.__GBDRAW_APP__.currentResults().map((result) => result.content),
         geometry: JSON.parse(JSON.stringify(state.trackSlotResolvedGeometry.value)) };
     });
     const generate = async () => {

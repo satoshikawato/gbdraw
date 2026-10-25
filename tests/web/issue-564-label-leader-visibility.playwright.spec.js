@@ -25,7 +25,7 @@ const inspectUnit = (page, featureId) => page.evaluate((targetId) => {
   const app = window.__GBDRAW_APP__;
   const mounted = document.querySelector('.origin-top svg');
   const result = new DOMParser().parseFromString(
-    app.results[app.selectedResultIndex]?.content || '',
+    app.currentResults()[app.selectedResultIndex]?.content || '',
     'image/svg+xml'
   );
   return {
@@ -259,7 +259,7 @@ const prepareLegacyTarget = (page) => evaluateWithRetainedPromise(page, async ()
   return {
     featureId: entry.featureId,
     mounted: document.querySelector('.origin-top svg').outerHTML,
-    result: app.results[app.selectedResultIndex].content,
+    result: app.currentResults()[app.selectedResultIndex].content,
     forceSeq: state.labelReflowForceRequestSeq.value
   };
 });
@@ -284,7 +284,7 @@ test('tracked metadata-free Session refreshes once and never exposes a partial v
       const { state } = await import('./js/state.js');
       return {
         mounted: document.querySelector('.origin-top svg').outerHTML,
-        result: app.results[app.selectedResultIndex].content,
+        result: app.currentResults()[app.selectedResultIndex].content,
         override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === app.clickedFeature.svg_id)),
         forceSeq: state.labelReflowForceRequestSeq.value
       };
@@ -357,7 +357,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       const { state } = await import('./js/state.js');
       return {
         mounted: document.querySelector('.origin-top svg').outerHTML,
-        result: app.results[app.selectedResultIndex].content,
+        result: app.currentResults()[app.selectedResultIndex].content,
         override: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === targetId)),
         forceSeq: state.labelReflowForceRequestSeq.value
       };

@@ -42,7 +42,7 @@ test('rejected Circular region can Undo both edits back to valid Auto', async ({
   try {
     await generate(page);
     const before = await page.evaluate(() => ({
-      undo: window.__GBDRAW_HISTORY__.getUndoCount(), result: window.__GBDRAW_APP__.results[0].content
+      undo: window.__GBDRAW_HISTORY__.getUndoCount(), result: window.__GBDRAW_APP__.currentResults()[0].content
     }));
     await openPresentation(page);
     await edit(page, 'Circular region start', '1000');
@@ -55,7 +55,7 @@ test('rejected Circular region can Undo both edits back to valid Auto', async ({
     await expect(page.getByLabel('Circular region start', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Circular region end', { exact: true })).toHaveValue('');
     await generate(page);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
     expect(page.externalRequests).toEqual([]);
   } finally { await page.context().close(); }
 });

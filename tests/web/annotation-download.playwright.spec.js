@@ -21,7 +21,7 @@ const snapshot = (page) => page.evaluate(async () => {
   const history = window.__GBDRAW_HISTORY__;
   const { getCommittedCanonicalSession } = await import('./js/services/config.js');
   return JSON.stringify({
-    draft: app.annotationSets, results: app.results, resultIndex: app.selectedResultIndex,
+    draft: app.annotationSets, results: app.currentResults(), resultIndex: app.selectedResultIndex,
     annotation: app.selectedAnnotation, features: app.selectedFeatures,
     zoom: app.zoom, pan: app.canvasPan, svg: app.svgContainer?.innerHTML,
     scroll: [app.canvasContainerRef?.scrollLeft, app.canvasContainerRef?.scrollTop],
@@ -211,13 +211,13 @@ for (const width of [1440, 390]) {
     expect(await getDiagramWorkerActivity(page)).toEqual(workerBeforeControl);
     const rows = await effectiveRows(page);
     await generateAndWaitForResult(page);
-    const controlSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const controlSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     const workerBefore = await getDiagramWorkerActivity(page);
     await upload(good.table);
     await expect(status).toContainText('Ignored annotation table columns: notes, gene_desc, pmid, fill_colour.');
     await expect(status).toContainText('not saved in Sessions or TSV re-export');
     expect(await effectiveRows(page)).toEqual(rows);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);
     expect(await getDiagramWorkerActivity(page)).toEqual(workerBefore);
     await status.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     const bounds = await status.boundingBox();
@@ -240,7 +240,7 @@ for (const width of [1440, 390]) {
     const native = execFileSync('python', ['tests/web/helpers/annotation-roundtrip.py', tsvPath, expectedPath], { encoding: 'utf8' });
     await writeFile(testInfo.outputPath('python-reader.txt'), native);
     await generateAndWaitForResult(page);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);
     // All malformed inputs must leave the complete prior artifact and draft
     // intact; the panel notice names the error, without a browser alert (FL-14).
     const alertCount = dialogs.length;
@@ -277,11 +277,11 @@ for (const width of [1440, 390]) {
     await fileInput.setInputFiles({ name: 'delayed.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from(good.table) });
     await page.waitForFunction(() => typeof window.__finishAnnotationRead === 'function');
     await page.evaluate(() => { window.__GBDRAW_APP__.annotationSets[0].annotations[0].label = 'Newer edit'; });
-    const resultBeforeStale = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const resultBeforeStale = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     await page.evaluate(() => window.__finishAnnotationRead());
     await expect.poll(() => fileInput.inputValue()).toBe('');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0].annotations[0].label)).toBe('Newer edit');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(resultBeforeStale);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(resultBeforeStale);
     await expect(status).toBeEmpty();
     await page.evaluate(() => { File.prototype.arrayBuffer = window.__annotationReadOriginal; });
     await upload(good.table);
@@ -310,11 +310,11 @@ for (const width of [1440, 390]) {
       await fresh.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]').setInputFiles(sessionPath);
       await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
       await expect.poll(() => effectiveRows(fresh)).toEqual(rows);
-      expect(await fresh.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
+      expect(await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);
       expect(await fresh.evaluate(() => window.__GBDRAW_APP__.annotationImportNotice)).toBe('');
       expect((await getDiagramWorkerActivity(fresh)).instances.flatMap((instance) => instance.runs)).toEqual([]);
       await generateAndWaitForResult(fresh);
-      expect(await fresh.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(controlSvg);
+      expect(await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(controlSvg);
     } finally {
       await context.close();
     }

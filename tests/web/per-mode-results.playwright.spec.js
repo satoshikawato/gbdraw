@@ -71,7 +71,7 @@ const openBothSources = async (page) => {
 const shown = (page) => page.evaluate(async () => {
   const ingestion = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
   const { state } = await import('/gbdraw/web/js/state.js');
-  const result = state.results.value[state.selectedResultIndex.value] || null;
+  const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value] || null;
   return {
     mode: state.mode.value,
     generatedMode: state.generatedMode.value,
@@ -852,7 +852,7 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
     const root = app.svgContainer.querySelector('svg');
     const outcome = await app.updateLegendEntryColor(0, '#ff00ff');
     await window.Vue.nextTick();
-    const result = state.results.value[state.selectedResultIndex.value];
+    const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
     return {
       sameRoot: root === window.__E1_ROOT__,
       outcome,

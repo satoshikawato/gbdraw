@@ -278,7 +278,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
 
   const admitted = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const content = String(app.results[0].content || '');
+    const content = String(app.currentResults()[0].content || '');
     const resultDocument = new DOMParser().parseFromString(content, 'image/svg+xml');
     const resultSvg = resultDocument.documentElement;
     const metadata = JSON.parse(resultSvg.getAttribute('data-gbdraw-composition'));
@@ -331,7 +331,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
     const liveSvg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
     const liveMetadata = JSON.parse(liveSvg.getAttribute('data-gbdraw-composition'));
     const resultDocument = new DOMParser().parseFromString(
-      String(app.results[0].content || ''),
+      String(app.currentResults()[0].content || ''),
       'image/svg+xml'
     );
     const resultMetadata = JSON.parse(

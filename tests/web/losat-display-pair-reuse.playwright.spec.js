@@ -105,7 +105,7 @@ const generate = async (page) => {
   return page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const svg = new DOMParser().parseFromString(
-      app.results[app.selectedResultIndex].content, 'image/svg+xml'
+      app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml'
     );
     const attribute = (node, name) => node.getAttribute(name) || '';
     const telemetry = app.lastRunInfo?.losatTelemetry || {};

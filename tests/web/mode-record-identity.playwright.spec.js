@@ -52,7 +52,7 @@ const snapshot = page => page.evaluate(async () => {
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
     committedPlacements: getCommittedCanonicalRenderRequest()?.diagramOptions.featurePlacements || [],
-    results: state.results.value.map(result => result.content) };
+    results: window.__GBDRAW_APP__.currentResults().map(result => result.content) };
 });
 const switchMode = async (page, mode) => {
   await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
@@ -288,7 +288,7 @@ const generateRegion = async page => {
   const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   return page.evaluate(async outcome => {
     const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const drawn = window.__GBDRAW_APP__.results.flatMap(result => [
+    const drawn = window.__GBDRAW_APP__.currentResults().flatMap(result => [
       ...new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
         .querySelectorAll('[data-gbdraw-annotation-id="ov105"]')
     ].map(element => element.getAttribute('data-gbdraw-record-id')));

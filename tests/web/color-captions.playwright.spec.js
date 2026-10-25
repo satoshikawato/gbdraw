@@ -16,7 +16,7 @@ const inspectNow = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups, legendRowShown } = await import('./js/services/legend-svg.js');
   const root=s.svgContainer.value.querySelector('svg');
-  const result=new DOMParser().parseFromString(s.results.value[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
+  const result=new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
   // The rows a Result shows: a rule commit that merges a row into a shown row
   // retires it live as a hidden row, which the layout skips and every export
   // strips, until Python draws the Legend again (D-15-6 (2), (3); OV-313).
@@ -27,7 +27,7 @@ const inspectNow = page => page.evaluate(async () => {
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
     names:names(result), mountedNames:names(root),
-    svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name};
+    svg:window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name};
 });
 const reveal = async locator => {
   for(const details of await locator.locator('xpath=ancestor::details').all()) {
@@ -231,7 +231,7 @@ test('a rule row whose key is the key of another listed row is refused, and a Se
       const {state:s}=await import('./js/state.js'),{serializeCleanSvg}=await import('./js/services/svg-serialization.js');
       const svg=s.svgContainer.value.querySelector('svg');
       for(const entry of svg.querySelectorAll('g[data-legend-key="Historical"]')) entry.removeAttribute('data-legend-owner');
-      const results=[...s.results.value];results[s.selectedResultIndex.value]={...results[s.selectedResultIndex.value],content:serializeCleanSvg(svg)};
+      const results=[...window.__GBDRAW_APP__.currentResults()];results[s.selectedResultIndex.value]={...results[s.selectedResultIndex.value],content:serializeCleanSvg(svg)};
       s.results.value=results;
     },ids);
     const draft=await inspect(page),saved=testInfo.outputPath('historical.gbdraw-session.json.gz');
@@ -316,7 +316,7 @@ for (const width of [1440, 390]) {
         const a = window.__GBDRAW_APP__;
         const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
         const root = a.svgContainer.querySelector('svg');
-        const result = new DOMParser().parseFromString(a.results[a.selectedResultIndex].content, 'image/svg+xml');
+        const result = new DOMParser().parseFromString(a.currentResults()[a.selectedResultIndex].content, 'image/svg+xml');
         const ids = new Set(a.extractedFeatures.filter(f => f.type === 'tRNA').map(f => f.svg_id));
         const colors = svg => [...new Set([...svg.querySelectorAll('path[data-gbdraw-feature-part="block"]')].filter(e => ids.has(e.getAttribute('data-gbdraw-feature-id'))).map(e => e.getAttribute('fill')))];
         return { mounted: colors(root), result: colors(result),

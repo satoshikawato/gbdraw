@@ -33,11 +33,11 @@ for (const composite of [false, true]) {
           // PD-OI-059: the definition font applies on Generate. Editing it
           // after Load starts no Worker work and leaves the saved Result
           // unchanged until Generate.
-          const saved = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+          const saved = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
           await page.getByLabel('Titles and Record Labels', { exact: true }).press('Enter');
           await page.getByLabel('Default font size', { exact: true }).fill('19');
           const rewritten = await page.waitForFunction(
-            saved => window.__GBDRAW_APP__.results[0].content !== saved, saved, { timeout: 3000 }
+            saved => window.__GBDRAW_APP__.currentResults()[0].content !== saved, saved, { timeout: 3000 }
           ).then(() => true, () => false);
           expect(rewritten).toBe(false);
           await assertDiagramWorkerIdle(page, 'A definition edit after Load must not start the diagram Worker');

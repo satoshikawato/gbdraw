@@ -65,7 +65,7 @@ for (const composite of [false, true]) {
       await expect.poll(() => page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         return (await import('./js/services/svg-result-ingestion.js'))
-          .isCommittedSvgResultMounted(state.results.value[state.selectedResultIndex.value]);
+          .isCommittedSvgResultMounted(window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]);
       })).toBe(true);
     };
     const close = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
@@ -130,7 +130,7 @@ for (const composite of [false, true]) {
         await generate();
         const edited = await check('P4-feature-edit');
         expect(Object.values(edited.placements)).toHaveLength(1);
-        expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toContain('COMPOSITE_RETAINED_LABEL');
+        expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toContain('COMPOSITE_RETAINED_LABEL');
         const download = page.waitForEvent('download');
         await page.getByRole('button', { name: 'Save Session', exact: true }).click();
         const saved = testInfo.outputPath('P5-saved.gbdraw-session.json.gz');

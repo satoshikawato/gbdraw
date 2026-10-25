@@ -81,7 +81,7 @@ const edit = (page, svgId, change) => evaluateWithRetainedPromise(page, async ({
 // What the committed Result draws: feature paths and label texts by rendered ID.
 const drawn = (page, ids) => page.evaluate((renderedIds) => {
   const app = window.__GBDRAW_APP__;
-  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+  const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml')
     .documentElement;
   return Object.fromEntries(renderedIds.map((id) => {
     const paths = [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
@@ -96,7 +96,7 @@ const drawn = (page, ids) => page.evaluate((renderedIds) => {
 
 const labelTextsInResult = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+  const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml')
     .documentElement;
   return [...root.querySelectorAll('[data-label-feature-id] text, text[data-label-feature-id]')]
     .map((element) => element.textContent.trim());
@@ -170,7 +170,7 @@ test('OV-02: a record_location color rule on a cropped record paints the same fe
   const fill = (id, source) => page.evaluate(({ renderedId, from }) => {
     const app = window.__GBDRAW_APP__;
     const root = from === 'mounted' ? app.svgContainer.querySelector('svg')
-      : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+      : new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
     return [...root.querySelectorAll(`path[data-gbdraw-feature-id="${CSS.escape(renderedId)}"]`)]
       .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null;
   }, { renderedId: id, from: source });
@@ -342,7 +342,7 @@ test('a Session 44 with crop and reverse complement keeps its feature edits', as
 // The fills of a feature's drawn blocks in the selected Result.
 const fills = (page, svgId) => page.evaluate((id) => {
   const app = window.__GBDRAW_APP__;
-  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+  const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml')
     .documentElement;
   return [...new Set([...root.querySelectorAll(`path[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
     .filter((element) => element.getAttribute('data-gbdraw-feature-part') !== 'connector')
@@ -392,7 +392,7 @@ test('a Session that saved rule captions with their color IDs loads without them
     const { state } = await import('/gbdraw/web/js/state.js');
     const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
     const svg = new DOMParser().parseFromString(
-      state.results.value[state.selectedResultIndex.value].content, 'image/svg+xml'
+      window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value].content, 'image/svg+xml'
     ).documentElement;
     return {
       captions: state.activeDrawing().manualSpecificRules.map((rule) => rule.cap),
@@ -647,7 +647,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   const loaded = () => page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
-    return { mode: app.mode, results: app.results.map((result) => result.content),
+    return { mode: app.mode, results: app.currentResults().map((result) => result.content),
       rows: Object.values(state.activeDrawing().featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
         row.labelVisibility, row.labelText]).sort(), records: app.linearSeqs.map((seq) => seq.gb?.name || null) };
   });

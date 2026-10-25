@@ -62,7 +62,7 @@ def status(page):
       return {deltas:c.compositionUserDeltas(a.svgContainer.querySelector('svg')),
         pan:{...a.canvasPan}, mode:a.layoutRepositionMode,
         history:window.__GBDRAW_HISTORY__.getUndoCount(), metrics:{...window.__s02Metrics},
-        results:a.results.map(r=>r.content)};
+        results:a.currentResults().map(r=>r.content)};
     }""")
 
 

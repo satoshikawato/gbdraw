@@ -412,7 +412,7 @@ const piecesSince = (page, start) => page.evaluate((start) => {
     mounts: metrics.previewMountAdoptionCount || 0,
     binds: metrics.previewBinderInvocationCount || 0,
     receipts: metrics.previewReadyReceiptAcceptedCount || 0,
-    content: window.__GBDRAW_APP__.results[0].content
+    content: window.__GBDRAW_APP__.currentResults()[0].content
   };
 }, start);
 const generatePieces = async (page) => {
@@ -450,7 +450,7 @@ const wholeAndPieces = (page) => page.evaluate(async () => {
 const heldSegmentCount = (page) => page.evaluate(async () => {
   const { SEGMENTS } = await import('./js/services/current-worker-result-source.js');
   const { state } = await import('./js/state.js');
-  return window.Vue.toRaw(state.results.value[0])?.[SEGMENTS]?.size ?? 0;
+  return window.Vue.toRaw(window.__GBDRAW_APP__.currentResults()[0])?.[SEGMENTS]?.size ?? 0;
 });
 // The page elements whose `name` (an `object` also by `id`) becomes a property
 // of `document`, which DOMPurify's SANITIZE_DOM reads (CW-06 input of a held text).
@@ -574,7 +574,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     // S-5 (Undo, Redo; Generate A, Generate B, Undo, Generate): restored
     // Results keep their segments, so a Generate after Redo or after Undo
     // sanitizes nothing and admits the restored Result's text again.
-    const restoredContent = () => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const restoredContent = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     const allHeld = async () => ({ sanitized: 0, reused: await contentPieceCount(page) });
     const beforeB = await undoCount(page);
     await setWindow(page, 3000);
@@ -674,7 +674,7 @@ test('a Result keeps its held segments through a live palette edit and its Undo'
     const before = await undoCount(page);
     await livePalette(page);
     expect(await undoCount(page)).toBe(before + 1);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).not.toBe(cold.content);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).not.toBe(cold.content);
     expect(await heldSegmentCount(page)).toBe(held);
     await history(page, 'undo');
     expect(await heldSegmentCount(page)).toBe(held);

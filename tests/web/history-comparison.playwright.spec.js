@@ -16,7 +16,7 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 1);
     const before = await page.evaluate(async () => ({
       plan: (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).linearComparisonPlan,
-      result: window.__GBDRAW_APP__.results[0].content
+      result: window.__GBDRAW_APP__.currentResults()[0].content
     }));
     await page.getByRole('button', { name: 'Set no comparison', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.mode)).toBe('none');
@@ -26,7 +26,7 @@ test('comparison off has its own Undo step after a record definition edit', asyn
       (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).linearComparisonPlan))
       .toEqual(before.plan);
     await expect(definition).toHaveValue('HISTORY_RECORD_TWO');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before.result);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.mode)).toBe('none');
     await expect(definition).toHaveValue('HISTORY_RECORD_TWO');
