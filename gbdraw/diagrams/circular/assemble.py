@@ -51,13 +51,13 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
-from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
+from ...core.text import drawn_text_box
 from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
 from ...features.objects import FeatureObject
 from ...labels.label_ink import circular_label_ink
-from ...labels.label_style import label_leader_width_px
+from ...labels.label_style import FeatureLabelStyle, label_leader_width_px
 from ...render.drawers.label_backing import feature_label_drawn_parts
 from ...labels.circular import (
     CircularLabelProbeStopped,
@@ -98,7 +98,7 @@ from ...layout.composition import (
     TitlePlacement,
     plan_composition,
 )
-from ...layout.spatial import Aabb, union_aabbs
+from ...layout.spatial import Aabb, bounding_aabb, union_aabbs
 from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.sources import (
     DepthLegendSource,
@@ -636,48 +636,21 @@ def _external_label_bounds_on_canvas(
     return min_x, min_y, max_x, max_y
 
 
-def _external_label_paint_bounds_local(label: CircularLabel, total_length: int) -> Aabb:
-    """Return exact text plus leader paint bounds (the leader at its label's own width) in circle-local
-    coordinates."""
-    measured_label = label.copy()
-    if measured_label.get("aabb_local") is None:
-        text_width, text_height = calculate_svg_bbox_dimensions(
-            str(measured_label.get("label_text", "")),
-            str(measured_label.get("font_family", "sans-serif")),
-            float(measured_label.get("font_size", 0.0)),
-            96,
-            font_weight="normal",
-            font_style="normal",
-        )
-        if text_width > 0.0:
-            measured_label["width_px"] = float(text_width)
-        if text_height > 0.0:
-            measured_label["height_px"] = float(text_height)
-    text_bounds = Aabb(
-        *_label_bbox_local(measured_label, total_length, margin_px=0.0)
+def _external_label_paint_bounds_local(label: CircularLabel, total_length: int, style: FeatureLabelStyle) -> Aabb:
+    """Return what an outer or inner label paints in ``style`` (its turned letters, its underline or white box,
+    and its leader at its label's own width) in circle-local coordinates, from the label's ink owner."""
+    ink = circular_label_ink(label, total_length, style)
+    box = ink.ink
+    letters = tuple(
+        ink.from_label_frame(corner)
+        for corner in ((box.min_x, box.min_y), (box.max_x, box.min_y), (box.max_x, box.max_y), (box.min_x, box.max_y))
     )
-    leader_points = (
-        (
-            float(label.get("middle_x", label.get("start_x", 0.0))),
-            float(label.get("middle_y", label.get("start_y", 0.0))),
-        ),
-        (
-            float(label.get("leader_start_x", label.get("start_x", 0.0))),
-            float(label.get("leader_start_y", label.get("start_y", 0.0))),
-        ),
-        (
-            float(label.get("feature_anchor_x", label.get("feature_middle_x", 0.0))),
-            float(label.get("feature_anchor_y", label.get("feature_middle_y", 0.0))),
-        ),
-    )
-    leader_bounds = Aabb(
-        min(point[0] for point in leader_points),
-        min(point[1] for point in leader_points),
-        max(point[0] for point in leader_points),
-        max(point[1] for point in leader_points),
-    ).expanded(0.5 * label_leader_width_px(label))
-    combined = union_aabbs((text_bounds, leader_bounds))
-    if combined is None:  # pragma: no cover - both inputs are present
+    drawn = tuple(point for part in feature_label_drawn_parts(ink, style) for point in part)
+    text_bounds = bounding_aabb((*letters, *drawn))
+    leader_bounds = bounding_aabb(ink.leader, 0.5 * label_leader_width_px(label))
+    if (
+        text_bounds is None or leader_bounds is None or (combined := union_aabbs((text_bounds, leader_bounds))) is None
+    ):  # pragma: no cover - placed labels have finite coordinates
         raise RuntimeError("external label paint bounds unexpectedly empty")
     return combined
 
@@ -688,8 +661,9 @@ def _external_label_obstacles_on_canvas(
     canvas_config: CircularCanvasConfigurator,
 ) -> tuple[Aabb, ...]:
     """Return authoritative per-label overlay obstacles in plot coordinates."""
+    style = canvas_config.profile.label_style
     return tuple(
-        _external_label_paint_bounds_local(label, total_length).translated(
+        _external_label_paint_bounds_local(label, total_length, style).translated(
             float(canvas_config.offset_x), float(canvas_config.offset_y)
         )
         for label in labels

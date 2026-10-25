@@ -40,6 +40,9 @@ from gbdraw.labels.circular import (
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
 from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
+from gbdraw.labels.label_ink import circular_label_ink
+from gbdraw.labels.label_style import FeatureLabelStyle
+from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
@@ -3453,10 +3456,17 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
     assert abs(labels[1]["start_y"] - initial_high_y) > 0.1
 
 
-def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -> None:
+@pytest.mark.parametrize(
+    "style",
+    [FeatureLabelStyle(line="none", protection="none"), FeatureLabelStyle(line="under", protection="box")],
+    ids=["plain", "underline_box"],
+)
+def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas(style: FeatureLabelStyle) -> None:
     total_length = 4000
     labels = [
         {
+            "label_text": "hypothetical protein",
+            "font_family": "Liberation Sans",
             "middle": 1000,
             "start_x": 470.0,
             "start_y": 0.0,
@@ -3482,6 +3492,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         legend_offset_x=0.0,
         legend_offset_y=0.0,
         length_param="short",
+        profile=SimpleNamespace(label_style=style),
     )
     original_canvas = vars(canvas_config).copy()
     original_labels = copy.deepcopy(labels)
@@ -3492,12 +3503,20 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         canvas_config,
     )
 
+    # The letters' ink (and what the style draws with them), not the layout box, bounds the label.
+    ink = circular_label_ink(labels[0], total_length, style)
+    drawn = [point for part in feature_label_drawn_parts(ink, style) for point in part]
     assert len(obstacles) == 1
-    assert obstacles[0].max_x == pytest.approx(1090.0)
+    assert obstacles[0].max_x == pytest.approx(500.0 + max([ink.ink.max_x, *(x for x, _y in drawn)]))
+    assert obstacles[0].min_y == pytest.approx(500.0 + min([ink.ink.min_y, *(y for _x, y in drawn)]))
+    assert obstacles[0].max_x != pytest.approx(500.0 + 470.0 + 120.0)
     assert obstacles[0].min_x == pytest.approx(889.3)
     assert obstacles[0].max_x > canvas_config.total_width
     assert vars(canvas_config) == original_canvas
     assert labels == original_labels
+    # The layout box does not reach the paint bounds.
+    resized = [{**labels[0], "width_px": 999.0, "height_px": 99.0}]
+    assert circular_assemble_module._external_label_obstacles_on_canvas(resized, total_length, canvas_config) == obstacles
 
 
 def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:
