@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `88`
+- Contract revision: `89`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -40,7 +40,8 @@ Status: active Product authority
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
-  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, and `PD-OI-106`
+  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`, and
+  `PD-OI-107`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -3116,6 +3117,77 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests,
     and documentation that remove the warning are in the same pull request,
     and the Review is `REQUIRED`.
+- Revision 89 changes: `PD-OI-107` is added (concern
+  `diagram-generation.organism-name-lines`, scenario revision `1`; the outcome
+  `A / ONE-RULE-FOR-AUTO-NAME-LINES`), and `PD-OI-067` gains scenario revision
+  `4` (concern `web.linear.file-default-definition`; the outcome
+  `B / PER-RECORD-INFERRED-DEFINITION, 推定名は organism-name-lines の規則で書く`).
+  When Species and Strain are empty (Auto), the Circular centre, the Circular
+  plot title, and the Web Linear Auto definition write the name from the
+  record's `/organism` and `/strain` (`/isolate`) by one rule, and the strain
+  is drawn once. They come from replies of the Product Decision Owner
+  `satoshikawato` of `2026-10-25` in the Claude Code sessions of the campaign
+  `definition-fit-choice-20261025` (decisions DF-D07, DF-D09, DF-D11, DF-D12,
+  DF-D13, DF-D22, and DF-D23), given to reports and questions the sessions
+  relayed because the choices are the Product Decision Owner's. Each reply is
+  quoted as written.
+  - DF-D07. The session showed a decision packet and an examples page of rule
+    A, with the pathovar epithet upright on line 2, a bracketed genus written
+    `[<i>Genus</i>] <i>epithet</i>`, and, among virus names, only an ICTV
+    binomial species name in italics. Reply:
+    「OK承認します。ウイルスはICTV 二名法だけ斜体」. In the next message:
+    「ウイルスはICTV 二名法だけ斜体っていうのはページで見せてくれた奴だよね？それでいいです」.
+  - DF-D09. For a typed Species with an empty Strain, the session's option b
+    left the Auto strain line out when the typed Species already names the
+    strain. The Owner wrote:
+    「bは、N315 だけ（2 行目なし）っていうのをN315を二行目というか(isolate/strain)の行にできない？Staphylococcus aureusだけで1行目。そっちのほうがよくね？」.
+    The session asked whether the typed text keeps its own typeface or gets
+    the rule's italics. Reply:
+    「これはオートを書き換えてマニュアルで入力したときってこと？それなら入力通りで。」.
+  - DF-D11. The session showed the two receipts without the DF-D12 and DF-D13
+    clauses. Reply, first line of the message:
+    「受領記録の文言（RECEIPTS.md の 2 件）：承認します。」.
+  - DF-D12. Same message, on the typeface of hybrid names:
+    「雑種名の書体：ICN 式の Citrus × limon にする ：確実に判定できるなら、する。」.
+  - DF-D13. Same message, on placeholder names:
+    「（任意）「Lachnospiraceae bacterium A4」のような仮名で、科名を斜体にするか: 確実に判定できるなら、する。」.
+    The session then measured both on real records and reported that both are
+    detected reliably: no error in the 226 real hybrid names checked by eye,
+    and a higher-taxon name in a placeholder only when the record's lineage
+    holds that name.
+  - DF-D22. The session asked whether the hybrid sign 「×」 is (a) always
+    upright or (b) italic in a named hybrid and upright in a formula, as the
+    ICN text writes it. Reply:
+    「雑種の記号「×」の書体: a（推奨）：いつも立体にする。」.
+  - DF-D23. The session showed the DF-D12 and DF-D13 additions with the old
+    and new text: two sentences added inside the parentheses of the
+    `PD-OI-107` Choice, the Must preserve sentence
+    「規則が読めない名前は分けず、全体を 1 行目に立体で置くこと。」 replaced by
+    「規則が分けない名前は全体を 1 行目に置き、雑種名と仮名の中の学名のほかは立体にすること。」,
+    the sentence
+    「系統に無い上位の名前や、語尾が決まっていない上位の名前（Gammaproteobacteria など）は、仮名の中でも立体のまま。動物（ICZN）の科の名前は立体。」
+    added to the Accepted residual risk, and, in the `PD-OI-067` scenario
+    revision `4` Rationale,
+    「（ウイルス名と仮名は立体、亜種などの形容語は斜体、株名は 1 回）」 replaced by
+    「（ウイルス名は立体、仮名は上位の学名だけ斜体、雑種名は ICN 式、亜種などの形容語は斜体、株名は 1 回）」.
+    Reply: 「受領記録への追記の文言承認」. The two receipts recorded in
+    `PD-OI-107` and `PD-OI-067` are the DF-D11 text with these additions.
+    The two Choice sentences follow 「入力に株名が入っていれば置かない」 inside
+    the closing parenthesis, separated by 「。」 as the other sentences there.
+  - The receipts and JSON reproduce the approved fields without translation
+    or additional terms. The `PD-OI-067` scenario revision `1` to `3`
+    receipts and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-107` scenario revision `1`
+    `272bfa0d36bca59d0a628007164f3b9a3aadcf2ada993d62071d82d0240c52a5`;
+    `PD-OI-067` scenario revision `4`
+    `55c815d3e0683c65bbcd54f2f8c26f02dad35fc7d937818beb5020cc8440f002`.
+  - `PD-OI-067` scenario revision `4` supersedes scenario revision `3` only
+    for the sentence its May retire names; every other term of scenario
+    revisions `1` to `3` stays in force.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests,
+    and documentation that write the name lines by this rule are in the same
+    pull request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -6412,21 +6484,26 @@ Decision date: 2026-10-18
 ### PD-OI-067: Per-record inferred Linear definitions
 
 - Concern key: `web.linear.file-default-definition`
-- Scenario revision: `3`
+- Scenario revision: `4`
 - Supersedes: `PD-OI-067`, scenario revision `1`
   (`B / PER-RECORD-INFERRED-DEFINITION`), only for the names area of the
   card of a File with one record; every scenario-1 term stays in force.
   Scenario revision `3` supersedes scenario revisions `1` and `2` only for
   how an inferred name writes a *Candidatus* organism; every other term of
-  both stays in force.
+  both stays in force. Scenario revision `4` supersedes scenario revision
+  `3` only for the sentence its May retire names (the inferred name with
+  the genus and species italic); every other term of scenario revisions
+  `1` to `3` stays in force.
 - Status: `ACCEPTED`
 - Selected outcomes: `B / PER-RECORD-INFERRED-DEFINITION` (scenario revision
   `1`) and
   `B / PER-RECORD-INFERRED-DEFINITION, one-record File shows record names on the card`
   (scenario revision `2`) and
   `B / PER-RECORD-INFERRED-DEFINITION, Candidatus は斜体の Ca. と書く`
-  (scenario revision `3`)
-- Normative outcome: exactly the three approved `PRODUCT_DECISION` receipts and
+  (scenario revision `3`) and
+  `B / PER-RECORD-INFERRED-DEFINITION, 推定名は organism-name-lines の規則で書く`
+  (scenario revision `4`)
+- Normative outcome: exactly the four approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below, read together, and the Owner
   selection of `2026-10-12` recorded after the scenario revision `2` receipt.
 - Decision source (scenario revision `1`): the complete `D-12` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
@@ -6453,6 +6530,13 @@ Decision date: 2026-10-18
   Product Contract co-change).
 - Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
   `88affcc65dc746deeb51944da38dfd607ef2fffce764fe7137024484a422bca1`.
+- Decision source (scenario revision `4`): the Owner replies of `2026-10-25`
+  quoted in the Revision 89 entry above. The fourth receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. Its rule is the one `PD-OI-107` records. The runtime
+  that implements it merges with it (static Product Contract co-change).
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `55c815d3e0683c65bbcd54f2f8c26f02dad35fc7d937818beb5020cc8440f002`.
 - Acceptance contracts: `OIC-015`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -6549,6 +6633,36 @@ Decision date: 2026-10-24
   "acceptedResidualRisk": "すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-24"
+}
+```
+
+Scenario revision `4` receipt (approved by `satoshikawato` on `2026-10-25`;
+DF-D11 and DF-D23 of the Revision 89 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.linear.file-default-definition
+Scenario revision: 4
+Choice: B / PER-RECORD-INFERRED-DEFINITION, 推定名は organism-name-lines の規則で書く
+Rationale: Linear の推定名を Circular 中央と同じ規則で作り、命名規約に合わせる（ウイルス名は立体、仮名は上位の学名だけ斜体、雑種名は ICN 式、亜種などの形容語は斜体、株名は 1 回）。
+Must preserve: scenario revision 1〜3 のほかの項目（定義の優先順位、Reset で推定値に戻ること、Session の往復、Candidatus は斜体の Ca. と立体の名前）。利用者が入力した Definition はそのまま描く。
+May retire: 先頭 2 語を斜体にする推定表記（scenario revision 3 の Must preserve のうち「Candidatus 以外の生物名の推定表記（属名と種小名を斜体）」）。
+Accepted residual risk: 規則が分けない名前は、今日の先頭 2 語の斜体を失う（GenBank 2,273 件、多くは立体が正しい仮名）。すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。
+Owner: satoshikawato
+Decision date: 2026-10-25
+```
+
+```json
+{
+  "concern": "web.linear.file-default-definition",
+  "scenarioRevision": 4,
+  "choice": "B / PER-RECORD-INFERRED-DEFINITION, 推定名は organism-name-lines の規則で書く",
+  "rationale": "Linear の推定名を Circular 中央と同じ規則で作り、命名規約に合わせる（ウイルス名は立体、仮名は上位の学名だけ斜体、雑種名は ICN 式、亜種などの形容語は斜体、株名は 1 回）。",
+  "mustPreserve": "scenario revision 1〜3 のほかの項目（定義の優先順位、Reset で推定値に戻ること、Session の往復、Candidatus は斜体の Ca. と立体の名前）。利用者が入力した Definition はそのまま描く。",
+  "mayRetire": "先頭 2 語を斜体にする推定表記（scenario revision 3 の Must preserve のうち「Candidatus 以外の生物名の推定表記（属名と種小名を斜体）」）。",
+  "acceptedResidualRisk": "規則が分けない名前は、今日の先頭 2 語の斜体を失う（GenBank 2,273 件、多くは立体が正しい仮名）。すでに保存した Session や書き出した図に書き込まれた名前は、作り直すまで古い表記のまま残る場合がある。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-25"
 }
 ```
 
@@ -9054,6 +9168,53 @@ Decision date: 2026-10-22
   "acceptedResidualRisk": "Python-produced warnings, Gallery tutorials and the docs stay English inside a translated UI; translated wording may contain errors until corrected; the es, fr, pt, ko, id, vi and th wording is drafted and checked without a native reviewer until one corrects it; id and vi readers see the English number format (1,000.5) where their convention writes 1.000,5; a translation report needs a GitHub account and is public.",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-22"
+}
+```
+
+### PD-OI-107: Organism name lines from record metadata
+
+- Concern key: `diagram-generation.organism-name-lines`
+- Scenario revision: `1`
+- Supersedes: none. `PD-OI-067` scenario revision `4` writes the Web Linear
+  inferred name by this record's rule, and this record keeps the *Candidatus*
+  form of `PD-OI-067` scenario revision `3`.
+- Status: `ACCEPTED`
+- Selected outcome: `A / ONE-RULE-FOR-AUTO-NAME-LINES`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-25` quoted in the Revision 89
+  entry above (DF-D07, DF-D09, DF-D11, DF-D12, DF-D13, DF-D22, and DF-D23).
+  The receipt and JSON below reproduce all nine fields of the approved receipt
+  without translation or additional terms. The runtime that implements it
+  merges with it (static Product Contract co-change); this record supplies no
+  runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `272bfa0d36bca59d0a628007164f3b9a3aadcf2ada993d62071d82d0240c52a5`.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.organism-name-lines
+Scenario revision: 1
+Choice: A / ONE-RULE-FOR-AUTO-NAME-LINES（pathovar の形容語は立体で 2 行目、角括弧の属は [<i>属</i>] <i>形容語</i>、ウイルスは ICTV 二名法の種名だけ斜体。Species だけ入力したときは、入力した文字を同じ規則で読み、学名部分を 1 行目、残りを 2 行目に置く。文字と書体は入力どおり。残りが無ければ Auto の株名を 2 行目に置き、入力に株名が入っていれば置かない。雑種名は ICN 式で、属名と形容語を斜体、雑種の記号（x、×）は立体。仮名（Lachnospiraceae bacterium A4 など）の中の科などの上位の名前は、レコードの系統にその名前があり、細菌・古細菌か植物・菌類・藻類のときだけ斜体）
+Rationale: Species と Strain が空（Auto）のとき、レコードの /organism と /strain（/isolate）から作る名前を命名規約に合わせ、株名を 2 回描かない。実データ（NCBI の全アセンブリなど）で測った 1 つの規則を、Circular 中央、Circular のプロットタイトル、Web の Linear の Auto 定義で共通に使う。
+Must preserve: 利用者が入力した Species、Strain、Definition をそのまま描くこと。Species と Strain が空なら Auto であること（Session の形式は変えない）。Candidatus は斜体の Ca. と立体の名前（PD-OI-067 scenario revision 3）。規則が分けない名前は全体を 1 行目に置き、雑種名と仮名の中の学名のほかは立体にすること。
+May retire: Circular 中央の 1 行目に /organism 全体を立体で描き、2 行目に株名を重ねて描く表記。
+Accepted residual risk: 英語の仮名（Marine alveolate L67-3）や /strain の無い小文字の株名を学名と読んで斜体にする誤り（実レコードで 0 件、NCBI Taxonomy の負荷試験で 0.010%）。分けられるのに分けない名前（GenBank の名前の 0.04%）。保存済みの図は作り直すまで古い表記のまま。系統に無い上位の名前や、語尾が決まっていない上位の名前（Gammaproteobacteria など）は、仮名の中でも立体のまま。動物（ICZN）の科の名前は立体。
+Owner: satoshikawato
+Decision date: 2026-10-25
+```
+
+```json
+{
+  "concern": "diagram-generation.organism-name-lines",
+  "scenarioRevision": 1,
+  "choice": "A / ONE-RULE-FOR-AUTO-NAME-LINES（pathovar の形容語は立体で 2 行目、角括弧の属は [<i>属</i>] <i>形容語</i>、ウイルスは ICTV 二名法の種名だけ斜体。Species だけ入力したときは、入力した文字を同じ規則で読み、学名部分を 1 行目、残りを 2 行目に置く。文字と書体は入力どおり。残りが無ければ Auto の株名を 2 行目に置き、入力に株名が入っていれば置かない。雑種名は ICN 式で、属名と形容語を斜体、雑種の記号（x、×）は立体。仮名（Lachnospiraceae bacterium A4 など）の中の科などの上位の名前は、レコードの系統にその名前があり、細菌・古細菌か植物・菌類・藻類のときだけ斜体）",
+  "rationale": "Species と Strain が空（Auto）のとき、レコードの /organism と /strain（/isolate）から作る名前を命名規約に合わせ、株名を 2 回描かない。実データ（NCBI の全アセンブリなど）で測った 1 つの規則を、Circular 中央、Circular のプロットタイトル、Web の Linear の Auto 定義で共通に使う。",
+  "mustPreserve": "利用者が入力した Species、Strain、Definition をそのまま描くこと。Species と Strain が空なら Auto であること（Session の形式は変えない）。Candidatus は斜体の Ca. と立体の名前（PD-OI-067 scenario revision 3）。規則が分けない名前は全体を 1 行目に置き、雑種名と仮名の中の学名のほかは立体にすること。",
+  "mayRetire": "Circular 中央の 1 行目に /organism 全体を立体で描き、2 行目に株名を重ねて描く表記。",
+  "acceptedResidualRisk": "英語の仮名（Marine alveolate L67-3）や /strain の無い小文字の株名を学名と読んで斜体にする誤り（実レコードで 0 件、NCBI Taxonomy の負荷試験で 0.010%）。分けられるのに分けない名前（GenBank の名前の 0.04%）。保存済みの図は作り直すまで古い表記のまま。系統に無い上位の名前や、語尾が決まっていない上位の名前（Gammaproteobacteria など）は、仮名の中でも立体のまま。動物（ICZN）の科の名前は立体。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-25"
 }
 ```
 
