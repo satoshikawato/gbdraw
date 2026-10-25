@@ -40,7 +40,7 @@ from gbdraw.labels.circular import (
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
 from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
-from gbdraw.labels.label_ink import circular_label_ink
+from gbdraw.labels.label_ink import circular_label_ink, segment_through_box
 from gbdraw.labels.label_style import FeatureLabelStyle
 from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
@@ -2953,6 +2953,30 @@ def test_hmmtdna_resolve_overlaps_middle_has_no_label_leader_line_collisions() -
         margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
     )
     assert collision_count == 0
+
+
+def test_hmmtdna_resolve_overlaps_middle_draws_no_leader_through_another_label() -> None:
+    """OV-1823: no drawn leader runs through another label's letters (the ATP8 leader under tRNA-Lys)."""
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    inks = [circular_label_ink(label, total_length, FeatureLabelStyle("none", "none")) for label in external_labels]
+    through = [
+        (label["label_text"], other["label_text"])
+        for label, own_ink in zip(external_labels, inks)
+        for other, ink in zip(external_labels, inks)
+        if other is not label
+        and any(
+            segment_through_box(ink.to_label_frame(start), ink.to_label_frame(end), ink.ink)
+            for start, end in zip(own_ink.leader, own_ink.leader[1:])
+        )
+    ]
+    assert through == []
 
 
 def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> None:

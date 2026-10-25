@@ -901,8 +901,9 @@ def test_dense_map_that_fits_with_legacy_rows_draws_as_before(
     )
 
     # Digest of the same run with labels laid out in their drawn boxes (OV-165; the 179 labels keep their order,
-    # with no drawn overlap). Before, the digest of origin/dev 3d748b78 (before OV-479) was 0572c062...
-    assert digest == (179, "a3d6edf717234f19a6e9cf2e9d6b46700266d73100ca2136e3229e4452465e39")
+    # with no drawn overlap and no leader through another label's letters; OV-1823 moves two labels 1-2 px out).
+    # Before, the digest of origin/dev 3d748b78 (before OV-479) was 0572c062...
+    assert digest == (179, "beb197dace5ea1dc78a1811febe973c733c2db35661d82f41a0f5ce32b00cd94")
 
 
 @pytest.mark.circular
@@ -924,5 +925,7 @@ def test_dense_map_whose_spaced_rows_cross_draws_as_before(
         ],
     )
 
-    # Digest of the same run on origin/dev 3d748b78 (before OV-479).
-    assert digest == (108, "cf67ec842c42201cd9f796657db30a5acb65b37c1e30f826380ea837cf15cf83")
+    # Digest of the same run with labels laid out in their drawn boxes (OV-165; the 108 labels keep their order,
+    # with no drawn overlap). OV-1823 steps six labels out, so 1 leader runs through another label's letters
+    # (origin/dev f5992e64a: 3). Before, the digest of origin/dev 3d748b78 (before OV-479) was cf67ec84...
+    assert digest == (108, "b5b4275737da5e3af8fa8a8a48964c13769ad0950df6d1a17e406bb74d86bbbe")
