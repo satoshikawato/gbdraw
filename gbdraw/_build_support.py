@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import sys
@@ -175,7 +176,49 @@ def write_wheel_cache_bust(config_path: Path, token: str) -> None:
     config_path.write_text(updated_text, encoding="utf-8")
 
 
+def _load_web_assets_module():
+    # By path, as setup.py loads this module: a build need not import `gbdraw`.
+    path = Path(__file__).resolve().parent / "_web_assets.py"
+    spec = spec_from_file_location("gbdraw_build_web_assets", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load the web asset manifest from {path}")
+    module = module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def pyodide_asset_config_values() -> dict[str, str | list[str]]:
+    """The config.js values that gbdraw/_web_assets.py owns, by constant name."""
+    web_assets = _load_web_assets_module()
+
+    def url(path: Path) -> str:
+        return f"./{path.as_posix()}"
+
+    return {
+        "PYODIDE_INDEX_URL": f"{url(web_assets.PYODIDE_RUNTIME_DIR.relative_to(web_assets.WEB_ROOT))}/",
+        "PYODIDE_RUNTIME_FILES": list(web_assets.PYODIDE_LOADER_FILES),
+        "PYODIDE_LOCAL_WHEELS": [url(path) for path in web_assets.PYODIDE_LOCAL_WHEELS],
+        "PYODIDE_RUNTIME_WHEELS": [url(path) for path in web_assets.PYODIDE_RUNTIME_WHEELS],
+    }
+
+
+def render_pyodide_asset_config(config_text: str) -> str:
+    """`config_text` with each value of pyodide_asset_config_values written in."""
+    for name, value in pyodide_asset_config_values().items():
+        pattern = re.compile(rf"^(export const {name} = ).*?(;)$", re.MULTILINE | re.DOTALL)
+        config_text, replacements = pattern.subn(
+            lambda match: f"{match.group(1)}{json.dumps(value, indent=2)}{match.group(2)}",
+            config_text,
+            count=1,
+        )
+        if replacements != 1:
+            raise RuntimeError(f"Could not update {name} in {CONFIG_PATH}")
+    return config_text
+
+
 def update_browser_wheel_config(*, wheel_name: str) -> None:
+    """Write GBDRAW_WHEEL_NAME and the values of pyodide_asset_config_values into config.js."""
     config_text = CONFIG_PATH.read_text(encoding="utf-8")
     updated_text, replacements = _WHEEL_NAME_RE.subn(
         lambda match: f'{match.group(1)}{wheel_name}{match.group(2)}',
@@ -184,6 +227,7 @@ def update_browser_wheel_config(*, wheel_name: str) -> None:
     )
     if replacements != 1:
         raise RuntimeError(f"Could not update GBDRAW_WHEEL_NAME in {CONFIG_PATH}")
+    updated_text = render_pyodide_asset_config(updated_text)
     if updated_text != config_text:
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
 

@@ -14,10 +14,18 @@ export const GBDRAW_WHEEL_CACHE_BUST = null;
 // server sets it (docs/internal/SELECTIVE_CI.md, "Pyodide snapshot").
 /** @type {string | null} */
 export const PYODIDE_SNAPSHOT_URL = null;
+// tools/prepare_browser_wheel.py writes the four PYODIDE_ values below from
+// gbdraw/_web_assets.py (PYODIDE_RUNTIME_DIR, PYODIDE_LOADER_FILES,
+// PYODIDE_LOCAL_WHEELS, PYODIDE_RUNTIME_WHEELS); tests/test_web_packaging.py
+// fails when they differ.
 export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0/full/";
-// The files in PYODIDE_INDEX_URL that Pyodide's loader downloads at start;
-// gbdraw/_web_assets.py PYODIDE_CORE_FILES holds them.
-export const PYODIDE_RUNTIME_FILES = ["pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
+// The files in PYODIDE_INDEX_URL that Pyodide's loader downloads at start.
+export const PYODIDE_RUNTIME_FILES = [
+  "pyodide.asm.js",
+  "pyodide.asm.wasm",
+  "python_stdlib.zip",
+  "pyodide-lock.json"
+];
 export const PYODIDE_LOCAL_WHEELS = [
   "./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",
   "./vendor/pyodide-wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
@@ -31,8 +39,7 @@ export const PYODIDE_LOCAL_WHEELS = [
 ];
 // The Pyodide distribution's wheels the diagram Worker loads by name before
 // micropip installs PYODIDE_LOCAL_WHEELS: micropip and what those wheels
-// require from the distribution (pandas' tzdata). gbdraw/_web_assets.py
-// PYODIDE_RUNTIME_WHEELS lists the same files.
+// require from the distribution (pandas' tzdata).
 export const PYODIDE_RUNTIME_WHEELS = [
   "./vendor/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
   "./vendor/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl"

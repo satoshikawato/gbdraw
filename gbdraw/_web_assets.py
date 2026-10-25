@@ -27,14 +27,20 @@ ASSET_URLS = {
     "noto_sans_jp": "https://registry.npmjs.org/@fontsource/noto-sans-jp/-/noto-sans-jp-5.2.9.tgz",
 }
 
-PYODIDE_CORE_FILES = {
-    "package.json",
+# The files of PYODIDE_RUNTIME_DIR that Pyodide's loader downloads at start,
+# in that order (config.js PYODIDE_RUNTIME_FILES, the page's prefetch).
+PYODIDE_LOADER_FILES = (
     "pyodide.asm.js",
     "pyodide.asm.wasm",
+    "python_stdlib.zip",
+    "pyodide-lock.json",
+)
+
+PYODIDE_CORE_FILES = {
+    "package.json",
     "pyodide.js",
     "pyodide.mjs",
-    "pyodide-lock.json",
-    "python_stdlib.zip",
+    *PYODIDE_LOADER_FILES,
 }
 
 PYODIDE_RUNTIME_PACKAGE_WHEELS = {

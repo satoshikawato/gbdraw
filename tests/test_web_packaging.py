@@ -505,38 +505,40 @@ def test_open_source_notices_include_local_pyodide_wheels() -> None:
         assert wheel_path.as_posix() in notices_html
 
 
-def _configured_wheels(name: str) -> tuple[Path, ...]:
-    config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    match = re.search(rf"export const {name}\s*=\s*\[(.*?)\];", config_js, re.DOTALL)
-    assert match is not None
-    return tuple(
-        Path(raw.lstrip("./"))
-        for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
+def test_web_config_pyodide_values_are_written_from_the_web_asset_manifest() -> None:
+    # tools/prepare_browser_wheel.py writes them (update_browser_wheel_config).
+    from gbdraw._build_support import CONFIG_PATH, render_pyodide_asset_config
+
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
+    assert render_pyodide_asset_config(config_text) == config_text, (
+        "gbdraw/web/js/config.js differs from gbdraw/_web_assets.py: run `python tools/prepare_browser_wheel.py`."
     )
 
 
-def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
-    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
+def test_update_browser_wheel_config_writes_the_web_asset_manifest(tmp_path, monkeypatch) -> None:
+    from gbdraw import _build_support as build_support
 
-    assert _configured_wheels("PYODIDE_LOCAL_WHEELS") == PYODIDE_LOCAL_WHEELS
+    config_path = tmp_path / "config.js"
+    stale = build_support.CONFIG_PATH.read_text(encoding="utf-8").replace(
+        '"pyodide.asm.wasm",', '"pyodide.asm.wasm", "stale.bin",', 1
+    ).replace('"./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",', "", 1)
+    config_path.write_text(stale, encoding="utf-8")
+    monkeypatch.setattr(build_support, "CONFIG_PATH", config_path)
+
+    build_support.update_browser_wheel_config(wheel_name="gbdraw-9.9.9-py3-none-any.whl")
+
+    written = config_path.read_text(encoding="utf-8")
+    assert written == build_support.render_pyodide_asset_config(written)
+    assert '"stale.bin"' not in written
+    assert '"./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl"' in written
+    assert 'export const GBDRAW_WHEEL_NAME = "gbdraw-9.9.9-py3-none-any.whl";' in written
 
 
-def test_web_config_pyodide_runtime_files_are_core_files() -> None:
-    from gbdraw._web_assets import PYODIDE_CORE_FILES
-
-    config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    match = re.search(r"export const PYODIDE_RUNTIME_FILES\s*=\s*\[(.*?)\];", config_js, re.DOTALL)
-    assert match is not None
-    files = re.findall(r"""["']([^"']+)["']""", match.group(1))
-    assert files and set(files) <= PYODIDE_CORE_FILES
-
-
-def test_web_config_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
+def test_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
     from gbdraw._web_assets import PYODIDE_RUNTIME_DIR, PYODIDE_RUNTIME_PACKAGE_WHEELS, PYODIDE_RUNTIME_WHEELS
 
     # The diagram Worker loads each by its name field (PEP 427); Pyodide then
     # fetches the lock file's wheel for that name.
-    assert _configured_wheels("PYODIDE_RUNTIME_WHEELS") == PYODIDE_RUNTIME_WHEELS
     lock = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))
     assert {
         path.name.split("-", 1)[0]: lock["packages"][path.name.split("-", 1)[0]]["file_name"]
