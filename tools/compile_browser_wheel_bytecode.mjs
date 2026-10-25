@@ -2,21 +2,22 @@
 // vendored Pyodide that loads it (tools/browser_wheel_bytecode.py): a .pyc
 // holds its interpreter's magic number, and the Python that builds the wheel
 // (3.11 in CI) is not Pyodide's. tools/prepare_browser_wheel.py runs it on the
-// wheel it builds.
+// wheel it builds, and names the Pyodide directory from gbdraw/_web_assets.py
+// (not config.js, which that script writes only afterwards).
 //
-// Usage: node tools/compile_browser_wheel_bytecode.mjs <wheel>   (rewritten in place)
+// Usage: node tools/compile_browser_wheel_bytecode.mjs <wheel> <pyodide-dir>   (wheel rewritten in place)
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
-const web = join(root, 'gbdraw/web');
 
 const main = async () => {
-  if (process.argv.length !== 3) throw new Error('Usage: node tools/compile_browser_wheel_bytecode.mjs <wheel>');
+  if (process.argv.length !== 4) {
+    throw new Error('Usage: node tools/compile_browser_wheel_bytecode.mjs <wheel> <pyodide-dir>');
+  }
   const wheel = resolve(process.argv[2]);
-  const { PYODIDE_INDEX_URL } = await import(pathToFileURL(join(web, 'js/config.js')).href);
-  const indexURL = `${join(web, PYODIDE_INDEX_URL)}/`;
+  const indexURL = `${resolve(process.argv[3])}/`;
   const { loadPyodide } = await import(pathToFileURL(join(indexURL, 'pyodide.mjs')).href);
   const pyodide = await loadPyodide({ indexURL, stdout: () => {}, stderr: (line) => console.error(line) });
   pyodide.FS.writeFile('/tmp/source.whl', readFileSync(wheel));

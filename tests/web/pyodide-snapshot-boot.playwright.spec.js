@@ -12,6 +12,7 @@
 // every other spec boot cold.
 const { test, expect } = require('@playwright/test');
 const { spawn } = require('node:child_process');
+const { rmSync } = require('node:fs');
 const { join } = require('node:path');
 const { fetchRoute, openApp } = require('./helpers/app-lifecycle.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
@@ -97,15 +98,29 @@ test('the diagram Worker restores the served Pyodide snapshot and boots cold whe
 });
 
 // The repository on `python3 -m http.server` (the test server when no snapshot
-// is served) at a free port: its origin, and a function that stops it.
+// is served) at a free port, every file fresh for an hour so that no response
+// depends on a file's modification time: its origin, and a function that stops
+// it. Rejects when the server exits or stays silent for 10 s.
+const PLAIN_SERVER = [
+  'import http.server',
+  'class Handler(http.server.SimpleHTTPRequestHandler):',
+  '    def end_headers(self):',
+  '        self.send_header("Cache-Control", "max-age=3600")',
+  '        super().end_headers()',
+  'http.server.test(HandlerClass=Handler, port=0, bind="127.0.0.1")'
+].join('\n');
+
 const startPlainServer = () => new Promise((resolveServer, rejectServer) => {
-  const server = spawn('python3', ['-u', '-m', 'http.server', '0', '--bind', '127.0.0.1'], {
-    cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore']
-  });
-  server.once('error', rejectServer);
+  const server = spawn('python3', ['-u', '-c', PLAIN_SERVER], { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] });
+  const fail = (message) => { server.kill(); rejectServer(new Error(message)); };
+  const timer = setTimeout(() => fail('The test server printed no port.'), 10_000);
+  server.once('error', (error) => { clearTimeout(timer); rejectServer(error); });
+  server.once('exit', (code) => { clearTimeout(timer); rejectServer(new Error(`The test server exited (${code}) before printing its port.`)); });
   server.stdout.on('data', (chunk) => {
     const port = /port (\d+)/.exec(String(chunk))?.[1];
-    if (port) resolveServer({ origin: `http://127.0.0.1:${port}`, stop: () => server.kill() });
+    if (!port) return;
+    clearTimeout(timer);
+    resolveServer({ origin: `http://127.0.0.1:${port}`, stop: () => server.kill() });
   });
 });
 
@@ -116,10 +131,12 @@ const startPlainServer = () => new Promise((resolveServer, rejectServer) => {
 test('the first Worker boots from the files the page prefetched when a file was chosen', async ({ playwright }, testInfo) => {
   test.setTimeout(300_000);
   const server = await startPlainServer();
-  const context = await playwright.chromium.launchPersistentContext(testInfo.outputPath('profile'), {
-    baseURL: server.origin, viewport: { width: 1280, height: 900 }
-  });
+  const profile = testInfo.outputPath('profile');
+  let context;
   try {
+    context = await playwright.chromium.launchPersistentContext(profile, {
+      baseURL: server.origin, viewport: { width: 1280, height: 900 }
+    });
     const page = context.pages()[0] || await context.newPage();
     await page.addInitScript(() => performance.setResourceTimingBufferSize(10_000));
     await openApp(page);
@@ -137,17 +154,22 @@ test('the first Worker boots from the files the page prefetched when a file was 
     expect(worker).toBeDefined();
     const requests = await /** @type {import('@playwright/test').Worker} */ (worker).evaluate(() => (
       performance.getEntriesByType('resource').map((entry) => {
-        const { name, transferSize, responseStatus } = /** @type {PerformanceResourceTiming} */ (entry);
-        return { name, transferSize, responseStatus };
+        const { name, transferSize, encodedBodySize } = /** @type {PerformanceResourceTiming} */ (entry);
+        return { name, transferSize, encodedBodySize };
       })));
     // Everything the Worker requested besides its own modules is a boot file,
     // each requested once.
     const boot = requests.filter(({ name }) => !new URL(name).pathname.startsWith('/gbdraw/web/js/'));
     expect(boot.map(({ name }) => name).sort()).toEqual([...bootUrls].sort());
-    // From the HTTP cache: no body crossed the network (a 304 carries headers only).
-    expect(boot.filter(({ transferSize, responseStatus }) => transferSize > 0 && responseStatus !== 304)).toEqual([]);
+    // From the HTTP cache: no body crossed the network (a cache hit transfers
+    // nothing, a revalidation only headers).
+    expect(boot.filter(({ transferSize, encodedBodySize }) => transferSize !== 0 && transferSize >= encodedBodySize)).toEqual([]);
   } finally {
-    await context.close();
-    server.stop();
+    try {
+      await context?.close();
+    } finally {
+      server.stop();
+      rmSync(profile, { recursive: true, force: true });
+    }
   }
 });

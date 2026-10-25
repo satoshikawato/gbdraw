@@ -14,7 +14,8 @@ import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
-  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads
+  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads,
+  runtimeWheelsInInstallOrder
 } from './pyodide-snapshot.js';
 
 let runtimePromise = null;
@@ -383,7 +384,7 @@ const initializeRuntime = async ({
       wheels,
       beforeInstall: async () => {
         reportStep(2);
-        await Promise.all([...wheels.localWheels, wheels.gbdrawWheel].map(({ bytes }) => bytes));
+        await Promise.all(runtimeWheelsInInstallOrder(wheels).map(({ bytes }) => bytes));
         reportStep(3);
       }
     });

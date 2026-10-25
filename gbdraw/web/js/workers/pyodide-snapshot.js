@@ -238,6 +238,13 @@ export const runtimeWheelDownloads = ({ localWheelUrls, gbdrawWheelUrl }) => ({
 });
 
 /**
+ * The wheels in install order: the dependency wheels, then the gbdraw wheel.
+ * @param {RuntimeWheels} wheels
+ * @returns {RuntimeWheel[]}
+ */
+export const runtimeWheelsInInstallOrder = ({ localWheels, gbdrawWheel }) => [...localWheels, gbdrawWheel];
+
+/**
  * Installs the diagram Worker's packages: the distribution packages
  * (DISTRIBUTION_PACKAGES), then the dependency wheels and the gbdraw wheel
  * in one micropip call from the Emscripten file system. micropip raises on
@@ -251,7 +258,7 @@ export const installRuntimePackages = async (pyodide, { wheels, beforeInstall })
   await pyodide.loadPackage([...DISTRIBUTION_PACKAGES]);
   const micropip = pyodide.pyimport('micropip');
   await beforeInstall?.();
-  const files = await Promise.all([...wheels.localWheels, wheels.gbdrawWheel].map(async ({ source, bytes }) => (
+  const files = await Promise.all(runtimeWheelsInInstallOrder(wheels).map(async ({ source, bytes }) => (
     /** @type {const} */ ([`${WHEEL_FOLDER}/${fileName(source)}`, await bytes])
   )));
   /** @type {string[]} */

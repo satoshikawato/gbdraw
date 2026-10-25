@@ -8,6 +8,7 @@ import sys
 import zipfile
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import ModuleType
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -176,7 +177,7 @@ def write_wheel_cache_bust(config_path: Path, token: str) -> None:
     config_path.write_text(updated_text, encoding="utf-8")
 
 
-def _load_web_assets_module():
+def _load_web_assets_module() -> ModuleType:
     # By path, as setup.py loads this module: a build need not import `gbdraw`.
     path = Path(__file__).resolve().parent / "_web_assets.py"
     spec = spec_from_file_location("gbdraw_build_web_assets", path)
@@ -186,6 +187,12 @@ def _load_web_assets_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def pyodide_runtime_dir() -> Path:
+    """The vendored Pyodide directory that gbdraw/_web_assets.py names."""
+    runtime_dir: Path = _load_web_assets_module().PYODIDE_RUNTIME_DIR
+    return runtime_dir
 
 
 def pyodide_asset_config_values() -> dict[str, str | list[str]]:

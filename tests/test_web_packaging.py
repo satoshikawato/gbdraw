@@ -266,6 +266,22 @@ def test_browser_wheel_bytecode_adds_an_unchecked_pyc_per_module_to_record(tmp_p
     ]
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node.js")
+def test_pyodide_bytecode_step_takes_the_pyodide_directory_from_the_web_asset_manifest(tmp_path: Path) -> None:
+    # The step runs before config.js is rewritten, so it must not read PYODIDE_INDEX_URL from it.
+    from gbdraw._build_support import pyodide_runtime_dir
+
+    prepare_module = _load_prepare_browser_wheel_module()
+    wheel = tmp_path / "pkg-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as zf:
+        zf.writestr("pkg/__init__.py", "VALUE = 1\n")
+        zf.writestr("pkg-1.0.dist-info/RECORD", "pkg/__init__.py,sha256=x,10\npkg-1.0.dist-info/RECORD,,\n")
+    prepare_module.add_pyodide_bytecode(wheel, pyodide_runtime_dir())
+    with zipfile.ZipFile(wheel) as zf:
+        assert [name for name in zf.namelist() if name.endswith(".pyc")] == ["pkg/__pycache__/__init__.cpython-313.pyc"]
+    assert "PYODIDE_INDEX_URL" not in (REPO_ROOT / "tools" / "compile_browser_wheel_bytecode.mjs").read_text(encoding="utf-8")
+
+
 @pytest.mark.browser
 def test_browser_wheel_carries_the_pyodide_bytecode_of_every_module() -> None:
     from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
@@ -1103,6 +1119,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
     expected_name = "gbdraw-0.14.1-py3-none-any.whl"
+    pyodide_dir = tmp_path / "pyodide"
     calls: list[object] = []
 
     def fake_run(
@@ -1129,6 +1146,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     build_support = SimpleNamespace(
         BROWSER_WHEEL_BUILD_ENV="GBDRAW_BUILDING_BROWSER_WHEEL",
         expected_browser_wheel_name=lambda: expected_name,
+        pyodide_runtime_dir=lambda: pyodide_dir,
         refresh_open_source_notices=lambda: calls.append("notices"),
         update_browser_wheel_config=lambda **kwargs: calls.append(("config", kwargs)),
         validate_browser_wheel_prepared=fake_validate_browser_wheel_prepared,
@@ -1139,14 +1157,14 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
         prepare_module, "_load_build_support_module", lambda: build_support
     )
     monkeypatch.setattr(prepare_module.subprocess, "run", fake_run)
-    monkeypatch.setattr(prepare_module, "add_pyodide_bytecode", lambda wheel: calls.append(("bytecode", wheel.name)))
+    monkeypatch.setattr(prepare_module, "add_pyodide_bytecode", lambda wheel, index: calls.append(("bytecode", wheel.name, index)))
 
     assert prepare_module.prepare_browser_wheel() == 0
     assert (web_root / expected_name).exists()
     assert calls == [
         "notices",
         "wheel",
-        ("bytecode", expected_name),
+        ("bytecode", expected_name, pyodide_dir),
         ("config", {"wheel_name": expected_name}),
         "validate",
     ]
