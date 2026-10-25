@@ -85,3 +85,12 @@ test('the Load install of each drawing\'s inputs takes them paired with the draw
   const body = source.slice(start, source.indexOf('\n};\n', start));
   assert.deepEqual(body.match(/\.get\([^)]*\)\s*\?\?[^;\n]*/g) ?? [], []);
 });
+
+// OV-1792: a legacy configuration Load returns before `afterImport`, which
+// only a Session Load reaches, so it holds no legacy arm.
+test('the Load afterImport hook holds no legacy-configuration arm', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  const start = source.indexOf('afterImport: async');
+  assert.ok(start >= 0);
+  assert.equal(source.slice(start, source.indexOf('\n  });\n', start)).includes("'legacy'"), false);
+});
