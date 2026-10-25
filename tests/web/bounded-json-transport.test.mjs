@@ -157,6 +157,19 @@ test('long strings with lone surrogates keep the UTF-16 route; short and empty s
   assert.deepEqual(chunks.map(chunk => chunk.encoding), ['utf-16']);
 });
 
+test('without String.prototype.isWellFormed a long string travels the UTF-16 route and stays equal', async () => {
+  const original = Object.getOwnPropertyDescriptor(String.prototype, 'isWellFormed');
+  const text = 'ACGTN'.repeat(200000);
+  try {
+    delete String.prototype.isWellFormed;
+    const { value, chunks } = await roundTrip({ text });
+    assert.equal(value.text, text);
+    assert.deepEqual(chunks.map(chunk => chunk.encoding), ['utf-16']);
+  } finally {
+    if (original) Object.defineProperty(String.prototype, 'isWellFormed', original);
+  }
+});
+
 test('the receiver decodes a multi-byte sequence split across byte chunks and rejects malformed UTF-8', () => {
   const bytes = new TextEncoder().encode('﻿a漢😀');
   const receiver = createBoundedJsonReceiver();

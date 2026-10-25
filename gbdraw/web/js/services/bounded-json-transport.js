@@ -109,7 +109,7 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
     const size = cloneUpperBound(current, CLONE_LIMIT);
     if (size <= CLONE_LIMIT) {
       await emit({ kind: 'value', path, value: current, whole: path.length === 0 }, pathBytes + size);
-    } else if (typeof current === 'string' && current.isWellFormed()) {
+    } else if (typeof current === 'string' && typeof current.isWellFormed === 'function' && current.isWellFormed()) {
       await emit({ kind: 'string-start', path, encoding: 'utf-8' }, pathBytes);
       for (let start = 0; start < current.length;) {
         // A code unit takes at most 3 bytes, so the last chunk holds the rest. `encodeInto` writes whole characters
@@ -171,13 +171,13 @@ export const sendBoundedJson = async (value, sendPart, { consume = false } = {})
  * Decodes one chunk of a UTF-8 string; without `bytes`, ends the string. A chunk may end inside a character.
  * @param {TextDecoder} decoder
  * @param {Uint8Array} [bytes]
- * @returns {string}
+ * @returns {string | null} null when the bytes are malformed
  */
 const decodeStringBytes = (decoder, bytes) => {
   try {
     return bytes ? decoder.decode(bytes, { stream: true }) : decoder.decode();
   } catch {
-    throw new Error('Invalid bounded JSON transport string.');
+    return null;
   }
 };
 
@@ -248,24 +248,27 @@ export const createBoundedJsonReceiver = () => {
       // `ignoreBOM` keeps a leading U+FEFF, which is part of the string; `fatal` rejects malformed bytes.
       const decoder = part.encoding === 'utf-8' ? new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }) : null;
       pendingString = { path: part.path, chunks: [], decoder };
-    } else if (part.kind === 'string-bytes') {
-      if (!pendingString || !pendingString.decoder || !(part.bytes instanceof Uint8Array) || part.bytes.byteLength > BYTE_CHUNK) {
-        throw new Error('Invalid bounded JSON transport string.');
+    } else if (part.kind === 'string-bytes' || part.kind === 'string-chunk') {
+      /** @type {string | null} */
+      let piece = null;
+      if (part.kind === 'string-bytes') {
+        if (pendingString && pendingString.decoder && part.bytes instanceof Uint8Array && part.bytes.byteLength <= BYTE_CHUNK) {
+          piece = decodeStringBytes(pendingString.decoder, part.bytes);
+        }
+      } else if (pendingString && !pendingString.decoder && part.units instanceof Uint16Array) {
+        const pieces = [];
+        for (let index = 0; index < part.units.length; index += 8192) {
+          pieces.push(String.fromCharCode(...part.units.subarray(index, index + 8192)));
+        }
+        piece = pieces.join('');
       }
-      pendingString.chunks.push(decodeStringBytes(pendingString.decoder, part.bytes));
-    } else if (part.kind === 'string-chunk') {
-      if (!pendingString || pendingString.decoder || !(part.units instanceof Uint16Array)) {
-        throw new Error('Invalid bounded JSON transport string.');
-      }
-      const pieces = [];
-      for (let index = 0; index < part.units.length; index += 8192) {
-        pieces.push(String.fromCharCode(...part.units.subarray(index, index + 8192)));
-      }
-      pendingString.chunks.push(pieces.join(''));
+      if (!pendingString || piece === null) throw new Error('Invalid bounded JSON transport string.');
+      pendingString.chunks.push(piece);
     } else if (part.kind === 'string-end') {
-      if (!pendingString) throw new Error('Invalid bounded JSON transport string.');
-      // The final call rejects a character left incomplete by the last chunk.
-      if (pendingString.decoder) pendingString.chunks.push(decodeStringBytes(pendingString.decoder));
+      // The final decode rejects a character left incomplete by the last chunk.
+      const tail = pendingString && pendingString.decoder ? decodeStringBytes(pendingString.decoder) : '';
+      if (!pendingString || tail === null) throw new Error('Invalid bounded JSON transport string.');
+      pendingString.chunks.push(tail);
       assignValue(pendingString.path, pendingString.chunks.join(''));
       pendingString = null;
     } else throw new Error('Invalid bounded JSON transport part.');

@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): Loading a large Session is faster and keeps less in
+  memory: the import Worker passes the Session as UTF-8 text, the feature
+  catalog builds each sequence once, the Load's unsafe-key check runs in the
+  import Worker, and the Similarity group rows exist only while the drawer shows
+  their tab. The Vibrio Gallery Session loaded in 4.4 s instead of 8.3 s, with
+  211 MB of JavaScript heap instead of 307 MB. The drawing and the saved Session
+  do not change (#1355).
 - Web app: the Editor's "N features ready" shows the feature count of the mode on
   screen. After a Generate in Circular and another in Linear, switching modes
   used to leave the other mode's count in the Editor header (OV-1762).

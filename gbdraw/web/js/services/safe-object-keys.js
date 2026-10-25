@@ -6,7 +6,8 @@ const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 /**
  * Walks every own key; an unsafe key is the Session-schema diagnostic that
  * Load and Save give for any other malformed Session structure (OV-952).
- * Session Load runs it in the import Worker (`workers/session-import-worker.js`).
+ * Session Load runs this yielding walk in the import Worker (`workers/session-import-worker.js`); Load's authority
+ * inventory (`validateSessionAuthorityInventory(..., { load: true })`) still runs one synchronous walk on the main thread.
  * @param {unknown} value
  */
 export const assertSafeObjectKeys = (value) => {
