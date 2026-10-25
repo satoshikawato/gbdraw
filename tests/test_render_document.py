@@ -617,3 +617,46 @@ def test_empty_element_markup_writes_empty_values_and_declines_other_elements() 
         assert empty_element_markup(element) is None
     style = Style("a > b { fill: red }")
     assert element_text(style) == _etree_text(style.get_xml())
+
+
+def test_a_written_svg_is_handed_to_the_file_a_chunk_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The file's encoder never holds the whole document (L2-09); the bytes are svgwrite's."""
+
+    import gbdraw.render.document as document_module
+
+    monkeypatch.setattr(document_module, "_WRITE_CHUNK", 4096, raising=False)
+    drawing = Drawing(size=("200px", "200px"))
+    for index in range(400):
+        drawing.add(Rect(insert=(index % 20, index // 20), size=(1, 1), fill="#123456", id=f"r{index}"))
+    expected = io.StringIO()
+    drawing.write(expected)
+    assert len(expected.getvalue()) > 4 * 4096
+
+    written: list[int] = []
+    builtin_open = open
+
+    def recording_open(*args: Any, **kwargs: Any) -> Any:
+        handle = builtin_open(*args, **kwargs)
+        write = handle.write
+
+        def record(text: Any) -> int:
+            written.append(len(text))
+            return write(text)
+
+        handle.write = record
+        return handle
+
+    monkeypatch.setattr(api_render, "open", recording_open, raising=False)
+    (svg,) = api_render.save_figure_to(drawing, "svg", output_prefix=str(tmp_path / "chunks"))
+    assert Path(svg).read_text(encoding="utf-8") == expected.getvalue()
+    assert written and max(written) <= 4096
+
+    stream = io.StringIO()
+    stream_writes: list[int] = []
+    stream_write = stream.write
+    stream.write = lambda text: (stream_writes.append(len(text)), stream_write(text))[1]  # type: ignore[method-assign]
+    write_svg_document(drawing).write(stream)
+    assert stream.getvalue() == expected.getvalue()
+    assert max(stream_writes) <= 4096

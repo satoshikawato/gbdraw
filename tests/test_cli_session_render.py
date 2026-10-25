@@ -353,6 +353,46 @@ def test_a_session_that_cannot_be_saved_again_writes_no_diagram(
     assert not (tmp_path / "out.gbdraw-session.json").exists()
 
 
+def _embedded_data(document: Any) -> set[bool]:
+    """Whether each resource of ``document`` keeps its embedded data, as a set."""
+
+    return {"data" in entry for entry in document._data["resources"].values()}
+
+
+def test_only_a_cli_render_without_a_resave_drops_the_embedded_resource_data(
+    two_drawings: Path, tmp_path: Path,
+) -> None:
+    """The files hold the bytes once they are materialized; a re-save and the Python API still read them."""
+
+    from gbdraw.cli_utils.session import render_session_drawings_cli
+    from gbdraw.session import render_session_drawings
+
+    def cli_render(document: Any, name: str, *, save_session: bool) -> None:
+        render_session_drawings_cli(
+            document, drawings=None, output_override=str(tmp_path / name / "fig"), format_override="svg",
+            save_session=save_session, session_output=None,
+        )
+
+    released = load_session_document(two_drawings)
+    assert _embedded_data(released) == {True}
+    cli_render(released, "released", save_session=False)
+    assert _embedded_data(released) == {False}
+
+    resaved = load_session_document(two_drawings)
+    cli_render(resaved, "resaved", save_session=True)
+    assert _embedded_data(resaved) == {True}
+    assert (tmp_path / "resaved" / "fig.gbdraw-session.json").read_bytes() != b""
+
+    api = load_session_document(two_drawings)
+    with materialize_session(api, output_directory=tmp_path / "api") as materialized:
+        render_session_drawings(materialized, output_prefix="fig", formats="svg")
+    assert _embedded_data(api) == {True}
+
+    for name in ("fig_circular.svg", "fig_linear.svg"):
+        assert (tmp_path / "released" / name).read_bytes() == (tmp_path / "resaved" / name).read_bytes()
+        assert (tmp_path / "released" / name).read_bytes() == (tmp_path / "api" / name).read_bytes()
+
+
 def test_the_resaved_session_is_current(two_drawings: Path, tmp_path: Path) -> None:
     render_main(
         ["--session", str(SESSION_FIXTURES / "q-frame-main-linear-reverse.v42.gbdraw-session.json.gz"),

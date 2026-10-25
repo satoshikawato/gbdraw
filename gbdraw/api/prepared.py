@@ -7,6 +7,7 @@ import itertools
 import secrets
 import sys
 
+from array import array
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -71,8 +72,9 @@ class PreparedInputRetention:
 class _PreparedCacheEntry:
     value: Any
     resource_identities: frozenset[PreparedResourceIdentity]
-    # The full stamp walks every feature; the structure stamp stops at the
-    # feature list (D-05). Both are taken when the entry is built.
+    # The full stamp walks every feature and keeps one hash per feature field;
+    # the structure stamp stops at the feature list (D-05). Both are taken when
+    # the entry is built.
     owner_stamp: Hashable
     structure_stamp: Hashable
     retained_bytes: int
@@ -328,7 +330,19 @@ def _shallow_value_stamp(value: Any) -> Hashable:
     return (type(value).__name__, id(value))
 
 
-def _feature_stamp(feature: Any) -> Hashable:
+# The fields of a feature stamp, in order; the mutation message names them.
+_FEATURE_STAMP_FIELDS = (
+    "owner",
+    "type",
+    "location owner",
+    "start",
+    "end",
+    "strand",
+    "qualifiers",
+)
+
+
+def _feature_stamp(feature: Any) -> tuple[Hashable, ...]:
     location = getattr(feature, "location", None)
     qualifiers = getattr(feature, "qualifiers", None)
     return (
@@ -342,6 +356,32 @@ def _feature_stamp(feature: Any) -> Hashable:
     )
 
 
+def _feature_field_hashes(features: Any) -> bytes:
+    """Hash each field of each feature stamp, in order; the full stamp keeps these.
+
+    Equal stamps give equal hashes. CPython's tuple hash changes whenever one
+    element's hash changes, so a change of one value in a field always changes
+    that field's hash; any other change is missed only by a hash collision.
+    """
+
+    hashes = array("q")
+    for feature in features:
+        hashes.extend(map(hash, _feature_stamp(feature)))
+    return hashes.tobytes()
+
+
+def _changed_feature_field(before: bytes, after: bytes) -> str:
+    """Name the first feature field whose hash differs between two full stamps."""
+
+    width = len(_FEATURE_STAMP_FIELDS)
+    for slot, (before_hash, after_hash) in enumerate(
+        zip(memoryview(before).cast("q"), memoryview(after).cast("q"))
+    ):
+        if before_hash != after_hash:
+            return f"feature {slot // width} {_FEATURE_STAMP_FIELDS[slot % width]}"
+    return "features"
+
+
 def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
     features = getattr(record, "features", ())
     annotations = getattr(record, "annotations", None)
@@ -353,11 +393,7 @@ def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
         len(record.seq),
         id(features),
         len(features),
-        (
-            tuple(_feature_stamp(feature) for feature in features)
-            if walk_features
-            else None
-        ),
+        _feature_field_hashes(features) if walk_features else None,
         _shallow_value_stamp(annotations),
     )
 
@@ -436,69 +472,13 @@ def _owner_mutation_detail(before: Hashable, after: Hashable) -> str:
             if before_field != after_field:
                 if (
                     field_index == 7
-                    and isinstance(before_field, tuple)
-                    and isinstance(after_field, tuple)
+                    and isinstance(before_field, bytes)
+                    and isinstance(after_field, bytes)
                 ):
-                    feature_fields = (
-                        "owner",
-                        "type",
-                        "location owner",
-                        "start",
-                        "end",
-                        "strand",
-                        "qualifiers",
+                    return (
+                        f"record {record_index} "
+                        f"{_changed_feature_field(before_field, after_field)}"
                     )
-                    for feature_index, (before_feature, after_feature) in enumerate(
-                        zip(before_field, after_field, strict=False)
-                    ):
-                        if before_feature == after_feature:
-                            continue
-                        if isinstance(before_feature, tuple) and isinstance(
-                            after_feature, tuple
-                        ):
-                            for feature_field_index, (
-                                before_feature_field,
-                                after_feature_field,
-                            ) in enumerate(
-                                zip(before_feature, after_feature, strict=False)
-                            ):
-                                if before_feature_field != after_feature_field:
-                                    if (
-                                        feature_field_index == 6
-                                        and isinstance(before_feature_field, tuple)
-                                        and isinstance(after_feature_field, tuple)
-                                        and len(before_feature_field) >= 4
-                                        and len(after_feature_field) >= 4
-                                        and isinstance(before_feature_field[3], tuple)
-                                        and isinstance(after_feature_field[3], tuple)
-                                    ):
-                                        before_qualifiers = dict(before_feature_field[3])
-                                        after_qualifiers = dict(after_feature_field[3])
-                                        changed_keys = sorted(
-                                            key
-                                            for key in (
-                                                set(before_qualifiers)
-                                                | set(after_qualifiers)
-                                            )
-                                            if before_qualifiers.get(key)
-                                            != after_qualifiers.get(key)
-                                        )
-                                        if changed_keys:
-                                            return (
-                                                f"record {record_index} feature "
-                                                f"{feature_index} qualifier owner "
-                                                f"{changed_keys[0]}"
-                                            )
-                                    feature_field = (
-                                        feature_fields[feature_field_index]
-                                        if feature_field_index < len(feature_fields)
-                                        else f"field {feature_field_index}"
-                                    )
-                                    return (
-                                        f"record {record_index} feature "
-                                        f"{feature_index} {feature_field}"
-                                    )
-                        return f"record {record_index} feature {feature_index}"
                 field_name = (
                     record_fields[field_index]
                     if field_index < len(record_fields)

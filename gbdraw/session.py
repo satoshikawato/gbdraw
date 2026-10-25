@@ -490,6 +490,21 @@ def materialize_session(
     )
 
 
+def _release_materialized_resource_data(materialized: MaterializedSession) -> None:
+    """Drop each resource's embedded data once its file is materialized.
+
+    Only for a document its caller owns and neither reads nor saves again:
+    the CLI render without a re-save. The resource descriptors keep every
+    other field, the materialized files hold the bytes, and the Session file
+    is untouched. A re-save and the Python API keep the data.
+    """
+
+    _active_materialization(materialized)
+    resources = materialized.document._data.get("resources", {})
+    for resource_id in materialized.resource_paths:
+        resources[resource_id].pop("data", None)
+
+
 def _active_materialization(materialized: MaterializedSession) -> None:
     if not isinstance(materialized, MaterializedSession):
         raise SessionConversionError("A MaterializedSession is required.")
