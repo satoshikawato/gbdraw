@@ -1619,6 +1619,62 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     assert len(walked) == cached_features
 
 
+def test_the_full_owner_stamp_keeps_a_fixed_size_per_feature() -> None:
+    """The full stamp keeps one hash per feature field, not a tuple per feature (L2-03)."""
+
+    import tracemalloc
+
+    record = _record("stamp-size")
+    record.features = [
+        SeqFeature(
+            FeatureLocation(index, index + 30, strand=1),
+            type="CDS",
+            qualifiers={
+                "locus_tag": [f"tag_{index}"],
+                "product": ["hypothetical protein"],
+                "note": ["a note"],
+                "translation": ["M" * 9],
+            },
+        )
+        for index in range(2000)
+    ]
+    records = (record,)
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        stamp = prepared_module._owner_stamp(records, walk_features=True)
+        held = tracemalloc.get_traced_memory()[0] - before
+    finally:
+        tracemalloc.stop()
+    assert stamp == prepared_module._owner_stamp(records, walk_features=True)
+    assert held / len(record.features) < 100
+
+
+@pytest.mark.parametrize(
+    ("mutate", "detail"),
+    [
+        (lambda feature: setattr(feature, "type", "gene"), "feature 1 type"),
+        (lambda feature: setattr(feature, "location", FeatureLocation(240, 330, strand=-1)), "feature 1 location owner"),
+        (lambda feature: setattr(feature, "location", FeatureLocation(240, 331, strand=-1)), "feature 1 location owner"),
+        (lambda feature: feature.qualifiers.__setitem__("locus_tag", ["changed"]), "feature 1 qualifiers"),
+        (lambda feature: feature.qualifiers.__setitem__("note", ["added"]), "feature 1 qualifiers"),
+    ],
+)
+def test_a_full_check_names_the_changed_feature_and_field(
+    tmp_path: Path, mutate: object, detail: str,
+) -> None:
+    records = (_record("named"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    assert callable(mutate)
+    mutate(records[0].features[1])
+    with pytest.raises(ValidationError, match=f"ownership was mutated \\(record 0 {detail}\\)"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(
+                ("source", identity), frozenset({identity}), lambda: pytest.fail("the entry check is structural"),
+            )
+            _read_in_a_record_stage(records[0], "named")
+
+
 # Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data
 # flow). A held revision equal to this render's gives featureCatalog None; the
 # page then keeps the catalog it admitted for that revision.
