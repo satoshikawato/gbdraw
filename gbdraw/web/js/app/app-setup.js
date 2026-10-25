@@ -1720,19 +1720,22 @@ export const createAppSetup = () => {
     estimateFileBytes: state.inputFiles.estimateBytes,
     // A file stays stored while any History step or binding names it (R11).
     retainOnlyFiles: retainHistoryAndBoundFiles(state, state.inputFiles),
+    // A History finds its drawing by ID at each call, never a held object: a
+    // legacy configuration Load commits a copy of the shown drawing under its
+    // ID and keeps that drawing's History (OV-1790, D-15-114).
     managerOptions: (drawingId) => {
-      const drawing = state.drawingOf(drawingId);
-      const ports = historySnapshots.drawingHistory(drawing.id);
+      const drawing = () => state.drawingOf(drawingId);
+      const ports = historySnapshots.drawingHistory(drawingId);
       return /** @type {HistoryManagerOptions} */ ({
         buildIntent: ports.buildIntent,
         applyIntent: (...args) => followRuleEdits(
-          drawing, () => restoreWithSpecificRuleDrafts(ports.applyIntent, ...args)
+          drawing(), () => restoreWithSpecificRuleDrafts(ports.applyIntent, ...args)
         ),
         buildCheckpoint: ports.buildCheckpoint,
         applyCheckpoint: (checkpoint, restored) => followRuleEdits(
-          drawing, () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
+          drawing(), () => restoreWithSpecificRuleDrafts(ports.applyCheckpoint, checkpoint), restored
         ),
-        captureGeneratedArtifactHandle: () => historySnapshots.captureGeneratedArtifactHandle(drawing),
+        captureGeneratedArtifactHandle: () => historySnapshots.captureGeneratedArtifactHandle(drawing()),
         restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
         compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
         signatureFor: historySnapshots.snapshotSignature,
@@ -3856,7 +3859,8 @@ export const createAppSetup = () => {
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
         // A loaded Session's drawings are new drawing states: each gets an
-        // empty History before the baseline (a legacy config keeps the drawings).
+        // empty History before the baseline. (A legacy configuration Load
+        // does not come here: its drawing keeps its History, OV-1790.)
         if (result.status === 'ok') history.replaceMembers(state.drawingList().map((drawing) => drawing.id));
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {

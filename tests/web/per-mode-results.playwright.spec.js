@@ -764,6 +764,37 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', identity: linear.identity, mounted: true });
 });
 
+// OV-1790: a legacy configuration Load commits a copy of the shown drawing
+// (D-15-114) and keeps its History, which works on the copy: the Undo of the
+// next Generate takes back only the Generate and keeps the loaded rules.
+test('the Undo of a Generate after a legacy configuration Load keeps the loaded configuration', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBothSources(page);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const before = await undoCount();
+  const rule = { feat: 'CDS', qual: 'product', val: 'x', color: '#ff0000', cap: 'Loaded' };
+  await page.locator('input[accept^=".json,"]').setInputFiles({
+    name: 'legacy-config.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ form: {}, rules: [rule] }))
+  });
+  await expect(page.locator('[data-app-notice]')).toContainText('Configuration loaded from an older gbdraw.', { timeout: 120_000 });
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+  const shownRules = () => page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return JSON.parse(JSON.stringify(state.activeDrawing().manualSpecificRules));
+  });
+  expect(await shownRules()).toMatchObject([rule]);
+  // The Load does not restart the drawing's History.
+  expect(await undoCount()).toBeGreaterThanOrEqual(Math.max(before, 1));
+  await generate(page);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await settleLive(page);
+  await expectEmptyPreview(page, 'circular');
+  expect(await shownRules()).toMatchObject([rule]);
+});
+
 // REVIEW-1 m8: the switch also waits for an Undo or Redo, so a restore always
 // finds the mode it was captured in. The mode buttons read the same state.
 test('the mode switch waits for Undo and Redo', async ({ page }) => {
