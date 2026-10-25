@@ -718,12 +718,12 @@ test('Cancel during render keeps the warm Worker', async ({ browser }) => {
       .filter(({ name }) => name === 'python-diagnostics').at(-1).metrics);
     expect(nextMetrics.preparedInputCacheFullCheckCount).toBeGreaterThan(0);
     expect(nextMetrics.preparedInputCacheMutationViolationCount).toBe(0);
-    const kept = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const kept = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     await page.evaluate(async () => {
       (await import('./js/services/diagram-generation.js')).disposeDiagramGenerationWorker();
     });
     await generate(page);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(kept);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(kept);
   } finally {
     await page.context().close();
   }

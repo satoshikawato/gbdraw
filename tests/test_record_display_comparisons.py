@@ -33,6 +33,7 @@ from gbdraw.render.interactive_svg import enrich_svg
 from gbdraw.exceptions import GbdrawError
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.linear_comparison import project_match_endpoints
+from tests.utils.svg_compare import PATH_ROUNDING
 
 
 def record(length=100, name="reference"):
@@ -290,7 +291,7 @@ def test_final_hsp_vertices_equal_independent_common_t_oracle(reverse):
               for axis, length in zip(axes, (100, 120), strict=True)]
     for path, expected in zip(paths, endpoint_oracle((60, 21, 31, 90), (41, 51), (100, 120), (reverse, False)), strict=True):
         points = xy(path.get("d"))
-        assert [p[0] for p in points] == pytest.approx([expected[0] * scales[0], expected[1] * scales[0], expected[3] * scales[1], expected[2] * scales[1]])
+        assert [p[0] for p in points] == pytest.approx([expected[0] * scales[0], expected[1] * scales[0], expected[3] * scales[1], expected[2] * scales[1]], abs=PATH_ROUNDING)
         assert points[0][1] == points[1][1] < points[2][1] == points[3][1]
 
 

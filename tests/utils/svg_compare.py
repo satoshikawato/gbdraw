@@ -17,6 +17,12 @@ from pathlib import Path
 from typing import Union
 import math
 
+from gbdraw.svg.path_data import PATH_DECIMALS
+
+# How far a point or a distance read back from path data may be from the value drawn: path numbers carry
+# PATH_DECIMALS decimals (a coordinate moves by at most half of this, a distance by at most 0.71 of it).
+PATH_ROUNDING = 10.0 ** -PATH_DECIMALS
+
 
 BASIC_CSS_COLORS = {
     "aqua": "#00ffff",

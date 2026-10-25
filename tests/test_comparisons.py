@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import math
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -495,8 +496,7 @@ def test_pairwise_match_curve_path_preserves_endpoint_spans() -> None:
     path_desc = str(path.get_xml().attrib["d"])
 
     assert "C" in path_desc
-    for endpoint_x in ("50.0", "200.0", "100.0", "300.0"):
-        assert endpoint_x in path_desc
+    assert {"50", "200", "100", "300"} <= set(re.findall(r"-?[\d.]+", path_desc))
     assert path_desc.strip().lower().endswith("z")
     assert path.attribs["data-pairwise-match-style"] == "curve"
     assert float(path.attribs["data-identity-factor"]) == pytest.approx(0.95)

@@ -11,6 +11,7 @@ from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
+from ....svg.path_data import path_number, path_point
 
 
 class LegendGroup:
@@ -43,8 +44,8 @@ class LegendGroup:
         start_y_top, start_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
         end_y_top, end_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
         rectangle_path: str = (
-            f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} "
-            f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
+            f"M {path_point(normalized_start, start_y_top)} L {path_point(normalized_end, end_y_top)} "
+            f"L {path_point(normalized_end, end_y_bottom)} L {path_point(normalized_start, start_y_bottom)} z"
         )
         return rectangle_path
 
@@ -63,8 +64,8 @@ class LegendGroup:
         group.attribs["data-gbdraw-orientation"] = "circular"
         font = self.font_family
         path_desc = (
-            f"M 0,{-self.color_rect_size / 2} L {layout.bar_width},{-self.color_rect_size / 2} "
-            f"L {layout.bar_width},{self.color_rect_size / 2} L 0,{self.color_rect_size / 2} z"
+            f"M 0,{path_number(-self.color_rect_size / 2)} L {path_point(layout.bar_width, -self.color_rect_size / 2)} "
+            f"L {path_point(layout.bar_width, self.color_rect_size / 2)} L 0,{path_number(self.color_rect_size / 2)} z"
         )
 
         if layout.compact:
@@ -200,10 +201,10 @@ class LegendGroup:
         layout = self.layout
         assert layout is not None
         path_desc = (
-            f"M {0},{-0.5 * self.color_rect_size} "
-            f"L {layout.width},{-0.5 * self.color_rect_size} "
-            f"L {layout.width},{layout.height -0.5 * self.color_rect_size} "
-            f"L {0},{layout.height -0.5 * self.color_rect_size} z"
+            f"M {path_point(0, -0.5 * self.color_rect_size)} "
+            f"L {path_point(layout.width, -0.5 * self.color_rect_size)} "
+            f"L {path_point(layout.width, layout.height -0.5 * self.color_rect_size)} "
+            f"L {path_point(0, layout.height -0.5 * self.color_rect_size)} z"
         )
         rect_path = Path(d=path_desc, fill="none", stroke="none", stroke_width=0)
         self.legend_group.add(rect_path)

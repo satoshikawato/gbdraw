@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import math
+import re
 from typing import Literal
 
 
@@ -165,5 +166,9 @@ def block_path_with_open_caps(
             raise ValueError("An open head requires the authored tail-cap command")
         outline += tail_cap
     if end_cap is not None:
-        outline = outline.replace(end_cap, "M" + end_cap[1:], 1)
+        # The cap is a whole command: its last number must not continue (``L 200,-1`` is not ``L 200,-12``).
+        cap = re.search(re.escape(end_cap) + r"(?![\d.eE])", outline)
+        if cap is None:
+            raise ValueError(f"The end-cap command {end_cap!r} is not in the path")
+        outline = outline[: cap.start()] + "M" + end_cap[1:] + outline[cap.end():]
     return ["block", path, outline]

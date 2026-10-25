@@ -33,6 +33,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import _LANE_SIDES, FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import parse_region_spec
+from tests.utils.svg_compare import PATH_ROUNDING
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     encode_canonical_request,
@@ -1390,7 +1391,7 @@ def test_final_svg_isolated_secondary_lane_keeps_empty_main(monkeypatch, mode, s
         assert abs(lane.center_px - main_center) == pytest.approx(23.9)
         for path in paths:
             x, y = map(float, re.search(rf"M\s*({number})[,\s]+({number})", path.get("d")).groups())
-            assert lane.inner_px - 1e-6 <= math.hypot(x, y) <= lane.outer_px + 1e-6
+            assert lane.inner_px - PATH_ROUNDING <= math.hypot(x, y) <= lane.outer_px + PATH_ROUNDING
         label = result[0]
         assert label["is_inner"] == (side == "inward")
         assert math.hypot(label["feature_middle_x"], label["feature_middle_y"]) == pytest.approx(lane.center_px)
@@ -1593,8 +1594,8 @@ def test_final_placement_ribbons_follow_paint_with_four_unit_clearance(start, fe
         query_y, subject_y = [absolute_y(path, float(endpoints[i][1])) for i in (0, 1 if style == "curve" else 2)]
         query_band = feature_bands[path.get("data-query-feature-svg-id")] if feature_bound else bands[0]
         subject_band = feature_bands[path.get("data-subject-feature-svg-id")] if feature_bound else bands[1]
-        assert (query_band[0] - query_y if reverse else query_y - query_band[1]) == pytest.approx(4)
-        assert (subject_y - subject_band[1] if reverse else subject_band[0] - subject_y) == pytest.approx(4)
+        assert (query_band[0] - query_y if reverse else query_y - query_band[1]) == pytest.approx(4, abs=2 * PATH_ROUNDING)
+        assert (subject_y - subject_band[1] if reverse else subject_band[0] - subject_y) == pytest.approx(4, abs=2 * PATH_ROUNDING)
     def identity(tree):
         return {p.get("data-gbdraw-match-id") for p in tree.iter() if p.get("data-pairwise-match-style")}
     assert identity(roots[0]) == identity(root)

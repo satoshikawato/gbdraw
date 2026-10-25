@@ -12,6 +12,16 @@ write-up of a release.
 
 ## [Unreleased]
 
+- SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
+  `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
+  within 30 degrees of 180 or near 360, so a drawn arc stays within 0.003 SVG px of its circle (equal halves of a
+  near-full circle bowed up to 0.8 px once rounded). Depth, GC content and GC skew paths keep a sample
+  only where dropping it would move the outline by more than 0.02 SVG px, and a Circular Depth or GC percent area
+  closes on its baseline with two arcs. The drawing looks the same (largest grey-level change 9 of 255 at 1x and 16
+  at 4x outside text set on a path), and files get smaller: Circular AP027078 with Depth 5.6 MB -> 0.48 MB, Linear
+  2.5 MB -> 0.21 MB, NC_010162 4.3 MB -> 3.2 MB, the hepatoplasmataceae collinear Gallery figure 6.3 MB -> 3.8 MB;
+  25 test figures together 86.1 MB -> 64.8 MB (-25%). Tools that compare SVG bytes or parse path numbers with a fixed
+  precision see new values.
 - Performance (web app): on a cross-origin-isolated page such as gbdraw.app,
   Cancel now stops Python in the diagram Worker and keeps the Worker, so the
   next Generate does not boot Pyodide again and reuses what the Worker had

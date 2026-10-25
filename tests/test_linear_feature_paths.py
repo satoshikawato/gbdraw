@@ -78,13 +78,13 @@ def _feature(
     [
         (
             "positive",
-            "M 80.0,0.0 L 200.0,0.0 L 240.0,10.0 "
-            "L 200.0,20.0 L 80.0,20.0 z",
+            "M 80,0 L 200,0 L 240,10 "
+            "L 200,20 L 80,20 z",
         ),
         (
             "negative",
-            "M 240.0,0.0 L 120.0,0.0 L 80.0,10.0 "
-            "L 120.0,20.0 L 240.0,20.0 z",
+            "M 240,0 L 120,0 L 80,10 "
+            "L 120,20 L 240,20 z",
         ),
     ],
 )
@@ -304,3 +304,17 @@ def test_undefined_strand_narrow_arrow_falls_back_to_full_width_rectangle() -> N
 
     assert len(points) == 4
     assert {point[1] for point in points} == {-10.0, 10.0}
+
+
+@pytest.mark.parametrize("lane_y", [(-12, -6.5, -1), (-22, -12, -2)])
+def test_open_end_outline_keeps_the_top_edge_when_the_bottom_y_is_a_prefix_of_the_top_y(lane_y) -> None:
+    from gbdraw.svg.linear_features import create_rectangle_path_linear
+
+    top, _middle, bottom = lane_y
+    _kind, fill, outline = create_rectangle_path_linear(
+        {"feat_start": 100, "feat_end": 200, "open_end": True}, 1000, 1000.0, 10.0, "positive", True, 0,
+        feature_y_positions=lane_y,
+    )
+    # The open end drops only the cut edge at x = 200 (OV-1841); the top edge before it is still stroked.
+    assert fill == f"M 100,{top} L 200,{top} L 200,{bottom} L 100,{bottom} z"
+    assert outline == f"M 100,{top} L 200,{top} M 200,{bottom} L 100,{bottom} L 100,{top}"

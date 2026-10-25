@@ -172,7 +172,7 @@ class DepthDrawer:
         )
         if line is None:
             return ()
-        positions, outer_radii, baseline_radius = line
+        positions, outer_radii, baseline_radius = line.positions, line.radii, line.baseline_radius
         pad = stroke_pad_px(self.stroke_color, self.stroke_width)
         inks: list[CircularInk] = [
             CircularInkProfile.between(positions, outer_radii, record_length=record_len, base_px=baseline_radius,

@@ -21,6 +21,7 @@ from xml.etree import ElementTree
 
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from gbdraw.svg.path_data import PATH_DECIMALS
 from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 
 if __package__:
@@ -1410,7 +1411,9 @@ def _assert_similarity_groups(
         if not x_values:
             raise RecipeContractError("H-CLI-07 alignment feature geometry is missing.")
         aligned_centers.append(record_x[record_id] + (min(x_values) + max(x_values)) / 2)
-    if max(aligned_centers) - min(aligned_centers) > 1e-6:
+    # Each centre is the mean of two path numbers rounded to PATH_DECIMALS decimals, so two centres may differ by
+    # one rounding step; two steps leave room for float noise at that edge.
+    if max(aligned_centers) - min(aligned_centers) > 2 * 10.0 ** -PATH_DECIMALS:
         raise RecipeContractError("H-CLI-07 CAG38695.1 group is not aligned.")
 
 
@@ -1697,17 +1700,21 @@ def _assert_quantitative_tracks(
                 for child in slot.iter()
                 if child.tag.rsplit("}", 1)[-1] == "path"
             ]
+    # A track path keeps a sample only where dropping it would move the outline by more than 0.02 SVG px
+    # (tests/test_track_paths.py pins that bound); for this depth table that keeps 606 line commands. The depth
+    # area closes on its baseline with two arcs.
     depth_paths = paths_by_slot.get("depth_1", [])
-    if (
-        len(depth_paths) != 1
-        or depth_paths[0].attrib.get("fill") != "#2563EB"
-        or depth_paths[0].attrib.get("d", "").count("L") != 1214
-    ):
-        raise RecipeContractError(f"{scenario_id} depth series geometry changed.")
-    if [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("gc_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError(f"{scenario_id} GC-skew series changed.")
-    if include_at_skew and [path.attrib.get("d", "").count("L") for path in paths_by_slot.get("at_skew", [])[1:]] != [607, 607]:
-        raise RecipeContractError(f"{scenario_id} AT-skew series changed.")
+    depth_line_count = depth_paths[0].attrib.get("d", "").count("L") if len(depth_paths) == 1 else None
+    if depth_line_count != 606:
+        raise RecipeContractError(
+            f"{scenario_id} depth series has {depth_line_count} line commands after simplification; expected 606."
+        )
+    if depth_paths[0].attrib.get("fill") != "#2563EB" or depth_paths[0].attrib.get("d", "").count("A") != 2:
+        raise RecipeContractError(f"{scenario_id} depth series fill or baseline arcs changed.")
+    for skew_slot in ["gc_skew"] + (["at_skew"] if include_at_skew else []):
+        skew_counts = [path.attrib.get("d", "").count("L") for path in paths_by_slot.get(skew_slot, [])[1:]]
+        if len(skew_counts) != 2 or len(set(skew_counts)) != 1 or not 2 < skew_counts[0] <= 607:
+            raise RecipeContractError(f"{scenario_id} {skew_slot} series changed.")
     required_text = {
         "0x",
         "20x",

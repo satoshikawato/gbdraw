@@ -38,6 +38,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
+from tests.utils.svg_compare import PATH_ROUNDING
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -3842,9 +3843,10 @@ def test_single_record_side_legend_matches_upper_corner_edge_margin(
     corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
 
     side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
-    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
-    assert legend_left >= -1e-6
-    assert legend_right <= viewbox_width + 1e-6
+    # The legend bounds are read from path data (PATH_ROUNDING).
+    assert side_edge_margin == pytest.approx(corner_top, abs=PATH_ROUNDING)
+    assert legend_left >= -PATH_ROUNDING
+    assert legend_right <= viewbox_width + PATH_ROUNDING
 
 
 @pytest.mark.circular
@@ -3893,9 +3895,10 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
     corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
 
     side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
-    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
-    assert legend_left >= -1e-6
-    assert legend_right <= viewbox_width + 1e-6
+    # The legend bounds are read from path data (PATH_ROUNDING).
+    assert side_edge_margin == pytest.approx(corner_top, abs=PATH_ROUNDING)
+    assert legend_left >= -PATH_ROUNDING
+    assert legend_right <= viewbox_width + PATH_ROUNDING
 
 
 def _axis_circle_squares(root: ET.Element) -> list[tuple[float, float, float, float]]:
