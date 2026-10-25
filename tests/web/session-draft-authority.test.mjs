@@ -1048,6 +1048,51 @@ assert.equal(modeDrawing(state, 'circular').form.multi_record_canvas, true);
 assert.deepEqual({ ...modeDrawing(state, 'circular').layoutPreferences.circular.multi }, { legend: 'right', plotTitlePosition: 'top' });
 alerts.length = 0;
 
+// OV-1788 (D-15-112): a legacy configuration Load that fails part-way, after
+// it installed the settings, changes no drawing: it applies to a copy of the
+// shown drawing that it commits, and the rollback puts the drawing back.
+{
+  const shown = state.activeDrawing();
+  const settingsOf = (drawing) => JSON.parse(JSON.stringify({ form: drawing.form, adv: drawing.adv }));
+  const before = settingsOf(shown);
+  const instantPreview = state.paletteInstantPreviewEnabled;
+  const instantPreviewValue = instantPreview.value;
+  // The ref's own accessor, if it has one, comes back after the throw.
+  const ownAccessor = Object.getOwnPropertyDescriptor(instantPreview, 'value');
+  const restoreAccessor = () => {
+    if (ownAccessor) Object.defineProperty(instantPreview, 'value', ownAccessor);
+    else delete instantPreview.value;
+  };
+  // The apply writes Instant Preview after the settings; the write throws once.
+  Object.defineProperty(instantPreview, 'value', {
+    configurable: true,
+    get: () => instantPreviewValue,
+    set: () => {
+      restoreAccessor();
+      throw new Error('OV-1788 injected apply failure');
+    }
+  });
+  const quietError = console.error;
+  console.error = () => {};
+  let failedLegacy;
+  try {
+    failedLegacy = await importPayload({
+      form: { plot_title: 'OV-1788 part-way' },
+      adv: { axis_stroke_width: 7 },
+      paletteInstantPreviewEnabled: !instantPreviewValue
+    });
+  } finally {
+    console.error = quietError;
+    restoreAccessor();
+  }
+  assert.equal(failedLegacy.status, 'error');
+  assert.equal(state.activeDrawing(), shown, 'the rollback shows the drawing it showed');
+  assert.deepEqual(settingsOf(state.activeDrawing()), before, 'OV-1788: form and adv as before the failed Load');
+  assert.equal(instantPreview.value, instantPreviewValue);
+  state.errorLog.value = null;
+  alerts.length = 0;
+}
+
 installShownDrawing('circular');
 state.activeDrawing().form.multi_record_canvas = false;
 state.activeDrawing().form.legend = 'left';

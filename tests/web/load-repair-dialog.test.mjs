@@ -1026,8 +1026,11 @@ test('a configuration file with a shape or Linear visibility that is no text, or
       ['setting-replaced', 'adv.linear_length_visibility', 'kept', '0', before.length],
       ['setting-replaced', 'adv.feature_shapes.gene', 'dropped', 'bogus', undefined]
     ]);
-    assert.deepEqual([drawing.adv.feature_shapes.CDS, Object.hasOwn(drawing.adv.feature_shapes, 'gene'), drawing.adv.feature_shapes.misc_feature,
-      drawing.adv.linear_accession_visibility, drawing.adv.linear_length_visibility], [before.CDS, false, 'rectangle', before.accession, before.length]);
+    // The Load commits a new drawing state (D-15-112): read the shown one.
+    const loadedDrawing = modeDrawing(state, 'linear');
+    assert.deepEqual([loadedDrawing.adv.feature_shapes.CDS, Object.hasOwn(loadedDrawing.adv.feature_shapes, 'gene'),
+      loadedDrawing.adv.feature_shapes.misc_feature, loadedDrawing.adv.linear_accession_visibility,
+      loadedDrawing.adv.linear_length_visibility], [before.CDS, false, 'rectangle', before.accession, before.length]);
     await savedSession('BA-OD100');
   } finally {
     installShownDrawing(shownMode);
@@ -1116,8 +1119,10 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
     const shapes = JSON.stringify(drawing.adv.feature_shapes);
     const asked = [];
     const loaded = await importSession(input(file), { confirmLoadRepairs: async ({ items }) => { asked.push(...items); return true; } });
+    // The Load commits a new drawing state (D-15-112): read the shown one.
+    const loadedDrawing = modeDrawing(state, state.mode.value);
     outcomes.push([JSON.stringify(file), loaded.status, asked, loaded.repairs.map(({ effect }) => effect),
-      held(drawing), ratios(drawing), JSON.stringify(drawing.adv.feature_shapes) === shapes]);
+      held(loadedDrawing), ratios(loadedDrawing), JSON.stringify(loadedDrawing.adv.feature_shapes) === shapes]);
   }
   installShownDrawing(shownMode);
   assert.deepEqual(outcomes, cases.map(([file, line]) => [JSON.stringify(file), 'legacy', [line], ['kept'], firstHeld, ratiosAfter(file), true]));
@@ -1242,14 +1247,15 @@ test('a value the app writes into a setting of another kind loads with no row, i
   const kept = drawing.adv.min_bitscore;
   const [status, rows] = await load({ adv: { min_bitscore: 'abc', evalue: 'abc' } });
   assert.deepEqual([status, rows.length, rows[0]?.startsWith('Settings: the value "abc" (adv.min_bitscore) cannot be used;')], ['legacy', 1, true], rows.join('\n'));
-  assert.deepEqual([drawing.adv.min_bitscore, drawing.adv.evalue], [kept, 'abc']);
+  // Each Load commits a new drawing state (D-15-112): read the shown one.
+  assert.deepEqual([modeDrawing(state, shown).adv.min_bitscore, modeDrawing(state, shown).adv.evalue], [kept, 'abc']);
   // A number filter reads text as `resolveComparisonThresholds` does
   // (`DECIMAL_NUMBER_PATTERN`): a hexadecimal text, which Number() reads as 16,
   // is no number of the filter, so it is listed and not used (BA-OD113 N1).
   const [hexStatus, hexRows] = await load({ adv: { min_bitscore: '0x10' } });
   assert.deepEqual([hexStatus, hexRows.length, hexRows[0]?.startsWith('Settings: the value "0x10" (adv.min_bitscore) cannot be used;')],
     ['legacy', 1, true], hexRows.join('\n'));
-  assert.equal(drawing.adv.min_bitscore, kept);
+  assert.equal(modeDrawing(state, shown).adv.min_bitscore, kept);
 });
 
 // OV-827 (BA-OD113): a blank over a number reads as the field's default
@@ -1257,15 +1263,16 @@ test('a value the app writes into a setting of another kind loads with no row, i
 // and in a Session; a blank is never 0 for a reader whose default is not 0.
 test('a blank over a number reads as the field\'s default with no row, in a configuration file and a Session (OV-827)', async () => {
   await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
-  const drawing = modeDrawing(state, state.mode.value);
+  // Each Load commits a new drawing state (D-15-112): edit and read the shown one.
   const edited = () => {
+    const drawing = modeDrawing(state, state.mode.value);
     Object.assign(drawing.adv, { gc_content_tick_interval: 50, multi_record_column_gap_ratio: 0.3, multi_record_row_gap_ratio: 0.2 });
     Object.assign(drawing.losat.blastp, { collinearMaxConflictsInMergeGap: 4, collinearMaxUnitGap: 3 });
     drawing.linearRecordGap.value = 40;
   };
-  const read = () => [drawing.adv.gc_content_tick_interval, drawing.adv.multi_record_column_gap_ratio,
-    drawing.adv.multi_record_row_gap_ratio, drawing.losat.blastp.collinearMaxConflictsInMergeGap,
-    drawing.losat.blastp.collinearMaxUnitGap, drawing.linearRecordGap.value];
+  const read = (drawing = modeDrawing(state, state.mode.value)) => [drawing.adv.gc_content_tick_interval,
+    drawing.adv.multi_record_column_gap_ratio, drawing.adv.multi_record_row_gap_ratio,
+    drawing.losat.blastp.collinearMaxConflictsInMergeGap, drawing.losat.blastp.collinearMaxUnitGap, drawing.linearRecordGap.value];
   // '' (a cleared input) reads as the field's default; null is copied as
   // stored and read by the field's reader, whose unset value is its default
   // (the GC tick interval's is null, auto), and 0 only where the default is 0.

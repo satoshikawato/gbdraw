@@ -5044,6 +5044,36 @@ const commitLoadedDrawings = (plan) => {
   return Object.freeze([...loaded, ...unused]);
 };
 
+/**
+ * The legacy configuration Load's commit (D-15-112): a new drawing state of
+ * the shown drawing's ID and mode replaces it in the store and takes its
+ * slices, each through its capture and install (the per-feature edits and
+ * paint through Load's installs, `applyDrawingFeatureData` and
+ * `applyDrawingEditorData`), so the configuration applies to the copy and the
+ * rollback puts the drawing back unchanged (`restoreSessionImportSnapshot`).
+ * @param {DrawingState} drawing The shown drawing.
+ * @returns {DrawingState} The copy, shown.
+ */
+const commitDrawingCopy = (drawing) => {
+  const copy = createDrawingState(drawing.id, drawing.mode);
+  state.replaceDrawings(state.drawingList().map((each) => (each.id === drawing.id ? copy : each)), state.drawingTabs.value);
+  const { slices } = drawing;
+  applyDrawingFeatureData(copy, drawingFeatureData(drawing));
+  applyDrawingEditorData(copy, normalizeEditorStateData(buildEditorStateData(drawing)));
+  // The slices the two installs above leave out, and the exact feature edits
+  // (with the Feature placements) and label tables.
+  SETTINGS_SLICE.install(copy.slices.settings, SETTINGS_SLICE.capture(slices.settings));
+  INPUTS_SLICE.install(copy.slices.inputs, INPUTS_SLICE.capture(slices.inputs));
+  CANVAS_SLICE.install(copy.slices.canvas, CANVAS_SLICE.capture(slices.canvas));
+  COLOR_RULES_SLICE.install(copy.slices.colorRules, COLOR_RULES_SLICE.capture(slices.colorRules));
+  PALETTE_SLICE.install(copy.slices.palette, PALETTE_SLICE.capture(slices.palette));
+  ANNOTATION_SETS_SLICE.install(copy.slices.annotationSets, ANNOTATION_SETS_SLICE.capture(slices.annotationSets));
+  GROUP_NAMES_SLICE.install(copy.slices.groupNames, GROUP_NAMES_SLICE.capture(slices.groupNames));
+  FEATURE_EDITS_SLICE.install(copy.slices.featureEdits, FEATURE_EDITS_SLICE.capture(slices.featureEdits));
+  LABEL_TABLES_SLICE.install(copy.slices.labelTables, LABEL_TABLES_SLICE.capture(slices.labelTables));
+  return installShownDrawing(drawing.id);
+};
+
 // Every one-per-Session value returns to a new Session's before a Load
 // installs its own, and before its rollback restores the previous ones. The
 // drawings are not touched: a Load commits new drawing states
@@ -5286,6 +5316,13 @@ export const buildFeatureStateData = (drawing) => ({
   biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
+  ...drawingFeatureData(drawing)
+});
+
+// A drawing's per-feature edits as `applyDrawingFeatureData` reads them: the
+// drawing's part of `buildFeatureStateData`.
+/** @param {DrawingState} drawing */
+const drawingFeatureData = (drawing) => ({
   featureColorOverrides: captureFeatureFills(drawing.slices.paint),
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(VISIBILITY_RULES_SLICE.capture(drawing.slices.visibilityRules).featureVisibilityManualRules),
   featureOverrides: featureOverridesForState(FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featureOverrides),
@@ -5863,7 +5900,7 @@ const importSessionDocument = async (e, options = {}) => {
       rollbackSnapshot = captureSessionImportSnapshot(legacyDrawing);
       rollbackExtensionSnapshot = rollbackState.capture();
       commitStarted = true;
-      applyLegacyConfigPayload(legacyDrawing, legacyConfig.value);
+      applyLegacyConfigPayload(commitDrawingCopy(legacyDrawing), legacyConfig.value);
       return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
     }
 
