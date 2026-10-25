@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from types import SimpleNamespace
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -752,6 +753,61 @@ def test_a_proof_shares_no_container_with_its_python_input() -> None:
     assert is_json_exact_protein_identity_manifest(
         validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
     )
+
+
+@pytest.mark.linear
+def test_a_read_only_container_built_by_hand_holds_only_read_only_data() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+    read_only_dict = type(proof["recordInstances"])
+    read_only_list = type(next(iter(proof["proteinSets"].values()))["proteins"])
+    shell = read_only_dict(
+        {key: dict(binding) for key, binding in payload["recordInstances"].items()}
+    )
+    forged = validate_protein_identity_manifest({**payload, "recordInstances": shell})
+    instance_key = next(iter(payload["recordInstances"]))
+
+    bindings = cast("dict[str, dict[str, object]]", forged["recordInstances"])
+    with pytest.raises(TypeError):
+        bindings[instance_key]["featureMetadata"] = {}
+    with pytest.raises(TypeError):
+        cast("list[object]", read_only_list([[1, 2]])[0]).append(3)
+    assert is_json_exact_protein_identity_manifest(forged)
+    assert forged == payload
+
+
+@pytest.mark.linear
+def test_a_proof_holds_no_mutable_sequence_or_set_of_its_python_input() -> None:
+    from collections import deque
+
+    payload = _current_protein_manifest_payload_for_validation()
+    protein = next(iter(payload["proteinSets"].values()))["proteins"][0]
+    parts = deque(list(part) for part in protein["locationParts"])
+    protein["locationParts"] = parts
+    tags = {("tag", 1)}
+    payload["note"] = tags
+    proof = validate_protein_identity_manifest(payload)
+    before = proof.to_dict()
+
+    parts[0][0] = 999_999
+    parts.append([1, 2, 3])
+    tags.add(("tag", 2))
+
+    assert proof.to_dict() == before
+    assert proof["note"] == {("tag", 1)}
+    assert not is_json_exact_protein_identity_manifest(proof)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_a_non_finite_float_is_not_plain_json_data(value: float) -> None:
+    from gbdraw.api.request_render import CurrentRequestArtifacts
+
+    payload = {**_current_protein_manifest_payload_for_validation(), "note": value}
+
+    assert not is_json_exact_protein_identity_manifest(validate_protein_identity_manifest(payload))
+    stored = CurrentRequestArtifacts(protein_identity_manifest=payload).protein_identity_manifest
+    assert type(stored) is dict
 
 
 @pytest.mark.linear
