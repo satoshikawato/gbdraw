@@ -294,7 +294,10 @@ def load_font(face: FontFace) -> Optional[TTFont]:
     if face.content_id:
         raise ValueError(f"Font {face.measurement_name} ({face.path}) is no longer registered.")
     try:
-        font = TTFont(face.path, fontNumber=face.index)
+        # From the bytes read once (no open file, no later read of a file that
+        # changed), lazily: a table, and each GPOS lookup, is decompiled when
+        # first used, so kerning reads only the ``kern`` lookups.
+        font = TTFont(io.BytesIO(face_source_bytes(face)), fontNumber=face.index, lazy=True)
         if face.instance:
             font = named_instance(font, face.instance)
     except Exception as exc:
@@ -402,7 +405,7 @@ def _generic_of_font(font: TTFont) -> str:
 
 def _read_font(source: Union[str, io.BytesIO], index: int, path: str) -> TTFont:
     try:
-        return TTFont(source, fontNumber=index)
+        return TTFont(source, fontNumber=index, lazy=True)
     except Exception as exc:
         raise ValidationError(
             f"Cannot read font file {path}: {exc}",
