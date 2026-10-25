@@ -1,4 +1,4 @@
-import { concatUint8Arrays } from '../services/losat-runtime.js';
+import { compileLosatWasm, concatUint8Arrays } from '../services/losat-runtime.js';
 
 const DEFAULT_INITIAL_MEMORY_PAGES = 21;
 const DEFAULT_MAXIMUM_MEMORY_PAGES = 16384;
@@ -14,12 +14,7 @@ const parsePositiveInt = (value, fallback) => {
 
 const compileLosatModule = async (module, wasmUrl) => {
   if (module instanceof WebAssembly.Module) return module;
-  const response = await fetch(wasmUrl, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Missing packaged asset: threaded LOSAT wasm not found at ${wasmUrl}`);
-  }
-  const bytes = await response.arrayBuffer();
-  return WebAssembly.compile(bytes);
+  return compileLosatWasm(wasmUrl, 'threaded LOSAT wasm');
 };
 
 const hasNumThreadsArg = (args) =>
