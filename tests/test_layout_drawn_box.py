@@ -3,7 +3,8 @@
 Layout reserves ``drawn_text_box``: the drawn advance, or the ink's right edge
 when a last glyph paints past it, and the face's line box. A consumer that
 needs room beyond the drawn box adds its own named margin (Circular feature
-labels: ``CIRCULAR_LABEL_GAP_EM`` of the width). The line box is the same for
+labels: ``CIRCULAR_LABEL_GAP_EM`` of the width; Linear feature labels:
+``LINEAR_LABEL_HEIGHT_MARGIN_EM`` of the height). The line box is the same for
 every string of a face, so two labels of one face and size are equally tall
 whatever letters they have (OV-1743).
 """
@@ -35,6 +36,7 @@ from gbdraw.core.text import drawn_text_box, get_font_vertical_metrics, text_ink
 from gbdraw.diagrams.linear.assemble import _axis_ruler_extents
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.labels.circular import prepare_label_list
+from gbdraw.labels.label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM
 from gbdraw.labels.linear import linear_record_labels
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.render.groups.linear.definition import DefinitionGroup, LinearDefinitionStyle
@@ -290,15 +292,16 @@ def test_linear_definition_lines_are_a_line_box_tall_and_interval_apart() -> Non
 
 
 # 7: Linear feature labels.
-def test_linear_label_height_is_the_face_line_box() -> None:
+def test_linear_label_height_is_the_face_line_box_plus_the_row_margin() -> None:
     cfg = _config({"labels.linear.scope": "all"})
     record_labels = linear_record_labels(
         _features(CAPTIONS), 1000 * len(CAPTIONS), 2000, 20, False, "middle", None, LinearRenderProfile(cfg),
         label_font_size=14.0,
     )
+    height = _line_box(cfg.objects.text.font_family, 14.0) + LINEAR_LABEL_HEIGHT_MARGIN_EM * 14.0
     heights = {label["label_text"]: label["height_px"] for label in record_labels.labels}
-    assert heights == pytest.approx({caption: _line_box(cfg.objects.text.font_family, 14.0) for caption in CAPTIONS})
-    assert record_labels.max_label_height == pytest.approx(_line_box(cfg.objects.text.font_family, 14.0))
+    assert heights == pytest.approx({caption: height for caption in CAPTIONS})
+    assert record_labels.max_label_height == pytest.approx(height)
 
 
 # 8: corpus property over every face and size.

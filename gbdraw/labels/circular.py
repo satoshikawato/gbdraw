@@ -5050,6 +5050,8 @@ def prepare_label_list(
                 feature_inner_radius = float(lane.inner_px)
                 feature_center_radius = float(lane.center_px)
                 feature_outer_radius = float(lane.outer_px)
+            # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x embed test reads the same width as
+            # the placer and the fit count, so the gap is part of deciding which labels go inside their feature.
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle

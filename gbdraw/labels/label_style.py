@@ -54,11 +54,11 @@ GAP_STOP_EM = 0.20
 # (each label half of it on each side, of its own font size), so two names never read as one word.
 ROW_LABEL_GAP_EM = 0.25
 # Feature labels are laid out in the box their text is drawn in (``core.text.drawn_text_box``: the drawn
-# width, the face's line box) plus these margins, in font sizes (OV-165). A Circular label reserves
-# ``CIRCULAR_LABEL_GAP_EM`` more width, the room the placer keeps between rim neighbours; a Linear label
-# ``LINEAR_LABEL_HEIGHT_MARGIN_EM`` more height (none: its row gap is ``ROW_LABEL_GAP_EM``).
+# width, the face's line box) plus these margins, in font sizes (OV-165).
+# Circular: extra box width, the room kept between neighbours along the rim (the embed test reads it too).
 CIRCULAR_LABEL_GAP_EM: Final = 0.30
-LINEAR_LABEL_HEIGHT_MARGIN_EM: Final = 0.0
+# Linear: extra box height, the room kept between label rows stacked above or below a track.
+LINEAR_LABEL_HEIGHT_MARGIN_EM: Final = 0.126
 # Leader and underline width: max(LEADER_MIN_PX, LEADER_EM x font size).
 LEADER_MIN_PX = 1.0
 LEADER_EM = 0.07
