@@ -30,9 +30,8 @@ write-up of a release.
   wheel and the sdist, which embed it, each grow by about 2.8 MB. The drawing
   and the saved Session do not change (#1364).
 - Web app: a dependency wheel that fails to download on the network now names
-  the wheel in the error. The
-  Pyodide file lists in `config.js` are written from `gbdraw/_web_assets.py`
-  by `tools/prepare_browser_wheel.py`.
+  the wheel in the error. The Pyodide file lists in `config.js` are written
+  from `gbdraw/_web_assets.py` by `tools/prepare_browser_wheel.py`.
 - Performance (CLI, Python, web app): each source feature's hash is computed
   once, when its source loads, and read back by the drawing, the shared-hash
   count, the interactive context and the protein extraction; the source feature
