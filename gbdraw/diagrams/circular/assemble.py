@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from gbdraw.features.placement import FeaturePlacementSlot, ResolvedRecordFeatureInputs
 
+import json
 import logging
 import math
+import os
 import copy
 from dataclasses import dataclass, replace
 from functools import lru_cache, partial
@@ -165,7 +167,7 @@ from .builders import (
     add_tick_group_on_canvas,
 )
 from ...render.groups.circular.definition import CircularDefinitionProfile, CircularDefinitionStyle, DefinitionGroup
-from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout, track_layout_reason
+from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout
 from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
@@ -1520,6 +1522,62 @@ def _packaged_circular_definition_font_size() -> float:
     return float(config["objects"]["definition"]["circular"]["font_size"])
 
 
+def _definition_clearance_px(layout: CircularRadialLayout) -> float:
+    """The radius the centre definition may reach without entering a drawn track's band (P1 prototype)."""
+
+    return min((float(band.inner_px) for _slot, band in _track_bands(layout)), default=float("inf"))
+
+
+def _p1_log(entry: Mapping[str, object]) -> None:
+    """P1 prototype evidence only: one JSON line per placement when ``P1_LOG`` names a file."""
+
+    path = os.environ.get("P1_LOG")
+    if path:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(dict(entry), sort_keys=True) + "\n")
+
+
+def _p1_fit_by_moving(
+    resolve_layout: Callable[[float | None], CircularRadialLayout],
+    gb_record: SeqRecord,
+    cfg: GbdrawConfig,
+    definition_profile: CircularDefinitionProfile,
+    reserved_for: Callable[[int], float],
+) -> tuple[CircularRadialLayout, float | None, int] | None:
+    """P1 variant "move" (evidence only): split, then let preset-lane rows reflow (no width change), then wrap."""
+
+    from . import radial_layout as radial
+
+    may_wrap = definition_profile == "full" and math.isclose(
+        float(cfg.objects.definition.circular.font_size), _packaged_circular_definition_font_size()
+    )
+    previous: float | None = None
+    for line_count in range(1, (MAX_WRAPPED_SPECIES_LINES if may_wrap else 1) + 1):
+        reserved = reserved_for(line_count)
+        if previous is not None and reserved >= previous - FEATURE_BAND_EPSILON:
+            break
+        previous = reserved
+        radial._P1_MOVE_ONLY = True
+        try:
+            layout = resolve_layout(reserved)
+        except ValidationError:
+            continue
+        finally:
+            radial._P1_MOVE_ONLY = False
+        natural = resolve_layout(None)
+        moved = any(
+            a.draw_band_px != b.draw_band_px for a, b in zip(layout.slots, natural.slots)
+        )
+        _p1_log({"record": str(gb_record.id), "profile": str(definition_profile), "lines": line_count,
+                 "state": ("moved" if moved else "fit" if line_count == 1 else "wrap"), "tried": [[line_count, round(reserved, 2)]],
+                 "font": float(cfg.objects.definition.circular.font_size), "clearance": None})
+        if moved:
+            # Keep the moved rows in later re-layouts (labels stage) by recording them as the drawn layout only.
+            return layout, None, line_count
+        return layout, reserved, line_count
+    return None
+
+
 def _resolve_radial_layout_fitting_definition(
     resolve_layout: Callable[[float | None], CircularRadialLayout],
     *,
@@ -1530,28 +1588,19 @@ def _resolve_radial_layout_fitting_definition(
     strain: str | None,
     plot_title: str | None,
     definition_profile: CircularDefinitionProfile,
-    layout_definition_profile: CircularDefinitionProfile,
     definition_position: str,
     center_reserved_radius: float | None,
     record_presentation: RecordPresentation | None,
 ) -> tuple[CircularRadialLayout, float | None, int]:
-    """Place the slots around the center definition (PD-OI-078).
+    """Place the slots, then fit the center definition inside them (P1 prototype, DF-D02, DF-D03).
 
-    Returns the layout, the reserved definition radius the layout used and the
-    species line count of the drawn definition. Only a placement that fails
-    because of the definition band wraps the species line at word boundaries
-    and places again, with the fewest lines that fit. An explicit
-    ``center_reserved_radius`` keeps the single line. ``definition_font_size``
-    18 is the packaged default, so 18 counts as not explicit and may wrap; any
-    other value is explicit and never wraps. A failure the wrap cannot fix
-    raises the original definition-band error.
-
-    A plot title, or a Multi-Record Canvas under rows that pack, changes only
-    the center text (OV-1710, OV-1711): when the record draws the record
-    summary (``definition_profile``) and the layout follows the full
-    definition (``layout_definition_profile``), the slots are placed around
-    the full definition, which is never smaller. When the full definition
-    cannot fit, the slots are placed around the drawn one.
+    Returns the layout, the definition band's radius and the species line count of the drawn definition.
+    Only an explicit ``center_reserved_radius`` keeps the tracks out of the centre (DF-D05; one line, as
+    before). Otherwise the tracks are placed as if there were no definition, and the definition takes the
+    fewest species lines whose band clears every drawn track band; the wrap applies only at the packaged
+    font size (18) and to the full definition, as before. When no line count clears, the definition is drawn
+    over the tracks (``P1_OVERLAP_LINES``: ``one`` draws one line, ``compact`` the line count with the
+    smallest band) and the label-fit check names the overlap when its ink touches a track.
     """
 
     if center_reserved_radius is not None:
@@ -1560,55 +1609,62 @@ def _resolve_radial_layout_fitting_definition(
     if str(definition_position).strip().lower() != "center":
         return resolve_layout(None), None, 1
 
-    def fit(profile: CircularDefinitionProfile) -> tuple[CircularRadialLayout, float, int]:
-        def reserved_for(line_count: int) -> float:
-            return _definition_reserved_radius_px(
-                gb_record,
-                geometry,
-                species,
-                strain,
-                cfg=cfg,
-                plot_title=plot_title,
-                definition_profile=profile,
-                species_line_count=line_count,
-                record_presentation=record_presentation,
-            )
+    layout = resolve_layout(None)
+    clearance = _definition_clearance_px(layout)
+    if os.environ.get("P1_ALLOW_MOVE") == "1":
+        moved = _p1_fit_by_moving(resolve_layout, gb_record, cfg, definition_profile, lambda count: _definition_reserved_radius_px(
+            gb_record, geometry, species, strain, cfg=cfg, plot_title=plot_title, definition_profile=definition_profile,
+            species_line_count=count, record_presentation=record_presentation))
+        if moved is not None:
+            return moved
 
-        reserved = reserved_for(1)
-        try:
-            return resolve_layout(reserved), reserved, 1
-        except ValidationError as error:
-            font_size = float(cfg.objects.definition.circular.font_size)
-            if (
-                track_layout_reason(error) != "DEFINITION_RESERVED"
-                or profile != "full"
-                or not math.isclose(font_size, _packaged_circular_definition_font_size())
-            ):
-                raise
-            definition_error = error
+    def reserved_for(line_count: int) -> float:
+        return _definition_reserved_radius_px(
+            gb_record,
+            geometry,
+            species,
+            strain,
+            cfg=cfg,
+            plot_title=plot_title,
+            definition_profile=definition_profile,
+            species_line_count=line_count,
+            record_presentation=record_presentation,
+        )
 
-        previous = reserved
+    font_size = float(cfg.objects.definition.circular.font_size)
+    may_wrap = definition_profile == "full" and (
+        os.environ.get("P1_WRAP_EXPLICIT_FONT") == "1"
+        or math.isclose(font_size, _packaged_circular_definition_font_size())
+    )
+    tried: list[tuple[int, float]] = [(1, reserved_for(1))]
+    chosen: tuple[int, float] | None = tried[0] if tried[0][1] <= clearance + FEATURE_BAND_EPSILON else None
+    if chosen is None and may_wrap:
         for line_count in range(2, MAX_WRAPPED_SPECIES_LINES + 1):
             wrapped = reserved_for(line_count)
-            if wrapped >= previous - FEATURE_BAND_EPSILON:
+            if wrapped >= tried[-1][1] - FEATURE_BAND_EPSILON:
                 break
-            previous = wrapped
-            try:
-                return resolve_layout(wrapped), wrapped, line_count
-            except ValidationError as retry_error:
-                if track_layout_reason(retry_error) != "DEFINITION_RESERVED":
-                    break
-        raise definition_error
-
-    if definition_profile == "record_summary" and layout_definition_profile == "full":
-        try:
-            layout, reserved, _untitled_line_count = fit(layout_definition_profile)
-            # The drawn record summary has no species line to wrap.
-            return layout, reserved, 1
-        except ValidationError as error:
-            if track_layout_reason(error) != "DEFINITION_RESERVED":
-                raise
-    return fit(definition_profile)
+            tried.append((line_count, wrapped))
+            if wrapped <= clearance + FEATURE_BAND_EPSILON:
+                chosen = (line_count, wrapped)
+                break
+    state = "fit" if chosen is not None and chosen[0] == 1 else "wrap" if chosen is not None else "overlap"
+    if chosen is None:
+        chosen = min(tried, key=lambda item: item[1]) if os.environ.get("P1_OVERLAP_LINES") == "compact" else tried[0]
+    line_count, reserved = chosen
+    _p1_log(
+        {
+            "record": str(gb_record.id),
+            "profile": str(definition_profile),
+            "font": font_size,
+            "clearance": round(clearance, 2) if math.isfinite(clearance) else None,
+            "tried": [[count, round(radius, 2)] for count, radius in tried],
+            "lines": line_count,
+            "state": state,
+        }
+    )
+    if reserved <= FEATURE_BAND_EPSILON:
+        return layout, None, line_count
+    return replace(layout, definition_reserved_band_px=RadialBand(0.0, float(reserved))), reserved, line_count
 
 
 def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
@@ -2844,14 +2900,6 @@ def add_record_on_circular_canvas(
         record_length=len(gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
-    # Rows that pack from the feature track take their Auto widths from the full definition the record draws
-    # alone, so a record summary on a Multi-Record Canvas changes only the center text (OV-1711). The preset
-    # lanes keep the drawn definition there (D-08 covers the plot title).
-    reserved_definition_profile: CircularDefinitionProfile = (
-        "full"
-        if definition_profile == "record_summary" and not preferred_anchor_slot_ids
-        else definition_profile if layout_definition_profile is None else layout_definition_profile
-    )
     # The tracks around the definition, and the definition text as drawn, for a config: the figure's own, or a
     # smaller definition font that the definition row probes (D-12).
     def place_around_definition(layout_cfg: GbdrawConfig) -> tuple[CircularRadialLayout, float | None, int]:
@@ -2877,7 +2925,6 @@ def add_record_on_circular_canvas(
             strain=strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
-            layout_definition_profile=reserved_definition_profile,
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,

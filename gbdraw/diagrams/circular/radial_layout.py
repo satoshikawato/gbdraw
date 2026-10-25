@@ -109,6 +109,9 @@ def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
 
 # The owner of the center reservation band among the occupied bands.
 _CENTER_RESERVATION = "definition"
+# P1 prototype variant "move" (evidence only): the definition band is occupied, but no track is narrowed for it;
+# preset-lane rows may still reflow toward the axis. Set by the fit resolver around its calls.
+_P1_MOVE_ONLY = False
 
 
 @dataclass(frozen=True)
@@ -1391,6 +1394,8 @@ def _inside_movable_stack_group_from(
 
 
 def _inside_auto_stack_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
+    if _P1_MOVE_ONLY:
+        return [1.0]
     min_scales = [
         _min_dense_stack_numeric_width_px(intent.renderer, intent.width_px) / intent.width_px
         for intent in intents
@@ -1687,6 +1692,8 @@ def _linear_scales_from_1_to_min(min_scale: float, *, steps: int = 8) -> list[fl
 
 
 def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
+    if _P1_MOVE_ONLY:
+        return [1.0]
     min_scales = [
         _min_readable_preferred_width_px(intent.renderer, intent.width_px) / intent.width_px
         for intent in intents
@@ -2324,7 +2331,11 @@ def _resolve_explaining_failure(
             **layout_inputs,
         )
     except _InsideFitError as error:
-        if definition_reserved_radius_px is None or definition_reserved_radius_px <= LAYOUT_EPSILON:
+        if (
+            not layout_inputs["center_reserved_radius_explicit"]
+            or definition_reserved_radius_px is None
+            or definition_reserved_radius_px <= LAYOUT_EPSILON
+        ):
             raise
         try:
             _resolve_circular_radial_layout(definition_reserved_radius_px=None, **layout_inputs)
@@ -2361,7 +2372,9 @@ def _resolve_circular_radial_layout(
         else None
     )
     occupied: list[tuple[str, RadialBand]] = []
-    if definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
+    # P1 prototype (DF-D02, DF-D05): only an explicit center_reserved_radius keeps the tracks out of the centre;
+    # the definition text's own band is recorded (radial labels keep out of it) but never narrows or moves a track.
+    if (center_reserved_radius_explicit or _P1_MOVE_ONLY) and definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
         occupied.append((_CENTER_RESERVATION, definition_band))
 
     intents = _slot_intents(
