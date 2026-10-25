@@ -12,6 +12,7 @@ import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
 // R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
@@ -34,7 +35,7 @@ installSessionImportWorker();
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // A saved unmanaged override is checked as the browser's Load checks it (PD-OI-009).
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 // The composition root's transform of an older Session's Results (R13 port).

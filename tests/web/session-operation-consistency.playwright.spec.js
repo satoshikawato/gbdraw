@@ -81,7 +81,7 @@ for (const operation of ['save', 'load']) {
     await setup(page);
     await capture(page);
     await page.evaluate(async operation => {
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       let release;
       const gate = new Promise(resolve => { release = resolve; });
       window.releaseSession = release;
@@ -105,7 +105,7 @@ for (const operation of ['save', 'load']) {
       values.push(['feature placement', await app.featurePlacementActions.setPlacement([], 'invalid')]);
       values.push(['undo', await history.undo()], ['redo', await history.redo()]);
       values.push(['history action', await history.runUndoable('forbidden', () => { throw new Error('ran'); })]);
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       values.push(['cross operation', app.sessionSavePending
         ? await service.importSession({ target: { files: [new File(['{}'], 'other.json')], value: '' } }, { confirmLoadRepairs: async () => false })
         : await service.exportSession('cross-save')]);
@@ -167,7 +167,7 @@ test('failed adoption restores source before transients and preserves all admitt
   await capture(page);
   const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
   const outcome = await evaluateWithRetainedPromise(page, async text => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return service.importSession({ target: { files: [new File([text], 'replacement.json')], value: '' } }, {
       confirmLoadRepairs: async () => false,
       beforePreviewMount: () => { throw new Error('controlled adoption failure'); }
@@ -200,7 +200,7 @@ test('Generate rejects Save and Load from processing publication through settlem
   });
   await page.waitForFunction(() => window.generateGateReached);
   const busy = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return [await service.exportSession('blocked'), await service.importSession({
       target: { files: [new File(['{}'], 'blocked.json')], value: '' }
     })];
@@ -232,7 +232,7 @@ test('Generate rejects Save and Load from processing publication through settlem
   });
   await page.waitForFunction(() => window.reflowRunHeld);
   const reflowBusy = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     return [await service.exportSession('blocked-reflow'), await service.importSession({
       target: { files: [new File(['{}'], 'blocked.json')], value: '' }
     })];
@@ -252,7 +252,7 @@ test('Generate rejects Save and Load from processing publication through settlem
 test('teardown releases pending and canceled Save cannot download or clear a newer operation', async ({ page }) => {
   await setup(page);
   const outcome = await evaluateWithRetainedPromise(page, async () => {
-    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+    const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const { state } = await import('/gbdraw/web/js/state.js');
     let release;
     const gate = new Promise(resolve => { release = resolve; });
@@ -287,7 +287,7 @@ for (const failure of ['baseline-error', 'teardown-during-baseline']) {
     await capture(page);
     const replacement = fixture('lambda_basic_linear').buffer.toString('utf8');
     const outcome = await evaluateWithRetainedPromise(page, async ({ text, failure }) => {
-      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const history = window.__GBDRAW_HISTORY__;
       const initialize = history.initializeIntentBaseline;
       history.initializeIntentBaseline = async (...args) => {

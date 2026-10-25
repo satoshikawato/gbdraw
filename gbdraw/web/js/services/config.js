@@ -5828,7 +5828,7 @@ const importSessionDocument = async (e, options = {}) => {
   const semanticFileWatchersSuppressedBeforeImport = Boolean(
     state.semanticFileWatchersSuppressed.value
   );
-  const rollbackStateExtension = options?.rollbackState;
+  const rollbackState = options.rollbackState;
   /** @type {ReturnType<typeof captureSessionImportSnapshot> | null} */
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
@@ -5861,9 +5861,7 @@ const importSessionDocument = async (e, options = {}) => {
         if (!await confirmLoadRepairs(legacyDialog) || !options.isCurrent()) return { status: 'canceled' };
       }
       rollbackSnapshot = captureSessionImportSnapshot(legacyDrawing);
-      if (typeof rollbackStateExtension?.capture === 'function') {
-        rollbackExtensionSnapshot = rollbackStateExtension.capture();
-      }
+      rollbackExtensionSnapshot = rollbackState.capture();
       commitStarted = true;
       applyLegacyConfigPayload(legacyDrawing, legacyConfig.value);
       return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
@@ -6769,9 +6767,7 @@ const importSessionDocument = async (e, options = {}) => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (!options.isCurrent()) return { status: 'canceled' };
     rollbackSnapshot = captureSessionImportSnapshot(/** @type {SessionLoadOptions} */ (options).shownDrawing());
-    if (typeof rollbackStateExtension?.capture === 'function') {
-      rollbackExtensionSnapshot = rollbackStateExtension.capture();
-    }
+    rollbackExtensionSnapshot = rollbackState.capture();
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
     const committed = commitLoadedDrawings(plan);
@@ -7112,9 +7108,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (commitStarted && rollbackSnapshot) {
       try {
         await restoreSessionImportSnapshot(rollbackSnapshot);
-        if (typeof rollbackStateExtension?.restore === 'function') {
-          await rollbackStateExtension.restore(rollbackExtensionSnapshot);
-        }
+        await rollbackState.restore(rollbackExtensionSnapshot);
       } catch (rollbackError) {
         state.generationFailureRecovery.value = 'restore-failed';
       }
@@ -7297,14 +7291,20 @@ export const exportSession = (titleOverride = null, options) => {
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
 /**
+ * The Load rollback port: `capture` before the Load commits, `restore` with what it returned when the Load fails
+ * (the method form keeps the owner's own snapshot type assignable).
+ * @typedef {{ capture(): unknown, restore(snapshot: unknown): void | Promise<void> }} SessionImportRollbackState
+ */
+/**
  * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing
  * (as `SessionSaveOptions` has them; a legacy configuration is the shown drawing's settings) and a step to run
- * before the Load starts, both read here; the required Load port
+ * before the Load starts, both read here; the required Load ports `rollbackState` (the composition root's
+ * `createSessionImportRollbackState`) and
  * `confirmLoadRepairs`, which shows the list of what the file cannot fully restore and answers [Load] or
  * [Cancel] (every caller that loads decides; there is no default); every other option is passed on to
  * `importSessionDocument` unread.
  * @typedef {Pick<SessionSaveOptions, 'availability' | 'shownDrawing'> & { beforeImport?: () => void | Promise<void>,
- *   confirmLoadRepairs: ConfirmLoadRepairs } & Record<string, unknown>} SessionLoadOptions
+ *   confirmLoadRepairs: ConfirmLoadRepairs, rollbackState: SessionImportRollbackState } & Record<string, unknown>} SessionLoadOptions
  */
 /**
  * @param {SessionFileInput} event

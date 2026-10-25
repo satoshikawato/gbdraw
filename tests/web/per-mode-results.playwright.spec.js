@@ -990,7 +990,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     const failure = await evaluateWithRetainedPromise(fresh, async () => {
       const name = 'tobacco-chloroplast.gbdraw-session.json';
       const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-      const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state);
+      const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
       const result = await importSession({ target: { files: [file], value: 'selected' } }, {
         beforePreviewMount: () => { throw new Error('forced rollback'); }
       });

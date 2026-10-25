@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { modeDrawing } from './drawing-state.mjs';
 import { callerSession } from './session-caller.mjs';
+import { sessionRollbackPort } from './session-rollback-port.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => {
@@ -101,7 +102,7 @@ print(validate_web_config_overrides_json(p['mode'], json.dumps(p['config']),
 });
 const { transformLegacyResultSvg } = await import(treeUrl('gbdraw/web/js/app/app-setup.js'));
 const { state } = await import(treeUrl('gbdraw/web/js/state.js'));
-const { importSession, exportSession } = callerSession(sessionConfig, state);
+const { importSession, exportSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const readInput = (arg) => {
   if (arg.startsWith('git:')) {

@@ -13,6 +13,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { bindingDrawings, boundState } from './helpers/input-files.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 globalThis.window = {
@@ -40,7 +41,7 @@ const { takeFileBytesForTransfer } = await import('../../gbdraw/web/js/services/
 const { CANONICAL_REQUEST_SCHEMA } = await import('../../gbdraw/web/js/contracts/schema.generated.js');
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state);
+const { exportSession, importSession, serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 test('Save binds a File Generate already encoded with no read, hash or decode (OV-1559)', async () => {
   const text = `>x\n${'ACGT'.repeat(250_000)}\n`;

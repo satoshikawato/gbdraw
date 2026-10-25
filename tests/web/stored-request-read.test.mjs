@@ -19,6 +19,7 @@ import { evaluatePython, validateWebConfigOverrides } from './helpers/python-eva
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -44,7 +45,7 @@ const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-rep
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const read = (path) => {
   const raw = readFileSync(new URL(path, REPO));
@@ -330,7 +331,7 @@ test('the other diagram\'s request is read at Load: its repairs are listed, and 
 
 const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
 const { getCommittedCanonicalSession } = sessionConfig2;
-const { exportSession } = callerSession(sessionConfig2, state);
+const { exportSession } = callerSession(sessionConfig2, state, await sessionRollbackPort(state));
 const frame = () => {
   const intent = modeDrawing(state, 'linear').importedComparisonIntent;
   return [intent.disposition, intent.message];

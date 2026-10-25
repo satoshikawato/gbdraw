@@ -11,6 +11,7 @@ import { evaluatePython, validateWebConfigOverrides } from './helpers/python-eva
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -32,7 +33,7 @@ setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validate
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const fixture = (name) => {

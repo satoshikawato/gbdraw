@@ -11,6 +11,7 @@ import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -31,7 +32,7 @@ const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConf
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const fixture = (name) => {
   const bytes = readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url));

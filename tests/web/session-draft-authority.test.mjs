@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -45,7 +46,7 @@ const {
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {
   buildCanonicalRenderRequest,
@@ -1170,10 +1171,8 @@ const historyMembersBefore = Object.freeze({ histories: [] });
 const restoredHistoryMembers = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
-  historyMembers: {
-    captureMembers: () => historyMembersBefore,
-    restoreMembers: (members) => restoredHistoryMembers.push(members)
-  },
+  captureHistoryMembers: () => historyMembersBefore,
+  restoreHistoryMembers: (members) => restoredHistoryMembers.push(members),
   captureDisplayedArtifact: () => {
     const slot = artifactPort.captureArtifactSlot();
     capturedArtifacts.push(slot);
@@ -1431,7 +1430,7 @@ assert.deepEqual(rollbackState(),beforeLateRead);
 
 // The same sole Session owner keeps a late Save error from replacing a newer alert.
 const sessionConfig2 = await import('../../gbdraw/web/js/services/config.js');
-const { exportSession } = callerSession(sessionConfig2, state);
+const { exportSession } = callerSession(sessionConfig2, state, await sessionRollbackPort(state));
 let failLateSave;
 const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
   failLateSave = reject;

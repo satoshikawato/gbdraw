@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
 globalThis.window = {
@@ -34,7 +35,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const MODES = ['circular', 'linear'];
 const save = async (title) => {

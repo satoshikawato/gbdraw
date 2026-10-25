@@ -26,6 +26,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -53,7 +54,7 @@ const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const JS = join(ROOT, 'gbdraw', 'web', 'js');
