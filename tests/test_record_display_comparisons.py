@@ -247,7 +247,7 @@ def test_annotation_artificial_seam_has_no_bracket_caps(mode, reverse):
     assert len(group) == 4
 
 
-@pytest.mark.parametrize("mutation", ["duplicate_index", "duplicate_dom", "missing_marker", "conflicting_endpoint", "missing_endpoint", "conflicting_alias"])
+@pytest.mark.parametrize("mutation", ["duplicate_index", "duplicate_dom", "missing_marker", "conflicting_endpoint", "missing_endpoint", "conflicting_id"])
 def test_interactive_rejects_real_fragment_identity_conflicts(mutation):
     plan, root = svg(request("linear", [record(), record(120, "subject")], [41, 51],
                              linear_comparisons=[LinearComparison(0, 1, hit_frame())]))
@@ -264,7 +264,7 @@ def test_interactive_rejects_real_fragment_identity_conflicts(mutation):
         for path in paths:
             del path.attrib["data-qstart"]
     else:
-        paths[1].set("data-gbdraw-pairwise-match-id", "other")
+        paths[1].set("data-gbdraw-match-id", "other")
     context = build_interactive_svg_context(plan.records, mode="linear", linear_rendered_feature_ids=True)
     with pytest.raises(GbdrawError, match="match ID|fragment metadata"):
         enrich_svg(ET.tostring(root, encoding="unicode"), context)

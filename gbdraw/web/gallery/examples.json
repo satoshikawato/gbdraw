@@ -17,7 +17,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "417 KB",
+    "fileSizeLabel": "416 KB",
     "command": "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular -f interactive_svg --separate_strands --track_type middle --labels out --species '<i>Homo sapiens</i>'",
     "commandKind": "runnable",
     "commandNote": "Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
@@ -237,7 +237,7 @@
       "AP027132.gb",
       "NZ_CP006932.gb"
     ],
-    "fileSizeLabel": "16.0 MB",
+    "fileSizeLabel": "15.9 MB",
     "command": "gbdraw linear --losat losatp --losatp_mode similarity_groups --losat_threads 32 -f interactive_svg --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb --align_center --separate_strands --pairwise_match_style curve --scale_style ruler --gc --skew --palette ajisai -o hepatoplasmataceae_orthogroup",
     "commandKind": "runnable",
     "commandNote": "Download the five accession-pinned GenBank inputs from Files. The CLI value remains orthogroup for compatibility.",

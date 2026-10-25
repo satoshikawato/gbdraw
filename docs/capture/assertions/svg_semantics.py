@@ -53,11 +53,13 @@ root => {
     };
   });
   const matchElements = elements.filter((element) => (
-    Boolean(element.getAttribute('data-gbdraw-pairwise-match-id')) &&
+    Boolean(element.getAttribute('data-gbdraw-match-id')) &&
     String(element.getAttribute('data-match-kind') || '').toLowerCase() === 'pairwise'
   ));
+  // Linear comparison ribbons; a Circular ring band is a 'homology' match.
   const comparisonElements = elements.filter((element) => (
-    Boolean(element.getAttribute('data-gbdraw-pairwise-match-id'))
+    Boolean(element.getAttribute('data-gbdraw-match-id')) &&
+    String(element.getAttribute('data-match-kind') || '').toLowerCase() !== 'homology'
   ));
   const elementById = (id) => elements.find((element) => element.getAttribute('id') === id);
   const childCountById = (id) => Array.from(elementById(id)?.children || []).length;
@@ -189,7 +191,7 @@ root => {
       bitscore: String(element.getAttribute('data-bitscore') || ''),
     })),
     comparisonMatches: comparisonElements.map((element) => ({
-      id: String(element.getAttribute('data-gbdraw-pairwise-match-id') || ''),
+      id: String(element.getAttribute('data-gbdraw-match-id') || ''),
       kind: String(element.getAttribute('data-match-kind') || ''),
       query: String(element.getAttribute('data-query-record-id') || ''),
       subject: String(element.getAttribute('data-subject-record-id') || ''),
@@ -336,13 +338,15 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
     match_elements = [
         element
         for element in elements
-        if element.attrib.get("data-gbdraw-pairwise-match-id")
+        if element.attrib.get("data-gbdraw-match-id")
         and element.attrib.get("data-match-kind", "").lower() == "pairwise"
     ]
+    # Linear comparison ribbons; a Circular ring band is a "homology" match.
     comparison_elements = [
         element
         for element in elements
-        if element.attrib.get("data-gbdraw-pairwise-match-id")
+        if element.attrib.get("data-gbdraw-match-id")
+        and element.attrib.get("data-match-kind", "").lower() != "homology"
     ]
     record_group = next(
         (
@@ -433,7 +437,7 @@ def inspect_svg_file(path: Path) -> dict[str, Any]:
         ],
         "comparisonMatches": [
             {
-                "id": element.attrib.get("data-gbdraw-pairwise-match-id", ""),
+                "id": element.attrib.get("data-gbdraw-match-id", ""),
                 "kind": element.attrib.get("data-match-kind", ""),
                 "query": element.attrib.get("data-query-record-id", ""),
                 "subject": element.attrib.get("data-subject-record-id", ""),

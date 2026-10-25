@@ -26,6 +26,7 @@ const serviceNames = [
   'svg-result-ingestion.js',
   'svg-sanitization.js',
   'svg-serialization.js',
+  'preview-affordances.js',
   'svg-transform.js'
 ];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
@@ -41,6 +42,9 @@ await Promise.all(serviceNames.map(async (name) => {
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
 }));
 
+await mkdir(join(tempDir, 'contracts'), { recursive: true });
+// svg-sanitization.js and svg-result-normalization.js read the legacy attribute table.
+await writeFile(join(tempDir, 'contracts', 'schema.generated.js'), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), 'utf8'), 'utf8');
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'reactivity.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');

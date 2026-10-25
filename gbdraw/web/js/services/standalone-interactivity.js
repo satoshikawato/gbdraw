@@ -23,7 +23,6 @@ const FEATURE_SELECTOR = [
 ].join(', ');
 const STANDALONE_MATCH_SELECTOR = [
   'path[data-gbdraw-match-id]',
-  'path[data-gbdraw-pairwise-match-id]',
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
 ].join(', ');
@@ -1558,28 +1557,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
 const standaloneAttr = (element, name) =>
   String(element?.getAttribute?.(name) || '').trim();
 
-/**
- * @param {Element | null | undefined} element
- * @param {readonly string[]} names
- * @returns {{ valid: boolean, supplied: boolean, value: string }}
- */
-const standaloneElementTextAlias = (element, names) => {
-  const values = new Set(names
-    .map((name) => standaloneAttr(element, name))
-    .filter(Boolean));
-  return {
-    valid: values.size <= 1,
-    supplied: values.size > 0,
-    value: values.size === 1 ? values.values().next().value : ''
-  };
-};
-
-/** @param {Element} element */
-const standaloneElementMatchId = (element) => standaloneElementTextAlias(element, [
-  'data-gbdraw-match-id',
-  'data-gbdraw-pairwise-match-id'
-]);
-
 /** @param {...unknown} values */
 const firstStandaloneText = (...values) => {
   for (const value of values) {
@@ -1625,13 +1602,10 @@ const buildStandaloneMatchPayloads = (svg) => {
   if (!svg) return [];
   const elements = Array.from(svg.querySelectorAll(STANDALONE_MATCH_SELECTOR));
   const payloads = elements.map((element, index) => {
-    const idStatus = standaloneElementMatchId(element);
-    if (!idStatus.valid) return null;
-    let id = idStatus.value;
+    let id = standaloneAttr(element, 'data-gbdraw-match-id');
     if (!id) {
       id = `pairwise_match_${index + 1}`;
       element.setAttribute('data-gbdraw-match-id', id);
-      element.setAttribute('data-gbdraw-pairwise-match-id', id);
     }
     const matchKind = standaloneMatchKind(element);
     // Source coordinates for the embedded popup and FASTA header (PD-OI-076).
@@ -2082,9 +2056,7 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   });
   const matchIds = new Set(matches.map((match) => match.id));
   svg.querySelectorAll(STANDALONE_MATCH_SELECTOR).forEach((element) => {
-    const idStatus = standaloneElementMatchId(element);
-    const id = idStatus.valid ? idStatus.value : '';
-    if (!matchIds.has(id)) return;
+    if (!matchIds.has(standaloneAttr(element, 'data-gbdraw-match-id'))) return;
     element.setAttribute('data-gbdraw-interactive-match', 'true');
     addClassToken(element, 'gbdraw-interactive-pairwise-match');
   });

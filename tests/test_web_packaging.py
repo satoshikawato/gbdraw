@@ -927,8 +927,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         feature_catalog = editor_state.get("featureCatalog", {})
         catalog_items = feature_catalog.get("items", [])
         svg_text = "\n".join(result.get("content", "") for result in results)
-        pairwise_ids = set(
-            re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text)
+        match_ids = set(
+            re.findall(r"data-gbdraw-match-id=[\"']([^\"']+)[\"']", svg_text)
         )
         collinearity_ids = set(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
@@ -1042,7 +1042,7 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
                 for entry in losat_derived_cache_entries
             ), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
-            assert pairwise_ids or collinearity_ids, session_name
+            assert match_ids or collinearity_ids, session_name
 
     assert observed_losat_cache_sessions == GALLERY_LOSAT_CACHE_SESSION_FILES
     assert (

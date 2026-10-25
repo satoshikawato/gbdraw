@@ -32,6 +32,7 @@ await writeFile(
   await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'),
   'utf8'
 );
+await cp(join(sourceDir, 'services', 'preview-affordances.js'), join(tempDir, 'services', 'preview-affordances.js'));
 const featureSelectionUrl = pathToFileURL(join(tempDir, 'app', 'feature-selection.js'));
 const serializationUrl = pathToFileURL(join(tempDir, 'services', 'svg-serialization.js'));
 
@@ -41,6 +42,7 @@ const {
   stripFeatureSelectionClasses
 } = await import(featureSelectionUrl);
 const { stripTransientPreviewState } = await import(serializationUrl);
+const { PREVIEW_MATCH_BUTTON_ATTRIBUTE } = await import(pathToFileURL(join(tempDir, 'services', 'preview-affordances.js')));
 
 class FakeElement {
   constructor(className = '', style = '') {
@@ -100,10 +102,8 @@ class FakeElement {
 const fakeSvg = (elements, className = '') => {
   const root = new FakeElement(className);
   root.querySelectorAll = (selector) => {
-    if (selector === '[data-gbdraw-pairwise-match-id][role="button"][tabindex="0"]') {
-      return elements.filter((element) => element.getAttribute('data-gbdraw-pairwise-match-id')
-        && element.getAttribute('role') === 'button' && element.getAttribute('tabindex') === '0');
-    }
+    const attribute = /^\[([\w-]+)\]$/.exec(selector);
+    if (attribute) return elements.filter((element) => element.getAttribute(attribute[1]) !== null);
     if (selector === '[style]') {
       return elements.filter((element) => element.getAttribute('style') !== null);
     }
@@ -144,11 +144,18 @@ assert.equal(candidate.getAttribute('class'), null);
 const searchMatch = new FakeElement('gbdraw-preview-feature-search-match gbdraw-feature-selected keep');
 const layoutTarget = new FakeElement('gbdraw-preview-layout-target keep-layout', 'cursor: help');
 const cursorStyle = new FakeElement('', 'cursor: pointer; opacity: 0.8');
-const pairwise = new FakeElement();
-for (const [name, value] of Object.entries({
-  'data-gbdraw-pairwise-match-id': 'comparison1_match1',
-  role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
-})) pairwise.setAttribute(name, value);
+// OV-1842: the preview marks the match bands it makes buttons, and the label is
+// translated (ja below), so saving finds them by the marker, not by the label.
+/** @param {string} label */
+const previewMatchButton = (label) => {
+  const element = new FakeElement();
+  for (const [name, value] of Object.entries({
+    'data-gbdraw-match-id': 'comparison1_match1',
+    role: 'button', tabindex: '0', 'aria-label': label, [PREVIEW_MATCH_BUTTON_ATTRIBUTE]: ''
+  })) element.setAttribute(name, value);
+  return element;
+};
+const pairwise = previewMatchButton('ペアワイズマッチ1');
 // Hover and drag feedback that was removed leaves an empty inline style.
 const emptiedStyle = new FakeElement();
 emptiedStyle.setAttribute('style', '');
@@ -163,13 +170,9 @@ assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
 assert.equal(emptiedStyle.getAttribute('style'), null);
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');
-assert.equal(pairwise.getAttribute('data-gbdraw-pairwise-match-id'), 'comparison1_match1');
-for (const name of ['role', 'tabindex', 'aria-label']) assert.equal(pairwise.getAttribute(name), null);
-const interactivePairwise = new FakeElement();
-for (const [name, value] of Object.entries({
-  'data-gbdraw-pairwise-match-id': 'comparison1_match1',
-  role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
-})) interactivePairwise.setAttribute(name, value);
+assert.equal(pairwise.getAttribute('data-gbdraw-match-id'), 'comparison1_match1');
+for (const name of ['role', 'tabindex', 'aria-label', PREVIEW_MATCH_BUTTON_ATTRIBUTE]) assert.equal(pairwise.getAttribute(name), null);
+const interactivePairwise = previewMatchButton('Pairwise match 1');
 stripTransientPreviewState(fakeSvg([interactivePairwise]), { stripCursor: false });
 assert.equal(interactivePairwise.getAttribute('role'), 'button');
 

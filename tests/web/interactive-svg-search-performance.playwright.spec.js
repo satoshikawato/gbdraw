@@ -172,23 +172,23 @@ from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 source = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
 <rect id="fq" data-gbdraw-feature-id="fq" x="10" y="10" width="20" height="10" fill="#54bcf8" />
 <rect id="fs" data-gbdraw-feature-id="fs" x="10" y="50" width="20" height="10" fill="#54bcf8" />
-<path data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise" data-orthogroup-id="og1"
+<path data-gbdraw-match-id="m1" data-match-kind="pairwise" data-orthogroup-id="og1"
  data-query-record-id="rec1" data-subject-record-id="rec2" data-qstart="1" data-qend="9"
  data-sstart="10" data-send="18" data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
  data-query-protein-id="h_aaaaaaaaaaaaaaaaaaaaaaaaaa"
  data-subject-protein-id="f_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
  data-identity="99.1" data-alignment-length="9" fill="#94a3b8" d="M 20 20 L 30 20 L 30 50 L 20 50 Z" />
-<path data-gbdraw-pairwise-match-id="m2" data-match-kind="collinear" data-orthogroup-id="og1"
+<path data-gbdraw-match-id="m2" data-match-kind="collinear" data-orthogroup-id="og1"
  data-collinearity-block-id="block1" data-collinearity-block-kind="syntenic"
  data-collinear-group-scope="adjacent_local" data-group-kind="collinear_gene_group"
  data-query-record-id="rec1" data-subject-record-id="rec2" data-qstart="1" data-qend="9"
  data-sstart="10" data-send="18" data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
  data-identity="95.0" data-alignment-length="9" fill="#64748b" d="M 40 20 L 50 20 L 50 50 L 40 50 Z" />
-<path data-gbdraw-pairwise-match-id="m3" data-match-kind="orthogroup" data-orthogroup-id="og1"
+<path data-gbdraw-match-id="m3" data-match-kind="orthogroup" data-orthogroup-id="og1"
  data-query-record-id="rec1" data-subject-record-id="rec2"
  data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
  fill="#94a3b8" d="M 60 20 L 66 20 L 66 50 L 60 50 Z" />
-<path data-gbdraw-pairwise-match-id="m4" data-match-kind="orthogroup" data-orthogroup-id="og1"
+<path data-gbdraw-match-id="m4" data-match-kind="orthogroup" data-orthogroup-id="og1"
  data-query-record-id="rec1" data-subject-record-id="rec2"
  data-query-feature-svg-id="fq" data-subject-feature-svg-id="fs"
  fill="#94a3b8" d="M 74 20 L 80 20 L 80 50 L 74 50 Z" />
@@ -233,8 +233,8 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
     });
   });
   await page.goto(pathToFileURL(svgPath).href);
-  const firstMatch = page.locator('[data-gbdraw-pairwise-match-id="m1"]');
-  const secondMatch = page.locator('[data-gbdraw-pairwise-match-id="m2"]');
+  const firstMatch = page.locator('[data-gbdraw-match-id="m1"]');
+  const secondMatch = page.locator('[data-gbdraw-match-id="m2"]');
   await expect(firstMatch).toHaveAttribute('role', 'button');
   await expect(firstMatch).toHaveAttribute('tabindex', '0');
 
@@ -345,7 +345,7 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   expect(download.suggestedFilename()).not.toMatch(/h_[a-z2-7]{26}/i);
   expect(download.suggestedFilename()).not.toMatch(/f_[0-9a-f]{64}/i);
   await page.locator('[data-close]').click();
-  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+  await expect(page.locator('[data-gbdraw-match-id="m1"]'))
     .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
   await secondMatch.click();
   const collinearTitles = await page.locator('.gfi-block-title').allTextContents();
@@ -361,14 +361,14 @@ with open(sys.argv[1], 'w', encoding='utf-8') as handle:
   ]);
   await expect(page.locator('.gfi-content')).toContainText('Number of local collinear groups');
   await page.locator('[data-close]').click();
-  await page.locator('[data-gbdraw-pairwise-match-id="m3"]').click();
-  await expect(page.locator('[data-gbdraw-pairwise-match-id="m3"]'))
+  await page.locator('[data-gbdraw-match-id="m3"]').click();
+  await expect(page.locator('[data-gbdraw-match-id="m3"]'))
     .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
-  await expect(page.locator('[data-gbdraw-pairwise-match-id="m4"]'))
+  await expect(page.locator('[data-gbdraw-match-id="m4"]'))
     .toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
-  await expect(page.locator('[data-gbdraw-pairwise-match-id="m1"]'))
+  await expect(page.locator('[data-gbdraw-match-id="m1"]'))
     .not.toHaveClass(/gbdraw-interactive-pairwise-match--selected/);
-  await expect.poll(() => page.locator('[data-gbdraw-pairwise-match-id="m3"]')
+  await expect.poll(() => page.locator('[data-gbdraw-match-id="m3"]')
     .evaluate((element) => getComputedStyle(element).outlineStyle))
     .toBe('none');
 

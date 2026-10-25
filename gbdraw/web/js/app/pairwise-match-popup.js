@@ -169,7 +169,6 @@ import { msg, t, tm, tmx, tn } from '../utils/i18n.js';
 
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-match-id]',
-  'path[data-gbdraw-pairwise-match-id]',
   'path[data-match-kind]',
   'path[data-pairwise-match-style]'
 ].join(', ');
@@ -575,7 +574,6 @@ const readPairwiseMatchDescriptor = (element) => {
   const subjectIntervals = matchIntervals(element, matchKind, 'subject', subjectStart, subjectEnd);
   const matchId = firstText(
     attr(element, 'data-gbdraw-match-id'),
-    attr(element, 'data-gbdraw-pairwise-match-id'),
     collinearityBlockId,
     orthogroupId
   );

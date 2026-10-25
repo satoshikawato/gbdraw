@@ -300,9 +300,9 @@ const showMode = async (page, mode) => {
   await settleLive(page);
 };
 
-const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length;
+const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-match-id=/g) || []).length;
 // The data-identity of each drawn comparison match.
-const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-pairwise-match-id=[^>]*>/g) || [])
+const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-match-id=[^>]*>/g) || [])
   .map((tag) => Number(tag.match(/data-identity="([^"]*)"/)?.[1]))
   .filter(Number.isFinite);
 

@@ -1381,7 +1381,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     const offsets = plan.records.filter(({ status }) => status === 'aligned').map(({ recordKey, anchor }) => ({
       recordKey, offset: center(anchor) - reference
     }));
-    const ribbons = Array.from(svg.querySelectorAll('[data-gbdraw-pairwise-match-id]'));
+    const ribbons = Array.from(svg.querySelectorAll('[data-gbdraw-match-id]'));
     return { offsets, ribbons: ribbons.length,
       targetRibbons: ribbons.filter((element) => element.getAttribute('data-query-record-index') === '1'
         || element.getAttribute('data-subject-record-index') === '1').length };

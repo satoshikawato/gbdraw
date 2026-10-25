@@ -105,7 +105,7 @@ const svgComparisonSummary = (content) => {
   const source = String(content || '');
   return {
     comparisonGroups: (source.match(/<g[^>]*\bid="comparison\d+"/g) || []).length,
-    pairwiseMatches: (source.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
+    pairwiseMatches: (source.match(/data-gbdraw-match-id=/g) || []).length,
     comparisonLegends: (source.match(/data-gbdraw-role="comparison-legend"/g) || []).length
   };
 };

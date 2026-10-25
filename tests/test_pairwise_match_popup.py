@@ -234,7 +234,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         }};
 
         const attrs = new Map(Object.entries({{
-          'data-gbdraw-pairwise-match-id': 'comparison3_match3',
+          'data-gbdraw-match-id': 'comparison3_match3',
           'data-match-kind': 'collinear',
           'data-collinearity-block-id': 'block_0001',
           'data-collinearity-block-kind': 'cluster',
@@ -457,7 +457,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         }}
 
         const invalidSequenceAttrs = new Map(Object.entries({{
-          'data-gbdraw-pairwise-match-id': 'invalid-sequence-identity',
+          'data-gbdraw-match-id': 'invalid-sequence-identity',
           'data-match-kind': 'pairwise',
           'data-query-record-id': 'recA',
           'data-query-record-index': '-1',
@@ -493,7 +493,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         const endpointPayload = (role, overrides = {{}}) => {{
           const roleTitle = role === 'query' ? 'Query' : 'Subject';
           const endpointAttrs = new Map(Object.entries({{
-            'data-gbdraw-pairwise-match-id': `endpoint-${{role}}`,
+            'data-gbdraw-match-id': `endpoint-${{role}}`,
             'data-match-kind': 'pairwise',
             [`data-${{role}}-record-id`]: 'record_e',
             [`data-${{role}}-record-index`]: '4',
@@ -751,7 +751,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(block.genePairs.map((pair) => pair.group.id).join(',') === 'og_1,og_2', JSON.stringify(block.genePairs));
 
         const duplicateAttrs = new Map(Object.entries({{
-          'data-gbdraw-pairwise-match-id': 'comparison3_match4',
+          'data-gbdraw-match-id': 'comparison3_match4',
           'data-match-kind': 'collinear',
           'data-collinearity-block-id': 'block_0002',
           'data-query-record-id': 'AP027131.1',
@@ -794,7 +794,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
 
         const runtimeOnlyHandle = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa';
         const runtimeOnlyAttrs = new Map(Object.entries({{
-          'data-gbdraw-pairwise-match-id': 'comparison3_match5',
+          'data-gbdraw-match-id': 'comparison3_match5',
           'data-match-kind': 'pairwise',
           'data-query-record-id': 'record_runtime',
           'data-qstart': '1',

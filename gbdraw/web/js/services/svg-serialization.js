@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from './preview-affordances.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
@@ -120,13 +121,9 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
     .forEach(stripClasses);
   if (stripCursor) {
     stripEditorOnlyCursorStyles(svg);
-    svg.querySelectorAll('[data-gbdraw-pairwise-match-id][role="button"][tabindex="0"]')
-      .forEach((element) => {
-        if (!/^Pairwise match \d+$/.test(element.getAttribute('aria-label') || '')) return;
-        element.removeAttribute('role');
-        element.removeAttribute('tabindex');
-        element.removeAttribute('aria-label');
-      });
+    svg.querySelectorAll(`[${PREVIEW_MATCH_BUTTON_ATTRIBUTE}]`).forEach((element) => {
+      [PREVIEW_MATCH_BUTTON_ATTRIBUTE, 'role', 'tabindex', 'aria-label'].forEach((name) => element.removeAttribute(name));
+    });
     svg.querySelectorAll('[data-gbdraw-preview-item]').forEach((element) => {
       ['data-gbdraw-preview-item', 'role', 'tabindex', 'aria-haspopup'].forEach((name) => element.removeAttribute(name));
     });

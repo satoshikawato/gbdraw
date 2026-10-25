@@ -913,7 +913,7 @@
             "actions": [
               {
                 "type": "waitForSelector",
-                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+                "selector": "[data-gbdraw-match-id='comparison1_match1']",
                 "state": "attached"
               },
               {
@@ -926,7 +926,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Collinear click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
+                "script": "const target = document.querySelector(\"[data-gbdraw-match-id='comparison1_match1']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Collinear click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
               },
               {
                 "type": "waitForSelector",
@@ -934,7 +934,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['collinearity block', 'block_0024', 'ap027078.1', 'ap027131.1', 'plus', '15']) { if (!text.includes(expected)) throw new Error(`Collinear popup is missing: ${expected}`); } if (!popup || !rect) throw new Error('Collinear target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 600, rect.top - 80)); }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-match-id='comparison1_match1']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['collinearity block', 'block_0024', 'ap027078.1', 'ap027131.1', 'plus', '15']) { if (!text.includes(expected)) throw new Error(`Collinear popup is missing: ${expected}`); } if (!popup || !rect) throw new Error('Collinear target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 600, rect.top - 80)); }"
               },
               {
                 "type": "wait",
@@ -945,9 +945,9 @@
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const summary = popup?.querySelector('[data-collinear-summary]'); const pairs = popup?.querySelector('[data-collinear-gene-pairs]'); if (!popup || !summary || !pairs) throw new Error('Compact collinear summary not found.'); popup.children[0]?.setAttribute('data-capture', 'collinear-popup-header'); summary.setAttribute('data-capture', 'collinear-summary'); pairs.setAttribute('data-capture', 'collinear-gene-pairs'); document.activeElement?.blur();"
               }
             ],
-            "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+            "highlightSelector": "[data-gbdraw-match-id='comparison1_match1']",
             "clipSelectors": [
-              "[data-gbdraw-pairwise-match-id='comparison1_match1']",
+              "[data-gbdraw-match-id='comparison1_match1']",
               "[data-capture='collinear-popup-header']",
               "[data-capture='collinear-summary']",
               "[data-capture='collinear-gene-pairs']"

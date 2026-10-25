@@ -47,6 +47,7 @@ await copyModule(
   'gbdraw/web/js/services/svg-serialization.js',
   'services/svg-serialization.js'
 );
+await copyModule('gbdraw/web/js/services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
@@ -1790,25 +1791,17 @@ const matchElement = (attributes) => ({
   getAttribute(name) { return attributes[name] ?? null; }
 });
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-1'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-match-id': 'match-1' })),
   'match-1'
 );
+// The embedded runtime reads only the current attribute (a file it ships in never carries the legacy one).
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-2'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-pairwise-match-id': 'match-2' })),
   ''
 );
 embeddedMatchIdFunctions.ambiguousMatchElementIds.add('match-1');
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-1'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-match-id': 'match-1' })),
   ''
 );
 

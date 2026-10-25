@@ -476,7 +476,6 @@ class PairWiseMatchGroup:
         attribs = path.attribs
         match_id = _required_attribute_text(self._next_pairwise_match_id(match_index))
         attribs["data-gbdraw-match-id"] = match_id
-        attribs["data-gbdraw-pairwise-match-id"] = match_id
         attribs["data-match-kind"] = _match_kind(
             _attribute_text(getattr(row, "collinearity_block_id", None)),
             _attribute_text(getattr(row, "orthogroup_id", None)),
