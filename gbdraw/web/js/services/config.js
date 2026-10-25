@@ -3071,7 +3071,7 @@ export const applyLabelFitValues = (drawing, values, mode) => {
  *   settings the app wrote (`applyCapturedConfigData`).
  */
 const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAlignment = true, captured = false } = {}) => {
-  const mode = drawing === state.drawingOfMode('linear') ? 'linear' : 'circular';
+  const mode = drawing.mode;
   // The execution settings of a Session 44 or older draft or of a request
   // projection are app-level (`state.losatExecution`); the drawing keeps the
   // search settings. A group of no object holds none.
@@ -3104,7 +3104,7 @@ const applyConfigData = (drawing, data, { resolveTrackPlacements = true, applyAl
   // The record translations and alignment plan are the Linear mode's
   // artifact; only the Linear drawing's settings carry them. A History
   // config step carries neither and leaves them alone (OV-383).
-  const ownsAlignment = applyAlignment && drawing === state.drawingOfMode('linear');
+  const ownsAlignment = applyAlignment && mode === 'linear';
   if (state.linearRecordTranslations && ownsAlignment) {
     state.linearRecordTranslations.value = cloneJsonData(readList(linearLayout.recordTranslations).value);
   }
