@@ -115,6 +115,7 @@ const buildHarness = ({
       return true;
     },
     currentResults: () => state.results.value,
+    getResultIdentity: () => 'result:1',
     rulePreparation,
     evaluateLabelRules,
     showNotice,

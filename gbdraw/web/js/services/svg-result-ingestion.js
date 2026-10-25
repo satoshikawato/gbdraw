@@ -81,6 +81,13 @@ const text = (value) => String(value ?? '').trim();
  */
 
 /**
+ * The preview owner's reader of the Results (`currentResults` of
+ * app/preview-runtime.js): the displayed Result's edits are written into its
+ * text before the Results are returned (R1, R13).
+ * @typedef {() => SvgResultEntry[]} CurrentResultsPort
+ */
+
+/**
  * What a Result's metadata holds once it is committed (`metadataFromCatalogAdmission`,
  * `ingestSvgResult`). A legacy import has no `legendRowFacts`.
  * @typedef {object} CommittedSvgResultMetadata

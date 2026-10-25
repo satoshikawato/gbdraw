@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { NoticeHandle, ShowNotice } from '../app-messages.js' */
 /** @import { DrawingState, DiagramMode } from '../../state.js' */
-/** @import { SvgResultEntry } from '../../services/svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
@@ -616,9 +616,9 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
 };
 
 /**
- * The preview owner's reader of the Results, with the displayed Result's
- * edits written into its text (R1, R13).
- * @typedef {() => SvgResultEntry[]} CurrentResultsPort
+ * The preview owner's identity of a Result: its committed identity, which a
+ * write of the displayed Result's text keeps and a new Result replaces.
+ * @typedef {(result: SvgResultEntry | undefined) => string} ResultIdentityPort
  */
 
 /**
@@ -627,6 +627,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {CurrentResultsPort} currentResults
+ * @property {ResultIdentityPort} getResultIdentity
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(value?: any) => { value: any }} ref Vue `ref`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
@@ -648,6 +649,7 @@ export const createFeatureLabelActions = ({
   state,
   commitActiveResultEdit = null,
   currentResults,
+  getResultIdentity,
   rulePreparation,
   ref,
   computed,
@@ -1428,8 +1430,9 @@ export const createFeatureLabelActions = ({
   /** @param {string} featureId */
   const reflowDrawsLabel = async (featureId) => {
     const generationKey = state.resultGenerationKey?.value;
-    // Read with the shown Result's edits written, so only a new Result differs.
-    const before = currentResults()[selectedResultIndex.value];
+    // A new Result has a new identity; a write of the shown Result's edits keeps it.
+    const shownIdentity = () => getResultIdentity(state.results.value[selectedResultIndex.value]);
+    const before = shownIdentity();
     await nextTick();
     if (labelReflowProcessing?.value && typeof watch === 'function') {
       await /** @type {Promise<void>} */ (new Promise((resolve) => {
@@ -1440,8 +1443,9 @@ export const createFeatureLabelActions = ({
         });
       }));
     }
+    if (shownIdentity() === before) return null;
     const result = currentResults()[selectedResultIndex.value];
-    if (!result || result === before || labelReflowLastError.value || state.processing?.value
+    if (!result || labelReflowLastError.value || state.processing?.value
       || state.resultGenerationKey?.value !== generationKey) return null;
     const root = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml').documentElement;
     const key = normalizeKeyToken(featureId);

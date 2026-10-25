@@ -93,7 +93,7 @@ const editedIntentPartOf = (path, value) => (
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
 /** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
-/** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as History captures and restores it. */
+/** @import { CurrentResultsPort } from './svg-result-ingestion.js' */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /**
  * The `ui` values of an intent, checkpoint, or generated artifact: the fallback fields, the shown
@@ -981,8 +981,7 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
  * @property {((drawing: D, orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
  *   The orthogroup restore.
- * @property {() => ResultData[]} currentResults The generated Results with the displayed Result's
- *   edits written (R1): every capture of the Results reads them through it.
+ * @property {CurrentResultsPort} currentResults Every capture of the Results reads them through it.
  * @property {((results: HistorySnapshotData[], ui: HistorySnapshotData) => unknown) | null} [applyResultsData]
  *   The generated Results' restore, with the checkpoint's UI state.
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.

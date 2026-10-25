@@ -44,6 +44,8 @@ import {
  * @typedef {object} PreviewRuntimeOptions
  * @property {PreviewRuntimeState} state
  * @property {(svg: Element) => string} serializeSvg The clean serializer of services/svg-serialization.js.
+ * @property {{ value: number }} [editRevision] Counts the edits of the displayed Result's root, which
+ *   leave its Result object in place (R1); the app passes a ref that views of the root watch.
  */
 
 /**
@@ -220,7 +222,7 @@ const makeRuntime = ({
 });
 
 /** @param {PreviewRuntimeOptions} options */
-export const createPreviewRuntime = ({ state, serializeSvg }) => {
+export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { value: 0 } }) => {
   if (!state) throw new Error('createPreviewRuntime requires state.');
   if (typeof serializeSvg !== 'function') throw new Error('createPreviewRuntime requires serializeSvg.');
 
@@ -1090,6 +1092,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (!runtime) return false;
     runtime.dirty = true;
     runtime.dirtyReasons.add(String(reason || 'preview-edit'));
+    editRevision.value += 1;
     return true;
   };
 

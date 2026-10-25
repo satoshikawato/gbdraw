@@ -308,7 +308,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
-/** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -3109,7 +3109,7 @@ const deserializeFile = (value) => {
  * The preview owner's ports that Save and a Session reset use (R1, R13).
  * @typedef {object} PreviewRuntimePorts
  * @property {() => void} clearActiveRuntime Releases the displayed Result.
- * @property {() => SvgResultEntry[]} currentResults The Results, with the displayed Result's edits written.
+ * @property {CurrentResultsPort} currentResults
  */
 // Until the composition root registers the preview owner nothing is mounted,
 // so the Results are current as they are.
@@ -4580,7 +4580,8 @@ const captureSessionImportSnapshot = () => ({
   shownDrawingId: state.activeDrawingId.value,
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawingOfMode('linear')),
-  results: state.results.value,
+  // A holder restored later reads the Results with the shown Result's edits (R1).
+  results: previewRuntimePorts.currentResults(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,

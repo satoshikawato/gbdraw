@@ -114,8 +114,10 @@ const state = {
   })
 };
 let serializeCount = 0;
+const editRevision = { value: 0 };
 const runtime = createPreviewRuntime({
   state,
+  editRevision,
   serializeSvg: (targetSvg) => {
     serializeCount += 1;
     return `<svg data-count="${serializeCount}" data-elements="${targetSvg.elements.length}"></svg>`;
@@ -146,6 +148,9 @@ assert.deepEqual([serializeCount, resultReplacementCount], [0, 0]);
 assert.equal(state.results.value, resultsBeforeEdits);
 assert.equal(runtime.getActiveRuntime().dirty, true);
 assert.equal(state.skipCaptureBaseConfig.value, false);
+// Each edit of the root counts once, so views of the root that follow no
+// Result object (the Similarity alignment overlay) measure again.
+assert.equal(editRevision.value, 2);
 
 // U2: the first read after edits serializes the root once and writes it once;
 // the Result keeps its identity. A second read serializes nothing.
