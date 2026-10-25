@@ -860,7 +860,7 @@ def _validate_protein_sets_and_record_analyses(
         raw_proteins = raw_set.get("proteins")
         if raw_set.get("schema") != 1 or not isinstance(raw_proteins, list):
             raise ValidationError(f"Protein set {set_key!r} is invalid.")
-        identity_pairs: list[dict[str, str]] = []
+        identity_pairs: list[tuple[str, str]] = []
         feature_ids: set[str] = set()
         for protein in raw_proteins:
             if not isinstance(protein, Mapping):
@@ -884,14 +884,14 @@ def _validate_protein_sets_and_record_analyses(
             if expected_feature_id != feature_id:
                 raise ValidationError(f"Protein set {set_key!r} feature ID does not match its content.")
             feature_ids.add(feature_id)
-            identity_pairs.append({"featureAnalysisId": feature_id, "aaSha256": aa_sha256})
-        identity_pairs.sort(key=lambda protein: protein["featureAnalysisId"])
+            identity_pairs.append((feature_id, aa_sha256))
+        identity_pairs.sort(key=lambda pair: pair[0])
         if [
             str(protein.get("featureAnalysisId"))
             for protein in raw_proteins
-        ] != [protein["featureAnalysisId"] for protein in identity_pairs]:
+        ] != [feature_id for feature_id, _aa_sha256 in identity_pairs]:
             raise ValidationError(f"Protein set {set_key!r} is not in canonical feature order.")
-        if _identity_sha256({"proteins": identity_pairs}) != set_key:
+        if _identity_sha256(_protein_set_hash_payload(identity_pairs)) != set_key:
             raise ValidationError(f"Protein set {set_key!r} hash does not match its content.")
         protein_sets[set_key] = dict(raw_set)
 
@@ -909,17 +909,43 @@ def _validate_protein_sets_and_record_analyses(
             or not record_source_id
         ):
             raise ValidationError(f"Record analysis {analysis_key!r} has an invalid protein set reference.")
-        analysis_hash_payload = {
-            "proteinSetHash": protein_set_hash,
-            "recordSourceId": raw_analysis.get("recordSourceId"),
-            "region": raw_analysis.get("region"),
-            "selector": raw_analysis.get("selector"),
-        }
+        analysis_hash_payload = _record_analysis_hash_payload(
+            protein_set_hash=protein_set_hash,
+            record_source_id=raw_analysis.get("recordSourceId"),
+            region=raw_analysis.get("region"),
+            selector=raw_analysis.get("selector"),
+        )
         if _identity_sha256(analysis_hash_payload) != analysis_key:
             raise ValidationError(f"Record analysis {analysis_key!r} hash does not match its content.")
         record_analyses[analysis_key] = dict(raw_analysis)
 
     return protein_sets, record_analyses
+
+
+def _protein_set_hash_payload(
+    identity_pairs: Sequence[tuple[str, str]],
+) -> dict[str, object]:
+    return {
+        "proteins": [
+            {"featureAnalysisId": feature_id, "aaSha256": aa_sha256}
+            for feature_id, aa_sha256 in identity_pairs
+        ]
+    }
+
+
+def _record_analysis_hash_payload(
+    *,
+    protein_set_hash: str,
+    record_source_id: object,
+    region: object,
+    selector: object,
+) -> dict[str, object]:
+    return {
+        "proteinSetHash": protein_set_hash,
+        "recordSourceId": record_source_id,
+        "region": region,
+        "selector": selector,
+    }
 
 
 def _runtime_binding_payload(
@@ -952,11 +978,11 @@ def _display_binding_payload(
 
 
 def _expected_export_ordinals(
-    feature_metadata: Mapping[str, Mapping[str, object]],
+    display_aliases: Mapping[str, object],
 ) -> dict[str, int | None]:
     feature_ids_by_alias: dict[str, list[str]] = {}
-    for feature_id, metadata in feature_metadata.items():
-        alias = _normalize_identity_text(metadata.get("displayAlias")).strip()
+    for feature_id, display_alias in display_aliases.items():
+        alias = _normalize_identity_text(display_alias).strip()
         if not alias:
             raise ValidationError("Protein feature metadata requires a display alias.")
         feature_ids_by_alias.setdefault(alias, []).append(str(feature_id))
@@ -1102,7 +1128,12 @@ def validate_protein_identity_manifest(
             raise ValidationError(
                 f"Record instance {instance_key!r} metadata does not match its protein set."
             )
-        expected_ordinals = _expected_export_ordinals(normalized_metadata)
+        expected_ordinals = _expected_export_ordinals(
+            {
+                feature_id: metadata.get("displayAlias")
+                for feature_id, metadata in normalized_metadata.items()
+            }
+        )
         for feature_id, expected_ordinal in expected_ordinals.items():
             actual = normalized_metadata[feature_id].get("exportOrdinal")
             if actual != expected_ordinal:
@@ -1377,14 +1408,14 @@ def extract_protein_identity_manifest(
             (_protein_identity_core(protein) for protein in identified),
             key=lambda entry: str(entry["featureAnalysisId"]),
         )
-        hash_proteins = [
-            {
-                "featureAnalysisId": entry["featureAnalysisId"],
-                "aaSha256": entry["aaSha256"],
-            }
-            for entry in sorted_core
-        ]
-        protein_set_hash = _identity_sha256({"proteins": hash_proteins})
+        protein_set_hash = _identity_sha256(
+            _protein_set_hash_payload(
+                [
+                    (str(entry["featureAnalysisId"]), str(entry["aaSha256"]))
+                    for entry in sorted_core
+                ]
+            )
+        )
         protein_set = {"schema": 1, "proteins": sorted_core}
         existing_set = protein_sets.get(protein_set_hash)
         if (
@@ -1400,13 +1431,14 @@ def extract_protein_identity_manifest(
             raise ValidationError("record_source_ids must be non-empty.")
         selector = _canonical_identity_context_value(selector_values[record_index])
         region = _canonical_identity_context_value(region_values[record_index])
-        analysis_hash_payload = {
-            "proteinSetHash": protein_set_hash,
-            "recordSourceId": record_source_id,
-            "region": region,
-            "selector": selector,
-        }
-        record_analysis_id = _identity_sha256(analysis_hash_payload)
+        record_analysis_id = _identity_sha256(
+            _record_analysis_hash_payload(
+                protein_set_hash=protein_set_hash,
+                record_source_id=record_source_id,
+                region=region,
+                selector=selector,
+            )
+        )
         record_analysis = {
             "schema": 1,
             "recordSourceId": record_source_id,
@@ -1435,20 +1467,9 @@ def extract_protein_identity_manifest(
                 record_instance_key=instance_key,
             )
 
-        feature_ids_by_alias: dict[str, list[str]] = {}
-        for protein in identified:
-            feature_ids_by_alias.setdefault(
-                _normalize_identity_text(protein.display_alias).strip(),
-                [],
-            ).append(str(protein.feature_analysis_id))
-        export_ordinals: dict[str, int | None] = {}
-        for feature_ids in feature_ids_by_alias.values():
-            ordered_feature_ids = sorted(feature_ids)
-            for ordinal, feature_id in enumerate(ordered_feature_ids, start=1):
-                export_ordinals[feature_id] = (
-                    ordinal if len(ordered_feature_ids) > 1 else None
-                )
-
+        export_ordinals = _expected_export_ordinals(
+            {str(protein.feature_analysis_id): protein.display_alias for protein in identified}
+        )
         feature_metadata = {
             str(protein.feature_analysis_id): _protein_binding_metadata(
                 protein,
@@ -1509,7 +1530,9 @@ def extract_protein_identity_manifest(
         runtime_binding_hashes.append(runtime_binding_hash)
         display_binding_hashes.append(display_binding_hash)
 
-    manifest = validate_protein_identity_manifest(
+    # The validator's other checks re-derive what this loop computed with the same helpers;
+    # only the key walk can fail on caller input (record keys, selectors, regions).
+    _reject_manifest_presentation_identity(
         {
             "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
             "proteinSets": protein_sets,
@@ -1520,7 +1543,11 @@ def extract_protein_identity_manifest(
     return ProteinExtractionResult(
         proteins_by_record=proteins_by_record,
         protein_map=protein_map,
-        identity_manifest=manifest,
+        identity_manifest=ProteinIdentityManifest(
+            protein_sets=protein_sets,
+            record_analyses=record_analyses,
+            record_instances=record_instances,
+        ),
         record_instance_keys=tuple(instance_keys),
         protein_set_hashes=tuple(protein_set_hashes),
         record_analysis_ids=tuple(record_analysis_ids),

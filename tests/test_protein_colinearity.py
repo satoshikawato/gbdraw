@@ -541,6 +541,59 @@ def test_identical_record_instances_share_content_but_not_runtime_bindings() -> 
 
 
 @pytest.mark.linear
+def test_extracted_identity_manifest_is_its_own_validation() -> None:
+    # The extraction does not validate the manifest it builds, so it must build
+    # what the validator returns: the same content, key order and value types.
+    same_location = [
+        _cds(0, 9, qualifiers={"translation": ["MKT*"], "locus_tag": ["dup"]}),
+        _cds(0, 9, qualifiers={"translation": ["MK*"], "locus_tag": ["dup"]}),
+    ]
+    joined = SeqFeature(
+        CompoundLocation(
+            [FeatureLocation(30, 36, strand=-1), FeatureLocation(12, 18, strand=-1)],
+            operator="join",
+        ),
+        type="CDS",
+        qualifiers={"translation": ["MKV*"], "protein_id": [" "]},
+    )
+    unstranded = [
+        _cds(0, 9, strand=0, qualifiers={"translation": ["MK*"]}),
+        SeqFeature(FeatureLocation(12, 21, strand=None), type="CDS", qualifiers={"translation": ["MT*"]}),
+    ]
+    keyed = _record("keyed", features=unstranded)
+    keyed.annotations["gbdraw_record_key"] = " kéy "
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("left", features=[*same_location, joined]),
+            _record("left", features=[*same_location, joined]),
+            _record("right", features=[_cds(3, 12, qualifiers={"translation": ["MK*"]})]),
+            _record("odd", features=unstranded),
+        ],
+        record_instance_keys=("row-1", "row-2", "row-3", " réc "),
+        record_source_ids=("left", "left", "right", " ś "),
+        record_selectors=(
+            {"record": 1, "ids": ["a", 2.5]},
+            {"record": 1, "ids": ["a", 2.5]},
+            None,
+            ("a", {"é": 1, "é": 2}),
+        ),
+        regions=(None, None, {"start": 1, "end": 90}, None),
+    )
+    manifest = extraction.identity_manifest
+    ordinals = {
+        metadata["exportOrdinal"]
+        for binding in manifest.record_instances.values()
+        for metadata in binding["featureMetadata"].values()
+    }
+
+    assert ordinals == {None, 1, 2}
+    assert len(manifest.protein_sets) == 3
+    assert len(manifest.record_analyses) == 3
+    for built in (manifest, extract_protein_identity_manifest([keyed]).identity_manifest):
+        assert repr(validate_protein_identity_manifest(built.to_dict())) == repr(built)
+
+
+@pytest.mark.linear
 def test_protein_raw_identity_tracks_candidate_limit_args_exactly() -> None:
     extraction = extract_protein_identity_manifest(
         [
