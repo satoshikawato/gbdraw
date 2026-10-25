@@ -1219,14 +1219,13 @@ Gallery tutorials or screenshots.
 ```bash
 gbdraw gui
 python tools/prepare_browser_wheel.py
-python tools/prepare_browser_wheel.py --refresh-cache-bust
 python -m build
 pytest tests/ -v -m "not slow"
 npm ci
 node --test tests/web/typed-boundaries.test.mjs
 ```
 
-Refresh the cache-bust token only when preparing a deployable bundle.
+`tools/prepare_cloudflare_pages.py` writes the wheel's content-hash token into the hosted bundle.
 
 When browser verification matters, check both Playwright installations:
 
