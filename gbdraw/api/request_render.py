@@ -91,7 +91,7 @@ from gbdraw.features.source import (
     FeatureIdentity,
     IdentityBinding,
     SourceFeatureIdentity,
-    build_source_feature_catalog,
+    capture_source_features,
 )
 from gbdraw.features.visibility import (
     read_feature_visibility_file,
@@ -989,7 +989,7 @@ class CircularBatchRequestPlan:
             item_request = CircularDiagramRequest(
                 records=(
                     RecordInput(
-                        source=InMemoryRecordSource(record, source_feature_catalog=self.provenance[index].source_feature_catalog),
+                        source=InMemoryRecordSource(record, source_features=self.provenance[index].source_features),
                         record_key=self.request.records[index].record_key,
                         display=self.request.records[index].display,
                     ),
@@ -1321,7 +1321,7 @@ def _gff_types_named_by_visibility_rows(
         entry.feature_type
         for item in collection.provenance
         if item.source_kind == "gff_fasta" and item.record_key in shown
-        for entry in item.source_feature_catalog or ()
+        for entry in item.source_feature_catalog
         if entry.biological_feature_id in shown[item.record_key]
     } if shown else set()
 
@@ -1329,11 +1329,7 @@ def _gff_types_named_by_visibility_rows(
 def _source_catalogs(
     collection: ResolvedRecordCollection,
 ) -> tuple[tuple[SourceFeatureIdentity, ...], ...]:
-    return tuple(
-        item.source_feature_catalog if item.source_feature_catalog is not None
-        else build_source_feature_catalog(record)
-        for item, record in zip(collection.provenance, collection.records, strict=True)
-    )
+    return tuple(item.source_feature_catalog for item in collection.provenance)
 
 
 class _IdentityTableContext(TypedDict):
@@ -1525,10 +1521,9 @@ def _normalize_request_records(
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
         )
         register_prepared_value_identity(record, record_identity)
-        if provenance.source_feature_catalog:
-            register_prepared_value_identity(
-                provenance.source_feature_catalog, ("source-feature-catalog", record_identity)
-            )
+        register_prepared_value_identity(
+            provenance.source_features, ("source-feature-catalog", record_identity)
+        )
     return collection
 
 
@@ -1641,7 +1636,7 @@ def _coerce_resolved_collection(
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
                 detected_topology=_detected_topology(record, source_kind),
-                source_feature_catalog=build_source_feature_catalog(record),
+                source_features=capture_source_features(record),
             )
         )
     return ResolvedRecordCollection(records, tuple(provenance))
@@ -1674,7 +1669,7 @@ def _materialized_record_inputs(
         source_presentation = provenance.presentation
         materialized.append(
             RecordInput(
-                source=InMemoryRecordSource(record, source_feature_catalog=provenance.source_feature_catalog),
+                source=InMemoryRecordSource(record, source_features=provenance.source_features),
                 presentation=RecordPresentation(
                     label=source_presentation.label,
                     subtitle=source_presentation.subtitle,

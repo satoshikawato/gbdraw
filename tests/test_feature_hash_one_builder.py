@@ -253,7 +253,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
     """`hash=` names a feature by its source-record hash on every record."""
     import pandas as pd
 
-    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.source import capture_source_features
     from gbdraw.features.visibility import (
         compile_feature_visibility_rules,
         should_render_feature,
@@ -262,7 +262,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
     source = SeqIO.read(_write_records(tmp_path)[1], "genbank")
-    catalog = build_source_feature_catalog(source)
+    catalog = capture_source_features(source).entries
     record = source
     if transform != "reverse":
         record = apply_region_specs(
@@ -305,13 +305,13 @@ def test_catalog_metadata_and_builder_share_one_source_hash(
         compute_source_feature_hash,
         source_feature_hash_and_parts,
     )
-    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.source import capture_source_features
     from gbdraw.io.record_select import reverse_records
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
     from gbdraw.web_support.feature_metadata import _biological_selector_values
 
     source = SeqIO.read(_write_records(tmp_path)[1], "genbank")
-    catalog = build_source_feature_catalog(source)
+    catalog = capture_source_features(source).entries
     record = source
     if transform == "reverse":
         record = reverse_records([source], True)[0]

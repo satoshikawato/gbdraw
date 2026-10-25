@@ -639,13 +639,10 @@ def _drawn_features(
     legacy readers compute the drawn hash.
     """
 
-    catalog = {
-        entry.source_feature_index: entry.stable_feature_id
-        for entry in provenance.source_feature_catalog or ()
-    }
+    catalog = provenance.source_features.source_hashes
     drawn: list[DrawnFeature] = []
     # A feature's source index, or its ordinal in an untransformed record, as
-    # build_source_feature_catalog reads it.
+    # capture_source_features reads it.
     for position, feature in enumerate(_iter_source_features(record.features)):
         index = _source_feature_index(feature)
         index = position if index is None else index
@@ -671,10 +668,7 @@ def _legacy_display_frame_feature_id(
     for record, provenance in zip(plan.records, plan.provenance, strict=True):
         if provenance.record_key != record_key:
             continue
-        if any(
-            entry.stable_feature_id == feature_id
-            for entry in provenance.source_feature_catalog or ()
-        ):
+        if feature_id in provenance.source_features.source_hashes.values():
             return feature_id
         matches = {
             source

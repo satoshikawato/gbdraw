@@ -21,15 +21,15 @@ from pandas import DataFrame
 
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.source import SourceFeatureIdentity
+from gbdraw.features.source import SourceFeatureCatalog
 
 
 @dataclass(frozen=True)
 class ParsedRecordInputs:
-    """One cached source parse and its immutable pre-transform feature catalogs."""
+    """One cached source parse and its pre-transform source feature catalogs."""
 
     records: tuple[SeqRecord, ...]
-    source_feature_catalogs: tuple[tuple[SourceFeatureIdentity, ...], ...]
+    source_features: tuple[SourceFeatureCatalog, ...]
 
 
 @dataclass(frozen=True)
@@ -522,15 +522,13 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
                 len(getattr(feature, "qualifiers", None) or {}) * 64
                 for feature in features
             )
-        catalogs = getattr(value, "source_feature_catalogs", ())
-        if not catalogs:
-            catalogs = tuple(getattr(item, "source_feature_catalog", ()) or ()
-                             for item in getattr(value, "provenance", ()))
+        catalogs: tuple[SourceFeatureCatalog, ...] = (
+            value.source_features if isinstance(value, ParsedRecordInputs)
+            else tuple(item.source_features for item in getattr(value, "provenance", ()))
+        )
+        # A catalog holds its captured features; entries are built on demand.
         for catalog in catalogs:
-            total += sum(256 + len(entry.location_parts) * 96
-                         + sum(len(key) + sum(len(text) for text in values)
-                               for key, values in entry.qualifiers)
-                         for entry in catalog)
+            total += sum(128 + len(item.location_parts) * 96 for item in catalog.captured)
         return total
     return source_bytes
 

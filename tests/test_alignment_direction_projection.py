@@ -19,7 +19,7 @@ from gbdraw.api.request_render import plan_linear_request
 from gbdraw.api.requests import GenBankInputSource, LinearDiagramRequest, RecordInput, RecordPresentation
 from gbdraw.diagrams.linear.assemble import _final_record_translations
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.source import build_source_feature_catalog
+from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session_request_codec import encode_canonical_request
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_payload, _anchor
@@ -58,7 +58,7 @@ def build_fixture(tmp_path):
         SeqIO.write(record, path, 'genbank')
         paths.append(path)
         source = SeqIO.read(path, 'genbank')
-        identity = build_source_feature_catalog(source)[0]
+        identity = capture_source_features(source).entries[0]
         anchor = dict(recordKey=key, biologicalFeatureId=identity.biological_feature_id,
                       sourceFeatureIndex=identity.source_feature_index, stableFeatureSvgId=identity.stable_feature_id)
         region = parse_region_spec('target:51-350:rc') if key == 'target' else (
@@ -113,14 +113,14 @@ def _apply(request, projected):
 def test_real_sources_absolute_arrows_exclusions_and_immutability(fixture, intent, arrows, flips):
     request, helper, context, resource_paths, response, paths = fixture
     bytes_before = [path.read_bytes() for path in paths]
-    source_catalogs = [build_source_feature_catalog(SeqIO.read(path, 'genbank')) for path in paths]
+    source_catalogs = [capture_source_features(SeqIO.read(path, 'genbank')).entries for path in paths]
     result = project(response, helper, intent)
     assert [row['afterArrow'] for row in result['records']] == arrows
     assert [row['recordKey'] for row in result['records'] if row['beforeReverseComplement'] != row['afterReverseComplement']] == flips
     assert [row['exclusion'] for row in result['records']] == [None, None, 'unknown_strand', 'skipped_by_user',
                                                              'skipped_no_candidate', 'skipped_unmappable']
     assert [path.read_bytes() for path in paths] == bytes_before
-    assert [build_source_feature_catalog(SeqIO.read(path, 'genbank')) for path in paths] == source_catalogs
+    assert [capture_source_features(SeqIO.read(path, 'genbank')).entries for path in paths] == source_catalogs
     assert set(response['plan']) == {'schema', 'groupId', 'reference', 'records'}
     # The final helper batch receives projected absolute directions, not a policy.
     final_context = {**context, 'orientations': {row['recordKey']: row['afterReverseComplement'] for row in result['records']}}

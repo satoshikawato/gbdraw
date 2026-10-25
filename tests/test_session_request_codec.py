@@ -77,7 +77,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.shapes import resolve_feature_rendering
-from gbdraw.features.source import build_source_feature_catalog
+from gbdraw.features.source import capture_source_features
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -2358,7 +2358,7 @@ def test_linear_placements_overrides_slots_and_feature_identity_round_trip(
         SeqFeature(SimpleLocation(20, 40, 1), type="CDS", qualifiers={"locus_tag": ["alpha"]}),
     ]
     early, alpha = (
-        item.biological_feature_id for item in build_source_feature_catalog(record)
+        item.biological_feature_id for item in capture_source_features(record).entries
     )
     options = LinearDiagramOptions(
         feature_placements=(

@@ -46,7 +46,7 @@ from gbdraw.api.requests import (
 )
 from gbdraw.diagrams.linear.assemble import _final_record_translations
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.source import build_source_feature_catalog
+from gbdraw.features.source import capture_source_features
 from gbdraw.layout.linear_multi_record import LinearRecordPlacement, RecordKey
 from gbdraw.layout.similarity_alignment import (
     AlignmentAnchorIdentity,
@@ -86,7 +86,7 @@ def _record(
 
 
 def _anchor(record: SeqRecord, record_key: str) -> AlignmentAnchorIdentity:
-    feature = build_source_feature_catalog(record)[0]
+    feature = capture_source_features(record).entries[0]
     return AlignmentAnchorIdentity(
         record_key=record_key,
         biological_feature_id=feature.biological_feature_id,

@@ -1030,7 +1030,9 @@ def test_typed_results_move_between_frames_by_their_tags() -> None:
     )
 
     record = _frame_test_record()
-    binding = comparison_record_binding(record, None, False)
+    from gbdraw.features.source import capture_source_features
+
+    binding = comparison_record_binding(record, capture_source_features(record), False)
     assert binding.opposite_spans[1] == (200 - 95, 200 - 10, 1)
     assert binding.current_spans[2] == binding.opposite_spans[2][:2] + (1,) == (0, 200, 1)
     other = ComparisonRecordBinding({}, {}, {}, 50, {}, {}, False)

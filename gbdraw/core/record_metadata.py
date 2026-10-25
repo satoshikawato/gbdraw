@@ -17,6 +17,7 @@ _COORD_STEP_KEY = "gbdraw_coord_step"
 _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
 _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
 _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
+_SOURCE_FEATURE_HASH_ATTR = "_gbdraw_source_feature_hash"
 _SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
 
 
@@ -25,6 +26,13 @@ class _SourceFeatureAnchorProfile(NamedTuple):
     operator: str
     part_order: str
     strand: str
+
+
+class _SourceFeatureHashStamp(NamedTuple):
+    """The source hash of a feature, computed once for the record it was loaded in."""
+
+    record_id: str | None
+    feature_hash: str
 
 
 def _iter_source_features(features: Iterable[SeqFeature] | None) -> Iterator[SeqFeature]:
@@ -142,6 +150,27 @@ def _source_feature_anchor_profile(
     )
 
 
+def _stamp_source_feature_hash(
+    feature: object, record_id: str | None, feature_hash: str | None,
+) -> None:
+    """Store the source hash computed when the feature's source was loaded."""
+
+    if feature_hash is None:
+        if hasattr(feature, _SOURCE_FEATURE_HASH_ATTR):
+            delattr(feature, _SOURCE_FEATURE_HASH_ATTR)
+        return
+    setattr(feature, _SOURCE_FEATURE_HASH_ATTR, _SourceFeatureHashStamp(record_id, feature_hash))
+
+
+def _stamped_source_feature_hash(feature: object, record_id: str | None) -> str | None:
+    """The stored source hash when it was computed for ``record_id``, else None."""
+
+    stamp = getattr(feature, _SOURCE_FEATURE_HASH_ATTR, None)
+    if isinstance(stamp, _SourceFeatureHashStamp) and stamp.record_id == record_id:
+        return stamp.feature_hash
+    return None
+
+
 def _mapped_feature_location_parts(
     feature: object,
     *,
@@ -182,7 +211,7 @@ def _copy_source_feature_identity(
     coord_base: int,
     coord_step: int,
 ) -> None:
-    """Carry source ordinal and biological parts across a transformation."""
+    """Carry source ordinal, biological parts and source hash across a transformation."""
 
     index = _source_feature_index(source)
     setattr(
@@ -204,6 +233,9 @@ def _copy_source_feature_identity(
         _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR,
         _source_feature_anchor_profile(source, coord_step=coord_step),
     )
+    stamp = getattr(source, _SOURCE_FEATURE_HASH_ATTR, None)
+    if isinstance(stamp, _SourceFeatureHashStamp):
+        setattr(target, _SOURCE_FEATURE_HASH_ATTR, stamp)
 
 
 def _read_coord_map(record: object) -> tuple[int, int]:

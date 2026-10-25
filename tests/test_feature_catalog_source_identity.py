@@ -205,11 +205,11 @@ def test_renderer_emits_unique_catalog_refs_for_exact_feature_collisions(
 def test_shared_source_catalog_preserves_fixed_preplacement_public_ids():
     # Captured from the Session 6 source bytes before the shared helper existed.
     # Do not derive these expected IDs with the helper under test.
-    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.source import capture_source_features
     expected = {"preceding": "f86dce137", "nested-preceding": "fe1bb98ed",
                 "alpha": "f1ec8c56e~2", "beta": "f1ec8c56e~3"}
     source = _colliding_record()
-    catalog = build_source_feature_catalog(source)
+    catalog = capture_source_features(source).entries
     actual = {dict(item.qualifiers)["label"][0]: item.biological_feature_id for item in catalog}
     assert actual == expected
     assert _catalog_identity(_resolve(_input(source)))[0] == expected

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Sequence
 
 from Bio.SeqRecord import SeqRecord
-from gbdraw.features.source import SourceFeatureIdentity
+from gbdraw.features.source import SourceFeatureCatalog
 
 from pandas import DataFrame
 
@@ -74,7 +74,7 @@ def load_gff_fasta(
     color_table: DataFrame | None = None,
     feature_visibility_table: DataFrame | None = None,
     *,
-    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
+    source_feature_catalogs: list[SourceFeatureCatalog] | None = None,
 ) -> list[SeqRecord]:
     """Load paired GFF3 + FASTA files without applying diagram-mode policy."""
 
