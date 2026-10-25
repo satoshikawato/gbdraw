@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (CLI): the installed `gbdraw` command now starts through a private `_gbdraw_console.py` module that sets
+  `OPENBLAS_NUM_THREADS=1` before NumPy loads, only when you have not set the variable yourself. A one-shot render no
+  longer starts an OpenBLAS thread pool it does not use (NC_010162 circular: user CPU 5.2 s -> 1.9 s, wall 1.87 s ->
+  1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line
+  names `_gbdraw_console:main`.
 - Performance (CLI, Python, web app): each source feature's hash is computed
   once, when its source loads, and read back by the drawing, the shared-hash
   count, the interactive context and the protein extraction; the source feature
