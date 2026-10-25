@@ -240,6 +240,77 @@ export const LEGACY_REQUEST_TABLES = Object.freeze({
   paralogLinksDefault: 2
 });
 
+// gbdraw/core/record_metadata.py: organism_name_rule_data()
+export const ORGANISM_NAME_RULE = Object.freeze({
+  nonOrganismNames: Object.freeze(['artificial sequence', 'cloning vector', 'expression vector', 'synthetic construct', 'unidentified', 'unidentified cloning vector', 'unidentified organism', 'unknown', 'unknown organism', 'vector']),
+  candidatusPrefix: Object.freeze({
+    source: '(?:candidatus|ca\\.)\\s+',
+    flags: 'i'
+  }),
+  nonOrganismStart: Object.freeze({
+    source: '(?:synthetic|artificial|cloning|expression|shuttle|transformation|binary|gene\\s+trap|vector|unidentified|unknown|unclassified|uncultured|environmental)\\b',
+    flags: 'i'
+  }),
+  sequenceWords: Object.freeze(['construct', 'dna', 'episomal', 'integron', 'molecule', 'plasmid', 'replicon', 'rna', 'sequence', 'sequences', 'transposon', 'vector']),
+  virusWord: Object.freeze({
+    source: '(?:virus|viruses|viroid|viroids|viriform|satellite|satellites|phage|phages|virinae|viridae|virales|viricetes|viricetidae|viricota|viricotina|virineae|virites|virae|vira|viria|virid|virids)(?![a-z])',
+    flags: 'i'
+  }),
+  virusAcronym: Object.freeze({
+    source: '[A-Z]{0,3}NPV',
+    flags: ''
+  }),
+  ictvGenus: Object.freeze({
+    source: '[A-Z][a-z]*(?:virus|viroid|viriform|satellite)',
+    flags: ''
+  }),
+  cellularLineages: Object.freeze(['Archaea', 'Bacteria', 'Eukaryota']),
+  virusLineage: 'Viruses',
+  hybrid: Object.freeze({
+    source: '(?:^|\\s)[x×](?:\\s|$)|×',
+    flags: ''
+  }),
+  genus: Object.freeze({
+    source: '[A-Z][a-z]+',
+    flags: ''
+  }),
+  bracketedGenus: Object.freeze({
+    source: '\\[([A-Z][a-z]+)\\]',
+    flags: ''
+  }),
+  aboveGenus: Object.freeze({
+    source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|phyceae|mycetes|mycota|opsida)',
+    flags: ''
+  }),
+  epithet: Object.freeze({
+    source: '[a-z]{2,}(?:-[a-z]+)*',
+    flags: ''
+  }),
+  latinRankWords: Object.freeze(['f.', 'forma', 'nothosubsp.', 'nothovar.', 'ssp.', 'subsp', 'subsp.', 'subvar.', 'var.']),
+  strainLineWords: Object.freeze(['assemblage', 'biotype', 'biovar', 'breed', 'bv.', 'chemovar', 'cultivar', 'cv.', 'ecotype', 'genomovar', 'genotype', 'gv.', 'isolate', 'morphotype', 'morphovar', 'mutant', 'pathotype', 'pathovar', 'phagovar', 'phylotype', 'pv.', 'race', 'ribotype', 'ser.', 'serogroup', 'serotype', 'serovar', 'str', 'str.', 'strain', 'substr', 'substr.', 'subtype', 'sv.', 'type', 'variant']),
+  notEpithets: Object.freeze(['aff', 'agent', 'and', 'archaeon', 'archeaon', 'assemblage', 'at', 'bacteria', 'bacterium', 'biotype', 'biovar', 'breed', 'bv', 'by', 'cf', 'chemovar', 'chromosome', 'clade', 'clone', 'cluster', 'complex', 'contaminant', 'cultivar', 'culture', 'cv', 'cyanobacterium', 'cytoform', 'ecotype', 'ectomycorrhiza', 'endosymbiont', 'environmental', 'eukaryote', 'ex', 'for', 'form', 'from', 'fungal', 'fungus', 'gen', 'genogroup', 'genomosp', 'genomospecies', 'genomovar', 'genosp', 'genospecies', 'genotype', 'group', 'gv', 'hybrid', 'hybrids', 'icg', 'in', 'incertae', 'isolate', 'like', 'lineage', 'metagenome', 'mixed', 'morphotype', 'morphovar', 'mutant', 'mycorrhizal', 'near', 'nov', 'nr', 'of', 'on', 'oral', 'organism', 'pathotype', 'pathovar', 'phage', 'phagovar', 'phylotype', 'phytoplasma', 'plasmid', 'proteobacterium', 'pv', 'race', 'related', 'ribotype', 'satellite', 'sect', 'sedis', 'segment', 'sensu', 'sequence', 'ser', 'serogroup', 'serotype', 'serovar', 'sp', 'species', 'spp', 'str', 'strain', 'subcluster', 'subgen', 'subgroup', 'subsect', 'subspecies', 'substr', 'subtype', 'sv', 'symbiont', 'symbiote', 'taxon', 'the', 'to', 'type', 'unclassified', 'uncultured', 'unidentified', 'unnamed', 'variant', 'vector', 'virus', 'with', 'x']),
+  organismNoun: Object.freeze({
+    source: '(?:phytoplasma|biont|symbiote|bacterium|archaeon|archaeote|archaeum|parasite)$',
+    flags: ''
+  }),
+  statusSuffix: Object.freeze({
+    source: '\\((?:SeqCode|nom\\. [a-z.]+|nomen [a-z]+|in: [^()]+|ex .*\\b\\d{4})\\)',
+    flags: ''
+  }),
+  designationPart: Object.freeze({
+    source: '[-_/:=;,()\\[\\]]+',
+    flags: ''
+  }),
+  lowercaseWord: Object.freeze({
+    source: '[a-z]+(?:-[a-z]+)*\\.?',
+    flags: ''
+  }),
+  lowercaseStrain: Object.freeze({
+    source: '[a-z]{3,}',
+    flags: ''
+  })
+});
+
 // gbdraw/analysis/protein_colinearity.py: OrthogroupMember.role
 /** @type {Readonly<{ values: readonly ('anchor' | 'coortholog' | 'inparalog' | 'low_confidence' | 'local_paralog')[], default: 'anchor' }>} */
 export const ORTHOGROUP_MEMBER_ROLE = Object.freeze({

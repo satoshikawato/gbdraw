@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator
+from xml.sax.saxutils import escape
 from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
+
+from gbdraw.core.text import parse_mixed_content_text
 
 if TYPE_CHECKING:
     import numpy as np
@@ -327,12 +330,16 @@ class RecordSourceMetadata(NamedTuple):
     strain: str
     replicon: str | None
     organelle: str | None
+    # The first word of the record's lineage (GenBank ORGANISM lines), if any.
+    lineage_top: str | None = None
 
 
 def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
     """Extract source-feature metadata used in definition labels."""
     annotations = getattr(record, "annotations", None) or {}
     organism = str(annotations.get("organism", "") or "").strip()
+    taxonomy = annotations.get("taxonomy") or []
+    lineage_top = (str(taxonomy[0]).strip() or None) if taxonomy else None
     strain = ""
     replicon: str | None = None
     organelle: str | None = None
@@ -362,7 +369,15 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
         strain=strain,
         replicon=replicon,
         organelle=organelle,
+        lineage_top=lineage_top,
     )
+
+
+class OrganismLines(NamedTuple):
+    """A record's name as a taxon line and a strain line (text with ``<i>``)."""
+
+    taxon: str
+    strain: str
 
 
 _NON_ORGANISM_NAMES = frozenset(
@@ -379,43 +394,341 @@ _NON_ORGANISM_NAMES = frozenset(
         "expression vector",
     }
 )
-
-
 _CANDIDATUS_PREFIX = re.compile(r"(?:candidatus|ca\.)\s+", re.IGNORECASE)
+_NON_ORGANISM_START = re.compile(
+    r"(?:synthetic|artificial|cloning|expression|shuttle|transformation|binary|gene\s+trap|vector|"
+    r"unidentified|unknown|unclassified|uncultured|environmental)\b",
+    re.IGNORECASE,
+)
+_SEQUENCE_WORDS = frozenset(
+    {"dna", "rna", "molecule", "vector", "construct", "sequence", "sequences", "episomal", "replicon",
+     "transposon", "integron", "plasmid"}
+)
+# A virus word or an ICTV rank ending at the end of a word or before "-" or "["
+# ("virus-associated"), never inside a Latin epithet ("Treponema phagedenis").
+_VIRUS_WORD = re.compile(
+    r"(?:virus|viruses|viroid|viroids|viriform|satellite|satellites|phage|phages|virinae|viridae|virales|"
+    r"viricetes|viricetidae|viricota|viricotina|virineae|virites|virae|vira|viria|virid|virids)(?![a-z])",
+    re.IGNORECASE,
+)
+_VIRUS_ACRONYM = re.compile(r"[A-Z]{0,3}NPV")
+_ICTV_GENUS = re.compile(r"[A-Z][a-z]*(?:virus|viroid|viriform|satellite)")
+_CELLULAR_LINEAGES = frozenset({"Bacteria", "Archaea", "Eukaryota"})
+_VIRUS_LINEAGE = "Viruses"
+_HYBRID = re.compile(r"(?:^|\s)[x×](?:\s|$)|×")
+_GENUS = re.compile(r"[A-Z][a-z]+")
+_BRACKETED_GENUS = re.compile(r"\[([A-Z][a-z]+)\]")
+# Family, subfamily and class endings: such a name is no genus, and ICZN sets it upright.
+_ABOVE_GENUS = re.compile(r"[A-Z][a-z]*(?:idae|inae|aceae|ineae|phyceae|mycetes|mycota|opsida)")
+_EPITHET = re.compile(r"[a-z]{2,}(?:-[a-z]+)*")
+# Rank words before a Latin infraspecific epithet; upright, part of the taxon line.
+_LATIN_RANK_WORDS = frozenset({"subsp.", "subsp", "ssp.", "var.", "subvar.", "f.", "forma", "nothosubsp.", "nothovar."})
+# Infrasubspecific ranks and designations: they start the strain line.
+_STRAIN_LINE_WORDS = frozenset(
+    {"str.", "str", "strain", "substr.", "substr", "serovar", "sv.", "ser.", "serotype", "serogroup", "pv.",
+     "pathovar", "bv.", "biovar", "biotype", "genomovar", "gv.", "morphovar", "chemovar", "phagovar", "ecotype",
+     "cv.", "cultivar", "type", "subtype", "genotype", "isolate", "breed", "race", "pathotype", "phylotype",
+     "ribotype", "morphotype", "variant", "mutant", "assemblage"}
+)
+_NOT_EPITHETS = frozenset(
+    {"sp", "spp", "bacterium", "bacteria", "archaeon", "endosymbiont", "symbiont", "symbiote", "phytoplasma",
+     "group", "complex", "clade", "subgroup", "cluster", "lineage", "genomosp", "genosp", "genomospecies",
+     "genospecies", "x", "hybrid", "vector", "agent", "organism", "eukaryote", "cyanobacterium",
+     "proteobacterium", "of", "and", "like", "cf", "aff", "nr", "gen", "nov", "sect", "subsect", "subgen",
+     "environmental", "uncultured", "unidentified", "unclassified", "metagenome", "mixed", "culture", "sequence",
+     "plasmid", "chromosome", "segment", "satellite", "virus", "phage", "clone", "oral", "cytoform",
+     "genogroup", "form", "incertae", "sedis", "ex", "sensu", "hybrids", "icg", "ectomycorrhiza", "archeaon",
+     "subcluster", "from", "in", "on", "at", "near", "with", "the", "for", "by", "to", "taxon", "related",
+     "species", "subspecies", "unnamed", "fungal", "fungus", "contaminant", "mycorrhizal"}
+    | {word.rstrip(".") for word in _STRAIN_LINE_WORDS}
+)
+# The last part of a word ("S-endosymbiont") that names an organism kind; the
+# Latin words before it name a host.
+_ORGANISM_NOUN = re.compile(r"(?:phytoplasma|biont|symbiote|bacterium|archaeon|archaeote|archaeum|parasite)$")
+# NCBI status and homonym suffixes ("(SeqCode)", "(nom. nud.)", "(in: starfish)").
+_STATUS_SUFFIX = re.compile(r"\((?:SeqCode|nom\. [a-z.]+|nomen [a-z]+|in: [^()]+|ex .*\b\d{4})\)")
+_DESIGNATION_PART = re.compile(r"[-_/:=;,()\[\]]+")
+# A lowercase word after an unranked epithet ("tomato", "sp."): it ends the taxon there.
+_LOWERCASE_WORD = re.compile(r"[a-z]+(?:-[a-z]+)*\.?")
+# A strain that is one lowercase word ("pneumoniae") names an epithet, not a boundary.
+_LOWERCASE_STRAIN = re.compile(r"[a-z]{3,}")
+
+
+def _letters(text: str) -> str:
+    return re.sub(r"[^0-9a-z]+", "", text.lower())
+
+
+def _names_strain(tokens: list[str], strain: str) -> int | None:
+    """Index of the first word where the name spells the strain, else None.
+
+    Letters and digits only: "So ce 56" is named by "So ce56", "Q6390" by
+    "Marseille-Q6390", but "7" is not named by "O157:H7".
+    """
+    target = _letters(strain)
+    if not target:
+        return None
+    for index, token in enumerate(tokens):
+        if target in {_letters(part) for part in _DESIGNATION_PART.split(token) if part}:
+            return index
+        joined = ""
+        for later in tokens[index:]:
+            joined += _letters(later)
+            if joined == target:
+                return index
+            if not target.startswith(joined):
+                break
+    return None
+
+
+def _strain_line(rest: list[str], strain: str, name_tokens: list[str]) -> str:
+    """The words after the taxon, then the strain unless the name holds it (OV-1830)."""
+    words = " ".join(rest)
+    if not _letters(strain) or _names_strain(name_tokens, strain) is not None:
+        return words
+    parts = [part for part in re.split(r"\s*;\s*", strain) if part]
+    missing = [part for part in parts if _names_strain(name_tokens, part) is None]
+    return f"{words} {'; '.join(missing)}".strip()
+
+
+def _is_epithet(token: str) -> bool:
+    # The last part also counts: "funestus-like" is not an epithet.
+    last = token.rsplit("-", 1)[-1]
+    return bool(_EPITHET.fullmatch(token)) and last not in _NOT_EPITHETS and not _ORGANISM_NOUN.search(last)
+
+
+def _parenthetical_end(tokens: list[str], start: int) -> int:
+    if start >= len(tokens) or not tokens[start].startswith("("):
+        return start
+    depth = 0
+    for end in range(start, len(tokens)):
+        depth += tokens[end].count("(") - tokens[end].count(")")
+        if depth <= 0:
+            return end + 1
+    return start
+
+
+def _name_suffix(words: list[str]) -> str | None:
+    """A parenthetical that belongs to the taxon line, as text with ``<i>``.
+
+    NCBI's status suffixes are upright; a host name ("Buchnera aphidicola
+    (Aphis fabae)") is italic. Anything else ("(ATCC 35973)") is strain text.
+    """
+    text = " ".join(words)
+    if _STATUS_SUFFIX.fullmatch(text):
+        return text
+    inner = text[1:-1].split() if text.startswith("(") and text.endswith(")") else []
+    if len(inner) >= 2 and _GENUS.fullmatch(inner[0]):
+        if _is_epithet(inner[1]):
+            return f"(<i>{inner[0]} {inner[1]}</i>{''.join(' ' + word for word in inner[2:])})"
+        if inner[1] in {"sp.", "cf."}:
+            return f"(<i>{inner[0]}</i> {' '.join(inner[1:])})"
+    return None
+
+
+def _taxon_words(tokens: list[str], strain_at: int) -> tuple[list[str], int] | None:
+    """The taxon line's parts and the number of words they take, or None to keep the name whole.
+
+    The taxon is a genus, then "sp." or a species epithet, then Latin
+    infraspecific ranks (subsp., var., f., f. sp.) or one unranked zoological
+    epithet, then NCBI's status or host suffixes.
+    """
+    bracketed = _BRACKETED_GENUS.fullmatch(tokens[0])
+    genus = bracketed.group(1) if bracketed else tokens[0]
+    if not (bracketed or _GENUS.fullmatch(genus)) or _ABOVE_GENUS.fullmatch(genus):
+        return None
+    parts = [f"[<i>{genus}</i>]" if bracketed else f"<i>{genus}</i>"]
+    if len(tokens) == 1:
+        return parts, 1
+    if tokens[1] == "sp.":
+        end = _parenthetical_end(tokens, 2)
+        homonym = end > 2 and tokens[2] == "(in:"
+        return parts + ["sp."] + (tokens[2:end] if homonym else []), end if homonym else 2
+    if strain_at <= 1 or not _is_epithet(tokens[1]):
+        return None
+    parts.append(f"<i>{tokens[1]}</i>")
+    index = 2
+    while index < strain_at and tokens[index] in _LATIN_RANK_WORDS:
+        rank = "f. sp." if tokens[index] == "f." and index + 1 < len(tokens) and tokens[index + 1] == "sp." else tokens[index]
+        epithet_at = index + len(rank.split())
+        if epithet_at >= strain_at or not _is_epithet(tokens[epithet_at]):
+            return None
+        parts.append(f"{rank} <i>{tokens[epithet_at]}</i>")
+        index = epithet_at + 1
+    if (
+        index == 2
+        and index < strain_at
+        and _is_epithet(tokens[index])
+        and (index + 1 in (len(tokens), strain_at) or not _LOWERCASE_WORD.fullmatch(tokens[index + 1]))
+    ):
+        parts.append(f"<i>{tokens[index]}</i>")
+        index += 1
+    while (end := _parenthetical_end(tokens, index)) > index and (suffix := _name_suffix(tokens[index:end])):
+        parts.append(suffix)
+        index = end
+    rest = tokens[index:]
+    if rest and index < strain_at and rest[0][:1].islower() and rest[0] not in _STRAIN_LINE_WORDS:
+        return None
+    if any(_ORGANISM_NOUN.search(word.lower().strip("()'\",;").split("-")[-1]) for word in rest):
+        return None
+    return parts, index
+
+
+def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
+    """Split the source /organism and strain into a taxon line and a strain line.
+
+    The taxon is italic after the codes: genus and epithets italic, rank
+    words upright, an italic "Ca." before an upright Candidatus name
+    (OV-1720), a virus name upright and an ICTV binomial species italic. A
+    name that the rule cannot read as a taxon stays whole and upright on the
+    taxon line. The strain line never repeats what the name already holds.
+    """
+    organism = " ".join(str(metadata.organism or "").split())
+    strain = " ".join(str(metadata.strain or "").split())
+    prefix = _CANDIDATUS_PREFIX.match(organism)
+    name = organism[prefix.end():] if prefix else organism
+    tokens = name.split()
+    whole = organism.split()
+    # Bakta writes "." when it was given no organism.
+    if not re.search(r"[A-Za-z]", name) or name.lower() in _NON_ORGANISM_NAMES:
+        return OrganismLines("", strain)
+    keep_whole = OrganismLines(organism, _strain_line([], strain, whole))
+    # The lines are markup ("<i>"); a name with markup characters keeps today's plain text.
+    if re.search(r"[&<>]", organism + strain):
+        return keep_whole
+    if _is_virus(tokens, metadata.lineage_top):
+        # An ICTV binomial ("Lambdavirus lambda") is italic; a virus name with a
+        # number or letter ("Enterovirus J", "Cypovirus 1") is no species name.
+        if prefix is None and len(tokens) == 2 and _ICTV_GENUS.fullmatch(tokens[0]) and _EPITHET.fullmatch(tokens[1]):
+            return OrganismLines(f"<i>{organism}</i>", keep_whole.strain)
+        return keep_whole
+    taxon = _taxon_of(name, tokens, strain)
+    if taxon is None:
+        return keep_whole
+    parts, used = taxon
+    line = " ".join(parts).replace("</i> <i>", " ")
+    if prefix:
+        line = "<i>Ca.</i> " + re.sub(r"</?i>", "", line)
+    return OrganismLines(line, _strain_line(tokens[used:], strain, whole))
+
+
+def _is_virus(tokens: list[str], lineage: str | None) -> bool:
+    return lineage == _VIRUS_LINEAGE or (
+        lineage not in _CELLULAR_LINEAGES
+        and any(_VIRUS_WORD.search(token) or _VIRUS_ACRONYM.fullmatch(token) for token in tokens)
+    )
+
+
+def _taxon_of(name: str, tokens: list[str], strain: str) -> tuple[list[str], int] | None:
+    """The taxon of a name that is no virus (``_taxon_words``), or None to keep it whole."""
+    if (
+        _NON_ORGANISM_START.match(name)
+        or _HYBRID.search(name)
+        or any(token.lower().strip("()'\",;") in _SEQUENCE_WORDS for token in tokens)
+    ):
+        return None
+    strain_at = _names_strain(tokens, strain)
+    # A strain that spells the genus, an epithet ("pneumoniae") or the whole
+    # name marks no boundary; the strain line still leaves it out.
+    if strain_at is None or strain_at < 2 or _LOWERCASE_STRAIN.fullmatch(strain):
+        strain_at = len(tokens)
+    return _taxon_words(tokens, strain_at)
+
+
+def _markup(parts: list[tuple[str, bool]]) -> str:
+    return "".join(f"<i>{escape(text)}</i>" if italic else escape(text) for text, italic in parts if text)
+
+
+def organism_name_lines(metadata: RecordSourceMetadata, typed_taxon: str = "", typed_strain: str = "") -> OrganismLines:
+    """The two name lines a Circular definition draws, as text with ``<i>``.
+
+    Without typed text they are the Auto lines (``split_organism_lines``). A
+    typed Strain keeps both lines as typed, with the Auto taxon line when no
+    line 1 is typed. A typed line 1 without a typed Strain is read with the
+    Auto rule, the record's strain and lineage: when it reads a taxon and
+    words remain, the typed text is cut there into two lines, its words and
+    italics kept as typed. Otherwise the typed text is line 1 and the Auto
+    strain line is line 2, unless the typed text already names the record's
+    strain.
+    """
+    auto = split_organism_lines(metadata)
+    if typed_strain:
+        return OrganismLines(typed_taxon or auto.taxon, typed_strain)
+    if not typed_taxon:
+        return auto
+    spans = [(str(part["text"] or ""), bool(part["italic"])) for part in parse_mixed_content_text(typed_taxon)]
+    plain = "".join(text for text, _italic in spans)
+    strain = " ".join(str(metadata.strain or "").split())
+    words = plain.split()
+    prefix = _CANDIDATUS_PREFIX.match(" ".join(words))
+    prefix_words = len(prefix.group(0).split()) if prefix else 0
+    name_tokens = words[prefix_words:]
+    name = " ".join(name_tokens)
+    readable = (
+        re.search(r"[A-Za-z]", name)
+        and name.lower() not in _NON_ORGANISM_NAMES
+        and not _is_virus(name_tokens, metadata.lineage_top)
+        and not _is_virus(str(metadata.organism or "").split(), metadata.lineage_top)
+    )
+    taxon = _taxon_of(name, name_tokens, strain) if readable else None
+    if taxon is not None and prefix_words + taxon[1] < len(words):
+        # Cut the spans between the last taxon word and the next word.
+        cut = prefix_words + taxon[1]
+        bounds = [match.span() for match in re.finditer(r"\S+", plain)]
+        line_end, rest_start = bounds[cut - 1][1], bounds[cut][0]
+        line: list[tuple[str, bool]] = []
+        rest: list[tuple[str, bool]] = []
+        offset = 0
+        for text, italic in spans:
+            span_start, offset = offset, offset + len(text)
+            line.append((text[: max(0, line_end - span_start)], italic))
+            rest.append((text[max(0, rest_start - span_start):], italic))
+        return OrganismLines(_markup(line), _markup(rest))
+    named = _names_strain(words, strain) is not None
+    return OrganismLines(typed_taxon, "" if named else auto.strain)
+
+
+def organism_name_rule_data() -> dict[str, object]:
+    """The word lists and patterns of ``split_organism_lines``, as data for the Web.
+
+    tools/generate_web_contracts.py writes them into the browser, where
+    ``formatInferredOrganismStrain`` (services/record-discovery.js) runs the
+    same steps without the Worker; tools/twins.json registers that twin. A
+    pattern is its source and its flags ("i" for IGNORECASE).
+    """
+
+    def pattern(compiled: re.Pattern[str]) -> dict[str, str]:
+        return {"source": compiled.pattern, "flags": "i" if compiled.flags & re.IGNORECASE else ""}
+
+    return {
+        "nonOrganismNames": sorted(_NON_ORGANISM_NAMES),
+        "candidatusPrefix": pattern(_CANDIDATUS_PREFIX),
+        "nonOrganismStart": pattern(_NON_ORGANISM_START),
+        "sequenceWords": sorted(_SEQUENCE_WORDS),
+        "virusWord": pattern(_VIRUS_WORD),
+        "virusAcronym": pattern(_VIRUS_ACRONYM),
+        "ictvGenus": pattern(_ICTV_GENUS),
+        "cellularLineages": sorted(_CELLULAR_LINEAGES),
+        "virusLineage": _VIRUS_LINEAGE,
+        "hybrid": pattern(_HYBRID),
+        "genus": pattern(_GENUS),
+        "bracketedGenus": pattern(_BRACKETED_GENUS),
+        "aboveGenus": pattern(_ABOVE_GENUS),
+        "epithet": pattern(_EPITHET),
+        "latinRankWords": sorted(_LATIN_RANK_WORDS),
+        "strainLineWords": sorted(_STRAIN_LINE_WORDS),
+        "notEpithets": sorted(_NOT_EPITHETS),
+        "organismNoun": pattern(_ORGANISM_NOUN),
+        "statusSuffix": pattern(_STATUS_SUFFIX),
+        "designationPart": pattern(_DESIGNATION_PART),
+        "lowercaseWord": pattern(_LOWERCASE_WORD),
+        "lowercaseStrain": pattern(_LOWERCASE_STRAIN),
+    }
 
 
 def format_inferred_definition(metadata: RecordSourceMetadata) -> str:
-    """Format organism and strain into publication-style HTML.
-
-    ``<i>Genus species</i> strain``; a Candidatus taxon is
-    ``<i>Ca.</i> Genus species strain``.
-    """
-    organism = str(metadata.organism or "").strip()
-    strain = str(metadata.strain or "").strip()
-
-    # "Candidatus" or an already abbreviated "Ca.", then any whitespace.
-    prefix = _CANDIDATUS_PREFIX.match(organism)
-    candidatus = prefix is not None
-    clean_org = organism[prefix.end():].strip() if prefix else organism
-
-    if not clean_org or clean_org.lower() in _NON_ORGANISM_NAMES:
-        return strain
-
-    words = clean_org.split()
-    # A Candidatus name is set upright after an italic "Ca." (OV-1720); any
-    # other genus or binomial is italic.
-    italic = (lambda name: name) if candidatus else (lambda name: f"<i>{name}</i>")
-    cand_prefix = "<i>Ca.</i> " if candidatus else ""
-    if len(words) >= 2:
-        binom = italic(" ".join(words[:2]))
-        rest = " ".join(words[2:])
-        if strain and strain.lower() not in rest.lower():
-            rest = f"{rest} {strain}".strip()
-        return f"{cand_prefix}{binom} {rest}".strip()
-    if words:
-        base = f"{cand_prefix}{italic(words[0])}"
-        return f"{base} {strain}".strip() if strain else base
-    return strain
+    """The record's name on one line: the taxon line, then the strain line."""
+    lines = split_organism_lines(metadata)
+    return " ".join(line for line in lines if line)
 
 
 def format_replicon_label(metadata: RecordSourceMetadata) -> str:
@@ -424,8 +737,11 @@ def format_replicon_label(metadata: RecordSourceMetadata) -> str:
 
 
 __all__ = [
+    "OrganismLines",
     "RecordSourceMetadata",
     "format_inferred_definition",
     "format_replicon_label",
     "infer_record_source_metadata",
+    "organism_name_lines",
+    "split_organism_lines",
 ]

@@ -420,7 +420,7 @@
         "gbdraw/web/js/app/python-helpers.js:list_sequence_records"
       ],
       "vector": "tests/fixtures/record_metadata_inference_cases.json",
-      "reason": "The Web lists records without the Worker; R4 requires the fast path to match the loader or decline. app/python-helpers.js holds a third copy as embedded Python.",
+      "reason": "The Web lists records without the Worker; R4 requires the fast path to match the loader or decline. The fast path runs the steps of the Auto organism name rule (split_organism_lines) on word lists and patterns that tools/generate_web_contracts.py writes from Python (ORGANISM_NAME_RULE) and declines text outside ASCII. app/python-helpers.js holds a third copy as embedded Python.",
       "retireWhen": "never: R4 keeps the fast path with this vector",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
