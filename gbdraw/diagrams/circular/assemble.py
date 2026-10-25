@@ -51,7 +51,6 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
-from ...core.text import drawn_text_box
 from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
@@ -147,7 +146,7 @@ from ...render.group_content import CANVAS_SCOPE, GroupContent, GroupKey, GroupK
 from ...layout.linear_multi_record import record_key_at
 from ...render.composition import apply_composition_plan
 from ...svg.ids import track_slot_svg_id
-from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
+from .positioning import center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout
 from ...tracks.parsing import slot_dinucleotide, slot_legend_label
 
@@ -899,8 +898,9 @@ def _record_track_ink(
 def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Sequence[Aabb]) -> int:
     """How many lines of the centre definition text meet what a track paints (D-18).
 
-    ``definition_text`` holds the painted line boxes centred on the record
-    (``_centre_definition_text``); a line counts when its box reaches more than
+    ``definition_text`` holds the lines' ink boxes centred on the record
+    (``_centre_definition_ink``, the boxes the centre reserve holds); a line
+    counts when its box reaches more than
     the threshold that region labels use (LP-D86) into a track's paint
     (``_record_track_ink``). The figure is drawn as before and warns.
     """
@@ -1410,18 +1410,6 @@ def _slot_width_ratio_factor(
 
 
 
-def _text_element_plain_text(element: Any) -> str:
-    parts: list[str] = []
-    text = getattr(element, "text", None)
-    if text:
-        parts.append(str(text))
-    for child in getattr(element, "elements", ()):
-        child_text = getattr(child, "text", None)
-        if child_text:
-            parts.append(str(child_text))
-    return "".join(parts)
-
-
 def _definition_reserved_radius_px(
     gb_record: SeqRecord,
     geometry: CircularCanvasGeometry,
@@ -1433,7 +1421,7 @@ def _definition_reserved_radius_px(
     definition_profile: CircularDefinitionProfile,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
-    definition_group = DefinitionGroup(
+    definition = DefinitionGroup(
         gb_record,
         geometry,
         style=CircularDefinitionStyle.of(cfg, definition_profile),
@@ -1441,41 +1429,21 @@ def _definition_reserved_radius_px(
         strain=strain,
         plot_title=plot_title,
         record_presentation=record_presentation,
-    ).get_group()
+    )
 
     # Track-slot reservation is a record-local compatibility contract. Keep it on
-    # the drawn box of each line (its text in the line's weight), independent from the
-    # exact painted bounds used by outer composition, so composition metadata cannot
-    # reflow tracks.
-    max_extent = 0.0
-    for element in getattr(definition_group, "elements", ()):
-        attribs = getattr(element, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
-        x_value = _svg_number(attribs.get("x"), default=0.0)
-        y_value = _svg_number(attribs.get("y"), default=0.0)
-        font_size = _svg_number(
-            attribs.get("font-size"),
-            default=cfg.objects.definition.circular.font_size,
-        )
-        text = _text_element_plain_text(element)
-        if not text.strip():
-            continue
-        width_px, height_px = drawn_text_box(
-            text,
-            str(attribs.get("font-family", cfg.objects.text.font_family)),
-            font_size,
-            str(attribs.get("font-weight", "normal")),
-        )
-        half_width = 0.5 * float(width_px)
-        half_height = 0.5 * float(height_px if height_px else font_size)
-        max_extent = max(
-            max_extent,
-            abs(x_value - half_width),
-            abs(x_value + half_width),
-            abs(y_value - half_height),
-            abs(y_value + half_height),
-        )
+    # the letters each line paints where it is drawn (its ink box in the faces it is
+    # drawn in, centred as drawn), independent from the exact painted bounds used by
+    # outer composition, so composition metadata cannot reflow tracks. The reserve
+    # reaches the ink box's farthest corner from the centre (OV-1822), which no
+    # painted point passes; the track check reads the same boxes.
+    max_extent = max(
+        (
+            math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y)))
+            for box in _centre_definition_ink(definition)
+        ),
+        default=0.0,
+    )
 
     if max_extent <= FEATURE_BAND_EPSILON:
         return 0.0
@@ -1487,13 +1455,12 @@ def _definition_clearance_px(layout: CircularRadialLayout) -> float:
     """How far the centre definition's band may reach before it enters a drawn track's band (``_track_bands``).
 
     This is the narrow row's reading of "the definition over a track": the
-    definition's band (``_definition_reserved_radius_px``: the largest
-    ``max(|x +/- w/2|, |y +/- h/2|)`` of its lines, plus padding) against each
-    track's band (its drawing, its tick or axis labels, and its labels' room).
-    The notice reads another one: the painted line boxes against what the
-    tracks paint (``_definition_lines_on_tracks`` over ``_record_track_ink``).
-    The band is not the boxes' corner distance, so a figure narrowed to it may
-    still have letters on a track and warn (MERS-CoV at 231.99 px).
+    definition's band (``_definition_reserved_radius_px``: the farthest corner
+    of its lines' ink boxes, plus padding) against each track's band (its
+    drawing, its tick or axis labels, and its labels' room). The notice reads
+    the same ink boxes (``_centre_definition_ink``) against what the tracks
+    paint (``_definition_lines_on_tracks`` over ``_record_track_ink``), so a
+    band that clears the tracks' bands leaves no letters on a track (OV-1854).
     """
 
     return min((float(band.inner_px) for _slot, band in _track_bands(layout)), default=float("inf"))
@@ -2281,17 +2248,29 @@ def _record_label_layout(
     )
 
 
-def _centre_definition_text(definition: DefinitionGroup) -> tuple[Aabb, ...]:
-    """The painted lines of a centred definition in the coordinates of the record's labels.
+def _centred_on_record(definition: DefinitionGroup, boxes: Sequence[Aabb]) -> tuple[Aabb, ...]:
+    """Boxes of a centred definition's lines in the coordinates of the record's labels.
 
-    ``place_definition_group_on_canvas`` centres the lines' union on the
+    ``place_definition_group_on_canvas`` centres the line boxes' union on the
     record's centre, the origin of the label coordinates.
     """
 
     bounds = definition.local_bounds
     dx = -0.5 * (bounds.min_x + bounds.max_x)
     dy = -0.5 * (bounds.min_y + bounds.max_y)
-    return tuple(box.translated(dx, dy) for box in definition.line_bounds)
+    return tuple(box.translated(dx, dy) for box in boxes)
+
+
+def _centre_definition_text(definition: DefinitionGroup) -> tuple[Aabb, ...]:
+    """The line boxes of a centred definition, which the labels keep clear of."""
+
+    return _centred_on_record(definition, definition.line_bounds)
+
+
+def _centre_definition_ink(definition: DefinitionGroup) -> tuple[Aabb, ...]:
+    """The ink boxes of a centred definition's lines: what the centre reserve holds and the track check reads."""
+
+    return _centred_on_record(definition, definition.line_inks)
 
 
 def _radial_layout_feature_dict(feature_layers: FeatureBuildResult) -> dict[str, FeatureObject]:
@@ -2850,21 +2829,19 @@ def add_record_on_circular_canvas(
             record_presentation=record_presentation,
         )
 
-    def centre_definition_text(text_cfg: GbdrawConfig) -> tuple[Aabb, ...]:
+    def centre_definition(text_cfg: GbdrawConfig) -> DefinitionGroup | None:
         if str(definition_position) != "center" or str(definition_profile) == "shared_common":
-            return ()
-        return _centre_definition_text(
-            DefinitionGroup(
-                gb_record,
-                canvas_config.geometry(),
-                style=CircularDefinitionStyle.of(text_cfg, definition_profile),
-                species=species,
-                strain=strain,
-                plot_title=plot_title,
-                record_index=int(annotation_record_index),
-                record_count=int(definition_record_count),
-                record_presentation=record_presentation,
-            )
+            return None
+        return DefinitionGroup(
+            gb_record,
+            canvas_config.geometry(),
+            style=CircularDefinitionStyle.of(text_cfg, definition_profile),
+            species=species,
+            strain=strain,
+            plot_title=plot_title,
+            record_index=int(annotation_record_index),
+            record_count=int(definition_record_count),
+            record_presentation=record_presentation,
         )
 
     def definition_lines_on_tracks(
@@ -2906,7 +2883,10 @@ def add_record_on_circular_canvas(
             probe = place_around_definition(probe_cfg)
         except ValidationError:
             return False
-        return definition_lines_on_tracks(probe.layout, centre_definition_text(probe_cfg), {}) == 0
+        probe_definition = centre_definition(probe_cfg)
+        if probe_definition is None:
+            return True
+        return definition_lines_on_tracks(probe.layout, _centre_definition_ink(probe_definition), {}) == 0
 
     centre_fit = place_around_definition(cfg)
     radial_layout = centre_fit.layout
@@ -2922,7 +2902,9 @@ def add_record_on_circular_canvas(
     precalculated_labels: list[CircularLabel] | None = None
     # LP-D49 DEF-WARN and the LP-D57 repair: labels over the centre definition text (not a plot title); D-12: the
     # text over a track.
-    definition_text = centre_definition_text(cfg)
+    centre = centre_definition(cfg)
+    definition_text = _centre_definition_text(centre) if centre is not None else ()
+    definition_ink = _centre_definition_ink(centre) if centre is not None else ()
     radial_refused = False
     label_state: _CircularLabelState | None = None
     # Text measurements per label font size, shared by the drawn placement and fit probes.
@@ -3208,7 +3190,7 @@ def add_record_on_circular_canvas(
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),
         region_track_overlaps=_region_labels_on_other_tracks(radial_layout, annotation_labels),
         definition_track_overlaps=(
-            definition_lines_on_tracks(radial_layout, definition_text, annotation_labels) if definition_text else 0
+            definition_lines_on_tracks(radial_layout, definition_ink, annotation_labels) if definition_ink else 0
         ),
         definition_probe=definition_clears_tracks,
         definition_narrow_radius_px=centre_fit.narrow_radius_px,

@@ -8,7 +8,7 @@ import re
 import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Dict, List, Mapping, Optional, TypedDict, Union
 
 from fontTools.pens.boundsPen import BoundsPen
@@ -589,25 +589,70 @@ def text_ink_offsets(
     *,
     dominant_baseline: str,
     text_anchor: str,
+    font_weight: FontWeight = "normal",
+    font_style: str | None = "normal",
 ) -> Optional[tuple[float, float, float, float]]:
     """The box ``text`` paints at ``font_size``, in px from the point it is drawn at.
 
     Returns (left, right, top, bottom), y down, for ``dominant_baseline`` and
-    ``text_anchor``; None when the font cannot be measured.
+    ``text_anchor``, in the face of ``font_weight`` and ``font_style``; None
+    when the font cannot be measured.
     """
 
-    ink = text_ink(text, font_family)
-    metrics = get_font_vertical_metrics(font_family)
+    return text_runs_ink_offsets(
+        ((text, font_style),),
+        font_family,
+        font_size,
+        dominant_baseline=dominant_baseline,
+        text_anchor=text_anchor,
+        font_weight=font_weight,
+    )
+
+
+def text_runs_ink_offsets(
+    runs: Sequence[tuple[str, str | None]],
+    font_family: str,
+    font_size: float,
+    *,
+    dominant_baseline: str,
+    text_anchor: str,
+    font_weight: FontWeight = "normal",
+) -> Optional[tuple[float, float, float, float]]:
+    """``text_ink_offsets`` of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``.
+
+    Each run is measured in its own face and starts at the end of the previous
+    run's advance; ``text_anchor`` aligns the runs' total advance. A run that
+    paints nothing only advances.
+    """
+
+    metrics = get_font_vertical_metrics(font_family, font_weight)
     shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
-    if ink is None or shift is None:
+    if shift is None:
         return None
     size = float(font_size)
-    origin = -TEXT_ANCHOR_SHARE[text_anchor] * ink.advance * size
+    advance = 0.0
+    left = right = top = bottom = math.nan
+    for text, font_style in runs:
+        ink = text_ink(text, font_family, font_weight, font_style)
+        if ink is None:
+            if resolve_font_face(font_family, font_weight, font_style) is None:
+                return None
+            advance += float(calculate_svg_bbox_dimensions(text, font_family, size, font_weight, font_style)[0]) / size
+            continue
+        run_left, run_right = advance + ink.left, advance + ink.right
+        left = run_left if math.isnan(left) else min(left, run_left)
+        right = run_right if math.isnan(right) else max(right, run_right)
+        top = ink.top if math.isnan(top) else max(top, ink.top)
+        bottom = ink.bottom if math.isnan(bottom) else min(bottom, ink.bottom)
+        advance += ink.advance
+    if math.isnan(left):
+        return None
+    origin = -TEXT_ANCHOR_SHARE[text_anchor] * advance * size
     return (
-        origin + ink.left * size,
-        origin + ink.right * size,
-        (shift - ink.top) * size,
-        (shift - ink.bottom) * size,
+        origin + left * size,
+        origin + right * size,
+        (shift - top) * size,
+        (shift - bottom) * size,
     )
 
 
@@ -794,6 +839,8 @@ __all__ = [
     "measurement_font_file",
     "parse_mixed_content_text",
     "text_ink",
+    "text_ink_offsets",
+    "text_runs_ink_offsets",
 ]
 
 

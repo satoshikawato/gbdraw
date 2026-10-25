@@ -11,13 +11,16 @@ radius, the room kept inside, and the tracks to turn off or narrow.
 
 from __future__ import annotations
 
+import math
 import warnings
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
 from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
+from fontTools.pens.recordingPen import RecordingPen
 
 from gbdraw.api import (
     CircularDiagramOptions,
@@ -26,7 +29,20 @@ from gbdraw.api import (
     CircularRequestTrackOptions,
 )
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
+from gbdraw.canvas import CircularCanvasConfigurator
+from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
+from gbdraw.config.toml import load_config_toml
+from gbdraw.core.fonts import load_font, resolve_font_face
+from gbdraw.core.text import (
+    TEXT_ANCHOR_SHARE,
+    _get_kerning_value,
+    collapse_svg_white_space,
+    dominant_baseline_shift_em,
+    get_font_vertical_metrics,
+)
+from gbdraw.diagrams.circular.assemble import _definition_reserved_radius_px
 from gbdraw.exceptions import ValidationError
+from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -423,3 +439,90 @@ def test_a_plot_title_with_no_name_to_draw_draws_no_title(multi_record: bool) ->
     root = ET.fromstring(drawing.tostring())
     assert root.find(".//svg:g[@data-gbdraw-composition-role='title']", SVG_NS) is None
 
+
+
+# One drawn text line: (x, y, font attributes, (text, font_style) runs).
+_OutlineLine = tuple[float, float, dict[str, str], tuple[tuple[str, str], ...]]
+
+
+def _outline_reach(lines: Iterable[_OutlineLine], dx: float, dy: float) -> float:
+    """The farthest glyph outline point (any point of the glyph programs) of drawn text lines from the centre, the
+    lines moved by (dx, dy). Measured from the font's outlines, independently of the ink boxes the reserve reads."""
+
+    reach = 0.0
+    for x, y, attrs, runs in lines:
+        family, size = attrs["font-family"], float(attrs["font-size"])
+        weight = attrs.get("font-weight", "normal")
+        metrics = get_font_vertical_metrics(family, weight)
+        assert metrics is not None
+        shift = dominant_baseline_shift_em(attrs.get("dominant-baseline", "auto"), metrics)
+        assert shift is not None
+        points: list[tuple[float, float]] = []
+        origin = 0.0
+        for text, style in runs:
+            face = resolve_font_face(family, weight, style)
+            assert face is not None
+            font = load_font(face)
+            assert font is not None
+            upm = float(font["head"].unitsPerEm)
+            cmap = font.getBestCmap()
+            glyphs = font.getGlyphSet()
+            previous = None
+            for char in collapse_svg_white_space(text):
+                name = cmap.get(ord(char))
+                if previous is not None:
+                    origin += _get_kerning_value(font, previous, name) / upm
+                if name is not None:
+                    pen = RecordingPen()
+                    glyphs[name].draw(pen)
+                    points.extend((origin + px / upm, py / upm) for _op, args in pen.value for px, py in args)
+                    origin += font["hmtx"][name][0] / upm
+                previous = name
+        start = x + dx - TEXT_ANCHOR_SHARE[attrs.get("text-anchor", "start")] * origin * size
+        reach = max(
+            [reach, *(math.hypot(start + px * size, y + dy + (shift - py) * size) for px, py in points)]
+        )
+    return reach
+
+
+def _group_lines(definition: DefinitionGroup) -> list[_OutlineLine]:
+    lines: list[_OutlineLine] = []
+    for element in definition.get_group().elements:
+        attrs = {key: str(value) for key, value in element.attribs.items()}
+        style = attrs.get("font-style", "normal")
+        runs = [(str(element.text), style)] if element.text else []
+        runs += [(str(child.text), str(child.attribs.get("font-style", style))) for child in element.elements]
+        lines.append((float(attrs["x"]), float(attrs["y"]), attrs, tuple(runs)))
+    return lines
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("organism", "species"),
+    [
+        ("Homo sapiens", None),
+        (HEPATOPLASMA, None),
+        (ESCHERICHIA, None),
+        ("Escherichia coli", "<i>Escherichia coli</i> str. K-12 substr. MG1655"),
+        (MJENMV, None),
+    ],
+)
+def test_the_definition_band_holds_the_farthest_ink_of_every_line(organism: str, species: str | None) -> None:
+    """V-OD16, OV-1854: the definition band is each line's farthest painted ink corner, centred as drawn, plus its
+    padding: never less than any glyph outline point (bold names, italic runs), and close to it."""
+
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    record = _record_with_organism(organism)
+    geometry = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record).geometry()
+    band = _definition_reserved_radius_px(
+        record, geometry, species, None, cfg=cfg, plot_title=None, definition_profile="full"
+    )
+    definition = DefinitionGroup(record, geometry, style=CircularDefinitionStyle.of(cfg, "full"), species=species)
+    bounds = definition.local_bounds
+    # place_definition_group_on_canvas centres the line boxes' union on the record's centre.
+    reach = _outline_reach(
+        _group_lines(definition), -0.5 * (bounds.min_x + bounds.max_x), -0.5 * (bounds.min_y + bounds.max_y)
+    )
+    held = band - max(8.0, 0.02 * float(geometry.radius))
+    # The box corner lies past the outline by at most about 3 px (a slanted italic run leaves its corner empty).
+    assert reach - 1e-6 <= held <= reach + 3.0, (reach, held)

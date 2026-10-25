@@ -17,6 +17,7 @@ from ....core.record_metadata import RecordSourceMetadata, infer_record_source_m
 from ....core.text import (
     measure_mixed_text_line,
     parse_mixed_content_text,
+    text_runs_ink_offsets,
 )
 from ....layout.spatial import Aabb, union_aabbs
 from ....render_stages import render_stage
@@ -31,6 +32,19 @@ if TYPE_CHECKING:
 CircularDefinitionProfile = Literal["full", "record_summary", "shared_common"]
 _SUPPORTED_DEFINITION_PROFILES = {"full", "record_summary", "shared_common"}
 _TextPart = Dict[str, str | bool | None]
+
+
+class _DrawnLine(NamedTuple):
+    """One drawn definition text line: its anchor point, font, and ``(text, font_style)`` runs."""
+
+    x: float
+    y: float
+    font_family: str
+    font_size: float
+    font_weight: str
+    text_anchor: str
+    dominant_baseline: str
+    runs: tuple[tuple[str, str], ...]
 
 
 def _normalize_definition_profile(profile: str) -> CircularDefinitionProfile:
@@ -206,6 +220,8 @@ class DefinitionGroup:
         # Painted text bounds in group-local coordinates: one box per text line, and their union.
         self.line_bounds = self._measure_line_bounds()
         self.local_bounds = union_aabbs(self.line_bounds) or Aabb(0.0, 0.0, 0.0, 0.0)
+        # What each line's letters paint, in the same coordinates: the centre reserve and the track check read it.
+        self.line_inks = self._measure_line_inks()
 
     def calculate_coordinates(self) -> None:
         self.end_x_1: float = (self.radius) * math.cos(math.radians(360.0 * 0 - 90))
@@ -297,58 +313,70 @@ class DefinitionGroup:
             name_font_weight=active_name_font_weight,
         )
 
-    def _measure_line_bounds(self) -> tuple[Aabb, ...]:
-        """Return authoritative painted bounds of each text line in group-local coordinates."""
-        line_bounds: list[Aabb] = []
+    def _drawn_lines(self) -> list[_DrawnLine]:
+        """Each text line as drawn: its anchor, font and styled runs (``tspan``), in drawing order."""
+        lines: list[_DrawnLine] = []
         for element in getattr(self.definition_group, "elements", ()):
             attribs = getattr(element, "attribs", None)
             if not isinstance(attribs, dict):
                 continue
 
-            parts: list[tuple[str, str]] = []
+            line_style = str(attribs.get("font-style", "normal"))
+            runs: list[tuple[str, str]] = []
             element_text = str(getattr(element, "text", "") or "")
             if element_text:
-                parts.append((element_text, str(attribs.get("font-style", "normal"))))
+                runs.append((element_text, line_style))
             for child in getattr(element, "elements", ()):
                 child_text = str(getattr(child, "text", "") or "")
                 if not child_text:
                     continue
                 child_attribs = getattr(child, "attribs", None)
-                child_style = (
-                    str(child_attribs.get("font-style", attribs.get("font-style", "normal")))
-                    if isinstance(child_attribs, dict)
-                    else str(attribs.get("font-style", "normal"))
+                runs.append(
+                    (
+                        child_text,
+                        str(child_attribs.get("font-style", line_style))
+                        if isinstance(child_attribs, dict)
+                        else line_style,
+                    )
                 )
-                parts.append((child_text, child_style))
-            if not parts:
+            if not runs:
                 continue
-
-            x = float(attribs.get("x", 0.0))
-            y = float(attribs.get("y", 0.0))
-            font_family = str(attribs.get("font-family", self.font))
-            font_size = float(attribs.get("font-size", self.font_size))
-            font_weight = str(attribs.get("font-weight", "normal"))
-            width, height = measure_mixed_text_line(
-                parts,
-                font_family,
-                font_size,
-                font_weight=font_weight,
+            lines.append(
+                _DrawnLine(
+                    x=float(attribs.get("x", 0.0)),
+                    y=float(attribs.get("y", 0.0)),
+                    font_family=str(attribs.get("font-family", self.font)),
+                    font_size=float(attribs.get("font-size", self.font_size)),
+                    font_weight=str(attribs.get("font-weight", "normal")),
+                    text_anchor=str(attribs.get("text-anchor", "start")).strip().lower(),
+                    dominant_baseline=str(attribs.get("dominant-baseline", "auto")).strip().lower(),
+                    runs=tuple(runs),
+                )
             )
-            text_anchor = str(attribs.get("text-anchor", "start")).strip().lower()
-            if text_anchor == "middle":
+        return lines
+
+    def _measure_line_bounds(self) -> tuple[Aabb, ...]:
+        """Return authoritative painted bounds of each text line in group-local coordinates."""
+        line_bounds: list[Aabb] = []
+        for line in self._drawn_lines():
+            x, y = line.x, line.y
+            width, height = measure_mixed_text_line(
+                line.runs,
+                line.font_family,
+                line.font_size,
+                font_weight=line.font_weight,
+            )
+            if line.text_anchor == "middle":
                 left = x - (0.5 * width)
                 right = x + (0.5 * width)
-            elif text_anchor == "end":
+            elif line.text_anchor == "end":
                 left = x - width
                 right = x
             else:
                 left = x
                 right = x + width
 
-            dominant_baseline = str(
-                attribs.get("dominant-baseline", "auto")
-            ).strip().lower()
-            if dominant_baseline == "middle":
+            if line.dominant_baseline == "middle":
                 top = y - (0.5 * height)
                 bottom = y + (0.5 * height)
             else:
@@ -357,6 +385,26 @@ class DefinitionGroup:
 
             line_bounds.append(Aabb(left, top, right, bottom))
         return tuple(line_bounds)
+
+    def _measure_line_inks(self) -> tuple[Aabb, ...]:
+        """The box each text line's letters paint in group-local coordinates (``text_runs_ink_offsets``, each run
+        in the face it is drawn in), or its line box when the font cannot be measured."""
+        inks: list[Aabb] = []
+        for line, line_box in zip(self._drawn_lines(), self.line_bounds):
+            offsets = text_runs_ink_offsets(
+                line.runs,
+                line.font_family,
+                line.font_size,
+                dominant_baseline=line.dominant_baseline,
+                text_anchor=line.text_anchor,
+                font_weight=line.font_weight,
+            )
+            if offsets is None:
+                inks.append(line_box)
+                continue
+            left, right, top, bottom = offsets
+            inks.append(Aabb(line.x + left, line.y + top, line.x + right, line.y + bottom))
+        return tuple(inks)
 
     def get_group(self) -> Group:
         return self.definition_group
