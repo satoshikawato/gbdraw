@@ -538,7 +538,7 @@
     },
     {
       "id": "function:migrateLegacySvgAttributes",
-      "concern": "Rename legacy SVG attributes in stored files (data-gbdraw-pairwise-match-id written by Sessions 29-31)",
+      "concern": "Rename legacy SVG attributes in stored files (data-gbdraw-pairwise-match-id written by Sessions 27-32)",
       "pythonOwner": [
         "gbdraw/render/interactive_svg.py:migrate_legacy_svg_attributes"
       ],
@@ -548,8 +548,7 @@
       "vector": null,
       "reason": "Both sides read the generated table LEGACY_SVG_ATTRIBUTE_RENAMES; the rule (a non-empty current attribute wins, the legacy one is dropped) is written on both. Python renames the outside SVG files that enrich_svg takes, and the Web renames stored Results at legacy admission without calling Python.",
       "retireWhen": "the Web admits legacy Results through Python, or support for Results without a feature catalog (Sessions below 40) ends",
-      "source": "R9 in gbdraw/web/CLAUDE.md; added before its twin in #1380 (review of #1380, B1)",
-      "pending": true
+      "source": "R9 in gbdraw/web/CLAUDE.md; added before its twin in #1380 (review of #1380, B1)"
     },
     {
       "id": "function:migratePersistedWebStateFieldNames",
