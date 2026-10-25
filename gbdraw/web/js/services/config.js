@@ -4776,7 +4776,6 @@ const captureSessionImportTransientState = () => ({
   clickedLabel: state.clickedLabel.value,
   settingsPopup: state.settingsPopup.value && { ...state.settingsPopup.value },
   featureExtractionPending: Boolean(state.featureExtractionPending.value),
-  featureEditorStatus: state.featureEditorStatus.value,
   matchSequenceSources: cloneJsonData(state.matchSequenceRegistry?.values?.() || []),
   diagramElements: [...state.diagramElements.value],
   diagramElementIds: [...state.diagramElementIds.value],
@@ -4835,7 +4834,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   if (snapshot.settingsPopup) floatSettingsSection(state, snapshot.settingsPopup.section, snapshot.settingsPopup);
   else returnSettingsSection(state);
   state.featureExtractionPending.value = snapshot.featureExtractionPending;
-  state.featureEditorStatus.value = snapshot.featureEditorStatus;
   state.matchSequenceRegistry?.reset?.(cloneJsonData(snapshot.matchSequenceSources));
   state.diagramElements.value = [...snapshot.diagramElements];
   state.diagramElementIds.value = [...snapshot.diagramElementIds];

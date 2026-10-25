@@ -64,7 +64,7 @@ const {
 const { createLegendCanvasActions } = await import(
   '../../gbdraw/web/js/app/legend-layout/canvas-actions.js'
 );
-const { createSessionImportRollbackState } = await import(
+const { createSessionImportRollbackState, transformLegacyResultSvg } = await import(
   '../../gbdraw/web/js/app/app-setup.js'
 );
 
@@ -1157,7 +1157,13 @@ const stashedLinearArtifact = Object.freeze({ drawingId: 'linear' });
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const artifactSlots = createArtifactSlotStore();
 artifactSlots.replaceLoaded([stashedLinearArtifact]);
-const displayedArtifact = Object.freeze({ drawingId: 'circular' });
+// The displayed artifact through the app's own port (the History snapshot
+// service's slot capture and install), so the rollback gives the shown
+// Result's artifact values (its feature-editor status among them) back.
+const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
+const artifactPort = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+const capturedArtifacts = [];
 const installedArtifacts = [];
 // OV-1769: the History router's members as the Load found them come back.
 const historyMembersBefore = Object.freeze({ histories: [] });
@@ -1168,8 +1174,15 @@ const sessionImportRollbackState = createSessionImportRollbackState({
     captureMembers: () => historyMembersBefore,
     restoreMembers: (members) => restoredHistoryMembers.push(members)
   },
-  captureDisplayedArtifact: () => displayedArtifact,
-  installDisplayedArtifact: (slot) => installedArtifacts.push(slot),
+  captureDisplayedArtifact: () => {
+    const slot = artifactPort.captureArtifactSlot();
+    capturedArtifacts.push(slot);
+    return slot;
+  },
+  installDisplayedArtifact: (slot) => {
+    installedArtifacts.push(slot);
+    artifactPort.installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) });
+  },
   depthTrackUiCounts,
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
@@ -1330,10 +1343,64 @@ assert.deepEqual(restoredHistoryMembers, [historyMembersBefore]);
 assert.strictEqual(restoredHistoryMembers[0], historyMembersBefore);
 assert.deepEqual(artifactSlots.kept(), [stashedLinearArtifact]);
 assert.strictEqual(artifactSlots.kept()[0], stashedLinearArtifact);
-assert.deepEqual(installedArtifacts, [displayedArtifact]);
+assert.equal(capturedArtifacts.length, 1);
+assert.deepEqual(installedArtifacts, capturedArtifacts);
 assert.equal(alerts.length, 0);
 assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
+
+// A Session 49 Load that fails after its commit gives back the same: the
+// drawings (the same objects), the shown Result, the feature-editor status,
+// the groups and the History members. The Load commits new drawings
+// (`commitLoadedDrawings`), so the rollback's own copy of the status adds
+// nothing to what the displayed-artifact port gives back.
+const { gunzipSync } = await import('node:zlib');
+const session49 = JSON.parse(gunzipSync(await readFile(
+  'tests/fixtures/sessions/drawings-v49/drawings-circular-only.v49.gbdraw-session.json.gz'
+)).toString('utf8'));
+const drawingsBefore49 = state.drawingList();
+const tabsBefore49 = state.drawingTabs.value;
+const shownResultBefore49 = state.results.value[state.selectedResultIndex.value];
+const statusBefore49 = state.featureEditorStatus.value;
+state.errorLog.value = null;
+const stateBefore49WithoutAlert = rollbackState();
+console.error = () => {};
+let failed49;
+try {
+  failed49 = await importSession(
+    { target: { files: [new Blob([JSON.stringify(session49)], { type: 'application/json' })], value: 'selected' } },
+    {
+      rollbackState: sessionImportRollbackState,
+      transformLegacyResultSvg,
+      confirmLoadRepairs: async () => true,
+      afterLoad: async () => {
+        // The Load committed its drawings; the shown Result's status changed.
+        assert.notStrictEqual(state.drawingList()[0], drawingsBefore49[0]);
+        state.setFeatureEditorStatus('ready');
+        const originalSvgContainer = state.svgContainer.value;
+        state.svgContainer.value = malformedCompositionContainer;
+        try {
+          legendCanvasActions.captureBaseConfig();
+        } finally {
+          state.svgContainer.value = originalSvgContainer;
+        }
+      }
+    }
+  );
+} finally {
+  console.error = originalConsoleError;
+}
+assert.equal(failed49.status, 'error', JSON.stringify(failed49.error));
+assert.deepEqual(failed49.error.context, { field: 'schema', reason: 'JSON_FORMAT' });
+assert.equal(capturedArtifacts.length, 2);
+assert.deepEqual(state.drawingList(), drawingsBefore49);
+state.drawingList().forEach((drawing, index) => assert.strictEqual(drawing, drawingsBefore49[index]));
+assert.deepEqual(state.drawingTabs.value, tabsBefore49);
+assert.strictEqual(state.results.value[state.selectedResultIndex.value], shownResultBefore49);
+assert.strictEqual(state.featureEditorStatus.value, statusBefore49);
+assert.deepEqual(restoredHistoryMembers, [historyMembersBefore, historyMembersBefore]);
+assert.deepEqual(rollbackState(), stateBefore49WithoutAlert);
+assert.deepEqual(state.errorLog.value, failed49.error);
 
 
 // A late failed Session read cannot replace a notification from a later action.
