@@ -964,8 +964,12 @@ def _normalized_biological_features(
         if context.biological_features
         else context.features
     )
+    # A canceled Worker request stops between features: this build's state is local (D7).
+    from gbdraw.api.prepared import cancel_checkpoint
+
     candidates: list[_SourceFeatureCandidate] = []
     for feature in source_features:
+        cancel_checkpoint()
         if not isinstance(feature, Mapping):
             continue
         if _text(feature.get("type")).lower() == "source" and (
@@ -997,6 +1001,7 @@ def _normalized_biological_features(
     indexed: list[_IndexedBiologicalFeature] = []
 
     for candidate, biological_feature_id in zip(candidates, biological_ids, strict=True):
+        cancel_checkpoint()
         feature = candidate.feature
         record_key = candidate.record_key
         stable_id = candidate.stable_id
@@ -2211,6 +2216,9 @@ def _feature_catalog_item(
     result_index: int,
     result_name: str,
 ) -> dict[str, Any]:
+    # A canceled Worker request stops between the phases of this build, whose state is local (D7).
+    from gbdraw.api.prepared import cancel_checkpoint
+
     record_keys = _record_keys(context)
     stored_features, stored_index = render_stage(
         "catalog_normalization",
@@ -2227,6 +2235,7 @@ def _feature_catalog_item(
         for item, feature in zip(stored_index, biological_features, strict=True)
     ]
     biological_index = _BiologicalFeatureIndex(indexed_features)
+    cancel_checkpoint()
     (
         rendered_features,
         rendered_references,
@@ -2237,6 +2246,7 @@ def _feature_catalog_item(
         record_keys,
         biological_index,
     )
+    cancel_checkpoint()
     raw_matches = _match_payloads(
         svg_index.match_candidates,
         rendered_match_identities,
@@ -2273,13 +2283,16 @@ def _feature_catalog_item(
                 {"id": normalized_group_id, "scope": group_scope, "members": []}
             )
             known_group_ids.add(normalized_group_id)
+    cancel_checkpoint()
     presentation_by_id = _orthogroup_presentation_by_id(raw_matches)
     sequence_sources = _deduplicated_sequence_sources(raw_matches, context)
+    cancel_checkpoint()
     _reference_reconstructible_nucleotide_sequences(
         biological_features,
         record_keys,
         sequence_sources,
     )
+    cancel_checkpoint()
     normalized_orthogroups = _normalized_orthogroups(
         orthogroups,
         record_keys,
@@ -2289,6 +2302,7 @@ def _feature_catalog_item(
             context.collinearity_search_scope
         ),
     )
+    cancel_checkpoint()
     normalized_matches = _normalized_matches(
         raw_matches,
         rendered_references,

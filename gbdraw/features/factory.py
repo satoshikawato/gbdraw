@@ -213,8 +213,11 @@ def _build_feature_layers(
     override_of = feature_override_lookup(
         gb_record, record_features.overrides if record_features is not None else None
     )
+    # A canceled Worker request stops between features: this build's state is local (D7).
+    from gbdraw.api.prepared import cancel_checkpoint
 
     for feature in gb_record.features:
+        cancel_checkpoint()
         override = override_of(feature)
         if not should_render_feature(
             feature,

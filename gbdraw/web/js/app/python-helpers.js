@@ -28,25 +28,39 @@ from gbdraw.web_support.feature_override_table import read_feature_override_tabl
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
 from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
+from gbdraw.web_support.worker_cancel import WorkerCancelRequest
 
 _WEB_LOSATP_CACHE_LIMIT = 64
 
 def _start_web_worker_state():
     """Starts the state each Worker owns: its caches, the prepared-input cache
-    epoch and the random seed. The helpers call it when they load; a Worker
-    restored from a Pyodide snapshot calls it again, so no two Workers share
-    the state the snapshot froze (OV-1000)."""
+    epoch, the cancel request and its SIGINT handler, and the random seed. The
+    helpers call it when they load; a Worker restored from a Pyodide snapshot
+    calls it again, so no two Workers share the state the snapshot froze
+    (OV-1000)."""
     global _WEB_LOSATP_HIT_TABLES, _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE, _WEB_LOSATP_CACHE_ORDER
-    global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES
+    global _WEB_PREPARED_INPUT_CACHE, _WEB_LABEL_FIT_SEARCHES, _WEB_CANCEL
     import random
+    import signal
+    import sys
     random.seed()
     _WEB_LOSATP_HIT_TABLES = {}
     _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
     _WEB_LOSATP_CACHE_ORDER = []
-    _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache()
+    # The page's Cancel writes SIGINT into the Worker's interrupt buffer; the
+    # handler only records it, and the cache stops at its next checkpoint (D7).
+    # Tests run these helpers in a native process, where SIGINT must still stop it.
+    _WEB_CANCEL = WorkerCancelRequest()
+    if sys.platform == "emscripten":
+        signal.signal(signal.SIGINT, _WEB_CANCEL.on_signal)
+    _WEB_PREPARED_INPUT_CACHE = PreparedBiologicalInputCache(cancel_check=_WEB_CANCEL.check)
     # The last figure of each mode drawn with crossing label leaders, for the
     # rows the label fit dialog computes later (OD-F14).
     _WEB_LABEL_FIT_SEARCHES = LabelFitRowSearches()
+
+def clear_web_cancel():
+    """The Worker's drain step after a Cancel: later requests run again."""
+    _WEB_CANCEL.clear()
 
 def _web_losatp_cache_by_name(name):
     if name == "converted":
@@ -1837,6 +1851,8 @@ _WEB_JSON_HELPERS = {
         _with_prepared_input_lookup(resolve_similarity_alignment_json, 2), "resolveSimilarityAlignment"
     ),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
+    # The drain after a Cancel: part of the Generate it stopped.
+    "clear_web_cancel": (clear_web_cancel, "generate"),
     # Its errors are rule errors: the error vocabulary has no operation of its own for it.
     "synthesize_color_rules_json": (synthesize_color_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),

@@ -1,5 +1,6 @@
 // @ts-check
 import { sha256Hex } from '../services/byte-utils.js';
+/** @import { WorkerFontFile } from '../services/diagram-worker-protocol.js' */
 
 // The fonts registered in a diagram Worker's Python (custom fonts D-01): their
 // files stay in FONT_DIRECTORY for the Worker's life, and each identity is the
@@ -8,15 +9,6 @@ import { sha256Hex } from '../services/byte-utils.js';
 
 const FONT_DIRECTORY = '/gbdraw-web-fonts';
 const FONT_IDENTITY_RE = /^[0-9a-f]{64}$/;
-
-/**
- * A font file the main thread sends: the identity of its bytes, its file name
- * or installed face name, and the bytes.
- * @typedef {object} WorkerFontFile
- * @property {string} identity
- * @property {string} label
- * @property {ArrayBuffer | ArrayBufferView} bytes
- */
 
 /** One file Python registers. @typedef {{ identity: string, path: string }} PythonFontEntry */
 

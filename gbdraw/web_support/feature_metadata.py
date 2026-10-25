@@ -296,6 +296,9 @@ def extract_features_from_records_payload(
     ID, whether or not that feature is eligible for rendering.
     """
 
+    # A canceled Worker request stops between features: this build's state is local (D7).
+    from gbdraw.api.prepared import cancel_checkpoint
+
     records = list(records or [])
     selected_feature_set = _normalize_selected_feature_set(selected_features)
 
@@ -318,6 +321,7 @@ def extract_features_from_records_payload(
             record, record_features[rec_idx].overrides if record_features else None
         )
         for feature_index, feat in enumerate(_iter_features(record.features)):
+            cancel_checkpoint()
             source_feature_index = _source_feature_index(feat)
             feature_override = override_of(feat)
             is_rendered_feature = should_render_feature(
@@ -362,6 +366,7 @@ def extract_features_from_records_payload(
             is_rendered_feature,
             selector_values,
         ) in prepared_features:
+            cancel_checkpoint()
             feature_start = int(feat.location.start)
             feature_end = int(feat.location.end)
             start, end = _absolute_display_interval(

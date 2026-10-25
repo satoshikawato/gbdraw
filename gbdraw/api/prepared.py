@@ -581,9 +581,19 @@ class PreparedBiologicalInputCache:
     decoded resources and parsed sources they built, which the page staged
     under the ids the next Generate names (OV-1595); they prune and evict
     nothing.
+
+    Cancel (D7): the Worker's cache takes the check of its cancel request
+    (``cancel_check``). ``cancel_checkpoint`` calls it before each build that
+    misses, the input layers here and render stages and the long loops of
+    the heaviest stages, so a canceled request stops between builds,
+    never inside one or inside a commit. The stop runs the rollback of a
+    failed transaction, which also evicts, without raising, a reused entry
+    the canceled request changed.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, cancel_check: Callable[[], None] | None = None) -> None:
+        # Raises KeyboardInterrupt while the Worker's requests are canceled.
+        self._cancel_check = cancel_check
         self._layers: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {
             layer: OrderedDict() for layer in _LAYERS
         }
@@ -706,7 +716,9 @@ class PreparedBiologicalInputCache:
                     self._publish_inputs(transaction, verified=True)
             else:
                 self._commit(transaction)
-        except BaseException:
+        except BaseException as error:
+            if isinstance(error, KeyboardInterrupt):
+                self._evict_changed_entries(transaction)
             if not read_only or publish_inputs:
                 self._publish_inputs(transaction)
             self._previous_transaction_failed = True
@@ -771,6 +783,33 @@ class PreparedBiologicalInputCache:
             f"({_owner_mutation_detail(expected, current_stamp)})."
         )
 
+    def check_cancel(self) -> None:
+        """Stop a canceled request here (``cancel_checkpoint``)."""
+
+        if self._cancel_check is not None:
+            self._cancel_check()
+
+    def _evict_changed_entries(self, transaction: _PreparedCacheTransaction) -> None:
+        """After a stop: drop, without raising, each reused entry the request changed.
+
+        Checked in full, as a commit checks; the next request rebuilds it
+        instead of failing on a change the user did not cause.
+        """
+
+        for layer, current in self._layers.items():
+            # A render-stage entry has no owner to check (one constant stamp).
+            if layer == _RENDER_STAGE_LAYER:
+                continue
+            for key in tuple(transaction.used[layer]):
+                entry = current.get(key)
+                if entry is None or key in transaction.pending[layer]:
+                    continue
+                try:
+                    self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                except Exception:
+                    # Evicted and counted by the check.
+                    continue
+
     def get_or_build(
         self,
         layer: str,
@@ -792,6 +831,7 @@ class PreparedBiologicalInputCache:
             transaction.used[layer].add(key)
             transaction.accessed[layer][key] = entry.value
             return entry.value
+        self.check_cancel()
         _record_metric(transaction, miss_metric)
         _record_metric(transaction, build_metric)
         value = builder()
@@ -1049,6 +1089,19 @@ def mark_record_touched(transaction: _PreparedCacheTransaction) -> None:
     """A render stage that may read a record built: the commit checks owners in full (O-2)."""
 
     transaction.record_touched = True
+
+
+def cancel_checkpoint() -> None:
+    """Stop here when the Worker's requests are canceled; outside a transaction, nothing.
+
+    Call it only between builds whose state is local, before any module-level
+    write of the current build: the ``KeyboardInterrupt`` it raises unwinds to
+    the transaction's rollback, which keeps no build it stopped.
+    """
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is not None:
+        transaction.cache.check_cancel()
 
 
 def active_render_stage_transaction() -> _PreparedCacheTransaction | None:

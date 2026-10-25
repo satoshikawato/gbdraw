@@ -9,7 +9,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
-const { openApp, evaluateWithRetainedPromise, settleLive } = require('./helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise, settleLive, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 
 const HMMT = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
@@ -39,16 +39,37 @@ const captureGenerateReplies = () => {
   };
 };
 
-const start = async (browser, { captureReplies = false } = {}) => {
+// Where Python stopped on a Cancel: the Worker's KeyboardInterrupt events, which
+// the page drops with the canceled request.
+const captureKeyboardInterrupts = () => {
+  const NativeWorker = window.Worker;
+  window.__INTERRUPTS__ = [];
+  window.Worker = class extends NativeWorker {
+    constructor(...args) {
+      super(...args);
+      this.addEventListener('message', ({ data }) => {
+        if (data?.type === 'test-lifecycle' && data.event?.name === 'python-keyboard-interrupt') {
+          window.__INTERRUPTS__.push(data.event.pythonError);
+        }
+      });
+    }
+  };
+};
+
+const start = async (browser, { captureReplies = false, crossOriginIsolated = false, captureInterrupts = false } = {}) => {
   const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();
   page.externalRequests = [];
-  await context.route('**/*', (route) => {
-    if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue();
-    page.externalRequests.push(route.request().url());
-    return route.abort();
-  });
+  if (crossOriginIsolated) {
+    await routeCrossOriginIsolated(context);
+  } else {
+    await context.route('**/*', (route) => {
+      if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue();
+      page.externalRequests.push(route.request().url());
+      return route.abort();
+    });
+  }
   await page.addInitScript(() => {
     window.__REUSE__ = { events: [], metrics: [] };
     window.__GBDRAW_TEST_HOOKS__ = {
@@ -57,6 +78,7 @@ const start = async (browser, { captureReplies = false } = {}) => {
     };
   });
   if (captureReplies) await page.addInitScript(captureGenerateReplies);
+  if (captureInterrupts) await page.addInitScript(captureKeyboardInterrupts);
   page.on('dialog', (dialog) => dialog.dismiss());
   await openApp(page);
   return page;
@@ -655,6 +677,55 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
   } finally {
     await page.context().close();
     await fresh.context().close();
+  }
+});
+
+// D7: on a cross-origin-isolated page, a Cancel while Python renders stops it
+// through the Worker's interrupt buffer, at a checkpoint, and keeps the Worker;
+// the next Generate checks every cached input in full (the stopped transaction
+// did not commit) and draws what a fresh Worker draws.
+test('Cancel during render keeps the warm Worker', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await start(browser, { crossOriginIsolated: true, captureInterrupts: true });
+  try {
+    expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
+    await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
+    await generate(page);
+    await setWindow(page, 2000);
+    await page.evaluate(() => {
+      const hooks = window.__GBDRAW_TEST_HOOKS__;
+      const record = hooks.onSessionLifecycleEvent;
+      hooks.onSessionLifecycleEvent = (event) => {
+        record(event);
+        if (event.name !== 'python-wrapper-start') return;
+        hooks.onSessionLifecycleEvent = record;
+        import('./js/services/diagram-generation.js').then((module) => module.cancelDiagramGeneration());
+      };
+    });
+    await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.processing.value), { timeout: 180_000 }).toBe(false);
+    const workerMetrics = () => page.evaluate(() => window.__REUSE__.metrics
+      .filter(({ name }) => name === 'workerCancelDrain' || name === 'workerConstructionCount')
+      .map(({ name, outcome }) => (outcome ? `${name}:${outcome}` : name)));
+    await expect.poll(workerMetrics).toEqual(['workerConstructionCount', 'workerCancelDrain:drained']);
+    // The SIGINT handler only set the flag; a checkpoint raised (a default
+    // handler raises KeyboardInterrupt with no message, anywhere).
+    expect(await page.evaluate(() => window.__INTERRUPTS__)).toEqual(['KeyboardInterrupt: Canceled at a checkpoint']);
+    await page.evaluate(async () => { (await import('./js/state.js')).state.errorLog.value = null; });
+    await generate(page);
+    expect(await workerMetrics()).toEqual(['workerConstructionCount', 'workerCancelDrain:drained']);
+    const nextMetrics = await page.evaluate(() => window.__REUSE__.events
+      .filter(({ name }) => name === 'python-diagnostics').at(-1).metrics);
+    expect(nextMetrics.preparedInputCacheFullCheckCount).toBeGreaterThan(0);
+    expect(nextMetrics.preparedInputCacheMutationViolationCount).toBe(0);
+    const kept = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    await page.evaluate(async () => {
+      (await import('./js/services/diagram-generation.js')).disposeDiagramGenerationWorker();
+    });
+    await generate(page);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(kept);
+  } finally {
+    await page.context().close();
   }
 });
 

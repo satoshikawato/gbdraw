@@ -272,6 +272,22 @@ def face_weight_and_italic(font: TTFont) -> tuple[int, bool]:
 # ------------------------------------------------------------------
 #  Font files
 # ------------------------------------------------------------------
+class _CachedFont(TTFont):
+    """A lazily read font kept across renders.
+
+    fontTools stores a table before decompiling it, so after a failed read
+    the next access would return the half-read table without an error. A
+    failed table is dropped here, and every later access fails the same way.
+    """
+
+    def __getitem__(self, tag: str) -> object:
+        try:
+            return super().__getitem__(tag)
+        except Exception:
+            self.tables.pop(tag, None)
+            raise
+
+
 _font_cache: Dict[FontFace, TTFont] = {}
 
 
@@ -297,7 +313,7 @@ def load_font(face: FontFace) -> Optional[TTFont]:
         # From the bytes read once (no open file, no later read of a file that
         # changed), lazily: a table, and each GPOS lookup, is decompiled when
         # first used, so kerning reads only the ``kern`` lookups.
-        font = TTFont(io.BytesIO(face_source_bytes(face)), fontNumber=face.index, lazy=True)
+        font = _CachedFont(io.BytesIO(face_source_bytes(face)), fontNumber=face.index, lazy=True)
         if face.instance:
             font = named_instance(font, face.instance)
     except Exception as exc:
@@ -405,7 +421,7 @@ def _generic_of_font(font: TTFont) -> str:
 
 def _read_font(source: Union[str, io.BytesIO], index: int, path: str) -> TTFont:
     try:
-        return TTFont(source, fontNumber=index, lazy=True)
+        return _CachedFont(source, fontNumber=index, lazy=True)
     except Exception as exc:
         raise ValidationError(
             f"Cannot read font file {path}: {exc}",
