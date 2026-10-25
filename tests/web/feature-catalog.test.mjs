@@ -952,3 +952,87 @@ test('schema-3 migration writes the bounds its anchor profile read', () => {
   assert.equal(resolved.eligibility.enabled, true, resolved.eligibility.message);
   assert.equal(resolved.startCoordinate, 2);
 });
+
+// The reverse complement the catalog used before its lookup table; the table must give the same text for every input.
+const legacyReverseComplement = (sequence) => {
+  const complements = {
+    A: 'T', C: 'G', G: 'C', T: 'A', U: 'A', R: 'Y', Y: 'R',
+    S: 'S', W: 'W', K: 'M', M: 'K', B: 'V', D: 'H', H: 'D',
+    V: 'B', N: 'N', '-': '-'
+  };
+  const normalized = String(sequence || '').replace(/\s+/g, '').toUpperCase();
+  return [...normalized].reverse().map((base) => complements[base] || 'N').join('');
+};
+
+const sequenceCatalog = (sequence, features) => ({
+  schema: 3,
+  items: [{
+    resultIndex: 0,
+    resultName: 'diagram.svg',
+    recordKeys: ['record-key'],
+    features: [],
+    biologicalFeatures: features.map((feature, index) => ({
+      recordKey: 'record-key', biologicalFeatureId: `feature-${index}`, type: 'CDS', sequenceSourceIndex: 0, ...feature
+    })),
+    orthogroups: [],
+    annotations: [],
+    comparisonMatches: [],
+    sequenceSources: [{ origin: 'linear-record', recordIndex: 0, sequence }]
+  }]
+});
+
+test('catalog nucleotide sequences keep the legacy reverse complement for every character', () => {
+  const sources = [
+    'ACGTUacgturyswkmbdhvnRYSWKMBDHVN-.*?XZxz0123456789',
+    'atg-NNN-ccc..gggTTT',
+    'ACGTſßéΩ漢😀ACGT',
+    // Sources hold no whitespace; these upper-case to other lengths or to ASCII (\u017f -> S, \ufb00 -> FF).
+    'ACG\u0000\u007f\u0085\u0130\ufb00\u017fTGA'
+  ];
+  for (const sequence of sources) {
+    const length = sequence.length;
+    const features = [
+      { start: 0, end: length, strand: -1 },
+      { start: 0, end: length, strand: '+' },
+      { start: 1, end: length - 1, strand: '-' },
+      // Ends inside the surrogate pair of the third source.
+      { start: 0, end: 10, strand: -1 },
+      { start: 2, end: 2, strand: -1, location_parts: [{ start: 2, end: 2, strand: '-' }, { start: 0, end: 3, strand: '-' }] },
+      { start: 0, end: length, location_parts: [{ start: 5, end: length, strand: '-' }, { start: 0, end: 5, strand: '+' }] },
+      { start: 0, end: length, strand: -1, location_parts: [] }
+    ];
+    const state = featureStateFromCatalog(validateFeatureCatalog(sequenceCatalog(sequence, features), results));
+    const expected = features.map(({ start, end, strand, location_parts: parts }) => (
+      (parts?.length ? parts : [{ start, end, strand }]).map((part) => {
+        const slice = sequence.slice(part.start, part.end);
+        const partStrand = part.strand ?? strand;
+        return partStrand === '-' || Number(partStrand) < 0 ? legacyReverseComplement(slice) : slice;
+      }).join('')
+    ));
+    assert.deepEqual(state.biologicalFeatures.map((feature) => feature.nucleotide_sequence), expected, sequence);
+  }
+});
+
+test('catalog admission slices each feature sequence once and rejects a feature whose sequence is empty', () => {
+  const sequence = `ATG${'C'.repeat(5000)}`;
+  const nativeSlice = String.prototype.slice;
+  let sourceSlices = 0;
+  String.prototype.slice = function (...args) {
+    if (this === sequence) sourceSlices += 1;
+    return nativeSlice.apply(this, args);
+  };
+  try {
+    const state = featureStateFromCatalog(validateFeatureCatalog(sequenceCatalog(sequence, [
+      { start: 0, end: 3, strand: '+' },
+      { start: 0, end: 9, location_parts: [{ start: 3, end: 6, strand: '-' }, { start: 6, end: 9, strand: '-' }] }
+    ]), results));
+    assert.deepEqual(state.biologicalFeatures.map((feature) => feature.nucleotide_sequence), ['ATG', 'GGGGGG']);
+    assert.equal(sourceSlices, 3);
+  } finally {
+    String.prototype.slice = nativeSlice;
+  }
+  assert.throws(
+    () => validateFeatureCatalog(sequenceCatalog(sequence, [{ start: 4, end: 4, strand: '-' }]), results),
+    /incompatible feature metadata/
+  );
+});
