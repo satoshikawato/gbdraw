@@ -3512,6 +3512,47 @@ def test_typed_tree_union_selects_the_recorded_branch(
     assert type(decoded["a"]) is type(expected["a"])
 
 
+def test_typed_tree_decoding_does_not_interpret_hints_per_item(monkeypatch) -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    calls = 0
+    real_get_origin = typing.get_origin
+
+    def count_get_origin(hint: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real_get_origin(hint)
+
+    monkeypatch.setattr(codec_module, "get_origin", count_get_origin)
+    hint = dict[str, tuple[int | None, ...]]
+
+    def count_for(size: int) -> int:
+        nonlocal calls
+        calls = 0
+        value = {"a": [*range(size), None]}
+        decoded = codec_module._decode_typed_tree(value, hint, path="p", resource_schema=3)
+        assert decoded == {"a": (*range(size), None)}
+        return calls
+
+    count_for(3)
+    assert count_for(1_000) == count_for(10)
+    assert count_for(1_000) < 10
+
+
+def test_typed_tree_union_keeps_its_branch_order_across_equal_hints() -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    # The two unions are equal, but the first branch that takes a list decodes it.
+    with pytest.raises(CanonicalRequestDecodingError, match="invalid type"):
+        codec_module._decode_typed_tree(
+            ["a"], list[int] | tuple[str, ...], path="p", resource_schema=3
+        )
+    decoded = codec_module._decode_typed_tree(
+        ["a"], tuple[str, ...] | list[int], path="p", resource_schema=3
+    )
+    assert decoded == ("a",)
+
+
 @dataclass(frozen=True)
 class _ContractLongTuple:
     values: tuple[int, ...]

@@ -85,6 +85,13 @@ write-up of a release.
   of once in each of five validation steps. For the Hepatoplasmataceae
   Similarity group Gallery Session these checks took 0.54 s instead of 0.88 s;
   the SVG and the saved Session are unchanged (#1357).
+- Performance (CLI, Python): replaying a Session decodes its stored
+  orthogroups and ortholog paths with a decoder built once per type, scans
+  its protein tables for legacy protein IDs once instead of three times, and
+  with `--session_output` copies each drawing's state once instead of three
+  times. Replaying the Vibrio collinearity Gallery Session used 12.7 s of CPU
+  time instead of 16.8 s (21.3 s instead of 26.4 s with `--session_output`);
+  the SVG and the saved Session are unchanged (#1359).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

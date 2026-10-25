@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -687,8 +686,10 @@ def _rendered_drawing_build(
 
     require_search_frame_protein_results(rendered.migration_report)
 
+    # These steps replace values and never change one in place; the document
+    # built from the drawing copies its data once (SessionDocument).
     state, web_file_inventory = project_session_adjunct_for_current_write(
-        copy.deepcopy(dict(plan.drawing.artifacts.fields)),
+        plan.drawing.artifacts.fields,
         source_version=source_version,
     )
     state = with_current_artifacts(
