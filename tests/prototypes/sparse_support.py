@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import math
 from typing import Mapping, Sequence
 from gbdraw.analysis.protein_colinearity import (
-    CdsProtein, OrthogroupResult, _LocalThreshold, OrthologEdgeKind,
+    CdsProtein, OrthogroupResult, OrthologEdgeKind,
     _protein_sort_key, _RECORD_LOCAL_CORE_COMPETITION_RATIO,
     _MIN_MEMBERSHIP_MIN_COVERAGE, _DOMAIN_ONLY_MAX_MIN_COVERAGE,
 )
@@ -93,7 +93,7 @@ def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
     group_member_ids: Mapping[str, set[str]],
     best_by_direction: Mapping[tuple[str, str], object],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     protein_map: Mapping[str, CdsProtein],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
@@ -224,7 +224,7 @@ def _build_core_support_candidate(
     group_id: str,
     member_ids: Sequence[str],
     best_by_direction: Mapping[tuple[str, str], object],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     protein_map: Mapping[str, CdsProtein],
 ) -> _CoreSupportCandidate | None:
     same_evidence = _best_evidence_between_protein_and_members(
@@ -266,18 +266,18 @@ def _build_core_support_candidate(
         and (
             (
                 candidate_threshold is not None
-                and same_score >= float(candidate_threshold.score)
+                and same_score >= candidate_threshold
             )
             or (
                 same_member_threshold is not None
-                and same_score >= float(same_member_threshold.score)
+                and same_score >= same_member_threshold
             )
         )
     )
     cross_pass = (
         cross_evidence.support_row is not None
         and candidate_threshold is not None
-        and cross_score >= float(candidate_threshold.score)
+        and cross_score >= candidate_threshold
     )
 
     if same_pass:

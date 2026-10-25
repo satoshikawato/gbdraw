@@ -91,7 +91,7 @@ def test_seeded_candidate_and_local_competition_equivalence(seed):
             for q, s in [(u, m), (m, u)]:
                 if rng.random() < .55:
                     best[q, s] = row(q, s, rng.choice([0., .4, 1., 1., 2.]), rng.choice([.1, .3, .7, 1.]), evalue=rng.choice([1e-20, 1e-30]))
-    thresholds = {pid: pc._LocalThreshold(pid, rng.choice([.5, 1., 3.]), "fixture", 0, 0) for pid in pm if rng.random() < .6}
+    thresholds = {pid: rng.choice([.5, 1., 3.]) for pid in pm if rng.random() < .6}
     mapping = {pid: gid for gid, members in groups.items() for pid in members}
     index = pc._index_core_support_evidence(directed(best, pm), mapping)
     for u in ["u", "v"]:
@@ -135,6 +135,23 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
     local = {"v": 1., "w": 1.}
     assert not old._record_local_component_has_competing_core_support(["v", "w"], core, best, thresholds, pm, local)
     assert old._record_local_component_has_competing_core_support(["v", "w"], expanded, best, thresholds, pm, local)
+
+
+def test_anchor_core_thresholds_by_protein():
+    pm = {pid: bench.protein(pc, pid, r, i) for i, (pid, r) in enumerate([
+        ("a", 0), ("b", 1), ("c", 1), ("u", 0), ("s", 0), ("z", 0)])}
+    best = {pair: row(*pair, score) for pair, score in [
+        (("a", "b"), 2.), (("b", "a"), 1.6), (("a", "c"), 3.), (("u", "c"), 4.), (("u", "b"), 1.),
+        (("c", "u"), .8), (("s", "z"), 5.)]}
+    hits = directed(best, pm)
+    anchors = [
+        pc._AnchorCoreEvidenceEdge("a", "b", direction(hits, "a", "b"), 2., 1.6, "rbh"),
+        pc._AnchorCoreEvidenceEdge("a", "c", direction(hits, "a", "c"), 3., .5, "coortholog"),
+        # Infinite and non-positive anchor scores never set a floor.
+        pc._AnchorCoreEvidenceEdge("u", "b", direction(hits, "u", "b"), float("inf"), 0., "coortholog"),
+    ]
+    # The lowest anchor score, else the best cross-record score; same-record hits alone set none.
+    assert pc._derive_anchor_core_thresholds(hits, anchors) == {"a": .75 * 2., "b": .75 * 1.6, "c": .75 * .5, "u": .75 * 4.}
 
 
 def test_sparse_visits_and_giant_groups():

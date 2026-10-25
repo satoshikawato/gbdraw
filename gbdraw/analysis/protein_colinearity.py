@@ -519,15 +519,6 @@ class OrthogroupEdgeSelectionResult:
     adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame]
 
 
-@dataclass(frozen=True)
-class _LocalThreshold:
-    protein_id: str
-    score: float
-    source: str
-    rbnh_count: int
-    accepted_edge_count: int
-
-
 class _ComparisonColumns:
     """One normalized table's values that only output edges read, row by row.
 
@@ -4598,7 +4589,7 @@ def _select_anchor_core_edges(
 def _select_record_local_paralog_edges(
     hits: _DirectedHitTable,
     protein_map: Mapping[str, CdsProtein],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     group_by_protein: Mapping[str, str],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
     query, subject, score = hits.query, hits.subject, hits.score
@@ -4613,7 +4604,7 @@ def _select_record_local_paralog_edges(
     has_threshold = np.zeros(len(hits.protein_ids), dtype=bool)
     threshold_codes = hits.codes(thresholds)
     mapped = threshold_codes >= 0
-    threshold_score[threshold_codes[mapped]] = np.asarray([float(threshold.score) for threshold in thresholds.values()])[mapped]
+    threshold_score[threshold_codes[mapped]] = np.fromiter(thresholds.values(), dtype=float, count=len(thresholds))[mapped]
     has_threshold[threshold_codes[mapped]] = True
 
     def passes_score_floor(protein: np.ndarray, value: np.ndarray) -> np.ndarray:
@@ -4692,7 +4683,7 @@ def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
     has_core_groups: bool,
     evidence_by_protein: Mapping[str, Mapping[str, Sequence[_DirectedHit]]],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
     if not has_core_groups:
@@ -4851,50 +4842,28 @@ def _append_record_local_orthogroups(
 def _derive_anchor_core_thresholds(
     hits: _DirectedHitTable,
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
-) -> dict[str, _LocalThreshold]:
+) -> dict[str, float]:
+    """Each protein's same-record score threshold, by protein ID.
+
+    A fixed share of the protein's lowest positive, finite anchor score, or of
+    its best cross-record score when it has none; absent without either.
+    """
     cross = hits.protein_record[hits.query] != hits.protein_record[hits.subject]
     cross_best = np.full(len(hits.protein_ids), -np.inf)
     np.maximum.at(cross_best, hits.query[cross], hits.score[cross])
     has_cross = np.bincount(hits.query[cross], minlength=len(hits.protein_ids)) > 0
-    best_cross_score_by_protein = dict(
-        zip((hits.protein_ids[code] for code in np.flatnonzero(has_cross).tolist()), cross_best[has_cross].tolist())
+
+    endpoint = hits.codes([*(edge.query_id for edge in anchor_edges), *(edge.subject_id for edge in anchor_edges)])
+    endpoint_score = np.asarray(
+        [*(edge.score for edge in anchor_edges), *(edge.reverse_score for edge in anchor_edges)], dtype=float
     )
-
-    anchor_scores_by_protein: dict[str, list[float]] = {}
-    for edge in anchor_edges:
-        if edge.score > 0.0:
-            anchor_scores_by_protein.setdefault(edge.query_id, []).append(float(edge.score))
-        if edge.reverse_score > 0.0:
-            anchor_scores_by_protein.setdefault(edge.subject_id, []).append(float(edge.reverse_score))
-
-    thresholds: dict[str, _LocalThreshold] = {}
-    for protein_id in sorted(set(best_cross_score_by_protein).union(anchor_scores_by_protein)):
-        anchor_scores = [
-            score
-            for score in anchor_scores_by_protein.get(protein_id, [])
-            if score > 0.0 and math.isfinite(score)
-        ]
-        if anchor_scores:
-            anchor_floor = min(anchor_scores)
-            thresholds[protein_id] = _LocalThreshold(
-                protein_id=protein_id,
-                score=float(anchor_floor * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR),
-                source="anchor",
-                rbnh_count=len(anchor_scores),
-                accepted_edge_count=len(anchor_scores),
-            )
-            continue
-        fallback_floor = best_cross_score_by_protein.get(protein_id)
-        if fallback_floor is None:
-            continue
-        thresholds[protein_id] = _LocalThreshold(
-            protein_id=protein_id,
-            score=float(fallback_floor * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR),
-            source="fallback",
-            rbnh_count=0,
-            accepted_edge_count=0,
-        )
-    return thresholds
+    usable = (endpoint >= 0) & (endpoint_score > 0.0) & np.isfinite(endpoint_score)
+    anchor_floor = np.full(len(hits.protein_ids), np.inf)
+    np.minimum.at(anchor_floor, endpoint[usable], endpoint_score[usable])
+    has_anchor = anchor_floor < np.inf
+    floor = np.where(has_anchor, anchor_floor, cross_best) * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR
+    codes = np.flatnonzero(has_anchor | has_cross)
+    return dict(zip((hits.protein_ids[code] for code in codes.tolist()), floor[codes].tolist()))
 
 
 def _index_core_support_evidence(
@@ -4960,7 +4929,7 @@ def _build_core_support_candidate(
     protein_id: str,
     group_id: str,
     evidence: Sequence[_DirectedHit],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
 ) -> _CoreSupportCandidate | None:
     same_evidence, cross_evidence = _best_evidence_between_protein_and_members(evidence)
     if same_evidence.diagnostic is None and cross_evidence.diagnostic is None:
@@ -4987,18 +4956,18 @@ def _build_core_support_candidate(
         and (
             (
                 candidate_threshold is not None
-                and same_score >= float(candidate_threshold.score)
+                and same_score >= candidate_threshold
             )
             or (
                 same_member_threshold is not None
-                and same_score >= float(same_member_threshold.score)
+                and same_score >= same_member_threshold
             )
         )
     )
     cross_pass = (
         cross_evidence.support is not None
         and candidate_threshold is not None
-        and cross_score >= float(candidate_threshold.score)
+        and cross_score >= candidate_threshold
     )
 
     evidence_hit: _DirectedHit | None
@@ -5378,7 +5347,7 @@ def _build_anchor_core_orthogroups(
             local_support_by_member,
         )
     )
-    del expanded_core_evidence
+    del expanded_core_evidence, thresholds
     _append_record_local_orthogroups(
         group_member_ids=group_member_ids,
         group_by_protein=group_by_protein,
