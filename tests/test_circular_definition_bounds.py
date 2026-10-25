@@ -105,17 +105,21 @@ def test_empty_circular_record_title_values_preserve_inference() -> None:
     assert "strain A" in svg
 
 
-def _k12_definition(*, record_label: str = "", species: str | None = None) -> DefinitionGroup:
+def _k12_definition(
+    *,
+    record_label: str = "",
+    species: str | None = None,
+    organism: str = "Escherichia coli",
+    strain: str = "K-12",
+    taxonomy: tuple[str, ...] = ("Bacteria", "Pseudomonadati"),
+) -> DefinitionGroup:
     cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
     record = SeqRecord(Seq("ATGC" * 250), id="NC_K12.1")
-    record.features = [
-        SeqFeature(
-            SimpleLocation(0, len(record.seq)),
-            type="source",
-            qualifiers={"organism": ["Escherichia coli"], "strain": ["K-12"]},
-        )
-    ]
-    record.annotations["taxonomy"] = ["Bacteria", "Pseudomonadati"]
+    qualifiers = {"organism": [organism]}
+    if strain:
+        qualifiers["strain"] = [strain]
+    record.features = [SeqFeature(SimpleLocation(0, len(record.seq)), type="source", qualifiers=qualifiers)]
+    record.annotations["taxonomy"] = list(taxonomy)
     canvas = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record)
     return DefinitionGroup(
         record,
@@ -138,3 +142,35 @@ def test_a_typed_record_label_is_drawn_whole_over_the_inferred_strain_line() -> 
     assert (_plain(labelled.species_parts), _plain(labelled.strain_parts)) == ("Escherichia coli MG1655", "K-12")
     typed_species = _k12_definition(species="Escherichia coli MG1655")
     assert (_plain(typed_species.species_parts), _plain(typed_species.strain_parts)) == ("Escherichia coli", "MG1655")
+
+
+def test_a_typed_line_one_draws_the_strain_the_organism_named() -> None:
+    # The /organism "Lachnospiraceae bacterium A4" names its strain, so the Auto
+    # line 2 is empty. A typed line 1 replaces that name: line 2 draws "A4".
+    for typed in ({"record_label": "My isolate"}, {"species": "My isolate"}):
+        definition = _k12_definition(organism="Lachnospiraceae bacterium A4", strain="A4", taxonomy=("Bacteria",), **typed)
+        assert (_plain(definition.species_parts), _plain(definition.strain_parts)) == ("My isolate", "A4")
+
+
+def test_a_candidatus_name_with_markup_characters_draws_the_italic_ca_and_the_literal_name() -> None:
+    from gbdraw.core.record_metadata import format_inferred_definition, infer_record_source_metadata
+    from gbdraw.render.groups.linear import DefinitionGroup as LinearDefinitionGroup, LinearDefinitionStyle
+
+    circular = _k12_definition(organism="Candidatus Foo & Bar", strain="", taxonomy=("Bacteria",))
+    expected = [("Ca.", True), (" Foo & Bar", False)]
+    assert [(part["text"], part["italic"]) for part in circular.species_parts] == expected
+    svg = circular.get_group().tostring()
+    assert "Foo &amp; Bar" in svg and "&lt;i&gt;" not in svg
+    # The Web Linear Auto definition is format_inferred_definition's one line.
+    record = SeqRecord(Seq("ATGC" * 250), id="NC_CA.1", annotations={"taxonomy": ["Bacteria"]})
+    record.features = [
+        SeqFeature(SimpleLocation(0, len(record.seq)), type="source", qualifiers={"organism": ["Candidatus Foo & Bar"]})
+    ]
+    definition = format_inferred_definition(infer_record_source_metadata(record))
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    linear = LinearDefinitionGroup(
+        record, "short", style=LinearDefinitionStyle.of(cfg), record_presentation=RecordPresentation(label=definition)
+    )
+    linear_svg = linear.get_group().tostring()
+    assert "Foo &amp; Bar" in linear_svg and "&lt;i&gt;" not in linear_svg
+    assert "font-style=\"italic\"" in linear_svg or "font-style:italic" in linear_svg

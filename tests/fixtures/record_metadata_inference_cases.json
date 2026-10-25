@@ -692,6 +692,34 @@
       "fastPath": "declines"
     },
     {
+      "name": "kept whole: a Candidatus name with markup characters keeps the italic Ca. and escapes the name",
+      "organism": "Candidatus Foo & Bar",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Foo &amp; Bar",
+      "lines": [
+        "<i>Ca.</i> Foo &amp; Bar",
+        ""
+      ],
+      "fastPath": "declines"
+    },
+    {
+      "name": "kept whole: a Candidatus name with a markup strain keeps the italic Ca. and escapes the strain",
+      "organism": "Candidatus Pelagibacter ubique",
+      "strain": "<A&B>",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Pelagibacter ubique &lt;A&amp;B&gt;",
+      "lines": [
+        "<i>Ca.</i> Pelagibacter ubique",
+        "&lt;A&amp;B&gt;"
+      ],
+      "fastPath": "declines"
+    },
+    {
       "name": "virus: the lineage decides for a misspelt virus name",
       "organism": "Beihai barnacle viurs 1",
       "strain": "",
@@ -2018,6 +2046,43 @@
             "recordLength": 60,
             "organism": "Bacillus sp. Ödeme-1",
             "inferredDefinition": "<i>Bacillus</i> sp. Ödeme-1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an organism with a markup character declines to the Worker",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "markup_1.gbk",
+          "lines": [
+            "LOCUS       MARKUP_1                 60 bp    DNA     linear       26-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   MARKUP_1",
+            "VERSION     MARKUP_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus sp. A&B",
+            "            Bacteria; Bacillati; Bacillota; Bacilli; Bacillales; Bacillaceae;",
+            "            Bacillus.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Bacillus sp. A&B\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "MARKUP_1.1",
+            "recordLength": 60,
+            "organism": "Bacillus sp. A&B",
+            "inferredDefinition": "Bacillus sp. A&B"
           }
         ]
       }

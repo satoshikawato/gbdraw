@@ -21,8 +21,9 @@ write-up of a release.
   vectors and names the rule cannot read stay whole on line 1; an ICTV
   binomial species (`Lambdavirus lambda`) is italic. A Candidatus name is
   drawn upright after an italic `Ca.`, also when the rule keeps it whole
-  (*Ca.* Saccharibacteria bacterium GW2011_GWC2_44_17); a name with the
-  characters `&`, `<` or `>` stays as written. In a hybrid, each
+  (*Ca.* Saccharibacteria bacterium GW2011_GWC2_44_17) and when the name holds
+  the characters `&`, `<` or `>` (*Ca.* Foo & Bar); any other name with those
+  characters stays as written. In a hybrid, each
   parent's genus and epithets are italic and the sign stays as written and
   upright (*Citrus* x *limon*, *Mentha* ×*piperita*); a hybrid with a part the
   rule cannot read stays upright. In a placeholder, the name above the genus
@@ -46,7 +47,10 @@ write-up of a release.
   draws no title in either mode instead of failing (OV-1845). A typed Species
   without a typed Strain is cut into two lines by the same rule, keeping its
   words and italics as typed; a typed Record label is drawn as typed, over
-  the Auto strain line when the Subtitle is empty. Saved Linear Auto
+  the Auto strain line when the Subtitle is empty. Under a typed Record label
+  or Species, that strain line keeps a strain the /organism named (`My isolate`
+  over `Lachnospiraceae bacterium A4` draws `A4`) and leaves out only what the
+  typed text names. Saved Linear Auto
   definitions keep their text until the file is read again.
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read

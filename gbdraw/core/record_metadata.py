@@ -653,38 +653,78 @@ def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
     name that the rule cannot read as a taxon stays whole on the taxon line,
     upright except for a hybrid's parents and a placeholder's higher-taxon
     name (``_whole_name_line``); a Candidatus name kept whole keeps its italic
-    "Ca.". Text with markup characters stays as written. The strain line never
-    repeats what the name already holds.
+    "Ca.". Other text with markup characters stays as written. The strain line
+    never repeats what the name already holds.
     """
-    organism = " ".join(str(metadata.organism or "").split())
-    strain = " ".join(str(metadata.strain or "").split())
+    strain = _single_spaced(metadata.strain)
+    auto = _auto_taxon_line(metadata)
+    if auto is None:
+        return OrganismLines("", strain)
+    strain_line = _strain_line(auto.rest, strain, _single_spaced(metadata.organism).split())
+    return OrganismLines(auto.line, escape(strain_line) if auto.escaped else strain_line)
+
+
+class _AutoTaxonLine(NamedTuple):
+    """The Auto rule's line 1, and the /organism words it leaves to line 2."""
+
+    line: str
+    rest: list[str]
+    # The line escapes markup characters, so line 2 must escape them too.
+    escaped: bool = False
+
+
+def _single_spaced(text: str | None) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _auto_taxon_line(metadata: RecordSourceMetadata) -> _AutoTaxonLine | None:
+    """Line 1 of ``split_organism_lines``, or None when the record names no organism."""
+    organism = _single_spaced(metadata.organism)
+    strain = _single_spaced(metadata.strain)
     prefix = _CANDIDATUS_PREFIX.match(organism)
     name = organism[prefix.end():] if prefix else organism
     tokens = name.split()
-    whole = organism.split()
     if not _HAS_LETTER.search(name) or name.lower() in _NON_ORGANISM_NAMES:
-        return OrganismLines("", strain)
-    strain_line = _strain_line([], strain, whole)
-    # The lines are markup ("<i>"), so a name with markup characters stays
-    # plain text as written: a "<i>" next to them would be drawn as letters.
+        return None
+    # The lines are markup ("<i>"), so a name with markup characters is kept
+    # whole: a Candidatus name keeps its italic "Ca." and escapes the rest
+    # (PD-OI-107 keeps the Ca. form); any other name stays plain text as written.
     if re.search(r"[&<>]", organism + strain):
-        return OrganismLines(organism, strain_line)
+        return _AutoTaxonLine(f"{_CANDIDATUS_MARK} {escape(name)}", [], True) if prefix else _AutoTaxonLine(organism, [])
     # A Candidatus name kept whole: an italic "Ca.", then the upright name.
-    candidatus = OrganismLines(f"{_CANDIDATUS_MARK} {name}", strain_line) if prefix else None
+    candidatus = _AutoTaxonLine(f"{_CANDIDATUS_MARK} {name}", []) if prefix else None
     if _is_virus(tokens, metadata.lineage):
         # An ICTV binomial ("Lambdavirus lambda") is italic; a virus name with a
         # number or letter ("Enterovirus J", "Cypovirus 1") is no species name.
         if prefix is None and len(tokens) == 2 and _ICTV_GENUS.fullmatch(tokens[0]) and _EPITHET.fullmatch(tokens[1]):
-            return OrganismLines(f"<i>{organism}</i>", strain_line)
-        return candidatus or OrganismLines(organism, strain_line)
+            return _AutoTaxonLine(f"<i>{organism}</i>", [])
+        return candidatus or _AutoTaxonLine(organism, [])
     taxon = _taxon_of(name, tokens, strain, metadata.lineage)
     if taxon is None:
-        return candidatus or OrganismLines(_whole_name_line(name, tokens, metadata.lineage), strain_line)
+        return candidatus or _AutoTaxonLine(_whole_name_line(name, tokens, metadata.lineage), [])
     parts, used = taxon
     line = " ".join(parts).replace("</i> <i>", " ")
     if prefix:
         line = f"{_CANDIDATUS_MARK} " + re.sub(r"</?i>", "", line)
-    return OrganismLines(line, _strain_line(tokens[used:], strain, whole))
+    return _AutoTaxonLine(line, tokens[used:])
+
+
+def _strain_line_under(typed_line: str, metadata: RecordSourceMetadata) -> str:
+    """Line 2 under a typed line 1: the Auto strain line read against the typed text.
+
+    The typed text replaces the Auto line 1, so a strain part that only the
+    /organism named is drawn here. Nothing is drawn when the typed text names
+    the record's strain (PD-OI-107); otherwise the words the Auto rule puts
+    after the taxon, then each strain part that neither the typed text nor
+    those words name.
+    """
+    words = "".join(str(part["text"] or "") for part in parse_mixed_content_text(typed_line)).split()
+    strain = _single_spaced(metadata.strain)
+    if _names_strain(words, strain) is not None:
+        return ""
+    auto = _auto_taxon_line(metadata)
+    rest = auto.rest if auto else []
+    return _strain_line(rest, strain, words + rest)
 
 
 def _hybrid_line(tokens: list[str], code: _NomenclatureCode) -> str | None:
@@ -797,19 +837,18 @@ def organism_name_lines(
     typed Strain is read with the Auto rule, the record's strain and lineage:
     when it reads a taxon and words remain, the typed text is cut there into
     two lines, its words and italics kept as typed (DF-D09). Otherwise the
-    typed text is line 1 and the Auto strain line is line 2, unless the typed
-    text already names the record's strain.
+    typed text is line 1. Under a typed line 1 and no typed line 2, line 2 is
+    the Auto strain line read against the typed text (``_strain_line_under``).
     """
-    auto = split_organism_lines(metadata)
     if record_label:
-        return OrganismLines(record_label, typed_strain or auto.strain)
+        return OrganismLines(record_label, typed_strain or _strain_line_under(record_label, metadata))
     if typed_strain:
-        return OrganismLines(typed_taxon or auto.taxon, typed_strain)
+        return OrganismLines(typed_taxon or split_organism_lines(metadata).taxon, typed_strain)
     if not typed_taxon:
-        return auto
+        return split_organism_lines(metadata)
     spans = [(str(part["text"] or ""), bool(part["italic"])) for part in parse_mixed_content_text(typed_taxon)]
     plain = "".join(text for text, _italic in spans)
-    strain = " ".join(str(metadata.strain or "").split())
+    strain = _single_spaced(metadata.strain)
     words = plain.split()
     prefix = _CANDIDATUS_PREFIX.match(" ".join(words))
     prefix_words = len(prefix.group(0).split()) if prefix else 0
@@ -835,8 +874,7 @@ def organism_name_lines(
             line.append((text[: max(0, line_end - span_start)], italic))
             rest.append((text[max(0, rest_start - span_start):], italic))
         return OrganismLines(_markup(line), _markup(rest))
-    named = _names_strain(words, strain) is not None
-    return OrganismLines(typed_taxon, "" if named else auto.strain)
+    return OrganismLines(typed_taxon, _strain_line_under(typed_taxon, metadata))
 
 
 class NamePatternData(TypedDict):

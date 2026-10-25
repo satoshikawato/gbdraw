@@ -128,6 +128,36 @@ def test_a_typed_record_label_is_line_one_as_typed() -> None:
     assert organism_name_lines(_K12, typed_strain="MG1655", record_label="E. coli") == OrganismLines("E. coli", "MG1655")
 
 
+_A4 = _meta("Lachnospiraceae bacterium A4", "A4")
+
+
+@pytest.mark.parametrize(
+    "metadata,typed,expected_strain",
+    [
+        # The /organism names the strain, so the Auto line 2 leaves it out; a
+        # typed line 1 replaces that name, so line 2 keeps the strain.
+        (_A4, "My isolate", "A4"),
+        (_A4, "<i>My</i> isolate", "A4"),
+        # The typed text names it: left out, as the Auto rule does.
+        (_A4, "Lachnospiraceae bacterium A4", ""),
+        # Each strain part is left out only when the typed text names it.
+        (_meta("Lachnospiraceae bacterium A4", "A4; DSM 1"), "My isolate", "A4; DSM 1"),
+        (_meta("Lachnospiraceae bacterium A4", "A4; DSM 1"), "Lachnospiraceae bacterium A4", "DSM 1"),
+        # The words the Auto rule puts after the taxon stay on line 2.
+        (_K12, "My isolate", "str. K-12 substr. MG1655"),
+    ],
+)
+def test_a_typed_line_one_keeps_the_strain_the_organism_named(
+    metadata: RecordSourceMetadata, typed: str, expected_strain: str
+) -> None:
+    # Record label (line 1 as typed) and a typed Species that stays whole give
+    # the same line 2: the Auto strain line read against the typed text.
+    assert organism_name_lines(metadata, record_label=typed) == OrganismLines(typed, expected_strain)
+    assert organism_name_lines(metadata, typed_taxon=typed) == OrganismLines(typed, expected_strain)
+    # A typed Subtitle or Strain still wins.
+    assert organism_name_lines(metadata, typed_strain="X", record_label=typed) == OrganismLines(typed, "X")
+
+
 @pytest.mark.parametrize("qualifiers,expected", [
     ({"chromosome": ["1"], "plasmid": ["p1"], "organelle": ["chloroplast"]}, "Chromosome 1"),
     ({"plasmid": ["p1"], "organelle": ["mitochondrion"]}, "p1"),
