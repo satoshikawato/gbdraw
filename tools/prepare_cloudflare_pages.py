@@ -59,10 +59,15 @@ def _read_immutable_assets_manifest() -> tuple[tuple[str, ...], dict[str, str]]:
 
 
 def render_bundle_headers() -> str:
-    """The bundle's `_headers`: isolation for every path, a year for immutable ones."""
-    prefixes, _ = _read_immutable_assets_manifest()
+    """The bundle's `_headers`: isolation for every path, a year for each pinned file.
+
+    One rule per pinned file, not per folder: Workers static assets answer a
+    missing path with the single-page-app `index.html`, and a folder rule would
+    let that page be cached as immutable.
+    """
+    _, pinned = _read_immutable_assets_manifest()
     immutable_rules = "".join(
-        f"\n/{prefix}*\n  Cache-Control: {IMMUTABLE_CACHE_CONTROL}\n" for prefix in prefixes
+        f"\n/{name}\n  Cache-Control: {IMMUTABLE_CACHE_CONTROL}\n" for name in sorted(pinned)
     )
     return ISOLATION_HEADERS + immutable_rules
 

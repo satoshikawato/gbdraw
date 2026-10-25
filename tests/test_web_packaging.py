@@ -1065,6 +1065,27 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
 
 
 @pytest.mark.browser
+def test_cloudflare_bundle_build_fails_when_a_pinned_vendor_file_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ensure_prepared_browser_wheel()
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    prefixes, pinned = cloudflare_module._read_immutable_assets_manifest()
+    name = sorted(pinned)[0]
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_read_immutable_assets_manifest",
+        lambda: (prefixes, {**pinned, name: "0" * 64}),
+    )
+    with pytest.raises(RuntimeError, match=name):
+        cloudflare_module.build_cloudflare_pages_bundle(
+            output_root=tmp_path / "cloudflare-pages",
+            commit_sha="abcdef1234567890abcdef1234567890abcdef12",
+        )
+
+
+@pytest.mark.browser
 def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     tmp_path: Path,
 ) -> None:
@@ -1122,6 +1143,12 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     bundle_config = (bundle_path / "js" / "config.js").read_text(encoding="utf-8")
     assert f'export const GBDRAW_WHEEL_CACHE_BUST = "{token}";' in bundle_config
     headers = (bundle_path / "_headers").read_text(encoding="utf-8")
+    # The build writes the cache rules and the module preloads, not only the
+    # isolation headers.
+    assert headers == cloudflare_module.render_bundle_headers()
+    assert index_html.count('<link rel="modulepreload"') == len(
+        cloudflare_module.module_preload_paths(bundle_path)
+    )
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers

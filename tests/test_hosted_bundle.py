@@ -52,24 +52,47 @@ def _load_cloudflare_module():
     return module
 
 
-def test_bundle_headers_cache_only_the_immutable_vendor_paths() -> None:
+def _header_rules(headers: str) -> dict[str, str]:
+    return {block.splitlines()[0]: block for block in headers.strip().split("\n\n")}
+
+
+def test_bundle_headers_cache_each_pinned_vendor_file() -> None:
     cloudflare = _load_cloudflare_module()
     headers = cloudflare.render_bundle_headers()
     immutable = "Cache-Control: public, max-age=31536000, immutable"
-    blocks = {
-        block.splitlines()[0]: block for block in headers.strip().split("\n\n")
-    }
-    for path in (
-        "/vendor/pyodide/*",
-        "/vendor/pyodide-wheels/*",
-        "/vendor/fonts/*",
-        "/vendor/phosphor-icons/*",
-    ):
-        assert immutable in blocks[path]
+    rules = _header_rules(headers)
+    _, pinned = cloudflare._read_immutable_assets_manifest()
+    for name in pinned:
+        assert not set(name) & set("*:? "), name  # a literal path, not a pattern
+        assert immutable in rules[f"/{name}"]
     # Mutable URLs keep the platform default (revalidate every load).
-    assert headers.count(immutable) == 4
-    assert "Cross-Origin-Embedder-Policy: require-corp" in blocks["/*"]
-    assert "frame-ancestors 'self'" in blocks["/gallery/examples/*"]
+    assert headers.count(immutable) == len(pinned)
+    assert "Cross-Origin-Embedder-Policy: require-corp" in rules["/*"]
+    assert "frame-ancestors 'self'" in rules["/gallery/examples/*"]
+
+
+def test_missing_vendor_path_matches_no_immutable_rule() -> None:
+    # Workers static assets answer a missing path with the single-page-app
+    # index.html (wrangler.toml `not_found_handling`); an immutable rule that
+    # matched it would let a browser keep that page a year.
+    cloudflare = _load_cloudflare_module()
+    prefixes, pinned = cloudflare._read_immutable_assets_manifest()
+    immutable_paths = {
+        line for line, block in _header_rules(cloudflare.render_bundle_headers()).items()
+        if "immutable" in block
+    }
+    assert immutable_paths == {f"/{name}" for name in pinned}
+    for prefix in prefixes:
+        assert f"/{prefix}does-not-exist.woff2" not in immutable_paths
+
+
+def test_bundle_headers_stay_inside_the_platform_limits() -> None:
+    # https://developers.cloudflare.com/workers/static-assets/headers/ :
+    # "up to 100 header rules", "each line ... has a 2,000 character limit".
+    cloudflare = _load_cloudflare_module()
+    headers = cloudflare.render_bundle_headers()
+    assert len(_header_rules(headers)) <= 100
+    assert max(len(line) for line in headers.splitlines()) <= 2000
 
 
 def test_immutable_vendor_files_match_their_manifest() -> None:
