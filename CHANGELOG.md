@@ -48,9 +48,10 @@ write-up of a release.
   without a typed Strain is cut into two lines by the same rule, keeping its
   words and italics as typed; a typed Record label is drawn as typed. Under a
   typed Record label, line 2 is the Subtitle, the typed Strain or the record's
-  strain, as before; under a typed Species, that strain line keeps a strain
-  the /organism named (`My isolate` over `Lachnospiraceae bacterium A4` draws
-  `A4`) and leaves out only what the typed text names. Saved Linear Auto
+  strain, as before; under a typed Species, that strain line is the record's
+  Auto strain line, so a strain the /organism named is kept (`My isolate` over
+  `Lachnospiraceae bacterium A4` draws `A4`), and it is left out when the typed
+  text names the record's strain. Saved Linear Auto
   definitions keep their text until the file is read again.
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read

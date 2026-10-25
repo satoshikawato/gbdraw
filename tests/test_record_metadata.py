@@ -17,6 +17,7 @@ from gbdraw.core.record_metadata import (
     organism_name_lines,
     split_organism_lines,
 )
+from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.exceptions import GbdrawError
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 
@@ -160,6 +161,16 @@ def test_a_typed_line_one_keeps_the_strain_the_organism_named(
     # A typed Record label draws the record's strain as stored; a typed Subtitle or Strain wins.
     assert organism_name_lines(metadata, record_label=typed) == OrganismLines(typed, metadata.strain)
     assert organism_name_lines(metadata, typed_strain="X", record_label=typed) == OrganismLines(typed, "X")
+
+
+def test_a_typed_species_draws_the_raw_strain_line_as_literal_text() -> None:
+    # Line 2 is a typed-markup string, so the Auto escape (A&amp;B) must not
+    # reach it: "A&B" is drawn as typed. A change to either side shows here.
+    metadata = _meta("Candidatus Foo & Bar", "A&B")
+    lines = organism_name_lines(metadata, typed_taxon="My isolate")
+    assert lines == OrganismLines("My isolate", "A&B")
+    assert "".join(str(part["text"]) for part in parse_mixed_content_text(lines.strain)) == "A&B"
+    assert split_organism_lines(metadata).strain == "A&amp;B"
 
 
 @pytest.mark.parametrize("qualifiers,expected", [
