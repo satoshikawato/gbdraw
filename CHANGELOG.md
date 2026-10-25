@@ -72,6 +72,11 @@ write-up of a release.
   of by the decoded comparison, as the web app does. Replaying the Vibrio
   collinearity Gallery Session took 13.4 s and 704 MiB instead of 20.4 s and
   1,083 MiB; SVG bytes are unchanged (#1354).
+- Performance (CLI, Python): replaying a Session with protein LOSAT results
+  checks each saved LOSATP blastp table against its record pair once instead
+  of once in each of five validation steps. For the Hepatoplasmataceae
+  Similarity group Gallery Session these checks took 0.54 s instead of 0.88 s;
+  the SVG and the saved Session are unchanged (#1357).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
