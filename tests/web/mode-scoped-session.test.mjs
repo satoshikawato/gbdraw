@@ -930,3 +930,21 @@ test('no Load reader compares a Session version with a Session 46-48 threshold',
     .filter(({ line }) => !/^(\/\/|\*|\/\*\*)/.test(line) && compare.test(line)).map(({ at, line }) => `${at} ${line}`));
   assert.deepEqual(found, []);
 });
+
+// OV-1791: a Session 49 Load lists one row per fault in a drawing's stored
+// unmanaged overrides, at the path the file holds (`drawings[i]`), for the
+// opened drawing as for the others.
+test('a Session 49 Load lists each drawing\'s stored override fault once, at its drawings[i] path', async () => {
+  const session = v49Session('drawings-circular-linear');
+  session.ui.activeDrawingId = 'circular';
+  const faulted = session.drawings.flatMap((entry, index) => (entry.config ? [{ entry, index }] : []));
+  assert.ok(faulted.some(({ entry }) => entry.id === 'circular'));
+  faulted.forEach(({ entry }) => { entry.config.unmanagedConfigOverrides = { [`no_such.${entry.id}.key`]: 1 }; });
+  const loaded = await importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, { confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.repairs.filter((repair) => repair.path.includes('unmanagedConfigOverrides'))
+    .map((repair) => `${repair.code} ${repair.path}`).sort(), faulted
+    .map(({ entry, index }) => `setting-replaced drawings[${index}].config.unmanagedConfigOverrides["no_such.${entry.id}.key"]`).sort());
+});

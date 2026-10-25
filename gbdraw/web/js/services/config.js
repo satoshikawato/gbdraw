@@ -6010,11 +6010,21 @@ const importSessionDocument = async (e, options = {}) => {
       storedDrawingInputs,
       projectedDrawingId
     } = preflight;
+    /**
+     * Where a drawing's draft part is in the file: a Session 49's
+     * entry in its list of drawings, a Session 46-48's `modes.<mode>` (OV-1791).
+     * @param {string} mode @param {number} index The drawing's place in the file's list.
+     */
+    const draftPartAt = (mode, index) => (projectedDrawingId !== null ? drawingSetPath(index).slice(0, -1) : `modes.${mode}`);
     if (restoredConfig && unmanagedConfigValidation) {
-      // A stored draft's overrides are read; a request's are checked.
+      // A stored draft's overrides are read, at the path the file holds
+      // them; a request's are checked. The draft loop below reads every
+      // other drawing's (OV-1791: one read, one row per fault).
+      const openedIndex = upgrade ? upgrade.document.drawings.findIndex((entry) => entry.id === projectedDrawingId) : -1;
       restoredConfig.unmanagedConfigOverrides = unmanagedConfigValidation.source === 'draft'
         ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, modeScopedSession
-          ? `modes.${unmanagedConfigValidation.mode}.config.unmanagedConfigOverrides` : 'config.unmanagedConfigOverrides', repairs)
+          ? `${draftPartAt(unmanagedConfigValidation.mode, openedIndex)}.config.unmanagedConfigOverrides`
+          : 'config.unmanagedConfigOverrides', repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
     for (const inputs of storedDrawingInputs.values()) {
@@ -6120,7 +6130,7 @@ const importSessionDocument = async (e, options = {}) => {
     const draftParts = new Map();
     if (upgraded) {
       upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
-        slice: drawingDraftPartOf(entry), at: projectedDrawingId !== null ? drawingSetPath(index).slice(0, -1) : `modes.${entry.mode}`
+        slice: drawingDraftPartOf(entry), at: draftPartAt(entry.mode, index)
       }));
       const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (projectedDrawingId === null ? data.modes : null);
       unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
@@ -6699,9 +6709,10 @@ const importSessionDocument = async (e, options = {}) => {
         pathIn(at, 'config'), mode, { slice: modeScopedSession }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
       repairs.push(...sliceFieldRepairs(slice, at, mode));
-      // A saved unmanaged override is checked against its own drawing's mode (PD-OI-009, OV-106).
+      // A saved unmanaged override is checked against its own drawing's mode
+      // (PD-OI-009, OV-106); the restored config's were read above (OV-1791).
       const savedOverrides = slice.config?.unmanagedConfigOverrides;
-      if (isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
+      if (!(config === restoredConfig && unmanagedConfigValidation) && isPlainObject(savedOverrides) && Object.keys(savedOverrides).length > 0) {
         config.unmanagedConfigOverrides = await readStoredUnmanagedConfigOverrides({
           mode, configOverrides: savedOverrides, source: 'draft'
         }, `${pathIn(at, 'config')}.unmanagedConfigOverrides`, repairs);
