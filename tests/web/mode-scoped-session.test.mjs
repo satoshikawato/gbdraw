@@ -1030,6 +1030,19 @@ test('Save writes each Session 49 drawing\'s own CLI options, found by drawing I
   }
 });
 
+test('Save checks each Session 49 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  // Load reads such a type as GenBank with a row (OV-594); Save refuses to write one.
+  state.activeDrawing().inputType.value = 'embl';
+  await assert.rejects(
+    exportSession('input-type', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) }),
+    /INPUT_INVALID/
+  );
+});
+
 // OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
 // Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
 test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {

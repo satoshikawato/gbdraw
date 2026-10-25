@@ -5904,9 +5904,9 @@ const exportSessionDocument = async (
     };
   }), activeDrawingId);
   try {
-    // Each drawing's one-drawing view, as Load reads it.
+    // Each drawing's one-drawing view, through Save's checks.
     sessionData.drawings.forEach((entry) => validateSessionAuthorityInventory(
-      /** @type {SessionEnvelope} */ (/** @type {unknown} */ (drawingViewOf(sessionData, entry))), sessionData.version, {}, { load: true }
+      /** @type {SessionEnvelope} */ (/** @type {unknown} */ (drawingViewOf(sessionData, entry))), sessionData.version
     ));
   } catch (error) {
     console.error('Session writer validation failed.', normalizeUserFacingError(error));
