@@ -29,7 +29,7 @@ const WEB_MODULES = readdirSync(WEB_ROOT, { recursive: true })
 // VALIDATION_UNCLASSIFIED (mostly internal invariants today). One total (kind
 // `count`), so a site that moves to another module with its code does not
 // change it.
-const UNCLASSIFIED_THROW_BASELINE = 578;
+const UNCLASSIFIED_THROW_BASELINE = 577;
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
