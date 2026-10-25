@@ -27,6 +27,7 @@ import gbdraw.cli_utils.session  # noqa: F401
 import gbdraw.linear  # noqa: F401
 import gbdraw.session  # noqa: F401
 from gbdraw import cli
+from gbdraw.analysis.protein_colinearity import validate_protein_identity_manifest
 from gbdraw.api.request_render import _extract_linear_request_proteins
 from gbdraw.api import (
     CircularDiagramRequest,
@@ -242,3 +243,14 @@ def test_cli_linear_session_extracts_its_proteins_once(
     # The Session adapter extracts the proteins to check the saved LOSATP
     # entries; the build of the same plan reuses that extraction.
     assert len(extractions) == 1
+
+
+def test_cli_linear_session_validates_the_identity_manifest_twice(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    validations = _count_calls(monkeypatch, validate_protein_identity_manifest)
+    _run_cli("linear", "--session", str(PROTEIN_SESSION), "-o", str(tmp_path / "replayed"), "-f", "svg")
+    # The Session load and CurrentRequestArtifacts validate the saved manifest;
+    # the protein extraction does not validate the manifest it builds.
+    assert len(validations) == 2
