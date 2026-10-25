@@ -39,6 +39,7 @@ import { ruleLegendCaptions } from './specific-color-rules.js';
 import { sanitizeSvgContent, unwrapSvgFragment, wrapSvgFragment } from './svg-sanitization.js';
 import { LEGEND_ORDER_RECORD, RESULT_BASE_SELECTOR, pythonDrawnAttribute, resultBaseAttribute } from './result-paint-bases.js';
 import { serializeCleanSvg } from './svg-serialization.js';
+import { MODE_SCOPED_SESSION_VERSION } from '../contracts/schema.generated.js';
 import { ownEntry } from '../utils/own-entry.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
 import { normalizeSvgResultIds } from './svg-result-normalization.js';
@@ -1465,10 +1466,6 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   return recorded;
 };
 
-// The first Session version whose Results carry the records of Python's
-// paint (0.14.0); an older Session's Result shows its edits without them.
-const PAINT_RECORD_SESSION_VERSION = 46;
-
 // The renamed generated rows a Session lists, by their caption: main's writer
 // (Sessions 44 to 46) renamed a row of Python's by rewriting its key and kept
 // Python's caption only as the entry's `originalCaption`. Only a caption no
@@ -1590,7 +1587,9 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const editsShown = edits && [
     edits.featureColorOverrides, edits.featureStrokeOverrides, edits.legendColorOverrides, edits.legendStrokeOverrides
   ].some((overrides) => Object.keys(overrides || {}).length > 0);
-  const needsRecords = Boolean(edits && editsShown && edits.sessionVersion < PAINT_RECORD_SESSION_VERSION);
+  // A Session before 46 (0.14.0, the mode-scoped layout) saved no records of
+  // Python's paint with its Results.
+  const needsRecords = Boolean(edits && editsShown && edits.sessionVersion < MODE_SCOPED_SESSION_VERSION);
   const normalizes = (/** @type {{ content?: unknown }} */ result) => Boolean(legacy?.applies(result?.content));
   const legacyNormalizationCount = results.filter(normalizes).length;
   const renames = edits ? savedLegendRenames(edits) : new Map();

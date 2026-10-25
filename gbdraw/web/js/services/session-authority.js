@@ -34,7 +34,7 @@ import {
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
   ROW_KEYED_LEGEND_SESSION_VERSION,
-  SESSION_VERSION,
+  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -209,8 +209,25 @@ export const readSessionInput = (value) => {
 // threshold (tests/web/session-authority.test.mjs compares them with the bands).
 // A Session 49 is a list of drawings (`isDrawingsBand`): none of the four
 // bands of the file's sets holds it, so none of them reads it (DESIGN §6).
+// Every Web reader of a Session reads a version's band through these and the
+// two version tests below (tests/web/mode-scoped-session.test.mjs).
+/** A Session 49 or later is a list of drawings. @param {number} version */
+export const versionHoldsDrawings = (version) => version >= SESSION_DRAWINGS_LAYOUT.version;
+/** A Session 46 or later keeps each mode's draft in its slice. @param {number} version */
+export const versionKeepsModeSlices = (version) => version >= MODE_SCOPED_SESSION_VERSION;
+// The versions with a settings-only form (`is_settings_only_session`): a
+// Session 49 has none, its drawing without a request holds no Results
+// (`projectsWithoutRequest`; DESIGN §1, §6).
+/** @type {ReadonlySet<unknown>} */
+const SETTINGS_ONLY_FORM_VERSIONS = new Set([42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
+  FILE_IMPORT_ORIGIN_SESSION_VERSION]);
+// The versions whose Web bindings may be schema 2 (`_validate_web_file_bindings`),
+// a Session 49 for each drawing's bindings (its one-drawing view).
+/** @type {readonly number[]} */
+const BINDING_SCHEMA_2_VERSIONS = [41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
+  FILE_IMPORT_ORIGIN_SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version];
 /** @param {SessionChecked} document @returns {document is SessionChecked49} */
-export const isDrawingsBand = (document) => document.version >= SESSION_DRAWINGS_LAYOUT.version;
+export const isDrawingsBand = (document) => versionHoldsDrawings(document.version);
 /** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
 export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION && !isDrawingsBand(document);
 /** @param {SessionChecked} document @returns {document is SessionChecked39 | SessionChecked40 | SessionChecked46} */
@@ -218,7 +235,7 @@ export const isArtifactBand = (document) => document.version >= CURRENT_ARTIFACT
 /** @param {SessionChecked} document @returns {document is SessionChecked40 | SessionChecked46} */
 export const isAuthorityBand = (document) => document.version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && !isDrawingsBand(document);
 /** @param {SessionChecked} document @returns {document is SessionChecked46} */
-export const isModeScopedBand = (document) => document.version >= MODE_SCOPED_SESSION_VERSION && !isDrawingsBand(document);
+export const isModeScopedBand = (document) => versionKeepsModeSlices(document.version) && !isDrawingsBand(document);
 
 /**
  * A value that holds nothing: `null`, `[]` or `{}` (E-OD06; R4's held parts).
@@ -362,7 +379,7 @@ const heldInputNames = (value) => {
 // 27-44 (B2d-4): whether it keeps its drafts in mode slices (46 or later),
 // and whether its Legend lists name a row by its shown caption (46 or older).
 /** @param {SessionEnvelope} document */
-export const isModeScopedVersion = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+export const isModeScopedVersion = (document) => versionKeepsModeSlices(document.version);
 /** @param {SessionEnvelope} document */
 export const holdsCaptionLegendRows = (document) => document.version < ROW_KEYED_LEGEND_SESSION_VERSION;
 
@@ -643,7 +660,7 @@ export const restoresNothing = (stored, repairs) => {
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? topLevelKey(path) : path)));
   // A Session 49 restores nothing when every drawing it holds was dropped.
   const storedDrawings = /** @type {{ drawings?: unknown }} */ (/** @type {unknown} */ (stored)).drawings;
-  if (stored.version >= SESSION_DRAWINGS_LAYOUT.version && Array.isArray(storedDrawings)) {
+  if (versionHoldsDrawings(stored.version) && Array.isArray(storedDrawings)) {
     return storedDrawings.every((_entry, index) => dropped.has(drawingSetPath(index).slice(0, -1)));
   }
   /**
@@ -763,7 +780,7 @@ const validateLinearComparisonPlan = (plan) => {
  */
 export const validateCurrentComparisonAuthority = (sessionData, { load = false } = {}) => {
   // Session 46: the comparison draft is the Linear drawing's.
-  const draftConfig = Number(sessionData.version) >= MODE_SCOPED_SESSION_VERSION
+  const draftConfig = versionKeepsModeSlices(Number(sessionData.version))
     ? /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config'>>} */ (sessionData.modes)?.linear?.config
     : sessionData.config;
   /** @type {Record<string, unknown>} */
@@ -910,9 +927,27 @@ export const hasBiologicalSessionInputs = (files = {}) => (
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
-  && [42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION].includes(data.version)
+export const isSettingsOnlySessionDocument = data => data != null && settingsOnlyAt(data, data.version);
+
+/**
+ * Whether a document of the band of `version` is a settings-only Session: its
+ * version has that form and its request is null.
+ * @param {SessionInput} data @param {unknown} version
+ */
+const settingsOnlyAt = (data, version) => SETTINGS_ONLY_FORM_VERSIONS.has(version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
+
+/**
+ * Whether Load projects a document of the file it reads without a request: a
+ * settings-only Session, or the one-drawing view (`drawingViewOf`) of a
+ * Session 49 drawing that holds no request. The band is the file's: Load's
+ * migration of a Session 27-39 names the writer's version.
+ * @param {SessionInput} data
+ * @param {number} sourceVersion The version of the file Load reads.
+ * @returns {boolean}
+ */
+export const projectsWithoutRequest = (data, sourceVersion) => settingsOnlyAt(data, sourceVersion)
+  || (versionHoldsDrawings(sourceVersion) && data.renderRequest == null);
 
 /**
  * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
@@ -1114,7 +1149,7 @@ const validateSettingsOnlyDocument = (data, { load = false } = {}) => {
   if (load) return;
   // Session 46: each mode's slice holds that mode's settings draft, with its
   // `form` and `adv` (`_validate_settings_only_session`, OV-591).
-  if (data.version >= MODE_SCOPED_SESSION_VERSION) {
+  if (versionKeepsModeSlices(data.version)) {
     // `ui.mode` is a Session value: the slice is read by its own key (OV-612).
     const mode = /** @type {UnvalidatedFields<'mode'>} */ (data.ui)?.mode;
     const slice = isPlainObject(data.modes) && typeof mode === 'string' && Object.hasOwn(data.modes, mode)
@@ -1531,7 +1566,7 @@ const validateModeScopedFields = (sessionData) => {
  * @param {number | string} version
  */
 const validateBandFields = (sessionData, version) => {
-  if (Number(version) < MODE_SCOPED_SESSION_VERSION) {
+  if (!versionKeepsModeSlices(Number(version))) {
     // The stored Result sets (`storedResultSets`) are named by their path.
     const fields = [...storedResultSets(sessionData).filter(({ projected }) => !projected).map(({ at }) => at.slice(0, -1)),
       ...MODE_SCOPED_TOP_LEVEL_KEYS];
@@ -1560,7 +1595,7 @@ const validateBandFields = (sessionData, version) => {
   if (forbiddenFeatureFields.length > 0) {
     throw new Error(`Session version ${String(version)} contains branch-only feature field(s): ${forbiddenFeatureFields.join(', ')}`);
   }
-  if (Number(version) >= MODE_SCOPED_SESSION_VERSION) {
+  if (versionKeepsModeSlices(Number(version))) {
     SLICE_MODES.forEach((mode) => {
       const sliceFeatures = /** @type {UnvalidatedFields<string, UnvalidatedFields<'features'>>} */ (sessionData.modes)?.[mode]?.features;
       if (!isPlainObject(sliceFeatures) || !Object.hasOwn(sliceFeatures, 'featureOverrides')) return;
@@ -1598,24 +1633,23 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
   const bindings = validateWebFileBindings(
     /** @type {UnvalidatedFields<'bindings'>} */ (sessionData.webFiles),
     /** @type {UnvalidatedFields<string, UnvalidatedFields<keyof RawSessionResourceDescriptor>>} */ (sessionData.resources),
-    webBindingInputSlot(Number(version) >= SESSION_DRAWINGS_LAYOUT.version, /** @type {UnvalidatedFields<'mode'>} */ (sessionData.ui)?.mode)
+    webBindingInputSlot(versionHoldsDrawings(Number(version)), /** @type {UnvalidatedFields<'mode'>} */ (sessionData.ui)?.mode)
   );
   // A Linear record the Session turns OFF names a bound record card (record-selection D-05).
   const linearRecordsOff = /** @type {UnvalidatedFields<'linear', UnvalidatedFields<'config', UnvalidatedFields<'recordsOff'>>>} */ (
     sessionData.modes
   )?.linear?.config?.recordsOff;
   // Load drops a record that names no card (`readRecordsOff`).
-  if (!load && Number(version) >= MODE_SCOPED_SESSION_VERSION && Array.isArray(linearRecordsOff)) {
+  if (!load && versionKeepsModeSlices(Number(version)) && Array.isArray(linearRecordsOff)) {
     const boundUids = new Set(/** @type {unknown[]} */ (Array.isArray(bindings?.linearSeqs) ? bindings.linearSeqs : []).map((sequence) => /** @type {UnvalidatedFields<'uid'>} */ (sequence)?.uid));
     if (/** @type {unknown[]} */ (linearRecordsOff).some((uid) => !boundUids.has(uid))) {
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
   // A Session 49 drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION,
-    SESSION_DRAWINGS_LAYOUT.version].includes(Number(version))) {
-    throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
-      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, ${SESSION_VERSION}, or ${SESSION_DRAWINGS_LAYOUT.version}.`);
+  if (bindings?.schema === 2 && !BINDING_SCHEMA_2_VERSIONS.includes(Number(version))) {
+    throw new Error(`Web binding schema 2 requires session version ${BINDING_SCHEMA_2_VERSIONS.slice(0, -1).join(', ')}, `
+      + `or ${BINDING_SCHEMA_2_VERSIONS.at(-1)}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
@@ -1675,9 +1709,7 @@ export const adoptCurrentSessionDocument = (sessionData, currentVersion, storedS
   if (sessionData.version !== currentVersion) {
     throw new Error('Only the current session schema can use adoptive ownership.');
   }
-  // A Session 49 drawing without a request projects as a settings-only Session.
-  const requestLess = isSettingsOnlySessionDocument(sessionData)
-    || (currentVersion >= SESSION_DRAWINGS_LAYOUT.version && sessionData.renderRequest == null);
+  const requestLess = projectsWithoutRequest(sessionData, currentVersion);
   const canonical = requestLess ? null : adoptRuntimeCanonicalSession({
     renderRequest: sessionData.renderRequest,
     resources: sessionData.resources,
