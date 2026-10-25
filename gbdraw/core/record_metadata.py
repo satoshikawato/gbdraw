@@ -830,18 +830,18 @@ def organism_name_lines(
 
     Without typed text they are the Auto lines (``split_organism_lines``). A
     typed Record label is line 1 as typed and wins over a typed Species;
-    line 2 is then the typed strain or the Auto strain line (PD-OI-012:
-    explicit values override their lines, empty values keep the inferred
-    output). A typed Strain keeps both lines as typed, with the Auto taxon
+    line 2 is then the typed Subtitle or Strain, else the record's strain as
+    stored, with no check against the label (PD-OI-012: explicit values
+    override their lines, empty values keep the inferred output). A typed Strain keeps both lines as typed, with the Auto taxon
     line when no line 1 is typed. A typed Species (``typed_taxon``) without a
     typed Strain is read with the Auto rule, the record's strain and lineage:
     when it reads a taxon and words remain, the typed text is cut there into
     two lines, its words and italics kept as typed (DF-D09). Otherwise the
-    typed text is line 1. Under a typed line 1 and no typed line 2, line 2 is
+    typed text is line 1. Under a typed Species and no typed line 2, line 2 is
     the Auto strain line read against the typed text (``_strain_line_under``).
     """
     if record_label:
-        return OrganismLines(record_label, typed_strain or _strain_line_under(record_label, metadata))
+        return OrganismLines(record_label, typed_strain or metadata.strain)
     if typed_strain:
         return OrganismLines(typed_taxon or split_organism_lines(metadata).taxon, typed_strain)
     if not typed_taxon:

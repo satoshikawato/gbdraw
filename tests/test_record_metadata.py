@@ -124,7 +124,12 @@ def test_a_typed_record_label_is_line_one_as_typed() -> None:
     # Species; an empty Subtitle keeps the Auto strain line, a typed one wins.
     assert organism_name_lines(
         _K12, typed_taxon="Escherichia coli K-12", record_label="Escherichia coli MG1655"
-    ) == OrganismLines("Escherichia coli MG1655", "str. K-12 substr. MG1655")
+    ) == OrganismLines("Escherichia coli MG1655", "K-12")
+    # Dev's rule: line 2 is the record's strain as stored, with no check against the label.
+    assert organism_name_lines(_K12, record_label="E. coli K-12") == OrganismLines("E. coli K-12", "K-12")
+    assert organism_name_lines(_meta("Lachnospiraceae bacterium A4", "A4"), record_label="My isolate") == OrganismLines(
+        "My isolate", "A4"
+    )
     assert organism_name_lines(_K12, typed_strain="MG1655", record_label="E. coli") == OrganismLines("E. coli", "MG1655")
 
 
@@ -150,11 +155,10 @@ _A4 = _meta("Lachnospiraceae bacterium A4", "A4")
 def test_a_typed_line_one_keeps_the_strain_the_organism_named(
     metadata: RecordSourceMetadata, typed: str, expected_strain: str
 ) -> None:
-    # Record label (line 1 as typed) and a typed Species that stays whole give
-    # the same line 2: the Auto strain line read against the typed text.
-    assert organism_name_lines(metadata, record_label=typed) == OrganismLines(typed, expected_strain)
+    # A typed Species that stays whole: the Auto strain line read against the typed text.
     assert organism_name_lines(metadata, typed_taxon=typed) == OrganismLines(typed, expected_strain)
-    # A typed Subtitle or Strain still wins.
+    # A typed Record label draws the record's strain as stored; a typed Subtitle or Strain wins.
+    assert organism_name_lines(metadata, record_label=typed) == OrganismLines(typed, metadata.strain)
     assert organism_name_lines(metadata, typed_strain="X", record_label=typed) == OrganismLines(typed, "X")
 
 

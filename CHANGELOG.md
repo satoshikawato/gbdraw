@@ -46,11 +46,11 @@ write-up of a release.
   drew "." (OV-1837); a typed plot title with nothing to draw (`<i></i>`) now
   draws no title in either mode instead of failing (OV-1845). A typed Species
   without a typed Strain is cut into two lines by the same rule, keeping its
-  words and italics as typed; a typed Record label is drawn as typed, over
-  the Auto strain line when the Subtitle is empty. Under a typed Record label
-  or Species, that strain line keeps a strain the /organism named (`My isolate`
-  over `Lachnospiraceae bacterium A4` draws `A4`) and leaves out only what the
-  typed text names. Saved Linear Auto
+  words and italics as typed; a typed Record label is drawn as typed. Under a
+  typed Record label, line 2 is the Subtitle, the typed Strain or the record's
+  strain, as before; under a typed Species, that strain line keeps a strain
+  the /organism named (`My isolate` over `Lachnospiraceae bacterium A4` draws
+  `A4`) and leaves out only what the typed text names. Saved Linear Auto
   definitions keep their text until the file is read again.
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
