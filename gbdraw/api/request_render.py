@@ -1636,7 +1636,8 @@ def _coerce_resolved_collection(
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
                 detected_topology=_detected_topology(record, source_kind),
-                source_features=capture_source_features(record),
+                # The records are the caller's: capture without stamping them.
+                source_features=capture_source_features(record, stamp=False),
             )
         )
     return ResolvedRecordCollection(records, tuple(provenance))

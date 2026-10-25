@@ -8,6 +8,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, NamedTuple, overload
 
 from Bio.SeqFeature import SeqFeature
@@ -104,12 +105,14 @@ class SourceFeatureCatalog:
         )
 
 
-def capture_source_features(record: SeqRecord) -> SourceFeatureCatalog:
+def capture_source_features(record: SeqRecord, *, stamp: bool = True) -> SourceFeatureCatalog:
     """Hash each source feature once, before request crop/visibility.
 
-    The hash is stamped on the feature, so every copy a crop, reverse
-    complement or type filter makes reads it instead of hashing again. Run it
-    only on records gbdraw owns: a fresh parse or its own copy.
+    With ``stamp`` (the default) the hash is stamped on the feature, so every
+    copy a crop, reverse complement or type filter makes reads it instead of
+    hashing again. Stamp only records gbdraw owns: a fresh parse or its own
+    copy. ``stamp=False`` leaves the features untouched, for a record the
+    caller owns.
     """
     captured = []
     for ordinal, feature in enumerate(_iter_source_features(record.features)):
@@ -117,7 +120,8 @@ def capture_source_features(record: SeqRecord) -> SourceFeatureCatalog:
         stable_id, parts = computed_source_feature_hash_and_parts(
             feature, record, record_id=record.id
         )
-        _stamp_source_feature_hash(feature, record.id, stable_id)
+        if stamp:
+            _stamp_source_feature_hash(feature, record.id, stable_id)
         if stable_id is not None:
             captured.append(_CapturedSourceFeature(
                 ordinal if index is None else index, stable_id, parts, feature,
@@ -127,7 +131,7 @@ def capture_source_features(record: SeqRecord) -> SourceFeatureCatalog:
         raise ValidationError(
             "Source feature catalog contains duplicate source feature indexes."
         )
-    return SourceFeatureCatalog(str(record.id), source_hashes, tuple(captured))
+    return SourceFeatureCatalog(str(record.id), MappingProxyType(source_hashes), tuple(captured))
 
 
 @dataclass(frozen=True)

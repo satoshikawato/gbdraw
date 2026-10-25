@@ -29,9 +29,16 @@ class _SourceFeatureAnchorProfile(NamedTuple):
 
 
 class _SourceFeatureHashStamp(NamedTuple):
-    """The source hash of a feature, computed once for the record it was loaded in."""
+    """The source hash of a feature, computed once for the record it was loaded in.
+
+    The hash also depends on the feature's type and location, so the stamp keeps
+    the type and the location object it was computed for; a reader accepts it
+    only for that same type and location object.
+    """
 
     record_id: str | None
+    feature_type: str
+    location: object
     feature_hash: str
 
 
@@ -159,16 +166,33 @@ def _stamp_source_feature_hash(
         if hasattr(feature, _SOURCE_FEATURE_HASH_ATTR):
             delattr(feature, _SOURCE_FEATURE_HASH_ATTR)
         return
-    setattr(feature, _SOURCE_FEATURE_HASH_ATTR, _SourceFeatureHashStamp(record_id, feature_hash))
+    setattr(
+        feature,
+        _SOURCE_FEATURE_HASH_ATTR,
+        _SourceFeatureHashStamp(
+            record_id, str(getattr(feature, "type", "") or ""), getattr(feature, "location", None), feature_hash,
+        ),
+    )
+
+
+def _feature_hash_stamp(feature: object) -> _SourceFeatureHashStamp | None:
+    """The stamp when it was computed for the feature's current type and location object."""
+
+    stamp = getattr(feature, _SOURCE_FEATURE_HASH_ATTR, None)
+    if (
+        isinstance(stamp, _SourceFeatureHashStamp)
+        and stamp.feature_type == str(getattr(feature, "type", "") or "")
+        and stamp.location is getattr(feature, "location", None)
+    ):
+        return stamp
+    return None
 
 
 def _stamped_source_feature_hash(feature: object, record_id: str | None) -> str | None:
-    """The stored source hash when it was computed for ``record_id``, else None."""
+    """The stored source hash when it was computed for ``record_id`` and the feature as it is, else None."""
 
-    stamp = getattr(feature, _SOURCE_FEATURE_HASH_ATTR, None)
-    if isinstance(stamp, _SourceFeatureHashStamp) and stamp.record_id == record_id:
-        return stamp.feature_hash
-    return None
+    stamp = _feature_hash_stamp(feature)
+    return stamp.feature_hash if stamp is not None and stamp.record_id == record_id else None
 
 
 def _mapped_feature_location_parts(
@@ -233,9 +257,9 @@ def _copy_source_feature_identity(
         _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR,
         _source_feature_anchor_profile(source, coord_step=coord_step),
     )
-    stamp = getattr(source, _SOURCE_FEATURE_HASH_ATTR, None)
-    if isinstance(stamp, _SourceFeatureHashStamp):
-        setattr(target, _SOURCE_FEATURE_HASH_ATTR, stamp)
+    stamp = _feature_hash_stamp(source)
+    if stamp is not None:
+        _stamp_source_feature_hash(target, stamp.record_id, stamp.feature_hash)
 
 
 def _read_coord_map(record: object) -> tuple[int, int]:
