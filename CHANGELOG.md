@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (CLI, Python, web app): the protein extraction no longer
+  validates the protein identity manifest it has just built; it keeps the one
+  check its input can fail (rendered-view field names in record keys,
+  selectors and regions). The extraction for the Vibrio collinearity Gallery
+  Session took 0.53 s instead of 0.67 s; the SVG and the saved Session are
+  unchanged (#1370).
 - Performance (CLI): the installed `gbdraw` command now starts through a private `_gbdraw_console.py` module that sets
   `OPENBLAS_NUM_THREADS=1` before NumPy loads, only when you have not set the variable yourself. A one-shot render no
   longer starts an OpenBLAS thread pool it does not use (NC_010162 circular: user CPU 5.2 s -> 1.9 s, wall 1.87 s ->
