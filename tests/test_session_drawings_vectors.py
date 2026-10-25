@@ -214,7 +214,7 @@ def test_only_sessions_46_to_48_move_to_drawings(version: int) -> None:
 def test_a_circular_only_session_48_upgrades_to_one_drawing_with_the_packaged_defaults() -> None:
     from gbdraw.session import upgrade_session_document
 
-    upgraded = upgrade_session_document(_settings_only_v48(), version=49).document.to_dict()
+    upgraded = upgrade_session_document(_settings_only_v48()).document.to_dict()
     assert [drawing["id"] for drawing in upgraded["drawings"]] == ["circular"]
 
 

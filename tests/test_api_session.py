@@ -45,6 +45,7 @@ from gbdraw.api import (
 from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
+from tests.utils.session_drawing_view import build_mode_scoped_session_document, drawing_view, upgrade_to_mode_scoped
 
 
 def _record(record_id: str = "record") -> RecordInput:
@@ -75,9 +76,10 @@ def test_session_document_round_trip_owns_resource_lifetime(
     assert document.mode == mode
     assert document.has_canonical_request is True
     assert document.to_dict()["resources"]["record-1-genbank"]["encoding"] == "base64"
-    assert document.to_dict()["renderRequest"]["output"]["overwrite"] is False
-    assert document.to_dict()["results"] == []
-    assert document.to_dict()["editorState"]["featureCatalog"] is None
+    written = drawing_view(document.to_dict())
+    assert written["renderRequest"]["output"]["overwrite"] is False
+    assert written["results"] == []
+    assert written["editorState"]["featureCatalog"] is None
 
     with materialize_session(
         document,
@@ -163,7 +165,7 @@ def test_direct_session_render_ignores_stored_overwrite_permission(
         ),
     )
     document = build_session_document(request)
-    document._data["renderRequest"]["output"]["overwrite"] = True
+    document._data["drawings"][0]["renderRequest"]["output"]["overwrite"] = True
     protected = tmp_path / "protected.svg"
     protected.write_text("keep this diagram", encoding="utf-8")
 
@@ -198,7 +200,7 @@ def test_current_document_quarantines_legacy_protein_cache_on_save(
     reloaded = load_session_document(session_path)
 
     assert saved.version == reloaded.version == CURRENT_SESSION_VERSION
-    assert reloaded.to_dict()["losatCache"]["entries"] == []
+    assert drawing_view(reloaded.to_dict())["losatCache"]["entries"] == []
     assert reloaded.to_dict()["legacyArtifacts"]["proteinRawCandidates"][
         "entries"
     ] == [
@@ -377,7 +379,7 @@ def test_partial_materialization_failure_cleans_owned_directory(tmp_path: Path) 
 def test_session_document_returns_detached_payload() -> None:
     document = build_session_document(CircularDiagramRequest(records=(_record(),)))
     detached = document.to_dict()
-    detached["renderRequest"]["mode"] = "linear"
+    detached["drawings"][0]["renderRequest"]["mode"] = "linear"
 
     assert document.mode == "circular"
     json.dumps(document.to_dict())
@@ -399,7 +401,7 @@ def test_v32_web_slot_specs_drop_only_legacy_feature_geometry(
             )
         ),
     )
-    data = build_session_document(request).to_dict()
+    data = build_mode_scoped_session_document(request)
     data["version"] = 32
     encoded_slots = data["renderRequest"]["diagramOptions"]["tracks"][
         "linearTrackSlots"
@@ -451,7 +453,7 @@ def test_v32_structured_slots_preserve_non_feature_geometry_and_fields(
             )
         ),
     )
-    data = build_session_document(request).to_dict()
+    data = build_mode_scoped_session_document(request)
     data["version"] = 32
     encoded_feature = data["renderRequest"]["diagramOptions"]["tracks"][
         "linearTrackSlots"
@@ -784,7 +786,7 @@ def test_python_depth_request_projects_in_web(tmp_path: Path) -> None:
     )
     session_path = tmp_path / "python-canonical-depth.gbdraw-session.json"
     save_session_document(session_path, request)
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
 
     assert len(session["renderRequest"]["diagramOptions"]["depthTracks"]) == 2
     subprocess.run(
@@ -839,7 +841,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
         assert decoded.options.collinearity_blocks == groups
         assert decoded.options.orthogroups == groups.orthogroups
         web = render_canonical_web_request(
-            document.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
+            drawing_view(document.to_dict())["renderRequest"], resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "web",
         )
     assert web["featureCatalog"]["items"] == [catalog_item]
@@ -899,12 +901,12 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
     })])
     reloaded = load_session_document(session_path)
     assert reloaded.version == saved.version == CURRENT_SESSION_VERSION
-    assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["featureCatalog"]
+    assert drawing_view(reloaded.to_dict())["editorState"]["featureCatalog"] == web["featureCatalog"]
     with materialize_session(reloaded, output_directory=tmp_path / "reload") as materialized:
         restored = session_to_request(materialized)
         assert restored.options.collinearity_blocks == groups
         rerendered = render_canonical_web_request(
-            reloaded.to_dict()["renderRequest"], resource_paths=materialized.resource_paths,
+            drawing_view(reloaded.to_dict())["renderRequest"], resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "reload-web",
         )
     assert rerendered["featureCatalog"] == web["featureCatalog"]
@@ -977,7 +979,7 @@ def test_an_upgrade_stores_the_protein_results_of_a_reversed_record_in_the_searc
     upgraded = upgrade.document.to_dict()
 
     assert upgrade.warnings == ()
-    assert upgraded["version"] == CURRENT_SESSION_VERSION == 48
+    assert upgraded["version"] == CURRENT_SESSION_VERSION == 49
     assert [drawing.id for drawing in upgrade.document.drawings] == ["circular", "linear"]
     # Bytes change under the stored IDs, only for the protein results.
     assert upgraded["resources"].keys() == source["resources"].keys()
@@ -1033,11 +1035,7 @@ def test_python_load_reads_a_session_47_and_a_settings_only_session_47() -> None
     data["webFiles"]["bindings"] = {"schema": 2, "c_gb": None}
     assert load_session_document(data).version == 47
     # A settings-only Session 47: the current one, written by a 47 writer.
-    from gbdraw.session import upgrade_session_document
-
-    current = upgrade_session_document(
-        load_session_document(_SESSION_FIXTURES / "settings-only.v42.json.gz")
-    ).document.to_dict()
+    current = upgrade_to_mode_scoped(_SESSION_FIXTURES / "settings-only.v42.json.gz")
     settings_only = {**current, "version": 47}
     assert is_settings_only_session(settings_only)
     assert load_session_document(settings_only).drawings == load_session_document(current).drawings

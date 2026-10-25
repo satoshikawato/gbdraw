@@ -57,7 +57,7 @@ restores both. The Circular inputs (**GenBank/DDBJ File**, or **GFF3 File** and
 **FASTA File**) and the Linear **File** cards are separate inputs: a Circular
 upload does not appear in Linear, and a mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
 feature popup are shared. A saved Session keeps each mode's settings
-(Session 48, [compatibility](session-and-request-compatibility.md)).
+(Session 49, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA

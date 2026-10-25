@@ -36,6 +36,7 @@ from gbdraw.session_io import (
     split_draft_into_modes,
 )
 from gbdraw.web_support.mode_scoped_settings import DIAGRAM_MODES, MODE_SCOPED_SETTINGS_REVISION
+from tests.utils.session_drawing_view import upgrade_to_mode_scoped
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VECTORS_PATH = REPO_ROOT / "tests" / "fixtures" / "sessions" / "mode-split-vectors.json"
@@ -240,12 +241,21 @@ def test_the_27_44_chain_composes_to_one_drawing_and_carries_drawing_b(fixture: 
             (mode_a, DRAWING_NAMES[mode_a], None)
         ]
         return
-    upgraded = upgrade_session_document(REPO_ROOT / fixture, temporary_directory=tmp_path).document.to_dict()
+    written = upgrade_session_document(REPO_ROOT / fixture, temporary_directory=tmp_path).document.to_dict()
 
-    assert upgraded["version"] == CURRENT_SESSION_VERSION
-    assert [(drawing.id, drawing.name, drawing.request is not None) for drawing in read_session_drawings(upgraded)] == [
-        (mode_a, DRAWING_NAMES[mode_a], isinstance(request, dict))
-    ]
+    assert written["version"] == CURRENT_SESSION_VERSION
+    # Session 49 lists a drawing per mode: A's carries the request; B's is the undrawn one.
+    parts = {drawing.id: drawing for drawing in read_session_drawings(written)}
+    assert (mode_a, DRAWING_NAMES[mode_a], isinstance(request, dict)) == (
+        mode_a,
+        parts[mode_a].name,
+        parts[mode_a].request is not None,
+    )
+    assert [drawing.id for drawing in parts.values() if drawing.request is not None] == (
+        [mode_a] if isinstance(request, dict) else []
+    )
+    # The chain's slices are checked on the mode-scoped Session 48 it composes before the move to drawings.
+    upgraded = upgrade_to_mode_scoped(REPO_ROOT / fixture, tmp_path)
     case = _FIXTURE_VECTORS.get(fixture)
     if case is not None:
         # The chain's slices are the split's (the vectors' Phase E oracle).

@@ -49,8 +49,9 @@ from gbdraw.session_drawings import (
     replace_session_drawings,
     write_session_drawings,
 )
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GENBANK = REPO_ROOT / "tests" / "test_inputs" / "HmmtDNA.gbk"
@@ -79,7 +80,7 @@ def _linear_result_state(request: LinearDiagramRequest, tmp_path: Path) -> dict:
     document = build_session_document(request)
     with materialize_session(document, output_directory=tmp_path / "web") as materialized:
         web = render_canonical_web_request(
-            document.to_dict()["renderRequest"],
+            drawing_view(document.to_dict(), mode="linear")["renderRequest"],
             resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "web-output",
         )
@@ -239,9 +240,10 @@ def test_build_session_document_writes_two_drawings(tmp_path: Path) -> None:
     document = _two_drawing_session(tmp_path, active_drawing="Linear")
 
     data = document.to_dict()
-    assert data["renderRequest"]["mode"] == "circular"
-    assert data["otherModeResult"]["renderRequest"]["mode"] == "linear"
-    assert data["ui"] == {"mode": "linear"}
+    assert sorted(drawing["id"] for drawing in data["drawings"]) == ["circular", "linear"]
+    assert drawing_view(data, "circular")["renderRequest"]["mode"] == "circular"
+    assert drawing_view(data, "linear")["renderRequest"]["mode"] == "linear"
+    assert data["ui"] == {"activeDrawingId": "linear"}
     assert document.active_drawing_id == "linear"
 
     path = tmp_path / "two.gbdraw-session.json"
@@ -253,7 +255,8 @@ def test_build_session_document_writes_two_drawings(tmp_path: Path) -> None:
             SessionDrawingSpec(linear, state=_linear_result_state(linear, tmp_path / "save")),
         ],
     )
-    assert load_session_document(path).drawings == document.drawings
+    # The shown drawing comes first, so the order follows ``active_drawing``.
+    assert set(load_session_document(path).drawings) == set(document.drawings)
 
 
 def test_the_current_layout_rejects_drawings_it_cannot_hold(tmp_path: Path) -> None:
@@ -325,7 +328,9 @@ def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
             ),
         ]
     )
-    assert document.to_dict()["modes"] == {"circular": circular_slice, "linear": linear_slice}
+    data = document.to_dict()
+    assert drawing_view(data, "circular")["modes"] == {"circular": circular_slice}
+    assert drawing_view(data, "linear")["modes"] == {"linear": linear_slice}
 
     def view(mode: str, slices: dict) -> dict:
         return {"renderRequest": {"mode": mode}, "results": [{"name": mode}], "modes": slices}
@@ -336,7 +341,7 @@ def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
     # A replaced drawing gives its own slice; the other drawing keeps its slice.
     changed = {"config": {"adv": {"axis_stroke_width": 3}}}
     replaced = replace_session_drawings(
-        {**data, "version": CURRENT_SESSION_VERSION},
+        {**data, "version": MODE_SCOPED_SESSION_MAX_VERSION},
         {"circular": view("circular", {"circular": changed, "linear": {}})},
     )
     assert replaced["modes"] == {"circular": changed, "linear": linear_slice}
@@ -362,10 +367,11 @@ def test_upgrade_keeps_a_settings_only_session_settings_only() -> None:
 
     assert upgrade.warnings == ()
     assert upgraded.version == CURRENT_SESSION_VERSION
-    assert upgraded.drawings == (SessionDrawing("circular", "Circular", "circular", False),)
-    # The flat draft is split into the mode slices; Circular keeps its values.
+    assert SessionDrawing("circular", "Circular", "circular", False) in upgraded.drawings
+    assert not any(drawing.has_canonical_request for drawing in upgraded.drawings)
+    # The flat draft is split into the mode settings; Circular keeps its values.
     assert "config" not in upgraded.to_dict()
-    form = upgraded.to_dict()["modes"]["circular"]["config"]["form"]
+    form = drawing_view(upgraded.to_dict(), "circular")["modes"]["circular"]["config"]["form"]
     assert form and all(source["config"]["form"][key] == value for key, value in form.items())
 
 
@@ -380,7 +386,7 @@ def test_upgrade_names_and_logs_each_result_it_drops(
     with caplog.at_level(logging.WARNING, logger="gbdraw.session"):
         upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
 
-    assert upgrade.document.to_dict()["results"] == []
+    assert drawing_view(upgrade.document.to_dict(), mode="linear")["results"] == []
     assert upgrade.warnings == (
         f"Upgrading Session 33 to {CURRENT_SESSION_VERSION} dropped the linear drawing's "
         "2 Result(s) 'out.svg', 'second.svg': Session 33 saved no feature catalog "
@@ -405,9 +411,9 @@ def test_upgrade_without_results_to_drop_warns_nothing(
     assert not caplog.records
 
 
-def _render_svgs(document: SessionDocument, directory: Path) -> list[bytes]:
+def _render_svgs(document: SessionDocument, directory: Path, drawing: str | None = None) -> list[bytes]:
     with materialize_session(document, output_directory=directory) as materialized:
-        result = render_session(materialized)
+        result = render_session(materialized, drawing=drawing)
     return [path.read_bytes() for path in result.output_paths]
 
 
@@ -453,26 +459,30 @@ def test_an_upgraded_session_renders_its_drawing_as_before(fixture: str, tmp_pat
     upgraded = upgrade.document
 
     assert source.version < upgraded.version == CURRENT_SESSION_VERSION
-    assert upgraded.drawings == source.drawings
+    # The move also lists the other mode as an undrawn drawing when its settings
+    # differ from the defaults (PD-OI-090), as the Web's Load does.
+    assert set(source.drawings) <= set(upgraded.drawings)
+    assert not any(drawing.has_canonical_request for drawing in set(upgraded.drawings) - set(source.drawings))
     catalog = source.to_dict().get("editorState", {}).get("featureCatalog")
     # Sessions 31-39 saved no catalog: their Results wait for the next render,
     # and the upgrade names each one it drops.
     source_results = source.to_dict()["results"]
     expected_results = source_results if catalog else []
-    assert upgraded.to_dict()["results"] == expected_results
+    [source_drawing] = source.drawings
+    assert drawing_view(upgraded.to_dict(), source_drawing.id)["results"] == expected_results
     if catalog or not source_results:
         assert upgrade.warnings == ()
     else:
         (warning,) = upgrade.warnings
         assert all(repr(result["name"]) in warning for result in source_results)
-    assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
+    assert _render_svgs(upgraded, tmp_path / "upgraded", source_drawing.id) == _render_svgs(source, tmp_path / "source")
 
 
 def test_an_upgraded_v33_label_override_with_empty_text_renders_as_before(tmp_path: Path) -> None:
     source = load_session_document(SESSION_FIXTURES / "feature-edits-circular.v33.gbdraw-session.json.gz")
     upgraded = upgrade_session_document(source).document
 
-    assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
+    assert _render_svgs(upgraded, tmp_path / "upgraded", "circular") == _render_svgs(source, tmp_path / "source")
 
 
 def test_a_result_set_keeps_the_key_order_of_its_source() -> None:

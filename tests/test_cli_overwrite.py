@@ -17,6 +17,7 @@ import gbdraw.cli_utils.session as cli_session
 import gbdraw.api.request_render as request_render_module
 import gbdraw.session as session_module
 import gbdraw.render.output_paths as output_paths_module
+from tests.utils.session_drawing_view import build_mode_scoped_session_document, drawing_view
 from gbdraw.api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -794,7 +795,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
         records=(RecordInput(source=InMemoryRecordSource(record)),),
         output=RenderOutputRequest(output_prefix="stored"),
     )
-    session = build_session_document(stored_request).to_dict()
+    session = build_mode_scoped_session_document(stored_request)
     session["version"] = 33
     session["config"] = {
         "adv": {
@@ -864,15 +865,17 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     assert captured["saved_path"] == sidecar_path
     assert captured["saved_request"] is captured["rendered_request"]
     saved = captured["document"].to_dict()
-    assert saved["renderRequest"]["output"]["prefix"] == "adapter-owned"
+    assert drawing_view(saved, mode="linear")["renderRequest"]["output"]["prefix"] == "adapter-owned"
     assert "config" not in saved
-    for mode in ("circular", "linear"):
-        adv = saved["modes"][mode]["config"]["adv"]
+    # Session 49 keeps the replayed drawing only; the circular slice of the 48 is no longer written.
+    assert [drawing["mode"] for drawing in saved["drawings"]] == ["linear"]
+    for mode in ("linear",):
+        adv = drawing_view(saved, mode=mode)["modes"][mode]["config"]["adv"]
         assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
-    linear = saved["modes"]["linear"]["config"]
+    linear = drawing_view(saved, mode="linear")["modes"]["linear"]["config"]
     assert linear["losat"]["blastp"]["collinearMaxUnitGap"] == 2
-    assert saved["losatDerivedCache"] == {"entries": []}
+    assert saved["drawings"][0]["losatDerivedCache"] == {"entries": []}
     assert "depth_tick_interval" in session["config"]["adv"]
     assert "collinearMaxGeneGap" in session["config"]["losat"]["blastp"]
 

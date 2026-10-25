@@ -74,8 +74,9 @@ def test_release_session_history_and_acceptance_use_current_authority() -> None:
     beta_notes = BETA_NOTES.read_text(encoding="utf-8")
     acceptance_source = BROWSER_ACCEPTANCE.read_text(encoding="utf-8")
 
+    # The 0.14.0 release notes name the version that release wrote.
     assert re.search(
-        rf"saves Sessions as session version {CURRENT_SESSION_VERSION}, with\s+"
+        r"saves Sessions as session version 48, with\s+"
         rf"canonical `renderRequest`\s+schema {CANONICAL_REQUEST_SCHEMA}",
         release_notes,
     )

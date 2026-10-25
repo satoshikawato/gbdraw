@@ -53,6 +53,7 @@ from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     DRAWINGS_SESSION_MIN_VERSION,
     FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
+    MODE_SCOPED_SESSION_MAX_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     OTHER_MODE_RESULT_EDITOR_FIELDS,
     OTHER_MODE_RESULT_FIELDS,
@@ -469,7 +470,7 @@ def _merged_shared(
         )
         if changed:
             raise ValidationError(
-                f"Session {CURRENT_SESSION_VERSION} drawings share "
+                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} drawings share "
                 + ", ".join(changed)
                 + "; give these fields to one drawing only.",
                 diagnostic=_LAYOUT_INVALID,
@@ -503,7 +504,7 @@ def _merged_shared(
             manifests.append(manifest)
     if len(manifests) > 1:
         raise ValidationError(
-            f"Session {CURRENT_SESSION_VERSION} drawings share one protein identity manifest; "
+            f"Session {MODE_SCOPED_SESSION_MAX_VERSION} drawings share one protein identity manifest; "
             "two drawings carry different ones.",
             diagnostic=_LAYOUT_INVALID,
         )
@@ -521,7 +522,7 @@ def _assemble(
         if not result_sets[1].get("results"):
             mode = _request_mode(result_sets[1]) or "second"
             raise ValidationError(
-                f"Session {CURRENT_SESSION_VERSION} keeps a second drawing only with its Result; "
+                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} keeps a second drawing only with its Result; "
                 f"give the {mode} drawing its Results or save it alone.",
                 diagnostic=_LAYOUT_INVALID,
             )
@@ -793,19 +794,19 @@ def write_session_drawings(
         )
     if len(views) > 2:
         raise ValidationError(
-            f"Session {CURRENT_SESSION_VERSION} holds at most one Circular and one Linear drawing.",
+            f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds at most one Circular and one Linear drawing.",
             diagnostic=_LAYOUT_INVALID,
         )
     modes = [_request_mode(view) for view in views]
     if len(views) == 2:
         if None in modes:
             raise ValidationError(
-                f"Session {CURRENT_SESSION_VERSION} holds a drawing without a request only as its only drawing.",
+                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds a drawing without a request only as its only drawing.",
                 diagnostic=_LAYOUT_INVALID,
             )
         if modes[0] == modes[1]:
             raise ValidationError(
-                f"Session {CURRENT_SESSION_VERSION} holds at most one drawing of each mode; "
+                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds at most one drawing of each mode; "
                 f"both drawings are {modes[0]}.",
                 diagnostic=_LAYOUT_INVALID,
             )
@@ -1103,7 +1104,7 @@ def drawings_document_from_mode_scoped(
     version = data.get("version")
     if not isinstance(version, int) or not MODE_SCOPED_SESSION_MIN_VERSION <= version < DRAWINGS_SESSION_MIN_VERSION:
         raise ValidationError(
-            f"Only a Session {MODE_SCOPED_SESSION_MIN_VERSION}-{CURRENT_SESSION_VERSION} moves to drawings; "
+            f"Only a Session {MODE_SCOPED_SESSION_MIN_VERSION}-{MODE_SCOPED_SESSION_MAX_VERSION} moves to drawings; "
             f"this one is {version!r}.",
             diagnostic=_LAYOUT_INVALID,
         )

@@ -11,6 +11,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+from typing import Any
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -26,6 +27,7 @@ from gbdraw.session_io import (
     load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_drawing_view import drawings_document_of_view
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -61,7 +63,7 @@ from tools.refresh_gallery_sessions import (
     _session_path,
     _validate_current_session_catalog_structure,
     _validate_gallery_session_inventory,
-    _validate_staged_gallery_session,
+    _validate_staged_gallery_session as _validate_staged_gallery_session_49,
     stored_protein_result_differences,
 )
 
@@ -593,6 +595,14 @@ def test_bundled_gallery_sources_match_current_session_results(
             example.source_svg_path.read_text(encoding="utf-8")
             == _session_result_svg(session, example)
         ), example.id
+
+
+def _validate_staged_gallery_session(session_path: Path, session: dict[str, object], **kwargs: Any) -> None:
+    """The tool's validator on a staged Session 49: a one-drawing view is written as one by the production writer."""
+
+    if session.get("version") == CURRENT_SESSION_VERSION:
+        session = drawings_document_of_view({"createdAt": "2026-01-02T00:00:00Z", **session})
+    _validate_staged_gallery_session_49(session_path, session, **kwargs)
 
 
 def _staged_geometry_session(
