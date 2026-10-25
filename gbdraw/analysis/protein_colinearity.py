@@ -273,12 +273,17 @@ class _FrozenDict(dict[str, object]):
     """A read-only dict inside a protein identity manifest proof.
 
     It stays a ``dict``, so equality with a plain manifest and ``json.dumps``
-    bytes are those of the same plain data.
+    bytes are those of the same plain data. It is built from a mapping or
+    from key-value pairs (as ``dataclasses.asdict`` rebuilds one); calling
+    ``__init__`` again does not change it.
     """
 
     __slots__ = ()
 
-    def __new__(cls, items: Mapping[str, object] = _EMPTY_MAPPING) -> _FrozenDict:
+    def __new__(
+        cls,
+        items: Mapping[str, object] | Iterable[tuple[str, object]] = (),
+    ) -> _FrozenDict:
         frozen = dict.__new__(cls)
         dict.update(frozen, items)
         return frozen
@@ -327,34 +332,30 @@ class _FrozenList(list[object]):
         return (_FrozenList, (list(self),))
 
 
-# Only the two makers of a proof hold it: validate_protein_identity_manifest and
-# extract_protein_identity_manifest (through _seal_protein_identity_manifest).
-_PROOF_TOKEN = object()
-
-
 class ProteinIdentityManifest(_FrozenDict):
     """Schema-2 authority for protein sets, analyses, and runtime bindings.
 
-    A proof: a read-only mapping whose items are the manifest, made only by
-    :func:`validate_protein_identity_manifest` (which returns a proof
-    unchanged) or by :func:`extract_protein_identity_manifest`. It equals, and
-    ``json.dumps`` writes, the same plain manifest; every dict and list inside
-    it is read-only, and ``copy.copy`` and ``copy.deepcopy`` return it.
+    A proof: a read-only mapping whose items are the manifest. Calling the
+    class checks its argument like :func:`validate_protein_identity_manifest`
+    (which returns a proof unchanged); only that check and
+    :func:`extract_protein_identity_manifest` seal one. It equals, and
+    ``json.dumps`` writes, the same plain manifest; every dict, list and tuple
+    inside it is read-only, and ``copy.copy`` and ``copy.deepcopy`` return it.
     """
 
-    __slots__ = ()
+    __slots__ = ("_json_exact",)
+    _json_exact: bool
 
     schema = PROTEIN_IDENTITY_MANIFEST_SCHEMA
 
-    def __new__(cls, *args: object, **kwargs: object) -> ProteinIdentityManifest:
-        if len(args) != 2 or args[0] is not _PROOF_TOKEN or kwargs:
-            raise TypeError(
-                "A ProteinIdentityManifest is made only by "
-                "validate_protein_identity_manifest() or extract_protein_identity_manifest()."
-            )
-        proof = dict.__new__(cls)
-        dict.update(proof, cast(Mapping[str, object], args[1]))
-        return proof
+    def __new__(
+        cls,
+        items: Mapping[str, object] | Iterable[tuple[str, object]] = (),
+        **fields: object,
+    ) -> ProteinIdentityManifest:
+        return validate_protein_identity_manifest({**dict(items), **fields})
+
+    __setattr__ = __delattr__ = _refuse_change
 
     def __reduce__(self) -> tuple[object, ...]:
         return (validate_protein_identity_manifest, (self.to_dict(),))
@@ -389,15 +390,57 @@ class ProteinIdentityManifest(_FrozenDict):
             ) from exc
 
 
-def _frozen(value: object) -> object:
-    """``value`` with every dict and list in it read-only; other values as they are."""
+def is_json_exact_protein_identity_manifest(
+    value: object,
+) -> TypeGuard[ProteinIdentityManifest]:
+    """Whether ``value`` is a proof that holds only plain JSON data.
 
-    if type(value) in _MANIFEST_SCALAR_TYPES or isinstance(value, (_FrozenDict, _FrozenList)):
+    Plain JSON data is what ``json.loads`` returns: dicts with ``str`` keys,
+    lists, and exactly ``str``, ``int``, ``float``, ``bool`` or ``None``. Such
+    a proof can stand where a deep copy or a JSON clone of its input stood; a
+    proof of other Python values (tuples, other mappings, other keys or
+    scalars) is used only as the checked authority.
+    """
+
+    return isinstance(value, ProteinIdentityManifest) and value._json_exact
+
+
+def _frozen(value: object, inexact: list[bool]) -> object:
+    """``value`` with every mapping, list and tuple in it read-only.
+
+    Sets ``inexact[0]`` when ``value`` holds anything but plain JSON data.
+    A read-only container is kept (its content cannot change) and walked
+    only to tell whether it is plain JSON data.
+    """
+
+    kind = type(value)
+    if kind in _MANIFEST_SCALAR_TYPES:
         return value
-    if isinstance(value, dict):
-        return _FrozenDict({key: _frozen(item) for key, item in value.items()})
+    if kind is dict or kind is _FrozenDict:
+        mapping = cast("dict[object, object]", value)
+        if not inexact[0] and any(type(key) is not str for key in mapping):
+            inexact[0] = True
+        if kind is _FrozenDict:
+            for item in mapping.values():
+                _frozen(item, inexact)
+            return value
+        return _FrozenDict(
+            cast("dict[str, object]", {key: _frozen(item, inexact) for key, item in mapping.items()})
+        )
+    if kind is list or kind is _FrozenList:
+        sequence = cast("list[object]", value)
+        if kind is _FrozenList:
+            for item in sequence:
+                _frozen(item, inexact)
+            return value
+        return _FrozenList([_frozen(item, inexact) for item in sequence])
+    inexact[0] = True
+    if isinstance(value, Mapping):
+        return _FrozenDict({key: _frozen(item, inexact) for key, item in value.items()})
     if isinstance(value, list):
-        return _FrozenList([_frozen(item) for item in value])
+        return _FrozenList([_frozen(item, inexact) for item in value])
+    if isinstance(value, tuple):
+        return tuple(_frozen(item, inexact) for item in value)
     return value
 
 
@@ -410,13 +453,29 @@ def _thawed(value: object) -> object:
         return {key: _thawed(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_thawed(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_thawed(item) for item in value)
     return copy.deepcopy(value)
 
 
 def _seal_protein_identity_manifest(
-    items: Iterable[tuple[str, object]],
+    items: Iterable[tuple[object, object]],
+    *,
+    inexact: bool = False,
 ) -> ProteinIdentityManifest:
-    return ProteinIdentityManifest(_PROOF_TOKEN, {key: _frozen(item) for key, item in items})
+    """The unchecked proof maker: only the check and the extraction call it."""
+
+    flag = [inexact]
+    frozen: dict[object, object] = {}
+    for key, item in items:
+        if type(key) is not str:
+            flag[0] = True
+        frozen[key] = _frozen(item, flag)
+    proof = dict.__new__(ProteinIdentityManifest)
+    # Keys that are not str make the proof inexact; they are kept as given.
+    dict.update(proof, cast("dict[str, object]", frozen))
+    object.__setattr__(proof, "_json_exact", not flag[0])
+    return proof
 
 
 @dataclass(frozen=True)
@@ -1182,8 +1241,14 @@ def validate_protein_identity_manifest(
             _check_protein_identity_manifest(value),
         )
     )
+    # Plain JSON data is sealed as it is: the check's maps hold the same
+    # content then. Other Python values get the check's str() coercions.
+    proof = _seal_protein_identity_manifest(value.items(), inexact=type(value) is not dict)
+    if proof._json_exact:
+        return proof
     return _seal_protein_identity_manifest(
-        (key, checked[key] if key in checked else item) for key, item in value.items()
+        ((key, checked[key] if key in checked else item) for key, item in value.items()),
+        inexact=True,
     )
 
 
@@ -6751,5 +6816,6 @@ __all__ = [
     "make_legacy_protein_raw_candidate",
     "validate_legacy_protein_raw_candidate_envelope",
     "validate_protein_identity_manifest",
+    "is_json_exact_protein_identity_manifest",
     "validate_protein_raw_entry_references",
 ]

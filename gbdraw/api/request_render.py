@@ -62,6 +62,7 @@ from gbdraw.analysis.protein_colinearity import (
     ProteinExtractionResult,
     ProteinIdentityManifest,
     extract_web_stable_cds_proteins,
+    is_json_exact_protein_identity_manifest,
     is_protein_losat_cache_entry,
     validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
@@ -559,6 +560,7 @@ class CurrentRequestArtifacts:
             # A proof was checked when it was made and is read-only: it is
             # kept as it is. Raw data is detached here and checked below.
             authority = manifest if isinstance(manifest, ProteinIdentityManifest) else None
+            stored_manifest: Mapping[str, object] | None = authority
             detached_manifest: Mapping[str, Any] | None = None
             if manifest is not None and authority is None:
                 if not isinstance(manifest, Mapping):
@@ -617,6 +619,13 @@ class CurrentRequestArtifacts:
                     "proteinManifestFullValidationCount"
                 )
                 authority = validate_protein_identity_manifest(detached_manifest)
+                # The proof checks the entries either way; it is kept in place
+                # of the detached copy only when it holds plain JSON data.
+                stored_manifest = (
+                    authority
+                    if is_json_exact_protein_identity_manifest(authority)
+                    else detached_manifest
+                )
             if protein_entries and authority is None:
                 raise ValidationError(
                     "Current protein LOSATP artifacts require protein_identity_manifest."
@@ -655,7 +664,7 @@ class CurrentRequestArtifacts:
 
         object.__setattr__(self, "losat_cache_entries", raw_entries)
         object.__setattr__(self, "losat_derived_cache_entries", derived_entries)
-        object.__setattr__(self, "protein_identity_manifest", authority)
+        object.__setattr__(self, "protein_identity_manifest", stored_manifest)
 
 
 @dataclass(frozen=True)
