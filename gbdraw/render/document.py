@@ -34,7 +34,19 @@ class SvgDocument:
         """Write the file form, prolog then body, to an open text file."""
 
         handle.write(self.prolog)
-        handle.write(self.body)
+        write_text(handle, self.body)
+
+
+# The characters handed to a text file at a time: its encoder then holds a
+# chunk's bytes, not a second copy of the whole document.
+_WRITE_CHUNK = 1 << 20
+
+
+def write_text(handle: TextIO, text: str) -> None:
+    """Write ``text`` to an open text file a chunk at a time; the file gets the same bytes."""
+
+    for start in range(0, len(text), _WRITE_CHUNK):
+        handle.write(text[start : start + _WRITE_CHUNK])
 
 
 _DECLARATION = '<?xml version="1.0" encoding="utf-8" ?>\n'
@@ -160,4 +172,5 @@ __all__ = [
     "SvgDocument",
     "document_parts",
     "write_svg_document",
+    "write_text",
 ]

@@ -13,7 +13,7 @@ from svgwrite import Drawing
 
 from gbdraw.exceptions import ExportError, GbdrawError, ValidationError
 from gbdraw.render import export as _export
-from gbdraw.render.document import write_svg_document
+from gbdraw.render.document import write_svg_document, write_text
 from gbdraw.render.formats import (
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
@@ -138,7 +138,7 @@ def save_figure_to(
             embedding = _font_embedding(document.body, embed_fonts)
             with open(staged[Path(svg_filename)], "w", encoding="utf-8") as svg_file:
                 svg_file.write(document.prolog)
-                svg_file.write(embed_font_css(document.body, embedding))
+                write_text(svg_file, embed_font_css(document.body, embedding))
         except GbdrawError:
             raise
         except Exception as exc:
@@ -162,12 +162,16 @@ def save_figure_to(
                 raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
             try:
                 with open(staged[Path(interactive_filename)], "w", encoding="utf-8") as handle:
-                    handle.write(interactive_svg)
+                    write_text(handle, interactive_svg)
             except OSError as exc:
                 raise ExportError(f"Failed to write interactive SVG: {exc}") from exc
+            # Written: CairoSVG below does not hold it beside its own tree.
+            del interactive_svg
 
         if cairosvg_module is not None:
             svg_bytes = document.body.encode("utf-8")
+            # Nothing reads the text again: CairoSVG holds the bytes and its own tree.
+            del document
             for fmt in classification.cairosvg:
                 out_file = resolve_format_output_path(base_prefix, fmt)
                 labels[out_file] = fmt.upper()
