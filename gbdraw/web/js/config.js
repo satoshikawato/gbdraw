@@ -15,6 +15,9 @@ export const GBDRAW_WHEEL_CACHE_BUST = null;
 /** @type {string | null} */
 export const PYODIDE_SNAPSHOT_URL = null;
 export const PYODIDE_INDEX_URL = "./vendor/pyodide/v0.29.0/full/";
+// The files in PYODIDE_INDEX_URL that Pyodide's loader downloads at start;
+// gbdraw/_web_assets.py PYODIDE_CORE_FILES holds them.
+export const PYODIDE_RUNTIME_FILES = ["pyodide.asm.js", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json"];
 export const PYODIDE_LOCAL_WHEELS = [
   "./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",
   "./vendor/pyodide-wheels/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",

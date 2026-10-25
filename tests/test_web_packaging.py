@@ -519,6 +519,16 @@ def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
     assert _configured_wheels("PYODIDE_LOCAL_WHEELS") == PYODIDE_LOCAL_WHEELS
 
 
+def test_web_config_pyodide_runtime_files_are_core_files() -> None:
+    from gbdraw._web_assets import PYODIDE_CORE_FILES
+
+    config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
+    match = re.search(r"export const PYODIDE_RUNTIME_FILES\s*=\s*\[(.*?)\];", config_js, re.DOTALL)
+    assert match is not None
+    files = re.findall(r"""["']([^"']+)["']""", match.group(1))
+    assert files and set(files) <= PYODIDE_CORE_FILES
+
+
 def test_web_config_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
     from gbdraw._web_assets import PYODIDE_RUNTIME_DIR, PYODIDE_RUNTIME_PACKAGE_WHEELS, PYODIDE_RUNTIME_WHEELS
 
