@@ -977,16 +977,32 @@ const admittedFeatureCatalog = (catalog) => {
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
+// The shown Result's editor artifacts as `applyEditorArtifactData` reads
+// them: the project part of `buildEditorStateData`. The catalog stays by
+// reference (R11).
+const editorArtifactData = () => ({
+  legend: {
+    originalOrder: cloneJsonArray(state.originalLegendOrder.value),
+    originalColors: cloneStringMap(state.originalLegendColors.value)
+  },
+  originalSvgStroke: {
+    color: state.originalSvgStroke.value?.color ?? null,
+    width: state.originalSvgStroke.value?.width ?? null
+  },
+  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
+  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
+});
+
 /** @param {DrawingState} drawing */
 export const buildEditorStateData = (drawing) => {
   const paint = captureLegendPaint(drawing.slices.paint);
+  const artifact = editorArtifactData();
   return {
     legend: {
       entries: paint.legendEntries,
       deletedEntries: paint.deletedLegendEntries,
       dormantEntries: paint.dormantLegendEntries,
-      originalOrder: cloneJsonArray(state.originalLegendOrder.value),
-      originalColors: cloneStringMap(state.originalLegendColors.value),
+      ...artifact.legend,
       colorOverrides: paint.legendColorOverrides,
       strokeOverrides: paint.legendStrokeOverrides,
       addedCaptions: paint.addedLegendCaptions.map((caption) => String(caption || '').trim()).filter(Boolean)
@@ -994,12 +1010,9 @@ export const buildEditorStateData = (drawing) => {
     featureStrokes: {
       overrides: paint.featureStrokeOverrides
     },
-    originalSvgStroke: {
-      color: state.originalSvgStroke.value?.color ?? null,
-      width: state.originalSvgStroke.value?.width ?? null
-    },
-    alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
-    featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
+    originalSvgStroke: artifact.originalSvgStroke,
+    alignmentResetReceipt: artifact.alignmentResetReceipt,
+    featureCatalog: artifact.featureCatalog
   };
 };
 
@@ -3770,9 +3783,18 @@ const orthogroupEditsOf = (edits, groupIds) => {
  * @param {Record<string, any>} [orthogroupState]
  * @param {{ legacyRecords?: any, catalogFeatureState?: Record<string, any> | null }} [options]
  */
-export const applyOrthogroupStateData = (
-  drawing, orthogroupState = {}, { legacyRecords = null, catalogFeatureState = null } = {}
-) => {
+export const applyOrthogroupStateData = (drawing, orthogroupState = {}, options = {}) => {
+  installGroupNames(drawing, orthogroupState, applyOrthogroupArtifactData(orthogroupState, options));
+};
+
+// The shown Result's groups, their feature index and enrichment, and the
+// selection: the project part of `applyOrthogroupStateData`.
+/**
+ * @param {NonNullable<Parameters<typeof applyOrthogroupStateData>[1]>} orthogroupState
+ * @param {NonNullable<Parameters<typeof applyOrthogroupStateData>[2]>} [options]
+ * @returns {Set<string>} The IDs of the installed groups.
+ */
+const applyOrthogroupArtifactData = (orthogroupState, { legacyRecords = null, catalogFeatureState = null } = {}) => {
   const storedGroups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groups = legacyRecords
     ? migrateLegacyOrthogroupMembers(storedGroups, legacyRecords)
@@ -3800,8 +3822,7 @@ export const applyOrthogroupStateData = (
   const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
-
-  installGroupNames(drawing, orthogroupState, groupIdSet);
+  return groupIdSet;
 };
 
 /**
@@ -4862,19 +4883,19 @@ const restoreSessionImportTransientState = (snapshot) => {
 // Load's rollback snapshot (DESIGN §4.1): the drawings as objects with their
 // tabs and the shown drawing's ID, which a Load replaces at its commit
 // (`commitLoadedDrawings`) and never writes into, and the one-per-Session
-// values it resets (`resetSessionProject`). The shown drawing's `ui` carries
-// the project's `ui` keys (title, LOSAT execution, PNG DPI, ...); its feature
-// and editor data carry the shown Result's artifacts (catalog features,
-// generated Legend inventory, stroke defaults, feature catalog, groups).
-/** @param {DrawingState} shownDrawing The shown drawing, from Load's caller (`shownDrawing`). */
-const captureSessionImportSnapshot = (shownDrawing) => ({
+// values it resets (`resetSessionProject`): the project's `ui` keys (title,
+// LOSAT execution, PNG DPI, the shown Result's layout and offsets, ...) and
+// the shown Result's artifacts (catalog features, groups, generated Legend
+// inventory, stroke defaults, feature catalog). It reads no drawing.
+/** @param {DrawingId} shownDrawingId The shown drawing's ID, from Load's caller (`shownDrawing`). */
+const captureSessionImportSnapshot = (shownDrawingId) => ({
   drawings: state.drawingList(),
   tabs: state.drawingTabs.value,
-  shownDrawingId: shownDrawing.id,
-  shownUi: cloneJsonData(buildUiStateData(shownDrawing)),
-  shownFeatures: buildFeatureStateData(shownDrawing),
-  shownOrthogroups: buildOrthogroupStateData(shownDrawing),
-  shownEditorState: buildEditorStateData(shownDrawing),
+  shownDrawingId,
+  shownUi: cloneJsonData({ ...buildProjectUiData(), ...previewViewportToPersist() }),
+  shownFeatures: featureArtifactData(),
+  shownOrthogroups: orthogroupArtifactData(),
+  shownEditorState: editorArtifactData(),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   cardFiles: { ...state.cardFiles },
   results: state.results.value,
@@ -4907,9 +4928,13 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionProject();
     state.replaceDrawings(snapshot.drawings, snapshot.tabs);
-    const shownDrawing = installShownDrawing(snapshot.shownDrawingId);
+    installShownDrawing(snapshot.shownDrawingId);
     const { shownUi } = snapshot;
-    applyUiStateData(shownDrawing, shownUi);
+    applySessionUiData(shownUi);
+    applyShownResultUiData(shownUi);
+    // A copy of the captured palette as is (R11); the drawings are the captured ones.
+    state.appliedPaletteName.value = shownUi.appliedPaletteName;
+    state.appliedPaletteColors.value = cloneColors(shownUi.appliedPaletteColors);
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
     FILE_IMPORT_CARDS.forEach((key) => { state.cardFiles[key] = snapshot.cardFiles[key] ?? null; });
     state.losatCache.value = snapshot.losatCache;
@@ -4930,7 +4955,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     applyResultsData(snapshot.results, shownUi);
     applyFeatureArtifactData(snapshot.shownFeatures);
     // The shown Result's groups, which `resetSessionProject` cleared (OV-1770).
-    applyOrthogroupStateData(shownDrawing, snapshot.shownOrthogroups);
+    applyOrthogroupArtifactData(snapshot.shownOrthogroups);
     applyEditorArtifactData(snapshot.shownEditorState);
     state.collinearGroups.value = snapshot.collinearGroups;
     applyRunStateData(snapshot.runState);
@@ -5142,38 +5167,68 @@ const previewViewportToPersist = () => {
   return { zoom, canvasPan: { x: canvasPan.x, y: canvasPan.y } };
 };
 
+// The `ui` values no drawing owns (the Session's, the shown Result's): the
+// project part of `buildUiStateData`, which the Load rollback restores.
+const buildProjectUiData = () => ({
+  title: String(state.sessionTitle.value || ''),
+  mode: state.mode.value,
+  selectedResultIndex: state.selectedResultIndex.value,
+  generatedLegendPosition: state.generatedLegendPosition.value,
+  generatedMode: state.generatedMode.value,
+  generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
+  generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
+    state.generatedCircularPlotTitlePosition.value
+  ),
+  featurePanelTab: state.featurePanelTab.value,
+  downloadDpi: state.downloadDpi.value,
+  autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+  paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
+  // App-level settings (History and the Load rollback restore them with the UI).
+  // The Rich Feature Popup is a UI preference outside History (D-03): the
+  // Session and the Load rollback save it on their own.
+  losatExecution: buildLosatExecutionData(),
+  appliedPaletteName: state.appliedPaletteName.value,
+  appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+  legendCurrentOffset: { ...state.legendCurrentOffset },
+  diagramOffset: { ...state.diagramOffset },
+  lengthBarUserOffset: { ...state.lengthBarUserOffset },
+  plotTitleUserOffset: { ...state.plotTitleUserOffset }
+});
+
+// The project part and the drawing's part, in the order a Session writes them.
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
+  const {
+    title, mode, selectedResultIndex, generatedLegendPosition, generatedMode, generatedMultiRecordCanvas,
+    generatedCircularPlotTitlePosition, featurePanelTab, downloadDpi, autoLabelReflow, paletteInstantPreviewEnabled,
+    losatExecution, appliedPaletteName, appliedPaletteColors, legendCurrentOffset, diagramOffset, lengthBarUserOffset,
+    plotTitleUserOffset
+  } = buildProjectUiData();
   const ui = {
-    title: String(state.sessionTitle.value || ''),
-    mode: state.mode.value,
+    title,
+    mode,
     canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
-    selectedResultIndex: state.selectedResultIndex.value,
-    generatedLegendPosition: state.generatedLegendPosition.value,
-    generatedMode: state.generatedMode.value,
-    generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
-    generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
-      state.generatedCircularPlotTitlePosition.value
-    ),
+    selectedResultIndex,
+    generatedLegendPosition,
+    generatedMode,
+    generatedMultiRecordCanvas,
+    generatedCircularPlotTitlePosition,
     layoutPreferences: cloneJsonData(drawing.layoutPreferences),
-    featurePanelTab: state.featurePanelTab.value,
+    featurePanelTab,
     ...sessionInputTypes(state.drawingList()),
     losatProgram: drawing.losatProgram.value,
-    downloadDpi: state.downloadDpi.value,
-    autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+    downloadDpi,
+    autoLabelReflow,
     linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
-    paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-    // App-level settings (History and the Load rollback restore them with the UI).
-    // The Rich Feature Popup is a UI preference outside History (D-03): the
-    // Session and the Load rollback save it on their own.
-    losatExecution: buildLosatExecutionData(),
-    appliedPaletteName: state.appliedPaletteName.value,
-    appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+    paletteInstantPreviewEnabled,
+    losatExecution,
+    appliedPaletteName,
+    appliedPaletteColors,
     ...queuedPaletteData(drawing.slices.palette),
-    legendCurrentOffset: { ...state.legendCurrentOffset },
-    diagramOffset: { ...state.diagramOffset },
-    lengthBarUserOffset: { ...state.lengthBarUserOffset },
-    plotTitleUserOffset: { ...state.plotTitleUserOffset }
+    legendCurrentOffset,
+    diagramOffset,
+    lengthBarUserOffset,
+    plotTitleUserOffset
   };
 
   if (includePreviewNavigation) Object.assign(ui, previewViewportToPersist());
@@ -5220,6 +5275,20 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     ui
   });
 
+  applyShownResultUiData(ui, { restorePreviewNavigation });
+  if (artifact) restoreAppliedPaletteFromSession(drawing, ui);
+  restorePendingPaletteFromSession(drawing, ui);
+  restoreLayoutPreferences(drawing, ui);
+  if (ui.canvasPadding) CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
+};
+
+// The shown Result's `ui` values, which no drawing owns: its generated
+// layout, the composition offsets, and the preview navigation.
+/**
+ * @param {SavedUiFields} ui
+ * @param {{ restorePreviewNavigation?: boolean }} [options]
+ */
+const applyShownResultUiData = (ui, { restorePreviewNavigation = true } = {}) => {
   if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
   if (ui.generatedLegendPosition) {
     state.generatedLegendPosition.value = legendPositionOrDefault(
@@ -5234,11 +5303,6 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
       ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
   }
-
-  if (artifact) restoreAppliedPaletteFromSession(drawing, ui);
-  restorePendingPaletteFromSession(drawing, ui);
-  restoreLayoutPreferences(drawing, ui);
-
   if (ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
     state.legendCurrentOffset.y = Number(ui.legendCurrentOffset.y) || 0;
@@ -5255,8 +5319,6 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
     state.plotTitleUserOffset.x = Number(ui.plotTitleUserOffset.x) || 0;
     state.plotTitleUserOffset.y = Number(ui.plotTitleUserOffset.y) || 0;
   }
-
-  if (ui.canvasPadding) CANVAS_SLICE.install(drawing.slices.canvas, { canvasPadding: readCanvasPadding(ui.canvasPadding).value });
   if (restorePreviewNavigation) {
     if (ui.canvasPan) {
       state.canvasPan.x = Number(ui.canvasPan.x) || 0;
@@ -5312,11 +5374,17 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 // a reactive read of each of their 10k-40k nested properties.
 /** @param {DrawingState} drawing */
 export const buildFeatureStateData = (drawing) => ({
-  extractedFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.extractedFeatures.value)),
-  biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
-  featureRecordIds: cloneJsonData(state.featureRecordIds.value),
+  ...featureArtifactData(),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   ...drawingFeatureData(drawing)
+});
+
+// The shown Result's catalog features as `applyFeatureArtifactData` reads
+// them: the project part of `buildFeatureStateData`.
+const featureArtifactData = () => ({
+  extractedFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.extractedFeatures.value)),
+  biologicalFeatures: sanitizeExtractedFeaturesForSession(toRaw(state.biologicalFeatures?.value)),
+  featureRecordIds: cloneJsonData(state.featureRecordIds.value)
 });
 
 // A drawing's per-feature edits as `applyDrawingFeatureData` reads them: the
@@ -5383,9 +5451,15 @@ const applyDrawingFeatureData = (drawing, features = {}) => {
 
 /** @param {DrawingState} drawing */
 export const buildOrthogroupStateData = (drawing) => ({
-  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
-  selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
+  ...orthogroupArtifactData(),
   ...buildGroupNamesData(drawing)
+});
+
+// The shown Result's groups and selection as `applyOrthogroupArtifactData`
+// reads them: the project part of `buildOrthogroupStateData`.
+const orthogroupArtifactData = () => ({
+  groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(toRaw(state.orthogroups.value)) : [],
+  selectedOrthogroupId: String(state.selectedOrthogroupId.value || '')
 });
 
 export const buildRunStateData = () => ({
@@ -5897,7 +5971,7 @@ const importSessionDocument = async (e, options = {}) => {
         const confirmLoadRepairs = /** @type {ConfirmLoadRepairs} */ (options.confirmLoadRepairs);
         if (!await confirmLoadRepairs(legacyDialog) || !options.isCurrent()) return { status: 'canceled' };
       }
-      rollbackSnapshot = captureSessionImportSnapshot(legacyDrawing);
+      rollbackSnapshot = captureSessionImportSnapshot(legacyDrawing.id);
       rollbackExtensionSnapshot = rollbackState.capture();
       commitStarted = true;
       applyLegacyConfigPayload(commitDrawingCopy(legacyDrawing), legacyConfig.value);
@@ -6803,7 +6877,7 @@ const importSessionDocument = async (e, options = {}) => {
     // after SVG sanitation, before the one atomic live-state transaction.
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (!options.isCurrent()) return { status: 'canceled' };
-    rollbackSnapshot = captureSessionImportSnapshot(/** @type {SessionLoadOptions} */ (options).shownDrawing());
+    rollbackSnapshot = captureSessionImportSnapshot(/** @type {SessionLoadOptions} */ (options).shownDrawing().id);
     rollbackExtensionSnapshot = rollbackState.capture();
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
