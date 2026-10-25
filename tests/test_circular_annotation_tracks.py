@@ -1269,7 +1269,13 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     assert any(convex_polygons_intersect(grown_convex_polygon(part, 4.0), on_midpoint) for part in moved.parts)
 
 
-def _draw_span_regions(slots: tuple[str, ...], style: RegionAnnotationStyle, *, mark: str = "bracket"):
+def _draw_span_regions(
+    slots: tuple[str, ...],
+    style: RegionAnnotationStyle,
+    *,
+    mark: str = "bracket",
+    center_reserved_radius: float | None = None,
+):
     """Two labelled regions over a record whose GC plots reach their band edges (REVIEW-1192 F1): GC 10 % on the
     first half and 90 % on the second."""
 
@@ -1292,7 +1298,9 @@ def _draw_span_regions(slots: tuple[str, ...], style: RegionAnnotationStyle, *, 
         options=CircularDiagramOptions(
             annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
             config_overrides={"labels.circular.scope": "none"},
-            tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=slots, center_reserved_radius=center_reserved_radius
+            ),
         ),
     )
 
@@ -1322,12 +1330,18 @@ def _annotation_letter_radii(drawing) -> list[tuple[float, float]]:
 
 
 @pytest.mark.parametrize(
-    "style",
-    [RegionAnnotationStyle(label_offset=4.0), RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial")],
+    ("style", "center_reserved_radius"),
+    [
+        (RegionAnnotationStyle(label_offset=4.0), None),
+        # The 40 pt letters need more room than the rings leave above the centre; a center reservation (which the
+        # definition text no longer makes, DF-D02) keeps the GC ring off the centre, so the rings pack against it.
+        (RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial"), 76.5),
+    ],
     ids=["14px", "40px-radial"],
 )
 def test_circular_span_label_room_moves_its_ring_by_the_room_and_keeps_the_features_on_the_axis(
     style: RegionAnnotationStyle,
+    center_reserved_radius: float | None,
 ) -> None:
     # A span on an automatic inside ring, with an automatic ring between it and the features (REVIEW-1192 delta D1).
     def draw(cover_anchor: str):
@@ -1339,6 +1353,7 @@ def test_circular_span_label_room_moves_its_ring_by_the_room_and_keeps_the_featu
                 f"regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor={cover_anchor},z=5",
             ),
             style,
+            center_reserved_radius=center_reserved_radius,
         )
 
     plain, span = _slot_bands(draw("false")), draw("true")

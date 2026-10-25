@@ -5011,7 +5011,7 @@ export const createAppSetup = () => {
   });
   // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
   // drew nothing, or over crossing leaders from the notice bar.
-  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice } = createLabelFitDialog({
+  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
     reactive,
     computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
@@ -5021,7 +5021,9 @@ export const createAppSetup = () => {
     closeAfterChoice: dialogChoice.closeAfterChoice,
     choicePending: () => dialogChoice.pending.value,
     runAnalysis: () => runAnalysis(),
-    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts)
+    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
+    // The record-definition popup owns which field writes a record's name lines (created below).
+    showRecordText: (recordId) => previewItemPopup.showRecordTextSettings(recordId)
   });
   // The notice bar over the shown Result drawn with crossing leaders or labels
   // over the definition text (WARN-NOTICE, DEF-WARN).
@@ -6907,6 +6909,7 @@ export const createAppSetup = () => {
     labelFitNotice,
     openLabelFitNotice,
     resolveLabelFitChoice,
+    editLabelFitRecordText,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,

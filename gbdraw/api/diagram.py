@@ -175,6 +175,7 @@ from gbdraw.labels.fit import (
     LabelFitRowKind,
     LabelFitValue,
     LabelFitVerification,
+    split_row_option_values,
 )
 from gbdraw.labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
@@ -2496,7 +2497,6 @@ def assemble_circular_diagram_from_record(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _definition_profile: CircularDefinitionProfile = "full",
-    _layout_definition_profile: CircularDefinitionProfile | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2869,10 +2869,6 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
-        # The radial layout reserves the definition drawn without the plot title (OV-1710).
-        layout_definition_profile=(
-            _definition_profile if _layout_definition_profile is None else _layout_definition_profile
-        ),
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         title_content=title_content,
@@ -3110,11 +3106,6 @@ def assemble_circular_diagram_from_records(
         show_plot_title=show_plot_title,
         keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
     )
-    layout_definition_profile = _circular_record_definition_profile(
-        record_count=len(records),
-        show_plot_title=False,
-        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
-    )
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -3263,7 +3254,6 @@ def assemble_circular_diagram_from_records(
             identity=identity,
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
-            _layout_definition_profile=layout_definition_profile,
             _precomputed_depth_tracks=(
                 record_depth_track_data[record_index]
                 if record_depth_track_data is not None
@@ -3744,9 +3734,10 @@ def build_circular_diagram(
     )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -3779,7 +3770,12 @@ def build_circular_diagram(
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            # The "narrow the inside tracks" row sets the radius (PD-OI-097).
+            center_reserved_radius=(
+                row_center_reserved_radius
+                if row_center_reserved_radius is not None
+                else tracks.center_reserved_radius if tracks else None
+            ),
             circular_track_slots=tracks.circular_track_slots if tracks else None,
             circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
             annotation_options=annotations,
@@ -4089,9 +4085,10 @@ def build_circular_multi_diagram(
     )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
@@ -4119,7 +4116,12 @@ def build_circular_multi_diagram(
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            # The "narrow the inside tracks" row sets the radius (PD-OI-097).
+            center_reserved_radius=(
+                row_center_reserved_radius
+                if row_center_reserved_radius is not None
+                else tracks.center_reserved_radius if tracks else None
+            ),
             multi_record_size_mode=layout.multi_record_size_mode,
             multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,

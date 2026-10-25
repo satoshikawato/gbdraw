@@ -163,7 +163,13 @@ test('a row\'s config paths become the draft fields the request mapping projects
   assert.deepEqual(draft({ 'objects.definition.circular.font_size': 16.5 }), { form: {}, adv: { def_font_size: 16.5 } });
   assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', modeDrawing(state, 'linear').adv),
     { form: {}, adv: { resolve_overlaps: true } });
+  // "Narrow the inside tracks" (PD-OI-097, N-a) sets the Circular Center Reserved Radius, a track option the
+  // request reads from the same draft field; no new Session field.
+  assert.deepEqual(draft({ 'tracks.center_reserved_radius': 231.99 }), { form: {}, adv: { center_reserved_radius: 231.99 } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
+  assert.throws(() => draft({ 'tracks.center_reserved_radius': '231.99' }), unknown);
+  assert.throws(() => draftFieldsForConfigValues({ 'tracks.center_reserved_radius': 231.99 }, 'linear',
+    modeDrawing(state, 'linear').adv), unknown);
   assert.throws(() => draftFieldsForConfigValues({ 'labels.unknown': 1 }, 'circular', adv), unknown);
   assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv), unknown);
 });
@@ -199,9 +205,11 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
   const steps = [];
   const writes = [];
   const generates = [];
+  const shown = [];
   const pending = { value: false };
   const closes = [];
   const dialog = createLabelFitDialog({
+    showRecordText: (recordId) => { shown.push(recordId); return true; },
     reactive: (value) => value,
     computeRow,
     writeRowSettings: (values, mode) => { writes.push({ values, mode }); onWrite(); },
@@ -216,8 +224,41 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
     runAnalysis: async () => { generates.push(true); },
     errorSummary: () => 'The row could not be computed.'
   });
-  return { dialog, steps, writes, generates, pending };
+  return { dialog, steps, writes, generates, shown, pending };
 };
+
+const definitionRecord = (recordId) => ({
+  recordId, labelKind: 'circular_definition', labelKindTitle: 'definition lines', labelCount: 1, fontSize: 18,
+  overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false,
+  counts: '1 line overlaps a track'
+});
+
+test('Edit Species / Strain closes the dialog, applies nothing, and shows that record\'s field by its ID (E-b)', async () => {
+  const { dialog, steps, writes, generates, shown } = dialogHarness();
+  const drawn = report([foundRow('smaller_definition_font', 16.5)], { drawn: true });
+  drawn.records = [...drawn.records, definitionRecord('NC_2'), definitionRecord('NC_3')];
+  await dialog.openLabelFitDialog(normalizeReport(drawn), { mode: 'circular' });
+  // One button per record whose definition is over a track, by record ID (not the outer-label record).
+  assert.deepEqual(dialog.labelFitDialog.definitionRecordIds, ['NC_2', 'NC_3']);
+  assert.equal(await dialog.editLabelFitRecordText('NC_3'), true);
+  assert.deepEqual(shown, ['NC_3']);
+  assert.equal(dialog.labelFitDialog.show, false);
+  assert.deepEqual([steps, writes, generates], [[], [], []]);
+  // A report without a definition record offers no such button.
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
+  assert.deepEqual(dialog.labelFitDialog.definitionRecordIds, []);
+});
+
+test('over a drawn figure the dialog\'s Cancel reads Keep as drawn (K-a), and Edit Species / Strain is a button per record', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
+  const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
+  assert.match(markup, /data-label-fit-keep @click="resolveLabelFitChoice\('cancel'\)"[^>]*>\{\{ labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
+  assert.match(markup, /v-for="recordId in labelFitDialog\.definitionRecordIds"[^>]*:data-label-fit-edit-record="recordId" @click="editLabelFitRecordText\(recordId\)"/);
+  const setup = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  assert.match(setup, /showRecordText: \(recordId\) => previewItemPopup\.showRecordTextSettings\(recordId\)/);
+});
 
 test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothing (PD-OI-088)', async () => {
   const { readFile } = await import('node:fs/promises');

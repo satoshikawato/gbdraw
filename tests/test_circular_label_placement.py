@@ -3664,7 +3664,7 @@ def test_tobacco_14pt_outer_labels_that_overlap_are_not_drawn() -> None:
     assert vertical.values is not None
     assert vertical.canvas_size is not None
     assert str(raised.value).startswith(
-        f"140 outer labels do not fit at 14 pt ({failing.fit.overlap_pairs} label pairs overlap,"
+        f"NC_001879.2: 140 outer labels do not fit at 14 pt ({failing.fit.overlap_pairs} label pairs overlap,"
     )
     assert "Nothing was drawn.\nRun again with one of:\n" in str(raised.value)
 

@@ -8584,7 +8584,7 @@
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ t('Labels do not fit') }}</h2>
             <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
-                ? t('The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.')
+                ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
@@ -8615,8 +8615,13 @@
                     </li>
                 </ul>
             </fieldset>
+            <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
+            <div v-if="labelFitDialog.definitionRecordIds.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
+                <button v-for="recordId in labelFitDialog.definitionRecordIds" :key="recordId" type="button" data-history-ignore
+                        :data-label-fit-edit-record="recordId" @click="editLabelFitRecordText(recordId)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecordIds.length > 1"> ({{ recordId }})</template></button>
+            </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
                 <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>

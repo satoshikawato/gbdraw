@@ -23,6 +23,7 @@ from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
+    CENTER_RESERVED_RADIUS_PATH,
     DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
@@ -65,6 +66,8 @@ _SETTING_NAMES: Mapping[str, tuple[str, str]] = {
     PLACEMENT_PATH: ("Circular Label Placement", ""),
     # Record Labels > Default font size: the Circular centre definition's font (D-12).
     DEFINITION_FONT_PATH: ("Default font size", "pt"),
+    # Advanced > Center Reserved Radius: "narrow the inside tracks" (PD-OI-097).
+    CENTER_RESERVED_RADIUS_PATH: ("Center Reserved Radius", "px"),
 }
 # A control whose name differs by mode: the Circular and the Linear checkbox
 # of `canvas.resolve_overlaps`.

@@ -9,7 +9,11 @@
 // Worker (OD-F14, the font scan bound), each for at most Python's row bound
 // (LP-D60). Apply and Cancel first let the row being computed finish, which
 // starts no further row. Apply writes the row's settings as one History step
-// (PD-OI-088) and runs Generate; Cancel writes nothing.
+// (PD-OI-088) and runs Generate; Cancel ("Keep as drawn" over a drawn figure)
+// writes nothing. A Circular centre definition over a track also offers "Edit
+// Species / Strain…" (PD-OI-097): it closes the dialog as Cancel does and
+// shows the field that writes that record's name lines, found by its record
+// ID; it applies nothing.
 import { labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -35,6 +39,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  * @property {boolean} finishing Apply or Cancel waits for the row being computed.
+ * @property {string[]} definitionRecordIds The records whose centre definition text overlaps a track, by record ID.
  */
 /** @typedef {'circular' | 'linear'} LabelFitMode */
 /**
@@ -50,6 +55,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {() => boolean} choicePending
  * @property {() => Promise<unknown>} runAnalysis Generate.
  * @property {(error: unknown) => string} errorSummary The user-facing summary of a failure.
+ * @property {(recordId: string) => boolean} showRecordText Shows and focuses the field that writes the name lines
+ *   of the drawn record with this ID (the record-definition popup's owner); false when no field does.
  */
 
 /**
@@ -69,10 +76,11 @@ const displayRow = (row) => ({
 
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
-  reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary
+  reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
+  showRecordText
 }) => {
   const dialog = reactive({
-    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false
+    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false, definitionRecordIds: []
   });
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
@@ -146,6 +154,8 @@ export const createLabelFitDialog = ({
       fontSize: record.fontSize,
       counts: record.counts
     }));
+    dialog.definitionRecordIds = [...new Set(report.records
+      .filter((record) => record.labelKind === 'circular_definition').map((record) => record.recordId))];
     dialog.rows = report.rows.map(displayRow);
     dialog.selectedKind = '';
     dialog.finishing = false;
@@ -187,5 +197,15 @@ export const createLabelFitDialog = ({
     return choice === 'apply' && chosen === true ? runAnalysis() : undefined;
   };
 
-  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice };
+  /**
+   * "Edit Species / Strain…": closes the dialog as Cancel does, then shows the
+   * record's name field (no Apply, no Generate).
+   * @param {string} recordId
+   */
+  const editLabelFitRecordText = async (recordId) => {
+    await resolveLabelFitChoice('cancel');
+    return dialog.show ? false : showRecordText(recordId);
+  };
+
+  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText };
 };

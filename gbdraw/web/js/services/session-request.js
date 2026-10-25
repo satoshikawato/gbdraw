@@ -838,13 +838,22 @@ const DEFINITION_FONT_FLAT_CONFIG_KEY = Object.freeze({
   linear: 'linear_definition_font_size'
 });
 
+// The track options a label fit row may set besides config paths, by the
+// identity `gbdraw/labels/fit.py` gives them, and the draft field the request's
+// track options read in each mode: "narrow the inside tracks" sets the
+// Circular Center Reserved Radius (`tracks.centerReservedRadius`, PD-OI-097).
+/** @type {Readonly<Record<string, Readonly<Partial<Record<ModeProfileName, string>>>>>} */
+const DRAFT_FIELD_OF_ROW_OPTION = Object.freeze({
+  'tracks.center_reserved_radius': Object.freeze({ circular: 'center_reserved_radius' })
+});
+
 /**
  * The draft fields that the request mapping projects to `values` (config
  * paths and their values), as a label fit row writes them: the reverse of the
- * request's config overrides. The label scope goes to the form's label mode;
- * the rest to the drawing's `adv`. A path the mode does not manage, or one
- * whose draft field the drawing does not hold, is an `UNKNOWN_CONFIG_PATH`
- * error.
+ * request's config overrides and track options. The label scope goes to the
+ * form's label mode; the rest to the drawing's `adv`. A path the mode does
+ * not manage, or one whose draft field the drawing does not hold, is an
+ * `UNKNOWN_CONFIG_PATH` error.
  * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {ModeProfileName} mode
  * @param {Readonly<Record<string, unknown>>} adv The drawing's draft, whose fields the result names.
@@ -853,13 +862,24 @@ const DEFINITION_FONT_FLAT_CONFIG_KEY = Object.freeze({
 export const draftFieldsForConfigValues = (values, mode, adv) => {
   const managed = new Set(managedConfigOverridePathsForMode(mode));
   const unknown = () => diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
-  if (Object.keys(values).some((path) => !managed.has(path))) throw unknown();
+  /** @type {Record<string, number | string | boolean>} */
+  const configValues = {};
   // A copy of the draft fields, not the drawing's own objects.
   /** @type {Record<string, string>} */
   const formFields = {};
   /** @type {Record<string, number | string | boolean>} */
   const advFields = {};
-  for (const [key, value] of Object.entries(projectCanonicalConfigOverrides(values, mode))) {
+  for (const [path, value] of Object.entries(values)) {
+    const optionField = Object.hasOwn(DRAFT_FIELD_OF_ROW_OPTION, path) ? DRAFT_FIELD_OF_ROW_OPTION[path][mode] : undefined;
+    if (optionField === undefined) {
+      if (!managed.has(path)) throw unknown();
+      configValues[path] = value;
+      continue;
+    }
+    if (!Object.hasOwn(adv, optionField) || typeof value !== 'number' || !Number.isFinite(value)) throw unknown();
+    advFields[optionField] = value;
+  }
+  for (const [key, value] of Object.entries(projectCanonicalConfigOverrides(configValues, mode))) {
     if (key === 'label_scope') {
       if (typeof value !== 'string') throw unknown();
       formFields[mode === 'circular' ? 'labels_mode' : 'show_labels_linear'] = mode === 'circular'

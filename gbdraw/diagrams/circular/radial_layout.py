@@ -107,7 +107,8 @@ def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
     return remedy + "".join(f"hide the {track.words} ({track.off_remedy}), " for track in tracks if track.width_option is None)
 
 
-# The owner of the center reservation band among the occupied bands.
+# The owner of the center reservation band among the occupied bands: only an explicit ``center_reserved_radius``
+# occupies the centre (DF-D05); the centre definition text never narrows or moves a track (DF-D02).
 _CENTER_RESERVATION = "definition"
 
 
@@ -127,7 +128,7 @@ class PlacementWindow:
     # The room kept below inner_px for the inside rows placed after this window's rows, and those rows.
     kept_inside_px: float = 0.0
     kept_inside_slots: tuple[_KeptInsideSlot, ...] = ()
-    # The outer edge of the center reservation (definition text or center_reserved_radius). Placement reads it from
+    # The outer edge of the center reservation (an explicit center_reserved_radius). Placement reads it from
     # the occupied bands; a fit failure reports the window from it (OV-1276).
     center_reserved_px: float = 0.0
 
@@ -219,18 +220,10 @@ def track_layout_reason(error: ValidationError) -> str | None:
     return reason if isinstance(reason, str) else None
 
 
-def _center_reserved_diagnostic(
-    diagnostic: Mapping[str, object], *, explicit_radius: bool
-) -> dict[str, object]:
-    """The same fit failure, limited by the center reservation.
+def _center_reserved_diagnostic(diagnostic: Mapping[str, object]) -> dict[str, object]:
+    """The same fit failure, limited by an explicit ``center_reserved_radius`` (``CENTER_RESERVED``)."""
 
-    ``DEFINITION_RESERVED``: the band that the center definition text needs.
-    ``CENTER_RESERVED``: an explicit ``center_reserved_radius``.
-    """
-
-    if explicit_radius:
-        return {**diagnostic, "code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"}
-    return {**diagnostic, "code": "TRACK_LAYOUT", "reason": "DEFINITION_RESERVED"}
+    return {**diagnostic, "code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"}
 
 
 def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
@@ -1539,28 +1532,18 @@ class _InsideFitError(ValidationError):
         failed = () if self.slot_track is None else (self.slot_track,)
         return _switched_track_remedy(tuple(dict.fromkeys((*failed, *self.placement_window.kept_switched_tracks))))
 
-    def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
-        """Name the center reservation (definition text or explicit radius) as the cause."""
+    def limited_by_center(self, reserved_radius_px: float) -> ValidationError:
+        """Name an explicit ``center_reserved_radius`` as the cause."""
 
         kept = self._kept_inside()
         reserved = f"{float(reserved_radius_px):.1f}px{f' and {kept}' if kept else ''}"
-        if explicit_radius:
-            switch_remedy = self._switch_remedy()
-            message = (
-                f"{self._between()} because center_reserved_radius reserves {reserved}. "
-                f"Set a smaller center_reserved_radius{f', {switch_remedy}' if switch_remedy else ' '}"
-                f"or place tracks outside.{self.hint}"
-            )
-        else:
-            message = (
-                f"{self._between()} because the center definition text reserves {reserved}. "
-                "Shorten the species or strain text, reduce the definition font size, "
-                f"set a smaller center_reserved_radius, {self._switch_remedy()}or place tracks outside.{self.hint}"
-            )
-        return ValidationError(
-            message,
-            diagnostic=_center_reserved_diagnostic(self.diagnostic or {}, explicit_radius=explicit_radius),
+        switch_remedy = self._switch_remedy()
+        message = (
+            f"{self._between()} because center_reserved_radius reserves {reserved}. "
+            f"Set a smaller center_reserved_radius{f', {switch_remedy}' if switch_remedy else ' '}"
+            f"or place tracks outside.{self.hint}"
         )
+        return ValidationError(message, diagnostic=_center_reserved_diagnostic(self.diagnostic or {}))
 
 
 def _inside_stack_failure_hint(intents: Sequence[_RadialSlotIntent]) -> str:
@@ -2234,10 +2217,13 @@ def resolve_circular_radial_layout(
     make the room at all, they keep the places they take without that side's
     rooms.
 
-    When an inside slot cannot be placed but the same slots fit without the
-    center reservation, the ``TRACK_LAYOUT`` diagnostic reason is
-    ``DEFINITION_RESERVED`` (the definition text band) or ``CENTER_RESERVED``
-    (``center_reserved_radius_explicit``); otherwise it is ``CANNOT_FIT``.
+    ``definition_reserved_radius_px`` is the centre's band: with
+    ``center_reserved_radius_explicit`` the tracks keep out of it; otherwise
+    it is the centre definition text's band, which is only recorded (radial
+    labels keep out of it) and never narrows or moves a track (DF-D02).
+    When an inside slot cannot be placed but the same slots fit without an
+    explicit center reservation, the ``TRACK_LAYOUT`` diagnostic reason is
+    ``CENTER_RESERVED``; otherwise it is ``CANNOT_FIT``.
     """
 
     layout_inputs = _RadialLayoutInputs(
@@ -2324,16 +2310,17 @@ def _resolve_explaining_failure(
             **layout_inputs,
         )
     except _InsideFitError as error:
-        if definition_reserved_radius_px is None or definition_reserved_radius_px <= LAYOUT_EPSILON:
+        if (
+            not layout_inputs["center_reserved_radius_explicit"]
+            or definition_reserved_radius_px is None
+            or definition_reserved_radius_px <= LAYOUT_EPSILON
+        ):
             raise
         try:
             _resolve_circular_radial_layout(definition_reserved_radius_px=None, **layout_inputs)
         except ValidationError:
             raise error from None
-        raise error.limited_by_center(
-            float(definition_reserved_radius_px),
-            explicit_radius=bool(layout_inputs["center_reserved_radius_explicit"]),
-        ) from None
+        raise error.limited_by_center(float(definition_reserved_radius_px)) from None
 
 
 def _resolve_circular_radial_layout(
@@ -2361,7 +2348,9 @@ def _resolve_circular_radial_layout(
         else None
     )
     occupied: list[tuple[str, RadialBand]] = []
-    if definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
+    # The centre definition text's band is only recorded (radial labels keep out of it); only an explicit
+    # center_reserved_radius keeps the tracks out of the centre (DF-D02, DF-D05).
+    if center_reserved_radius_explicit and definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
         occupied.append((_CENTER_RESERVATION, definition_band))
 
     intents = _slot_intents(
@@ -2411,7 +2400,7 @@ def _resolve_circular_radial_layout(
             if conflict is not None:
                 diagnostic = _cannot_fit_diagnostic(intent)
                 if conflict[0] == _CENTER_RESERVATION:
-                    diagnostic = _center_reserved_diagnostic(diagnostic, explicit_radius=center_reserved_radius_explicit)
+                    diagnostic = _center_reserved_diagnostic(diagnostic)
                 raise ValidationError(
                     f"Pinned circular track slot '{intent.slot_id}' overlaps reserved circular slot '{conflict[0]}'.",
                     diagnostic=diagnostic,

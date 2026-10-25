@@ -2,7 +2,7 @@
 // open the dialog after a Generate that drew nothing; crossing leaders show a
 // notice bar over the drawn figure, and its "Choose a fix" computes the rows
 // Generate did not search. Apply is one History step and Generates; Cancel
-// writes nothing. Linear region labels over other labels (LP-D68) and
+// ("Keep as drawn" over a drawn figure) writes nothing. Linear region labels over other labels (LP-D68) and
 // Circular region labels cut to fit their circle (LP-D87) show the notice with
 // no fix (LP-D82).
 const { readFileSync } = require('node:fs');
@@ -116,7 +116,7 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
   expect(await labelSettings(page)).toEqual(before.settings);
 });
 
-test('crossing leaders: the notice bar opens the dialog, which computes the rows; Cancel keeps the figure', async ({ page }) => {
+test('crossing leaders: the notice bar opens the dialog, which computes the rows; Keep as drawn keeps the figure', async ({ page }) => {
   test.setTimeout(600000);
   // Lambda with labels Out at 16 pt and no blacklist: no labels overlap and leaders cross, the recipe of the
   // Python twin (tests/test_web_label_fit.py). SARS-CoV-2 with external labels only at 14 pt crossed only
@@ -146,7 +146,9 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(ROW_KINDS);
   await shot(dialog.getByRole('dialog'), 'label-fit-dialog-crossing.png');
 
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  // K-a (PD-OI-097): over a drawn figure the dialog's Cancel reads "Keep as drawn".
+  await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Keep as drawn', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(notice).toBeVisible();
   expect(await undoCount(page)).toBe(before.undo);
@@ -154,10 +156,12 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
 });
 
-// D-12, D-18 (OV-1606): MERS-CoV at the Web defaults touches the tracks with its bold first definition line.
-// The figure is drawn; the notice offers the smaller definition font, and Apply writes Record Labels >
-// Default font size and Generates a figure without the notice.
-test('the definition text over a track: the notice offers a smaller definition font, and Apply draws without it', async ({ page }) => {
+// D-12, D-18 (OV-1606), DF-D02, DF-D16, DF-D25: MERS-CoV's organism name is drawn on one line (never wrapped)
+// over the tracks at the Web defaults, with the notice. The dialog offers the font at which the one line clears
+// the tracks and the narrower inside tracks (N-a, which says the text still overlaps), and Edit Species /
+// Strain… (E-b) closes it and shows the record's name field without a History step. Apply writes Record
+// Labels > Default font size and Generates a figure without the notice.
+test('the definition text over a track: the notice offers a smaller font, narrower tracks, and the name field', async ({ page }) => {
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
@@ -173,18 +177,39 @@ test('the definition text over a track: the notice offers a smaller definition f
   await shot(notice, 'definition-notice.png');
   await pageShots(page, 'definition-notice-page');
 
-  await notice.getByRole('button', { name: 'Choose a fix', exact: true }).click();
-  const dialog = page.locator('[data-label-fit-dialog]');
-  await expect(dialog).toBeVisible();
+  const openDialog = async () => {
+    await notice.getByRole('button', { name: 'Choose a fix', exact: true }).click();
+    const opened = page.locator('[data-label-fit-dialog]');
+    await expect(opened).toBeVisible();
+    return opened;
+  };
+  let dialog = await openDialog();
   await expect(dialog.locator('[data-label-fit-records]')).toContainText('1 definition line at 18 pt (1 line overlaps a track)');
   const row = dialog.locator('[data-label-fit-row="smaller_definition_font"]');
+  const narrow = dialog.locator('[data-label-fit-row="narrow_tracks"]');
   await expect(row).toHaveAttribute('data-label-fit-status', 'found', { timeout: 300000 });
-  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font']);
-  await expect(row).toContainText('Default font size 17 pt');
+  await expect(narrow).toHaveAttribute('data-label-fit-status', 'found_with_notice', { timeout: 300000 });
+  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font', 'narrow_tracks']);
+  await expect(row).toContainText('Default font size 10.5 pt');
+  await expect(narrow).toContainText('Center Reserved Radius 231.99 px');
+  await expect(narrow).toContainText('1 definition line still overlaps a track');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
+  // E-b: the name field of that record, found by its record ID; nothing is applied.
   const undo = await undoCount(page);
-  // The only row with a fix is preselected.
+  const edit = dialog.locator('[data-label-fit-edit-record="NC_019843.3"]');
+  await expect(edit).toHaveText('Edit Species / Strain…');
+  await edit.click();
+  await expect(dialog).toBeHidden();
+  await expect(notice).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const active = document.activeElement;
+    return Boolean(active && (active.id === 'circular-species' || active.closest('[data-circular-record-presentation]')));
+  })).toBe(true);
+  expect(await undoCount(page)).toBe(undo);
+
+  dialog = await openDialog();
+  // The only row that clears the text is preselected.
   await expect(row.locator('input[type="radio"]')).toBeChecked();
   const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
   await dialog.getByRole('button', { name: 'Apply and Generate', exact: true }).click();
@@ -194,7 +219,7 @@ test('the definition text over a track: the notice offers a smaller definition f
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   await expect(notice).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(10.5);
   // The row's setting is one step; the Generate that follows is its own.
   expect(await undoCount(page)).toBe(undo + 2);
   await pageShots(page, 'definition-fixed-page');

@@ -340,7 +340,6 @@ def add_record_definition_group_on_canvas(
     definition_group_id: str | None = None,
     record_index: int = 0,
     record_count: int = 1,
-    species_line_count: int = 1,
     record_presentation: RecordPresentation | None = None,
 ) -> Drawing:
     """
@@ -368,7 +367,6 @@ def add_record_definition_group_on_canvas(
         definition_group_id=definition_group_id,
         record_index=record_index,
         record_count=record_count,
-        species_line_count=species_line_count,
         record_presentation=record_presentation,
     )
     definition_group = place_content(canvas, content, group_key)

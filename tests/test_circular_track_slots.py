@@ -44,6 +44,10 @@ def _load_record():
     return SeqIO.read(str(input_path), "genbank")
 
 
+# An explicit centre reserve that leaves the EDL933 inside rows less room than their preset widths need.
+EDL933_CENTER_RESERVED_RADIUS = 200.0
+
+
 def _load_edl933_record():
     input_path = Path(__file__).parent / "test_inputs" / "EDL933.gbk"
     return SeqIO.read(str(input_path), "genbank")
@@ -1126,8 +1130,8 @@ def test_web_auto_slot_sizes_are_the_sizes_generate_draws(
                 assert row["widthPx"] == pytest.approx(auto_width), name
             assert (row["innerGapPx"], row["outerGapPx"]) == pytest.approx((sizes["gapPx"], sizes["gapPx"])), name
     assert sizes["presetNumericRowSides"][track_type] == {"depth": "inside", "gc_content": "inside", "gc_skew": "inside"}
-    if (input_name, track_type) == ("NC_005856.1.gb", "middle"):
-        assert narrowed > 0, "the packed stack narrows its rows"
+    # DF-D02: the centre definition narrows no row, even where a packed stack used to narrow for it.
+    assert narrowed == 0
 
 
 @pytest.mark.circular
@@ -1261,9 +1265,12 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
 
 
 @pytest.mark.circular
-def test_default_preset_slots_compress_to_clear_center_definition(
+def test_default_preset_slots_keep_their_widths_beside_the_center_definition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """DF-D02: the MjeNMV definition used to narrow GC content and GC skew to clear its one-line band. Now the
+    rows keep their preset widths and positions, and the name stays one line over them (DF-D25)."""
+
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
     record = _load_mjenmv_record()
@@ -1275,39 +1282,7 @@ def test_default_preset_slots_compress_to_clear_center_definition(
     captured: dict[str, object] = {}
     _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
 
-    def capture_numeric_slot(
-        canvas_config,
-    ) -> None:
-        captured["definition_reserved"] = circular_assemble_module._definition_reserved_radius_px(
-            record,
-            canvas_config.geometry(),
-            None,
-            None,
-            cfg=canvas_config.profile.config,
-            plot_title=None,
-            definition_profile="full",
-        )
-
-    def fake_add_numeric_group_on_canvas(
-        canvas,
-        gb_record,
-        gc_df,
-        canvas_config,
-        track_config,
-        *,
-        track_width_override=None,
-        norm_factor_override=None,
-        group_id=None,
-        record_transform=None,
-        **_kwargs,
-    ):
-        capture_numeric_slot(canvas_config)
-        return canvas
-
-    monkeypatch.setattr(circular_assemble_module, "add_gc_content_group_on_canvas", fake_add_numeric_group_on_canvas)
-    monkeypatch.setattr(circular_assemble_module, "add_gc_skew_group_on_canvas", fake_add_numeric_group_on_canvas)
-
-    assemble_circular_diagram_from_record(
+    canvas = assemble_circular_diagram_from_record(
         record,
         cfg=GbdrawConfig.from_dict(config_dict),
         default_colors=default_colors,
@@ -1317,21 +1292,14 @@ def test_default_preset_slots_compress_to_clear_center_definition(
 
     layout = captured["radial_layout"]
     by_id = {track.id: track for track in layout.tracks}  # type: ignore[attr-defined]
-    definition_reserved = float(captured["definition_reserved"])
-    # Styled definition paint bounds belong to outer composition and must not
-    # change the established record-local radial slot reservation.
-    assert definition_reserved == pytest.approx(210.142578125)
-    assert by_id["gc_content"].anchor_radius_px == pytest.approx(285.44407552083335)
-    assert by_id["gc_content"].draw_width_px == pytest.approx(46.3125)
-    assert by_id["gc_content"].draw_inner_radius_px == pytest.approx(262.28782552083335)
-    assert by_id["gc_content"].draw_outer_radius_px == pytest.approx(308.60032552083335)
-    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(235.23157552083337)
-    assert by_id["gc_skew"].draw_width_px == pytest.approx(46.3125)
-    assert by_id["gc_skew"].draw_inner_radius_px == pytest.approx(212.07532552083337)
-    assert by_id["gc_skew"].draw_outer_radius_px == pytest.approx(258.38782552083335)
-    assert by_id["gc_content"].reserved_inner_radius_px >= definition_reserved - 1e-6
-    assert by_id["gc_skew"].reserved_inner_radius_px >= definition_reserved - 1e-6
-    assert by_id["gc_content"].compressed or by_id["gc_skew"].compressed
+    for slot_id in ("gc_content", "gc_skew"):
+        assert not by_id[slot_id].compressed, slot_id
+    assert by_id["gc_content"].anchor_radius_px == pytest.approx(271.5503255208334)
+    assert by_id["gc_content"].draw_width_px == pytest.approx(74.1)
+    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(193.55032552083338)
+    assert by_id["gc_skew"].draw_width_px == pytest.approx(74.1)
+    assert "Marsupenaeus japonicus endogenous nimavirus" in canvas.tostring()
+    assert "<tspan>Marsupenaeus japonicus</tspan>" not in canvas.tostring()
 
 
 @pytest.mark.circular
@@ -1380,6 +1348,9 @@ def test_default_custom_slots_tuckin_inherit_preset_when_inside_numeric_tracks_a
 def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot_fit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The two 240 px rows cannot fit outside an explicit center_reserved_radius (the definition alone reserves
+    no band, DF-D02)."""
+
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
     record = _load_edl933_record()
@@ -1405,6 +1376,7 @@ def test_explicit_pure_auto_slots_tuckin_raise_when_inside_numeric_tracks_cannot
             default_colors=default_colors,
             selected_features_set=SELECTED_FEATURES,
             legend="none",
+            center_reserved_radius=150.0,
             circular_track_slots=[
                 CircularTrackSlot(id="features", renderer="features"),
                 CircularTrackSlot(id="ticks", renderer="ticks"),
@@ -1788,10 +1760,12 @@ def test_order_only_numeric_before_ticks_reserves_inner_numeric_space(
 def test_inside_auto_stack_compresses_numeric_tracks_to_preserve_ticks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # An explicit center_reserved_radius still narrows the inside rows (DF-D05).
     layout = _capture_circular_radial_layout(
         monkeypatch,
         track_type="tuckin",
         input_filename="EDL933.gbk",
+        center_reserved_radius=EDL933_CENTER_RESERVED_RADIUS,
         circular_track_slots=[
             CircularTrackSlot(id="features", renderer="features"),
             CircularTrackSlot(id="ticks", renderer="ticks"),
@@ -1824,6 +1798,7 @@ def test_inside_movable_stack_reflows_preferred_numeric_tracks_after_features(
         monkeypatch,
         track_type="tuckin",
         input_filename="EDL933.gbk",
+        center_reserved_radius=EDL933_CENTER_RESERVED_RADIUS,
         circular_track_slots=[
             CircularTrackSlot(id="features", renderer="features"),
             CircularTrackSlot(id="gc_content", renderer="dinucleotide_content", params={"nt": "GC"}),
@@ -1887,9 +1862,11 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
 
 @pytest.mark.circular
-def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
+def test_custom_duplicate_skew_with_depth_tuckin_keeps_its_rows_beside_the_definition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """DF-D02: the rows keep their widths; the definition's one-line band no longer pushes them outward."""
+
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
     record = _load_record()
@@ -1950,9 +1927,11 @@ def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
     )
 
     definition_reserved = float(captured["definition_reserved"])
-    for slot_id in ("depth", "gc_content", "gc_skew", "at_skew"):
-        center_px, width_px = captured[slot_id]  # type: ignore[misc]
-        assert center_px - (0.5 * width_px) >= definition_reserved - 1e-6
+    innermost = min(
+        center_px - (0.5 * width_px)  # type: ignore[operator]
+        for center_px, width_px in (captured[slot_id] for slot_id in ("depth", "gc_content", "gc_skew"))  # type: ignore[misc]
+    )
+    assert innermost < definition_reserved
 
 
 @pytest.mark.circular
@@ -2841,28 +2820,23 @@ def test_a_plot_title_does_not_move_the_inside_rows(
         assert observed[key] == pytest.approx(geometry, abs=1e-6), key
 
 
-def test_a_titled_figure_whose_full_definition_cannot_fit_places_the_rows_around_the_drawn_one(
+def test_a_definition_that_cannot_fit_moves_no_row_with_or_without_a_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # OV-1710: the record summary the title draws still bounds the rows; a
-    # full definition that cannot fit does not make the titled figure fail.
+    # DF-D02 (retires OV-1710's failure): a full definition that no wrap clears
+    # is drawn over the rows; the rows stay where a short definition leaves them.
     overrides = {"objects.definition.circular.font_size": 30}
     species = "Homo sapiens " * 6
-    with pytest.raises(ValidationError) as error:
-        _gallery_stack_layout(monkeypatch, _GALLERY_AT_SKEW_STACK, config_overrides=overrides, species=species)
-    assert error.value.diagnostic["reason"] == "DEFINITION_RESERVED"
-
-    layout = _gallery_stack_layout(
-        monkeypatch,
-        _GALLERY_AT_SKEW_STACK,
-        config_overrides=overrides,
-        species=species,
-        plot_title="Human mitochondrial genome",
-    )
-    band = layout.definition_reserved_band_px
-    assert band is not None
-    inside = [slot for slot in layout.slots if slot.side == "inside"]
-    assert all(slot.reserved_band_px.inner_px >= band.outer_px - 1e-6 for slot in inside)
+    expected = _slot_geometry(_gallery_stack_layout(monkeypatch, _GALLERY_AT_SKEW_STACK))
+    for plot_title in (None, "Human mitochondrial genome"):
+        layout = _gallery_stack_layout(
+            monkeypatch,
+            _GALLERY_AT_SKEW_STACK,
+            config_overrides=overrides,
+            species=species,
+            plot_title=plot_title,
+        )
+        assert _slot_geometry(layout) == pytest.approx(expected), plot_title
 
 
 def test_a_definition_that_needs_more_room_still_bounds_the_gallery_stack(

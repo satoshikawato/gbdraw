@@ -149,9 +149,7 @@ _NUMERIC_STACK = (
 @pytest.mark.parametrize(
     ("slots", "explicit_radius", "reason", "slot_index", "cause"),
     [
-        # The numeric stack sits directly on the center definition band.
-        (_NUMERIC_STACK, False, "DEFINITION_RESERVED", 2, "the center definition text reserves 70.0px"),
-        # The same band given as an explicit center_reserved_radius.
+        # The numeric stack sits directly on an explicit center_reserved_radius.
         (_NUMERIC_STACK, True, "CENTER_RESERVED", 2, "center_reserved_radius reserves 70.0px"),
         # A pinned inner slot, not the center band, is the inner limit.
         (
@@ -190,7 +188,7 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     assert message.startswith("Circular track slot 'PRIVATE_SLOT' cannot fit inside between ")
     if cause is not None:
         assert cause in message
-    assert ("species" in message) is (reason == "DEFINITION_RESERVED")
+    assert "species" not in message
     payload = _web(caught.value)
     assert payload["code"] == "TRACK_LAYOUT"
     context = payload["context"]
@@ -230,15 +228,7 @@ def _pinned(slot_id: str, renderer: str, radius_px: float, width_px: float = 20.
             "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'gc_content'.",
             {"reason": "CANNOT_FIT", "slotIndex": 1},
         ),
-        # A pinned row overlaps the center definition text ...
-        (
-            (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
-            40.0,
-            False,
-            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
-            {"reason": "DEFINITION_RESERVED", "slotIndex": 0},
-        ),
-        # ... or an explicit center_reserved_radius.
+        # A pinned row overlaps an explicit center_reserved_radius.
         (
             (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
             40.0,
@@ -290,6 +280,20 @@ def test_radial_layout_conflicts_report_track_row_without_slot_id(
     assert payload["code"] == "TRACK_LAYOUT"
     assert payload["context"] == context
     assert "PRIVATE" not in json.dumps(payload)
+
+
+def test_the_center_definition_alone_reserves_no_band_for_the_tracks():
+    """DF-D02: without an explicit center_reserved_radius the definition text keeps no band, so a row pinned
+    inside the text's band is placed and the text is checked against it after drawing."""
+
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        **_small_radial_inputs(),
+        slots=[_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0)],
+        definition_reserved_radius_px=40.0,
+        center_reserved_radius_explicit=False,
+    )
+    assert [slot.id for slot in layout.slots] == ["PRIVATE_SLOT"]
 
 
 @pytest.mark.parametrize("surface", ["logical", "record-major"])
