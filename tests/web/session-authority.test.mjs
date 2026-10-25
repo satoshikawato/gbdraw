@@ -562,3 +562,20 @@ assert.throws(() => validateSessionAuthorityInventory({
     }
   }
 }
+
+{
+  // DESIGN §6: the writer flip (SESSION_VERSION 49) leaves the settings-only
+  // form and the schema-2 bindings of Sessions 46-48 as they are, and gives a
+  // Session 49 no settings-only form: its drawing without a request is read
+  // by that drawing (`projectsWithoutRequest`). The child reads
+  // session-authority.js with the generated SESSION_VERSION set to 49.
+  const { spawnSync } = await import('node:child_process');
+  const run = spawnSync(process.execPath, ['--experimental-test-module-mocks', '--no-warnings',
+    join(repoRoot, 'tests/web/helpers/session-authority-at-flip.mjs')], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  const atFlip = JSON.parse(run.stdout.trim().split('\n').at(-1));
+  assert.equal(atFlip.sessionVersion, 49);
+  assert.deepEqual(atFlip.settingsOnly, { 46: true, 47: true, 48: true, 49: false });
+  assert.deepEqual(atFlip.bindings, { 46: 'read', 47: 'read', 48: 'read', 49: 'read' });
+  assert.deepEqual(atFlip.projectsWithoutRequest, { 30: false, 48: true, 49: true });
+}

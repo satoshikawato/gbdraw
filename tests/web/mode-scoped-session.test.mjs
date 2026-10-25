@@ -4,7 +4,7 @@
 // with a retired field are rejected.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
@@ -907,28 +907,72 @@ test('a Session 49 drawing gets the same settings whichever drawing Load opens (
 });
 
 // DESIGN §6 (B2-D6): after the Session 46-48 upgrade, a 46-48 file and a 49
-// file are both a Session 49, so no Load reader compares a Session version
-// with a 46-48 threshold. Only `sourceFacts` (session-drawings-upgrade.js)
-// carries a source version; the band of a file is read through the
-// session-authority band predicates. Thresholds of 44 and below serve the
-// Session 27-44 path until Python converts it (B2d-4) and are not counted.
-test('no Load reader compares a Session version with a Session 46-48 threshold', () => {
-  const read = (name) => readFileSync(new URL(`../../gbdraw/web/js/services/${name}`, import.meta.url), 'utf8');
-  const THRESHOLD = String.raw`(?:MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
-    + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version|4[6-8])\b`;
-  const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`);
-  const frame = read('main-session-comparison-frame.js');
-  const converterStart = frame.indexOf('export const convertStoredProteinResultFrames = ');
-  assert.ok(converterStart >= 0);
-  const readers = {
-    'config.js': read('config.js'),
-    'main-session-comparison-frame.js convertStoredProteinResultFrames':
-      frame.slice(converterStart, frame.indexOf('\n};\n', converterStart))
+// file are both a Session 49, so no Web reader of a Session compares its
+// version with a threshold of 46 or later (the writer's SESSION_VERSION, a
+// band constant, LAYOUT.version, a literal 46-49), lists such versions, or
+// holds a hand-written Session version of 46 or later. The band of a file is
+// read through the session-authority band predicates, and only the upgrade
+// carries a source version (`sourceFacts`). The sites below read a file's
+// band before any upgrade runs, each for its reason; every other site fails.
+// Thresholds of 44 and below serve the Session 27-44 path until Python
+// converts it (B2d-4) and are not counted.
+const BAND_READERS = {
+  'services/session-authority.js versionHoldsDrawings': 'band predicate: a Session 49 is a list of drawings',
+  'services/session-authority.js versionKeepsModeSlices': 'band predicate: a Session 46 or later keeps mode slices',
+  'services/session-authority.js holdsCaptionLegendRows': 'band predicate: a Session 46 or older keys Legend rows by caption',
+  'services/session-authority.js SETTINGS_ONLY_FORM_VERSIONS': 'band list: the versions with a settings-only form',
+  'services/session-authority.js BINDING_SCHEMA_2_VERSIONS': 'band list: the versions whose bindings may be schema 2',
+  'services/session-drawings-upgrade.js sessionLegendEditsByRowKey': 'before the upgrade: rekeys a Session 46\'s Legend edits',
+  'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-48, writes sourceFacts',
+  'services/svg-result-ingestion.js createSavedResultPlan':
+    'a Session 27-44 saved no paint records with its Results (B2d-4: Python supplies them, else one sourceFacts fact)',
+  'services/main-session-comparison-frame.js storesDrawnFrameProteinResults':
+    'Gallery publication, before any conversion: the stored file\'s protein frame (flip: Gallery reads 49)',
+  'services/gallery-session-publication.js validateEnvelope': 'Gallery publication writes the writer\'s version (flip: 49)',
+  'services/gallery-session-publication.js admit': 'Gallery publication admits a stored file by its band (flip: 46-48 via the upgrade)'
+};
+test('no Web reader of a Session compares its version with a Session 46 or later threshold outside the band owner', () => {
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const sources = readdirSync(root, { recursive: true }).map(String)
+    .filter((name) => name.endsWith('.js') && !name.startsWith('contracts/') && !name.endsWith('.generated.js'))
+    .map((name) => ({ name, source: readFileSync(new URL(name, root), 'utf8') }));
+  const NAMES = String.raw`MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
+    + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|SESSION_VERSION|CURRENT_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version`;
+  const THRESHOLD = String.raw`(?:${NAMES}|4[6-9])\b`;
+  const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|\b${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`, 'g');
+  // A version list: an array that names a band constant, or an `includes` list of a literal 46-49.
+  const list = new RegExp(String.raw`\[[^\][]*\b(?:${NAMES})\b[^\][]*\]|\[[^\][]*\b4[6-9]\b[^\][]*\]\s*\.includes\(`, 'g');
+  const handVersion = /\bconst [A-Z_]*SESSION[A-Z_]*VERSION\s*=\s*(4[6-9]|[5-9]\d)\b/g;
+  const declaration = /^(\s*)(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
+  /** @param {string} line */
+  const indentOf = (line) => line.match(/^\s*/)[0].length;
+  // The declaration a line belongs to: its own at the top level, else the
+  // nearest one whose block (the lines indented deeper than it) holds it.
+  const ownerOf = (lines, index) => {
+    const own = lines[index].match(declaration);
+    if (own && own[1].length === 0) return own[2];
+    for (let at = index - 1; at >= 0; at -= 1) {
+      const found = lines[at].match(declaration);
+      if (found && lines.slice(at + 1, index + 1).every((line) => !line.trim() || indentOf(line) > found[1].length)) return found[2];
+    }
+    return '(module)';
   };
-  const found = Object.entries(readers).flatMap(([name, source]) => source.split('\n')
-    .map((line, index) => ({ line: line.trim(), at: `${name}:${index + 1}` }))
-    .filter(({ line }) => !/^(\/\/|\*|\/\*\*)/.test(line) && compare.test(line)).map(({ at, line }) => `${at} ${line}`));
-  assert.deepEqual(found, []);
+  const sites = new Map();
+  for (const { name, source } of sources) {
+    const lines = source.split('\n');
+    const lineOf = (offset) => source.slice(0, offset).split('\n').length - 1;
+    for (const pattern of [compare, list, handVersion]) {
+      for (const match of source.matchAll(pattern)) {
+        const index = lineOf(match.index);
+        if (/^\s*(\/\/|\*|\/\*\*)/.test(lines[index])) continue;
+        const site = `${name} ${ownerOf(lines, index)}`;
+        sites.set(site, [...(sites.get(site) ?? []), `${name}:${index + 1} ${lines[index].trim().slice(0, 120)}`]);
+      }
+    }
+  }
+  const unlisted = [...sites].filter(([site]) => !Object.hasOwn(BAND_READERS, site)).flatMap(([, at]) => at);
+  assert.deepEqual(unlisted, [], 'a version compare outside the band owner: read a band predicate or a sourceFacts fact');
+  assert.deepEqual(Object.keys(BAND_READERS).filter((site) => !sites.has(site)), [], 'a listed site compares no version: remove it');
 });
 
 // OV-1791: a Session 49 Load lists one row per fault in a drawing's stored

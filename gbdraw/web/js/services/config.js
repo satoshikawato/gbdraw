@@ -218,6 +218,7 @@ import {
   holdsNothing,
   hasSettingsOnlyForm,
   isSettingsOnlySessionDocument,
+  projectsWithoutRequest,
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
@@ -2689,8 +2690,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // The settings-only decision of the request read is passed on explicitly (C-OD07).
   // A Session 49 drawing without a request projects as a settings-only
   // Session does; the document itself is no settings-only Session.
-  const settingsOnly = requestRead.settingsOnly || isSettingsOnlySessionDocument(data)
-    || (drawingsBand && data.renderRequest == null);
+  const settingsOnly = requestRead.settingsOnly || projectsWithoutRequest(data, sourceSessionVersion);
   // Kept for the Load stage that projects a Session 39's draft again (OV-1181).
   /** @type {Parameters<typeof projectCanonicalSessionRequest>[0] | null} */
   const canonicalProjectionInput = !settingsOnly && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION
