@@ -810,7 +810,7 @@ assert.equal(promotedMajani.renderRequest.diagramOptions.output.legend, 'right')
 assert.deepEqual(
   promotedMajani.renderRequest.records.map((record) => record.presentation.label),
   [
-    'Marsupenaeus japonicus endogenous nimavirus',
+    'MjeNMV',
     'Melicertus latisulcatus majanivirus',
     'Penaeus monodon majanivirus A',
     'Penaeus semisulcatus majanivirus',

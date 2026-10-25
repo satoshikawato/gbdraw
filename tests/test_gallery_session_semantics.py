@@ -550,7 +550,7 @@ def test_majanivirus_gallery_session_keeps_record_labels_and_color_rules(
     gallery_visual_roots: Callable[[str, bool], tuple[tuple[str, ET.Element], ...]],
 ) -> None:
     expected_labels = (
-        "Marsupenaeus japonicus endogenous nimavirus",
+        "MjeNMV",
         "Melicertus latisulcatus majanivirus",
         "Penaeus monodon majanivirus A",
         "Penaeus semisulcatus majanivirus",

@@ -680,7 +680,7 @@ test('Gallery renders the majanivirus orthogroup tutorial and media', async ({ p
   await expect(tutorialPanel.getByText('Treat 32 as a requested maximum')).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: '1 MjeNMV.gb Marsupenaeus japonicus endogenous nimavirus'
+      name: '1 MjeNMV.gb MjeNMV'
     })
   ).toBeVisible();
   const mediaImages = tutorialPanel.getByRole('img');
