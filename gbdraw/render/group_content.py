@@ -20,11 +20,12 @@ from enum import Enum
 from functools import cached_property
 from types import MappingProxyType
 from typing import Callable, Mapping, ParamSpec, Protocol
+from xml.etree.ElementTree import Element
 
 from svgwrite import Drawing
 from svgwrite.base import BaseElement
 from svgwrite.container import Group
-from svgwrite.etree import etree
+from svgwrite.etree import CDATA_TAG, etree
 from svgwrite.params import Parameter
 
 from gbdraw.exceptions import ExportError
@@ -75,9 +76,68 @@ class GroupKey:
 
 
 def element_text(element: BaseElement) -> str:
-    """svgwrite's serialization of one element, as ``Drawing.tostring`` writes it."""
+    """svgwrite's serialization of one element, as ``Drawing.tostring`` writes it.
 
-    return etree.tostring(element.get_xml(), encoding="utf-8").decode("utf-8")
+    An empty element (most of a drawing: paths, lines, circles) is written by
+    ``empty_element_markup``; any other through ElementTree.
+    """
+
+    xml = element.get_xml()
+    markup = empty_element_markup(xml)
+    if markup is not None:
+        return markup
+    return etree.tostring(xml, encoding="utf-8").decode("utf-8")
+
+
+def _attribute_value(value: str) -> str:
+    # ElementTree's attribute escaping (``_escape_attrib``), in its order.
+    if "&" in value:
+        value = value.replace("&", "&amp;")
+    if "<" in value:
+        value = value.replace("<", "&lt;")
+    if ">" in value:
+        value = value.replace(">", "&gt;")
+    if '"' in value:
+        value = value.replace('"', "&quot;")
+    if "\r" in value:
+        value = value.replace("\r", "&#13;")
+    if "\n" in value:
+        value = value.replace("\n", "&#10;")
+    if "\t" in value:
+        value = value.replace("\t", "&#09;")
+    return value
+
+
+def empty_element_markup(xml: Element) -> str | None:
+    """``etree.tostring(xml, encoding="utf-8")`` as text, for an element with
+    no children, text or tail, plain string attributes and a plain tag; None
+    for any other element (the caller serializes it with ElementTree).
+
+    ElementTree writes the attributes in their order, escapes the values with
+    ``_escape_attrib`` and, for UTF-8, writes a character UTF-8 cannot encode
+    (a lone surrogate) as a character reference.
+    """
+
+    tag = xml.tag
+    if (
+        len(xml)
+        or xml.text
+        or xml.tail
+        or not isinstance(tag, str)
+        or tag == CDATA_TAG
+        or tag[:1] == "{"
+    ):
+        return None
+    parts = ["<", tag]
+    for name, value in xml.items():
+        if not isinstance(name, str) or not isinstance(value, str) or name[:1] == "{":
+            return None
+        parts.append(f' {name}="{_attribute_value(value)}"')
+    parts.append(" />")
+    markup = "".join(parts)
+    if markup.isascii():
+        return markup
+    return markup.encode("utf-8", "xmlcharrefreplace").decode("utf-8")
 
 
 _NOT_AN_ELEMENT = (
@@ -335,6 +395,7 @@ __all__ = [
     "add_content_definitions",
     "build_group_content",
     "element_text",
+    "empty_element_markup",
     "group_manifest",
     "place_content",
     "require_element_markup",
