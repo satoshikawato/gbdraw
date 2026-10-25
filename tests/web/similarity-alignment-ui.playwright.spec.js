@@ -2227,7 +2227,13 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       if(await select.count())await exposeReviewControl(page,select);
       await exposeReviewControl(page,skip);await exposeReviewControl(page,custom);
       for(const control of [dialog.getByRole('button',{name:'Apply',exact:true}),dialog.getByRole('button',{name:'Cancel',exact:true})])await exposeReviewControl(page,control);
-      await page.locator('.preview-canvas').evaluate(el=>el.scrollIntoView({block:'start'}));
+      await page.locator('.preview-canvas').evaluate(el=>{
+        el.scrollIntoView({block:'start'});
+        // scrollIntoView keeps the canvas's 9rem scroll margin, which in a short phone Preview pane
+        // (390x422: 111 px) puts the canvas below the pane's visible end; a user swipes the pane instead.
+        const pane=el.closest('.result-pane').getBoundingClientRect();
+        if(el.getBoundingClientRect().top>=pane.bottom)el.closest('.result-pane').scrollTop+=el.getBoundingClientRect().top-Math.max(pane.top,document.querySelector('.drawing-bar').getBoundingClientRect().bottom);
+      });
       const measured=await compactReviewGeometry(page);geometry.push(measured);
       await info.attach(`review-${viewport.width}x${viewport.height}`,{body:JSON.stringify(measured,null,2),contentType:'application/json'});
       expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
