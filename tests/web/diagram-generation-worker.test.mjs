@@ -327,3 +327,103 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   assert.equal(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES)?.includes('stagedResources'), false);
   assert.equal(helperPayloadKeys('notAHelper'), null);
 }
+
+// D7: a Cancel drains the queue. The interrupt and then Python's cancel flag
+// are cleared after the operation in flight ends, the replies of every request
+// up to `through` are dropped (a pending part acknowledgement is released),
+// and the answer names the Cancel.
+{
+  const offline = 'http://127.0.0.1:9';
+  const replies = [];
+  self.postMessage = (message) => { replies.push(message); };
+  const settle = async () => { for (let i = 0; i < 50; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+  const bootMessage = (id, interruptBuffer) => ({
+    type: 'init', id, interruptBuffer, pyodideIndexUrl: `${offline}/pyodide/`, localWheelUrls: [],
+    gbdrawWheelUrl: `${offline}/gbdraw-0.0.0-py3-none-any.whl`,
+    pyodideModuleUrl: 'data:text/javascript,export const loadPyodide = (options) => globalThis.__FAKE_LOAD_PYODIDE__(options);'
+  });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('wheel');
+  try {
+    // Without a runtime (its boot is in flight, then fails): the buffer is cleared, after the boot ends.
+    const buffer = new Uint8Array(new SharedArrayBuffer(1));
+    let failBoot;
+    globalThis.__FAKE_LOAD_PYODIDE__ = () => new Promise((_resolve, reject) => { failBoot = reject; });
+    self.onmessage({ data: bootMessage('boot-in-flight', buffer) });
+    buffer[0] = 2;
+    self.onmessage({ data: { type: 'cancel', id: 'cancel-during-boot', through: 0 } });
+    await settle();
+    assert.deepEqual(replies.map(({ type }) => type), ['init-progress']);
+    failBoot(new Error('stop the boot'));
+    await settle();
+    assert.deepEqual(replies.filter(({ type }) => type !== 'init-progress').map(({ type, ok }) => [type, ok]),
+      [['init', false], ['cancel', true]]);
+    assert.equal(replies.at(-1).id, 'cancel-during-boot');
+    assert.equal(buffer[0], 0);
+
+    // A booted runtime: the buffer reaches Pyodide once, at boot.
+    replies.length = 0;
+    const pythonCalls = [];
+    let interruptBuffer = null;
+    let helperReply = () => 'null';
+    const fs = new Proxy({ analyzePath: () => ({ exists: false }), readdir: () => [] }, {
+      get: (target, name) => target[name] ?? (() => {})
+    });
+    const pyodide = {
+      loadPackage: async () => {},
+      pyimport: () => ({ install: async () => {} }),
+      FS: fs,
+      runPythonAsync: async () => {},
+      runPython: (code) => {
+        pythonCalls.push(code.trim());
+        return code.includes('get_web_runtime_capabilities') ? '{}' : undefined;
+      },
+      setInterruptBuffer: (value) => { interruptBuffer = value; },
+      globals: {
+        get: (name) => ({
+          call_web_json_helper: (...args) => helperReply(...args),
+          run_canonical_request_wrapper: () => ({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } })
+        })[name]
+      }
+    };
+    globalThis.__FAKE_LOAD_PYODIDE__ = async () => pyodide;
+    const booted = new Uint8Array(new SharedArrayBuffer(1));
+    self.onmessage({ data: bootMessage('booted', booted) });
+    await settle();
+    assert.equal(replies.find(({ type }) => type === 'init')?.ok, true);
+    assert.equal(interruptBuffer, booted);
+
+    // A run that is not canceled posts its result; a canceled one posts nothing.
+    replies.length = 0;
+    const run = (requestId) => self.onmessage({ data: { type: 'run', requestId, payload: {
+      request: {}, resourceManifest: [], stagedResources: [], retainedResourceTokens: []
+    } } });
+    run(10);
+    await settle();
+    assert.deepEqual(replies.filter(({ type }) => type === 'run').map(({ requestId, ok }) => [requestId, ok]), [[10, true]]);
+    replies.length = 0;
+    run(11);
+    booted[0] = 2;
+    self.onmessage({ data: { type: 'cancel', id: 'cancel-run', through: 11 } });
+    await settle();
+    // Progress may still go out (the page ignores it); no result does.
+    assert.deepEqual(replies.filter(({ type }) => type !== 'progress').map(({ type, id }) => [type, id]),
+      [['cancel', 'cancel-run']]);
+    assert.equal(booted[0], 0);
+    assert.equal(pythonCalls.at(-1), 'clear_web_cancel()');
+
+    // A bounded reply waiting for its part acknowledgement: the Cancel releases it, and the rest is dropped.
+    replies.length = 0;
+    helperReply = () => JSON.stringify({ rows: Array.from({ length: 3000 }, (_, index) => `${index}`.padEnd(100, 'x')) });
+    self.onmessage({ data: { type: 'helper', requestId: 12, operation: 'evaluateRules', payload: { rules: [] } } });
+    await settle();
+    assert.deepEqual(replies.map(({ type, status }) => [type, status]), [['helper', 'part']]);
+    self.onmessage({ data: { type: 'cancel', id: 'cancel-helper', through: 12 } });
+    await settle();
+    assert.deepEqual(replies.map(({ type, status, id }) => [type, status, id]),
+      [['helper', 'part', undefined], ['cancel', undefined, 'cancel-helper']]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete globalThis.__FAKE_LOAD_PYODIDE__;
+  }
+}

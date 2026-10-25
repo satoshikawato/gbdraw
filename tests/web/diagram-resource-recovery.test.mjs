@@ -53,7 +53,10 @@ class StagingWorker {
   postMessage(message) {
     const copy = structuredClone(message);
     this.messages.push(copy);
-    if (message.type === 'init') {
+    if (message.type === 'cancel') {
+      // The Worker drains once the operation in flight has ended (D7).
+      Promise.resolve(this.operation).then(() => this.emit({ type: 'cancel', id: message.id, ok: true }));
+    } else if (message.type === 'init') {
       queueMicrotask(() => this.emit({ type: 'init', id: message.id, ok: true, capabilities: EXPECTED_WEB_RUNTIME_CAPABILITIES }));
     } else if (message.type === 'helper' && message.payload?.resourceManifest) {
       this.operation = this.stageForHelper(structuredClone(message));
@@ -216,6 +219,29 @@ test('W8: cancel after staging releases Worker ownership and transfers A to a ne
   assert.equal(worker.terminated, true);
   assert.deepEqual(content(await run({ source: 'A' })), { source: 'A' });
   assert.deepEqual(transferred(current()), ['source']);
+});
+
+test('W8 with an interrupt buffer: the kept Worker drains and A is transferred to it again', async () => {
+  globalThis.crossOriginIsolated = true;
+  try {
+    await run({ source: 'A' });
+    const worker = current();
+    worker.mode = 'hold';
+    const staged = new Promise(resolve => { worker.staged = resolve; });
+    const pending = run({ source: 'B' });
+    const rejected = assert.rejects(pending, /canceled/);
+    await staged;
+    cancelDiagramGeneration();
+    await rejected;
+    worker.mode = 'success';
+    // Staging B pruned A from the kept Worker's cache: the page sends it again.
+    assert.deepEqual(content(await run({ source: 'A' })), { source: 'A' });
+    assert.equal(worker.terminated, undefined);
+    assert.equal(current(), worker);
+    assert.deepEqual(transferred(worker), ['source']);
+  } finally {
+    delete globalThis.crossOriginIsolated;
+  }
 });
 
 test('W9: unadmitted B has no delayed promotion; A recovers with its bytes', async () => {

@@ -5,6 +5,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,
+  DIAGRAM_WORKER_INTERRUPT_SIGNAL,
   stagedHelperReferences,
   readFeatureCatalogRevision,
   readSvgDocumentParts
@@ -28,6 +29,7 @@ import { toRaw } from '../utils/vue-raw.js';
 /** @import { WebFontEntry } from './font-store.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureCatalogRevision, WorkerHeldSegment } from './diagram-worker-protocol.js' */
+/** @import { DiagramWorkerCancelMessage, DiagramWorkerInitMessage } from './diagram-worker-protocol.js' */
 /** @import { DecodedContentPiece, DecodedSvgDocument, HeldSegment } from './current-worker-result-source.js' */
 
 /**
@@ -425,6 +427,27 @@ let workerCapabilities = null;
  * @type {string | null}
  */
 let pyodideSnapshotError = null;
+/**
+ * The interrupt buffer of the current Worker (index 0, read by Pyodide), or
+ * null on a page that is not cross-origin isolated, where a Cancel
+ * terminates the Worker.
+ * @type {Uint8Array | null}
+ */
+let workerInterruptBuffer = null;
+/**
+ * How long a Cancel waits for the kept Worker to answer (D7) before it
+ * terminates it, as a Cancel without an interrupt buffer does.
+ */
+export const DIAGRAM_WORKER_CANCEL_TIMEOUT_MS = 3000;
+/**
+ * The kept Worker's drain after a Cancel: settled when the Worker answers,
+ * or when it is terminated. Null while no drain runs.
+ * @typedef {object} WorkerDrain
+ * @property {Promise<void>} promise Never rejects.
+ * @property {(outcome: 'drained' | 'terminated') => void} finish
+ */
+/** @type {WorkerDrain | null} */
+let drainState = null;
 /** @typedef {Readonly<{ step: number, total: number, label: string }>} RuntimePreparationStep */
 /**
  * The pending Worker initialization: its promise, the reject that settles it,
@@ -529,14 +552,27 @@ const requestFontIdentities = (request) => {
   return fontFamily ? webFontIdentitiesFor(workerFontSource.readFonts(), fontFamily) : [];
 };
 
-/** @param {string} id */
+// A Cancel can stop Python only through memory the page shares with the Worker.
+const createInterruptBuffer = () => (
+  globalThis.crossOriginIsolated === true && typeof SharedArrayBuffer === 'function'
+    ? new Uint8Array(new SharedArrayBuffer(1))
+    : null
+);
+
+/**
+ * The init message of a new Worker, which takes the Worker's interrupt buffer.
+ * @param {string} id
+ * @returns {DiagramWorkerInitMessage}
+ */
 const buildInitPayload = (id) => {
+  workerInterruptBuffer = createInterruptBuffer();
   return {
     type: 'init',
     id,
     fonts: workerFontFiles(workerFontSource.readFonts()),
     ...buildPyodideAssetManifest(),
-    ...(pyodideSnapshotError === null ? {} : { pyodideSnapshotUrl: null })
+    ...(pyodideSnapshotError === null ? {} : { pyodideSnapshotUrl: null }),
+    interruptBuffer: workerInterruptBuffer
   };
 };
 
@@ -577,35 +613,88 @@ const rejectPendingInit = (error) => {
   reject(error);
 };
 
+/**
+ * Reject every feature-extraction and helper request that waits on the Worker.
+ * @param {unknown} error
+ */
+const rejectWorkerRequests = (error) => {
+  for (const requests of [activeFeatureRequests, activeHelperRequests]) {
+    requests.forEach((request) => {
+      request.cleanup?.();
+      request.reject(error);
+    });
+    requests.clear();
+  }
+};
+
 /** @param {unknown} [error] */
 const terminateWorker = (error = null) => {
   if (error) rejectPendingInit(error);
   else clearInitState();
-  activeFeatureRequests.forEach((request) => {
-    request.cleanup?.();
-    request.reject(error || new Error('Diagram generation worker was terminated.'));
-  });
-  activeFeatureRequests.clear();
-  activeHelperRequests.forEach((request) => {
-    request.cleanup?.();
-    request.reject(error || new Error('Diagram generation worker was terminated.'));
-  });
-  activeHelperRequests.clear();
+  rejectWorkerRequests(error || new Error('Diagram generation worker was terminated.'));
   if (worker) {
     worker.terminate();
     worker = null;
   }
   workerInitialized = false;
   workerCapabilities = null;
+  workerInterruptBuffer = null;
   resourceTransport.reset();
+  drainState?.finish('terminated');
+};
+
+/**
+ * Stop the kept Worker's canceled requests (D7): write SIGINT into its
+ * interrupt buffer, so Python stops at its next checkpoint, and ask it to
+ * drain: it drops the replies of every request up to the last one sent and
+ * answers once the operation in flight ends. Without an answer in time, it
+ * is terminated.
+ * @param {Worker} currentWorker
+ * @param {Uint8Array} buffer
+ */
+const drainWorker = (currentWorker, buffer) => {
+  const id = `diagram-cancel-${Date.now()}-${nextRequestId}`;
+  // The Promise executor runs synchronously and assigns it before anything reads it.
+  /** @type {() => void} */
+  let resolveDrain = () => {};
+  /** @type {Promise<void>} */
+  const promise = new Promise((resolve) => { resolveDrain = resolve; });
+  /** @param {MessageEvent} event */
+  const handleMessage = (event) => {
+    const data = event.data || {};
+    if (data.type === 'cancel' && data.id === id) finish('drained');
+  };
+  const terminate = () => {
+    if (worker === currentWorker) terminateWorker();
+  };
+  const timer = setTimeout(terminate, DIAGRAM_WORKER_CANCEL_TIMEOUT_MS);
+  /** @param {'drained' | 'terminated'} outcome */
+  const finish = (outcome) => {
+    clearTimeout(timer);
+    currentWorker.removeEventListener('message', handleMessage);
+    currentWorker.removeEventListener('error', terminate);
+    drainState = null;
+    recordStructuralMetric('workerCancelDrain', 1, { outcome });
+    resolveDrain();
+  };
+  currentWorker.addEventListener('message', handleMessage);
+  currentWorker.addEventListener('error', terminate);
+  drainState = { promise, finish };
+  Atomics.store(buffer, 0, DIAGRAM_WORKER_INTERRUPT_SIGNAL);
+  /** @type {DiagramWorkerCancelMessage} */
+  const message = { type: 'cancel', id, through: nextRequestId - 1 };
+  currentWorker.postMessage(message);
 };
 
 /**
  * @param {((step: RuntimePreparationStep) => void) | null} [onStep]
  *   Each first-use preparation step as the Worker starts it; a caller that
  *   joins a running initialization first receives the current step.
+ * @returns {Promise<Worker>}
  */
 const ensureWorkerInitialized = (onStep = null) => {
+  // After a Cancel, the kept Worker answers first; if it is terminated instead, a new one boots.
+  if (drainState) return drainState.promise.then(() => ensureWorkerInitialized(onStep));
   const currentWorker = getWorker();
   if (workerInitialized) return Promise.resolve(currentWorker);
   if (initState?.promise) {
@@ -777,8 +866,9 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
   (async () => {
     let failureStage = 'initialization';
     try {
-      const initializationWasWarm = workerInitialized;
-      if (!initializationWasWarm) reportProgress('preparing-runtime');
+      // A drain is not runtime preparation, but its wait is not a warm start either.
+      const initializationWasWarm = workerInitialized && !drainState;
+      if (!workerInitialized) reportProgress('preparing-runtime');
       const initializationStartedAt = globalThis.performance?.now?.() ?? Date.now();
       const currentWorker = await ensureWorkerInitialized((step) => reportProgress('preparing-runtime', step));
       recordSessionLifecycleEvent('worker-initialization-resolved', {
@@ -1079,6 +1169,8 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
 
 // Cancel ends only Worker-side work. A Cancel during JS-side preparation keeps
 // the warm Worker; the caller's cancel check stops the pending dispatch.
+// A booted Worker with an interrupt buffer is kept and drained (D7); a Cancel
+// during its boot, or on a page that is not cross-origin isolated, terminates it.
 export const cancelDiagramGeneration = () => {
   const request = activeRequest;
   if (!request && !initState && !activeFeatureRequests.size && !activeHelperRequests.size) {
@@ -1088,7 +1180,15 @@ export const cancelDiagramGeneration = () => {
   if (request) {
     settleActiveRequest(request, () => request.reject(error));
   }
-  terminateWorker(error);
+  const currentWorker = worker;
+  if (!currentWorker || !workerInitialized || !workerInterruptBuffer) {
+    terminateWorker(error);
+    return true;
+  }
+  rejectWorkerRequests(error);
+  // The Worker pruned its resources for the canceled request: send every byte again.
+  resourceTransport.reset();
+  if (!drainState) drainWorker(currentWorker, workerInterruptBuffer);
   return true;
 };
 

@@ -21,10 +21,19 @@ let runtimePromise = null;
 let runtime = null;
 let operationQueue = Promise.resolve();
 let auxiliaryAcknowledgement = null;
+// The page's interrupt buffer (DiagramWorkerInitMessage); null where a Cancel terminates this Worker.
+let interruptBuffer = null;
+// The last request ID a Cancel named (DiagramWorkerCancelMessage): no reply of
+// a request up to it is posted.
+let canceledThrough = 0;
+const isCanceled = (requestId) => typeof requestId === 'number' && requestId <= canceledThrough;
 const sendAuxiliaryResult = async (type, requestId, result) => {
+  if (isCanceled(requestId)) return;
   let wholeReply = false;
   try {
     await sendBoundedJson(result, (part, transfers = []) => {
+      // A Cancel during a bounded reply: its remaining parts are dropped.
+      if (isCanceled(requestId)) return Promise.resolve();
       if (part.whole) {
         wholeReply = true;
         self.postMessage({ type, requestId, ok: true, result: part.value });
@@ -35,7 +44,7 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
         self.postMessage({ type, requestId, status: 'part', ...part }, transfers);
       });
     }, { consume: true });
-    if (!wholeReply) self.postMessage({ type, requestId, ok: true });
+    if (!wholeReply && !isCanceled(requestId)) self.postMessage({ type, requestId, ok: true });
   } finally {
     auxiliaryAcknowledgement = null;
   }
@@ -1409,6 +1418,7 @@ const handleWorkerMessage = async (data) => {
   const { id, requestId, type } = data;
   try {
     if (type === 'init') {
+      interruptBuffer = data.interruptBuffer instanceof Uint8Array ? data.interruptBuffer : null;
       let initialized;
       try {
         initialized = await initializeRuntime(data);
@@ -1420,6 +1430,9 @@ const handleWorkerMessage = async (data) => {
         self.postMessage({ id, type: 'init', ok: false, snapshotError });
         return;
       }
+      // One site for both boots: a Cancel's SIGINT reaches the handler that
+      // _start_web_worker_state installed (D7).
+      if (interruptBuffer) initialized.pyodide.setInterruptBuffer(interruptBuffer);
       // The replay of the page's fonts into a new Worker, font by font; the
       // reply names each font it lost (OV-686), and a Generate that names one
       // fails (FONT_NOT_LOADED).
@@ -1469,11 +1482,13 @@ const handleWorkerMessage = async (data) => {
       requestId,
       testLifecycleEnabled: data.testLifecycleEnabled
     });
+    if (isCanceled(requestId)) return;
     self.postMessage(
       { requestId, type: 'run', ok: true, results },
       collectGenerationResultTransferList(results)
     );
   } catch (error) {
+    if (isCanceled(requestId)) return;
     self.postMessage({
       id,
       requestId,
@@ -1488,6 +1503,21 @@ const handleWorkerMessage = async (data) => {
   }
 };
 
+/** @param {() => Promise<void> | void} step */
+const enqueue = (step) => {
+  const scheduled = operationQueue.then(step, step);
+  operationQueue = scheduled.catch(() => {});
+};
+
+// The drain after a Cancel, once the operation in flight has ended: the
+// interrupt and then Python's cancel flag are cleared, so the next request
+// runs; the page sends none before this answer.
+const drainCancel = (id) => {
+  if (interruptBuffer) Atomics.store(interruptBuffer, 0, 0);
+  runtime?.pyodide.runPython('clear_web_cancel()');
+  self.postMessage({ type: 'cancel', id, ok: true });
+};
+
 self.onmessage = (event) => {
   const data = event.data || {};
   if (data.type === 'auxiliary-ack') {
@@ -1498,9 +1528,15 @@ self.onmessage = (event) => {
     }
     return;
   }
-  const scheduled = operationQueue.then(
-    () => handleWorkerMessage(data),
-    () => handleWorkerMessage(data)
-  );
-  operationQueue = scheduled.catch(() => {});
+  if (data.type === 'cancel') {
+    canceledThrough = Math.max(canceledThrough, Number(data.through) || 0);
+    if (auxiliaryAcknowledgement && isCanceled(auxiliaryAcknowledgement.requestId)) {
+      const pending = auxiliaryAcknowledgement;
+      auxiliaryAcknowledgement = null;
+      pending.resolve();
+    }
+    enqueue(() => drainCancel(data.id));
+    return;
+  }
+  enqueue(() => handleWorkerMessage(data));
 };
