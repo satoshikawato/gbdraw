@@ -4453,6 +4453,57 @@ test('a listed vendored runtime change fails on a hash or kind mismatch', () => 
   assertVendorGateFailure(kind, /library\.js: listed as replace, but the change is remove/, 'kind');
 });
 
+const IMMUTABLE_ASSETS_MANIFEST_PATH = 'tools/immutable-web-assets.json';
+const immutableManifestIn = (files) => (write) => write(
+  IMMUTABLE_ASSETS_MANIFEST_PATH,
+  typeof files === 'string' ? files : `${JSON.stringify({ prefixes: ['vendor/'], files }, null, 2)}\n`
+);
+
+test('a listed replace of a file the base pins as immutable fails, other listed changes pass', () => {
+  const pinned = immutableManifestIn({ 'vendor/library.js': sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH]) });
+  const replaced = runListedVendorChangeCase(
+    [vendorChangeEntry()],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    pinned
+  );
+  assertVendorGateFailure(replaced, UNLISTED_VENDOR_CHANGE, 'pinned replace');
+  assert.match(
+    replaced.output,
+    /library\.js: pinned in tools\/immutable-web-assets\.json and served as immutable; publish the new bytes under a new path/
+  );
+
+  const unpinned = runListedVendorChangeCase(
+    [vendorChangeEntry()],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    immutableManifestIn({ 'vendor/other.js': sha256Hex('other') })
+  );
+  assert.equal(unpinned.status, 0, unpinned.output);
+  assert.match(unpinned.output, /Gate: \*\*PASS\*\*/);
+
+  const added = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/library.v2.js', change: 'add' })],
+    (write) => write('gbdraw/web/vendor/library.v2.js', VENDOR_LIBRARY_UPDATE),
+    pinned
+  );
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /Gate: \*\*PASS\*\*/);
+});
+
+test('a malformed immutable-asset manifest in the base fails a vendored replace closed', () => {
+  ['{not json', '{"files": []}'].forEach((manifest) => {
+    const result = runListedVendorChangeCase(
+      [vendorChangeEntry()],
+      (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+      immutableManifestIn(manifest)
+    );
+    assertVendorGateFailure(
+      result,
+      /tools\/immutable-web-assets\.json in the base is malformed/,
+      manifest
+    );
+  });
+});
+
 test('an added binary vendored file passes only when the trusted base lists it as add with its bytes', () => {
   const fontPath = 'gbdraw/web/vendor/fonts/latin.woff2';
   const fontBytes = Buffer.from([0x77, 0x4f, 0x46, 0x32, 0, 1, 2, 3]);
