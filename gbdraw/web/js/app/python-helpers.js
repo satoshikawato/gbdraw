@@ -508,7 +508,7 @@ def _web_feature_view_hash_parts(record, source_feature_position):
 
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None, source_feature_catalogs=None):
     from Bio import SeqIO
-    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.source import capture_source_features
     from gbdraw.io.record_select import parse_record_selector, select_record
     from gbdraw.io.regions import crop_then_reverse_records, parse_region_specs
 
@@ -524,9 +524,9 @@ def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_s
         records = select_record(source_records, selector) if selector is not None else [source_records[0]]
         if source_feature_catalogs is not None:
             if prepared is None:
-                source_feature_catalogs.extend(build_source_feature_catalog(record) for record in records)
+                source_feature_catalogs.extend(capture_source_features(record) for record in records)
             else:
-                catalogs = {id(record): catalog for record, catalog in zip(prepared.records, prepared.source_feature_catalogs)}
+                catalogs = {id(record): catalog for record, catalog in zip(prepared.records, prepared.source_features)}
                 source_feature_catalogs.extend(catalogs[id(record)] for record in records)
     elif fmt == "gff":
         if not fasta_path:
@@ -654,7 +654,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             resolution = resolve_record_feature_inputs(
                 records=[record],
                 record_keys=[str(stable_record_key)],
-                source_catalogs=source_feature_catalogs[:1],
+                source_catalogs=[catalog.entries for catalog in source_feature_catalogs[:1]],
                 placements=(),
                 mode="linear",
                 feature_overrides=[FeatureOverride.from_mapping(row) for row in override_rows],

@@ -2066,3 +2066,49 @@ def test_a_single_record_title_change_reuses_the_gc_percent(
 def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
     feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
     assert len(prepared_module._feature_stamp(feature)) == len(prepared_module._FEATURE_STAMP_FIELDS)
+
+
+def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_never(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source hashes are computed when the source loads and read back after (L1-03).
+
+    The interactive context also hashes each feature once in its drawn frame;
+    no render builds a source catalog entry, and a warm Generate hashes nothing.
+    """
+    import types
+
+    import gbdraw.features.ids as ids_module
+    from gbdraw.features.source import SourceFeatureIdentity
+
+    counts = {"md5": 0, "entries": 0}
+
+    def md5(data: bytes) -> object:
+        counts["md5"] += 1
+        return hashlib.md5(data)
+
+    monkeypatch.setattr(ids_module, "hashlib", types.SimpleNamespace(md5=md5))
+    init = SourceFeatureIdentity.__init__
+
+    def counted_init(self: SourceFeatureIdentity, *args: object, **kwargs: object) -> None:
+        counts["entries"] += 1
+        init(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(SourceFeatureIdentity, "__init__", counted_init)
+    record = _record("hash-once")
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (record,))
+    cache = PreparedBiologicalInputCache()
+    document = _document(source)  # Writing the Session plans the request once.
+    counts["md5"] = 0
+    _cold, cold_diagnostics = _render(tmp_path, cache, document, request_id=1)
+    assert 0 < counts["md5"] <= 2 * len(record.features)
+    assert counts["entries"] == 0
+    counts["md5"] = 0
+    _warm, warm_diagnostics = _render(tmp_path, cache, document, request_id=2)
+    assert counts == {"md5": 0, "entries": 0}
+    for diagnostics in (cold_diagnostics, warm_diagnostics):
+        metrics = _metrics(diagnostics)
+        assert metrics["preparedInputCacheMutationViolationCount"] == 0
+        assert metrics.get("renderStageUncacheableCount", 0) == 0
+        assert metrics.get("renderStageUndeclaredReadCount", 0) == 0

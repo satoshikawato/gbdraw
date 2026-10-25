@@ -17,7 +17,7 @@ from .record_select import parse_record_selector, reverse_records, select_record
 from ..exceptions import GbdrawError, InputFileError, ParseError, ValidationError
 
 from gbdraw.core.record_metadata import _copy_source_feature_identity, _feature_source_index_map
-from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+from gbdraw.features.source import SourceFeatureCatalog, capture_source_features
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +398,7 @@ def parse_gff_fasta(
     gff_file: str,
     fasta_file: str,
     *,
-    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
+    source_feature_catalogs: list[SourceFeatureCatalog] | None = None,
 ) -> list[SeqRecord]:
     """Parse one GFF3/FASTA pair once, whatever feature types a diagram draws.
 
@@ -416,7 +416,7 @@ def parse_gff_fasta(
         if not gff_records:
             raise ValidationError(f"GFF3 file {gff_file} has no feature lines.", diagnostic=_GFF_WITHOUT_FEATURES)
         catalogs = {
-            id(record): build_source_feature_catalog(record) for record in gff_records
+            id(record): capture_source_features(record) for record in gff_records
         } if source_feature_catalogs is not None else {}
         logger.info("INFO: Loading FASTA file {}".format(fasta_file))
         fasta_records = _read_fasta_records(fasta_file)
@@ -436,7 +436,7 @@ def load_gff_fasta(
     record_selectors: list[str] | None = None,
     reverse_flags: list[bool] | None = None,
     *,
-    source_feature_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = None,
+    source_feature_catalogs: list[SourceFeatureCatalog] | None = None,
 ) -> list[SeqRecord]:
     """Parse paired GFF3/FASTA files without applying diagram-mode policy."""
 
@@ -448,7 +448,7 @@ def load_gff_fasta(
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
-        file_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = (
+        file_catalogs: list[SourceFeatureCatalog] | None = (
             [] if source_feature_catalogs is not None else None
         )
         parsed_records = parse_gff_fasta(gff_file, fasta_file, source_feature_catalogs=file_catalogs)

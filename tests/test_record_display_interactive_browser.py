@@ -50,9 +50,9 @@ def interactive_fixture(mode, reverse, start=41, manual=False):
                {"conservation_dataframes": [hit_frame()], "conservation_reference": "query"})
     if manual:
         from gbdraw.features.placement import FeaturePlacementOverride, FeaturePlacementTarget
-        from gbdraw.features.source import build_source_feature_catalog
+        from gbdraw.features.source import capture_source_features
         options.update(feature_placements=(FeaturePlacementOverride(
-            "record-1", build_source_feature_catalog(items[0])[0].biological_feature_id,
+            "record-1", capture_source_features(items[0]).entries[0].biological_feature_id,
             FeaturePlacementTarget("lane", "below" if mode == "linear" else "inward", 1),
         ),), config_overrides={"canvas.strandedness": False,
             ("canvas.linear.track_layout" if mode == "linear" else "canvas.circular.track_type"): "middle"})

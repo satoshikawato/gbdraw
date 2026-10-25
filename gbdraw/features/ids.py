@@ -11,6 +11,7 @@ from gbdraw.core.record_metadata import (
     _mapped_feature_location_parts,
     _read_coord_map,
     _source_feature_location_parts,
+    _stamped_source_feature_hash,
 )
 from gbdraw.exceptions import ValidationError
 
@@ -183,14 +184,16 @@ def source_feature_location_parts(
     )
 
 
-def source_feature_hash_and_parts(
+def computed_source_feature_hash_and_parts(
     feature: SeqFeature,
     record: SeqRecord | None = None,
     *,
     record_id: str | None = None,
 ) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
-    """The feature hash and the source location parts it hashes.
+    """Compute the feature hash and the source location parts it hashes.
 
+    Only loading a source (``capture_source_features``) computes; readers use
+    ``source_feature_hash_and_parts``, which returns the hash computed then.
     The hash is None when the feature has no source parts. ``record_id``
     defaults to the record's ID.
     """
@@ -203,11 +206,35 @@ def source_feature_hash_and_parts(
             compute_feature_hash_from_location_parts(
                 str(getattr(feature, "type", "") or ""),
                 parts,
-                record_id=record_id if record_id is not None else getattr(record, "id", None),
+                record_id=_hash_record_id(record, record_id),
             )
         ),
         parts,
     )
+
+
+def _hash_record_id(record: object, record_id: str | None) -> str | None:
+    return record_id if record_id is not None else getattr(record, "id", None)
+
+
+def source_feature_hash_and_parts(
+    feature: SeqFeature,
+    record: SeqRecord | None = None,
+    *,
+    record_id: str | None = None,
+) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
+    """The feature hash and the source location parts it hashes.
+
+    The hash computed when the feature's source was loaded, carried by every
+    crop, reverse complement or type filter copy, is returned for the record ID
+    it was computed for; any other record ID computes. The hash is None when the
+    feature has no source parts. ``record_id`` defaults to the record's ID.
+    """
+
+    stamped = _stamped_source_feature_hash(feature, _hash_record_id(record, record_id))
+    if stamped is None:
+        return computed_source_feature_hash_and_parts(feature, record, record_id=record_id)
+    return SourceFeatureHash(stamped), source_feature_location_parts(feature, record)
 
 
 def compute_source_feature_hash(
@@ -220,10 +247,15 @@ def compute_source_feature_hash(
     SVG ID drawn for the feature, and the value a `hash` selector matches,
     whatever crop or reverse complement its record has (OV-401, OV-412).
 
-    ``record_id`` defaults to the record's ID.
+    ``record_id`` defaults to the record's ID. Like
+    ``source_feature_hash_and_parts``, it returns the hash computed when the
+    source was loaded.
     """
 
-    return source_feature_hash_and_parts(feature, record, record_id=record_id)[0]
+    stamped = _stamped_source_feature_hash(feature, _hash_record_id(record, record_id))
+    if stamped is not None:
+        return SourceFeatureHash(stamped)
+    return computed_source_feature_hash_and_parts(feature, record, record_id=record_id)[0]
 
 
 def shared_source_feature_hashes(record: SeqRecord) -> frozenset[SourceFeatureHash]:

@@ -5,9 +5,10 @@ from __future__ import annotations
 import csv
 from collections import defaultdict
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
-from typing import Literal, overload
+from typing import Literal, NamedTuple, overload
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -17,13 +18,14 @@ from gbdraw.core.record_metadata import (
     _feature_source_index_map,
     _iter_source_features,
     _source_feature_index,
+    _stamp_source_feature_hash,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
 from .ids import (
     SourceFeatureHash,
+    computed_source_feature_hash_and_parts,
     disambiguate_feature_ids,
-    source_feature_hash_and_parts,
 )
 from .selector_values import (
     matches_feature_selector,
@@ -60,44 +62,72 @@ class SourceFeatureIdentity:
         )
 
 
-def build_source_feature_catalog(
-    record: SeqRecord,
-) -> tuple[SourceFeatureIdentity, ...]:
-    """Capture before request crop/visibility; never mutate or reread the source."""
-    entries = []
-    for ordinal, feature in enumerate(_iter_source_features(record.features)):
-        index = _source_feature_index(feature)
-        stable_id, parts = source_feature_hash_and_parts(
-            feature, record, record_id=record.id
+class _CapturedSourceFeature(NamedTuple):
+    source_feature_index: int
+    stable_feature_id: SourceFeatureHash
+    location_parts: tuple[tuple[int, int, int | None], ...]
+    feature: SeqFeature
+
+
+@dataclass(frozen=True, eq=False)
+class SourceFeatureCatalog:
+    """The original-source features of one record, captured when it loads.
+
+    ``source_hashes`` maps each source feature index to its stable feature ID.
+    ``entries`` (the identities a selector or an identity table reads) is built
+    on first read, once.
+    """
+
+    record_id: str
+    source_hashes: Mapping[int, SourceFeatureHash] = field(repr=False)
+    captured: tuple[_CapturedSourceFeature, ...] = field(repr=False)
+
+    @cached_property
+    def entries(self) -> tuple[SourceFeatureIdentity, ...]:
+        identities = disambiguate_feature_ids(
+            (self.record_id, item.stable_feature_id, item.source_feature_index)
+            for item in self.captured
         )
-        if stable_id is None:
-            continue
-        feature_type = str(feature.type)
-        entries.append(
+        return tuple(
             SourceFeatureIdentity(
-                biological_feature_id=stable_id,
-                source_feature_index=ordinal if index is None else index,
-                feature_type=feature_type,
-                location_parts=parts,
+                biological_feature_id=identity,
+                source_feature_index=item.source_feature_index,
+                feature_type=str(item.feature.type),
+                location_parts=item.location_parts,
                 qualifiers=tuple(
                     (str(key), tuple(normalize_qualifier_values(value)))
-                    for key, value in (feature.qualifiers or {}).items()
+                    for key, value in (item.feature.qualifiers or {}).items()
                 ),
-                stable_feature_id=stable_id,
+                stable_feature_id=item.stable_feature_id,
             )
+            for item, identity in zip(self.captured, identities, strict=True)
         )
-    if len({entry.source_feature_index for entry in entries}) != len(entries):
+
+
+def capture_source_features(record: SeqRecord) -> SourceFeatureCatalog:
+    """Hash each source feature once, before request crop/visibility.
+
+    The hash is stamped on the feature, so every copy a crop, reverse
+    complement or type filter makes reads it instead of hashing again. Run it
+    only on records gbdraw owns: a fresh parse or its own copy.
+    """
+    captured = []
+    for ordinal, feature in enumerate(_iter_source_features(record.features)):
+        index = _source_feature_index(feature)
+        stable_id, parts = computed_source_feature_hash_and_parts(
+            feature, record, record_id=record.id
+        )
+        _stamp_source_feature_hash(feature, record.id, stable_id)
+        if stable_id is not None:
+            captured.append(_CapturedSourceFeature(
+                ordinal if index is None else index, stable_id, parts, feature,
+            ))
+    source_hashes = {item.source_feature_index: item.stable_feature_id for item in captured}
+    if len(source_hashes) != len(captured):
         raise ValidationError(
             "Source feature catalog contains duplicate source feature indexes."
         )
-    ids = disambiguate_feature_ids(
-        (str(record.id), entry.stable_feature_id, entry.source_feature_index)
-        for entry in entries
-    )
-    return tuple(
-        replace(entry, biological_feature_id=identity)
-        for entry, identity in zip(entries, ids, strict=True)
-    )
+    return SourceFeatureCatalog(str(record.id), source_hashes, tuple(captured))
 
 
 @dataclass(frozen=True)

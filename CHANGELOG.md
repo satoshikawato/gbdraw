@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (CLI, Python, web app): each source feature's hash is computed
+  once, when its source loads, and read back by the drawing, the shared-hash
+  count, the interactive context and the protein extraction; the source feature
+  catalog builds its entries only when a selector, an identity table or a
+  similarity alignment reads them. NC_010162 circular computed 19,515 feature
+  hashes instead of 48,787 and normalized no qualifiers instead of 120,771, and
+  took 1.41 s instead of 1.67 s. Output bytes are unchanged. Typed API:
+  `InMemoryRecordSource.source_feature_catalog` is now `source_features` and
+  takes a `SourceFeatureCatalog` (from `capture_source_features`), which
+  replaces `build_source_feature_catalog`;
+  `ResolvedRecordProvenance.source_feature_catalog` still returns the entries.
 - Performance (CLI, Python, web app): Generates and CLI renders hold less
   memory: the prepared-input cache keeps one hash per feature field as its owner
   stamp, SVG text is written to its file in chunks, and `gbdraw render --session`
