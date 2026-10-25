@@ -885,7 +885,9 @@ def _build_session_document_from_drawings(
             drawing_id, name = drawing.id or drawing.mode, drawing.name or ""
         taken_ids.append(drawing_id)
         names.append(name)
-        state = copy.deepcopy(dict(drawing.state))
+        # The views are assembled from new mappings; SessionDocument(data) below
+        # detaches the document from ``drawing.state`` with one deep copy.
+        state = dict(drawing.state)
         conflicting = _RESERVED_DRAWING_FIELDS & set(state)
         if conflicting:
             raise SessionFormatError(

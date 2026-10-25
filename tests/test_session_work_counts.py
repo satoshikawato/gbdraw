@@ -178,9 +178,7 @@ def test_cli_session_render_validates_and_copies_the_session_once(
         {
             "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
             "gbdraw.api.request_render.__post_init__": 1,
-            # The sidecar's source state, its adjunct, and the written document.
-            "gbdraw.cli_utils.session._rendered_drawing_build": 1,
-            "gbdraw.session._build_session_document_from_drawings": 1,
+            # Only the written document copies the drawing state, once.
             "gbdraw.session.__post_init__": 1,
         }
     )

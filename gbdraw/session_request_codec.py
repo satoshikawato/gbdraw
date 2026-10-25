@@ -22,6 +22,7 @@ from typing import (
     Any,
     Literal,
     Mapping,
+    NamedTuple,
     NoReturn,
     Sequence,
     Union,
@@ -4621,6 +4622,13 @@ def _read_typed_json_resource(
 
 
 def _encode_typed_tree(value: object) -> Any:
+    value_type = type(value)
+    # Exact built-in types first: none of them is a result, a path collection
+    # or a dataclass, so they take the branches below without the checks.
+    if value_type in _TYPED_TREE_JSON_SCALARS:
+        return _json_value(value, path="typed resource")
+    if value_type is list or value_type is tuple:
+        return [_encode_typed_tree(item) for item in cast("Sequence[object]", value)]
     if isinstance(value, OrthogroupResult):
         value = compact_ortholog_paths(value)
     if isinstance(value, OrthologPathCollection):
@@ -4637,8 +4645,8 @@ def _encode_typed_tree(value: object) -> Any:
         return {
             "type": cls.__name__,
             "fields": {
-                _camel(item.name): _encode_typed_tree(getattr(value, item.name))
-                for item in fields(value)
+                key: _encode_typed_tree(getattr(value, item.name))
+                for key, item in _class_field_defs(cls).items()
             },
         }
     if isinstance(value, MappingABC):
@@ -4652,6 +4660,9 @@ def _encode_typed_tree(value: object) -> Any:
     return _json_value(value, path="typed resource")
 
 
+_TYPED_TREE_JSON_SCALARS = frozenset({str, int, float, bool, type(None)})
+
+
 def _decode_typed_tree(
     value: object,
     hint: object,
@@ -4659,7 +4670,89 @@ def _decode_typed_tree(
     path: str,
     resource_schema: int,
 ) -> Any:
+    return _typed_tree_decoder(hint, resource_schema).decode(value, path)
+
+
+class _TreeDecoder(NamedTuple):
+    """The decoder of one type hint. ``accepts(value)`` is true only where
+    ``decode(value, path)`` returns ``value`` itself, so a container skips the
+    call and the item's path for such a value."""
+
+    decode: Callable[[object, str], object]
+    accepts: Callable[[object], bool]
+
+
+@lru_cache(maxsize=1024)
+def _typed_tree_decoder(hint: object, resource_schema: int) -> _TreeDecoder:
+    """Build once per type hint and resource schema the decoder of a typed tree.
+
+    A dataclass reads its field hints at its first decode, as when each node
+    interpreted its hint, so a hint that cannot be read fails at the same value.
+    """
+
     if hint is OrthologPathCollection:
+        return _TreeDecoder(_path_collection_decoder(resource_schema), _reject)
+    if hint is Any or hint is object:
+        return _TreeDecoder(lambda value, path: value, _accept_any)
+    origin = get_origin(hint)
+    args = get_args(hint)
+    if origin in {types.UnionType, Union}:
+        return _union_decoder(args, resource_schema)
+    if hint is OrthogroupGraphResult and resource_schema != 3:
+        return _TreeDecoder(
+            _raise_decoding("Graph orthogroups require typed resource schema 3."), _reject
+        )
+    if hint is OrthogroupResult and resource_schema == 3:
+        return _TreeDecoder(
+            _raise_decoding("Legacy orthogroups require typed resource schema 1 or 2."), _reject
+        )
+    if isinstance(hint, type) and is_dataclass(hint):
+        return _TreeDecoder(_dataclass_decoder(hint, resource_schema), _reject)
+    if origin in {tuple, list, Sequence, SequenceABC}:
+        item = _typed_tree_decoder(args[0] if args else Any, resource_schema)
+        return _TreeDecoder(_sequence_decoder(item, as_tuple=origin is tuple), _reject)
+    if origin in {dict, Mapping, MappingABC}:
+        key_hint, value_hint = args if len(args) == 2 else (str, Any)
+        return _TreeDecoder(
+            _mapping_decoder(
+                _typed_tree_decoder(value_hint, resource_schema) if key_hint is str else None
+            ),
+            _reject,
+        )
+    if origin is Literal:
+
+        def accepts_literal(value: object) -> bool:
+            return value in args
+
+        def decode_literal(value: object, path: str) -> object:
+            if value not in args:
+                raise CanonicalRequestDecodingError(
+                    f"Typed resource literal at {path} has unsupported value {value!r}."
+                )
+            return value
+
+        return _TreeDecoder(decode_literal, accepts_literal)
+    matches = _type_checker(hint)
+
+    def decode_value(value: object, path: str) -> object:
+        if not matches(value):
+            raise CanonicalRequestDecodingError(
+                f"Typed resource value at {path} has an invalid type."
+            )
+        return value
+
+    return _TreeDecoder(decode_value, matches)
+
+
+def _raise_decoding(message: str) -> Callable[[object, str], NoReturn]:
+    def decode(value: object, path: str) -> NoReturn:
+        raise CanonicalRequestDecodingError(message)
+
+    return decode
+
+
+def _path_collection_decoder(resource_schema: int) -> Callable[[object, str], object]:
+    def decode(value: object, path: str) -> OrthologPathCollection:
         tagged = _object(value, path=path, required={"type", "fields"})
         if resource_schema != 3 or tagged["type"] != "OrthologPathCollection":
             raise CanonicalRequestDecodingError(f"Invalid path collection at {path}.")
@@ -4671,65 +4764,133 @@ def _decode_typed_tree(
             return OrthologPathCollection.from_payload(body)
         except (ValidationError, ValueError, TypeError, KeyError) as exc:
             raise CanonicalRequestDecodingError(f"Invalid path collection at {path}: {exc}") from exc
-    if hint is Any or hint is object:
-        return value
-    origin = get_origin(hint)
-    args = get_args(hint)
-    if origin in {types.UnionType, Union}:
-        if value is None and type(None) in args:
+
+    return decode
+
+
+def _union_decoder(args: tuple[object, ...], resource_schema: int) -> _TreeDecoder:
+    has_none = type(None) in args
+    branches = tuple(
+        (
+            branch.__name__ if isinstance(branch, type) else None,
+            get_origin(branch) in {tuple, list, Sequence, SequenceABC},
+            _type_checker(branch),
+            _typed_tree_decoder(branch, resource_schema),
+        )
+        for branch in args
+        if branch is not type(None)
+    )
+
+    def decode_union(value: object, path: str) -> object:
+        if value is None and has_none:
             return None
         tagged_type = value.get("type") if isinstance(value, MappingABC) else None
-        for branch in args:
-            if branch is type(None):
-                continue
-            if isinstance(branch, type) and branch.__name__ == tagged_type:
-                return _decode_typed_tree(
-                    value, branch, path=path, resource_schema=resource_schema
-                )
-            branch_origin = get_origin(branch)
-            if branch_origin in {tuple, list, Sequence, SequenceABC} and isinstance(value, list):
-                return _decode_typed_tree(
-                    value, branch, path=path, resource_schema=resource_schema
-                )
-            if _matches_type(value, branch):
-                return _decode_typed_tree(
-                    value, branch, path=path, resource_schema=resource_schema
-                )
+        for name, sequence, matches, branch in branches:
+            if (
+                (name is not None and name == tagged_type)
+                or (sequence and isinstance(value, list))
+                or matches(value)
+            ):
+                return branch.decode(value, path)
         raise CanonicalRequestDecodingError(
             f"Typed resource value at {path} does not match its union contract."
         )
-    if hint is OrthogroupGraphResult and resource_schema != 3:
-        raise CanonicalRequestDecodingError("Graph orthogroups require typed resource schema 3.")
-    if hint is OrthogroupResult and resource_schema == 3:
-        raise CanonicalRequestDecodingError("Legacy orthogroups require typed resource schema 1 or 2.")
-    if isinstance(hint, type) and is_dataclass(hint):
+
+    if any(branch.accepts is _reject for *_rest, branch in branches):
+        return _TreeDecoder(decode_union, _reject)
+    branch_checks = tuple(matches for _name, _sequence, matches, _branch in branches)
+
+    def accepts_union(value: object) -> bool:
+        # Every branch returns the value it matches; a mapping may name a branch.
+        if value is None and has_none:
+            return True
+        return not isinstance(value, MappingABC) and any(
+            matches(value) for matches in branch_checks
+        )
+
+    return _TreeDecoder(decode_union, accepts_union)
+
+
+def _sequence_decoder(item: _TreeDecoder, *, as_tuple: bool) -> Callable[[object, str], object]:
+    decode_item, accepts = item
+
+    def decode(value: object, path: str) -> list[object] | tuple[object, ...]:
+        raw = _array(value, path=path)
+        decoded = [
+            entry if accepts(entry) else decode_item(entry, f"{path}[{index}]")
+            for index, entry in enumerate(raw)
+        ]
+        return tuple(decoded) if as_tuple else decoded
+
+    return decode
+
+
+def _mapping_decoder(item: _TreeDecoder | None) -> Callable[[object, str], object]:
+    def decode(value: object, path: str) -> dict[str, object]:
+        raw_mapping = _object(value, path=path)
+        if item is None:
+            raise CanonicalRequestDecodingError(
+                f"Unsupported typed resource mapping key contract at {path}."
+            )
+        decode_item, accepts = item
+        return {
+            key: entry if accepts(entry) else decode_item(entry, f"{path}.{key}")
+            for key, entry in raw_mapping.items()
+        }
+
+    return decode
+
+
+class _DataclassDecodePlan(NamedTuple):
+    required: set[str]
+    optional: set[str]
+    entries: tuple[tuple[str, Field[Any], _TreeDecoder], ...]
+
+
+def _dataclass_decoder(hint: type, resource_schema: int) -> Callable[[object, str], object]:
+    plans: list[_DataclassDecodePlan] = []
+
+    def plan() -> _DataclassDecodePlan:
+        if not plans:
+            hints = _class_type_hints(hint)
+            field_defs = _class_field_defs(hint)
+            optional_fields = (
+                _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset())
+                if resource_schema == 1
+                else frozenset()
+            )
+            plans.append(
+                _DataclassDecodePlan(
+                    required=set(field_defs).difference(optional_fields),
+                    optional=set(optional_fields),
+                    entries=tuple(
+                        (key, item, _typed_tree_decoder(hints[item.name], resource_schema))
+                        for key, item in field_defs.items()
+                    ),
+                )
+            )
+        return plans[0]
+
+    def decode(value: object, path: str) -> object:
         tagged = _object(value, path=path, required={"type", "fields"})
         if tagged["type"] != hint.__name__ or hint.__name__ not in _TYPED_TREE_CLASSES:
             raise CanonicalRequestDecodingError(
                 f"Unsupported typed resource object at {path}: {tagged['type']!r}."
             )
         raw_fields = _object(tagged["fields"], path=f"{path}.fields")
-        hints = _class_type_hints(hint)
-        field_defs = _class_field_defs(hint)
-        optional_fields = (
-            _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset())
-            if resource_schema == 1
-            else frozenset()
-        )
+        required, optional, field_plans = plan()
         _require_exact_fields(
             raw_fields,
             path=f"{path}.fields",
-            required=set(field_defs).difference(optional_fields),
-            optional=set(optional_fields),
+            required=required,
+            optional=optional,
         )
         kwargs: dict[str, object] = {}
-        for key, item in field_defs.items():
+        for key, item, (decode_field, accepts) in field_plans:
             if key in raw_fields:
-                kwargs[item.name] = _decode_typed_tree(
-                    raw_fields[key],
-                    hints[item.name],
-                    path=f"{path}.fields.{key}",
-                    resource_schema=resource_schema,
+                entry = raw_fields[key]
+                kwargs[item.name] = (
+                    entry if accepts(entry) else decode_field(entry, f"{path}.fields.{key}")
                 )
             elif item.default is not MISSING:
                 kwargs[item.name] = item.default
@@ -4744,46 +4905,8 @@ def _decode_typed_tree(
         except ValidationError as exc:
             raise CanonicalRequestDecodingError(f"Invalid typed resource at {path}: {exc}") from exc
         return compact_ortholog_paths(result) if isinstance(result, OrthogroupResult) else result
-    if origin in {tuple, list, Sequence, SequenceABC}:
-        raw = _array(value, path=path)
-        item_hint = args[0] if args else Any
-        decoded = [
-            _decode_typed_tree(
-                item,
-                item_hint,
-                path=f"{path}[{index}]",
-                resource_schema=resource_schema,
-            )
-            for index, item in enumerate(raw)
-        ]
-        return tuple(decoded) if origin is tuple else decoded
-    if origin in {dict, Mapping, MappingABC}:
-        raw_mapping = _object(value, path=path)
-        key_hint, value_hint = args if len(args) == 2 else (str, Any)
-        if key_hint is not str:
-            raise CanonicalRequestDecodingError(
-                f"Unsupported typed resource mapping key contract at {path}."
-            )
-        return {
-            key: _decode_typed_tree(
-                item,
-                value_hint,
-                path=f"{path}.{key}",
-                resource_schema=resource_schema,
-            )
-            for key, item in raw_mapping.items()
-        }
-    if origin is Literal:
-        if value not in args:
-            raise CanonicalRequestDecodingError(
-                f"Typed resource literal at {path} has unsupported value {value!r}."
-            )
-        return value
-    if not _matches_type(value, hint):
-        raise CanonicalRequestDecodingError(
-            f"Typed resource value at {path} has an invalid type."
-        )
-    return value
+
+    return decode
 
 
 def _resolve_resource(

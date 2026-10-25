@@ -9,9 +9,11 @@ import json
 import logging
 import re
 from dataclasses import dataclass, fields, is_dataclass, replace
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Collection, Mapping, Sequence, cast
+from typing import Any, Callable, Collection, Iterable, Mapping, NamedTuple, Sequence, cast
 
+import numpy as np
 from pandas import DataFrame
 
 from gbdraw.analysis.protein_colinearity import (
@@ -541,58 +543,64 @@ def rewrite_protein_artifact_references(
     return copy.deepcopy(value)
 
 
-def _contains_legacy_protein_reference(value: Any) -> bool:
-    if isinstance(value, str):
-        return (
-            _LEGACY_PROTEIN_REFERENCE_RE.search(value) is not None
-            or _FEATURE_ANALYSIS_REFERENCE_RE.search(value) is not None
-        )
-    if isinstance(value, DataFrame):
-        return any(
-            _contains_legacy_protein_reference(item)
-            for item in value.to_numpy().ravel()
-        )
-    if is_dataclass(value) and not isinstance(value, type):
-        return any(
-            _contains_legacy_protein_reference(getattr(value, field.name))
-            for field in fields(value)
-            if field.init
-        )
-    if isinstance(value, Mapping):
-        return any(
-            _contains_legacy_protein_reference(key)
-            or _contains_legacy_protein_reference(item)
-            for key, item in value.items()
-        )
-    if isinstance(value, (tuple, list, set, frozenset)):
-        return any(_contains_legacy_protein_reference(item) for item in value)
-    return False
+class _ProteinReferences(NamedTuple):
+    """The protein references in request artifacts: the legacy protein IDs, and
+    whether a feature analysis ID is among them."""
+
+    legacy_ids: set[str]
+    feature_analysis: bool
 
 
-def _legacy_protein_reference_ids(value: Any) -> set[str]:
-    references: set[str] = set()
-    if isinstance(value, str):
-        references.update(
-            match.group(0)
-            for match in _LEGACY_PROTEIN_REFERENCE_RE.finditer(value)
-        )
-    elif isinstance(value, DataFrame):
-        for item in value.to_numpy().ravel():
-            references.update(_legacy_protein_reference_ids(item))
-    elif is_dataclass(value) and not isinstance(value, type):
-        for field in fields(value):
-            if field.init:
-                references.update(
-                    _legacy_protein_reference_ids(getattr(value, field.name))
+# Exact types that hold no string and no item, so the scan skips them.
+_REFERENCE_FREE_TYPES = frozenset(
+    {int, float, bool, type(None), np.float64, np.int64, np.bool_}
+)
+
+
+@lru_cache(maxsize=256)
+def _init_field_names(cls: type) -> tuple[str, ...]:
+    return tuple(field.name for field in fields(cls) if field.init)
+
+
+def _protein_references(values: Sequence[object]) -> _ProteinReferences:
+    """Scan strings, table cells, init fields, mapping keys and items, and
+    collection items of ``values`` once."""
+
+    legacy_ids: set[str] = set()
+    feature_analysis = False
+
+    def visit(value: object) -> None:
+        nonlocal feature_analysis
+        value_type = type(value)
+        if value_type in _REFERENCE_FREE_TYPES:
+            return
+        items: Iterable[object]
+        if isinstance(value, str):
+            # Each pattern starts with its prefix, so a string without it has no match.
+            if "p_" in value:
+                legacy_ids.update(
+                    match.group(0)
+                    for match in _LEGACY_PROTEIN_REFERENCE_RE.finditer(value)
                 )
-    elif isinstance(value, Mapping):
-        for key, item in value.items():
-            references.update(_legacy_protein_reference_ids(key))
-            references.update(_legacy_protein_reference_ids(item))
-    elif isinstance(value, (tuple, list, set, frozenset)):
-        for item in value:
-            references.update(_legacy_protein_reference_ids(item))
-    return references
+            if not feature_analysis and "f_" in value:
+                feature_analysis = _FEATURE_ANALYSIS_REFERENCE_RE.search(value) is not None
+            return
+        if isinstance(value, DataFrame):
+            items = value.to_numpy().ravel()
+        elif is_dataclass(value) and not isinstance(value, type):
+            items = (getattr(value, name) for name in _init_field_names(type(value)))
+        elif isinstance(value, Mapping):
+            items = (part for pair in value.items() for part in pair)
+        elif isinstance(value, (tuple, list, set, frozenset)):
+            items = value
+        else:
+            return
+        for item in items:
+            visit(item)
+
+    for value in values:
+        visit(value)
+    return _ProteinReferences(legacy_ids, feature_analysis)
 
 
 def _request_protein_artifacts(
@@ -1044,9 +1052,13 @@ def project_legacy_similarity_alignment_for_current_write(
 def _rewrite_linear_request_protein_references(
     request: LinearDiagramRequest,
     id_map: Mapping[str, str],
+    references: _ProteinReferences,
 ) -> LinearDiagramRequest:
+    """Rewrite verified IDs; ``references`` is the scan of ``request``."""
+
     if not id_map:
         rewritten_request = request
+        unresolved = references
     else:
         options = request.options
         rewritten_request = replace(
@@ -1071,10 +1083,8 @@ def _rewrite_linear_request_protein_references(
                 ),
             ),
         )
-    if any(
-        _contains_legacy_protein_reference(value)
-        for value in _request_protein_artifacts(rewritten_request)
-    ):
+        unresolved = _protein_references(_request_protein_artifacts(rewritten_request))
+    if unresolved.legacy_ids or unresolved.feature_analysis:
         raise ValidationError(
             "Precomputed protein artifacts contain an ID that no verified "
             "session artifact resolved."
@@ -1453,9 +1463,8 @@ def _adapt_session_plan(
 
     if isinstance(plan, LinearRequestPlan):
         assert isinstance(request, LinearDiagramRequest)
-        reference_ids: set[str] = set()
-        for value in _request_protein_artifacts(request):
-            reference_ids.update(_legacy_protein_reference_ids(value))
+        references = _protein_references(_request_protein_artifacts(request))
+        reference_ids = references.legacy_ids
         current_protein = tuple(
             entry for entry in current_raw if is_protein_losat_cache_entry(entry)
         )
@@ -1516,6 +1525,7 @@ def _adapt_session_plan(
         request = _rewrite_linear_request_protein_references(
             request,
             id_map,
+            references,
         )
 
     if manifest is None and not any(
