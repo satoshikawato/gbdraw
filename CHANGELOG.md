@@ -18,6 +18,21 @@ write-up of a release.
   1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda
   recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line names
   `_gbdraw_console:main`.
+- Performance (web app): the first Generate of a page starts faster. The diagram
+  Worker downloads its wheels while Pyodide loads and installs them in one
+  micropip call, without its 10 HEAD checks, and the gbdraw browser wheel ships
+  with Pyodide bytecode, which halves the Worker's Python import time. Choosing
+  a file, or loading a Session once the Load finishes, now downloads the
+  Worker's boot files (about 32 MB) into the HTTP cache at low priority, two at
+  a time, unless the browser asks to save data (Save-Data) or a Worker has
+  already started. At 10 Mbit/s a first Generate after that download took 15 s
+  instead of 34 s. The browser wheel grows from 3.7 MB to 6.5 MB, so the PyPI
+  wheel and the sdist, which embed it, each grow by about 2.8 MB. The drawing
+  and the saved Session do not change (#1364).
+- Web app: a dependency wheel that fails to download on the network now names
+  the wheel in the error. The
+  Pyodide file lists in `config.js` are written from `gbdraw/_web_assets.py`
+  by `tools/prepare_browser_wheel.py`.
 - Performance (CLI, Python, web app): each source feature's hash is computed
   once, when its source loads, and read back by the drawing, the shared-hash
   count, the interactive context and the protein extraction; the source feature
