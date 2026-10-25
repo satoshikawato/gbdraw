@@ -5,7 +5,7 @@ const { promisify } = require('node:util');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -131,10 +131,12 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
       .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
   }
-  // The page downloads the wheel when the file is chosen and the Worker's
-  // cold boot downloads it again (a routed request bypasses the HTTP cache).
+  // The page downloads the wheel when the file is chosen, and each Worker
+  // downloads it again (a routed request bypasses the HTTP cache): with a
+  // served snapshot, the Worker that cannot restore it is replaced by one that
+  // boots cold.
   const servedWheels = wheelResponses;
-  expect(servedWheels).toHaveLength(2);
+  expect(servedWheels).toHaveLength(1 + (await getDiagramWorkerActivity(page)).constructions);
   for (const served of servedWheels) {
     const wheelPath = new URL(served.url).pathname.replace(/^\//, '');
     expect(served.sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
