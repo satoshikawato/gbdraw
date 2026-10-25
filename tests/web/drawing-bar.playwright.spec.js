@@ -3,6 +3,7 @@
 // 390 px with the compact Preview and Editor conditions of PD-OI-038 (OIC-025),
 // and its tab menu renames a drawing as one History step.
 const { test, expect } = require('@playwright/test');
+const path = require('node:path');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 
@@ -57,8 +58,11 @@ test.describe('390 px', () => {
     expect(menuBox.left, 'the Drawing menu stays on screen').toBeGreaterThanOrEqual(0);
     expect(menuBox.right).toBeLessThanOrEqual(390);
 
-    // Settings | Preview: one pane at a time, the ARIA tab pattern with manual activation.
-    await expect(paneTab('settings')).toHaveAttribute('aria-selected', 'true');
+    // Settings | Preview: one pane at a time, the ARIA tab pattern with manual activation. A Load with a
+    // Result shows the Preview, as Generate does, and a drawing switch keeps the pane.
+    await expect(paneTab('preview')).toHaveAttribute('aria-selected', 'true');
+    await expect(settings).toBeHidden();
+    await paneTab('settings').tap();
     await expect(result).toBeHidden();
     await paneTab('preview').tap();
     await expect(settings).toBeHidden();
@@ -125,6 +129,23 @@ test.describe('390 px', () => {
     expect(geometry.rowsInView).toBeGreaterThanOrEqual(2);
     expect(geometry.visibleHeight).toBeGreaterThanOrEqual(200);
     expect(geometry.pageWidth).toBeLessThanOrEqual(390);
+  });
+
+  // A Load whose shown drawing has a Result shows the Preview pane, as Generate does;
+  // a Load of a Session without a Result keeps the pane it started from.
+  test('a Session Load shows the Preview pane when the shown drawing has a Result and keeps Settings when it has none', async ({ page }) => {
+    test.setTimeout(240_000);
+    await openApp(page);
+    const tab = (pane) => page.locator(`.phone-pane-tabs [role="tab"][data-phone-pane="${pane}"]`);
+    await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
+    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await expect(page.locator('[data-app-notice]')).toContainText('Session loaded');
+    await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    expect(await page.locator('.origin-top svg').count()).toBe(0);
+    await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
+    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.origin-top svg')).toBeVisible();
   });
 });
 
