@@ -830,8 +830,16 @@ const normalizeStringArray = (source, at, losses = null) => {
 
 /** @type {string | null} */
 let lastSessionFilename = null;
-/** @type {Record<string, any> | null} */
-let preservedCliOptions = null;
+/**
+ * The CLI options a Session's request was written with, kept for Save: Load
+ * reads them as provenance (`SESSION_TOP_LEVEL_AUTHORITY.cliOptions`).
+ * @typedef {Readonly<Record<string, unknown>>} SessionCliOptions
+ */
+/** @param {unknown} value @returns {SessionCliOptions | null} */
+const cliOptionsOf = (value) => (isPlainObject(value) ? cloneJsonData(value) : null);
+// Each drawing's CLI options, by drawing ID (B2-D9: they go with the request's drawing).
+/** @type {Map<DrawingId, SessionCliOptions>} */
+const preservedCliOptions = new Map();
 // The variable keeps its earlier type: `applyResultsData` passes the request's
 // `diagramOptions.selectedFeaturesSet` on as feature types without a check,
 // which the true type refuses (stage 1d).
@@ -2403,6 +2411,8 @@ const drawingProjectionInputOf = (view, {
  *   when its draft holds none (the editor-draft loop reads a draft's).
  * @property {RequestFeatureEdits | null} requestFeatureEdits Its request's per-feature edits, which a
  *   draft without them takes (`featureEditsOverProjection`, OV-220); null: the drawing holds no request.
+ * @property {SessionCliOptions | null} cliOptions The CLI options the drawing's request was written with
+ *   (B2-D9); null: none.
  */
 /**
  * @param {Session49} document
@@ -2420,7 +2430,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
     return {
       files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
-      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null
+      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null, cliOptions: cliOptionsOf(view.cliOptions)
     };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
@@ -2449,7 +2459,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     files: projection.files, comparisonClassification, inputType,
     restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
-    requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState }
+    requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
+    cliOptions: cliOptionsOf(view.cliOptions)
   };
 };
 
@@ -5139,7 +5150,7 @@ const commitDrawingCopy = (drawing) => {
 // (`commitLoadedDrawings`), and its rollback puts the previous ones back.
 const resetSessionProject = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
-  preservedCliOptions = null;
+  preservedCliOptions.clear();
   setCommittedCanonicalSession(null);
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
@@ -5874,8 +5885,9 @@ const exportSessionDocument = async (
         results,
         ...(committed && artifact ? { runMetadata: artifactRunMetadata(artifact) } : {}),
         ...(editorState ? { editorState } : {}),
-        // The shown drawing's selected Similarity group; the group names are
-        // its draft's (`config.webEdits`).
+        // The shown drawing's selected Similarity group: transient UI that a
+        // drawing switch clears (`resetModeTransientUi`), so no other drawing
+        // holds one. The group names are each drawing's draft's (`config.webEdits`).
         ...(shown ? {
           orthogroupState: {
             selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
@@ -5883,7 +5895,7 @@ const exportSessionDocument = async (
           }
         } : {}),
         modes: { [saved.mode]: slice },
-        ...(shown && preservedCliOptions ? { cliOptions: cloneJsonData(preservedCliOptions) } : {}),
+        ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
         losatCache: { entries: losatEntries },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
@@ -6980,7 +6992,14 @@ const importSessionDocument = async (e, options = {}) => {
     // projection may name a thread count), the rich popup, CLI provenance.
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
-    preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
+    // The committed set's CLI options and each other Session 49 drawing's own.
+    preservedCliOptions.clear();
+    /** @type {[DrawingId, SessionCliOptions | null][]} */
+    const cliOptionsByDrawing = [
+      [committedSetDrawingId, cliOptionsOf(sessionCliOptions)],
+      ...[...storedDrawingInputs].map(([id, inputs]) => /** @type {[DrawingId, SessionCliOptions | null]} */ ([id, inputs.cliOptions]))
+    ];
+    for (const [id, options] of cliOptionsByDrawing) if (options) preservedCliOptions.set(id, options);
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
       state.linearRecordTranslations.value = cloneJsonData(

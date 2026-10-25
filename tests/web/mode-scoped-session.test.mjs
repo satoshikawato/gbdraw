@@ -1015,6 +1015,21 @@ test('Save writes each drawing of a Session 49 as its own entry; a fresh Load re
   assertLoadedDrawings(saved, await loadKeepingSlots(saved));
 });
 
+test('Save writes each Session 49 drawing\'s own CLI options, found by drawing ID, the drawing Load does not open too', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const optionsOf = (id) => ({ rawArgs: ['--gbk', `${id}.gb`, '-o', id] });
+  session.drawings.forEach((entry) => { entry.cliOptions = optionsOf(entry.id); });
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const result = await exportSession('cli-options', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  for (const id of ['linear', 'linear-2']) {
+    assert.deepEqual(saved.drawings.find((entry) => entry.id === id).cliOptions, optionsOf(id), id);
+  }
+});
+
 // OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
 // Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
 test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {
