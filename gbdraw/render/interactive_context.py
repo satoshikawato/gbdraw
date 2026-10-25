@@ -11,7 +11,7 @@ from pandas import DataFrame
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.visibility import compile_feature_visibility_rules
 from gbdraw.exceptions import ExportError, ValidationError
-from gbdraw.api.prepared import record_prepared_input_metric
+from gbdraw.api.prepared import cancel_checkpoint, record_prepared_input_metric
 from gbdraw.render.interactive_svg import InteractiveSvgContext
 from gbdraw.annotations import AnnotationOptions, ResolvedAnnotationBundle, resolve_annotations
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -112,11 +112,14 @@ def build_interactive_svg_context(
         )) for feature in features]
     biological_features = cast("list[dict[str, object]]", payload.get("biological_features", []))
     orthogroup_payload: list[dict[str, object]] = []
+    # A canceled Worker request stops between the phases of this build, whose state is local (D7).
+    cancel_checkpoint()
     if orthogroups is not None:
         orthogroup_payload = serialize_orthogroups_payload(
             orthogroups,
             records=record_list,
         )
+        cancel_checkpoint()
         if orthogroup_payload:
             features = enrich_features_with_orthogroups(features, orthogroup_payload)
             biological_features = enrich_features_with_orthogroups(
@@ -153,6 +156,7 @@ def build_interactive_svg_context(
     resolved_mode = mode or ("linear" if linear_rendered_feature_ids else "circular")
     sequence_sources: list[dict[str, object]] = []
     for record_index, record in enumerate(record_list):
+        cancel_checkpoint()
         aliases = {
             str(record.id or "").strip(),
             str(record.name or "").strip(),

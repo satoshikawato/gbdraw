@@ -10,6 +10,7 @@ from a fresh cache (an interrupted build is never kept).
 from __future__ import annotations
 
 import signal
+import sys
 from pathlib import Path
 
 import pytest
@@ -144,3 +145,34 @@ def test_a_stop_silently_evicts_a_cached_input_the_canceled_build_changed(tmp_pa
     rebuilt = (_record("rebuilt"),)
     with cache.transaction(resource_paths={path: identity}, diagnostics=None):
         assert get_or_build_parsed_source(("source", identity), identities, lambda: rebuilt) is rebuilt
+
+
+class _CallSites:
+    """A cancel check that records which function called ``cancel_checkpoint``."""
+
+    def __init__(self) -> None:
+        self.sites: set[str] = set()
+
+    def __call__(self) -> None:
+        # check_cancel <- cancel_checkpoint <- the build that asked.
+        checkpoint = sys._getframe(2)
+        if checkpoint.f_code is cancel_checkpoint.__code__:
+            caller = checkpoint.f_back
+            assert caller is not None
+            self.sites.add(caller.f_code.co_name)
+
+
+def test_a_cold_render_checks_inside_the_long_builds(tmp_path: Path) -> None:
+    # Tier 2: the builds that took longest between checkpoints check per feature
+    # or per phase, so a Cancel does not wait for a whole build.
+    source = tmp_path / "source.gbk"
+    _write_genbank(source, (_record("cold"),))
+    sites = _CallSites()
+    _render(tmp_path, PreparedBiologicalInputCache(cancel_check=sites), _document(source), request_id=1)
+    assert {
+        "_build_feature_layers",
+        "extract_features_from_records_payload",
+        "build_interactive_svg_context",
+        "_normalized_biological_features",
+        "_feature_catalog_item",
+    } <= sites.sites
