@@ -36,7 +36,7 @@ test('incomplete strings and out of order array batches cannot expose a candidat
   assert.throws(() => receiver.getValue(), /Incomplete/);
   receiver.receivePart({ kind: 'value', path: [], value: [] });
   assert.throws(() => receiver.receivePart({ kind: 'batch', path: [], index: 1, value: [1] }), /batch/);
-  receiver.receivePart({ kind: 'string-start', path: [0] });
+  receiver.receivePart({ kind: 'string-start', path: [0], encoding: 'utf-16' });
   assert.throws(() => receiver.getValue(), /Incomplete/);
   assert.throws(() => receiver.receivePart({ kind: 'string-chunk', units: new Uint8Array(2) }), /string/);
 });
@@ -111,4 +111,75 @@ test('bounded Worker byte replies reject incomplete or out-of-order chunks', () 
     bytes: new Uint8Array([1]) }), /Invalid bounded bytes chunk/);
   receiver.receivePart({ kind: 'bytes-chunk', offset: 0, bytes: new Uint8Array([1, 2]) });
   assert.throws(() => receiver.receivePart({ kind: 'bytes-end' }), /Incomplete bounded bytes/);
+});
+
+/** Sends `value` through a clone of every message and returns the received value and the string chunks sent. */
+const roundTrip = async (value) => {
+  const receiver = createBoundedJsonReceiver();
+  const chunks = [];
+  await sendBoundedJson(value, async (message, buffers = []) => {
+    for (const part of message.kind === 'parts' ? message.parts : [message]) {
+      if (part.kind === 'string-start') chunks.push({ encoding: part.encoding, sizes: [] });
+      if (part.kind === 'string-bytes') chunks.at(-1).sizes.push(part.bytes.byteLength);
+      if (part.kind === 'string-chunk') chunks.at(-1).sizes.push(part.units.byteLength);
+    }
+    for (const buffer of buffers) assert.ok(buffer.byteLength <= 256 * 1024);
+    receiver.receivePart(structuredClone(message, { transfer: buffers }));
+  });
+  return { value: receiver.getValue(), chunks };
+};
+
+test('long well-formed strings travel as UTF-8 byte chunks and keep every code unit', async () => {
+  const cases = {
+    ascii: 'ACGTN'.repeat(200000),
+    bmp: 'αβγ漢字'.repeat(90000),
+    astral: '😀𝔸'.repeat(70000),
+    bom: '﻿start'.repeat(40000),
+    // Each 3- and 4-byte character crosses a 256 KiB chunk boundary at some offset.
+    shifted: `${'a'.repeat(262143)}漢${'b'.repeat(262142)}😀${'c'.repeat(100)}`,
+  };
+  for (const [name, text] of Object.entries(cases)) {
+    const { value, chunks } = await roundTrip({ text });
+    assert.equal(value.text, text, name);
+    assert.equal(chunks.length, 1, name);
+    assert.equal(chunks[0].encoding, 'utf-8', name);
+    assert.equal(chunks[0].sizes.reduce((sum, size) => sum + size, 0), Buffer.byteLength(text), name);
+    assert.ok(chunks[0].sizes.every(size => size > 0 && size <= 256 * 1024), name);
+  }
+});
+
+test('long strings with lone surrogates keep the UTF-16 route; short and empty strings stay values', async () => {
+  const lone = `${'x'.repeat(200000)}\ud800${'y'.repeat(10)}\udfff`;
+  const { value, chunks } = await roundTrip({ lone, empty: '', short: 'é😀\ud800' });
+  assert.equal(value.lone, lone);
+  assert.equal(value.empty, '');
+  assert.equal(value.short, 'é😀\ud800');
+  assert.deepEqual(chunks.map(chunk => chunk.encoding), ['utf-16']);
+});
+
+test('the receiver decodes a multi-byte sequence split across byte chunks and rejects malformed UTF-8', () => {
+  const bytes = new TextEncoder().encode('﻿a漢😀');
+  const receiver = createBoundedJsonReceiver();
+  receiver.receivePart({ kind: 'value', path: [], value: {} });
+  receiver.receivePart({ kind: 'string-start', path: ['text'], encoding: 'utf-8' });
+  for (const [start, end] of [[0, 2], [2, 5], [5, 9], [9, bytes.length]]) {
+    receiver.receivePart({ kind: 'string-bytes', bytes: bytes.subarray(start, end) });
+  }
+  receiver.receivePart({ kind: 'string-end' });
+  assert.equal(receiver.getValue().text, '﻿a漢😀');
+
+  const truncated = createBoundedJsonReceiver();
+  truncated.receivePart({ kind: 'string-start', path: [], encoding: 'utf-8' });
+  truncated.receivePart({ kind: 'string-bytes', bytes: bytes.subarray(0, 5) });
+  assert.throws(() => truncated.receivePart({ kind: 'string-end' }), /string/);
+
+  const mixed = createBoundedJsonReceiver();
+  mixed.receivePart({ kind: 'string-start', path: [], encoding: 'utf-8' });
+  assert.throws(() => mixed.receivePart({ kind: 'string-chunk', units: new Uint16Array([0x61]) }), /string/);
+  assert.throws(() => mixed.receivePart({ kind: 'string-bytes', bytes: new Uint8Array([0xff]) }), /string/);
+  const unknown = createBoundedJsonReceiver();
+  assert.throws(() => unknown.receivePart({ kind: 'string-start', path: [], encoding: 'latin1' }), /string/);
+  const units = createBoundedJsonReceiver();
+  units.receivePart({ kind: 'string-start', path: [], encoding: 'utf-16' });
+  assert.throws(() => units.receivePart({ kind: 'string-bytes', bytes: new Uint8Array([0x61]) }), /string/);
 });
