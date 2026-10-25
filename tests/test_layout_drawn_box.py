@@ -10,6 +10,7 @@ whatever letters they have (OV-1743).
 
 from __future__ import annotations
 
+import inspect
 import math
 import re
 import subprocess
@@ -29,6 +30,7 @@ from gbdraw.canvas.linear import LinearCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig, LinearRenderProfile
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
+from gbdraw.core import text as core_text
 from gbdraw.core.text import drawn_text_box, get_font_vertical_metrics, text_ink, text_ink_offsets
 from gbdraw.diagrams.linear.assemble import _axis_ruler_extents
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
@@ -199,7 +201,6 @@ def test_circular_tick_label_reserves_its_drawn_box() -> None:
         font_family=SANS,
         track_type="tuckin",
         strandedness=True,
-        dpi=96,
         label_side="outside",
         tick_side="inside",
         tick_length_px=10.0,
@@ -239,7 +240,6 @@ def _length_bar(style: str) -> LengthBarGroup:
         canvas_config.length_param,
         scale=cfg.objects.scale,
         font_family=cfg.objects.text.font_family,
-        dpi=cfg.canvas.dpi,
     )
 
 
@@ -320,7 +320,7 @@ def test_every_label_and_tick_layout_width_holds_the_drawn_ink() -> None:
             for text in ("0", "10 kbp", "1.5 Mbp", "250 bp"):
                 geometry = resolve_circular_tick_label_geometry(
                     center_radius_px=100.0, total_len=50_000, size="large", tick=10_000, label_text=text,
-                    font_size=size, font_family=family, track_type="tuckin", strandedness=True, dpi=96,
+                    font_size=size, font_family=family, track_type="tuckin", strandedness=True,
                     label_side="outside", tick_side="inside", tick_length_px=10.0, tick_width=2.0,
                     length_threshold=int(cfg.labels.length_threshold.circular),
                 )
@@ -437,3 +437,14 @@ def test_gallery_labels_keep_their_count_and_do_not_overlap(case: str, tmp_path:
         (i, j) for i in range(len(quads)) for j in range(i + 1, len(quads)) if _overlap_depth(quads[i], quads[j]) > 1e-3
     ]
     assert (len(quads), overlaps) == (expected_count, [])
+
+
+def test_text_measurement_has_one_unit_and_no_dpi_argument() -> None:
+    """Point-mode measurement is deleted (OV-165): one box in SVG user units, no dpi to pass."""
+
+    for name in ("calculate_bbox_dimensions", "get_text_bbox_size_pixels"):
+        assert not hasattr(core_text, name), name
+        assert name not in core_text.__all__, name
+    assert "layout_height" not in inspect.signature(core_text.measure_mixed_text_line).parameters
+    for function in (core_text.calculate_svg_bbox_dimensions, core_text.measure_mixed_text_line, drawn_text_box):
+        assert "dpi" not in inspect.signature(function).parameters, function.__name__

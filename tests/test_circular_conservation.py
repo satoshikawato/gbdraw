@@ -137,7 +137,7 @@ def _circular_legend_measurement(
     )
 
 
-def _text_x_bounds(text: ET.Element, x_offset: float, dpi: int) -> tuple[float, float]:
+def _text_x_bounds(text: ET.Element, x_offset: float) -> tuple[float, float]:
     caption = "".join(text.itertext())
     font_family = text.get("font-family", "")
     font_size = float(str(text.get("font-size", "0")).replace("px", ""))
@@ -151,7 +151,7 @@ def _text_x_bounds(text: ET.Element, x_offset: float, dpi: int) -> tuple[float, 
     return x_offset, x_offset + float(width)
 
 
-def _element_x_bounds(element: ET.Element, dpi: int, parent_x: float = 0.0) -> tuple[float, float]:
+def _element_x_bounds(element: ET.Element, parent_x: float = 0.0) -> tuple[float, float]:
     local_x, _ = _translate_xy_or_zero(element.get("transform"))
     x_offset = parent_x + local_x
     tag = element.tag.rsplit("}", 1)[-1]
@@ -166,10 +166,10 @@ def _element_x_bounds(element: ET.Element, dpi: int, parent_x: float = 0.0) -> t
         if xs:
             bounds.append((x_offset + min(xs), x_offset + max(xs)))
     elif tag == "text":
-        bounds.append(_text_x_bounds(element, x_offset, dpi))
+        bounds.append(_text_x_bounds(element, x_offset))
 
     for child in list(element):
-        bounds.append(_element_x_bounds(child, dpi, x_offset))
+        bounds.append(_element_x_bounds(child, x_offset))
 
     finite_bounds = [
         bound
@@ -181,7 +181,7 @@ def _element_x_bounds(element: ET.Element, dpi: int, parent_x: float = 0.0) -> t
     return min(bound[0] for bound in finite_bounds), max(bound[1] for bound in finite_bounds)
 
 
-def _text_y_bounds(text: ET.Element, y_offset: float, dpi: int) -> tuple[float, float]:
+def _text_y_bounds(text: ET.Element, y_offset: float) -> tuple[float, float]:
     caption = "".join(text.itertext())
     font_family = text.get("font-family", "")
     font_size = float(str(text.get("font-size", "0")).replace("px", ""))
@@ -195,7 +195,7 @@ def _text_y_bounds(text: ET.Element, y_offset: float, dpi: int) -> tuple[float, 
     return y_offset - float(height), y_offset
 
 
-def _element_y_bounds(element: ET.Element, dpi: int, parent_y: float = 0.0) -> tuple[float, float]:
+def _element_y_bounds(element: ET.Element, parent_y: float = 0.0) -> tuple[float, float]:
     _, local_y = _translate_xy_or_zero(element.get("transform"))
     y_offset = parent_y + local_y
     tag = element.tag.rsplit("}", 1)[-1]
@@ -210,10 +210,10 @@ def _element_y_bounds(element: ET.Element, dpi: int, parent_y: float = 0.0) -> t
         if ys:
             bounds.append((y_offset + min(ys), y_offset + max(ys)))
     elif tag == "text":
-        bounds.append(_text_y_bounds(element, y_offset, dpi))
+        bounds.append(_text_y_bounds(element, y_offset))
 
     for child in list(element):
-        bounds.append(_element_y_bounds(child, dpi, y_offset))
+        bounds.append(_element_y_bounds(child, y_offset))
 
     finite_bounds = [
         bound
@@ -703,7 +703,7 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     ]
     assert len(feature_entries) == 2
     feature_bounds = [
-        _element_x_bounds(entry, canvas_config.dpi)
+        _element_x_bounds(entry)
         for entry in feature_entries
     ]
     feature_left = min(bound[0] for bound in feature_bounds)
@@ -711,7 +711,7 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
 
     gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
     assert gradient_legend is not None
-    gradient_left, gradient_right = _element_x_bounds(gradient_legend, canvas_config.dpi)
+    gradient_left, gradient_right = _element_x_bounds(gradient_legend)
 
     feature_center = (feature_left + feature_right) / 2.0
     gradient_center = (gradient_left + gradient_right) / 2.0
@@ -781,8 +781,8 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     assert feature_legend is not None
     assert gradient_legend is not None
 
-    feature_top, feature_bottom = _element_y_bounds(feature_legend, canvas_config.dpi)
-    gradient_top, gradient_bottom = _element_y_bounds(gradient_legend, canvas_config.dpi)
+    feature_top, feature_bottom = _element_y_bounds(feature_legend)
+    gradient_top, gradient_bottom = _element_y_bounds(gradient_legend)
 
     feature_center = (feature_top + feature_bottom) / 2.0
     gradient_center = (gradient_top + gradient_bottom) / 2.0
@@ -838,7 +838,7 @@ def test_circular_bottom_multi_conservation_layout_height_contains_gradient_bloc
 
     gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
     assert gradient_legend is not None
-    _, gradient_bottom = _element_y_bounds(gradient_legend, canvas_config.dpi)
+    _, gradient_bottom = _element_y_bounds(gradient_legend)
 
     assert layout.height > layout.feature_height
     assert gradient_bottom <= layout.height - (legend_config.color_rect_size / 2.0) + 1.0
@@ -887,7 +887,7 @@ def test_circular_api_bottom_multi_conservation_legend_fits_viewbox() -> None:
     assert legend is not None
     assert gradient_legend is not None
     _, legend_y = _translate_xy(legend.get("transform"))
-    _, gradient_bottom = _element_y_bounds(gradient_legend, 96)
+    _, gradient_bottom = _element_y_bounds(gradient_legend)
 
     assert legend_y + gradient_bottom <= viewbox[1] + viewbox[3]
 
@@ -1131,6 +1131,6 @@ def test_circular_single_conservation_legend_keeps_long_title_inside_legend_widt
     ns = {"svg": "http://www.w3.org/2000/svg"}
     gradient_legend = root.find(".//svg:g[@id='conservation_identity_legend']", ns)
     assert gradient_legend is not None
-    left, right = _element_x_bounds(gradient_legend, canvas_config.dpi)
+    left, right = _element_x_bounds(gradient_legend)
     assert left >= -0.5
     assert right <= natural.width + 0.5

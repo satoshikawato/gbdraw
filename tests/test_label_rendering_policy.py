@@ -109,7 +109,7 @@ def test_linear_label_goes_inside_its_feature_only_with_a_quarter_em_to_spare() 
     cfg = _config("auto")
     font_size = 16.0
     label = "dnaK"
-    advance_px, _ = calculate_svg_bbox_dimensions(label, cfg.objects.text.font_family, font_size, cfg.canvas.dpi)
+    advance_px, _ = calculate_svg_bbox_dimensions(label, cfg.objects.text.font_family, font_size)
     margin_px = 0.25 * font_size
     # One px per bp here; a feature of n bp is n px long.
     tight_bp = math.floor(advance_px) + 2

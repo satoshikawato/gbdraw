@@ -74,7 +74,6 @@ class LengthBarGroup:
         *,
         scale: ObjectsScaleConfig,
         font_family: str,
-        dpi: int,
         ruler_width: float | None = None,
     ) -> None:
         """
@@ -98,7 +97,6 @@ class LengthBarGroup:
         self.scale_group_width: float = 0
         self.scale_group_height: float = 0
         self.local_bounds = Aabb(0.0, 0.0, 0.0, 0.0)
-        self.dpi = dpi
         # --- 2. Set other properties ---
         self.longest_genome: int = longest_genome
         self.longest_record_width: float = longest_record_width

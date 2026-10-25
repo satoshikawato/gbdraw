@@ -40,14 +40,12 @@ class LinearDefinitionStyle:
 
     definition: ObjectsDefinitionLinearConfig
     font_family: str
-    dpi: int
 
     @classmethod
     def of(cls, cfg: GbdrawConfig) -> LinearDefinitionStyle:
         return cls(
             definition=cfg.objects.definition.linear,
             font_family=cfg.objects.text.font_family,
-            dpi=cfg.canvas.dpi,
         )
 
 
@@ -122,7 +120,6 @@ class DefinitionGroup:
         self.show_replicon: bool = bool(def_cfg.show_replicon)
         self.show_accession: bool = bool(def_cfg.show_accession)
         self.show_length: bool = bool(def_cfg.show_length)
-        self.dpi: int = style.dpi
         self.linear_text_anchor: str = text_anchor if text_anchor is not None else def_cfg.text_anchor
         self.linear_dominant_baseline: str = def_cfg.dominant_baseline
         self.get_definition_details()
@@ -237,7 +234,7 @@ class DefinitionGroup:
     ) -> tuple[float, float]:
         """Rendered SVG width and line-box height of ``(text, font_style)`` parts drawn as tspans of one line."""
         width, _ = measure_mixed_text_line(
-            parts, style.font_family, style.font_size, self.dpi, font_weight=style.font_weight
+            parts, style.font_family, style.font_size, font_weight=style.font_weight
         )
         height = max(
             (

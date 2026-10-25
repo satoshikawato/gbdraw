@@ -24,7 +24,6 @@ class CircularCanvasGeometry:
 
     radius: float
     track_ratio: float
-    dpi: int
     length_param: str
     track_ratio_factors: tuple[float, ...]
 
@@ -83,7 +82,6 @@ class CircularCanvasConfigurator:
         self.default_height: int = cfg.canvas.circular.height
         self.radius: float = cfg.canvas.circular.radius
         self.track_ratio: float = cfg.canvas.circular.track_ratio
-        self.dpi: int = cfg.canvas.dpi
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
         # track_width (legacy) used to be config-driven; now derived from radius/track_ratio factors.
@@ -122,7 +120,6 @@ class CircularCanvasConfigurator:
         return CircularCanvasGeometry(
             radius=self.radius,
             track_ratio=self.track_ratio,
-            dpi=self.dpi,
             length_param=self.length_param,
             track_ratio_factors=tuple(self.track_ratio_factors),
         )

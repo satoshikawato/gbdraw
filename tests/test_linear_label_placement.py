@@ -51,7 +51,7 @@ from gbdraw.labels.linear import (
     linear_record_labels,
     place_linear_label_row,
 )
-from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_bbox_dimensions, calculate_svg_bbox_dimensions, text_ink_offsets
+from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_svg_bbox_dimensions, drawn_text_box, text_ink_offsets
 from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
@@ -1406,7 +1406,7 @@ def _painted_feature_label_boxes(svg_path: Path) -> list[tuple[str, tuple[float,
                 text, family, size, dominant_baseline=str(element.get("dominant-baseline")), text_anchor=anchor
             )
             assert ink is not None
-            advance, _height = calculate_svg_bbox_dimensions(text, family, size, 96)
+            advance, _height = calculate_svg_bbox_dimensions(text, family, size)
             left = dx + float(str(element.get("x"))) - TEXT_ANCHOR_SHARE[anchor] * advance
             y = dy + float(str(element.get("y")))
             boxes.append((text, (left, left + advance, y + ink[2], y + ink[3])))
@@ -1553,7 +1553,6 @@ def _svg_text_boxes(svg: str, cfg: GbdrawConfig) -> tuple[list[list[tuple[float,
     coordinates: each text's advance by its font box, anchored and turned as the SVG draws it."""
 
     font_family = cfg.objects.text.font_family
-    dpi = cfg.canvas.dpi
     labels: list[list[tuple[float, float]]] = []
     definitions: list[list[tuple[float, float]]] = []
 
@@ -1566,8 +1565,7 @@ def _svg_text_boxes(svg: str, cfg: GbdrawConfig) -> tuple[list[list[tuple[float,
             is_label = "data-label-feature-id" in element.attrib
             if text and (is_label or in_definition):
                 size = float(element.attrib["font-size"])
-                width, _ = calculate_svg_bbox_dimensions(text, font_family, size, dpi)
-                _, height = calculate_bbox_dimensions(text, font_family, size, dpi)
+                width, height = drawn_text_box(text, font_family, size)
                 x, y = float(element.attrib.get("x", 0.0)), float(element.attrib.get("y", 0.0))
                 left = {"start": 0.0, "end": -width}.get(element.attrib.get("text-anchor", "start"), -0.5 * width)
                 corners = [(left, -0.5 * height), (left + width, -0.5 * height), (left + width, 0.5 * height), (left, 0.5 * height)]

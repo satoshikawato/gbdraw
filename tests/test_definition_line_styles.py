@@ -382,13 +382,12 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
     line_styles["accession"] = {"font_size": 5}
     calls: list[tuple[str, float, str]] = []
 
-    def fake_bbox(text, _font_family, font_size, _dpi, *, font_weight="normal", font_style="normal"):
+    def fake_bbox(text, _font_family, font_size, font_weight="normal", font_style="normal"):
         calls.append((str(text), float(font_size), str(font_style)))
         return float(font_size) * len(str(text)), float(font_size)
 
     # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
     for module in ("gbdraw.core.text",):
-        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", fake_bbox)
         monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", fake_bbox)
 
     definition_group = DefinitionGroup(

@@ -332,7 +332,6 @@ class DefinitionGroup:
                 parts,
                 font_family,
                 font_size,
-                self.geometry.dpi,
                 font_weight=font_weight,
             )
             text_anchor = str(attribs.get("text-anchor", "start")).strip().lower()

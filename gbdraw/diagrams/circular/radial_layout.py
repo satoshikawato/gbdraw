@@ -559,7 +559,6 @@ def _tick_layout_from_params(
         strandedness=bool(cfg.canvas.strandedness),
         font_size=float(cfg.objects.ticks.tick_labels.font_size),
         font_family=str(cfg.objects.text.font_family),
-        dpi=int(geometry.dpi),
         manual_interval=cfg.objects.scale.interval,
         label_side=label_side,
         tick_side=tick_side,

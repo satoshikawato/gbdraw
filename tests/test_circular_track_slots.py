@@ -2894,7 +2894,7 @@ def _tick_label_arcs(svg: str) -> list[tuple[float, float, float, str]]:
     import math
     import xml.etree.ElementTree as ET
 
-    from gbdraw.core.text import calculate_bbox_dimensions
+    from gbdraw.core.text import calculate_svg_bbox_dimensions
 
     root = ET.fromstring(svg)
     paths = {
@@ -2915,7 +2915,7 @@ def _tick_label_arcs(svg: str) -> list[tuple[float, float, float, str]]:
         start, end = math.atan2(start_y, start_x), math.atan2(end_y, end_x)
         center = start + (((end - start) + math.pi) % (2.0 * math.pi) - math.pi) / 2.0
         font_size = float(element.get("font-size"))
-        width_px, _height = calculate_bbox_dimensions(element.text or "", element.get("font-family"), font_size, 96)
+        width_px, _height = calculate_svg_bbox_dimensions(element.text or "", element.get("font-family"), font_size)
         labels.append((center % (2.0 * math.pi), 0.5 * float(width_px) / radius, 0.5 * font_size / radius, element.text))
     return sorted(labels)
 

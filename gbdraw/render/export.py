@@ -159,7 +159,6 @@ def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
             text,
             run.get("font-family") or style["font_family"],
             _font_size_px(run.get("font-size"), style["font_size"]),
-            96,
             run.get("font-weight") or style["font_weight"],
             run.get("font-style") or style["font_style"],
         )[0]
