@@ -42,7 +42,13 @@ const {
   disposeDiagramGenerationWorker
 } = await import('../../gbdraw/web/js/services/diagram-generation.js');
 
-const flush = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+const flush = async () => { for (let i = 0; i < 20; i += 1) await tick(); };
+// Waits for the page's asynchronous resource preparation (sha256) to post the next run.
+const runsSent = async (worker, count) => {
+  for (let i = 0; i < 10_000 && worker.sent('run').length < count; i += 1) await tick();
+  assert.equal(worker.sent('run').length, count);
+};
 const payload = (text) => ({
   request: { records: [{ source: { kind: 'genbank', resourceId: 'source' } }] },
   resources: { source: { name: 'source.gb', kind: 'genbank', size: text.length, encoding: 'base64', data: Buffer.from(text).toString('base64') } }
@@ -59,7 +65,7 @@ const warmWorker = async () => {
   const first = runDiagramGeneration(payload('AAAA'));
   const worker = ControlledWorker.instances.at(-1);
   worker.initialize();
-  await flush();
+  await runsSent(worker, 1);
   assert.deepEqual(transferred(worker), ['source']);
   worker.emit({ type: 'run', requestId: latestRun(worker).requestId, ok: true, results: [] });
   await first;
@@ -84,7 +90,7 @@ test('a Cancel during a render interrupts Python, keeps the Worker, and the next
   const worker = await warmWorker();
   const [{ interruptBuffer }] = worker.sent('init');
   const canceled = runDiagramGeneration(payload('AAAA'));
-  await flush();
+  await runsSent(worker, 2);
   const { requestId } = latestRun(worker);
   const rejected = assert.rejects(canceled, /canceled/);
   assert.equal(cancelDiagramGeneration(), true);
@@ -102,7 +108,7 @@ test('a Cancel during a render interrupts Python, keeps the Worker, and the next
   await flush();
   assert.equal(worker.sent('run').length, 2, 'only the answer to this Cancel counts');
   worker.drain();
-  await flush();
+  await runsSent(worker, 3);
   assert.equal(ControlledWorker.instances.at(-1), worker);
   assert.equal(worker.sent('init').length, 1);
   assert.deepEqual(transferred(worker), ['source'], 'the Worker pruned for the canceled request: the bytes go again');
@@ -116,7 +122,7 @@ test('without an answer in time the Worker is terminated and the waiting render 
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const worker = await warmWorker();
   const canceled = runDiagramGeneration(payload('AAAA'));
-  await flush();
+  await runsSent(worker, 2);
   const rejected = assert.rejects(canceled, /canceled/);
   cancelDiagramGeneration();
   await rejected;
@@ -131,7 +137,7 @@ test('without an answer in time the Worker is terminated and the waiting render 
   const replacement = ControlledWorker.instances.at(-1);
   assert.notEqual(replacement, worker);
   replacement.initialize();
-  await flush();
+  await runsSent(replacement, 1);
   assert.deepEqual(transferred(replacement), ['source']);
   replacement.emit({ type: 'run', requestId: latestRun(replacement).requestId, ok: true, results: [] });
   await next;
@@ -141,7 +147,7 @@ test('without an answer in time the Worker is terminated and the waiting render 
 test('a Worker error during the drain terminates it', async () => {
   const worker = await warmWorker();
   const canceled = runDiagramGeneration(payload('AAAA'));
-  await flush();
+  await runsSent(worker, 2);
   const rejected = assert.rejects(canceled, /canceled/);
   cancelDiagramGeneration();
   await rejected;
@@ -165,7 +171,7 @@ test('a Cancel rejects auxiliary requests too, and a second Cancel during the dr
   const [{ interruptBuffer }] = worker.sent('init');
   const helper = runDiagramHelperOperation('evaluateRules', { rules: [] });
   const render = runDiagramGeneration(payload('AAAA'));
-  await flush();
+  await runsSent(worker, 2);
   const rejected = Promise.all([assert.rejects(helper, /canceled/), assert.rejects(render, /canceled/)]);
   cancelDiagramGeneration();
   await rejected;
