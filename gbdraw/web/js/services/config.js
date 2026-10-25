@@ -2369,6 +2369,11 @@ const drawingProjectionInputOf = (view, {
 };
 
 /**
+ * A drawing's request projection as `featureEditsOverProjection` reads it:
+ * the per-feature edits its request carries.
+ * @typedef {NonNullable<Parameters<typeof featureEditsOverProjection>[1]>} RequestFeatureEdits
+ */
+/**
  * What a Session 49 drawing Load does not project gives its drawing
  * (B2d-3a-2): the input files of its request and bindings, read from its
  * one-drawing view as the projected drawing's are (`projectCanonicalSessionRequest`,
@@ -2383,6 +2388,8 @@ const drawingProjectionInputOf = (view, {
  *   request, and its draft installs over its mode's defaults.
  * @property {UnmanagedOverrideCheck | null} requestOverrides Its request's unmanaged overrides, checked
  *   when its draft holds none (the editor-draft loop reads a draft's).
+ * @property {RequestFeatureEdits | null} requestFeatureEdits Its request's per-feature edits, which a
+ *   draft without them takes (`featureEditsOverProjection`, OV-220); null: the drawing holds no request.
  */
 /**
  * @param {Session49} document
@@ -2400,7 +2407,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
     return {
       files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
-      restoredConfig: null, requestOverrides: null
+      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null
     };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
@@ -2428,7 +2435,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
   return {
     files: projection.files, comparisonClassification, inputType,
     restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
-    requestOverrides: overrides.source === 'storedRequest' ? overrides : null
+    requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
+    requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState }
   };
 };
 
@@ -5951,6 +5959,16 @@ const importSessionDocument = async (e, options = {}) => {
     const projectedConfigOf = (drawingId) => (drawingId === committedSetDrawingId
       ? (committedSliceProjected ? restoredConfig : null)
       : storedDrawingInputs.get(drawingId)?.restoredConfig ?? null);
+    /**
+     * The per-feature edits of a drawing's request, by drawing ID: the
+     * committed set's (its projection) and each other Session 49 drawing
+     * that holds a request (`storedDrawingInputs`, OV-1786); else null.
+     * @param {DrawingId} drawingId
+     * @returns {RequestFeatureEdits | null}
+     */
+    const requestFeatureEditsOf = (drawingId) => (drawingId === committedSetDrawingId
+      ? (projectionResult && !settingsOnly ? projectionResult.renderState : null)
+      : storedDrawingInputs.get(drawingId)?.requestFeatureEdits ?? null);
     // Any other Session 46-48 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
     const isStoredSlice = (drawingId) => modeScopedSession && projectedConfigOf(drawingId) === null;
@@ -6795,10 +6813,10 @@ const importSessionDocument = async (e, options = {}) => {
     for (const drawing of committed) {
       const { id, mode } = drawing;
       const { slice } = draftPartOf(id);
-      // The committed set's drawing takes its request's per-feature edits where
-      // it has none (OV-220).
-      const features = id === committedSetDrawingId && canonicalSession && !settingsOnly
-        ? { features: featureEditsOverProjection(slice.features, projectionResult.renderState) } : {};
+      // A drawing that holds a request takes its request's per-feature edits
+      // where its draft has none (OV-220), opened or not (OV-1786).
+      const requestEdits = requestFeatureEditsOf(id);
+      const features = requestEdits ? { features: featureEditsOverProjection(slice.features, requestEdits) } : {};
       applyModeSliceData(drawing, mode, { ...slice, ...features, ...draftOf(id) }, {
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         applyCanvasPadding: id !== plan.activeDrawingId

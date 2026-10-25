@@ -874,9 +874,16 @@ test('session-authority reads `otherModeResult` only in the Result set enumerati
 // (DESIGN `drawingViewOf`).
 test('a Session 49 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
   const session = v49Session('drawings-circular-linear');
-  // The drawing's settings (its draft's form and adv) and its other settings
-  // a request can carry.
-  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides'];
+  // The Linear drawing has no feature-edit draft: it takes its request's
+  // per-feature edits (OV-220), opened or not.
+  const linear = session.drawings.find((entry) => entry.mode === 'linear');
+  assert.equal(linear.features ?? null, null);
+  linear.renderRequest.diagramOptions.featureOverrides = [{ recordKey: 'record-1', biologicalFeatureId: 'f1234~1',
+    featureVisibility: null, labelVisibility: null, labelText: 'Request label' }];
+  // The drawing's settings (its draft's form and adv), its other settings a
+  // request can carry, and its per-feature edits.
+  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides',
+    'featureOverrides', 'featureVisibilityManualRules', 'canonicalLabelOverrideRows'];
   const settingsOf = (id) => {
     const drawing = state.drawingOf(id);
     return JSON.parse(JSON.stringify(Object.fromEntries(SETTINGS.map((name) => [name, drawing[name] ?? null]))));
