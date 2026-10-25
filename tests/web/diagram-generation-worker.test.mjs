@@ -273,6 +273,38 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   }
 }
 
+// A cold boot starts every wheel download (one GET each, no HEAD check)
+// before Pyodide loads.
+{
+  const events = [];
+  const offline = 'http://127.0.0.1:9';
+  const localWheelUrls = [`${offline}/a-1.0-py3-none-any.whl`, `${offline}/b-1.0-py3-none-any.whl`];
+  const gbdrawWheelUrl = `${offline}/gbdraw-0.0.0-py3-none-any.whl?v=1`;
+  globalThis.__FAKE_LOAD_PYODIDE__ = async () => {
+    events.push(['loadPyodide']);
+    return { loadPackage: async () => { throw new Error('stop after loadPyodide'); } };
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    events.push([options.method || 'GET', String(url)]);
+    return new Response('wheel');
+  };
+  try {
+    const reply = await new Promise((resolve) => {
+      self.postMessage = (message) => { if (message.type === 'init') resolve(message); };
+      self.onmessage({ data: {
+        type: 'init', id: 'cold-boot-downloads', pyodideIndexUrl: `${offline}/pyodide/`, localWheelUrls, gbdrawWheelUrl,
+        pyodideModuleUrl: 'data:text/javascript,export const loadPyodide = (options) => globalThis.__FAKE_LOAD_PYODIDE__(options);'
+      } });
+    });
+    assert.equal(reply.ok, false);
+    assert.deepEqual(events, [...[...localWheelUrls, gbdrawWheelUrl].map((url) => ['GET', url]), ['loadPyodide']]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete globalThis.__FAKE_LOAD_PYODIDE__;
+  }
+}
+
 // Every helper that stages resources accepts each key the page's resource
 // staging writes into its payload (PR #1313 CI: `extractCdsProteinFasta` and
 // `convertStoredProteinResultFrames` refused `retainedResourceTokens`).

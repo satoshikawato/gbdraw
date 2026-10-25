@@ -14,7 +14,7 @@ import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
-  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep
+  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads
 } from './pyodide-snapshot.js';
 
 let runtimePromise = null;
@@ -302,14 +302,6 @@ export const resolveGenerationCleanupOutcome = ({
   return result;
 };
 
-const ensureLocalAsset = async (url, label) => {
-  const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${url}`);
-  }
-  return url;
-};
-
 // The booted runtime with its capabilities. A runtime restored from a Pyodide
 // snapshot first starts this Worker's own state, since the snapshot holds the
 // state of the process that made it (OV-1000), and calls numpy and pandas, so
@@ -360,6 +352,8 @@ const initializeRuntime = async ({
   });
   runtimePromise = (async () => {
     reportStep(0);
+    // The wheels download while Pyodide loads.
+    const wheels = runtimeWheelDownloads({ localWheelUrls, gbdrawWheelUrl });
     // A test server may serve a snapshot of the runtime this function builds
     // (workers/pyodide-snapshot.js). An error in a step of its restore is a
     // snapshot failure (pyodideSnapshotStep); any other error is an ordinary
@@ -367,7 +361,7 @@ const initializeRuntime = async ({
     const [{ loadPyodide }, snapshot] = await Promise.all([
       import(pyodideModuleUrl),
       pyodideSnapshotUrl
-        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }))
+        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, wheels }))
         : null
     ]);
     const load = () => loadPyodide({
@@ -386,16 +380,10 @@ const initializeRuntime = async ({
     }
     reportStep(1);
     await installRuntimePackages(pyodide, {
-      localWheels: localWheelUrls,
-      gbdrawWheel: gbdrawWheelUrl,
+      wheels,
       beforeInstall: async () => {
         reportStep(2);
-        await Promise.all(
-          localWheelUrls.map((url, index) =>
-            ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
-          )
-        );
-        await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+        await Promise.all(wheels.map(({ bytes }) => bytes));
         reportStep(3);
       }
     });

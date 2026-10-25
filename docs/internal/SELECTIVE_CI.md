@@ -436,8 +436,9 @@ functional tests. Each `playwright-functional` shard builds one after `Prepare
 browser wheel` into `$RUNNER_TEMP/pyodide-snapshot` and passes that directory
 to the tests; a build failure fails the job. Other jobs build none.
 `node tools/build_pyodide_snapshot.mjs <dir>` boots Pyodide
-in Node, runs the Worker's package recipe (`installRuntimePackages`: micropip
-installs the dependency wheels with their requirements, then the gbdraw wheel),
+in Node, runs the Worker's package recipe (`installRuntimePackages`: Pyodide
+loads micropip and tzdata from its distribution, then one micropip call
+installs the dependency wheels and the gbdraw wheel),
 runs the Worker helpers, checks that every installed distribution's
 requirements are installed, and writes `snapshot.bin` (the Wasm memory),
 `state.json` (the side-module linker state and the validity key) and `fs.bin`

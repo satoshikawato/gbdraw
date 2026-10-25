@@ -445,19 +445,33 @@ def test_open_source_notices_include_local_pyodide_wheels() -> None:
         assert wheel_path.as_posix() in notices_html
 
 
-def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
-    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
-
+def _configured_wheels(name: str) -> tuple[Path, ...]:
     config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    match = re.search(
-        r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_js, re.DOTALL
-    )
+    match = re.search(rf"export const {name}\s*=\s*\[(.*?)\];", config_js, re.DOTALL)
     assert match is not None
-    configured_wheels = tuple(
+    return tuple(
         Path(raw.lstrip("./"))
         for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
     )
-    assert configured_wheels == PYODIDE_LOCAL_WHEELS
+
+
+def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
+    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
+
+    assert _configured_wheels("PYODIDE_LOCAL_WHEELS") == PYODIDE_LOCAL_WHEELS
+
+
+def test_web_config_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR, PYODIDE_RUNTIME_PACKAGE_WHEELS, PYODIDE_RUNTIME_WHEELS
+
+    # The diagram Worker loads each by its name field (PEP 427); Pyodide then
+    # fetches the lock file's wheel for that name.
+    assert _configured_wheels("PYODIDE_RUNTIME_WHEELS") == PYODIDE_RUNTIME_WHEELS
+    lock = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))
+    assert {
+        path.name.split("-", 1)[0]: lock["packages"][path.name.split("-", 1)[0]]["file_name"]
+        for path in PYODIDE_RUNTIME_WHEELS
+    } == PYODIDE_RUNTIME_PACKAGE_WHEELS
 
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:

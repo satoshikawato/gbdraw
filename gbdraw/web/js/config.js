@@ -26,5 +26,13 @@ export const PYODIDE_LOCAL_WHEELS = [
   "./vendor/pyodide-wheels/bcbio_gff-0.7.1-py3-none-any.whl",
   "./vendor/pyodide-wheels/pandas-2.3.2-cp313-cp313-pyodide_2025_0_wasm32.whl"
 ];
+// The Pyodide distribution's wheels the diagram Worker loads by name before
+// micropip installs PYODIDE_LOCAL_WHEELS: micropip and what those wheels
+// require from the distribution (pandas' tzdata). gbdraw/_web_assets.py
+// PYODIDE_RUNTIME_WHEELS lists the same files.
+export const PYODIDE_RUNTIME_WHEELS = [
+  "./vendor/pyodide/v0.29.0/full/micropip-0.11.0-py3-none-any.whl",
+  "./vendor/pyodide/v0.29.0/full/tzdata-2025.2-py2.py3-none-any.whl"
+];
 export const LOSAT_THREADED_WASM_URL = "./wasm/losat/losat-threaded.wasm";
 export const WASI_SHIM_URL = "./vendor/browser_wasi_shim/dist/index.js";
