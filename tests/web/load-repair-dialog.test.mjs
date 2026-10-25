@@ -14,6 +14,7 @@ import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -44,7 +45,13 @@ const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/
 const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const rollbackPort = await sessionRollbackPort(state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, rollbackPort);
+// The real port, with a note when the Load captures or restores.
+const spyOnPort = (onCapture, onRestore = () => {}) => ({
+  capture: () => { onCapture(); return rollbackPort.capture(); },
+  restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
+});
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
@@ -94,7 +101,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
       assert.equal(loadedState(), snapshot);
       return false;
     },
-    rollbackState: { capture: () => reached.push('snapshot'), restore: () => reached.push('restore') },
+    rollbackState: spyOnPort(() => reached.push('snapshot'), () => reached.push('restore')),
     afterImport: async () => reached.push('afterImport'),
     beforePreviewMount: () => { reached.push('preview'); return null; },
     installLoadedArtifactSlots: () => reached.push('slots')
@@ -277,7 +284,7 @@ const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
       let committed = false;
       const loaded = await importSession(input(file), {
         confirmLoadRepairs: async () => true,
-        rollbackState: { capture: () => { committed = true; }, restore: () => {} }
+        rollbackState: spyOnPort(() => { committed = true; })
       });
       if (!['ok', 'legacy'].includes(loaded.status)) {
         if (committed) refusedAfterTheCommit.push(`${kind} ${path}: ${JSON.stringify(mutated)}`);
@@ -1038,7 +1045,7 @@ test('a configuration file or a Session drops and lists a rule or whitelist entr
   const asked = [];
   const loaded = await importSession(input(file), {
     confirmLoadRepairs: async ({ items }) => { asked.push(items); return true; },
-    rollbackState: { capture: () => { committed = true; }, restore: () => {} }
+    rollbackState: spyOnPort(() => { committed = true; })
   });
   assert.equal(loaded.status, 'legacy', JSON.stringify(loaded.error));
   assert.ok(committed);

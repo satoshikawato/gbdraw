@@ -358,8 +358,13 @@ const heldInputNames = (value) => {
   return [...names];
 };
 
+// The band facts Load reads of a file before Python converts a Session
+// 27-44 (B2d-4): whether it keeps its drafts in mode slices (46 or later),
+// and whether its Legend lists name a row by its shown caption (46 or older).
 /** @param {SessionEnvelope} document */
-const isModeScopedVersion = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+export const isModeScopedVersion = (document) => document.version >= MODE_SCOPED_SESSION_VERSION;
+/** @param {SessionEnvelope} document */
+export const holdsCaptionLegendRows = (document) => document.version < ROW_KEYED_LEGEND_SESSION_VERSION;
 
 /**
  * Drops the members of a Result set whose Results the reader dropped.

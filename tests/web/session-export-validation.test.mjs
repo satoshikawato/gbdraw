@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
@@ -43,7 +44,7 @@ const { buildCanonicalRenderRequest } = await import(
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { bindDrawingInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const circularFiles = modeDrawing(state, 'circular').files;
-const { exportSession } = callerSession(sessionConfig, state);
+const { exportSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 let inputReads = 0;
 installShownDrawing('circular');

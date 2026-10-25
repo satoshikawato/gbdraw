@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 // While Review alignment is open the figure is fitted, and what is saved or captured is the view
 // from before the review. The pan/zoom owner holds it; the Session writer and the UI capture with
@@ -21,7 +22,7 @@ globalThis.document = {
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { buildUiStateData, setHeldPreviewViewportReader } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession } = callerSession(sessionConfig, state);
+const { exportSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { createPanZoom } = await import('../../gbdraw/web/js/app/ui.js');
 
 const panZoom = createPanZoom(state);

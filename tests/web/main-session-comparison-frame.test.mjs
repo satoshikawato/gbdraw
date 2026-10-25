@@ -172,30 +172,30 @@ test('Python converts each drawing whose protein results touch a reversed record
   const kept = protein(47, true, 'precomputedProteinComparison');
   const forward = protein(47, false);
   const { calls, convert } = proteinConverter({ table: { data: base64('F\n'), size: 2 } });
-  const converted = await convertStoredProteinResultFrames(47, [shown, null, forward, kept], { convert });
+  const converted = await convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown, null, forward, kept], { convert });
   assert.deepEqual(calls, [
     { version: 47, canonicalRequest: shown.renderRequest, resources: shown.resources },
     { version: 47, canonicalRequest: kept.renderRequest, resources: kept.resources }
   ]);
   assert.deepEqual([...converted], [['table', { data: base64('F\n'), size: 2 }]]);
   // A Session 48 and a drawing that touches no reversed record start nothing.
-  assert.equal((await convertStoredProteinResultFrames(48, [shown], { convert })).size, 0);
-  assert.equal((await convertStoredProteinResultFrames(47, [forward], { convert: null })).size, 0);
+  assert.equal((await convertStoredProteinResultFrames({ version: 48, inDrawnFrame: false }, [shown], { convert })).size, 0);
+  assert.equal((await convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [forward], { convert: null })).size, 0);
   assert.equal(calls.length, 2);
 });
 
 test('a conversion that fails or returns unreadable bytes changes nothing and is reported (OV-1145)', async () => {
   const shown = protein(47);
   const failure = (code) => ({ code, stage: 'helper', operation: 'convertStoredProteinResultFrames' });
-  await assert.rejects(convertStoredProteinResultFrames(47, [shown], { convert: null }), failure('HELPER_PROTOCOL'));
+  await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown], { convert: null }), failure('HELPER_PROTOCOL'));
   for (const resources of [null, { table: { data: 1, size: 2 } }, { table: { data: base64('F\n'), size: -1 } }]) {
-    await assert.rejects(convertStoredProteinResultFrames(47, [shown], proteinConverter(resources)),
+    await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown], proteinConverter(resources)),
       failure('RESULT_INVALID'), JSON.stringify(resources));
   }
   // Two drawings that store one resource ID must agree on its bytes.
   let call = 0;
   const convert = async () => ({ result: { resources: { table: { data: base64(call++ ? 'B\n' : 'A\n'), size: 2 } } } });
-  await assert.rejects(convertStoredProteinResultFrames(47, [shown, protein(47)], { convert }), failure('RESULT_INVALID'));
+  await assert.rejects(convertStoredProteinResultFrames({ version: 47, inDrawnFrame: true }, [shown, protein(47)], { convert }), failure('RESULT_INVALID'));
 });
 
 test('the converted bytes replace a resource under its stored ID with its size and checksum (OV-1145)', async () => {

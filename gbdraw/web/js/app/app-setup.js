@@ -352,8 +352,9 @@ const loadExportService = () => {
  * @typedef {object} SessionImportRollbackOptions
  * @property {ArtifactSlotStore} artifactSlots
  *   The kept generated artifacts of the drawings not shown (E1), held by reference.
- * @property {{ captureMembers: HistoryRouter['captureMembers'], restoreMembers: HistoryRouter['restoreMembers'] }} historyMembers
- *   The History router: a Load replaces its members before the baseline (OV-1769).
+ * @property {HistoryRouter['captureMembers']} captureHistoryMembers
+ *   The History router's members: a Load replaces them before the baseline (OV-1769).
+ * @property {HistoryRouter['restoreMembers']} restoreHistoryMembers
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
@@ -381,7 +382,8 @@ const loadExportService = () => {
 /** @param {SessionImportRollbackOptions} options */
 export const createSessionImportRollbackState = ({
   artifactSlots,
-  historyMembers,
+  captureHistoryMembers,
+  restoreHistoryMembers,
   captureDisplayedArtifact,
   installDisplayedArtifact,
   depthTrackUiCounts,
@@ -393,7 +395,7 @@ export const createSessionImportRollbackState = ({
 }) => ({
   capture: () => ({
     artifactSlots: artifactSlots.snapshot(),
-    historyMembers: historyMembers.captureMembers(),
+    historyMembers: captureHistoryMembers(),
     // The displayed artifact's parts outside state: its transport identity,
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
@@ -404,7 +406,7 @@ export const createSessionImportRollbackState = ({
   }),
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     // The previous drawings' Histories, which the Load replaced (`replaceMembers`).
-    historyMembers.restoreMembers(snapshot.historyMembers);
+    restoreHistoryMembers(snapshot.historyMembers);
     artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
     // The restored document holds each drawing's Depth series (OV-1165).
@@ -3740,6 +3742,23 @@ export const createAppSetup = () => {
   const circularDrawings = () => state.drawingList().filter((drawing) => drawing.mode === 'circular');
   const captureRingSettings = () => new Map(circularDrawings().map((drawing) => [drawing.id, ringSettingsOf(drawing)]));
   let ringSettingsBeforeImport = captureRingSettings();
+  // The Load rollback port: the one the Load options carry and `window.__GBDRAW_APP__` hands to page callers.
+  const sessionImportRollbackState = createSessionImportRollbackState({
+    artifactSlots,
+    captureHistoryMembers: () => history.captureMembers(),
+    restoreHistoryMembers: (members) => history.restoreMembers(members),
+    captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
+    // The rollback restored the pan already; the install keeps it.
+    installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
+      drawing: state.drawingOf(slot.drawingId), ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
+    }),
+    depthTrackUiCounts,
+    featureListScrollTop,
+    featureListScrollRef,
+    selectedPairwiseBlockOrthogroupId,
+    captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
+    restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
+  });
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
   // Load dialog before.
@@ -3810,21 +3829,7 @@ export const createAppSetup = () => {
         )
       }));
     },
-    rollbackState: createSessionImportRollbackState({
-      artifactSlots,
-      historyMembers: history,
-      captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
-      // The rollback restored the pan already; the install keeps it.
-      installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
-        drawing: state.drawingOf(slot.drawingId), ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
-      }),
-      depthTrackUiCounts,
-      featureListScrollTop,
-      featureListScrollRef,
-      selectedPairwiseBlockOrthogroupId,
-      captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
-      restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
-    }),
+    rollbackState: sessionImportRollbackState,
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
         // The comparison rings read from the loaded files and series (an older
@@ -7880,6 +7885,7 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    sessionImportRollbackState,
     sessionInput,
     openSessionFilePicker,
     galleryExamples,

@@ -12,6 +12,7 @@ import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 globalThis.window = {
   Vue: {
@@ -37,7 +38,7 @@ const {
   COMPOSITION_METADATA_ATTRIBUTE
 } = await import('../../gbdraw/web/js/app/legend-layout/composition-actions.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state);
+const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const REPO = new URL('../../', import.meta.url);
 const fixture = (name) => {

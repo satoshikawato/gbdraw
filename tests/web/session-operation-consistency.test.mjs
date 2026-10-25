@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
 await cp(join(process.cwd(), 'gbdraw/web/js'), join(root, 'js'), { recursive: true });
@@ -206,7 +207,7 @@ test('Save and Load report an active asynchronous History mutation until settlem
 
 test('Save and Load consult the availability the composition root passes (R13)', async () => {
   const sessionConfig = await load('services/config.js');
-  const { exportSession, importSession } = callerSession(sessionConfig, state);
+  const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
   const calls = [];
   const busyFrom = (operation, call) => (requested) => {
     calls.push(requested);

@@ -9,6 +9,7 @@ import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
 globalThis.window = {
@@ -34,7 +35,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { exportSession, importSession } = callerSession(sessionConfig, state);
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const MODES = ['circular', 'linear'];
 const save = async (title) => {
@@ -874,9 +875,16 @@ test('session-authority reads `otherModeResult` only in the Result set enumerati
 // (DESIGN `drawingViewOf`).
 test('a Session 49 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
   const session = v49Session('drawings-circular-linear');
-  // The drawing's settings (its draft's form and adv) and its other settings
-  // a request can carry.
-  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides'];
+  // The Linear drawing has no feature-edit draft: it takes its request's
+  // per-feature edits (OV-220), opened or not.
+  const linear = session.drawings.find((entry) => entry.mode === 'linear');
+  assert.equal(linear.features ?? null, null);
+  linear.renderRequest.diagramOptions.featureOverrides = [{ recordKey: 'record-1', biologicalFeatureId: 'f1234~1',
+    featureVisibility: null, labelVisibility: null, labelText: 'Request label' }];
+  // The drawing's settings (its draft's form and adv), its other settings a
+  // request can carry, and its per-feature edits.
+  const SETTINGS = ['form', 'adv', 'rules', 'unmanagedConfigOverrides',
+    'featureOverrides', 'featureVisibilityManualRules', 'canonicalLabelOverrideRows'];
   const settingsOf = (id) => {
     const drawing = state.drawingOf(id);
     return JSON.parse(JSON.stringify(Object.fromEntries(SETTINGS.map((name) => [name, drawing[name] ?? null]))));
@@ -896,4 +904,29 @@ test('a Session 49 drawing gets the same settings whichever drawing Load opens (
       .filter((key) => JSON.stringify(a[key]) !== JSON.stringify(b[key])).map((key) => `${id}.${name}.${key}`);
   })));
   assert.deepEqual(differs, []);
+});
+
+// DESIGN §6 (B2-D6): after the Session 46-48 upgrade, a 46-48 file and a 49
+// file are both a Session 49, so no Load reader compares a Session version
+// with a 46-48 threshold. Only `sourceFacts` (session-drawings-upgrade.js)
+// carries a source version; the band of a file is read through the
+// session-authority band predicates. Thresholds of 44 and below serve the
+// Session 27-44 path until Python converts it (B2d-4) and are not counted.
+test('no Load reader compares a Session version with a Session 46-48 threshold', () => {
+  const read = (name) => readFileSync(new URL(`../../gbdraw/web/js/services/${name}`, import.meta.url), 'utf8');
+  const THRESHOLD = String.raw`(?:MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
+    + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version|4[6-8])\b`;
+  const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`);
+  const frame = read('main-session-comparison-frame.js');
+  const converterStart = frame.indexOf('export const convertStoredProteinResultFrames = ');
+  assert.ok(converterStart >= 0);
+  const readers = {
+    'config.js': read('config.js'),
+    'main-session-comparison-frame.js convertStoredProteinResultFrames':
+      frame.slice(converterStart, frame.indexOf('\n};\n', converterStart))
+  };
+  const found = Object.entries(readers).flatMap(([name, source]) => source.split('\n')
+    .map((line, index) => ({ line: line.trim(), at: `${name}:${index + 1}` }))
+    .filter(({ line }) => !/^(\/\/|\*|\/\*\*)/.test(line) && compare.test(line)).map(({ at, line }) => `${at} ${line}`));
+  assert.deepEqual(found, []);
 });

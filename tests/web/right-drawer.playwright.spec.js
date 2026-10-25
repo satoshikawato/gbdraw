@@ -1076,7 +1076,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   expect(await verifyGroups()).toEqual(before);
   const rollback = await evaluateWithRetainedPromise(page, async (bytes) => {
     const { state } = await import('./js/state.js');
-    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const previous = state.collinearGroups.value;
     let beforePreviewMountCalled = false;
     const result = await importSession({ target: {
@@ -1360,7 +1360,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
   const failure = await evaluateWithRetainedPromise(page, async () => {
     const name = 'HmmtDNA_basic_circular.gbdraw-session.json';
     const file = new File([await (await fetch(`/gbdraw/web/gallery/sessions/${name}`)).arrayBuffer()], name);
-    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state);
+    const { importSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await importSession({ target: { files: [file], value: 'selected' } }, {
       beforePreviewMount: () => { throw new Error('S05 Session rollback probe'); }
     });
