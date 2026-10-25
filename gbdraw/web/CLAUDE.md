@@ -128,6 +128,7 @@ in the same change.
 | Session 46 mode slices and the split of a Session 27–44 draft into them; once the Session format holds a list of drawings, Python alone converts a Session 27–44, once at Load | `js/services/mode-scoped-migration.js` until then (Python: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
+| The displayed Result's text: marking its mounted root changed, the one write of the root into the Result, and the reader of the Results (R1) | `js/app/preview-runtime.js` (`commitActiveResultEdit`, `currentResults`) |
 | When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration; its Session 27–44 conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/gallery-session-migration.js` until then |
@@ -208,10 +209,11 @@ The right-side editor is a live-edit boundary. A single Feature, Label, Legend,
 or visibility edit must commit its canonical override state before returning;
 Generate, session save, and drawer close are never live-edit triggers. Route the
 mutation through the owning editor action so History records the same operation.
-If a mounted target exists, update it and the current Result synchronously
-before optional geometry reflow: a paint edit (R2) through the port
-`showEditorIntent` (R3), a label edit through the label owner
-(`app/feature-editor/label-actions.js`). A stroke action, a Legend row color,
+If a mounted target exists, update it synchronously before optional geometry
+reflow: a paint edit (R2) through the port `showEditorIntent` (R3), a label
+edit through the label owner (`app/feature-editor/label-actions.js`). The edit
+is in the current Result when the action returns: its text follows the mounted
+root on demand (R1). A stroke action, a Legend row color,
 and a Legend row deletion are each one transition, `editEditorIntent` in
 `app/app-setup.js`: the action writes the intent of the drawing it resolved,
 through that drawing's paint slice (R15), the port shows it when it changed,
@@ -259,6 +261,19 @@ The current Result changes only through:
   Session changed, it is stale and runs again from the current committed
   Session; if it fails, it commits nothing and does not run again.
 
+The displayed Result's text (`content`) follows its mounted root on demand. An
+edit by (a) or (b) changes the mounted root and marks it changed
+(`commitActiveResultEdit` in `app/preview-runtime.js`), without serializing it.
+`currentResults` in `app/preview-runtime.js` returns the Results; when the
+mounted root changed since it was last written, it first serializes the root
+once and writes the text into its Result, if the Result is still the one the
+root shows. Code that reads a Result's text, or holds the Results to restore
+them later (Save, a History checkpoint, the capture of a generated artifact or
+of a drawing's artifact slot), reads them through `currentResults`; the release
+of the mounted Result (a Result switch, a drawing switch, a Session Load, a
+Generate) writes it the same way first. Export reads the mounted root. No other
+code writes a mounted root into a Result.
+
 A setting that none of these applies is **Applies on Generate**: say so beside
 the control, write only the draft, and leave the Result unchanged. Never patch
 the Result from a draft value outside the declared live rows or with a helper's
@@ -283,7 +298,11 @@ Guards:
 - `tests/web/history-generated-authority.playwright.spec.js` and the label-reflow
   test in `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a draft edit
   of a setting that applies on Generate leaves the Result unchanged until
-  Generate).
+  Generate);
+- `tests/web/preview-runtime.test.mjs`: an edit serializes nothing; the first
+  `currentResults` after edits serializes once and writes once, and a second
+  serializes nothing; a release writes the departing Result's edits only while
+  it is still current; an unchanged root keeps the Result's bytes.
 
 ### R2: Lifetime of editor intent
 

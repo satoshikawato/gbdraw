@@ -17,6 +17,12 @@
           "rootCause": "P1",
           "job": "playwright-functional",
           "retireWhen": "never"
+        },
+        {
+          "path": "tests/web/preview-runtime.test.mjs",
+          "rootCause": "P9",
+          "job": "web-contracts-pr",
+          "retireWhen": "never"
         }
       ],
       "allowlists": []
