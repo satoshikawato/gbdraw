@@ -1685,12 +1685,14 @@ def test_linear_label_without_a_clear_place_moves_the_feature_label_off_it_and_c
     cover: tRNA-Leu moves to a new row (LP-D82 (b)), and the label, then over its leader only, is drawn above
     the record's leader lines on a white rounded box at 70 % opacity, where the leader behind it is no conflict."""
 
+    # 18 pt: since labels hold their drawn box, a 10 pt label without the underline sits 7.7 px under the
+    # tRNA-Leu letters, so its box clears them and the plain variant below would have no conflict to keep.
     region = RegionAnnotation(
         "control",
         CoordinateSpan(None, 1, 300),
         label="Mitochondrial control region",
         mark="highlight",
-        style=_SCENARIO_LABEL_STYLE,
+        style=RegionAnnotationStyle(label_font_size=18.0),
     )
     drawing = _six_kb_drawing(region, ((190, 210, "tRNA-Leu"),))
     svg = drawing.tostring()
@@ -1701,7 +1703,7 @@ def test_linear_label_without_a_clear_place_moves_the_feature_label_off_it_and_c
     assert not drawing._gbdraw_linear_label_fit.records and _region_label_crossings(svg) == []
     ((target, rect, text),) = _front_labels(svg)
     left, top, right, bottom = _text_ink_box(text, parents)
-    assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "10.0"
+    assert text.text == "Mitochondrial control region" and text.attrib["font-size"] == "18.0"
     assert right <= name[0] or left >= name[2] or bottom <= name[1] or top >= name[3]
     # Without an underline or a box (OV-1357) the label keeps its default place and its counted conflict, and
     # tRNA-Leu its row.
@@ -1711,7 +1713,7 @@ def test_linear_label_without_a_clear_place_moves_the_feature_label_off_it_and_c
     assert [record.fit.region_overlaps for record in plain._gbdraw_linear_label_fit.records] == [1]
     assert _leader_rise(svg, "tRNA-Leu") > _leader_rise(plain.tostring(), "tRNA-Leu")
     assert (rect.attrib["fill"], rect.attrib["fill-opacity"]) == ("#ffffff", "0.7")
-    assert float(rect.attrib["rx"]) == pytest.approx(0.18 * 10.0)
+    assert float(rect.attrib["rx"]) == pytest.approx(0.18 * 18.0)
     # The annotation's own group keeps its box and draws no second copy of the letters.
     (item,) = [group for group in root.iter() if group.attrib.get("id") == target]
     assert item.attrib["data-gbdraw-annotation-label"] == "Mitochondrial control region"
