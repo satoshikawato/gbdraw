@@ -111,6 +111,12 @@ const HANDLE_OFFSETS = Object.freeze({ allocated: 8, memAddr: 12, memSize: 16, t
  * @property {Promise<Uint8Array> | Uint8Array} bytes
  */
 /**
+ * The wheels the recipe installs, by role.
+ * @typedef {object} RuntimeWheels
+ * @property {readonly RuntimeWheel[]} localWheels the dependency wheels, in recipe order.
+ * @property {RuntimeWheel} gbdrawWheel the gbdraw browser wheel, installed last.
+ */
+/**
  * Where a JS object that Python still references lives: a named property of
  * globalThis, of the public Pyodide API or of its internal API, or the holder
  * itself. A null holder restores as null.
@@ -194,24 +200,41 @@ const DISTRIBUTION_PACKAGES = Object.freeze(PYODIDE_RUNTIME_WHEELS.map((path) =>
 const WHEEL_FOLDER = '/tmp/gbdraw-runtime-wheels';
 
 /**
- * Starts downloading the wheels the recipe installs from the page's server,
- * all at once: the dependency wheels in recipe order, then the gbdraw wheel.
- * A download that fails rejects with an error that names the wheel; nothing
- * awaits a download before the recipe or the snapshot check needs it, so a
- * rejection is observed here.
- * @param {{ localWheelUrls: readonly string[], gbdrawWheelUrl: string }} urls
- * @returns {RuntimeWheel[]}
+ * Starts downloading one wheel. A download that fails, by its HTTP status or
+ * on the network, rejects with an error that names the wheel. The rejection is
+ * marked observed here: a consumer awaits the download only when the recipe or
+ * the snapshot check needs it, and another download may fail first.
+ * @param {string} source
+ * @param {string} label
+ * @returns {RuntimeWheel}
  */
-export const runtimeWheelDownloads = ({ localWheelUrls, gbdrawWheelUrl }) => [
-  ...localWheelUrls.map((url, index) => /** @type {const} */ ([url, `Pyodide dependency wheel #${index + 1}`])),
-  /** @type {const} */ ([gbdrawWheelUrl, 'gbdraw browser wheel'])
-].map(([source, label]) => {
-  const bytes = fetch(source).then(async (response) => {
-    if (!response.ok) throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${source}`);
-    return new Uint8Array(await response.arrayBuffer());
+const wheelDownload = (source, label) => {
+  /** @returns {Promise<Uint8Array | string>} The bytes, or why there are none. */
+  const read = async () => {
+    try {
+      const response = await fetch(source);
+      return response.ok ? new Uint8Array(await response.arrayBuffer()) : String(response.status);
+    } catch (error) {
+      return String(error);
+    }
+  };
+  const bytes = read().then((result) => {
+    if (typeof result === 'string') throw new Error(`Missing packaged asset: ${label} (${result}) at ${source}`);
+    return result;
   });
   bytes.catch(() => {});
   return { source, bytes };
+};
+
+/**
+ * Starts downloading the wheels the recipe installs from the page's server,
+ * all at once.
+ * @param {{ localWheelUrls: readonly string[], gbdrawWheelUrl: string }} urls
+ * @returns {RuntimeWheels}
+ */
+export const runtimeWheelDownloads = ({ localWheelUrls, gbdrawWheelUrl }) => ({
+  localWheels: localWheelUrls.map((url, index) => wheelDownload(url, `Pyodide dependency wheel #${index + 1}`)),
+  gbdrawWheel: wheelDownload(gbdrawWheelUrl, 'gbdraw browser wheel')
 });
 
 /**
@@ -221,25 +244,35 @@ export const runtimeWheelDownloads = ({ localWheelUrls, gbdrawWheelUrl }) => [
  * any failure. A Worker's cold boot and the snapshot builder both run it, so
  * a snapshot holds what a cold boot installs.
  * @param {PyodideInstaller} pyodide
- * @param {{ wheels: readonly RuntimeWheel[], beforeInstall?: () => Promise<void> }} inputs
- *   wheels: the dependency wheels in recipe order, then the gbdraw wheel.
+ * @param {{ wheels: RuntimeWheels, beforeInstall?: () => Promise<void> }} inputs
  *   beforeInstall runs once micropip is loaded.
  */
 export const installRuntimePackages = async (pyodide, { wheels, beforeInstall }) => {
   await pyodide.loadPackage([...DISTRIBUTION_PACKAGES]);
   const micropip = pyodide.pyimport('micropip');
   await beforeInstall?.();
-  const files = await Promise.all(wheels.map(async ({ source, bytes }) => (
+  const files = await Promise.all([...wheels.localWheels, wheels.gbdrawWheel].map(async ({ source, bytes }) => (
     /** @type {const} */ ([`${WHEEL_FOLDER}/${fileName(source)}`, await bytes])
   )));
+  /** @type {string[]} */
+  const written = [];
+  const removeWheelFiles = () => {
+    written.forEach((path) => pyodide.FS.unlink(path));
+    pyodide.FS.rmdir(WHEEL_FOLDER);
+  };
   pyodide.FS.mkdirTree(WHEEL_FOLDER);
   try {
-    files.forEach(([path, data]) => pyodide.FS.writeFile(path, data, { canOwn: true }));
+    files.forEach(([path, data]) => {
+      pyodide.FS.writeFile(path, data, { canOwn: true });
+      written.push(path);
+    });
     await micropip.install(files.map(([path]) => `emfs:${path}`));
-  } finally {
-    files.forEach(([path]) => pyodide.FS.unlink(path));
-    pyodide.FS.rmdir(WHEEL_FOLDER);
+  } catch (error) {
+    // The install's error is the one to report, whatever the cleanup meets.
+    try { removeWheelFiles(); } catch { /* the folder stays in /tmp */ }
+    throw error;
   }
+  removeWheelFiles();
 };
 
 /**
@@ -550,7 +583,7 @@ const fetchBytes = async (url) => {
  * the wheels and the helper source this Worker would install. state.json is
  * fetched first, so a missing or blocked snapshot fails before any other
  * snapshot file.
- * @param {{ folderUrl: string, wheels: readonly RuntimeWheel[] }} inputs
+ * @param {{ folderUrl: string, wheels: RuntimeWheels }} inputs
  *   wheels: runtimeWheelDownloads of the wheels this Worker would install.
  * @returns {Promise<PendingPyodideSnapshot>}
  */
@@ -565,11 +598,12 @@ export const fetchPyodideSnapshot = async ({ folderUrl, wheels }) => {
   // key check below throws first.
   memoryPromise.catch(() => {});
   filesPromise.catch(() => {});
-  const [helperFile, ...wheelBytes] = await Promise.all([fetchBytes(PYTHON_HELPER_FILE.href), ...wheels.map(({ bytes }) => bytes)]);
-  const gbdrawWheel = /** @type {Uint8Array} */ (wheelBytes.pop());
-  const key = await pyodideSnapshotKey({
-    localWheels: wheelBytes.map((bytes, index) => /** @type {const} */ ([wheels[index].source, bytes])), gbdrawWheel, helperFile
-  });
+  const [helperFile, gbdrawWheel, localWheels] = await Promise.all([
+    fetchBytes(PYTHON_HELPER_FILE.href),
+    wheels.gbdrawWheel.bytes,
+    Promise.all(wheels.localWheels.map(async ({ source, bytes }) => /** @type {const} */ ([source, await bytes])))
+  ]);
+  const key = await pyodideSnapshotKey({ localWheels, gbdrawWheel, helperFile });
   if (state.key !== key) throw snapshotFailure('Pyodide snapshot was built from another recipe, wheel or helper source');
   assertRestorable(state);
   // Released by complete(): about 170 MB.

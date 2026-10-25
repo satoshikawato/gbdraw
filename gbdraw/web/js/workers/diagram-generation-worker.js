@@ -383,7 +383,7 @@ const initializeRuntime = async ({
       wheels,
       beforeInstall: async () => {
         reportStep(2);
-        await Promise.all(wheels.map(({ bytes }) => bytes));
+        await Promise.all([...wheels.localWheels, wheels.gbdrawWheel].map(({ bytes }) => bytes));
         reportStep(3);
       }
     });
