@@ -9,7 +9,10 @@ entries only when a reader asks for them.
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import pickle
+import re
 import types
 from pathlib import Path
 
@@ -22,6 +25,7 @@ from pandas import DataFrame
 
 import gbdraw.features.ids as ids_module
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
+from gbdraw.api import CircularRequestPlan, build_request_plan_diagram
 from gbdraw.api.request_render import build_request_diagram, plan_request
 from gbdraw.api.requests import (
     CircularDiagramRequest,
@@ -269,3 +273,85 @@ def test_catalog_entries_equal_the_source_features_they_capture() -> None:
     assert catalog.entries[3].biological_feature_id == f"{hashes[3]}~3"
     assert catalog.source_hashes == dict(enumerate(hashes))
     assert catalog.entries is catalog.entries
+
+
+_STAMP_ATTR = "_gbdraw_source_feature_hash"
+
+
+def _circular_request(source: InMemoryRecordSource) -> CircularDiagramRequest:
+    return CircularDiagramRequest(
+        records=(RecordInput(source, record_key="one"),),
+        options=CircularDiagramOptions(selected_features_set=("CDS",)),
+    )
+
+
+def _drawn_ids(plan: object) -> set[str]:
+    return set(re.findall(r'id="(f[0-9a-f]{8})', build_request_plan_diagram(plan).drawing.tostring()))
+
+
+def test_planning_leaves_the_callers_features_without_a_stamp() -> None:
+    from_source = _record()
+    plan_request(_circular_request(InMemoryRecordSource(from_source)))
+    bare = _record()
+    CircularRequestPlan(request=_circular_request(InMemoryRecordSource(bare)), records=(bare,), layout=None)
+    for record in (from_source, bare):
+        assert all(not hasattr(feature, _STAMP_ATTR) for feature in record.features)
+
+
+def test_a_bare_records_plan_draws_a_feature_moved_after_planning_at_its_current_location() -> None:
+    record = _record()
+    plan = CircularRequestPlan(
+        request=_circular_request(InMemoryRecordSource(record)), records=(record,), layout=None,
+    )
+    moved = record.features[1]
+    moved.location = SimpleLocation(150, 450, strand=1)
+    fresh = _fresh_hash(moved, record)
+    assert compute_source_feature_hash(moved, record) == fresh
+    assert fresh in _drawn_ids(plan)
+
+
+def test_a_replan_with_the_earlier_catalog_draws_a_moved_feature_at_its_current_location() -> None:
+    first = plan_request(_circular_request(InMemoryRecordSource(_record())))
+    planned = first.records[0]
+    old_hash = compute_source_feature_hash(planned.features[1], planned)
+    planned.features[1].location = SimpleLocation(150, 450, strand=1)
+    again = plan_request(_circular_request(
+        InMemoryRecordSource(planned, source_features=first.provenance[0].source_features)
+    ))
+    moved = again.records[0].features[1]
+    fresh = _fresh_hash(moved, again.records[0])
+    assert fresh != old_hash
+    assert compute_source_feature_hash(moved, again.records[0]) == fresh
+    assert {fresh, old_hash} & _drawn_ids(again) == {fresh}
+
+
+def test_a_stamp_is_refused_for_a_changed_type_and_carried_to_a_copy_only_while_valid() -> None:
+    from gbdraw.core.record_metadata import _copy_source_feature_identity
+
+    record = plan_request(_circular_request(InMemoryRecordSource(_record()))).records[0]
+    feature = record.features[1]
+    stamped = compute_source_feature_hash(feature, record)
+    feature.type = "gene"
+    assert compute_source_feature_hash(feature, record) == _fresh_hash(feature, record) != stamped
+    feature.type = "CDS"
+    assert compute_source_feature_hash(feature, record) == stamped
+
+    copy_of = SeqFeature(location=SimpleLocation(10, 20, strand=1), type="CDS")
+    _copy_source_feature_identity(feature, copy_of, fallback_index=1, coord_base=1, coord_step=1)
+    assert getattr(copy_of, _STAMP_ATTR).location is copy_of.location
+    assert compute_source_feature_hash(copy_of, record) == stamped
+
+    feature.location = SimpleLocation(150, 450, strand=1)
+    stale_copy = SeqFeature(location=feature.location, type="CDS")
+    _copy_source_feature_identity(feature, stale_copy, fallback_index=1, coord_base=1, coord_step=1)
+    assert not hasattr(stale_copy, _STAMP_ATTR)
+
+
+def test_a_plan_and_its_catalog_survive_deepcopy_and_pickle() -> None:
+    plan = plan_request(_circular_request(InMemoryRecordSource(_record())))
+    catalog = plan.provenance[0].source_features
+    assert catalog.entries
+    for value in (catalog, plan.provenance[0], plan):
+        copy.deepcopy(value)
+        pickle.loads(pickle.dumps(value))
+    assert pickle.loads(pickle.dumps(catalog)).source_hashes == catalog.source_hashes

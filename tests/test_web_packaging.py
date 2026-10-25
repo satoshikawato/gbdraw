@@ -9,6 +9,7 @@ import importlib.util
 import io
 import json
 import os
+import posixpath
 import re
 import shutil
 import socket
@@ -277,7 +278,8 @@ def test_browser_wheel_carries_the_pyodide_bytecode_of_every_module() -> None:
         names = set(zf.namelist())
         sources = sorted(name for name in names if name.endswith(".py"))
         expected = {
-            f"{name.rpartition('/')[0]}/__pycache__/{name.rpartition('/')[2][:-3]}.{tag}.pyc" for name in sources
+            posixpath.join(posixpath.dirname(name), "__pycache__", f"{posixpath.basename(name)[:-3]}.{tag}.pyc")
+            for name in sources
         }
         assert sources and expected <= names
         assert {name for name in names if name.endswith(".pyc")} == expected
