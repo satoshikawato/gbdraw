@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from './preview-affordances.js';
 
 /**
  * A Vue ref, or the `{ value }` cell that stands in for one (a Gallery
@@ -104,11 +105,6 @@ const stripEditorOnlyCursorStyles = (svg) => {
     }
   });
 };
-
-// Marks a match band that the preview made a button (role, tabindex and the
-// translated aria-label), so that saving and export find it by this marker,
-// not by its label text.
-export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
 
 /**
  * @param {Element | null | undefined} svg

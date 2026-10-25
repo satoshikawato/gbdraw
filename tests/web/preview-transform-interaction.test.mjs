@@ -51,6 +51,7 @@ await copyModule('utils/i18n.js', 'utils/i18n.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
+await copyModule('services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/drawn-groups.js', 'services/drawn-groups.js');

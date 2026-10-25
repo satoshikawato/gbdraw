@@ -1382,8 +1382,9 @@ const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
 ))).toString('utf8'));
 const FORCED_STROKES = 'forced-label-underlay-strokes.v44.gbdraw-session.json.gz';
 
-// gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30) named a comparison
-// match only by `data-gbdraw-pairwise-match-id`. The legacy admission (here
+// `main` from 2026-06-18 to 2026-07-19 (Sessions 27 to 32), which includes
+// gbdraw 0.12.0, 0.12.1 and 0.13.0 (the Session 29 and 30 fixtures below), named
+// a comparison match only by `data-gbdraw-pairwise-match-id`. The legacy admission (here
 // with a sanitizer that keeps its input) renames it once: the admitted Result
 // has the stored IDs under `data-gbdraw-match-id` only, and the popup payload
 // reads them from there. The real sanitizer and selection on a legacy Result

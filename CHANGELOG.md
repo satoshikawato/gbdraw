@@ -14,8 +14,8 @@ write-up of a release.
 
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
-  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app before 2026-07-19 (Sessions 29
-  to 31), and the SVG files of those versions, carry only the old name. They still load in the web app, and
+  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app from 2026-06-18 to
+  2026-07-19 (Sessions 27 to 32), and the SVG files of those versions, carry only the old name. They still load in the web app, and
   `enrich_svg` still takes those SVG files: the old name is renamed once when such a file is read. `enrich_svg` no
   longer refuses an SVG file whose element carries both names with different values; it keeps
   `data-gbdraw-match-id` and drops the old name.

@@ -32,6 +32,7 @@ await writeFile(
   await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'),
   'utf8'
 );
+await cp(join(sourceDir, 'services', 'preview-affordances.js'), join(tempDir, 'services', 'preview-affordances.js'));
 const featureSelectionUrl = pathToFileURL(join(tempDir, 'app', 'feature-selection.js'));
 const serializationUrl = pathToFileURL(join(tempDir, 'services', 'svg-serialization.js'));
 
@@ -40,7 +41,8 @@ const {
   normalizeFeatureSelectionId,
   stripFeatureSelectionClasses
 } = await import(featureSelectionUrl);
-const { PREVIEW_MATCH_BUTTON_ATTRIBUTE, stripTransientPreviewState } = await import(serializationUrl);
+const { stripTransientPreviewState } = await import(serializationUrl);
+const { PREVIEW_MATCH_BUTTON_ATTRIBUTE } = await import(pathToFileURL(join(tempDir, 'services', 'preview-affordances.js')));
 
 class FakeElement {
   constructor(className = '', style = '') {

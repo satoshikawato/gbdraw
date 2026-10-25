@@ -33,9 +33,9 @@ INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 MATCH_ID_ATTRIBUTE = "data-gbdraw-match-id"
 # Attributes a stored SVG of an older gbdraw wrote under another name: legacy
-# name -> current name. gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30)
-# and ``main`` until fca1e886f (Session 31, 2026-07-19) named a comparison
-# match only by ``data-gbdraw-pairwise-match-id``. An SVG
+# name -> current name. ``main`` from cc707a5be (2026-06-18, Session 27) until
+# 7ec9ce7cc (2026-07-19, Session 32), which includes gbdraw 0.12.0, 0.12.1 and
+# 0.13.0, named a comparison match only by ``data-gbdraw-pairwise-match-id``. An SVG
 # from outside is renamed once when it is admitted (`migrate_legacy_svg_attributes`
 # here, `services/svg-result-normalization.js` in the Web, which reads this
 # table through tools/generate_web_contracts.py); every other reader reads

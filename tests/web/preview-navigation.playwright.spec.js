@@ -198,10 +198,6 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 1 });
 });
 
-// OV-1537: Chrome sends the click of a drag to the element that holds both the
-// press and the release, here the svg, so a pan that began on the figure's
-// background and ends with a feature or a match under the pointer must open
-// nothing; a click on the same point still opens its popup.
 // OV-1842: in any language, the match buttons the preview adds (role, tabindex
 // and a translated aria-label) are found by their marker and left out of what
 // is saved and exported.
@@ -230,6 +226,10 @@ test('a Result saved in Japanese keeps none of the preview match buttons', async
   expect(saved.buttons).toBe(0);
 });
 
+// OV-1537: Chrome sends the click of a drag to the element that holds both the
+// press and the release, here the svg, so a pan that began on the figure's
+// background and ends with a feature or a match under the pointer must open
+// nothing; a click on the same point still opens its popup.
 test('a pan that ends over a feature or a match opens no popup', async ({ page }) => {
   test.setTimeout(180000);
   await page.setViewportSize({ width: 1600, height: 1000 });

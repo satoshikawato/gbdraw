@@ -47,6 +47,7 @@ await copyModule(
   'gbdraw/web/js/services/svg-serialization.js',
   'services/svg-serialization.js'
 );
+await copyModule('gbdraw/web/js/services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'

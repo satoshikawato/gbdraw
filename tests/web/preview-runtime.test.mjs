@@ -26,6 +26,7 @@ const serviceNames = [
   'svg-result-ingestion.js',
   'svg-sanitization.js',
   'svg-serialization.js',
+  'preview-affordances.js',
   'svg-transform.js'
 ];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));

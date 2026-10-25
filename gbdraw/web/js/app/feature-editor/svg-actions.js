@@ -29,7 +29,7 @@ import { fillRecordOf, legendEntryKey } from '../../services/drawing/paint.js';
 import { PREVIEW_ITEM_SELECTOR, previewItemTarget } from '../preview-item-popup.js';
 import { DRAWN_ELEMENT_SELECTOR, drawnElementSection } from '../../services/settings-sections.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/svg-serialization.js';
+import { PREVIEW_MATCH_BUTTON_ATTRIBUTE } from '../../services/preview-affordances.js';
 import {
   ANNOTATION_ID_ATTRIBUTE, ANNOTATION_SELECTOR, REGION_LABEL_FOR_ATTRIBUTE, REGION_LABEL_FRONT_SELECTOR
 } from '../../services/drawn-groups.js';
