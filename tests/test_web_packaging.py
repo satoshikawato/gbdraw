@@ -227,6 +227,64 @@ def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module._assert_packaged_assets()
 
 
+def _load_browser_wheel_bytecode_module():
+    spec = importlib.util.spec_from_file_location("browser_wheel_bytecode", REPO_ROOT / "tools" / "browser_wheel_bytecode.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_browser_wheel_bytecode_adds_an_unchecked_pyc_per_module_to_record(tmp_path: Path) -> None:
+    bytecode = _load_browser_wheel_bytecode_module()
+    source = tmp_path / "pkg-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(source, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("pkg/__init__.py", (2020, 1, 2, 3, 4, 6)), "VALUE = 1\n")
+        zf.writestr(zipfile.ZipInfo("pkg/data.toml", (2020, 1, 2, 3, 4, 6)), "a = 1\n")
+        zf.writestr("pkg-1.0.dist-info/RECORD", "pkg/__init__.py,sha256=x,10\npkg/data.toml,sha256=y,6\npkg-1.0.dist-info/RECORD,,\n")
+    targets = [tmp_path / "first.whl", tmp_path / "second.whl"]
+    assert [bytecode.add_bytecode(str(source), str(target)) for target in targets] == [1, 1]
+    assert targets[0].read_bytes() == targets[1].read_bytes()
+    pyc_name = f"pkg/__pycache__/__init__.{sys.implementation.cache_tag}.pyc"
+    with zipfile.ZipFile(targets[0]) as zf:
+        assert zf.namelist() == [
+            "pkg/__init__.py", pyc_name, "pkg/data.toml", "pkg-1.0.dist-info/RECORD"
+        ]
+        pyc = zf.read(pyc_name)
+        record = zf.read("pkg-1.0.dist-info/RECORD").decode().splitlines()
+        assert zf.getinfo(pyc_name).date_time == (2020, 1, 2, 3, 4, 6)
+    # PEP 552: this interpreter's magic, then flags 0b01 (hash-based, unchecked).
+    assert pyc[:4] == importlib.util.MAGIC_NUMBER
+    assert int.from_bytes(pyc[4:8], "little") == 1
+    digest = base64.urlsafe_b64encode(hashlib.sha256(pyc).digest()).rstrip(b"=").decode()
+    assert record == [
+        "pkg/__init__.py,sha256=x,10",
+        "pkg/data.toml,sha256=y,6",
+        f"{pyc_name},sha256={digest},{len(pyc)}",
+        "pkg-1.0.dist-info/RECORD,,",
+    ]
+
+
+@pytest.mark.browser
+def test_browser_wheel_carries_the_pyodide_bytecode_of_every_module() -> None:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
+
+    _, browser_wheel_path = ensure_prepared_browser_wheel()
+    python = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))["info"]["python"]
+    major, minor = python.split(".")[:2]
+    tag = f"cpython-{major}{minor}"
+    with zipfile.ZipFile(browser_wheel_path) as zf:
+        names = set(zf.namelist())
+        sources = sorted(name for name in names if name.endswith(".py"))
+        expected = {
+            f"{name.rpartition('/')[0]}/__pycache__/{name.rpartition('/')[2][:-3]}.{tag}.pyc" for name in sources
+        }
+        assert sources and expected <= names
+        assert {name for name in names if name.endswith(".pyc")} == expected
+        flags = {int.from_bytes(zf.read(name)[4:8], "little") for name in expected}
+    assert flags == {1}
+
+
 @pytest.mark.browser
 def test_browser_wheel_excludes_hosted_web_assets() -> None:
     verify_module, browser_wheel_path = ensure_prepared_browser_wheel()
@@ -1067,12 +1125,14 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
         prepare_module, "_load_build_support_module", lambda: build_support
     )
     monkeypatch.setattr(prepare_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(prepare_module, "add_pyodide_bytecode", lambda wheel: calls.append(("bytecode", wheel.name)))
 
     assert prepare_module.prepare_browser_wheel() == 0
     assert (web_root / expected_name).exists()
     assert calls == [
         "notices",
         "wheel",
+        ("bytecode", expected_name),
         ("config", {"wheel_name": expected_name}),
         "validate",
     ]

@@ -21,6 +21,18 @@ def _load_build_support_module():
     return SimpleNamespace(**run_path(str(REPO_ROOT / "gbdraw" / "_build_support.py")))
 
 
+def add_pyodide_bytecode(wheel: Path) -> None:
+    """Add the vendored Pyodide's bytecode of every module to the wheel (tools/browser_wheel_bytecode.py)."""
+
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError(
+            "The browser wheel needs Node.js (`node`): tools/compile_browser_wheel_bytecode.mjs compiles its "
+            "bytecode with the vendored Pyodide."
+        )
+    subprocess.run([node, str(REPO_ROOT / "tools" / "compile_browser_wheel_bytecode.mjs"), str(wheel)], check=True)
+
+
 def prepare_browser_wheel(*, build_isolation: bool = True) -> int:
     build_support = _load_build_support_module()
     expected_name = build_support.expected_browser_wheel_name()
@@ -71,6 +83,7 @@ def prepare_browser_wheel(*, build_isolation: bool = True) -> int:
             with zipfile.ZipFile(built_wheel) as zf:
                 if browser_wheel_member in set(zf.namelist()):
                     raise RuntimeError(f"Browser wheel recursively contains itself: {browser_wheel_member}")
+            add_pyodide_bytecode(built_wheel)
 
             target_path = WEB_ROOT / expected_name
             shutil.copy2(built_wheel, target_path)
