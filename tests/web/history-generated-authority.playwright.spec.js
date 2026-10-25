@@ -131,7 +131,7 @@ test('Live palette and its History keep the scale draft out of the committed req
   const page = await load(browser);
   try {
     await generate(page);
-    const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     await page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       await window.__GBDRAW_HISTORY__.runUndoable('Change scale', () => { state.activeDrawing().adv.scale_interval = 12345; });
@@ -142,7 +142,7 @@ test('Live palette and its History keep the scale draft out of the committed req
       });
     });
     expect(await committedScaleInterval(page)).not.toBe(12345);
-    const after = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const after = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     expect(after).not.toBe(before);
     for (const action of ['undo','redo']) {
       await page.evaluate(action => window.__GBDRAW_HISTORY__[action](),action);
@@ -158,7 +158,7 @@ test('Live palette and its History keep the scale draft out of the committed req
     await expect(paletteHelp).toContainText('Live edit');
     await page.getByText('Palette instant preview',{exact:true}).click();
     await expect(paletteHelp).toContainText('Applies on Generate');
-    const applied=await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content);
+    const applied=await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content);
     const next=await page.evaluate(()=>window.__GBDRAW_APP__.paletteNames.find(name=>name!==window.__GBDRAW_APP__.selectedPalette));
     const paletteSelect=page.getByRole('combobox',{name:'Palette',exact:true});
     const previous=await paletteSelect.inputValue();
@@ -175,16 +175,16 @@ test('Live palette and its History keep the scale draft out of the committed req
     expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount+1);
     await expect(page.locator('[data-default-color-application-help]')).toContainText('Applies on Generate');
     await noDerivedStatus(page);
-    expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
+    expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).toBe(applied);
     await page.evaluate(async()=>{
       window.__GBDRAW_APP__.editDefaultColor('CDS', '#345678');
       await window.Vue.nextTick();
     });
-    expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).toBe(applied);
+    expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).toBe(applied);
     await page.getByText('Palette instant preview',{exact:true}).click();
     await expect(paletteHelp).toContainText('Live edit');
     await expect(page.locator('[data-default-color-application-help]')).toContainText('Live edit');
-    expect(await page.evaluate(()=>window.__GBDRAW_APP__.results[0].content)).not.toBe(applied);
+    expect(await page.evaluate(()=>window.__GBDRAW_APP__.currentResults()[0].content)).not.toBe(applied);
     await noDerivedStatus(page);
   } finally { await page.context().close(); }
 });
@@ -192,9 +192,9 @@ test('Live palette and its History keep the scale draft out of the committed req
 
 // PD-OI-059/PD-OI-060 (D-04, D-05) and OIC-027: Applies on Generate settings
 // never rewrite the current Result; only a successful Generate applies them.
-const resultContent = page => page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+const resultContent = page => page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
 const resultRewrittenWithin = (page, original, timeout) => page.waitForFunction(
-  original => window.__GBDRAW_APP__.results[0]?.content !== original, original, { timeout }
+  original => window.__GBDRAW_APP__.currentResults()[0]?.content !== original, original, { timeout }
 ).then(() => true, () => false);
 const expectUnchangedResult = async (page, committed, timeout = 3000) => {
   expect(await resultRewrittenWithin(page, committed, timeout), 'Result rewritten before Generate').toBe(false);

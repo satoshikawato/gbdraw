@@ -337,7 +337,7 @@ const saveAndReloadSession = async (page) => {
 };
 
 const drawnDefinitionLines = (page) => page.evaluate(() => {
-  const doc = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0]?.content || '', 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0]?.content || '', 'image/svg+xml');
   return [...doc.querySelectorAll('text[data-definition-line-kind]')].map((text) => text.textContent);
 });
 

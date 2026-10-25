@@ -113,7 +113,7 @@ const exported = async (page, action) => {
 };
 
 const drawnFonts = (page) => page.evaluate(() => {
-  const content = String(window.__GBDRAW_APP__.results[0]?.content || '');
+  const content = String(window.__GBDRAW_APP__.currentResults()[0]?.content || '');
   const label = document.querySelector('.gbdraw-preview-surface svg text[font-family]');
   return {
     families: [...new Set([...content.matchAll(/font-family="([^"]*)"/g)].map((match) => match[1]))],
@@ -393,7 +393,7 @@ test('PDF export draws each label once on its box, centred on its SVG anchor', a
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180_000 });
   await generateAndWaitForResult(page);
   const svgFile = testInfo.outputPath('lambda.svg');
-  writeFileSync(svgFile, await page.evaluate(() => String(window.__GBDRAW_APP__.results[0].content)));
+  writeFileSync(svgFile, await page.evaluate(() => String(window.__GBDRAW_APP__.currentResults()[0].content)));
   const pdf = await exported(page, 'downloadPDF');
   const pdfFile = testInfo.outputPath('lambda.pdf');
   writeFileSync(pdfFile, pdf.bytes);

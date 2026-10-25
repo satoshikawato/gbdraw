@@ -645,7 +645,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   await expect(resolution).toContainText('Saved comparison preserved as read-only');
   const imported = await page.evaluate(() => ({
     intent: JSON.parse(JSON.stringify(window.__GBDRAW_APP__.importedComparisonIntent)),
-    result: window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex]?.content,
+    result: window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex]?.content,
     undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   expect(imported.intent).toMatchObject({
@@ -676,7 +676,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
       outcome,
       error: app.errorLog,
       action: app.importedComparisonIntent.action,
-      result: app.results[app.selectedResultIndex]?.content,
+      result: app.currentResults()[app.selectedResultIndex]?.content,
       comparisons: committed?.renderRequest?.comparisons,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
     };
@@ -1116,7 +1116,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     app.adv.pairwise_match_style = style_;
     app.adv.comparison_height = height_;
     const result = await app.runAnalysis();
-    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
     const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
     return {
@@ -1507,7 +1507,7 @@ const prepareUploadedTablePair = async (page) => {
       lastModified: name_.length
     }));
     const result = await app.runAnalysis();
-    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
     const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
     return {
@@ -1605,7 +1605,7 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return { result, code: app.errorLog?.code ?? null,
-      content: String(app.results?.[app.selectedResultIndex]?.content || '') };
+      content: String(app.currentResults()[app.selectedResultIndex]?.content || '') };
   });
   expect(blocked).toEqual({ result: { status: 'blocked', reason: 'missing-blast-tsv' }, code: null,
     content: drawn.content });

@@ -98,7 +98,7 @@ for (const mode of ['circular', 'linear']) {
     await expect(start).toBeEnabled();
     await generateFromControl(page);
     const initial = await page.evaluate(() => ({
-      result: window.__GBDRAW_APP__.results[0].content,
+      result: window.__GBDRAW_APP__.currentResults()[0].content,
       feature: window.__GBDRAW_APP__.extractedFeatures[0]
     }));
     expect(initial.result).toContain('<svg');
@@ -111,7 +111,7 @@ for (const mode of ['circular', 'linear']) {
     await expect(placement.locator('option[value=main]')).toHaveJSProperty('disabled', false);
     await placement.selectOption('main');
     await expect.poll(() => page.evaluate(() => { const app = window.__GBDRAW_APP__; return app.featurePlacementActions.valueFor(app.extractedFeatures[0]); })).toBe('main');
-    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(initial.result);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(initial.result);
     await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     await page.locator('.drawer-toggle').click();
     const tolerance = await reveal(page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true, includeHidden: true }));
@@ -150,8 +150,7 @@ for (const mode of ['circular', 'linear']) {
     await page.getByRole('button', { name: /^Redo/ }).first().click();
     await expect(start).toHaveValue('91');
     const savedResult = await page.evaluate(async () => {
-      const { serializeResults } = await import('./js/services/config.js');
-      return serializeResults()[0].content;
+      return window.__GBDRAW_APP__.currentResults()[0].content;
     });
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'Joint surfaces'; });
     const downloadPromise = page.waitForEvent('download');
@@ -174,7 +173,7 @@ for (const mode of ['circular', 'linear']) {
     await openApp(loaded);
     await loaded.locator('input[accept^=".json,"]').setInputFiles(savedPath);
     await expect.poll(() => loaded.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
-    const loadedResult = await loaded.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const loadedResult = await loaded.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     expect(await svgStructure(loaded, loadedResult)).toEqual(await svgStructure(loaded, savedResult));
     await loaded.locator('.drawer-toggle').click();
     await loaded.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();
@@ -188,7 +187,7 @@ for (const mode of ['circular', 'linear']) {
     await loaded.getByRole('button', { name: /^Undo/ }).first().click();
     await expect.poll(() => loaded.evaluate(() => { const app = window.__GBDRAW_APP__; return app.featurePlacementActions.valueFor(app.extractedFeatures[0]); })).toBe('main');
     await generateFromControl(loaded);
-    expect(await loaded.evaluate(() => window.__GBDRAW_APP__.results[0].content)).not.toBe(savedResult);
+    expect(await loaded.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).not.toBe(savedResult);
     await context.close();
   });
 }
@@ -356,7 +355,7 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   await page.locator('.drawer-toggle').click();
   await generateFromControl(page);
   const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length);
-  const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
   // The requested start left with the replaced source (OV-374: the field shows the current start).
   await expect(start).toHaveValue('1');
@@ -365,7 +364,7 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   await page.getByRole('button', { name: /^Undo/ }).first().click();
   await expect(start).toHaveValue('71');
   expect(await placements()).toBe(1);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before);
   // The feature survives a FASTA replacement (same record, type, and
   // location), so the source-replacing Generate applies its placement.
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });

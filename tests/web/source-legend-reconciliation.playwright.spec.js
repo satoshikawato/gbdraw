@@ -26,14 +26,14 @@ const inspect = page => page.evaluate(async () => {
   const captions = svg => [...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]') || [])]
     .map(e => ({ caption: e.getAttribute('data-legend-key'), color: e.querySelector('path[fill]')?.getAttribute('fill') }))
     .sort((a, b) => a.caption.localeCompare(b.caption));
-  const result = s.results.value[s.selectedResultIndex.value].content;
+  const result = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
   const svg = new DOMParser().parseFromString(result, 'image/svg+xml').documentElement;
   return JSON.parse(JSON.stringify({
     entries: s.activeDrawing().legendEntries.value.map(e => e.caption).sort(), original: s.originalLegendOrder.value,
     entryState: s.activeDrawing().legendEntries.value, originalColors: s.originalLegendColors.value,
     manualRules: s.activeDrawing().manualSpecificRules, strokes: s.activeDrawing().legendStrokeOverrides,
     selectedResult: s.selectedResultIndex.value,
-    resultsDigest: await digest(s.results.value),
+    resultsDigest: await digest(window.__GBDRAW_APP__.currentResults()),
     mountedDigest: await digest(s.svgContainer.value.querySelector('svg').outerHTML),
     requestDigest: await digest(getCommittedCanonicalRenderRequest()),
     result: captions(svg), mounted: captions(s.svgContainer.value.querySelector('svg')),
@@ -66,7 +66,7 @@ const rowStyle = (page, caption) => page.evaluate(async target => {
     const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
     return swatch && [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), swatch.getAttribute('stroke-width')];
   });
-  const content = s.results.value[s.selectedResultIndex.value].content;
+  const content = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
   return {
     result: styles(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
     mounted: styles(s.svgContainer.value.querySelector('svg'))
@@ -89,7 +89,7 @@ const expectDrawnName = async (page, key, name) => {
       const row = group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`);
       return row && drawnLegendRowName(row);
     });
-    const content = s.results.value[s.selectedResultIndex.value].content;
+    const content = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
     return {
       result: names(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
       mounted: names(s.svgContainer.value.querySelector('svg'))
@@ -192,7 +192,7 @@ const rowStroke = (page, caption) => page.evaluate(async target => {
     const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
     return swatch && [color(swatch.getAttribute('stroke')), Number(swatch.getAttribute('stroke-width'))];
   });
-  const content = s.results.value[s.selectedResultIndex.value].content;
+  const content = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
   return {
     result: strokes(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
     mounted: strokes(s.svgContainer.value.querySelector('svg'))
@@ -908,7 +908,7 @@ const drawnStrokes = page => page.evaluate(async () => {
     swatches: Object.fromEntries(getAllFeatureLegendGroups(svg).flatMap((group, index) => [...group.querySelectorAll('g[data-legend-key]')]
       .map(entry => [`${index}:${entry.getAttribute('data-legend-key')}`, stroke(getLegendEntrySwatch(entry))])))
   });
-  const content = s.results.value[s.selectedResultIndex.value].content;
+  const content = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
   return {
     result: read(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
     mounted: read(s.svgContainer.value.querySelector('svg'))

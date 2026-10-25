@@ -48,7 +48,7 @@ for (const [name, gene, action] of cases) {
       await expect.poll(() => page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         const { isCommittedSvgResultMounted } = await import('./js/services/svg-result-ingestion.js');
-        return isCommittedSvgResultMounted(state.results.value[state.selectedResultIndex.value]);
+        return isCommittedSvgResultMounted(window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]);
       })).toBe(true);
       expect(await page.evaluate(async () => (await import('./js/services/config.js'))
         .getCommittedCanonicalRenderRequest())).toEqual(await page.evaluate(() => window.__LABEL_TEST_REQUEST__));
@@ -78,7 +78,7 @@ for (const [name, gene, action] of cases) {
     const agree = async (stage, expectedText, feature) => {
       const artifact = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
-        return { result: state.results.value[state.selectedResultIndex.value].content,
+        return { result: window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value].content,
           mounted: state.svgContainer.value.querySelector('svg').outerHTML };
       });
       const result = await semantic(artifact.result);

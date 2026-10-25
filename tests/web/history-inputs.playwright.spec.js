@@ -35,7 +35,7 @@ const generate = async (page) => {
     .filter((event) => event.name === 'generate.processing-cleared').length > count, before,
   { timeout: 180_000 });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.summary || '')).toBe('');
-  return page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  return page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
 };
 
 const expectHistory = async (page, undo, redo, label, options = {}) => {
@@ -96,7 +96,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
       contentType: 'application/json'
     });
     await expectHistory(page, baseline + 1, 0, 'Change setting');
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(originalSvg);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(originalSvg);
 
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await expect(select).toHaveValue('out');

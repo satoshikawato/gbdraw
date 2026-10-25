@@ -8,7 +8,7 @@ const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   return {
-    svg: s.results.value[s.selectedResultIndex.value].content,
+    svg: window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content,
     request: getCommittedCanonicalRenderRequest(),
     geometry: JSON.parse(JSON.stringify(s.trackSlotResolvedGeometry.value)),
     slots: JSON.parse(JSON.stringify(s.activeDrawing().adv[`${mode}_track_slots`])),

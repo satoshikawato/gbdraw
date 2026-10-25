@@ -82,7 +82,6 @@ import {
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
-  serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
@@ -1587,8 +1586,13 @@ export const createAppSetup = () => {
     storeCircularMultiRecordDefaults(state.activeDrawing());
     rebindAnnotationRecords();
   };
-  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
-  setPreviewRuntime(previewRuntime);
+  // Bumped by each edit of the displayed Result's root (R1).
+  const resultEditRevision = shallowRef(0);
+  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg, editRevision: resultEditRevision });
+  setPreviewRuntime({
+    clearActiveRuntime: previewRuntime.clearActiveRuntime,
+    currentResults: previewRuntime.currentResults
+  });
 
   const historyFileStore = createHistoryFileStore();
   // Before the History snapshot service, which clears its copy feedback (D-37).
@@ -1609,7 +1613,7 @@ export const createAppSetup = () => {
     applyEditorStateData,
     buildOrthogroupStateData,
     applyOrthogroupStateData,
-    serializeResults,
+    currentResults: previewRuntime.currentResults,
     applyResultsData,
     buildRunStateData,
     applyRunStateData,
@@ -1997,6 +2001,8 @@ export const createAppSetup = () => {
     readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    currentResults: previewRuntime.currentResults,
+    getResultIdentity: previewRuntime.getResultIdentity,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
     previewTransformInteraction,
@@ -5103,6 +5109,9 @@ export const createAppSetup = () => {
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   // The preview is shown again after this flush's watchers have run: measure on the next tick.
   watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
+  // An edit of the shown root (a drag, Reset Layout, an Undo of a record move)
+  // leaves the Result object in place (R1), so the review measures again on it.
+  watch(resultEditRevision, similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   const similarityAlignmentReview = computed(() => {
     const draft = similarityAlignmentActions.draft.value;
     const directions = similarityAlignmentActions.directionPreview.value?.records;
@@ -6921,6 +6930,8 @@ export const createAppSetup = () => {
     sessionTitle,
     sessionTitleLabel,
     results,
+    // The Results with the displayed Result's edits written (R1); the test hooks read them.
+    currentResults: previewRuntime.currentResults,
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,

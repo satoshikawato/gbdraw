@@ -48,7 +48,7 @@ const snapshot = page => page.evaluate(async () => {
       key: annotation.metadata?._gbdraw_web_target_record_key || null
     }))),
     request: getCommittedCanonicalRenderRequest(),
-    results: state.results.value.map(result => ({ name: result.name, content: result.content })),
+    results: window.__GBDRAW_APP__.currentResults().map(result => ({ name: result.name, content: result.content })),
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
 });

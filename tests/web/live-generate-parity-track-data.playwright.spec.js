@@ -943,7 +943,7 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
     const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
     return {
       mode: state.generatedMode.value,
-      identity: getCommittedSvgResultRuntimeIdentity(state.results.value[state.selectedResultIndex.value]),
+      identity: getCommittedSvgResultRuntimeIdentity(window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]),
       delta: compositionUserDeltas(svg)[targetRole]
     };
   }, role);
@@ -1021,7 +1021,7 @@ const TRACK_TOGGLES = {
 // hidden by display none.
 const trackDrawn = (page, group) => page.evaluate((base) => {
   const app = window.__GBDRAW_APP__;
-  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+  const root = new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
   // Circular names the groups gc_content_N and skew_N, Linear gc_content and gc_skew.
   const groups = [...root.querySelectorAll('g[id]')].filter((element) => (
     new RegExp(`^(gc_)?${base}(_\\d+)?$`).test(element.id)
@@ -1032,7 +1032,7 @@ const trackDrawn = (page, group) => page.evaluate((base) => {
 const displayedResult = (page) => page.evaluate(async () => {
   const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
   const app = window.__GBDRAW_APP__;
-  const result = app.results[app.selectedResultIndex] || null;
+  const result = app.currentResults()[app.selectedResultIndex] || null;
   return {
     mode: app.mode,
     count: app.results.length,

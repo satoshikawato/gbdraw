@@ -49,7 +49,7 @@ def checkpoint(page, name, output):
       const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');
       const root = s.svgContainer.value?.querySelector('svg');
       return {
-        result: s.results.value[s.selectedResultIndex.value]?.content || '',
+        result: window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value]?.content || '',
         mounted: root ? serializeCleanSvg(root) : '',
         request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(s.activeDrawing()),
         identity: s.extractedFeatures.value.map(f => ({id:f.id, biologicalFeatureId:f.biologicalFeatureId,

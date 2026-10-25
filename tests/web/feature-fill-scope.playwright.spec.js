@@ -35,7 +35,7 @@ const inspectFillState = async (page, target) => page.evaluate(async ({ caption,
     legendEntryColor: app.legendEntryColor(legendEntry) || null,
     featureColorOverrides: JSON.stringify(app.featureColorOverrides),
     manualSpecificRules: JSON.stringify(app.manualSpecificRules),
-    resultContent: app.results[app.selectedResultIndex]?.content || '',
+    resultContent: app.currentResults()[app.selectedResultIndex]?.content || '',
     undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
     redoCount: window.__GBDRAW_HISTORY__.getRedoCount()
   };
@@ -68,7 +68,7 @@ const inspectStrokeState = async (page, target) => page.evaluate(async ({ captio
         : Number(legendSwatch.getAttribute('stroke-width'))
     } : null,
     featureStrokeOverrides: JSON.stringify(app.featureStrokeOverrides),
-    resultContent: app.results[app.selectedResultIndex]?.content || '',
+    resultContent: app.currentResults()[app.selectedResultIndex]?.content || '',
     undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
     redoCount: window.__GBDRAW_HISTORY__.getRedoCount()
   };

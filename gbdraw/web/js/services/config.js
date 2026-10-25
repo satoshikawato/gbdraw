@@ -17,7 +17,6 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
-import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
@@ -133,7 +132,7 @@ import {
   createSessionResourceFileView,
   isSessionResourceFileView
 } from './session-resource-backing.js';
-import { normalizeLogicalResults } from './result-normalization.js';
+import { logicalResultsOf, normalizeLogicalResults } from './result-normalization.js';
 import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
@@ -309,7 +308,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
-/** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -3106,33 +3105,20 @@ const deserializeFile = (value) => {
   return file;
 };
 
-/** @type {{ clearActiveRuntime?: () => void } | null} */
-let activePreviewRuntime = null;
+/**
+ * The preview owner's ports that Save and a Session reset use (R1, R13).
+ * @typedef {object} PreviewRuntimePorts
+ * @property {() => void} clearActiveRuntime Releases the displayed Result.
+ * @property {CurrentResultsPort} currentResults
+ */
+// Until the composition root registers the preview owner nothing is mounted,
+// so the Results are current as they are.
+/** @type {PreviewRuntimePorts} */
+let previewRuntimePorts = { clearActiveRuntime: () => {}, currentResults: () => state.results.value };
 
-/** @param {{ clearActiveRuntime?: () => void } | null | undefined} runtime */
-export const setPreviewRuntime = (runtime) => {
-  activePreviewRuntime = runtime || null;
-};
-
-export const serializeResults = () => {
-  if (activePreviewRuntime) {
-    return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
-      name: res.name || `Result ${idx + 1}`,
-      content: res.content
-    })));
-  }
-
-  const currentSvg = (() => {
-    if (!state.svgContainer.value) return null;
-    const svg = state.svgContainer.value.querySelector('svg');
-    if (!svg) return null;
-    return serializeCleanSvg(svg);
-  })();
-
-  return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
-    name: res.name || `Result ${idx + 1}`,
-    content: idx === state.selectedResultIndex.value && currentSvg ? currentSvg : res.content
-  })));
+/** @param {PreviewRuntimePorts} ports */
+export const setPreviewRuntime = (ports) => {
+  previewRuntimePorts = ports;
 };
 
 /**
@@ -4594,7 +4580,8 @@ const captureSessionImportSnapshot = () => ({
   shownDrawingId: state.activeDrawingId.value,
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawingOfMode('linear')),
-  results: state.results.value,
+  // A holder restored later reads the Results with the shown Result's edits (R1).
+  results: previewRuntimePorts.currentResults(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,
@@ -4695,7 +4682,7 @@ export const installShownDrawing = (id) => {
 
 // Both drawings return to their defaults before a Session installs its own.
 const resetSessionBaseline = () => {
-  activePreviewRuntime?.clearActiveRuntime?.();
+  previewRuntimePorts.clearActiveRuntime();
   preservedCliOptions = null;
   setCommittedCanonicalSession(null);
   loadedTrackSettings = null;
@@ -5101,6 +5088,8 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
 /** @returns {SessionArtifactView} */
 const displayedArtifactView = () => Object.freeze({
   ...Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
+  // The displayed Result's edits are written into its text when Save reads it (R1).
+  results: previewRuntimePorts.currentResults(),
   originalLegendOrder: state.originalLegendOrder.value,
   mode: state.generatedMode.value === 'linear' ? 'linear' : 'circular',
   committedCanonicalSession,
@@ -5132,15 +5121,11 @@ const chooseSessionArtifacts = (keptSlots) => {
   if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
   return { artifact: displayed, otherArtifact: other };
 };
-// Live edits are committed into a Result's content at once, so its content is
-// what Save writes, also for the displayed Result.
+// A Result's content is what Save writes: the displayed view reads its
+// Results with their edits written, and a kept artifact's were written when
+// it was kept.
 /** @param {SessionArtifactView} view */
-const serializeArtifactResults = (view) => normalizeLogicalResults(view.results.map(
-  (/** @type {Record<string, any>} */ res, /** @type {number} */ idx) => ({
-    name: res.name || `Result ${idx + 1}`,
-    content: res.content
-  })
-));
+const serializeArtifactResults = (view) => logicalResultsOf(view.results);
 // The artifact's own catalog, generated Legend inventory and colors, stroke
 // defaults and alignment Reset receipt; the Legend and stroke edits are its
 // mode's drawing's (Session 46 `modes.<m>.editorState`).

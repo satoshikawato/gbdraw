@@ -70,7 +70,7 @@ const snapshot = page => page.evaluate(async () => {
   return {
     config: config.buildConfigData(state.activeDrawing()),
     request: config.getCommittedCanonicalRenderRequest(),
-    resultHashes: await Promise.all(state.results.value.map(result => digest(result.content))),
+    resultHashes: await Promise.all(window.__GBDRAW_APP__.currentResults().map(result => digest(result.content))),
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
 });
@@ -378,7 +378,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1.');
     await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
     const restored = await snapshot(fresh);
-    await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.results[0].content), contentType: 'image/svg+xml' });
+    await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), contentType: 'image/svg+xml' });
     await testInfo.attach('original-result.svg', { body: saved.results[0].content, contentType: 'image/svg+xml' });
     expect(restored.config.adv.circular_track_slots).toEqual(edited.config.adv.circular_track_slots);
     expect(restored.request).toEqual(before.request);
@@ -458,7 +458,7 @@ test('Generate preserves four canonical pairs and same-value geometry; unit edit
   const firstGeometry = await geometry(page);
   const withoutOutputName = value => ({ ...value, records: value.records.map(({ resultName, ...record }) => record) });
   expect(withoutOutputName(firstGeometry)).toEqual(withoutOutputName(originalGeometry));
-  const firstSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const firstSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   for (const [slot, field, value] of [
     ['plastome_regions', 'Width', '20'], ['plastome_regions', 'Radius', '0.65'],
     ['gc_content', 'Width', '0.08'], ['gc_content', 'Radius', '0.56']
@@ -467,7 +467,7 @@ test('Generate preserves four canonical pairs and same-value geometry; unit edit
   const same = await snapshot(page);
   expect(canonicalSlots(same.request)).toEqual(canonicalSlots(first.request));
   expect(await geometry(page)).toEqual(firstGeometry);
-  expect(await svgGeometry(page, await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)))
+  expect(await svgGeometry(page, await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)))
     .toEqual(await svgGeometry(page, firstSvg));
   await selectUnit(page, 'px');
   const pending = await snapshot(page);
@@ -504,7 +504,7 @@ test('Generate preserves four canonical pairs and same-value geometry; unit edit
   expect(b.slots.find(row => row.slotId === 'gc_content')).toEqual({
     ...a.slots.find(row => row.slotId === 'gc_content'), widthPx: 0.08, widthFactor: null
   });
-  const currentSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const currentSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   const pendingDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'SVG', exact: true }).click();
   const downloaded = await pendingDownload;

@@ -793,7 +793,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
 
     const featureColor = '#1234ab';
     await app.setFeatureColorValue(feature, featureColor);
-    const featureResultContent = app.results[app.selectedResultIndex]?.content || '';
+    const featureResultContent = app.currentResults()[app.selectedResultIndex]?.content || '';
 
     const labeledFeature = app.extractedFeatures.find((candidate) => (
       app.getEditableLabelByFeatureId(candidate?.svg_id)
@@ -807,7 +807,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     let labelElement = currentSvg.querySelector(
       `text[data-label-key="${CSS.escape(labelEntry.key)}"]`
     );
-    const textResultContent = app.results[app.selectedResultIndex]?.content || '';
+    const textResultContent = app.currentResults()[app.selectedResultIndex]?.content || '';
     app.openFeatureEditorFromList(labeledFeature, null);
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
@@ -829,7 +829,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       .find((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
     const labelParts = Array.from(currentSvg.querySelectorAll('[data-label-feature-id]'))
       .filter((element) => element.getAttribute('data-label-feature-id') === labeledFeature.svg_id);
-    const visibilityResultContent = app.results[app.selectedResultIndex]?.content || '';
+    const visibilityResultContent = app.currentResults()[app.selectedResultIndex]?.content || '';
     const resultSvg = new DOMParser().parseFromString(
       visibilityResultContent,
       'image/svg+xml'
@@ -881,7 +881,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       featureResultContent,
       textResultContent,
       visibilityResultContent,
-      legendResultContent: app.results[app.selectedResultIndex]?.content || ''
+      legendResultContent: app.currentResults()[app.selectedResultIndex]?.content || ''
     };
   });
 

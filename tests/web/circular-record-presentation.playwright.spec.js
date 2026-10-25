@@ -21,7 +21,7 @@ const secondGenbank = readFileSync(
 
 const inspectCircularResult = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const content = String(app.results?.[0]?.content || '');
+  const content = String(app.currentResults()[0]?.content || '');
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   return {
     content,

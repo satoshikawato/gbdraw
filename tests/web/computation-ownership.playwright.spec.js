@@ -238,7 +238,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
   const onGenerate = (await tooltip.textContent()).includes('Changes apply on Generate');
   const shown = () => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    return app.results[app.selectedResultIndex].content;
+    return app.currentResults()[app.selectedResultIndex].content;
   });
   const before = await shown();
   const lock = page.locator('input[type="checkbox"][aria-describedby="linear-definition-lock-help"]');

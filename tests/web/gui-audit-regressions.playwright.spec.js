@@ -441,13 +441,13 @@ test('invalid annotation coordinates preserve the draft and the last successful 
     expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   }
   expect(dialogs).toEqual([]);
-  const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   await panel.getByLabel('Annotation start (1-based)', { exact: true }).fill('1.5');
   await panel.getByLabel('Annotation start (1-based)', { exact: true }).press('Tab');
   expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' },
     summary: expect.stringContaining('integer greater than zero') });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(oldResult);
   await panel.getByLabel('Annotation start (1-based)', { exact: true }).fill('1');
   await generateAndWaitForResult(page);
 });

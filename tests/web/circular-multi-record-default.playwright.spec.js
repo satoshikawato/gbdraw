@@ -22,7 +22,7 @@ const uploadGenbank = async (page, name, text) => {
 
 const inspectResult = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const doc = new DOMParser().parseFromString(String(app.results?.[0]?.content || ''), 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(String(app.currentResults()[0]?.content || ''), 'image/svg+xml');
   const definition = doc.querySelector('[data-gbdraw-role="record-definition"]');
   return {
     multiRecordCanvas: app.form.multi_record_canvas,

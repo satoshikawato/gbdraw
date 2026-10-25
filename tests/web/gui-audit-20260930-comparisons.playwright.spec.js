@@ -75,13 +75,13 @@ const svgRibbons = (page, content) => page.evaluate((text) => {
 }, content);
 const committedRibbons = async (page) => svgRibbons(page, await page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  return String(app.results?.[app.selectedResultIndex]?.content || '');
+  return String(app.currentResults()[app.selectedResultIndex]?.content || '');
 }));
 
 const featureSpan = (page, locusTag) => page.evaluate((tag) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.locus_tag === tag);
-  const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+  const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
   const xs = [...svg.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(feature.svg_id)}"]`)]
     .flatMap((element) => (String(element.getAttribute('d') || '').match(/-?\d+(?:\.\d+)?/g) || [])

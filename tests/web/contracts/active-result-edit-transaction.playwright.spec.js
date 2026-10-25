@@ -111,7 +111,7 @@ test.describe('active Result Feature fill transaction', () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
     const mountedSvg = document.querySelector('.origin-top svg');
-    const selectedResult = app.results[app.selectedResultIndex] || null;
+    const selectedResult = app.currentResults()[app.selectedResultIndex] || null;
     const selectedSvg = new DOMParser().parseFromString(
       String(selectedResult?.content || ''),
       'image/svg+xml'

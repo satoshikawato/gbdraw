@@ -127,7 +127,7 @@ const generated = async (page, testInfo, name) => {
   const { svg, recipe } = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const source = app.lastRunInfo?.sourceRecipe || {};
-    return { svg: app.results[0].content, recipe: { available: source.available, command: source.command || '', reason: source.unavailableReason || '' } };
+    return { svg: app.currentResults()[0].content, recipe: { available: source.available, command: source.command || '', reason: source.unavailableReason || '' } };
   });
   const file = testInfo.outputPath(`${name.replace(/\W+/g, '-')}.gui.svg`);
   writeFileSync(file, svg);

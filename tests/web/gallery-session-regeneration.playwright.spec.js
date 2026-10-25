@@ -183,7 +183,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
       }))
     });
     const result = await app.runAnalysis();
-    const content = app.results?.[0]?.content || '';
+    const content = app.currentResults()[0]?.content || '';
     return {
       result,
       errorLog: app.errorLog,
