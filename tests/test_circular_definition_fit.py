@@ -24,7 +24,7 @@ from gbdraw.api import (
     CircularOutputOptions,
     CircularRequestTrackOptions,
 )
-from gbdraw.api.diagram import build_circular_multi_diagram
+from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.groups.circular.definition import wrap_definition_line_parts
@@ -383,3 +383,21 @@ def test_a_kept_scale_row_adds_no_scale_remedy() -> None:
     message = str(_InsideFitError("slot", intent=None, placement_window=window))
     assert "turn off or narrow the GC content track (--no-gc, --gc_content_width)" in message
     assert "--hide_scale" not in message
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("multi_record", [False, True], ids=["one record", "multi-record canvas"])
+def test_a_plot_title_with_no_name_to_draw_draws_no_title(multi_record: bool) -> None:
+    """A record with no organism (GenBank writes ORGANISM ".") and no typed plot
+    title has no plot-title line (OV-1831); asking for the title at the top
+    draws no title instead of failing the composition (OV-1837)."""
+    record = _record_with_organism(".")
+    options = CircularDiagramOptions(output=CircularOutputOptions(plot_title_position="top"))
+    drawing = (
+        build_circular_multi_diagram([record], options=options)
+        if multi_record
+        else build_circular_diagram(record, options=options)
+    )
+    root = ET.fromstring(drawing.tostring())
+    assert root.find(".//svg:g[@data-gbdraw-composition-role='title']", SVG_NS) is None
+

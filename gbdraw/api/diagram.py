@@ -1379,8 +1379,13 @@ def _circular_plot_title_content(
     strain: str | None,
     plot_title: str | None,
     record_presentation: RecordPresentation | None,
-) -> GroupContent:
-    """The plot title content, keyed by the record's facts (not the record) and the title geometry."""
+) -> GroupContent | None:
+    """The plot title content, keyed by the record's facts (not the record) and the title geometry.
+
+    None when the title paints nothing: a record with no name to draw and no
+    typed title (OV-1837). The composition planner leaves an empty item out,
+    so the callers place no title target either.
+    """
 
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
@@ -1388,7 +1393,7 @@ def _circular_plot_title_content(
         legend="none",
         gb_record=gb_record,
     )
-    return render_stage(
+    content = render_stage(
         "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
@@ -1401,6 +1406,10 @@ def _circular_plot_title_content(
         definition_group_id="plot_title",
         record_presentation=record_presentation,
     )
+    bounds = content.local_bounds
+    if bounds is not None and CompositionItem("title", bounds).is_empty:
+        return None
+    return content
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -2830,7 +2839,8 @@ def assemble_circular_diagram_from_record(
             plot_title=normalized_plot_title or None,
             record_presentation=_record_presentation,
         )
-        title_placement = TitlePlacement(normalized_plot_title_position)
+        if title_content is not None:
+            title_placement = TitlePlacement(normalized_plot_title_position)
 
     result = _assemble_circular_diagram_result(
         record_transform=_record_transform,
