@@ -29,3 +29,18 @@ export const withSavedDrawingView = (document, id, mutate) => {
   rebuilt.drawings = views.map((entry) => rebuilt.drawings.find((drawing) => drawing.id === entry.id));
   return rebuilt;
 };
+
+/**
+ * Every saved drawing read as one 46-48-shaped view: the shown drawing's view
+ * with `modes.<mode>` of each other drawing added (one drawing per mode in the
+ * Sessions a Save writes from the two-mode state). For reads only; load the
+ * saved document itself.
+ */
+export const savedModesView = (document) => {
+  const view = savedDrawingView(document, document.ui.activeDrawingId);
+  for (const entry of document.drawings) {
+    const other = drawingViewOf(document, entry);
+    view.modes = { ...other.modes, ...view.modes };
+  }
+  return view;
+};
