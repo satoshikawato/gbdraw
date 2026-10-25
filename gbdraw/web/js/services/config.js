@@ -219,7 +219,6 @@ import {
   settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
-import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -5529,8 +5528,8 @@ const importSessionDocument = async (e, options = {}) => {
     const candidate = await importSessionFile(file, { signal: options.signal });
     if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+    // The import Worker refused a document with an unsafe own key (OV-952).
     const parsed = candidate.data;
-    await assertSafeObjectKeysForImport(parsed);
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure
