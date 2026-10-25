@@ -33,8 +33,12 @@ const main = async () => {
   } = await importWeb('js/workers/pyodide-snapshot.js');
   const indexURL = `${join(web, PYODIDE_INDEX_URL)}/`;
   const { loadPyodide } = await import(pathToFileURL(join(indexURL, 'pyodide.mjs')).href);
-  const wheels = [...PYODIDE_LOCAL_WHEELS.map((/** @type {string} */ path) => join(web, path)), join(web, GBDRAW_WHEEL_NAME)]
-    .map((source) => ({ source, bytes: new Uint8Array(readFileSync(source)) }));
+  /** @param {string} source */
+  const wheelFile = (source) => ({ source, bytes: new Uint8Array(readFileSync(source)) });
+  const wheels = {
+    localWheels: PYODIDE_LOCAL_WHEELS.map((/** @type {string} */ path) => wheelFile(join(web, path))),
+    gbdrawWheel: wheelFile(join(web, GBDRAW_WHEEL_NAME))
+  };
 
   const pyodide = await loadPyodide({ indexURL, _makeSnapshot: true });
   await installRuntimePackages(pyodide, { wheels });
@@ -53,8 +57,8 @@ json.dumps(sorted({f"{d.metadata['Name']} requires {r}" for d in md.distribution
   if (missing.length) throw new Error(`The snapshot runtime misses dependencies: ${missing.join('; ')}`);
   pyodide.runPython('import gc; gc.collect()');
   const key = await pyodideSnapshotKey({
-    localWheels: wheels.slice(0, -1).map(({ source }) => /** @type {const} */ ([source, readFileSync(source)])),
-    gbdrawWheel: readFileSync(wheels[wheels.length - 1].source),
+    localWheels: wheels.localWheels.map(({ source }) => /** @type {const} */ ([source, readFileSync(source)])),
+    gbdrawWheel: readFileSync(wheels.gbdrawWheel.source),
     helperFile: readFileSync(PYTHON_HELPER_FILE)
   });
   const { memory, state, files } = capturePyodideSnapshot(pyodide, key);

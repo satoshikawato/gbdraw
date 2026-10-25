@@ -14,9 +14,14 @@ const ASSETS = new URL('../../gbdraw/web/js/services/pyodide-assets.js', import.
 let instance = 0;
 const freshAssets = () => import(`${ASSETS}?page=${instance += 1}`);
 
-/** Runs `prefetch` with fetch recorded and Save-Data set as given; returns the requests. */
-const prefetchWith = async ({ saveData = false, respond = () => new Response('bytes') } = {}) => {
-  const { prefetchPyodideBootAssets } = await freshAssets();
+/**
+ * Runs `prefetch` with fetch recorded and Save-Data set as given; returns the requests.
+ * `before` runs on the same module instance first.
+ */
+const prefetchWith = async ({ saveData = false, respond = () => new Response('bytes'), before = () => {} } = {}) => {
+  const assets = await freshAssets();
+  const { prefetchPyodideBootAssets } = assets;
+  before(assets);
   const requests = [];
   const originals = { fetch: globalThis.fetch, location: globalThis.location, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
   globalThis.fetch = async (url, options) => { requests.push([String(url), options]); return respond(); };
@@ -76,6 +81,12 @@ test('the prefetch keeps two downloads in flight', async () => {
 
 test('Save-Data prefetches nothing', async () => {
   assert.deepEqual(await prefetchWith({ saveData: true }), []);
+});
+
+// The diagram Worker downloads its boot files itself once its manifest is built
+// (its `init` message): a file chosen after a Generate prefetches nothing.
+test('a page whose diagram Worker has started booting prefetches nothing', async () => {
+  assert.deepEqual(await prefetchWith({ before: ({ buildPyodideAssetManifest }) => buildPyodideAssetManifest(BASE) }), []);
 });
 
 test('a failed boot file download is dropped without an unhandled rejection', async () => {

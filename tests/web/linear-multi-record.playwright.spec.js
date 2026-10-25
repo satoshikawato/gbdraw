@@ -131,12 +131,14 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
       .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
   }
-  // The page downloads the wheel when the file is chosen, and each Worker
-  // downloads it again (a routed request bypasses the HTTP cache): with a
-  // served snapshot, the Worker that cannot restore it is replaced by one that
-  // boots cold.
+  // One Worker serves every Generate. With a served snapshot, the Worker that
+  // cannot restore it is replaced once by one that boots cold. The page
+  // downloads the wheel when the file is chosen, and each Worker downloads it
+  // again (a routed request bypasses the HTTP cache).
+  const expectedWorkers = process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR ? 2 : 1;
+  expect((await getDiagramWorkerActivity(page)).constructions).toBe(expectedWorkers);
   const servedWheels = wheelResponses;
-  expect(servedWheels).toHaveLength(1 + (await getDiagramWorkerActivity(page)).constructions);
+  expect(servedWheels).toHaveLength(1 + expectedWorkers);
   for (const served of servedWheels) {
     const wheelPath = new URL(served.url).pathname.replace(/^\//, '');
     expect(served.sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));

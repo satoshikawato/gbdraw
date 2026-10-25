@@ -381,9 +381,9 @@ const initializeRuntime = async ({
     reportStep(1);
     await installRuntimePackages(pyodide, {
       wheels,
-      beforeInstall: async () => {
+      beforeInstall: async (installOrder) => {
         reportStep(2);
-        await Promise.all(wheels.map(({ bytes }) => bytes));
+        await Promise.all(installOrder.map(({ bytes }) => bytes));
         reportStep(3);
       }
     });

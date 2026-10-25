@@ -83,20 +83,27 @@ test('a snapshot with a table slot or a JS reference it cannot restore is refuse
 // The cold boot downloads each wheel once (a GET, no HEAD check) and
 // installs them all in one micropip call from the Emscripten file system,
 // after loading micropip and tzdata from the Pyodide distribution.
+// A Pyodide runtime with an in-memory file system that, like MEMFS, cannot
+// unlink a file it does not hold. `writeFile` replaces its file write.
+const fakeInstaller = (calls, files, { writeFile = (path, data) => files.set(path, data) } = {}) => ({
+  loadPackage: async (names) => { calls.push(['loadPackage', names]); },
+  pyimport: () => ({
+    install: async (requirements) => {
+      calls.push(['install', requirements, requirements.map((path) => new TextDecoder().decode(files.get(path.replace(/^emfs:/, ''))))]);
+    }
+  }),
+  FS: {
+    mkdirTree: () => {},
+    writeFile,
+    unlink: (path) => { if (!files.delete(path)) throw new Error(`ENOENT: ${path}`); },
+    rmdir: () => {}
+  }
+});
+
 test('the recipe installs the downloaded wheels in one micropip call', async () => {
   const calls = [];
   const files = new Map();
-  const pyodide = {
-    loadPackage: async (names) => { calls.push(['loadPackage', names]); },
-    pyimport: () => ({
-      install: async (requirements) => {
-        calls.push(['install', requirements, requirements.map((path) => new TextDecoder().decode(files.get(path.replace(/^emfs:/, ''))))]);
-      }
-    }),
-    FS: {
-      mkdirTree: () => {}, writeFile: (path, data) => files.set(path, data), unlink: (path) => files.delete(path), rmdir: () => {}
-    }
-  };
+  const pyodide = fakeInstaller(calls, files);
   const { requests } = await withServedFiles(wheels, () => installRuntimePackages(pyodide, {
     wheels: runtimeWheelDownloads(URLS), beforeInstall: async () => { calls.push(['beforeInstall']); }
   }));
@@ -111,8 +118,40 @@ test('the recipe installs the downloaded wheels in one micropip call', async () 
   assert.equal(files.size, 0);
 });
 
+// A wheel file the install could not write is not unlinked, and the cleanup
+// does not replace the install's error.
+test('a failed install removes only the wheel files it wrote and keeps its error', async () => {
+  const files = new Map();
+  let writes = 0;
+  const pyodide = fakeInstaller([], files, {
+    writeFile: (path, data) => {
+      writes += 1;
+      if (writes === 2) throw new Error('out of memory');
+      files.set(path, data);
+    }
+  });
+  await assert.rejects(
+    withServedFiles(wheels, () => installRuntimePackages(pyodide, { wheels: runtimeWheelDownloads(URLS) })),
+    { message: 'out of memory' }
+  );
+  assert.equal(files.size, 0);
+});
+
 test('a wheel that is not served fails the download with its name', async () => {
   const { value: downloads } = await withServedFiles({ [LOCAL_WHEELS[0]]: wheels[LOCAL_WHEELS[0]] }, () => runtimeWheelDownloads(URLS));
-  await assert.rejects(downloads[1].bytes, { message: `Missing packaged asset: Pyodide dependency wheel #2 (404) at ${LOCAL_WHEELS[1]}` });
-  await assert.rejects(downloads[2].bytes, { message: `Missing packaged asset: gbdraw browser wheel (404) at ${GBDRAW_WHEEL}` });
+  await assert.rejects(downloads.localWheels[1].bytes, { message: `Missing packaged asset: Pyodide dependency wheel #2 (404) at ${LOCAL_WHEELS[1]}` });
+  await assert.rejects(downloads.gbdrawWheel.bytes, { message: `Missing packaged asset: gbdraw browser wheel (404) at ${GBDRAW_WHEEL}` });
+});
+
+test('a wheel download that fails on the network names the wheel', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  try {
+    const downloads = runtimeWheelDownloads(URLS);
+    await assert.rejects(downloads.gbdrawWheel.bytes, {
+      message: `Missing packaged asset: gbdraw browser wheel (TypeError: Failed to fetch) at ${GBDRAW_WHEEL}`
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
 });
