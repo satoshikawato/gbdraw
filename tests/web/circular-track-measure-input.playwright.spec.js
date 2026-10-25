@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const {
   openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
@@ -48,6 +48,8 @@ const load = async (page, file = fixture, canceledRows = null) => {
     !window.__GBDRAW_APP__.sessionImportPending
     && (!accepted || window.__C619_EVENTS__.filter(event => event.name === 'interactiveReady').length > readyBefore)
   ), { readyBefore, accepted });
+  // A phone Load shows the Preview pane; the track controls are in Settings.
+  await showPhonePane(page, 'settings');
 };
 const openPanel = async page => {
   const button = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
@@ -160,6 +162,7 @@ test.beforeEach(async ({ page }) => {
 for (const width of [1440, 390]) {
   test(`saved scalar controls are readable, accessible, and read-only at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 1000 });
+    await showPhonePane(page, 'settings');
     const before = await snapshot(page);
     const workers = await workerCounts(page);
     const button = await openPanel(page);

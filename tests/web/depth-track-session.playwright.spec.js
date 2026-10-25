@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
@@ -885,6 +886,8 @@ test('Linear File-level Depth assignment preserves history, sessions, and regene
     await waitForAppShell(page, { waitForPalette: false });
     await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
     await expectSessionLoadedWithoutWarnings(page);
+    // A phone Load shows the Preview pane; the file cards are in Settings.
+    await showPhonePane(page, 'settings');
     await expect.poll(() => page.evaluate(() => (
       window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
     ))).toBe(2);

@@ -11,6 +11,8 @@ const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode 
 const load = async (page, file) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+  // A phone Load shows the Preview pane; the color rules are in Settings.
+  await showPhonePane(page, 'settings');
 };
 const setup = async (page, mode = 'circular') => {
   page.on('dialog', dialog => dialog.accept());

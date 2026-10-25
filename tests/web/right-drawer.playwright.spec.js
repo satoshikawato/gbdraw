@@ -1161,7 +1161,9 @@ test('a collinear ribbon without a collinear group scope pairs its genes by simi
 const exposeControl = async (page, control) => {
   await control.evaluate((element) => {
     element.scrollIntoView({ block: 'center', inline: 'nearest' });
-    const header = document.querySelector('.app-header').getBoundingClientRect();
+    // The header covers the top only while fixed or sticky; at the narrowest widths it scrolls with the page.
+    const headerEl = document.querySelector('.app-header');
+    const header = /fixed|sticky/.test(getComputedStyle(headerEl).position) ? headerEl.getBoundingClientRect() : { bottom: 0 };
     const generate = document.querySelector('.generate-bar');
     const bottom = getComputedStyle(generate).position === 'fixed'
       ? generate.getBoundingClientRect().top : innerHeight;

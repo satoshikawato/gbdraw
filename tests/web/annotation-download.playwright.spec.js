@@ -62,6 +62,8 @@ for (const width of [1440, 390]) {
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
+    // A phone Load shows the Preview pane; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     await page.evaluate(async () => {
       const { normalizeAnnotationSets } = await import('./js/services/annotation-state.js');
@@ -179,6 +181,8 @@ for (const width of [1440, 390]) {
     await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
       .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json'));
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
+    // A phone Load shows the Preview pane; the annotation panel is in Settings.
+    await showPhonePane(page, 'settings');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     const summary = panelSummary(page);
     await summary.focus();
