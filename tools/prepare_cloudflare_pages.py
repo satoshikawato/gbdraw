@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -43,6 +44,49 @@ ISOLATION_HEADERS = """/*
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'self' data: blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'self'
 """
+# Vendored files whose URL never serves other bytes: browsers keep them a year
+# without revalidating. The manifest pins each file's SHA-256, and the bundle
+# build fails when a file under these paths changes without a new URL.
+IMMUTABLE_ASSETS_MANIFEST = REPO_ROOT / "tools" / "immutable-web-assets.json"
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def _read_immutable_assets_manifest() -> tuple[tuple[str, ...], dict[str, str]]:
+    manifest = json.loads(IMMUTABLE_ASSETS_MANIFEST.read_text(encoding="utf-8"))
+    return tuple(manifest["prefixes"]), dict(manifest["files"])
+
+
+def render_bundle_headers() -> str:
+    """The bundle's `_headers`: isolation for every path, a year for immutable ones."""
+    prefixes, _ = _read_immutable_assets_manifest()
+    immutable_rules = "".join(
+        f"\n/{prefix}*\n  Cache-Control: {IMMUTABLE_CACHE_CONTROL}\n" for prefix in prefixes
+    )
+    return ISOLATION_HEADERS + immutable_rules
+
+
+def verify_immutable_assets(web_root: Path) -> None:
+    """Fail when a file under an immutable path is not the one its URL was pinned to."""
+    prefixes, pinned = _read_immutable_assets_manifest()
+    found = {
+        path.relative_to(web_root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for prefix in prefixes
+        for path in sorted((web_root / prefix).rglob("*"))
+        if path.is_file()
+    }
+    problems = [
+        f"{name}: {'not in the manifest' if name not in pinned else 'bytes changed'} ({digest})"
+        for name, digest in sorted(found.items())
+        if pinned.get(name) != digest
+    ] + [f"{name}: missing" for name in sorted(set(pinned) - set(found))]
+    if problems:
+        raise RuntimeError(
+            "Files under immutable URLs differ from "
+            f"{IMMUTABLE_ASSETS_MANIFEST.relative_to(REPO_ROOT)}:\n"
+            + "\n".join(problems)
+            + "\nA file whose bytes change needs a new URL (a new file name or folder); "
+            "then record the new path and SHA-256 in the manifest."
+        )
 
 
 def _load_repo_module(module_path: Path, module_name: str):
@@ -182,7 +226,8 @@ def build_cloudflare_pages_bundle(
         output_root / "js" / "config.js",
         build_support.browser_wheel_cache_bust_token(served_wheel),
     )
-    (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
+    verify_immutable_assets(output_root)
+    (output_root / "_headers").write_text(render_bundle_headers(), encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
         remote_base=gallery_remote_base
