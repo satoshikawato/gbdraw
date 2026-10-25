@@ -349,7 +349,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
 /** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
-/** @import { ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
+/** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { RawConservationSeriesEntry } from './conservation-series.js' */
@@ -1617,9 +1617,10 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
  * @param {T} data
  * @param {number} sourceSessionVersion
  * @param {LoadRepair[]} repairs
+ * @param {OpenedDrawingPath} at Where the file holds the caches' drawing, the prefix of their rows' paths.
  * @returns {Promise<T>}
  */
-const readSessionLosatArtifacts = async (data, sourceSessionVersion, repairs) => {
+const readSessionLosatArtifacts = async (data, sourceSessionVersion, repairs, at) => {
   let deadline = performance.now() + 16;
   const steps = sessionLosatArtifactSteps(data, sourceSessionVersion);
   let step = steps.next();
@@ -1635,7 +1636,7 @@ const readSessionLosatArtifacts = async (data, sourceSessionVersion, repairs) =>
   /** @type {Record<string, unknown>} */
   const next = { ...data };
   /** @param {string} path */
-  const dropped = (path) => repairs.push(loadRepair({ code: 'cache-entry-dropped', path, effect: 'dropped' }));
+  const dropped = (path) => repairs.push(loadRepair({ code: 'cache-entry-dropped', path: `${at}${path}`, effect: 'dropped' }));
   faults.containers.forEach((field) => {
     dropped(field);
     delete next[field];
@@ -2467,6 +2468,21 @@ const projectedDrawingView = (data) => {
 };
 
 /**
+ * Where the file holds the drawing Load opens: a Session 49's place in its
+ * list of drawings (`drawings[i].`, found by the opened drawing's ID), a
+ * Session 27-48's top level. Its parts' rows take it as their paths' prefix,
+ * so they name the file's own paths (OV-1791, OV-1797).
+ * @typedef {'' | DrawingSetPath} OpenedDrawingPath
+ */
+/** @param {SessionChecked} sessionData @returns {OpenedDrawingPath} */
+const openedDrawingPathOf = (sessionData) => {
+  if (!isDrawingsBand(sessionData)) return '';
+  const document = /** @type {Session49} */ (/** @type {unknown} */ (sessionData));
+  const openedId = openedDrawingOf(document).id;
+  return drawingSetPath(document.drawings.findIndex((entry) => entry.id === openedId));
+};
+
+/**
  * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
@@ -2483,6 +2499,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // A Session 49 is a list of drawings, each read by its set's readers below
   // (`storedResultSets`); its tables are framed and its Legend edits row keyed.
   const drawingsBand = isDrawingsBand(sessionData);
+  const openedDrawingAt = openedDrawingPathOf(sessionData);
   // A Session before 31 holds no request (OV-862), so no stored table of it is converted.
   const framed = isCanonicalBand(sessionData) ? await convertMainSessionComparisonFrames(sessionData) : sessionData;
   const legendRead = drawingsBand
@@ -2568,6 +2585,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     normalizedEditorState = normalizeEditorStateData(catalogData.editorState, {
       featureCatalog: validatedFeatureCatalog,
       repairs,
+      path: `${openedDrawingAt}editorState`,
       sessionVersion: sourceSessionVersion
     });
     recordSessionLifecycleEvent('editor-state-normalization-end');
@@ -2592,7 +2610,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
-  const cacheData = await readSessionLosatArtifacts(promotedData, sourceSessionVersion, repairs);
+  const cacheData = await readSessionLosatArtifacts(promotedData, sourceSessionVersion, repairs, openedDrawingAt);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
@@ -2802,6 +2820,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     // Each other Session 49 drawing's inputs, by drawing ID.
     storedDrawingInputs: new Map(document49 ? document49.drawings.filter((entry) => entry !== openedDrawingOf(document49))
       .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document49, entry, currentResourceTable)]) : []),
+    openedDrawingAt,
     // The drawing whose set Load projects: a Session 49's opened drawing.
     projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session49} */ (/** @type {unknown} */ (sessionData))).id) : null
   };
@@ -6008,22 +6027,22 @@ const importSessionDocument = async (e, options = {}) => {
       settingsOnly,
       upgrade,
       storedDrawingInputs,
+      openedDrawingAt,
       projectedDrawingId
     } = preflight;
     /**
      * Where a drawing's draft part is in the file: a Session 49's
      * entry in its list of drawings, a Session 46-48's `modes.<mode>` (OV-1791).
-     * @param {string} mode @param {number} index The drawing's place in the file's list.
+     * @param {string} mode @param {OpenedDrawingPath} at The drawing's place in the file's list.
      */
-    const draftPartAt = (mode, index) => (projectedDrawingId !== null ? drawingSetPath(index).slice(0, -1) : `modes.${mode}`);
+    const draftPartAt = (mode, at) => (projectedDrawingId !== null ? at.slice(0, -1) : `modes.${mode}`);
     if (restoredConfig && unmanagedConfigValidation) {
       // A stored draft's overrides are read, at the path the file holds
       // them; a request's are checked. The draft loop below reads every
       // other drawing's (OV-1791: one read, one row per fault).
-      const openedIndex = upgrade ? upgrade.document.drawings.findIndex((entry) => entry.id === projectedDrawingId) : -1;
       restoredConfig.unmanagedConfigOverrides = unmanagedConfigValidation.source === 'draft'
         ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, modeScopedSession
-          ? `${draftPartAt(unmanagedConfigValidation.mode, openedIndex)}.config.unmanagedConfigOverrides`
+          ? `${draftPartAt(unmanagedConfigValidation.mode, openedDrawingAt)}.config.unmanagedConfigOverrides`
           : 'config.unmanagedConfigOverrides', repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
@@ -6130,7 +6149,7 @@ const importSessionDocument = async (e, options = {}) => {
     const draftParts = new Map();
     if (upgraded) {
       upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
-        slice: drawingDraftPartOf(entry), at: draftPartAt(entry.mode, index)
+        slice: drawingDraftPartOf(entry), at: draftPartAt(entry.mode, drawingSetPath(index))
       }));
       const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (projectedDrawingId === null ? data.modes : null);
       unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
