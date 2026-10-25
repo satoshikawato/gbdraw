@@ -148,7 +148,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
 
   for (const enabled of [false, true]) {
     await page.evaluate((enabled) => { window.__GBDRAW_APP__.layoutRepositionMode = enabled; }, enabled);
-    for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-pairwise-match-id]']) {
+    for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-match-id]']) {
       const point = await page.evaluate((selector) => {
         for (const element of window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)) {
           const bounds = element.getBoundingClientRect();
@@ -215,7 +215,7 @@ test('a pan that ends over a feature or a match opens no popup', async ({ page }
 
   for (const [selector, key] of [
     ['[data-gbdraw-feature-id]', 'clickedFeature'],
-    ['[data-gbdraw-pairwise-match-id]', 'clickedPairwiseMatch']
+    ['[data-gbdraw-match-id]', 'clickedPairwiseMatch']
   ]) {
     // A press on the svg's own background, so the drag's click goes to the svg.
     const press = await page.evaluate(() => {

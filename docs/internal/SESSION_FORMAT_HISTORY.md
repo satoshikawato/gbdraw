@@ -12,6 +12,24 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: one comparison-match attribute in saved Results
+
+No Session or request version changes. gbdraw 0.12.0, 0.12.1 and 0.13.0
+(Sessions 29 and 30) wrote a comparison match's ID only as
+`data-gbdraw-pairwise-match-id`; from fca1e886f (2026-07-19, Session 32 on
+`main`) the writers added `data-gbdraw-match-id` with the same value, and now
+they write only `data-gbdraw-match-id`. The legacy name is a row of
+`LEGACY_SVG_ATTRIBUTE_RENAMES` (`gbdraw/render/interactive_svg.py`, written to
+`js/contracts/schema.generated.js` by `tools/generate_web_contracts.py`). The
+Web legacy Result admission (`admitLegacyImportedResults`, through
+`normalizeSvgResultIds`) and `enrich_svg` rename it once; an element that
+already has `data-gbdraw-match-id` keeps it. Every other reader reads only
+`data-gbdraw-match-id`. A Session of 40 or later never holds a Result with only
+the legacy name: such a Result can be saved only after a Generate, and the
+Python upgrade drops Results without a feature catalog. Fixtures:
+`tests/fixtures/sessions/BGC0000708-BGC0000713.v29`/`.v30` and
+`cli-linear-protein.v30`.
+
 ## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
 
 Session version 48 stores the protein results of a reverse-complemented Linear

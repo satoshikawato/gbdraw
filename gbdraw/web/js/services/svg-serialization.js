@@ -120,7 +120,7 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
     .forEach(stripClasses);
   if (stripCursor) {
     stripEditorOnlyCursorStyles(svg);
-    svg.querySelectorAll('[data-gbdraw-pairwise-match-id][role="button"][tabindex="0"]')
+    svg.querySelectorAll('[data-gbdraw-match-id][role="button"][tabindex="0"]')
       .forEach((element) => {
         if (!/^Pairwise match \d+$/.test(element.getAttribute('aria-label') || '')) return;
         element.removeAttribute('role');

@@ -1082,7 +1082,7 @@ export const createFeatureSvgActions = ({
         });
       });
       svg.querySelectorAll(PAIRWISE_MATCH_SELECTOR).forEach((element) => {
-        const matchId = String(element.getAttribute('data-gbdraw-match-id') || element.getAttribute('data-gbdraw-pairwise-match-id') || '').trim();
+        const matchId = String(element.getAttribute('data-gbdraw-match-id') || '').trim();
         if (matchId) {
           if (!byMatch.has(matchId)) byMatch.set(matchId, []);
           byMatch.get(matchId).push(element);
@@ -1188,13 +1188,13 @@ export const createFeatureSvgActions = ({
         if (blockId) return `collinearity:${blockId}`;
         const orthogroupId = matchAttr(matchElement, 'data-orthogroup-id');
         if (orthogroupId) return `orthogroup:${orthogroupId}`;
-        return `match:${matchAttr(matchElement, 'data-gbdraw-match-id') || matchAttr(matchElement, 'data-gbdraw-pairwise-match-id') || matchAttr(matchElement, 'd')}`;
+        return `match:${matchAttr(matchElement, 'data-gbdraw-match-id') || matchAttr(matchElement, 'd')}`;
       };
 
       /** @param {Element} element */
       const matchFragments = (element) => {
         ensureComparisonIndexes();
-        const id = matchAttr(element, 'data-gbdraw-match-id') || matchAttr(element, 'data-gbdraw-pairwise-match-id');
+        const id = matchAttr(element, 'data-gbdraw-match-id');
         // ensureComparisonIndexes above has set all three comparison maps.
         return /** @type {Map<string, Element[]>} */ (handlerState.comparisonElementsByMatchId).get(id) || [element];
       };

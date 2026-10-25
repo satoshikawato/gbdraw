@@ -116,7 +116,7 @@ test('Prokka-style GenBank records keep their LOCUS names through Circular Gener
   expect(await page.evaluate(() => {
     const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
     return new DOMParser().parseFromString(content, 'image/svg+xml')
-      .querySelectorAll('[data-gbdraw-pairwise-match-id]').length;
+      .querySelectorAll('[data-gbdraw-match-id]').length;
   })).toBeGreaterThan(0);
 });
 

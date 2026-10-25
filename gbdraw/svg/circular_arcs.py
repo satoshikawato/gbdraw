@@ -33,9 +33,14 @@ def circle_point(radius: float, angle_deg: float) -> tuple[float, float]:
 
 
 def arc_pieces(span_deg: float) -> tuple[float, ...]:
-    """The signed spans of the arcs that draw ``span_deg`` (see the module rule)."""
+    """The signed spans of the arcs that draw ``span_deg`` (see the module rule).
+
+    A span beyond a full circle (or not finite) has no arcs: ``ValueError``.
+    """
 
     size = abs(float(span_deg))
+    if not size <= 360.0:
+        raise ValueError(f"A circle arc spans at most 360 degrees, not {span_deg!r}.")
     if size <= ARC_SINGLE_MAX_DEG:
         return (float(span_deg),)
     sign = 1.0 if span_deg > 0 else -1.0

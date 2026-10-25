@@ -105,7 +105,7 @@ for (const example of commonExamples) {
             || app.similarityAlignmentRepair?.reason || result?.reason || error?.summary
             || error?.message || (error ? JSON.stringify(error) : null),
           svg,
-          matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
+          matchCount: (svg.match(/data-gbdraw-match-id=/g) || []).length,
           losatCalls: window.__GBDRAW_GALLERY_LOSAT_CALLS__
         };
       });

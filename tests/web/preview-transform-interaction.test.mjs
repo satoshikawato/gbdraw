@@ -84,8 +84,8 @@ await writeFile(
 await writeFile(
   join(tempDir, 'app', 'pairwise-match-popup.js'),
   [
-    'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-pairwise-match-id]";',
-    'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-pairwise-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
+    'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-match-id]";',
+    'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
     'export const buildMatchPopupPayload = () => null;'
   ].join('\n'),
   'utf8'
@@ -486,7 +486,7 @@ class FakeElement {
     if (this.kind === 'feature') {
       return selector.includes('data-gbdraw-feature-id') || selector.includes('path[id^="f"]');
     }
-    if (this.kind === 'match') return selector.includes('data-gbdraw-pairwise-match-id');
+    if (this.kind === 'match') return selector.includes('data-gbdraw-match-id');
     return false;
   }
 
@@ -512,7 +512,7 @@ class FakeSvg extends ListenerTarget {
     if (selector === '[data-orthogroup-id]') {
       return this.elements.filter((element) => element.hasAttribute('data-orthogroup-id'));
     }
-    if (selector.includes('data-gbdraw-pairwise-match-id')) {
+    if (selector.includes('data-gbdraw-match-id')) {
       return this.elements.filter((element) => element.kind === 'match');
     }
     return this.elements.filter((element) => element.kind === 'feature');
@@ -539,7 +539,7 @@ const featureTwo = new FakeElement('feature', {
 });
 const match = new FakeElement('match', {
   id: 'm1',
-  'data-gbdraw-pairwise-match-id': 'm1',
+  'data-gbdraw-match-id': 'm1',
   'data-orthogroup-id': 'OG1'
 });
 const unrelatedPath = new FakeElement('generic', {
@@ -773,7 +773,7 @@ const cssFeatureSelector = cursorRule[1]
 const { FEATURE_SELECTOR } = await import(pathToFileURL(join(tempDir, 'services', 'feature-dom.js')));
 assert.equal(cssFeatureSelector, FEATURE_SELECTOR);
 for (const excludedSelector of [
-  'data-gbdraw-pairwise-match-id',
+  'data-gbdraw-match-id',
   'data-match-kind',
   'data-orthogroup-id',
   'legend',

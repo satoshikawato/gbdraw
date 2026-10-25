@@ -2973,7 +2973,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
       provenance: plain(latestDerived?.payload?.provenance),
       telemetry: plain(app.lastRunInfo?.losatTelemetry),
       svg,
-      matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length
+      matchCount: (svg.match(/data-gbdraw-match-id=/g) || []).length
     };
   });
 

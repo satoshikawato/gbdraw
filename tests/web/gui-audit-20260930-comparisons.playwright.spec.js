@@ -65,7 +65,7 @@ const svgRibbons = (page, content) => page.evaluate((text) => {
   const svg = new DOMParser().parseFromString(text, 'image/svg+xml');
   const numbers = (value) => (String(value || '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/gi) || []).map(Number);
   const span = (values) => [Math.round(Math.min(...values)), Math.round(Math.max(...values))];
-  return [...svg.querySelectorAll('[data-gbdraw-pairwise-match-id]')].map((element) => {
+  return [...svg.querySelectorAll('[data-gbdraw-match-id]')].map((element) => {
     const point = numbers(element.getAttribute('d'));
     const data = Object.fromEntries([...element.attributes]
       .filter(({ name }) => name.startsWith('data-'))
@@ -339,7 +339,7 @@ test('the match popup and its FASTA header report source coordinates of a croppe
   const popup = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.clickedPairwiseMatch = null;
-    app.svgContainer.querySelector('svg [data-gbdraw-pairwise-match-id]')
+    app.svgContainer.querySelector('svg [data-gbdraw-match-id]')
       .dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
     for (let attempt = 0; attempt < 100 && !app.clickedPairwiseMatch; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));

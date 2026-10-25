@@ -448,16 +448,16 @@
             "actions": [
               {
                 "type": "waitForSelector",
-                "selector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
+                "selector": "[data-gbdraw-match-id='comparison1_match331']",
                 "state": "attached"
               },
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\")) throw new Error('Similarity-group target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = -970; app.canvasPan.y = 0; }"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector(\"[data-gbdraw-match-id='comparison1_match331']\")) throw new Error('Similarity-group target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = -970; app.canvasPan.y = 0; }"
               },
               {
                 "type": "evaluate",
-                "script": "const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Similarity-group click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
+                "script": "const target = document.querySelector(\"[data-gbdraw-match-id='comparison1_match331']\"); const rect = target?.getBoundingClientRect(); if (!target || !rect) throw new Error('Similarity-group click target is unavailable.'); target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2, view: window }));"
               },
               {
                 "type": "waitForSelector",
@@ -465,7 +465,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-pairwise-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'genes in', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Similarity-group popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Similarity-group target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"[data-gbdraw-match-id='comparison1_match331']\"); const text = String(popup?.textContent || '').replace(/\\s+/g, ' ').toLowerCase(); const rect = target?.getBoundingClientRect(); for (const expected of ['og_244', '30s ribosomal protein s11', 'genes in', 'ap027078.1']) { if (!text.includes(expected)) throw new Error(`Similarity-group popup is missing: ${expected}`); } if (!rect || !popup) throw new Error('Similarity-group target bounds are unavailable.'); popup.style.width = '600px'; const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 600 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 624); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
               },
               {"type": "wait", "ms": 250},
               {
@@ -473,7 +473,7 @@
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact similarity-group member table not found.'); popup.children[0]?.setAttribute('data-capture', 'hepat-og-popup-header'); count.setAttribute('data-capture', 'hepat-og-popup-count'); lastShown.setAttribute('data-capture', 'hepat-og-popup-member-row'); document.activeElement?.blur();"
               }
             ],
-            "highlightSelector": "[data-gbdraw-pairwise-match-id='comparison1_match331']",
+            "highlightSelector": "[data-gbdraw-match-id='comparison1_match331']",
             "clipSelectors": ["[data-capture='hepat-og-popup-header']", "[data-capture='hepat-og-popup-count']", "[data-capture='hepat-og-popup-member-row']"],
             "cropPadding": {
               "top": 18,

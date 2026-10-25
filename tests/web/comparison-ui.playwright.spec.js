@@ -1118,13 +1118,13 @@ test('comparison controls drive appearance and current Session round trips', { t
     const result = await app.runAnalysis();
     const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
-    const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
+    const match = svg.querySelector('[data-gbdraw-match-id]');
     return {
       result,
       error: app.errorLog,
       style: match?.getAttribute('data-pairwise-match-style') || '',
       path: match?.getAttribute('d') || '',
-      matchCount: svg.querySelectorAll('[data-gbdraw-pairwise-match-id]').length
+      matchCount: svg.querySelectorAll('[data-gbdraw-match-id]').length
     };
   }, { style_: style, height_: height });
 
@@ -1509,7 +1509,7 @@ const prepareUploadedTablePair = async (page) => {
     const result = await app.runAnalysis();
     const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
-    const match = svg.querySelector('[data-gbdraw-pairwise-match-id]');
+    const match = svg.querySelector('[data-gbdraw-match-id]');
     return {
       status: result?.status,
       errorCode: app.errorLog?.code || '',
@@ -1534,7 +1534,7 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(unrelated.recordIds).toEqual(['Co06A', 'Co06B']);
 
   const match = page.locator(
-    '.shadow-xl.origin-top > svg [data-gbdraw-pairwise-match-id]'
+    '.shadow-xl.origin-top > svg [data-gbdraw-match-id]'
   ).first();
   await match.focus();
   await match.press('Enter');

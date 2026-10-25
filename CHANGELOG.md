@@ -12,12 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
+  `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
+  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 (Sessions 29 and 30), which carry only the old
+  name, still load in the web app and as input to `enrich_svg`: the old name is renamed once when such a file is
+  read.
 - SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
   `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
-  within 30 degrees of 180 or near 360, so a drawn arc stays within 0.003 SVG px of its circle (equal halves of a
+  within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a
   near-full circle bowed up to 0.8 px once rounded). Depth, GC content and GC skew paths keep a sample
   only where dropping it would move the outline by more than 0.02 SVG px, and a Circular Depth or GC percent area
-  closes on its baseline with two arcs. The drawing looks the same (largest grey-level change 9 of 255 at 1x and 16
+  closes on its baseline with two arcs (one for a span of 20 degrees or less). The drawing looks the same (largest grey-level change 9 of 255 at 1x and 16
   at 4x outside text set on a path), and files get smaller: Circular AP027078 with Depth 5.6 MB -> 0.48 MB, Linear
   2.5 MB -> 0.21 MB, NC_010162 4.3 MB -> 3.2 MB, the hepatoplasmataceae collinear Gallery figure 6.3 MB -> 3.8 MB;
   25 test figures together 86.1 MB -> 64.8 MB (-25%). Tools that compare SVG bytes or parse path numbers with a fixed

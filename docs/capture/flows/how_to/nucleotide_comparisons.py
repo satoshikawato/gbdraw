@@ -195,7 +195,7 @@ def _assert_comparison_svg_download(
     matches = [
         element
         for element in elements
-        if element.attrib.get("data-gbdraw-pairwise-match-id")
+        if element.attrib.get("data-gbdraw-match-id")
         and element.attrib.get("data-match-kind") == "pairwise"
     ]
     if len(matches) != expected_matches:

@@ -260,7 +260,7 @@ const makeSyntheticState = () => {
 };
 
 const commonAttributes = {
-  'data-gbdraw-pairwise-match-id': 'match-synthetic',
+  'data-gbdraw-match-id': 'match-synthetic',
   'data-query-record-id': 'query-record',
   'data-subject-record-id': 'subject-record',
   'data-query-record-index': '0',
@@ -775,7 +775,7 @@ const decodeXml = (value) => String(value || '')
   .replace(/&#x([\da-f]+);/gi, (_match, hexadecimal) => String.fromCodePoint(Number.parseInt(hexadecimal, 16)));
 
 const pairwiseElementsFromSvg = (svg) => Array.from(
-  svg.matchAll(/<path\b(?=[^>]*data-gbdraw-pairwise-match-id=)[^>]*>/g),
+  svg.matchAll(/<path\b(?=[^>]*data-gbdraw-match-id=)[^>]*>/g),
   (match) => {
     const attributes = {};
     for (const attribute of match[0].matchAll(/([\w:-]+)="([^"]*)"/g)) {
@@ -896,7 +896,7 @@ test('exact large-fixture payloads retain canonical digests, structure, and Feat
     });
     captured[name] = {
       target: {
-        matchId: target.attributes['data-gbdraw-pairwise-match-id'],
+        matchId: target.attributes['data-gbdraw-match-id'],
         blockId: target.attributes['data-collinearity-block-id'],
         orthogroupIds: target.attributes['data-orthogroup-id']
       },

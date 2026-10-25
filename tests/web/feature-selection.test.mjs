@@ -100,8 +100,8 @@ class FakeElement {
 const fakeSvg = (elements, className = '') => {
   const root = new FakeElement(className);
   root.querySelectorAll = (selector) => {
-    if (selector === '[data-gbdraw-pairwise-match-id][role="button"][tabindex="0"]') {
-      return elements.filter((element) => element.getAttribute('data-gbdraw-pairwise-match-id')
+    if (selector === '[data-gbdraw-match-id][role="button"][tabindex="0"]') {
+      return elements.filter((element) => element.getAttribute('data-gbdraw-match-id')
         && element.getAttribute('role') === 'button' && element.getAttribute('tabindex') === '0');
     }
     if (selector === '[style]') {
@@ -146,7 +146,7 @@ const layoutTarget = new FakeElement('gbdraw-preview-layout-target keep-layout',
 const cursorStyle = new FakeElement('', 'cursor: pointer; opacity: 0.8');
 const pairwise = new FakeElement();
 for (const [name, value] of Object.entries({
-  'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+  'data-gbdraw-match-id': 'comparison1_match1',
   role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
 })) pairwise.setAttribute(name, value);
 // Hover and drag feedback that was removed leaves an empty inline style.
@@ -163,11 +163,11 @@ assert.equal(searchMatch.getAttribute('class'), 'keep');
 assert.equal(cursorStyle.getAttribute('style'), 'opacity: 0.8');
 assert.equal(emptiedStyle.getAttribute('style'), null);
 assert.equal(previewRoot.getAttribute('class'), 'keep-root');
-assert.equal(pairwise.getAttribute('data-gbdraw-pairwise-match-id'), 'comparison1_match1');
+assert.equal(pairwise.getAttribute('data-gbdraw-match-id'), 'comparison1_match1');
 for (const name of ['role', 'tabindex', 'aria-label']) assert.equal(pairwise.getAttribute(name), null);
 const interactivePairwise = new FakeElement();
 for (const [name, value] of Object.entries({
-  'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+  'data-gbdraw-match-id': 'comparison1_match1',
   role: 'button', tabindex: '0', 'aria-label': 'Pairwise match 1'
 })) interactivePairwise.setAttribute(name, value);
 stripTransientPreviewState(fakeSvg([interactivePairwise]), { stripCursor: false });

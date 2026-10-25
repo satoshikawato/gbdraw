@@ -30,7 +30,7 @@ from gbdraw.render.interactive_svg import (
     _first_text,
     _is_feature_candidate,
     _is_match_candidate,
-    _match_id_status,
+    _match_id,
     _merge_rendered_feature_entry,
     _normalize_string_array,
     _rendered_feature_entry,
@@ -363,7 +363,6 @@ _MATCH_SNAPSHOT_ATTRIBUTES = tuple(
             "data-gbdraw-match-fragment",
             "data-gbdraw-match-geometry",
             "data-gbdraw-match-id",
-            "data-gbdraw-pairwise-match-id",
             "data-match-kind",
             "data-collinearity-block-id",
             "data-orthogroup-id",
@@ -549,10 +548,7 @@ def _match_payload(
     attributes: Mapping[str, object],
     index: int,
 ) -> dict[str, object]:
-    match_id, valid = _match_id_status(attributes)
-    if not valid:
-        raise GbdrawError("Rendered match contains conflicting match ID aliases.")
-    match_id = match_id or f"match_{index + 1}"
+    match_id = _match_id(attributes) or f"match_{index + 1}"
     payload: dict[str, object] = {
         "id": match_id,
         "match_kind": _match_kind(attributes),

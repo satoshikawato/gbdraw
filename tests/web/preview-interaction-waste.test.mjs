@@ -63,10 +63,10 @@ const stubs = {
   ],
   // The hover summary of a band: its builder is counted.
   'app/pairwise-match-popup.js': [
-    'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-pairwise-match-id]";',
+    'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-match-id]";',
     'export const buildPairwiseMatchHoverSummary = (element) => {',
     '  globalThis.__PREVIEW_WASTE_COUNTS__.hoverSummaryBuilds += 1;',
-    '  const id = element.getAttribute("data-gbdraw-pairwise-match-id");',
+    '  const id = element.getAttribute("data-gbdraw-match-id");',
     '  return { id, title: "Pairwise match", subtitle: id, fill: "#94a3b8", rows: [',
     '    { id: "Kind", label: "Kind", value: "pairwise" },',
     '    { id: "Identity", label: "Identity", value: element.getAttribute("data-identity") },',
@@ -289,7 +289,7 @@ class FakeElement {
 
   matches(selector) {
     if (this.kind === 'feature') return selector.includes('data-gbdraw-feature-id') || selector.includes('path[id^="f"]');
-    if (this.kind === 'match') return selector.includes('data-gbdraw-pairwise-match-id');
+    if (this.kind === 'match') return selector.includes('data-gbdraw-match-id');
     return false;
   }
 
@@ -318,7 +318,7 @@ class FakeSvg {
   querySelectorAll(selector) {
     this.queryCount += 1;
     if (selector === '[data-orthogroup-id]') return this.elements.filter((element) => element.hasAttribute('data-orthogroup-id'));
-    if (selector.includes('data-gbdraw-pairwise-match-id')) return this.elements.filter((element) => element.kind === 'match');
+    if (selector.includes('data-gbdraw-match-id')) return this.elements.filter((element) => element.kind === 'match');
     return this.elements.filter((element) => element.kind === 'feature');
   }
 
@@ -333,7 +333,7 @@ const featureRow = (index, extra = {}) => ({
   start: index * 100, end: index * 100 + 90, record_id: 'REC', ...extra
 });
 const band = (id, attributes = {}) => new FakeElement('match', {
-  id, 'data-gbdraw-pairwise-match-id': id, 'data-identity': '91.5', 'data-qstart': '1', 'data-qend': '90', ...attributes
+  id, 'data-gbdraw-match-id': id, 'data-identity': '91.5', 'data-qstart': '1', 'data-qend': '90', ...attributes
 });
 
 // One preview: an SVG with features and bands, the SVG owner, and a pan/zoom owner.
@@ -481,7 +481,7 @@ test('OV-937: the open match popup marks its bands from the band index', () => {
   const ribbonTwo = band('og-b', { 'data-match-kind': 'orthogroup', 'data-orthogroup-id': 'OG8;OG7' });
   const otherRibbon = band('og-c', { 'data-match-kind': 'orthogroup', 'data-orthogroup-id': 'OG8' });
   const pairwise = band('pw-1', { 'data-orthogroup-id': 'OG7', 'data-match-kind': 'pairwise' });
-  const pairwiseFragment = band('pw-1-b', { 'data-gbdraw-pairwise-match-id': 'pw-1', 'data-match-kind': 'pairwise' });
+  const pairwiseFragment = band('pw-1-b', { 'data-gbdraw-match-id': 'pw-1', 'data-match-kind': 'pairwise' });
   const local = createPreview({ features: [featureRow(0)], bands: [ribbonOne, ribbonTwo, otherRibbon, pairwise, pairwiseFragment] });
   const selected = () => [ribbonOne, ribbonTwo, otherRibbon, pairwise, pairwiseFragment]
     .filter((element) => element.classList.contains('gbdraw-match-selected'))

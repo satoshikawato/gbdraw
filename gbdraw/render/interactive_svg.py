@@ -9,6 +9,7 @@ import json
 import math
 import re
 import string
+from types import MappingProxyType
 from typing import Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
@@ -30,6 +31,17 @@ INTERACTIVE_STYLE_ID = "gbdraw-interactive-feature-style"
 INTERACTIVE_SCRIPT_ID = "gbdraw-interactive-feature-script"
 INTERACTIVE_GLOW_FILTER_ID = "gbdraw-interactive-feature-glow"
 INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
+MATCH_ID_ATTRIBUTE = "data-gbdraw-match-id"
+# Attributes a stored SVG of an older gbdraw wrote under another name: legacy
+# name -> current name. gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30)
+# named a comparison match only by ``data-gbdraw-pairwise-match-id``. An SVG
+# from outside is renamed once when it is admitted (`adopt_legacy_svg_attributes`
+# here, `services/svg-result-normalization.js` in the Web, which reads this
+# table through tools/generate_web_contracts.py); every other reader reads
+# only the current name.
+LEGACY_SVG_ATTRIBUTE_RENAMES: Mapping[str, str] = MappingProxyType(
+    {"data-gbdraw-pairwise-match-id": MATCH_ID_ATTRIBUTE}
+)
 _FEATURE_ELEMENT_SUFFIX_RE = re.compile(rf"__(?:part|line){ASCII_NONNEGATIVE_INTEGER_PATTERN}$")
 _FEATURE_CONNECTOR_SUFFIX_RE = re.compile(rf"__line{ASCII_NONNEGATIVE_INTEGER_PATTERN}$")
 _FEATURE_RECORD_SUFFIX_RE = re.compile(rf"_record_({ASCII_NONNEGATIVE_INTEGER_PATTERN})$")
@@ -381,34 +393,35 @@ def _is_feature_fill_target(element: ET.Element) -> bool:
     return _FEATURE_CONNECTOR_SUFFIX_RE.search(str(element.get("id") or "")) is None
 
 
+def adopt_legacy_svg_attributes(root: ET.Element) -> None:
+    """Rename the attributes of `LEGACY_SVG_ATTRIBUTE_RENAMES` in place.
+
+    An element that already has the current attribute keeps its value; the
+    legacy attribute is removed either way.
+    """
+
+    for element in root.iter():
+        for legacy, current in LEGACY_SVG_ATTRIBUTE_RENAMES.items():
+            value = element.attrib.pop(legacy, None)
+            if value is not None and not element.get(current):
+                element.set(current, value)
+
+
 def _is_match_candidate(element: ET.Element) -> bool:
     if _local_name(element.tag) != "path":
         return False
     return any(
         element.get(attr)
         for attr in (
-            "data-gbdraw-match-id",
-            "data-gbdraw-pairwise-match-id",
+            MATCH_ID_ATTRIBUTE,
             "data-match-kind",
             "data-pairwise-match-style",
         )
     )
 
 
-def _match_id_status(attributes: Mapping[str, object]) -> tuple[str, bool]:
-    return _consistent_text_alias(
-        {
-            "match_id": attributes.get("data-gbdraw-match-id"),
-            "pairwise_match_id": attributes.get(
-                "data-gbdraw-pairwise-match-id"
-            ),
-        },
-        ("match_id", "pairwise_match_id"),
-    )
-
-
-def _element_match_id_status(element: ET.Element) -> tuple[str, bool]:
-    return _match_id_status(element.attrib)
+def _match_id(attributes: Mapping[str, object]) -> str:
+    return str(attributes.get(MATCH_ID_ATTRIBUTE) or "").strip()
 
 
 def _validate_match_fragments(attributes: Sequence[Mapping[str, object]]) -> None:
@@ -1616,6 +1629,7 @@ def enrich_svg(
         raise GbdrawError(f"Malformed SVG source for interactive export: {exc}") from exc
     if _local_name(root.tag) != "svg":
         raise GbdrawError("Interactive SVG export expected an SVG root element.")
+    adopt_legacy_svg_attributes(root)
 
     popup_mode: Literal["rich", "simple"] = (
         "simple" if context.popup_mode == "simple" else "rich"
@@ -1739,8 +1753,8 @@ def enrich_svg(
         matches_by_id[match_id] = match
     elements_by_match_id: dict[str, list[ET.Element]] = {}
     for element in match_elements:
-        match_id, valid = _element_match_id_status(element)
-        if not valid or not match_id:
+        match_id = _match_id(element.attrib)
+        if not match_id:
             raise GbdrawError(
                 "Rendered SVG contains invalid or duplicate match IDs."
             )
@@ -1753,8 +1767,7 @@ def enrich_svg(
         )
     for match_id, elements in elements_by_match_id.items():
         for element in elements:
-            element.set("data-gbdraw-match-id", match_id)
-            element.set("data-gbdraw-pairwise-match-id", match_id)
+            element.set(MATCH_ID_ATTRIBUTE, match_id)
             element.set("data-gbdraw-interactive-match", "true")
             _add_class_token(element, "gbdraw-interactive-pairwise-match")
 

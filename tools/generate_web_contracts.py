@@ -68,6 +68,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("OTHER_MODE_RESULT_LEGEND_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_LEGEND_FIELDS"),
     ("OTHER_MODE_RESULT_RUN_METADATA_FIELDS", "gbdraw.session_io", "OTHER_MODE_RESULT_RUN_METADATA_FIELDS"),
     ("CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS", "gbdraw.session_io", "CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS"),
+    ("LEGACY_SVG_ATTRIBUTE_RENAMES", "gbdraw.render.interactive_svg", "LEGACY_SVG_ATTRIBUTE_RENAMES"),
 )
 # (Web name, Python module, function): values a Python function derives from
 # its owner, written in this order after the constants.
@@ -127,6 +128,13 @@ def _declaration(web_name: str, value: object) -> str:
         return (
             f"/** @type {{Readonly<Record<{keys}, readonly string[]>>}} */\n"
             f"export const {web_name} = {_frozen({key: list(item) for key, item in value.items()})};\n"
+        )
+    if isinstance(value, Mapping) and all(isinstance(item, str) for item in value.values()):
+        # One string per key, in the owner's order.
+        keys = " | ".join(_scalar(key) for key in value)
+        return (
+            f"/** @type {{Readonly<Record<{keys}, string>>}} */\n"
+            f"export const {web_name} = {_frozen(dict(value))};\n"
         )
     if isinstance(value, dict):
         return (

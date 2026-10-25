@@ -8,6 +8,7 @@ import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintD
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { normalizeGenerationResponse, selectHeldRenderState } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { SEGMENTS } from '../../gbdraw/web/js/services/current-worker-result-source.js';
 import {
@@ -1380,6 +1381,36 @@ const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
   `../fixtures/sessions/${name}`, import.meta.url
 ))).toString('utf8'));
 const FORCED_STROKES = 'forced-label-underlay-strokes.v44.gbdraw-session.json.gz';
+
+// gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30) named a comparison
+// match only by `data-gbdraw-pairwise-match-id`. The legacy admission renames
+// it once, so every reader (the popup, the selection, the standalone export)
+// finds the match by `data-gbdraw-match-id` alone.
+test('a Session 29 or 30 Result is admitted with one match attribute', () => {
+  const textParser = class { parseFromString(content) { return { documentElement: parseSvgText(content) }; } };
+  [
+    ['BGC0000708-BGC0000713.v29.gbdraw-session.json.gz', 77],
+    ['BGC0000708-BGC0000713.v30.gbdraw-session.json.gz', 77],
+    ['cli-linear-protein.v30.gbdraw-session.json.gz', 2]
+  ].forEach(([name, count]) => {
+    const session = sessionFixture(name);
+    const stored = parseSvgText(session.results[0].content);
+    const legacyIds = stored.querySelectorAll('[data-gbdraw-pairwise-match-id]')
+      .map((element) => element.getAttribute('data-gbdraw-pairwise-match-id'));
+    assert.equal(legacyIds.length, count, name);
+    assert.equal(stored.querySelectorAll('[data-gbdraw-match-id]').length, 0, name);
+
+    const [admitted] = admitLegacyImportedResults(
+      createLegacyImportResultSource(normalizeLogicalResults(session.results)),
+      { sanitizer: { sanitize: (value) => value }, parser: textParser }
+    );
+    const content = getCommittedSvgContent(admitted);
+    assert.equal(content.includes('data-gbdraw-pairwise-match-id'), false, name);
+    const matches = parseSvgText(content).querySelectorAll('[data-gbdraw-match-id]');
+    assert.deepEqual(matches.map((element) => element.getAttribute('data-gbdraw-match-id')), legacyIds, name);
+    assert.deepEqual(matches.map((element) => buildMatchPopupPayload(element)?.id), legacyIds, name);
+  });
+});
 const loadSavedResults = (session, {
   mode = 'circular', results = normalizeLogicalResults(session.results),
   featureCatalog = session.editorState.featureCatalog, patch = () => {}

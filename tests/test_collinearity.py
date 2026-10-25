@@ -2884,7 +2884,8 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
     drawing.add(group.generate_linear_match_path(row))
 
     svg_text = drawing.tostring()
-    assert 'data-gbdraw-pairwise-match-id="comparison1_match1"' in svg_text
+    assert 'data-gbdraw-match-id="comparison1_match1"' in svg_text
+    assert "data-gbdraw-pairwise-match-id" not in svg_text
     assert 'data-match-kind="collinear"' in svg_text
     assert 'data-query-record-index="0"' in svg_text
     assert 'data-subject-record-index="1"' in svg_text
@@ -2937,7 +2938,7 @@ def test_pairwise_match_path_emits_plain_required_metadata() -> None:
     drawing.add(group.generate_linear_match_path(row, match_index=7))
     svg_text = drawing.tostring()
 
-    assert 'data-gbdraw-pairwise-match-id="comparison1_match7"' in svg_text
+    assert 'data-gbdraw-match-id="comparison1_match7"' in svg_text
     assert 'data-match-kind="pairwise"' in svg_text
     # Record identity comes from the endpoint records, never from table IDs (CO-06).
     assert 'data-query-record-id="record_a"' in svg_text
