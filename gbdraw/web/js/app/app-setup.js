@@ -3691,8 +3691,6 @@ export const createAppSetup = () => {
   /** @param {SessionFileInput} event */
   const importSession = async (event) => {
     const name = String(event?.target?.files?.[0]?.name || '');
-    // A chosen Session makes a Generate likely: download the Worker's boot files now.
-    if (name) prefetchPyodideBootAssets();
     const result = await loadSessionFromFile(event);
     // The notice of an earlier operation does not stand for this load; a
     // Load the user canceled changed nothing, the notice included.
@@ -3704,6 +3702,9 @@ export const createAppSetup = () => {
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
+    // A loaded Session makes a Generate likely: download the Worker's boot
+    // files now, after the Load, so they never slow its own requests.
+    if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
     return result;
   };
   /** @param {SessionFileInput} event */
