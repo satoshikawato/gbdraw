@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: the Auto organism name has one rule for the Circular centre, the
+  Circular plot title and the Web Linear Auto definition. Line 1 is the
+  scientific name (genus and epithets italic, rank words such as `subsp.`,
+  `sp.` and `pv.` upright, `[Genus]` brackets upright, an italic `Ca.` before
+  an upright Candidatus name); line 2 is the strain, drawn once even when the
+  /organism already holds it (OV-1830). Virus names, names above the genus
+  with a placeholder (`Lachnospiraceae bacterium A4`), hybrids, cloning
+  vectors and names the rule cannot read stay whole and upright on line 1; an
+  ICTV binomial species (`Lambdavirus lambda`) is italic. A Bakta ORGANISM
+  `.` gives no name line instead of an italic "." (OV-1831). A typed Species
+  without a typed Strain is cut into two lines by the same rule, keeping its
+  words and italics as typed. Saved Linear Auto definitions keep their text
+  until the file is read again.
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
   `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app from 2026-06-18 to

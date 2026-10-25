@@ -9,10 +9,13 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
+    OrganismLines,
     RecordSourceMetadata,
     format_inferred_definition,
     format_replicon_label,
     infer_record_source_metadata,
+    organism_name_lines,
+    split_organism_lines,
 )
 from gbdraw.exceptions import GbdrawError
 from gbdraw.io.genome import load_gbks, load_gff_fasta
@@ -28,14 +31,92 @@ _CASES = json.loads(
 
 
 @pytest.mark.parametrize("case", _CASES["definition"], ids=lambda case: case["name"])
-def test_format_inferred_definition_matches_shared_cases(case: dict[str, str]) -> None:
+def test_format_inferred_definition_matches_shared_cases(case: dict) -> None:
     meta = RecordSourceMetadata(
         organism=case["organism"],
         strain=case["strain"],
         replicon=None,
         organelle=None,
+        lineage_top=case.get("lineage"),
     )
     assert format_inferred_definition(meta) == case["expected"]
+    if "lines" in case:
+        # The Circular centre draws the same rule on two lines.
+        assert split_organism_lines(meta) == OrganismLines(*case["lines"])
+
+
+def _meta(organism: str, strain: str, lineage: str | None = "Bacteria") -> RecordSourceMetadata:
+    return RecordSourceMetadata(organism, strain, None, None, lineage)
+
+
+def test_the_strain_line_draws_the_strain_once() -> None:
+    # OV-1830: the Circular centre drew "K-12" on both lines and "N315" twice.
+    assert split_organism_lines(_meta("Escherichia coli str. K-12 substr. MG1655", "K-12")) == OrganismLines(
+        "<i>Escherichia coli</i>", "str. K-12 substr. MG1655"
+    )
+    assert split_organism_lines(_meta("Staphylococcus aureus subsp. aureus N315", "N315")).strain == "N315"
+    # Letters and digits only: "So ce 56" is the "So ce56" the name holds.
+    assert split_organism_lines(_meta("Sorangium cellulosum So ce56", "So ce 56")).strain == "So ce56"
+    # A strain the name does not hold follows the words after the taxon.
+    assert split_organism_lines(_meta("Escherichia coli O157:H7", "Sakai")).strain == "O157:H7 Sakai"
+
+
+def test_a_placeholder_organism_gives_no_name_line() -> None:
+    # OV-1831: Bakta writes ORGANISM "." when it has no organism; the Linear
+    # Auto definition drew an italic ".".
+    assert split_organism_lines(_meta(".", "X-4", None)) == OrganismLines("", "X-4")
+    assert format_inferred_definition(_meta(".", "X-4", None)) == "X-4"
+
+
+def test_the_lineage_reaches_the_rule_from_a_genbank_record() -> None:
+    record = SeqRecord(
+        Seq("ATGC"), id="v", annotations={"organism": "Beihai barnacle viurs 1", "taxonomy": ["Viruses", "Riboviria"]}
+    )
+    metadata = infer_record_source_metadata(record)
+    assert metadata.lineage_top == "Viruses"
+    assert split_organism_lines(metadata) == OrganismLines("Beihai barnacle viurs 1", "")
+    # Without a lineage (GFF3 input) the misspelt virus name reads as a taxon.
+    assert infer_record_source_metadata(SeqRecord(Seq("ATGC"), id="g")).lineage_top is None
+
+
+_K12 = _meta("Escherichia coli str. K-12 substr. MG1655", "K-12")
+_N315 = _meta("Staphylococcus aureus subsp. aureus N315", "N315")
+
+
+@pytest.mark.parametrize(
+    "metadata,typed,expected",
+    [
+        # The typed text is cut where the Auto rule cuts it; its words stay as typed.
+        (_K12, "Escherichia coli str. K-12 substr. MG1655", ("Escherichia coli", "str. K-12 substr. MG1655")),
+        (_K12, "Escherichia coli MG1655", ("Escherichia coli", "MG1655")),
+        (_N315, "Staphylococcus aureus N315", ("Staphylococcus aureus", "N315")),
+        # Its italics stay as typed; a span the cut crosses closes and reopens.
+        (_N315, "<i>Staphylococcus aureus</i> N315", ("<i>Staphylococcus aureus</i>", "N315")),
+        (_N315, "<i>Staphylococcus aureus N315</i>", ("<i>Staphylococcus aureus</i>", "<i>N315</i>")),
+        (_N315, "Candidatus Staphylococcus aureus N315", ("Candidatus Staphylococcus aureus", "N315")),
+        # Only a taxon: the Auto strain line follows, unless the text names the strain.
+        (_K12, "Escherichia coli", ("Escherichia coli", "str. K-12 substr. MG1655")),
+        (_K12, "<i>Escherichia coli</i>", ("<i>Escherichia coli</i>", "str. K-12 substr. MG1655")),
+        # Text the rule cannot read stays whole.
+        (_K12, "Escherichia phage T5", ("Escherichia phage T5", "str. K-12 substr. MG1655")),
+        (_meta("Lachnospiraceae bacterium A4", "A4"), "Lachnospiraceae bacterium A4", ("Lachnospiraceae bacterium A4", "")),
+        # The record's virus name keeps the typed text whole.
+        (_meta("Escherichia phage T5", "", "Viruses"), "Escherichia coli phage T5", ("Escherichia coli phage T5", "")),
+    ],
+)
+def test_a_typed_species_without_a_typed_strain_follows_the_auto_rule(
+    metadata: RecordSourceMetadata, typed: str, expected: tuple[str, str]
+) -> None:
+    assert organism_name_lines(metadata, typed_taxon=typed) == OrganismLines(*expected)
+
+
+def test_a_typed_strain_keeps_both_lines_as_typed() -> None:
+    assert organism_name_lines(_K12, typed_taxon="Escherichia coli K-12", typed_strain="MG1655") == OrganismLines(
+        "Escherichia coli K-12", "MG1655"
+    )
+    # No typed line 1: the Auto taxon line, the typed strain line.
+    assert organism_name_lines(_K12, typed_strain="MG1655") == OrganismLines("<i>Escherichia coli</i>", "MG1655")
+    assert organism_name_lines(_K12) == split_organism_lines(_K12)
 
 
 @pytest.mark.parametrize("qualifiers,expected", [

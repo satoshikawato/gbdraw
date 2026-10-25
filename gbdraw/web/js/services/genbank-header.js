@@ -28,6 +28,7 @@ const GENBANK_LOCUS_PATTERN = /^LOCUS {7} *(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/;
  *   version: string,
  *   recordId: string,
  *   organism: string,
+ *   lineageTop: string | null,
  *   recordLength: number | null,
  *   topology: string
  * }} GenBankHeader
@@ -61,6 +62,7 @@ export const scanGenBankHeader = (chunk) => {
   /** @type {number | null} */
   let versionSuffix = null;
   let organism = '';
+  let lineage = '';
   /** @param {string} text */
   const addAccessions = (text) => {
     const tokens = text.replace(/;/g, ' ').split(/\s+/).filter(Boolean);
@@ -86,7 +88,7 @@ export const scanGenBankHeader = (chunk) => {
       }
     } else if (keyword === 'ORGANISM') {
       organism = data;
-      let lineage = '';
+      lineage = '';
       while (continuation(index)) {
         const line = header[++index];
         const value = line.slice(GENBANK_INDENT).trim();
@@ -104,9 +106,20 @@ export const scanGenBankHeader = (chunk) => {
     version,
     recordId,
     organism: organism.trim(),
+    lineageTop: lineageTopOf(lineage),
     recordLength: locusMatch[2] ? Number(locusMatch[2]) : null,
     topology: locusLine.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b.*\s(circular|linear)(?:\s|$)/)?.[1] || 'unknown'
   };
+};
+
+// The first taxon of the ORGANISM lineage, as Biopython's _split_taxonomy
+// gives annotations["taxonomy"] and infer_record_source_metadata reads it.
+/** @param {string} lineage @returns {string | null} */
+const lineageTopOf = (lineage) => {
+  const text = lineage.trim();
+  if (!text || text === '.') return null;
+  const taxa = (text.endsWith('.') ? text.slice(0, -1) : text).split(';').filter((taxon) => taxon !== '');
+  return taxa.length > 0 ? taxa[0].trim() || null : null;
 };
 
 // The record ID the loader gives one GenBank record chunk, with the header
