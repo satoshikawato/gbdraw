@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Hashable, Iterator
 
 import pytest
 from Bio import SeqIO
@@ -564,6 +564,66 @@ def test_a_fresh_cli_render_builds_no_derived_protein_entries(
     session = json.loads(_fresh_protein_session(tmp_path, monkeypatch).read_text(encoding="utf-8"))
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}
+
+
+def _key_nodes(key: Hashable) -> Iterator[Hashable]:
+    """Every node of a render-stage key, the key itself included."""
+
+    stack = [key]
+    while stack:
+        node = stack.pop()
+        yield node
+        if isinstance(node, tuple):
+            stack.extend(node)
+
+
+@pytest.mark.parametrize("call", ["cli", "render_session", "render_session_drawings"])
+def test_a_session_call_keys_its_decoded_collinearity_by_its_resource(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, call: str
+) -> None:
+    """A Session call decodes inside its cache, so a decoded result is keyed by its resource, not walked."""
+
+    import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+    from gbdraw.api import prepared
+    from gbdraw.session import render_session, render_session_drawings
+    from tests.test_render_stage_protein_analysis import _no_search
+
+    sidecar = _fresh_protein_session(tmp_path, monkeypatch, "collinear")
+    (resource_id,) = [
+        comparison["resourceId"]
+        for comparison in json.loads(sidecar.read_text(encoding="utf-8"))["renderRequest"]["comparisons"]
+        if comparison["kind"] == "collinearityResult"
+    ]
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
+    keys: list[Any] = []
+    original_lookup = prepared.lookup_render_stage
+
+    def recording_lookup(transaction: Any, key: Any) -> Any:
+        keys.append(key)
+        return original_lookup(transaction, key)
+
+    monkeypatch.setattr(prepared, "lookup_render_stage", recording_lookup)
+    monkeypatch.chdir(tmp_path)
+    with materialize_session(load_session_document(sidecar), output_directory=tmp_path / "api") as materialized:
+        size = materialized.resource_paths[resource_id].stat().st_size
+        if call == "render_session":
+            render_session(materialized)
+        elif call == "render_session_drawings":
+            render_session_drawings(materialized)
+    if call == "cli":
+        _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg")
+
+    (projection,) = [key for key in keys if key[1] == "collinearity_projection"]
+    (identity,) = [
+        identity
+        for identity in prepared._key_resource_identities(projection)
+        if identity.resource_id == resource_id
+    ]
+    assert identity.size == size
+    assert ("identity", identity) in set(_key_nodes(projection))
+    assert not [
+        key for key in keys if "gbdraw.analysis.collinearity.CollinearityResult" in set(_key_nodes(key))
+    ]
 
 
 def _session_with_derived_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, list[dict[str, Any]]]:

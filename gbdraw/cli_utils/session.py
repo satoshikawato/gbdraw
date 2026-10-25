@@ -787,6 +787,7 @@ def render_session_drawings_cli(
         _build_session_document_from_drawings,
         _plan_session_drawings,
         _render_session_drawing_plans,
+        _session_parse_cache,
         _write_session_document,
         materialize_session,
         upgrade_session_document,
@@ -802,39 +803,43 @@ def render_session_drawings_cli(
         output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
     )
     with materialize_session(base, output_directory=output_directory) as materialized:
-        plans = _plan_session_drawings(
-            materialized,
-            drawings,
-            output_prefix=output_path.name if output_path is not None else None,
-            formats=format_override,
-            overwrite=overwrite,
-            embed_fonts=embed_fonts,
-        )
-        sidecar: tuple[Path, str] | None = None
-        if save:
-            sidecar = _session_sidecar_path(
-                plans,
-                session_output=session_output,
-                output_path=output_path,
-                output_directory=output_directory,
-            )
-            preflight_session_sidecar_if_requested(
-                save_session=True,
-                session_output=str(sidecar[0]),
-                output_prefix=None,
-                diagram_output_paths=tuple(
-                    path
-                    for plan in plans
-                    for path in diagram_request_output_paths(plan.request)
-                ),
+        # The drawings are decoded and rendered in one cache transaction, so a
+        # decoded resource is keyed by its resource; the logs and the re-save
+        # follow it.
+        with _session_parse_cache(materialized):
+            plans = _plan_session_drawings(
+                materialized,
+                drawings,
+                output_prefix=output_path.name if output_path is not None else None,
+                formats=format_override,
                 overwrite=overwrite,
+                embed_fonts=embed_fonts,
             )
-        preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
-        rendered = _render_session_drawing_plans(
-            materialized,
-            plans,
-            include_feature_catalog=save,
-        )
+            sidecar: tuple[Path, str] | None = None
+            if save:
+                sidecar = _session_sidecar_path(
+                    plans,
+                    session_output=session_output,
+                    output_path=output_path,
+                    output_directory=output_directory,
+                )
+                preflight_session_sidecar_if_requested(
+                    save_session=True,
+                    session_output=str(sidecar[0]),
+                    output_prefix=None,
+                    diagram_output_paths=tuple(
+                        path
+                        for plan in plans
+                        for path in diagram_request_output_paths(plan.request)
+                    ),
+                    overwrite=overwrite,
+                )
+            preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
+            rendered = _render_session_drawing_plans(
+                materialized,
+                plans,
+                include_feature_catalog=save,
+            )
         for result in rendered.values():
             items = (
                 result.items
