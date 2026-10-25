@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Hashable, Iterator
 
 import pytest
 from Bio import SeqIO
@@ -566,16 +566,15 @@ def test_a_fresh_cli_render_builds_no_derived_protein_entries(
     assert session["losatDerivedCache"] == {"entries": []}
 
 
-def _key_strings(key: Any) -> Any:
-    """Every string node of a render-stage key."""
+def _key_nodes(key: Hashable) -> Iterator[Hashable]:
+    """Every node of a render-stage key, the key itself included."""
 
     stack = [key]
     while stack:
         node = stack.pop()
+        yield node
         if isinstance(node, tuple):
             stack.extend(node)
-        elif isinstance(node, str):
-            yield node
 
 
 @pytest.mark.parametrize("call", ["cli", "render_session", "render_session_drawings"])
@@ -586,7 +585,6 @@ def test_a_session_call_keys_its_decoded_collinearity_by_its_resource(
 
     import gbdraw.analysis.protein_colinearity as protein_colinearity_module
     from gbdraw.api import prepared
-    from gbdraw.api.prepared import PreparedResourceIdentity
     from gbdraw.session import render_session, render_session_drawings
     from tests.test_render_stage_protein_analysis import _no_search
 
@@ -616,12 +614,15 @@ def test_a_session_call_keys_its_decoded_collinearity_by_its_resource(
         _cli(monkeypatch, "render", "--session", str(sidecar), "-o", str(tmp_path / "replayed"), "-f", "svg")
 
     (projection,) = [key for key in keys if key[1] == "collinearity_projection"]
-    assert projection[4][0] == (
-        "identity",
-        PreparedResourceIdentity(resource_id, f"session-{resource_id}", size),
-    )
+    (identity,) = [
+        identity
+        for identity in prepared._key_resource_identities(projection)
+        if identity.resource_id == resource_id
+    ]
+    assert identity.size == size
+    assert ("identity", identity) in set(_key_nodes(projection))
     assert not [
-        key for key in keys if "gbdraw.analysis.collinearity.CollinearityResult" in set(_key_strings(key))
+        key for key in keys if "gbdraw.analysis.collinearity.CollinearityResult" in set(_key_nodes(key))
     ]
 
 

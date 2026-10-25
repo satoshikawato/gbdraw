@@ -50,6 +50,11 @@ write-up of a release.
   a deleted palette row back in the color the Legend shows, and a rule named
   like such a row in that color is accepted instead of refused as a Legend row
   conflict (OV-282).
+- Performance (CLI, Python): `gbdraw <mode> --session` and the Python Session
+  render functions key their render cache by the Session's resources instead
+  of by the decoded comparison, as the web app does. Replaying the Vibrio
+  collinearity Gallery Session took 13.4 s and 704 MiB instead of 20.4 s and
+  1,083 MiB; SVG bytes are unchanged (#1354).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

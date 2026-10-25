@@ -688,14 +688,15 @@ def _plan_session_drawings(
 
 @contextmanager
 def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
-    """Decode and parse each materialized resource once for every drawing of one call.
+    """Parse each materialized resource once for every drawing of one call.
 
     One ``PreparedBiologicalInputCache`` transaction spans the call, so its
     retention is the selected drawings' resources; the cache ends with the
-    call. The drawings are decoded inside it, as a Worker Generate decodes
-    inside its transaction, so a decoded resource is keyed by its resource
-    identity instead of by its value. An error of the body keeps its own
-    type; opening or committing the cache raises :class:`SessionRenderError`.
+    call. The callers decode the drawings inside it, as a Worker Generate
+    decodes inside its transaction, so a decoded resource is keyed by its
+    resource identity instead of by its value. An error of the body keeps its
+    own type; opening or committing the cache raises
+    :class:`SessionRenderError`.
     """
 
     from gbdraw.api.prepared import (
@@ -738,7 +739,13 @@ def _render_session_drawing_plans(
     *,
     include_feature_catalog: bool = False,
 ) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
-    """Render planned drawings inside the call's :func:`_session_parse_cache`."""
+    """Render planned drawings inside the call's :func:`_session_parse_cache`.
+
+    Its callers (``render_session``, ``render_session_drawings`` and the CLI's
+    ``render_session_drawings_cli``) open that cache around decoding and
+    rendering; without it a decoded resource is keyed by its value and the
+    drawings parse their records again.
+    """
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
