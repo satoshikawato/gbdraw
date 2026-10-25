@@ -203,7 +203,13 @@ def _select_drawing(
 
 @dataclass(frozen=True)
 class SessionDocument:
-    """Validated session envelope detached from caller-owned mutable mappings."""
+    """Validated session envelope detached from caller-owned mutable mappings.
+
+    ``render_session_drawings_cli`` without a re-save drops the resources'
+    embedded data (``_release_materialized_resource_data``). After that the
+    document, and any drawing artifacts that share its resources, are no
+    longer valid for saving or reuse.
+    """
 
     _data: Mapping[str, Any]
     source_path: Path | None = None

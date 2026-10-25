@@ -383,6 +383,13 @@ def test_only_a_cli_render_without_a_resave_drops_the_embedded_resource_data(
     assert _embedded_data(resaved) == {True}
     assert (tmp_path / "resaved" / "fig.gbdraw-session.json").read_bytes() != b""
 
+    sidecar = load_session_document(two_drawings)
+    render_session_drawings_cli(
+        sidecar, drawings=None, output_override=str(tmp_path / "sidecar" / "fig"), format_override="svg",
+        save_session=False, session_output=str(tmp_path / "sidecar" / "out.gbdraw-session.json"),
+    )
+    assert _embedded_data(sidecar) == {True}
+
     api = load_session_document(two_drawings)
     with materialize_session(api, output_directory=tmp_path / "api") as materialized:
         render_session_drawings(materialized, output_prefix="fig", formats="svg")
