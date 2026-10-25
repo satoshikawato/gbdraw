@@ -1707,36 +1707,17 @@ def _fasta_record_instance_key(
     return matches[0]
 
 
-# The parse verdict depends only on the text. Key by digest so the memo does not
-# keep the (possibly multi-megabyte) texts alive, and bound it.
-_OUTFMT6_PARSE_VERDICTS: dict[bytes, bool] = {}
-_OUTFMT6_PARSE_VERDICTS_MAX = 1024
+# The verdict depends only on the text and the runtime handles of the two
+# bindings, which a validated manifest's runtime binding hash digests. Key by the
+# text's digest and both hashes, so the memo does not keep the (possibly
+# multi-megabyte) texts alive and an entry that several layers check reads its
+# rows once; bound it.
+_RAW_TSV_VERDICTS: dict[tuple[bytes, str, str], bool] = {}
+_RAW_TSV_VERDICTS_MAX = 1024
 
 
-def _is_parseable_losatp_outfmt6(text: str) -> bool:
-    key = hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
-    verdict = _OUTFMT6_PARSE_VERDICTS.get(key)
-    if verdict is None:
-        try:
-            parse_losatp_outfmt6(text)
-            verdict = True
-        except ParseError:
-            verdict = False
-        if len(_OUTFMT6_PARSE_VERDICTS) >= _OUTFMT6_PARSE_VERDICTS_MAX:
-            _OUTFMT6_PARSE_VERDICTS.clear()
-        _OUTFMT6_PARSE_VERDICTS[key] = verdict
-    return verdict
-
-
-def raw_protein_tsv_matches_bindings(
-    text: str,
-    *,
-    query_ids: set[str],
-    subject_ids: set[str],
-) -> bool:
-    """Return whether every non-comment TSV row belongs to the directional pair."""
-
-    for raw_line in str(text).splitlines():
+def _raw_tsv_verdict(text: str, query_ids: set[str], subject_ids: set[str]) -> bool:
+    for raw_line in text.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
         columns = raw_line.split("\t")
@@ -1746,7 +1727,39 @@ def raw_protein_tsv_matches_bindings(
             or columns[1] not in subject_ids
         ):
             return False
-    return _is_parseable_losatp_outfmt6(str(text))
+    try:
+        parse_losatp_outfmt6(text)
+    except ParseError:
+        return False
+    return True
+
+
+def raw_protein_tsv_matches_bindings(
+    text: str,
+    manifest: ProteinIdentityManifest,
+    *,
+    query_record_instance_key: str,
+    subject_record_instance_key: str,
+) -> bool:
+    """Return whether the TSV parses and every non-comment row belongs to the directional pair."""
+
+    text = str(text)
+    key = (
+        hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest(),
+        str(manifest.binding_for(query_record_instance_key)["runtimeBindingHash"]),
+        str(manifest.binding_for(subject_record_instance_key)["runtimeBindingHash"]),
+    )
+    verdict = _RAW_TSV_VERDICTS.get(key)
+    if verdict is None:
+        verdict = _raw_tsv_verdict(
+            text,
+            _binding_runtime_ids(manifest, query_record_instance_key),
+            _binding_runtime_ids(manifest, subject_record_instance_key),
+        )
+        if len(_RAW_TSV_VERDICTS) >= _RAW_TSV_VERDICTS_MAX:
+            _RAW_TSV_VERDICTS.clear()
+        _RAW_TSV_VERDICTS[key] = verdict
+    return verdict
 
 
 def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> TypeGuard[Mapping[str, object]]:
@@ -1832,14 +1845,9 @@ def validate_protein_raw_entry_references(
             return False
         return raw_protein_tsv_matches_bindings(
             str(entry.get("text") or ""),
-            query_ids=_binding_runtime_ids(
-                authority,
-                pair_identity.query_record_instance_key,
-            ),
-            subject_ids=_binding_runtime_ids(
-                authority,
-                pair_identity.subject_record_instance_key,
-            ),
+            authority,
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         )
     except (KeyError, TypeError, ValueError, ValidationError):
         return False
@@ -2342,12 +2350,11 @@ def promote_legacy_protein_raw_cache_entries(
                 query_id_map,
                 subject_id_map,
             )
-            query_ids = _binding_runtime_ids(manifest, query_instance_key)
-            subject_ids = _binding_runtime_ids(manifest, subject_instance_key)
             if not raw_protein_tsv_matches_bindings(
                 rewritten_tsv,
-                query_ids=query_ids,
-                subject_ids=subject_ids,
+                manifest,
+                query_record_instance_key=query_instance_key,
+                subject_record_instance_key=subject_instance_key,
             ):
                 raise ValidationError("Rewritten TSV does not match the current bindings.")
 
@@ -2638,18 +2645,11 @@ class LosatpCacheManager(LosatRawCache):
             return None
         if tuple(str(arg) for arg in cast("Sequence[object]", cached.get("args") or ())) != tuple(str(arg) for arg in args):
             return None
-        query_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.query_record_instance_key,
-        )
-        subject_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.subject_record_instance_key,
-        )
         if not raw_protein_tsv_matches_bindings(
             str(cached.get("text") or ""),
-            query_ids=query_ids,
-            subject_ids=subject_ids,
+            self.identity_manifest,
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         ):
             return None
         return cached
@@ -2761,14 +2761,9 @@ class LosatpCacheManager(LosatRawCache):
         }
         if not raw_protein_tsv_matches_bindings(
             str(entry["text"]),
-            query_ids=_binding_runtime_ids(
-                cast(ProteinIdentityManifest, self.identity_manifest),
-                pair_identity.query_record_instance_key,
-            ),
-            subject_ids=_binding_runtime_ids(
-                cast(ProteinIdentityManifest, self.identity_manifest),
-                pair_identity.subject_record_instance_key,
-            ),
+            cast(ProteinIdentityManifest, self.identity_manifest),
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         ):
             raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
         self._add_search_entry(
