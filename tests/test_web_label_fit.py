@@ -208,14 +208,15 @@ def _sars_request(overrides: dict[str, object]) -> dict:
     ).to_dict()
 
 
-# Lambda with outer labels at 16 pt and no blacklist: 11 leader pairs cross and no labels overlap, so
-# the figure is drawn with the notice. (SARS-CoV-2 with external labels only at 14 pt crossed only
-# because labels next to the origin could wrap past their neighbours, OV-1366; it fits now.)
+# Lambda with outer labels at 17 pt and no blacklist: 10 leader pairs cross and no labels overlap, so
+# the figure is drawn with the notice. (16 pt did while labels were laid out in point-mode boxes, OV-165.
+# SARS-CoV-2 with external labels only at 14 pt crossed only because labels next to the origin could wrap
+# past their neighbours, OV-1366; it fits now.)
 CROSSING_OVERRIDES: dict[str, object] = {
     "labels.circular.scope": "outer",
     "labels.filtering.blacklist_keywords": [],
-    "labels.font_size.short": 16.0,
-    "labels.font_size.long": 16.0,
+    "labels.font_size.short": 17.0,
+    "labels.font_size.long": 17.0,
 }
 
 

@@ -559,9 +559,10 @@ def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]
     return loaded, calls
 
 
-# The crowded MjeNMV inner fixture keeps one overlapping pair (hypothetical protein / tyrosine
-# recombinase next to the origin) since OV-1366: it may no longer spread by wrapping past the origin.
-MJENMV_INNER_TUCKIN_OVERLAPS = 1
+# The crowded MjeNMV inner fixture kept one overlapping pair (hypothetical protein / tyrosine
+# recombinase next to the origin) from OV-1366, when it could no longer spread by wrapping past the
+# origin, until its labels were laid out in their drawn boxes (OV-165): none now, drawn or modelled.
+MJENMV_INNER_TUCKIN_OVERLAPS = 0
 
 
 @pytest.fixture(scope="module")
@@ -1911,7 +1912,7 @@ def test_mjenmv_inner_labels_keep_feature_order(
     assert min(deltas) > 0.0
 
 
-def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
+def test_mjenmv_wsv209_hypothetical_leader_lines_do_not_cross(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, _total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1930,7 +1931,8 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
     assert wsv209 is not None
     assert near_hypothetical is not None
 
-    assert circular_labels_module._segments_properly_intersect(
+    # They crossed while the labels were laid out in point-mode boxes; in their drawn boxes they do not (OV-165).
+    assert not circular_labels_module._segments_properly_intersect(
         circular_labels_module._primary_leader_segment(wsv209),
         circular_labels_module._primary_leader_segment(near_hypothetical),
     )
@@ -2181,7 +2183,7 @@ def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> No
     assert y_overlap_calls < 2500000
 
 
-def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision() -> None:
+def test_nc001879_inner_dense_keeps_the_legacy_inner_layout_without_leader_collisions() -> None:
     improved_calls = 0
     original_improved = circular_labels_module.improved_label_placement_fc
 
@@ -2200,7 +2202,10 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
-    assert improved_calls == 2
+    # OV-165: in their drawn boxes the dense inner labels' legacy layout has no leader collision, so it is kept
+    # and only the outer side runs the current solver (before, the point-mode boxes left 1 collision and both
+    # sides ran it).
+    assert improved_calls == 1
     assert _count_overlaps(inner_labels, total_length) == 0
     assert (
         circular_labels_module._count_label_leader_line_collisions(
@@ -2208,7 +2213,7 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
             total_length,
             margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
         )
-        == 1
+        == 0
     )
 
 

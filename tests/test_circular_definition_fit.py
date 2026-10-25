@@ -11,6 +11,7 @@ radius, the room kept inside, and the tracks to turn off or narrow.
 
 from __future__ import annotations
 
+import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
