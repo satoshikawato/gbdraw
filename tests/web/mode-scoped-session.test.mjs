@@ -992,3 +992,36 @@ test('a Session 49 Load lists each drawing\'s stored override fault once, at its
     .map((repair) => `${repair.code} ${repair.path}`).sort(), faulted
     .map(({ entry, index }) => `setting-replaced drawings[${index}].config.unmanagedConfigOverrides["no_such.${entry.id}.key"]`).sort());
 });
+
+// Save writes Session 49 (B2d-3, DESIGN §4.4): every used drawing in tab order and the shown one.
+test('Save writes each drawing of a Session 49 as its own entry; a fresh Load restores the drawings, each Result and the shown one', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const kept = [first.opening, ...first.stashed].filter(Boolean);
+  const saved = await (async () => {
+    const result = await exportSession(null, { readKeptArtifacts: () => kept });
+    assert.equal(result.status, 'saved', result.error?.message);
+    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  })();
+  assert.equal(saved.version, 49);
+  for (const retired of ['modes', 'otherModeResult', 'renderRequest', 'results', 'config']) assert.equal(Object.hasOwn(saved, retired), false, retired);
+  assert.equal(Object.hasOwn(saved.ui, 'mode'), false);
+  assert.deepEqual(saved.drawings.map((entry) => entry.id).slice(0, 2), ['linear', 'linear-2']);
+  assert.equal(saved.ui.activeDrawingId, 'linear-2');
+  saved.drawings.slice(0, 2).forEach((entry) => assert.equal(entry.results.length, 1, entry.id));
+  resetDrawings();
+  assertLoadedDrawings(saved, await loadKeepingSlots(saved));
+});
+
+// OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
+// Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
+test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
+});
