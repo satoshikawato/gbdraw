@@ -12,7 +12,9 @@ from gbdraw.svg.elements import Circle
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from ..layout.scalar_axis import project_scalar_line
-from .track_paths import circle_subpath, circular_baseline_back, track_line_to, track_polyline
+from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
+from .path_data import path_point
+from .track_paths import track_line_to, track_polyline
 
 
 class CircularTrackLine(NamedTuple):
@@ -33,10 +35,8 @@ class CircularAreaLine(NamedTuple):
     segment_starts: tuple[int, ...] = ()
 
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
-    """
-    Generates the SVG path description for a circle.
-    """
-    return circle_subpath(radius * norm_factor)
+    """The closed circle of ``radius * norm_factor`` from 12 o'clock, clockwise (two arcs)."""
+    return circle_arc(radius * norm_factor, -90.0, 360.0) + "z"
 
 
 def circular_gc_content_line(
@@ -216,16 +216,14 @@ def generate_circular_scalar_area_path_desc(
     if len(positions) == 0:
         return ""
     angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
-    first, last = float(angles_rad[0]), float(angles_rad[-1])
-    inner_ends = track_line_to(
-        baseline_radius * np.cos([first, last]), baseline_radius * np.sin([first, last])
-    )
-    first_inner, last_inner = inner_ends[1:].split("L")
+    first = position_angle(positions[0], record_len)
+    last = position_angle(positions[-1], record_len)
+    # The outer line, then the baseline back from the last sample to the first as arcs (Circular wrap kept).
     return (
-        f"M{first_inner}"
+        f"M {path_point(*circle_point(baseline_radius, first))}"
         + track_line_to(outer_radii * np.cos(angles_rad), outer_radii * np.sin(angles_rad), segment_starts)
-        + f"L{last_inner}"
-        + circular_baseline_back(baseline_radius, first, last)
+        + f"L {path_point(*circle_point(baseline_radius, last))} "
+        + circle_arc_to(baseline_radius, last, first - last)
         + "z"
     )
 

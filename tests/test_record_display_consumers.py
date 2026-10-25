@@ -201,9 +201,13 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                 assert all(b[0] >= a[0] or a[1] == pytest.approx(b[1])
                            for a, b in zip(points, points[1:]))
                 width = max(x for x, _ in points)
-                # The path keeps both ends of the drawn segment; a sample on a straight stretch between its
-                # neighbours may be dropped (track paths keep a point only where the outline needs it).
-                for offset in (0, 10000):
+                # The path keeps both ends of the drawn segment and the corners at the samples and depth steps
+                # (2500, 5000, 7500 moved by the seam). A sample within 1 px of an end may go: dropping it moves the
+                # outline by less than the 0.02 px track paths allow.
+                kept = [offset for offset in offsets if min(offset, 10000 - offset) * width / 10000 >= 1 or
+                        offset in (0, 10000)]
+                assert len(kept) >= 5
+                for offset in kept:
                     assert any(x == pytest.approx(offset * width / 10000, abs=PATH_ROUNDING) for x, _ in points)
             elif name != "depth":
                 # The outer ring meets itself at the duplicated seam value.

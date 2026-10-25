@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, NamedTuple, cast
 
 import numpy as np
-from numpy.typing import NDArray
+from numpy.typing import ArrayLike, NDArray
 
 from gbdraw.auto_sizes import scalar_axis_tick_font_size
 
@@ -49,7 +49,9 @@ class ProjectedScalarLine(NamedTuple):
     segment_starts: tuple[int, ...]
 
 
-def project_scalar_line(positions, values, transform: RecordDisplayTransform) -> ProjectedScalarLine:
+def project_scalar_line(
+    positions: ArrayLike, values: ArrayLike, transform: RecordDisplayTransform
+) -> ProjectedScalarLine:
     """:func:`project_scalar_samples` as one line: positions, values and where each drawn segment starts."""
 
     segments = project_scalar_samples(positions, values, transform)

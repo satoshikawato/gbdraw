@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import math
 from typing import Tuple
 
 from gbdraw.svg.elements import Path, Text, TextPath
-from gbdraw.svg.path_data import path_point
+from gbdraw.svg.circular_arcs import circle_arc, position_angle
 
 from ....config.models import CircularRenderProfile
 from ....auto_sizes import determine_length_parameter
@@ -73,56 +72,16 @@ class LabelDrawer:
         _, bbox_h = calculate_bbox_dimensions(label["label_text"], self.font_family, font_px, dpi=96)
         center_offset = bbox_h / 4
 
-        if 0 <= angle < 90:
-            param = " 0 0 1 "
-            start_x_1: float = (label_radius - center_offset) * math.cos(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            start_y_1: float = (label_radius - center_offset) * math.sin(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            end_x: float = (label_radius - center_offset) * math.cos(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
-            )
-            end_y: float = (label_radius - center_offset) * math.sin(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
-            )
-            label_axis_path_desc: str = (
-                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius - center_offset, label_radius - center_offset) + param + path_point(end_x, end_y)
-            )
+        # The text path runs in reading order: clockwise from the label start, or anticlockwise from its end
+        # in the lower half so the text stays upright.
+        span = 360.0 * (float(label["end"]) - float(label["start"])) / record_length
         if 90 <= angle < 270:
-            param = " 1 0 0 "
-            start_x_1 = (label_radius + center_offset) * math.cos(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
+            label_axis_path_desc = circle_arc(
+                label_radius + center_offset, position_angle(label["end"], record_length), -span
             )
-            start_y_1 = (label_radius + center_offset) * math.sin(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
-            )
-            end_x = (label_radius + center_offset) * math.cos(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            end_y = (label_radius + center_offset) * math.sin(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            label_axis_path_desc = (
-                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius + center_offset, label_radius + center_offset) + param + path_point(end_x, end_y)
-            )
-        elif 270 <= angle <= 360:
-            param = " 0 0 1 "
-            start_x_1 = (label_radius - center_offset) * math.cos(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            start_y_1 = (label_radius - center_offset) * math.sin(
-                math.radians(360.0 * (label["start"] / record_length) - 90)
-            )
-            end_x = (label_radius - center_offset) * math.cos(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
-            )
-            end_y = (label_radius - center_offset) * math.sin(
-                math.radians(360.0 * ((label["end"]) / record_length) - 90)
-            )
-            label_axis_path_desc = (
-                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius - center_offset, label_radius - center_offset) + param + path_point(end_x, end_y)
+        else:
+            label_axis_path_desc = circle_arc(
+                label_radius - center_offset, position_angle(label["start"], record_length), span
             )
 
         group_identifier = str(getattr(group, "attribs", {}).get("id", "labels"))

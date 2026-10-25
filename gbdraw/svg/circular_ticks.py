@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from gbdraw.svg.elements import Path, Text, TextPath
+from gbdraw.svg.circular_arcs import circle_arc, position_angle
 from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
@@ -668,37 +669,9 @@ def generate_circular_tick_labels(
             reverse_path=reverse_path,
             text_anchor=geometry.text_anchor,
         )
-        if not reverse_path:
-            param = " 0 0 1 "
-            start_x_1: float = path_radius * math.cos(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            start_y_1: float = path_radius * math.sin(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            end_x: float = path_radius * math.cos(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-            end_y: float = path_radius * math.sin(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-        else:
-            param = " 1 0 0 "
-            start_x_1 = path_radius * math.cos(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            start_y_1 = path_radius * math.sin(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            end_x = path_radius * math.cos(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-            end_y = path_radius * math.sin(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-        label_axis_path_desc: str = (
-            "M " + path_point(start_x_1, start_y_1) + "A" + path_point(path_radius, path_radius)
-            + param + path_point(end_x, end_y)
+        # Clockwise from label_start to label_end, or anticlockwise on a reversed (lower-half) path.
+        label_axis_path_desc: str = circle_arc(
+            path_radius, position_angle(label_start, total_len), 360.0 * (label_end - label_start) / total_len
         )
         label_axis_path = Path(
             id=stable_svg_id(

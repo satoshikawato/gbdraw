@@ -12,7 +12,6 @@ import pytest
 from gbdraw.svg.circular_tracks import generate_circle_path_desc, generate_circular_scalar_area_path_desc
 from gbdraw.svg.track_paths import (
     TRACK_PATH_TOLERANCE_PX,
-    circular_baseline_back,
     kept_track_points,
     track_line_to,
     track_polyline,
@@ -84,18 +83,24 @@ def test_collinear_points_are_dropped_and_short_lines_kept() -> None:
 
 
 def test_circular_baselines_are_two_arcs() -> None:
-    assert generate_circle_path_desc(50, 2) == "M 0 -100A 100 100 0 0 1 0 100A 100 100 0 0 1 0 -100z"
-    # Back from 3 o'clock to 12 o'clock through the middle angle.
-    assert circular_baseline_back(10.0, -math.pi / 2, 0.0) == "A10 10 0 0 0 7.071 -7.071A10 10 0 0 0 0 -10"
+    # A full circle is 120 + 240 degrees (no drawn arc near 180 or 360; OV-1840).
+    assert generate_circle_path_desc(50, 2) == "M 0,-100 A 100,100 0 0 1 86.603,50 A 100,100 0 1 1 0,-100z"
+
+
+def test_non_finite_samples_are_rejected() -> None:
+    with pytest.raises(ValueError, match="finite"):
+        kept_track_points(np.array([0.0, 1.0, 2.0]), np.array([0.0, np.nan, 0.0]))
+    with pytest.raises(ValueError, match="finite"):
+        track_line_to([0.0, np.inf, 2.0], [0.0, 1.0, 0.0])
 
 
 def test_circular_scalar_area_draws_the_outer_line_and_an_arc_baseline() -> None:
     plot = pd.DataFrame({"position": [0, 25, 50, 75], "value_normalized": [0.5, 0.5, 0.5, 0.5]})
     desc = generate_circular_scalar_area_path_desc(100, 100, plot, 20, 1.0)
     # Baseline radius 90, outer radius 100: the outer line keeps only the points the arc of samples needs,
-    # the baseline returns from the last sample (270 degrees on screen) to the first as two arcs.
-    assert desc.startswith("M0 -90L0 -100")
-    assert desc.endswith("L-90 0A90 90 0 0 0 63.64 63.64A90 90 0 0 0 0 -90z")
+    # the baseline returns from the last sample (9 o'clock) to the first (12 o'clock) as two 135-degree arcs.
+    assert desc.startswith("M 0,-90L0 -100")
+    assert desc.endswith("L -90,0 A 90,90 0 0 0 63.64,63.64 A 90,90 0 0 0 0,-90z")
     assert desc.count("A") == 2
 
 

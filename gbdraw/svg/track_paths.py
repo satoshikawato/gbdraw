@@ -2,8 +2,9 @@
 
 A track path writes its numbers through :func:`gbdraw.svg.path_data.path_number`, keeps a point of its
 drawn line only where dropping it would move the outline by more than ``TRACK_PATH_TOLERANCE_PX``
-(Ramer-Douglas-Peucker on the drawn coordinates, per drawn segment), and draws a Circular baseline as two
-arcs. The data behind a track (bins, windows) and its axes are not touched here.
+(Ramer-Douglas-Peucker on the drawn coordinates, per drawn segment). A Circular area closes on its
+baseline through :mod:`gbdraw.svg.circular_arcs`. The data behind a track (bins, windows) and its axes are
+not touched here.
 """
 
 from __future__ import annotations
@@ -24,9 +25,12 @@ def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_
     The ends of the line and of each drawn segment (``segment_starts`` are the indices where a segment after
     the first begins) are always kept. Between two kept points, the point farthest from the straight
     segment joining them is kept while that distance exceeds ``TRACK_PATH_TOLERANCE_PX``; every pending
-    stretch is split in the same round (level-synchronous, vectorized).
+    stretch is split in the same round (level-synchronous, vectorized). A NaN or infinite coordinate raises
+    ``ValueError``.
     """
 
+    if not (np.isfinite(xs).all() and np.isfinite(ys).all()):
+        raise ValueError("A track path needs finite coordinates; a sample is NaN or infinite.")
     count = len(xs)
     keep = np.zeros(count, dtype=bool)
     if count <= 2:
@@ -83,30 +87,8 @@ def track_polyline(xs: ArrayLike, ys: ArrayLike, segment_starts: Sequence[int] =
     return f"M{path_number(x_values[0])} {path_number(y_values[0])}{path_line_to(x_values[1:], y_values[1:])}"
 
 
-def _arc_end(radius: float, angle: float) -> str:
-    return f"{path_number(radius * np.cos(angle))} {path_number(radius * np.sin(angle))}"
-
-
-def circular_baseline_back(radius: float, start_angle: float, end_angle: float) -> str:
-    """Two arcs on the circle of ``radius`` from ``end_angle`` back to ``start_angle`` (radians, the drawing
-    direction of a track runs from start to end; the span is at most a full turn)."""
-
-    r = path_number(radius)
-    middle = 0.5 * (start_angle + end_angle)
-    return f"A{r} {r} 0 0 0 {_arc_end(radius, middle)}A{r} {r} 0 0 0 {_arc_end(radius, start_angle)}"
-
-
-def circle_subpath(radius: float) -> str:
-    """A closed circle of ``radius`` around the origin, from 12 o'clock clockwise, as two arcs."""
-
-    r = path_number(radius)
-    return f"M 0 {path_number(-radius)}A {r} {r} 0 0 1 0 {r}A {r} {r} 0 0 1 0 {path_number(-radius)}z"
-
-
 __all__ = [
     "TRACK_PATH_TOLERANCE_PX",
-    "circle_subpath",
-    "circular_baseline_back",
     "kept_track_points",
     "track_line_to",
     "track_polyline",
