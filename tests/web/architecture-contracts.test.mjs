@@ -322,6 +322,19 @@ const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
   'app/run-analysis.js': 2,
   'services/config.js': 4
 });
+// D6 (perf audit PR-9): the Save and History copies of the mounted root's
+// serialization retire into the preview runtime's write on demand. Their
+// counts may shrink or disappear without editing this guard; they may not grow.
+const SERIALIZATION_RETIRING_CEILINGS = Object.freeze({
+  'services/config.js': 1,
+  'services/history-snapshot.js': 1
+});
+const retiringSerializationOperators = (detected, path) => {
+  const ceiling = SERIALIZATION_RETIRING_CEILINGS[path];
+  assert.ok(operatorCount(detected, path, 'SVG serialization') <= ceiling,
+    `${path}: SVG serialization may only contract (ceiling ${ceiling})`);
+  return operatorEntries(detected, path, 'SVG serialization');
+};
 const keeperCommitOperators = (detected, path) => {
   const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
   assert.ok(operatorCount(detected, path, 'Result content commit') <= ceiling,
@@ -846,8 +859,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     'SVG serialization': [
       ...retiringOperatorsBefore(detected, 'services/config.js', 'SVG serialization'),
-      { path: 'services/config.js', count: 1 },
-      { path: 'services/history-snapshot.js', count: 1 },
+      ...retiringSerializationOperators(detected, 'services/config.js'),
+      ...retiringSerializationOperators(detected, 'services/history-snapshot.js'),
       { path: 'services/svg-result-ingestion.js', count: 1 }
     ],
     'Python helper': [
