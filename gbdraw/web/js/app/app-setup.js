@@ -3013,18 +3013,6 @@ export const createAppSetup = () => {
     drawing.circularConservation.series.splice(0, drawing.circularConservation.series.length, ...nextSeries);
     refreshCircularConservationSlots(drawing);
   };
-  // The settings a reconcile reads besides the ring files: the source and the
-  // legacy series names. A legacy config import reconciles only when they
-  // changed (D-15-47).
-  /** @param {DrawingState} drawing */
-  const ringSettingsOf = (drawing) => ({
-    source: drawing.circularConservation.source, labels: drawing.circularConservation.labels
-  });
-  /** @param {DrawingState} drawing @param {{ source: unknown, labels: unknown }} before */
-  const reconcileChangedRingSettings = (drawing, before) => {
-    const after = ringSettingsOf(drawing);
-    if (after.source !== before.source || after.labels !== before.labels) reconcileCircularConservation(drawing);
-  };
   // Generate turns the rings on or off by their source files; the managed stack
   // rows follow in the same step, also when the run then fails or is canceled.
   /** @param {DrawingState} drawing @param {boolean} enabled */
@@ -3741,10 +3729,7 @@ export const createAppSetup = () => {
     t('Load Session'), () => sessionInput.value?.click()
   );
   let nextSessionPreviewToken = 1;
-  // Each Circular drawing's ring settings as the Load found them (`beforeImport`), by drawing ID.
   const circularDrawings = () => state.drawingList().filter((drawing) => drawing.mode === 'circular');
-  const captureRingSettings = () => new Map(circularDrawings().map((drawing) => [drawing.id, ringSettingsOf(drawing)]));
-  let ringSettingsBeforeImport = captureRingSettings();
   // The Load rollback port: the one the Load options carry and `window.__GBDRAW_APP__` hands to page callers.
   const sessionImportRollbackState = createSessionImportRollbackState({
     artifactSlots,
@@ -3806,7 +3791,6 @@ export const createAppSetup = () => {
     },
     transformLegacyResultSvg,
     beforeImport: async () => {
-      ringSettingsBeforeImport = captureRingSettings();
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
@@ -3834,23 +3818,16 @@ export const createAppSetup = () => {
     },
     rollbackState: sessionImportRollbackState,
     afterImport: async (/** @type {{ status: string, decompressedCharacters?: number, isCurrent: () => boolean }} */ result) => {
-      if (result?.status === 'ok' || result?.status === 'legacy') {
+      // Only a Session Load comes here; a legacy configuration Load returns
+      // before it (OV-1792).
+      if (result?.status === 'ok') {
         // The comparison rings read from the loaded files and series (an older
-        // Session's series names included), before the History baseline. A
-        // legacy config import keeps the ring files, so it reconciles only when
-        // it changed the source or the series names; a drawing the Load made
-        // reconciles.
-        for (const drawing of circularDrawings()) {
-          const before = ringSettingsBeforeImport.get(drawing.id);
-          if (result.status === 'ok' || !before) reconcileCircularConservation(drawing);
-          else reconcileChangedRingSettings(drawing, before);
-        }
+        // Session's series names included), before the History baseline.
+        for (const drawing of circularDrawings()) reconcileCircularConservation(drawing);
         // The loaded draft's live values wait for their next change or Generate (6.7).
         discardLiveSettingRequests();
         historySnapshots.clearGeneratedArtifactIdentity({
-          retainedBytes: result?.status === 'ok'
-            ? Number(result.decompressedCharacters || 0) * 2
-            : 0
+          retainedBytes: Number(result.decompressedCharacters || 0) * 2
         });
         // A replaced document resets transient UI: the selection named features
         // of the previous Session.
@@ -3861,7 +3838,7 @@ export const createAppSetup = () => {
         // A loaded Session's drawings are new drawing states: each gets an
         // empty History before the baseline. (A legacy configuration Load
         // does not come here: its drawing keeps its History, OV-1790.)
-        if (result.status === 'ok') history.replaceMembers(state.drawingList().map((drawing) => drawing.id));
+        history.replaceMembers(state.drawingList().map((drawing) => drawing.id));
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');
