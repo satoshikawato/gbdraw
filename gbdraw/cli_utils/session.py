@@ -777,7 +777,8 @@ def render_session_drawings_cli(
     render; every diagram path and the sidecar are checked together before the
     first write; and the re-save replaces only the rendered drawings. Without
     a re-save, the resources' embedded data is dropped from ``document`` once
-    its files are written, so the caller does not render it again.
+    its files are written: afterwards ``document`` and the drawing artifacts
+    that share its resources are not valid for saving or reuse.
     """
 
     from gbdraw.api.request_render import (

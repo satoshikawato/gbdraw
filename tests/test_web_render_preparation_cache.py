@@ -2061,3 +2061,8 @@ def test_a_single_record_title_change_reuses_the_gc_percent(
     assert calls == []
     assert metrics["renderStageHit:record_gc_percent"] >= 1
     assert metrics.get("renderStageUncacheableCount", 0) == 0
+
+
+def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
+    feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
+    assert len(prepared_module._feature_stamp(feature)) == len(prepared_module._FEATURE_STAMP_FIELDS)

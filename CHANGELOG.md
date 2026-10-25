@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (CLI, Python, web app): Generates and CLI renders hold less
+  memory: the prepared-input cache keeps one hash per feature field as its owner
+  stamp, SVG text is written to its file in chunks, and `gbdraw render --session`
+  without a re-save drops the embedded resource data once its files are written
+  (vibrio Gallery Session max RSS 696 -> 563 MiB). Outputs do not change (#1360).
 - Performance (hosted web app): a returning visitor reloads gbdraw.app without
   downloading the Pyodide runtime, wheels, fonts, icons or LOSAT wasm again. The
   vendored files are cached for a year (one `_headers` rule per file, pinned by
