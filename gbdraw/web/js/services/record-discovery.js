@@ -151,6 +151,13 @@ const NAME = Object.freeze({
   aboveGenus: Object.fromEntries(
     Object.entries(ORGANISM_NAME_RULE.aboveGenus).map(([code, pattern]) => [code, fullPattern(pattern)])
   ),
+  italicAboveGenus: new Map(
+    Object.entries(ORGANISM_NAME_RULE.italicAboveGenus).map(([code, pattern]) => [code, fullPattern(pattern)])
+  ),
+  placeholderPrefix: ORGANISM_NAME_RULE.placeholderPrefix,
+  hybridSigns: new Set(ORGANISM_NAME_RULE.hybridSigns),
+  joinedHybridSign: ORGANISM_NAME_RULE.joinedHybridSign,
+  parentStart: matchPattern(ORGANISM_NAME_RULE.parentStart),
   epithet: fullPattern(ORGANISM_NAME_RULE.epithet),
   latinRankWords: new Set(ORGANISM_NAME_RULE.latinRankWords),
   strainLineWords: new Set(ORGANISM_NAME_RULE.strainLineWords),
@@ -309,6 +316,70 @@ const taxonWords = (tokens, strainAt, code) => {
 };
 
 /**
+ * A hybrid name or formula as text with `<i>`, or null when a part is no taxon
+ * (_hybrid_line): a sign before a capital starts a parent, a sign before an
+ * epithet stays in the nothotaxon, and every sign stays as written and upright.
+ * @param {string[]} tokens
+ * @param {string} code The nomenclature code (`nomenclatureCode`).
+ * @returns {string | null}
+ */
+const hybridLine = (tokens, code) => {
+  /** @type {Array<Array<[string, string]>>} each parent: [sign before the word, word] */
+  const parents = [];
+  let sign = '';
+  for (const token of tokens) {
+    if (NAME.hybridSigns.has(token)) {
+      if (sign) return null;
+      sign = `${token} `;
+      continue;
+    }
+    let word = token;
+    if (token.startsWith(NAME.joinedHybridSign) && token.length > 1) {
+      if (sign) return null;
+      sign = NAME.joinedHybridSign;
+      word = token.slice(NAME.joinedHybridSign.length);
+    }
+    if (sign && NAME.parentStart.test(word)) parents.push([]);
+    else if (sign && !(parents.length > 0 && isEpithet(word))) return null;
+    else if (parents.length === 0) parents.push([]);
+    parents[parents.length - 1].push([sign, word]);
+    sign = '';
+  }
+  if (sign || parents.length === 0) return null;
+  /** @type {string[]} */
+  const words = [];
+  for (const parent of parents) {
+    const plain = parent.map(([, word]) => word);
+    const reading = taxonWords(plain, plain.length, code);
+    if (!reading) return null;
+    const [parts, used] = reading;
+    const marked = parts.join(' ').split(' ');
+    if (marked.length !== used || parent.slice(used).some(([before]) => before)) return null;
+    const texts = [...marked, ...plain.slice(used)];
+    parent.forEach(([before], index) => words.push(before + texts[index]));
+  }
+  return words.join(' ').replaceAll('</i> <i>', ' ');
+};
+
+/**
+ * A name the rule keeps whole, as text with `<i>` (_whole_name_line): a hybrid
+ * read part by part, or a placeholder whose higher-taxon word is italic when
+ * the code sets it so and the lineage holds the word as written.
+ * @param {string} name
+ * @param {string[]} tokens
+ * @param {readonly string[]} lineage
+ * @returns {string}
+ */
+const wholeNameLine = (name, tokens, lineage) => {
+  const code = nomenclatureCode(lineage);
+  if (NAME.hybrid.test(name)) return hybridLine(tokens, code) || name;
+  const higher = NAME.italicAboveGenus.get(code);
+  const at = tokens.length > 1 && tokens[0] === NAME.placeholderPrefix ? 1 : 0;
+  if (higher === undefined || !higher.test(tokens[at]) || !lineage.includes(tokens[at])) return name;
+  return [...tokens.slice(0, at), `<i>${tokens[at]}</i>`, ...tokens.slice(at + 1)].join(' ');
+};
+
+/**
  * A record's Auto name as a taxon line and a strain line (text with `<i>`),
  * as split_organism_lines writes them.
  * @param {string} rawOrganism
@@ -337,17 +408,21 @@ const organismNameLines = (rawOrganism, rawStrain, lineage) => {
     }
     return keepWhole;
   }
+  // A name read as no taxon stays whole; a Candidatus name keeps its plain text.
+  const keptWhole = () => (
+    prefix ? keepWhole : { taxon: wholeNameLine(name, tokens, lineage), strain: keepWhole.strain }
+  );
   if (
     NAME.nonOrganismStart.test(name)
     || NAME.hybrid.test(name)
     || tokens.some((token) => NAME.sequenceWords.has(stripChars(token.toLowerCase(), '()\'",;')))
   ) {
-    return keepWhole;
+    return keptWhole();
   }
   const strainAt = namesStrain(tokens, strain);
   const noBoundary = strainAt === null || strainAt < 2 || NAME.lowercaseStrain.test(strain);
   const taxon = taxonWords(tokens, noBoundary ? tokens.length : strainAt, nomenclatureCode(lineage));
-  if (!taxon) return keepWhole;
+  if (!taxon) return keptWhole();
   const [parts, used] = taxon;
   let line = parts.join(' ').replaceAll('</i> <i>', ' ');
   if (prefix) line = `<i>Ca.</i> ${line.replace(/<\/?i>/g, '')}`;

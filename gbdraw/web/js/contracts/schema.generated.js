@@ -305,7 +305,7 @@ export const ORGANISM_NAME_RULE = Object.freeze({
       flags: ''
     }),
     botanical: Object.freeze({
-      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota)',
+      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales|phyta)',
       flags: ''
     }),
     prokaryotic: Object.freeze({
@@ -313,9 +313,26 @@ export const ORGANISM_NAME_RULE = Object.freeze({
       flags: ''
     }),
     any: Object.freeze({
-      source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|opsida|phyceae|mycetes|mycota|ales)',
+      source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|opsida|phyceae|mycetes|mycota|ales|phyta)',
       flags: ''
     })
+  }),
+  italicAboveGenus: Object.freeze({
+    prokaryotic: Object.freeze({
+      source: '[A-Z][a-z]*(?:aceae|ales|ineae|idae|ota)',
+      flags: ''
+    }),
+    botanical: Object.freeze({
+      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota|ales|phyta)',
+      flags: ''
+    })
+  }),
+  placeholderPrefix: 'uncultured',
+  hybridSigns: Object.freeze(['x', '×']),
+  joinedHybridSign: '×',
+  parentStart: Object.freeze({
+    source: '\\[?[A-Z]',
+    flags: ''
   }),
   epithet: Object.freeze({
     source: '(?:[a-z]-)?[a-z]{2,}(?:-[a-z]+)*',

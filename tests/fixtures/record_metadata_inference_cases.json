@@ -277,15 +277,15 @@
       ]
     },
     {
-      "name": "kept whole: Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7 / VIN7",
+      "name": "hybrid: Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7 / VIN7",
       "organism": "Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7",
       "strain": "VIN7",
       "lineage": [
         "Eukaryota"
       ],
-      "expected": "Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7",
+      "expected": "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> VIN7",
       "lines": [
-        "Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7",
+        "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> VIN7",
         ""
       ]
     },
@@ -664,15 +664,15 @@
       ]
     },
     {
-      "name": "kept whole: a hybrid sign",
+      "name": "hybrid: a multiplication sign between two parents",
       "organism": "Saccharomyces cerevisiae × Saccharomyces kudriavzevii",
       "strain": "",
       "lineage": [
         "Eukaryota"
       ],
-      "expected": "Saccharomyces cerevisiae × Saccharomyces kudriavzevii",
+      "expected": "<i>Saccharomyces cerevisiae</i> × <i>Saccharomyces kudriavzevii</i>",
       "lines": [
-        "Saccharomyces cerevisiae × Saccharomyces kudriavzevii",
+        "<i>Saccharomyces cerevisiae</i> × <i>Saccharomyces kudriavzevii</i>",
         ""
       ]
     },
@@ -844,6 +844,393 @@
       "expected": "Navicula bacterium",
       "lines": [
         "Navicula bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a nothospecies with the letter x",
+      "organism": "Citrus x limon",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Citrus</i> x <i>limon</i>",
+      "lines": [
+        "<i>Citrus</i> x <i>limon</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a multiplication sign joined to the epithet",
+      "organism": "Mentha ×piperita",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Mentha</i> ×<i>piperita</i>",
+      "lines": [
+        "<i>Mentha</i> ×<i>piperita</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a nothogenus",
+      "organism": "x Triticosecale",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "x <i>Triticosecale</i>",
+      "lines": [
+        "x <i>Triticosecale</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an infraspecific nothotaxon",
+      "organism": "Medicago sativa subsp. x tunetana",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Medicago sativa</i> subsp. x <i>tunetana</i>",
+      "lines": [
+        "<i>Medicago sativa</i> subsp. x <i>tunetana</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a hybrid formula keeps its strain line",
+      "organism": "Saccharomyces cerevisiae x Saccharomyces kudriavzevii",
+      "strain": "CEG",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> CEG",
+      "lines": [
+        "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i>",
+        "CEG"
+      ]
+    },
+    {
+      "name": "fix3: a hybrid formula under the zoological code",
+      "organism": "Bos indicus x Bos taurus",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "<i>Bos indicus</i> x <i>Bos taurus</i>",
+      "lines": [
+        "<i>Bos indicus</i> x <i>Bos taurus</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a hybrid without a lineage",
+      "organism": "Citrus x limon",
+      "strain": "",
+      "expected": "<i>Citrus</i> x <i>limon</i>",
+      "lines": [
+        "<i>Citrus</i> x <i>limon</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an abbreviated parent genus keeps the name upright",
+      "organism": "Poeciliopsis monacha x P. lucida",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "Poeciliopsis monacha x P. lucida",
+      "lines": [
+        "Poeciliopsis monacha x P. lucida",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a strain after the sign keeps the name upright",
+      "organism": "Saccharomyces cerevisiae S96 x YJM789",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "Saccharomyces cerevisiae S96 x YJM789",
+      "lines": [
+        "Saccharomyces cerevisiae S96 x YJM789",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a quoted cultivar keeps the name upright",
+      "organism": "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+      "lines": [
+        "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a sign before a word outside the name keeps it upright",
+      "organism": "Phytophthora sp. x amnicola",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Sar"
+      ],
+      "expected": "Phytophthora sp. x amnicola",
+      "lines": [
+        "Phytophthora sp. x amnicola",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a coculture reads each part",
+      "organism": "Synechococcus sp. PCC 7002 x Microcystis aeruginosa TAIHU98 coculture",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Synechococcus</i> sp. PCC 7002 x <i>Microcystis aeruginosa</i> TAIHU98 coculture",
+      "lines": [
+        "<i>Synechococcus</i> sp. PCC 7002 x <i>Microcystis aeruginosa</i> TAIHU98 coculture",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a family placeholder in its lineage",
+      "organism": "Lachnospiraceae bacterium A4",
+      "strain": "A4",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota",
+        "Clostridia",
+        "Lachnospirales",
+        "Lachnospiraceae"
+      ],
+      "expected": "<i>Lachnospiraceae</i> bacterium A4",
+      "lines": [
+        "<i>Lachnospiraceae</i> bacterium A4",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: uncultured before the higher taxon",
+      "organism": "uncultured Lachnospiraceae bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota",
+        "Clostridia",
+        "Lachnospirales",
+        "Lachnospiraceae"
+      ],
+      "expected": "uncultured <i>Lachnospiraceae</i> bacterium",
+      "lines": [
+        "uncultured <i>Lachnospiraceae</i> bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a phylum placeholder (-ota)",
+      "organism": "Bacillota bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota"
+      ],
+      "expected": "<i>Bacillota</i> bacterium",
+      "lines": [
+        "<i>Bacillota</i> bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an old phylum name outside the lineage stays upright",
+      "organism": "Firmicutes bacterium M10-2",
+      "strain": "M10-2",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota"
+      ],
+      "expected": "Firmicutes bacterium M10-2",
+      "lines": [
+        "Firmicutes bacterium M10-2",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a Candidatus higher taxon stays upright",
+      "organism": "Pelagibacterales bacterium MED-G40",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Pseudomonadati",
+        "Pseudomonadota",
+        "Alphaproteobacteria",
+        "Candidatus Pelagibacterales"
+      ],
+      "expected": "Pelagibacterales bacterium MED-G40",
+      "lines": [
+        "Pelagibacterales bacterium MED-G40",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a Candidatus placeholder stays upright",
+      "organism": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Candidatus Saccharimonadota"
+      ],
+      "expected": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "lines": [
+        "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a misspelt higher taxon stays upright",
+      "organism": "Mehylophilales bacterium 35-46-6",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Pseudomonadati",
+        "Pseudomonadota",
+        "Betaproteobacteria",
+        "Nitrosomonadales"
+      ],
+      "expected": "Mehylophilales bacterium 35-46-6",
+      "lines": [
+        "Mehylophilales bacterium 35-46-6",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a family placeholder under the zoological code stays upright",
+      "organism": "Trichoceridae sp. BV-2014",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa",
+        "Ecdysozoa",
+        "Arthropoda",
+        "Hexapoda",
+        "Insecta",
+        "Diptera",
+        "Trichoceridae"
+      ],
+      "expected": "Trichoceridae sp. BV-2014",
+      "lines": [
+        "Trichoceridae sp. BV-2014",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a class placeholder under the botanical code",
+      "organism": "Dothideomycetes sp. 11042",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Fungi",
+        "Dikarya",
+        "Ascomycota",
+        "Pezizomycotina",
+        "Dothideomycetes"
+      ],
+      "expected": "<i>Dothideomycetes</i> sp. 11042",
+      "lines": [
+        "<i>Dothideomycetes</i> sp. 11042",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: no lineage keeps a placeholder upright",
+      "organism": "Bacillota bacterium",
+      "strain": "",
+      "expected": "Bacillota bacterium",
+      "lines": [
+        "Bacillota bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: an order name under the botanical code stays whole",
+      "organism": "Helotiales sp. EF0021",
+      "strain": "EF0021",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "Helotiales sp. EF0021",
+      "lines": [
+        "Helotiales sp. EF0021",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: an order placeholder in its lineage",
+      "organism": "Helotiales sp. EF0021",
+      "strain": "EF0021",
+      "lineage": [
+        "Eukaryota",
+        "Fungi",
+        "Dikarya",
+        "Ascomycota",
+        "Pezizomycotina",
+        "Leotiomycetes",
+        "Helotiales"
+      ],
+      "expected": "<i>Helotiales</i> sp. EF0021",
+      "lines": [
+        "<i>Helotiales</i> sp. EF0021",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: a division name under the botanical code stays whole",
+      "organism": "Chlorophyta sp. CCMP1407",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "Chlorophyta sp. CCMP1407",
+      "lines": [
+        "Chlorophyta sp. CCMP1407",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: a division placeholder in its lineage",
+      "organism": "Chlorophyta sp. CCMP1407",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae",
+        "Chlorophyta"
+      ],
+      "expected": "<i>Chlorophyta</i> sp. CCMP1407",
+      "lines": [
+        "<i>Chlorophyta</i> sp. CCMP1407",
         ""
       ]
     }

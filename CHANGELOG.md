@@ -19,14 +19,23 @@ write-up of a release.
   an upright Candidatus name); line 2 is the strain, drawn once even when the
   /organism already holds it (OV-1830). Virus names, names above the genus
   with a placeholder (`Lachnospiraceae bacterium A4`), hybrids, cloning
-  vectors and names the rule cannot read stay whole and upright on line 1; an
-  ICTV binomial species (`Lambdavirus lambda`) is italic. The endings that
+  vectors and names the rule cannot read stay whole on line 1; an ICTV
+  binomial species (`Lambdavirus lambda`) is italic. In a hybrid, each
+  parent's genus and epithets are italic and the sign stays as written and
+  upright (*Citrus* x *limon*, *Mentha* ×*piperita*); a hybrid with a part the
+  rule cannot read stays upright. In a placeholder, the name above the genus
+  is italic (*Lachnospiraceae* bacterium A4, uncultured *Lachnospiraceae*
+  bacterium, *Dothideomycetes* sp. 11042) only for Bacteria, Archaea and the
+  botanical lineages, when it has an ending of that code (for Bacteria and
+  Archaea also the phylum ending `-ota`) and the record's lineage holds it as
+  written; other placeholders stay upright. The endings that
   mark a name above the genus follow the nomenclature code of the record's
   GenBank lineage: `-idae`, `-inae` for Metazoa; `-aceae`, `-ineae`, `-inae`,
-  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota` for Viridiplantae,
-  Fungi, Rhodophyta and Ochrophyta; `-aceae`, `-ales`, `-ineae`, `-idae` for
-  Bacteria and Archaea; all of them for other lineages and records without
-  one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the
+  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota`, `-ales`, `-phyta`
+  for Viridiplantae, Fungi, Rhodophyta and Ochrophyta, so
+  `Helotiales sp. EF0021` stays whole (OV-1834); `-aceae`, `-ales`, `-ineae`,
+  `-idae` for Bacteria and Archaea; all of them for other lineages and
+  records without one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the
   botanical code only, and a letter-hyphen epithet (`Aedes w-albus`) is
   italic. A Bakta ORGANISM
   `.` gives no name line instead of an italic "." (OV-1831). A typed Species

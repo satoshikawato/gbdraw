@@ -429,15 +429,37 @@ _CODE_LINEAGES: dict[str, _NomenclatureCode] = {
 }
 # Endings of names above genus under each code: such a first word is no genus.
 # "any" takes every ending, so a name of unknown code stays whole and upright.
+# The botanical list holds the ICN order (-ales) and division (-phyta) endings
+# too, so "Helotiales sp. EF0021" stays whole (OV-1834).
 _ABOVE_GENUS_ENDINGS: dict[_NomenclatureCode, tuple[str, ...]] = {
     "zoological": ("idae", "inae"),
-    "botanical": ("aceae", "ineae", "inae", "idae", "opsida", "phyceae", "mycetes", "mycota"),
+    "botanical": ("aceae", "ineae", "inae", "idae", "opsida", "phyceae", "mycetes", "mycota", "ales", "phyta"),
     "prokaryotic": ("aceae", "ales", "ineae", "idae"),
 }
 _ABOVE_GENUS_ENDINGS[_ANY_CODE] = tuple(dict.fromkeys(e for endings in _ABOVE_GENUS_ENDINGS.values() for e in endings))
 _ABOVE_GENUS = {
     code: re.compile(rf"[A-Z][a-z]*(?:{'|'.join(endings)})") for code, endings in _ABOVE_GENUS_ENDINGS.items()
 }
+# The codes that set names above genus in italics (the ICNP and the ICN; the
+# ICZN does not), with the endings that make a placeholder's first word such a
+# name ("Lachnospiraceae bacterium A4"); -ota is the ICNP phylum ending.
+_ITALIC_ABOVE_GENUS_ENDINGS: dict[_NomenclatureCode, tuple[str, ...]] = {
+    "prokaryotic": (*_ABOVE_GENUS_ENDINGS["prokaryotic"], "ota"),
+    "botanical": _ABOVE_GENUS_ENDINGS["botanical"],
+}
+_ITALIC_ABOVE_GENUS = {
+    code: re.compile(rf"[A-Z][a-z]*(?:{'|'.join(endings)})") for code, endings in _ITALIC_ABOVE_GENUS_ENDINGS.items()
+}
+# The word before a placeholder's higher-taxon name ("uncultured Lachnospiraceae bacterium").
+_PLACEHOLDER_PREFIX = "uncultured"
+# Hybrid signs, kept as the record writes them and upright (ICN Rec. H.3A.2
+# allows the letter x); the multiplication sign may also stand joined to the
+# next word ("Mentha ×piperita").
+_HYBRID_SIGNS = frozenset({"x", "×"})
+_JOINED_HYBRID_SIGN = "×"
+# A word after a sign that starts a parent of a formula, or a nothogenus: a
+# capital or a bracketed genus.
+_PARENT_START = re.compile(r"\[?[A-Z]")
 # A hyphenated genus (ICN Art. 20.3: Pseudo-nitzschia, Sciuro-hypnum), read only
 # under the botanical code: "Legionella-like" and "Gram-positive" start
 # placeholders elsewhere. Neither part may be a word of _NOT_EPITHETS.
@@ -611,8 +633,10 @@ def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
     The taxon is italic after the codes: genus and epithets italic, rank
     words upright, an italic "Ca." before an upright Candidatus name
     (OV-1720), a virus name upright and an ICTV binomial species italic. A
-    name that the rule cannot read as a taxon stays whole and upright on the
-    taxon line. The strain line never repeats what the name already holds.
+    name that the rule cannot read as a taxon stays whole on the taxon line,
+    upright except for a hybrid's parents and a placeholder's higher-taxon
+    name (``_whole_name_line``). The strain line never repeats what the name
+    already holds.
     """
     organism = " ".join(str(metadata.organism or "").split())
     strain = " ".join(str(metadata.strain or "").split())
@@ -635,12 +659,82 @@ def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
         return keep_whole
     taxon = _taxon_of(name, tokens, strain, metadata.lineage)
     if taxon is None:
-        return keep_whole
+        if prefix:
+            return keep_whole
+        return OrganismLines(_whole_name_line(name, tokens, metadata.lineage), keep_whole.strain)
     parts, used = taxon
     line = " ".join(parts).replace("</i> <i>", " ")
     if prefix:
         line = "<i>Ca.</i> " + re.sub(r"</?i>", "", line)
     return OrganismLines(line, _strain_line(tokens[used:], strain, whole))
+
+
+def _hybrid_line(tokens: list[str], code: _NomenclatureCode) -> str | None:
+    """A hybrid name or formula as text with ``<i>``, or None when a part is no taxon.
+
+    A sign before a capitalized word starts a parent (a formula, "x
+    Triticosecale"); a sign before an epithet belongs to the nothotaxon
+    ("Citrus x limon", "subsp. x tunetana"). Each parent is read like a name
+    without a strain (``_taxon_words``); its other words stay upright, and so
+    does every sign, which must stand before a word of a parent's name
+    ("Phytophthora sp. x amnicola" stays upright).
+    """
+    parents: list[list[tuple[str, str]]] = []  # each parent: (sign before the word, word)
+    sign = ""
+    for token in tokens:
+        if token in _HYBRID_SIGNS:
+            if sign:
+                return None
+            sign = token + " "
+            continue
+        word = token
+        if token.startswith(_JOINED_HYBRID_SIGN) and len(token) > 1:
+            if sign:
+                return None
+            sign, word = _JOINED_HYBRID_SIGN, token[1:]
+        if sign and _PARENT_START.match(word):
+            parents.append([])
+        elif sign and not (parents and _is_epithet(word)):
+            return None
+        elif not parents:
+            parents.append([])
+        parents[-1].append((sign, word))
+        sign = ""
+    if sign or not parents:
+        return None
+    words: list[str] = []
+    for parent in parents:
+        plain = [word for _sign, word in parent]
+        reading = _taxon_words(plain, len(plain), code)
+        if reading is None:
+            return None
+        parts, used = reading
+        marked = " ".join(parts).split(" ")
+        # One marked word per word taken (the zip below relies on it), and no
+        # sign before the parent's strain or other words.
+        if len(marked) != used or any(sign for sign, _word in parent[used:]):
+            return None
+        words += [sign + text for (sign, _word), text in zip(parent, marked + plain[used:])]
+    return " ".join(words).replace("</i> <i>", " ")
+
+
+def _whole_name_line(name: str, tokens: list[str], lineage: tuple[str, ...]) -> str:
+    """A name the rule keeps whole, as text with ``<i>``.
+
+    A hybrid is read part by part (``_hybrid_line``). A placeholder's first
+    word, or the word after "uncultured", is italic when the lineage's code
+    sets names above genus in italics, the word has that code's ending, and
+    the record's lineage holds the word as written (no misspelling, no
+    Candidatus name written without its prefix). Any other name stays upright.
+    """
+    code = _nomenclature_code(lineage)
+    if _HYBRID.search(name):
+        return _hybrid_line(tokens, code) or name
+    higher = _ITALIC_ABOVE_GENUS.get(code)
+    at = 1 if len(tokens) > 1 and tokens[0] == _PLACEHOLDER_PREFIX else 0
+    if higher is None or not higher.fullmatch(tokens[at]) or tokens[at] not in lineage:
+        return name
+    return " ".join([*tokens[:at], f"<i>{tokens[at]}</i>", *tokens[at + 1:]])
 
 
 def _is_virus(tokens: list[str], lineage: tuple[str, ...]) -> bool:
@@ -750,6 +844,11 @@ def organism_name_rule_data() -> dict[str, object]:
         "codeLineages": dict(_CODE_LINEAGES),
         "anyCode": _ANY_CODE,
         "aboveGenus": {code: pattern(compiled) for code, compiled in _ABOVE_GENUS.items()},
+        "italicAboveGenus": {code: pattern(compiled) for code, compiled in _ITALIC_ABOVE_GENUS.items()},
+        "placeholderPrefix": _PLACEHOLDER_PREFIX,
+        "hybridSigns": sorted(_HYBRID_SIGNS),
+        "joinedHybridSign": _JOINED_HYBRID_SIGN,
+        "parentStart": pattern(_PARENT_START),
         "epithet": pattern(_EPITHET),
         "latinRankWords": sorted(_LATIN_RANK_WORDS),
         "strainLineWords": sorted(_STRAIN_LINE_WORDS),
