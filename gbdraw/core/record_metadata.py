@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Iterator
 from xml.sax.saxutils import escape
-from typing import TYPE_CHECKING, NamedTuple, TypeVar
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeVar
 
 from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -330,8 +330,8 @@ class RecordSourceMetadata(NamedTuple):
     strain: str
     replicon: str | None
     organelle: str | None
-    # The first word of the record's lineage (GenBank ORGANISM lines), if any.
-    lineage_top: str | None = None
+    # The record's lineage (GenBank ORGANISM lines), highest taxon first.
+    lineage: tuple[str, ...] = ()
 
 
 def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
@@ -339,7 +339,7 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
     annotations = getattr(record, "annotations", None) or {}
     organism = str(annotations.get("organism", "") or "").strip()
     taxonomy = annotations.get("taxonomy") or []
-    lineage_top = (str(taxonomy[0]).strip() or None) if taxonomy else None
+    lineage = tuple(word for word in (str(taxon).strip() for taxon in taxonomy) if word)
     strain = ""
     replicon: str | None = None
     organelle: str | None = None
@@ -369,7 +369,7 @@ def infer_record_source_metadata(record: SeqRecord) -> RecordSourceMetadata:
         strain=strain,
         replicon=replicon,
         organelle=organelle,
-        lineage_top=lineage_top,
+        lineage=lineage,
     )
 
 
@@ -418,9 +418,33 @@ _VIRUS_LINEAGE = "Viruses"
 _HYBRID = re.compile(r"(?:^|\s)[x×](?:\s|$)|×")
 _GENUS = re.compile(r"[A-Z][a-z]+")
 _BRACKETED_GENUS = re.compile(r"\[([A-Z][a-z]+)\]")
-# Family, subfamily and class endings: such a name is no genus, and ICZN sets it upright.
-_ABOVE_GENUS = re.compile(r"[A-Z][a-z]*(?:idae|inae|aceae|ineae|phyceae|mycetes|mycota|opsida)")
-_EPITHET = re.compile(r"[a-z]{2,}(?:-[a-z]+)*")
+# The nomenclature code of a name, from its record's lineage; "any" when the
+# lineage names none (other eukaryotes, or no lineage, as for GFF3 input).
+_NomenclatureCode = Literal["zoological", "botanical", "prokaryotic", "any"]
+_ANY_CODE: _NomenclatureCode = "any"
+# Lineage words that name the code.
+_CODE_LINEAGES: dict[str, _NomenclatureCode] = {
+    "Bacteria": "prokaryotic", "Archaea": "prokaryotic", "Metazoa": "zoological", "Viridiplantae": "botanical",
+    "Fungi": "botanical", "Rhodophyta": "botanical", "Ochrophyta": "botanical",
+}
+# Endings of names above genus under each code: such a first word is no genus.
+# "any" takes every ending, so a name of unknown code stays whole and upright.
+_ABOVE_GENUS_ENDINGS: dict[_NomenclatureCode, tuple[str, ...]] = {
+    "zoological": ("idae", "inae"),
+    "botanical": ("aceae", "ineae", "inae", "idae", "opsida", "phyceae", "mycetes", "mycota"),
+    "prokaryotic": ("aceae", "ales", "ineae", "idae"),
+}
+_ABOVE_GENUS_ENDINGS[_ANY_CODE] = tuple(dict.fromkeys(e for endings in _ABOVE_GENUS_ENDINGS.values() for e in endings))
+_ABOVE_GENUS = {
+    code: re.compile(rf"[A-Z][a-z]*(?:{'|'.join(endings)})") for code, endings in _ABOVE_GENUS_ENDINGS.items()
+}
+# A hyphenated genus (ICN Art. 20.3: Pseudo-nitzschia, Sciuro-hypnum), read only
+# under the botanical code: "Legionella-like" and "Gram-positive" start
+# placeholders elsewhere. Neither part may be a word of _NOT_EPITHETS.
+_HYPHEN_GENUS = re.compile(r"([A-Z][a-z]+)-([a-z]{3,})")
+_HYPHEN_GENUS_CODE: _NomenclatureCode = "botanical"
+# A letter-hyphen epithet ("w-albus", "c-aureum") is an epithet too.
+_EPITHET = re.compile(r"(?:[a-z]-)?[a-z]{2,}(?:-[a-z]+)*")
 # Rank words before a Latin infraspecific epithet; upright, part of the taxon line.
 _LATIN_RANK_WORDS = frozenset({"subsp.", "subsp", "ssp.", "var.", "subvar.", "f.", "forma", "nothosubsp.", "nothovar."})
 # Infrasubspecific ranks and designations: they start the strain line.
@@ -439,7 +463,7 @@ _NOT_EPITHETS = frozenset(
      "plasmid", "chromosome", "segment", "satellite", "virus", "phage", "clone", "oral", "cytoform",
      "genogroup", "form", "incertae", "sedis", "ex", "sensu", "hybrids", "icg", "ectomycorrhiza", "archeaon",
      "subcluster", "from", "in", "on", "at", "near", "with", "the", "for", "by", "to", "taxon", "related",
-     "species", "subspecies", "unnamed", "fungal", "fungus", "contaminant", "mycorrhizal"}
+     "species", "subspecies", "unnamed", "fungal", "fungus", "contaminant", "mycorrhizal", "non"}
     | {word.rstrip(".") for word in _STRAIN_LINE_WORDS}
 )
 # The last part of a word ("S-endosymbiont") that names an organism kind; the
@@ -525,7 +549,11 @@ def _name_suffix(words: list[str]) -> str | None:
     return None
 
 
-def _taxon_words(tokens: list[str], strain_at: int) -> tuple[list[str], int] | None:
+def _nomenclature_code(lineage: tuple[str, ...]) -> _NomenclatureCode:
+    return next((_CODE_LINEAGES[word] for word in lineage if word in _CODE_LINEAGES), _ANY_CODE)
+
+
+def _taxon_words(tokens: list[str], strain_at: int, code: _NomenclatureCode) -> tuple[list[str], int] | None:
     """The taxon line's parts and the number of words they take, or None to keep the name whole.
 
     The taxon is a genus, then "sp." or a species epithet, then Latin
@@ -534,7 +562,11 @@ def _taxon_words(tokens: list[str], strain_at: int) -> tuple[list[str], int] | N
     """
     bracketed = _BRACKETED_GENUS.fullmatch(tokens[0])
     genus = bracketed.group(1) if bracketed else tokens[0]
-    if not (bracketed or _GENUS.fullmatch(genus)) or _ABOVE_GENUS.fullmatch(genus):
+    hyphen = _HYPHEN_GENUS.fullmatch(genus) if code == _HYPHEN_GENUS_CODE else None
+    if (
+        not (bracketed or _GENUS.fullmatch(genus) or (hyphen and not {hyphen.group(1).lower(), hyphen.group(2)} & _NOT_EPITHETS))
+        or _ABOVE_GENUS[code].fullmatch(genus)
+    ):
         return None
     parts = [f"[<i>{genus}</i>]" if bracketed else f"<i>{genus}</i>"]
     if len(tokens) == 1:
@@ -595,13 +627,13 @@ def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
     # The lines are markup ("<i>"); a name with markup characters keeps today's plain text.
     if re.search(r"[&<>]", organism + strain):
         return keep_whole
-    if _is_virus(tokens, metadata.lineage_top):
+    if _is_virus(tokens, metadata.lineage):
         # An ICTV binomial ("Lambdavirus lambda") is italic; a virus name with a
         # number or letter ("Enterovirus J", "Cypovirus 1") is no species name.
         if prefix is None and len(tokens) == 2 and _ICTV_GENUS.fullmatch(tokens[0]) and _EPITHET.fullmatch(tokens[1]):
             return OrganismLines(f"<i>{organism}</i>", keep_whole.strain)
         return keep_whole
-    taxon = _taxon_of(name, tokens, strain)
+    taxon = _taxon_of(name, tokens, strain, metadata.lineage)
     if taxon is None:
         return keep_whole
     parts, used = taxon
@@ -611,14 +643,15 @@ def split_organism_lines(metadata: RecordSourceMetadata) -> OrganismLines:
     return OrganismLines(line, _strain_line(tokens[used:], strain, whole))
 
 
-def _is_virus(tokens: list[str], lineage: str | None) -> bool:
-    return lineage == _VIRUS_LINEAGE or (
-        lineage not in _CELLULAR_LINEAGES
+def _is_virus(tokens: list[str], lineage: tuple[str, ...]) -> bool:
+    top = lineage[0] if lineage else None
+    return top == _VIRUS_LINEAGE or (
+        top not in _CELLULAR_LINEAGES
         and any(_VIRUS_WORD.search(token) or _VIRUS_ACRONYM.fullmatch(token) for token in tokens)
     )
 
 
-def _taxon_of(name: str, tokens: list[str], strain: str) -> tuple[list[str], int] | None:
+def _taxon_of(name: str, tokens: list[str], strain: str, lineage: tuple[str, ...]) -> tuple[list[str], int] | None:
     """The taxon of a name that is no virus (``_taxon_words``), or None to keep it whole."""
     if (
         _NON_ORGANISM_START.match(name)
@@ -631,7 +664,7 @@ def _taxon_of(name: str, tokens: list[str], strain: str) -> tuple[list[str], int
     # name marks no boundary; the strain line still leaves it out.
     if strain_at is None or strain_at < 2 or _LOWERCASE_STRAIN.fullmatch(strain):
         strain_at = len(tokens)
-    return _taxon_words(tokens, strain_at)
+    return _taxon_words(tokens, strain_at, _nomenclature_code(lineage))
 
 
 def _markup(parts: list[tuple[str, bool]]) -> str:
@@ -666,10 +699,10 @@ def organism_name_lines(metadata: RecordSourceMetadata, typed_taxon: str = "", t
     readable = (
         re.search(r"[A-Za-z]", name)
         and name.lower() not in _NON_ORGANISM_NAMES
-        and not _is_virus(name_tokens, metadata.lineage_top)
-        and not _is_virus(str(metadata.organism or "").split(), metadata.lineage_top)
+        and not _is_virus(name_tokens, metadata.lineage)
+        and not _is_virus(str(metadata.organism or "").split(), metadata.lineage)
     )
-    taxon = _taxon_of(name, name_tokens, strain) if readable else None
+    taxon = _taxon_of(name, name_tokens, strain, metadata.lineage) if readable else None
     if taxon is not None and prefix_words + taxon[1] < len(words):
         # Cut the spans between the last taxon word and the next word.
         cut = prefix_words + taxon[1]
@@ -712,7 +745,11 @@ def organism_name_rule_data() -> dict[str, object]:
         "hybrid": pattern(_HYBRID),
         "genus": pattern(_GENUS),
         "bracketedGenus": pattern(_BRACKETED_GENUS),
-        "aboveGenus": pattern(_ABOVE_GENUS),
+        "hyphenGenus": pattern(_HYPHEN_GENUS),
+        "hyphenGenusCode": _HYPHEN_GENUS_CODE,
+        "codeLineages": dict(_CODE_LINEAGES),
+        "anyCode": _ANY_CODE,
+        "aboveGenus": {code: pattern(compiled) for code, compiled in _ABOVE_GENUS.items()},
         "epithet": pattern(_EPITHET),
         "latinRankWords": sorted(_LATIN_RANK_WORDS),
         "strainLineWords": sorted(_STRAIN_LINE_WORDS),

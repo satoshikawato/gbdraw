@@ -20,13 +20,18 @@ const CASES = JSON.parse(
 test('formatInferredOrganismStrain declines text it cannot read as Python does', () => {
   assert.throws(() => formatInferredOrganismStrain({ organism: 'Bacillus sp. \u00d6deme-1', strain: '' }), /Python reader/);
   assert.throws(() => formatInferredOrganismStrain({ organism: 'Bacillus subtilis', strain: '\u00d6-1' }), /Python reader/);
+  // Python's str.strip removes \x1c-\x1f, \x85 and \ufeff from a lineage word; String.trim does not (OV-1833).
+  assert.throws(
+    () => formatInferredOrganismStrain({ organism: 'Bacillus subtilis', strain: '', lineage: ['\u001cBacteria'] }),
+    /Python reader/
+  );
 });
 
 test('formatInferredOrganismStrain matches the shared inference table', () => {
   for (const testCase of CASES.definition) {
     assert.equal(
       formatInferredOrganismStrain({
-        organism: testCase.organism, strain: testCase.strain, lineageTop: testCase.lineage ?? null
+        organism: testCase.organism, strain: testCase.strain, lineage: testCase.lineage ?? []
       }),
       testCase.expected,
       testCase.name

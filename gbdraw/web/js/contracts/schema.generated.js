@@ -284,17 +284,46 @@ export const ORGANISM_NAME_RULE = Object.freeze({
     source: '\\[([A-Z][a-z]+)\\]',
     flags: ''
   }),
-  aboveGenus: Object.freeze({
-    source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|phyceae|mycetes|mycota|opsida)',
+  hyphenGenus: Object.freeze({
+    source: '([A-Z][a-z]+)-([a-z]{3,})',
     flags: ''
   }),
+  hyphenGenusCode: 'botanical',
+  codeLineages: Object.freeze({
+    Bacteria: 'prokaryotic',
+    Archaea: 'prokaryotic',
+    Metazoa: 'zoological',
+    Viridiplantae: 'botanical',
+    Fungi: 'botanical',
+    Rhodophyta: 'botanical',
+    Ochrophyta: 'botanical'
+  }),
+  anyCode: 'any',
+  aboveGenus: Object.freeze({
+    zoological: Object.freeze({
+      source: '[A-Z][a-z]*(?:idae|inae)',
+      flags: ''
+    }),
+    botanical: Object.freeze({
+      source: '[A-Z][a-z]*(?:aceae|ineae|inae|idae|opsida|phyceae|mycetes|mycota)',
+      flags: ''
+    }),
+    prokaryotic: Object.freeze({
+      source: '[A-Z][a-z]*(?:aceae|ales|ineae|idae)',
+      flags: ''
+    }),
+    any: Object.freeze({
+      source: '[A-Z][a-z]*(?:idae|inae|aceae|ineae|opsida|phyceae|mycetes|mycota|ales)',
+      flags: ''
+    })
+  }),
   epithet: Object.freeze({
-    source: '[a-z]{2,}(?:-[a-z]+)*',
+    source: '(?:[a-z]-)?[a-z]{2,}(?:-[a-z]+)*',
     flags: ''
   }),
   latinRankWords: Object.freeze(['f.', 'forma', 'nothosubsp.', 'nothovar.', 'ssp.', 'subsp', 'subsp.', 'subvar.', 'var.']),
   strainLineWords: Object.freeze(['assemblage', 'biotype', 'biovar', 'breed', 'bv.', 'chemovar', 'cultivar', 'cv.', 'ecotype', 'genomovar', 'genotype', 'gv.', 'isolate', 'morphotype', 'morphovar', 'mutant', 'pathotype', 'pathovar', 'phagovar', 'phylotype', 'pv.', 'race', 'ribotype', 'ser.', 'serogroup', 'serotype', 'serovar', 'str', 'str.', 'strain', 'substr', 'substr.', 'subtype', 'sv.', 'type', 'variant']),
-  notEpithets: Object.freeze(['aff', 'agent', 'and', 'archaeon', 'archeaon', 'assemblage', 'at', 'bacteria', 'bacterium', 'biotype', 'biovar', 'breed', 'bv', 'by', 'cf', 'chemovar', 'chromosome', 'clade', 'clone', 'cluster', 'complex', 'contaminant', 'cultivar', 'culture', 'cv', 'cyanobacterium', 'cytoform', 'ecotype', 'ectomycorrhiza', 'endosymbiont', 'environmental', 'eukaryote', 'ex', 'for', 'form', 'from', 'fungal', 'fungus', 'gen', 'genogroup', 'genomosp', 'genomospecies', 'genomovar', 'genosp', 'genospecies', 'genotype', 'group', 'gv', 'hybrid', 'hybrids', 'icg', 'in', 'incertae', 'isolate', 'like', 'lineage', 'metagenome', 'mixed', 'morphotype', 'morphovar', 'mutant', 'mycorrhizal', 'near', 'nov', 'nr', 'of', 'on', 'oral', 'organism', 'pathotype', 'pathovar', 'phage', 'phagovar', 'phylotype', 'phytoplasma', 'plasmid', 'proteobacterium', 'pv', 'race', 'related', 'ribotype', 'satellite', 'sect', 'sedis', 'segment', 'sensu', 'sequence', 'ser', 'serogroup', 'serotype', 'serovar', 'sp', 'species', 'spp', 'str', 'strain', 'subcluster', 'subgen', 'subgroup', 'subsect', 'subspecies', 'substr', 'subtype', 'sv', 'symbiont', 'symbiote', 'taxon', 'the', 'to', 'type', 'unclassified', 'uncultured', 'unidentified', 'unnamed', 'variant', 'vector', 'virus', 'with', 'x']),
+  notEpithets: Object.freeze(['aff', 'agent', 'and', 'archaeon', 'archeaon', 'assemblage', 'at', 'bacteria', 'bacterium', 'biotype', 'biovar', 'breed', 'bv', 'by', 'cf', 'chemovar', 'chromosome', 'clade', 'clone', 'cluster', 'complex', 'contaminant', 'cultivar', 'culture', 'cv', 'cyanobacterium', 'cytoform', 'ecotype', 'ectomycorrhiza', 'endosymbiont', 'environmental', 'eukaryote', 'ex', 'for', 'form', 'from', 'fungal', 'fungus', 'gen', 'genogroup', 'genomosp', 'genomospecies', 'genomovar', 'genosp', 'genospecies', 'genotype', 'group', 'gv', 'hybrid', 'hybrids', 'icg', 'in', 'incertae', 'isolate', 'like', 'lineage', 'metagenome', 'mixed', 'morphotype', 'morphovar', 'mutant', 'mycorrhizal', 'near', 'non', 'nov', 'nr', 'of', 'on', 'oral', 'organism', 'pathotype', 'pathovar', 'phage', 'phagovar', 'phylotype', 'phytoplasma', 'plasmid', 'proteobacterium', 'pv', 'race', 'related', 'ribotype', 'satellite', 'sect', 'sedis', 'segment', 'sensu', 'sequence', 'ser', 'serogroup', 'serotype', 'serovar', 'sp', 'species', 'spp', 'str', 'strain', 'subcluster', 'subgen', 'subgroup', 'subsect', 'subspecies', 'substr', 'subtype', 'sv', 'symbiont', 'symbiote', 'taxon', 'the', 'to', 'type', 'unclassified', 'uncultured', 'unidentified', 'unnamed', 'variant', 'vector', 'virus', 'with', 'x']),
   organismNoun: Object.freeze({
     source: '(?:phytoplasma|biont|symbiote|bacterium|archaeon|archaeote|archaeum|parasite)$',
     flags: ''

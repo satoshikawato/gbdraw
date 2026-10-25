@@ -20,7 +20,15 @@ write-up of a release.
   /organism already holds it (OV-1830). Virus names, names above the genus
   with a placeholder (`Lachnospiraceae bacterium A4`), hybrids, cloning
   vectors and names the rule cannot read stay whole and upright on line 1; an
-  ICTV binomial species (`Lambdavirus lambda`) is italic. A Bakta ORGANISM
+  ICTV binomial species (`Lambdavirus lambda`) is italic. The endings that
+  mark a name above the genus follow the nomenclature code of the record's
+  GenBank lineage: `-idae`, `-inae` for Metazoa; `-aceae`, `-ineae`, `-inae`,
+  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota` for Viridiplantae,
+  Fungi, Rhodophyta and Ochrophyta; `-aceae`, `-ales`, `-ineae`, `-idae` for
+  Bacteria and Archaea; all of them for other lineages and records without
+  one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the
+  botanical code only, and a letter-hyphen epithet (`Aedes w-albus`) is
+  italic. A Bakta ORGANISM
   `.` gives no name line instead of an italic "." (OV-1831). A typed Species
   without a typed Strain is cut into two lines by the same rule, keeping its
   words and italics as typed. Saved Linear Auto definitions keep their text

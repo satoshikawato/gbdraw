@@ -144,7 +144,13 @@ const NAME = Object.freeze({
   hybrid: searchPattern(ORGANISM_NAME_RULE.hybrid),
   genus: fullPattern(ORGANISM_NAME_RULE.genus),
   bracketedGenus: fullPattern(ORGANISM_NAME_RULE.bracketedGenus),
-  aboveGenus: fullPattern(ORGANISM_NAME_RULE.aboveGenus),
+  hyphenGenus: fullPattern(ORGANISM_NAME_RULE.hyphenGenus),
+  hyphenGenusCode: ORGANISM_NAME_RULE.hyphenGenusCode,
+  codeLineages: new Map(Object.entries(ORGANISM_NAME_RULE.codeLineages)),
+  anyCode: ORGANISM_NAME_RULE.anyCode,
+  aboveGenus: Object.fromEntries(
+    Object.entries(ORGANISM_NAME_RULE.aboveGenus).map(([code, pattern]) => [code, fullPattern(pattern)])
+  ),
   epithet: fullPattern(ORGANISM_NAME_RULE.epithet),
   latinRankWords: new Set(ORGANISM_NAME_RULE.latinRankWords),
   strainLineWords: new Set(ORGANISM_NAME_RULE.strainLineWords),
@@ -235,15 +241,32 @@ const nameSuffix = (words) => {
 };
 
 /**
+ * The nomenclature code the record's lineage names, or the code of every ending.
+ * @param {readonly string[]} lineage
+ * @returns {string}
+ */
+const nomenclatureCode = (lineage) => {
+  for (const word of lineage) {
+    const code = NAME.codeLineages.get(word);
+    if (code !== undefined) return code;
+  }
+  return NAME.anyCode;
+};
+
+/**
  * The taxon line's parts and the number of words they take, or null to keep the name whole.
  * @param {string[]} tokens
  * @param {number} strainAt
+ * @param {string} code The nomenclature code (`nomenclatureCode`).
  * @returns {[string[], number] | null}
  */
-const taxonWords = (tokens, strainAt) => {
+const taxonWords = (tokens, strainAt, code) => {
   const bracketed = tokens[0].match(NAME.bracketedGenus);
   const genus = bracketed ? bracketed[1] : tokens[0];
-  if (!(bracketed || NAME.genus.test(genus)) || NAME.aboveGenus.test(genus)) return null;
+  const hyphen = code === NAME.hyphenGenusCode ? genus.match(NAME.hyphenGenus) : null;
+  const hyphenGenus = hyphen !== null
+    && !NAME.notEpithets.has(hyphen[1].toLowerCase()) && !NAME.notEpithets.has(hyphen[2]);
+  if (!(bracketed || NAME.genus.test(genus) || hyphenGenus) || NAME.aboveGenus[code].test(genus)) return null;
   const parts = [bracketed ? `[<i>${genus}</i>]` : `<i>${genus}</i>`];
   if (tokens.length === 1) return [parts, 1];
   if (tokens[1] === 'sp.') {
@@ -290,10 +313,10 @@ const taxonWords = (tokens, strainAt) => {
  * as split_organism_lines writes them.
  * @param {string} rawOrganism
  * @param {string} rawStrain
- * @param {string | null} lineageTop The first word of the record's lineage, or null.
+ * @param {readonly string[]} lineage The record's lineage, highest taxon first.
  * @returns {{ taxon: string, strain: string }}
  */
-const organismNameLines = (rawOrganism, rawStrain, lineageTop) => {
+const organismNameLines = (rawOrganism, rawStrain, lineage) => {
   const organism = wordsOf(rawOrganism).join(' ');
   const strain = wordsOf(rawStrain).join(' ');
   const prefix = organism.match(NAME.candidatusPrefix);
@@ -304,8 +327,9 @@ const organismNameLines = (rawOrganism, rawStrain, lineageTop) => {
   if (!/[A-Za-z]/.test(name) || NAME.nonOrganismNames.has(name.toLowerCase())) return { taxon: '', strain };
   const keepWhole = { taxon: organism, strain: strainLineOf([], strain, whole) };
   if (/[&<>]/.test(organism + strain)) return keepWhole;
-  if (lineageTop === NAME.virusLineage || (
-    !NAME.cellularLineages.has(lineageTop || '')
+  const top = lineage.length > 0 ? lineage[0] : null;
+  if (top === NAME.virusLineage || (
+    !NAME.cellularLineages.has(top || '')
     && tokens.some((token) => NAME.virusWord.test(token) || NAME.virusAcronym.test(token))
   )) {
     if (!prefix && tokens.length === 2 && NAME.ictvGenus.test(tokens[0]) && NAME.epithet.test(tokens[1])) {
@@ -322,7 +346,7 @@ const organismNameLines = (rawOrganism, rawStrain, lineageTop) => {
   }
   const strainAt = namesStrain(tokens, strain);
   const noBoundary = strainAt === null || strainAt < 2 || NAME.lowercaseStrain.test(strain);
-  const taxon = taxonWords(tokens, noBoundary ? tokens.length : strainAt);
+  const taxon = taxonWords(tokens, noBoundary ? tokens.length : strainAt, nomenclatureCode(lineage));
   if (!taxon) return keepWhole;
   const [parts, used] = taxon;
   let line = parts.join(' ').replaceAll('</i> <i>', ' ');
@@ -333,15 +357,15 @@ const organismNameLines = (rawOrganism, rawStrain, lineageTop) => {
 /**
  * The record's Auto name on one line, as format_inferred_definition writes it;
  * text the browser cannot read as Python does declines to the Worker.
- * @param {{ organism?: unknown, strain?: unknown, lineageTop?: string | null }} [fields]
+ * @param {{ organism?: unknown, strain?: unknown, lineage?: readonly string[] }} [fields]
  */
-export const formatInferredOrganismStrain = ({ organism = '', strain = '', lineageTop = null } = {}) => {
+export const formatInferredOrganismStrain = ({ organism = '', strain = '', lineage = [] } = {}) => {
   const rawOrganism = String(organism || '');
   const rawStrain = String(strain || '');
-  if (!BROWSER_EQUAL_TEXT.test(rawOrganism) || !BROWSER_EQUAL_TEXT.test(rawStrain)) {
+  if (![rawOrganism, rawStrain, ...lineage].every((text) => BROWSER_EQUAL_TEXT.test(text))) {
     declineToPythonReader('This organism name');
   }
-  const lines = organismNameLines(rawOrganism, rawStrain, lineageTop);
+  const lines = organismNameLines(rawOrganism, rawStrain, lineage);
   return [lines.taxon, lines.strain].filter(Boolean).join(' ');
 };
 
@@ -373,7 +397,7 @@ export const extractGenBankMetadata = (chunk, header = undefined) => {
   const inferredDefinition = formatInferredOrganismStrain({
     organism,
     strain: effectiveStrain,
-    lineageTop: scanned?.lineageTop ?? null
+    lineage: scanned ? scanned.lineage : []
   });
   return { organism, strain: effectiveStrain, inferredDefinition };
 };

@@ -37,7 +37,7 @@ def test_format_inferred_definition_matches_shared_cases(case: dict) -> None:
         strain=case["strain"],
         replicon=None,
         organelle=None,
-        lineage_top=case.get("lineage"),
+        lineage=tuple(case.get("lineage", ())),
     )
     assert format_inferred_definition(meta) == case["expected"]
     if "lines" in case:
@@ -45,7 +45,7 @@ def test_format_inferred_definition_matches_shared_cases(case: dict) -> None:
         assert split_organism_lines(meta) == OrganismLines(*case["lines"])
 
 
-def _meta(organism: str, strain: str, lineage: str | None = "Bacteria") -> RecordSourceMetadata:
+def _meta(organism: str, strain: str, lineage: tuple[str, ...] = ("Bacteria",)) -> RecordSourceMetadata:
     return RecordSourceMetadata(organism, strain, None, None, lineage)
 
 
@@ -64,8 +64,8 @@ def test_the_strain_line_draws_the_strain_once() -> None:
 def test_a_placeholder_organism_gives_no_name_line() -> None:
     # OV-1831: Bakta writes ORGANISM "." when it has no organism; the Linear
     # Auto definition drew an italic ".".
-    assert split_organism_lines(_meta(".", "X-4", None)) == OrganismLines("", "X-4")
-    assert format_inferred_definition(_meta(".", "X-4", None)) == "X-4"
+    assert split_organism_lines(_meta(".", "X-4", ())) == OrganismLines("", "X-4")
+    assert format_inferred_definition(_meta(".", "X-4", ())) == "X-4"
 
 
 def test_the_lineage_reaches_the_rule_from_a_genbank_record() -> None:
@@ -73,10 +73,10 @@ def test_the_lineage_reaches_the_rule_from_a_genbank_record() -> None:
         Seq("ATGC"), id="v", annotations={"organism": "Beihai barnacle viurs 1", "taxonomy": ["Viruses", "Riboviria"]}
     )
     metadata = infer_record_source_metadata(record)
-    assert metadata.lineage_top == "Viruses"
+    assert metadata.lineage == ("Viruses", "Riboviria")
     assert split_organism_lines(metadata) == OrganismLines("Beihai barnacle viurs 1", "")
     # Without a lineage (GFF3 input) the misspelt virus name reads as a taxon.
-    assert infer_record_source_metadata(SeqRecord(Seq("ATGC"), id="g")).lineage_top is None
+    assert infer_record_source_metadata(SeqRecord(Seq("ATGC"), id="g")).lineage == ()
 
 
 _K12 = _meta("Escherichia coli str. K-12 substr. MG1655", "K-12")
@@ -101,7 +101,7 @@ _N315 = _meta("Staphylococcus aureus subsp. aureus N315", "N315")
         (_K12, "Escherichia phage T5", ("Escherichia phage T5", "str. K-12 substr. MG1655")),
         (_meta("Lachnospiraceae bacterium A4", "A4"), "Lachnospiraceae bacterium A4", ("Lachnospiraceae bacterium A4", "")),
         # The record's virus name keeps the typed text whole.
-        (_meta("Escherichia phage T5", "", "Viruses"), "Escherichia coli phage T5", ("Escherichia coli phage T5", "")),
+        (_meta("Escherichia phage T5", "", ("Viruses",)), "Escherichia coli phage T5", ("Escherichia coli phage T5", "")),
     ],
 )
 def test_a_typed_species_without_a_typed_strain_follows_the_auto_rule(
