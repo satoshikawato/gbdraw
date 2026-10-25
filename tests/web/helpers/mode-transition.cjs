@@ -29,6 +29,8 @@ const load = async (browser, file = seeds.circular, viewport = { width: 1600, he
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.extractedFeatures.length > 0), { timeout: 180000 }).toBe(true);
+  // On a phone a Load with a Result shows the Preview pane; the specs start from Settings, as a user taps it.
+  await showPhonePane(page, 'settings');
   return page;
 };
 
