@@ -4754,14 +4754,17 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
  * @typedef {LoadedInputs & { circularRecordList: CircularRecordEntry[], linearRecordRows: LinearRecordRow[] }} LiveFileState
  */
 /**
- * @param {ReadonlyMap<DrawingId, LiveFileState>} snapshots The inputs each drawing installs, by drawing ID (its
- *   Files, which `bindLoadedInputs` registers here). A rollback installs none: the previous drawings come back as
- *   they were.
+ * A loaded drawing and the inputs it installs (its Files, which
+ * `bindLoadedInputs` registers here), paired so no drawing is without them.
+ * @typedef {{ drawing: DrawingState, inputs: LiveFileState }} LoadedDrawingInputs
+ */
+/**
+ * @param {readonly LoadedDrawingInputs[]} loaded Each loaded drawing with its inputs. A rollback installs none:
+ *   the previous drawings come back as they were.
  * @param {LiveFileState} shown The shown drawing's inputs, whose card files the project takes.
- * @param {readonly DrawingState[]} drawings The loaded drawings.
  * @returns {Partial<DrawingInputFiles>} The input fields of the shown drawing's inputs, as refs.
  */
-const restoreLiveFileState = (snapshots, shown, drawings) => {
+const restoreLiveFileState = (loaded, shown) => {
   state.matchSequenceRegistry?.reset?.();
   /** @type {Map<LiveFileState, ReturnType<typeof bindLoadedInputs>>} One registration per set of inputs. */
   const bound = new Map();
@@ -4772,8 +4775,7 @@ const restoreLiveFileState = (snapshots, shown, drawings) => {
   };
   const shownFiles = /** @type {Partial<DrawingInputFiles> & Partial<CardInputFiles>} */ (boundOf(shown).files);
   FILE_IMPORT_CARDS.forEach((key) => { state.cardFiles[key] = shownFiles[key] ?? null; });
-  drawings.forEach((drawing) => {
-    const snapshot = snapshots.get(drawing.id) ?? shown;
+  loaded.forEach(({ drawing, inputs: snapshot }) => {
     const { files, linearSeqs, linearComparisonPlan, circularRecordDiscovery } = boundOf(snapshot);
     const { linearCanonicalComparisons = [], ...circularFiles } = /** @type {Partial<DrawingInputFiles>} */ (files);
     if (drawing.mode === 'circular') {
@@ -7029,8 +7031,8 @@ const importSessionDocument = async (e, options = {}) => {
       return /** @type {LiveFileState} */ (liveFileStates.get(loaded));
     };
     // Each drawing takes its own files; the cards are the shown drawing's (D-15-93).
-    restoreLiveFileState(new Map(committed.map((drawing) => [drawing.id, liveFileStateOf(filesOf(drawing.id))])),
-      liveFileStateOf(filesOf(plan.activeDrawingId)), committed);
+    restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })),
+      liveFileStateOf(filesOf(plan.activeDrawingId)));
     // The Linear drawing the Files card list folds: the shown one, else a
     // Session 27-48's Linear part's (a Session 49's first Linear drawing).
     const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing : state.drawingOf(linearPartDrawingId);

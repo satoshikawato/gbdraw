@@ -75,3 +75,13 @@ test('a Session 49 Load reads every drawing\'s LOSAT caches, each at its drawing
     .flatMap((_, index) => [`cache-entry-dropped drawings[${index}].losatCache.entries[0]`, `cache-entry-dropped drawings[${index}].losatDerivedCache`])
     .sort());
 });
+
+// N2: each loaded drawing installs the inputs paired with it; no drawing
+// falls back to the shown drawing's inputs when its own are missing.
+test('the Load install of each drawing\'s inputs takes them paired with the drawing, with no fallback', () => {
+  const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
+  const start = source.indexOf('const restoreLiveFileState = ');
+  assert.ok(start >= 0);
+  const body = source.slice(start, source.indexOf('\n};\n', start));
+  assert.deepEqual(body.match(/\.get\([^)]*\)\s*\?\?[^;\n]*/g) ?? [], []);
+});
