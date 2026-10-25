@@ -266,6 +266,14 @@ def test_browser_wheel_bytecode_adds_an_unchecked_pyc_per_module_to_record(tmp_p
     ]
 
 
+def _pyodide_bytecode_tag() -> str:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
+
+    python = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))["info"]["python"]
+    major, minor = python.split(".")[:2]
+    return f"cpython-{major}{minor}"
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="needs Node.js")
 def test_pyodide_bytecode_step_takes_the_pyodide_directory_from_the_web_asset_manifest(tmp_path: Path) -> None:
     # The step runs before config.js is rewritten, so it must not read PYODIDE_INDEX_URL from it.
@@ -278,18 +286,14 @@ def test_pyodide_bytecode_step_takes_the_pyodide_directory_from_the_web_asset_ma
         zf.writestr("pkg-1.0.dist-info/RECORD", "pkg/__init__.py,sha256=x,10\npkg-1.0.dist-info/RECORD,,\n")
     prepare_module.add_pyodide_bytecode(wheel, pyodide_runtime_dir())
     with zipfile.ZipFile(wheel) as zf:
-        assert [name for name in zf.namelist() if name.endswith(".pyc")] == ["pkg/__pycache__/__init__.cpython-313.pyc"]
+        assert [name for name in zf.namelist() if name.endswith(".pyc")] == [f"pkg/__pycache__/__init__.{_pyodide_bytecode_tag()}.pyc"]
     assert "PYODIDE_INDEX_URL" not in (REPO_ROOT / "tools" / "compile_browser_wheel_bytecode.mjs").read_text(encoding="utf-8")
 
 
 @pytest.mark.browser
 def test_browser_wheel_carries_the_pyodide_bytecode_of_every_module() -> None:
-    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
-
     _, browser_wheel_path = ensure_prepared_browser_wheel()
-    python = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))["info"]["python"]
-    major, minor = python.split(".")[:2]
-    tag = f"cpython-{major}{minor}"
+    tag = _pyodide_bytecode_tag()
     with zipfile.ZipFile(browser_wheel_path) as zf:
         names = set(zf.namelist())
         sources = sorted(name for name in names if name.endswith(".py"))
