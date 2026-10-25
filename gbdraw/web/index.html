@@ -1654,20 +1654,41 @@
                 display: none !important;
             }
             /* The Preview pane takes the viewport below the tabs; the Generate bar stays, and the footer
-               lies below the viewport, reached by scrolling the page. */
-            #app:has(> .app-main[data-phone-pane="preview"]) {
-                height: 100dvh !important;
-                min-height: 0 !important;
+               lies below the viewport, reached by scrolling the page. In a window at most 240 px wide (a
+               390 px phone at 200 % zoom) the header, the drawing bar and the tabs leave too little of the
+               viewport for the figure: there the page scrolls as a whole, the header scrolls away with it,
+               and the Preview pane is at least 70 % of the window high (OV-1802, Owner 2026-10-25). */
+            @media (min-width: 241px) {
+                #app:has(> .app-main[data-phone-pane="preview"]) {
+                    height: 100dvh !important;
+                    min-height: 0 !important;
+                }
+                #app:has(> .app-main[data-phone-pane="preview"]) > footer[data-app-footer] {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                }
+                .app-main[data-phone-pane="preview"] {
+                    flex: 1 1 0 !important;
+                    min-height: 0 !important;
+                }
+                .app-main[data-phone-pane="preview"] > .result-pane {
+                    flex: 1 1 0 !important;
+                    min-height: 0 !important;
+                    overflow-y: auto !important;
+                    container-type: size;
+                }
             }
-            #app:has(> .app-main[data-phone-pane="preview"]) > footer[data-app-footer] {
-                position: absolute;
-                top: 100%;
-                left: 0;
-                right: 0;
+            @media (max-width: 240px) {
+                header.app-header {
+                    position: static;
+                }
+                .app-main[data-phone-pane="preview"] > .result-pane {
+                    min-height: 70vh !important;
+                }
             }
             .app-main[data-phone-pane="preview"] {
-                flex: 1 1 0 !important;
-                min-height: 0 !important;
                 gap: 0 !important;
             }
             .app-main[data-phone-pane="preview"] > .settings-pane > :not(.generate-bar) {
@@ -1675,12 +1696,6 @@
             }
             .app-main[data-phone-pane="preview"] > .settings-pane {
                 height: 0 !important;
-            }
-            .app-main[data-phone-pane="preview"] > .result-pane {
-                flex: 1 1 0 !important;
-                min-height: 0 !important;
-                overflow-y: auto !important;
-                container-type: size;
             }
 
             .app-main {
@@ -2171,6 +2186,11 @@
            (64 px over the pane's end, 8 px seam). */
         .settings-pane { --generate-room: 5.875rem; }
         .generate-bar-short { display: none; }
+        /* "Generate Diagram" wraps in a window at most 240 px wide: the bar shows "Generate" there (OV-1772). */
+        @media (max-width: 240px) {
+            .generate-bar .generate-bar-long { display: none; }
+            .generate-bar .generate-bar-short { display: inline; }
+        }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) { --generate-room: 4.5rem; }
         .settings-scroll, .settings-pane[data-settings-display="rail"] > .settings-index { margin-bottom: var(--generate-room); }
 

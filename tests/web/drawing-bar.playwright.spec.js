@@ -149,6 +149,43 @@ test.describe('390 px', () => {
   });
 });
 
+// 195 x 422 is a 390 x 844 phone at 200 % zoom (Owner R17-12, OV-1802 and OV-1772): the page scrolls as a whole,
+// so the header, the drawing bar and the tabs scroll away and the figure of a Result can be brought into view
+// above the fixed Generate bar, whose short label keeps one line.
+test.describe('195 px', () => {
+  test.use({ viewport: { width: 195, height: 422 }, hasTouch: true });
+
+  test('the page scrolls as a whole, the Preview pane is at least 70 % of the window, and Generate keeps one line', async ({ page }) => {
+    test.setTimeout(240_000);
+    await openApp(page);
+    const label = () => page.locator('.generate-bar button').evaluate((button) => {
+      const shown = [...button.querySelectorAll('span > span')].filter((span) => span.checkVisibility());
+      return { text: shown.map((span) => span.textContent.trim()), lines: shown.map((span) => span.getClientRects().length) };
+    });
+    expect(await label()).toEqual({ text: ['Generate'], lines: [1] });
+    await expect(page.locator('.generate-bar button')).toHaveAccessibleName('Generate Diagram');
+    expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    const previewTab = page.locator('.phone-pane-tabs [role="tab"][data-phone-pane="preview"]');
+    if (await previewTab.getAttribute('aria-selected') !== 'true') await previewTab.tap();
+    await expect(page.getByRole('region', { name: 'Result Preview' })).toBeVisible();
+    expect(await label()).toEqual({ text: ['Generate'], lines: [1] });
+    await page.locator('.preview-canvas').evaluate((canvas) => canvas.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const view = await page.evaluate(() => {
+      const box = (selector) => document.querySelector(selector).getBoundingClientRect();
+      const canvas = box('.preview-canvas');
+      const generateTop = box('.generate-bar').top;
+      const visible = Math.min(canvas.bottom, generateTop) - Math.max(canvas.top, 0);
+      const probe = document.elementFromPoint(canvas.left + canvas.width / 2, Math.max(canvas.top, 0) + Math.min(visible, 200) / 2);
+      return { paneShare: box('#result-pane').height / innerHeight, headerTop: box('.app-header').bottom <= 0,
+        visible: Math.round(visible), figureHit: Boolean(probe?.closest('.preview-canvas')) };
+    });
+    expect(view.paneShare, 'the Preview pane is at least 70 % of the window').toBeGreaterThanOrEqual(0.7);
+    expect(view.headerTop, 'the header scrolled away with the page').toBe(true);
+    expect(view.visible, 'the canvas in view above the Generate bar').toBeGreaterThanOrEqual(200);
+    expect(view.figureHit, 'the figure takes the point in view').toBe(true);
+  });
+});
+
 test('Rename in the tab menu is one History step that Undo restores; a repeated name is refused with its reason', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 900 });
