@@ -39,5 +39,5 @@ export const fixture = (colors, rules, { slots = null } = {}) => {
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   const actions = createSvgStyles({ state, watch() {}, nextTick: fn => fn(),
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit, readDrawnTracks: () => tracks });
-  return { actions, state, attrs, depthAttrs, skewFills, ready };
+  return { actions, state, attrs, depthAttrs, skewFills, ready, currentResults: previewRuntime.currentResults };
 };
