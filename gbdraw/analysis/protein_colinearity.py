@@ -347,7 +347,8 @@ class ProteinIdentityManifest(_FrozenDict):
     :func:`extract_protein_identity_manifest` seal one. It equals, and
     ``json.dumps`` writes, the same plain manifest; every mapping, sequence
     and set inside it is read-only, and ``copy.copy`` and ``copy.deepcopy``
-    return it. Other objects, such as custom objects, are kept as given.
+    return it. Set items, dict keys and other objects, such as custom
+    objects, are kept as given.
     """
 
     __slots__ = ("_json_exact",)
@@ -434,7 +435,8 @@ def _frozen(value: object, inexact: list[bool]) -> object:
 
     A mapping becomes a read-only dict, a list a read-only list, any other
     sequence but ``str`` and ``bytes`` a tuple of frozen items, and a set a
-    frozenset. Other objects, such as custom objects, are kept as they are.
+    frozenset. Set items, dict keys and other objects, such as custom
+    objects, are kept as they are.
     Sets ``inexact[0]`` when ``value`` holds anything but plain JSON data. A
     read-only container's constructor froze what it holds, so it is kept,
     and walked only to tell whether it is plain JSON data.
@@ -472,7 +474,7 @@ def _frozen(value: object, inexact: list[bool]) -> object:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return tuple(_frozen(item, inexact) for item in value)
     if isinstance(value, AbstractSet):
-        # Set items are hashable, so none of them is a dict, list or set.
+        # Set items are hashable, and are kept as given, like dict keys.
         return frozenset(value)
     return value
 
