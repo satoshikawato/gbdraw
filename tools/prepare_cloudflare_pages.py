@@ -266,6 +266,8 @@ def build_cloudflare_pages_bundle(
         commit_sha=resolved_commit_sha,
     )
     build_support = _load_build_support_module()
+    # The token hashes the wheel as served: any build-time repack of the wheel
+    # must happen before this point.
     served_wheel = output_root / build_support.expected_browser_wheel_name()
     build_support.write_wheel_cache_bust(
         output_root / "js" / "config.js",
