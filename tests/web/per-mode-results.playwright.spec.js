@@ -789,7 +789,7 @@ test('the Undo of a Generate after a legacy configuration Load keeps the loaded 
   expect(await undoCount()).toBeGreaterThanOrEqual(Math.max(before, 1));
   await generate(page);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Generate diagram');
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settleLive(page);
   await expectEmptyPreview(page, 'circular');
   expect(await shownRules()).toMatchObject([rule]);
