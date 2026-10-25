@@ -1383,9 +1383,11 @@ const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
 const FORCED_STROKES = 'forced-label-underlay-strokes.v44.gbdraw-session.json.gz';
 
 // gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30) named a comparison
-// match only by `data-gbdraw-pairwise-match-id`. The legacy admission renames
-// it once, so every reader (the popup, the selection, the standalone export)
-// finds the match by `data-gbdraw-match-id` alone.
+// match only by `data-gbdraw-pairwise-match-id`. The legacy admission (here
+// with a sanitizer that keeps its input) renames it once: the admitted Result
+// has the stored IDs under `data-gbdraw-match-id` only, and the popup payload
+// reads them from there. The real sanitizer and selection on a legacy Result
+// are covered by "Pairwise pointer feedback" in linear-multi-record.playwright.spec.js.
 test('a Session 29 or 30 Result is admitted with one match attribute', () => {
   const textParser = class { parseFromString(content) { return { documentElement: parseSvgText(content) }; } };
   [

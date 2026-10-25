@@ -178,7 +178,7 @@ export const ensureUniquePairwiseGradientIds = (svg) => {
  * @param {SvgResultRoot | null | undefined} svg
  * @returns {boolean} Whether an attribute changed.
  */
-const renameLegacyAttributes = (svg) => {
+const migrateLegacySvgAttributes = (svg) => {
   let changed = false;
   Object.entries(LEGACY_SVG_ATTRIBUTE_RENAMES).forEach(([legacy, current]) => {
     svg?.querySelectorAll(`[${legacy}]`).forEach((element) => {
@@ -192,7 +192,7 @@ const renameLegacyAttributes = (svg) => {
 
 /** @param {SvgResultRoot | null | undefined} svg */
 export const normalizeSvgResultIds = (svg) => {
-  const renamed = renameLegacyAttributes(svg);
+  const renamed = migrateLegacySvgAttributes(svg);
   const skewChanged = ensureUniqueSkewClipPathIds(svg);
   const gradientChanged = ensureUniquePairwiseGradientIds(svg);
   return Boolean(renamed || skewChanged || gradientChanged);

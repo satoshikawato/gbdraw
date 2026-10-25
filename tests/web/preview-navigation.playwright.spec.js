@@ -148,7 +148,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
 
   for (const enabled of [false, true]) {
     await page.evaluate((enabled) => { window.__GBDRAW_APP__.layoutRepositionMode = enabled; }, enabled);
-    for (const selector of ['[data-gbdraw-feature-id]', '[data-gbdraw-match-id]']) {
+    for (const [selector, selectionKey] of [['[data-gbdraw-feature-id]', 'clickedFeature'], ['[data-gbdraw-match-id]', 'clickedPairwiseMatch']]) {
       const point = await page.evaluate((selector) => {
         for (const element of window.__GBDRAW_APP__.svgContainer.querySelectorAll(selector)) {
           const bounds = element.getBoundingClientRect();
@@ -163,7 +163,6 @@ test('preview pan leaves feature and match gestures available', async ({ page })
       expectTranslation(before, await geometry(page), 0, 0);
       await page.mouse.click(point.x, point.y);
       await page.waitForFunction(() => !window.__GBDRAW_APP__.ruleMatchingPending);
-      const selectionKey = selector.includes('pairwise') ? 'clickedPairwiseMatch' : 'clickedFeature';
       await expect.poll(() => page.evaluate((key) => Boolean(window.__GBDRAW_APP__[key]), selectionKey)).toBe(true);
       await page.keyboard.press('Escape');
       if (selector === '[data-gbdraw-feature-id]') {
@@ -203,6 +202,34 @@ test('preview pan leaves feature and match gestures available', async ({ page })
 // press and the release, here the svg, so a pan that began on the figure's
 // background and ends with a feature or a match under the pointer must open
 // nothing; a click on the same point still opens its popup.
+// OV-1842: in any language, the match buttons the preview adds (role, tabindex
+// and a translated aria-label) are found by their marker and left out of what
+// is saved and exported.
+test('a Result saved in Japanese keeps none of the preview match buttons', async ({ page }) => {
+  test.setTimeout(120000);
+  await page.addInitScript(() => localStorage.setItem('gbdraw.ui-language', 'ja'));
+  await openApp(page);
+  page.on('dialog', (dialog) => dialog.dismiss());
+  await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+    .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  const buttons = page.locator('[data-gbdraw-match-id][role="button"][data-gbdraw-preview-match]');
+  await expect.poll(() => buttons.count()).toBeGreaterThan(0);
+  await expect(buttons.first()).toHaveAttribute('aria-label', /^ペアワイズマッチ\d+$/);
+  const saved = await page.evaluate(async () => {
+    const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');
+    const doc = new DOMParser().parseFromString(
+      serializeCleanSvg(window.__GBDRAW_APP__.svgContainer.querySelector('svg')), 'image/svg+xml');
+    const count = (selector) => doc.querySelectorAll(selector).length;
+    return {
+      matches: count('[data-gbdraw-match-id]'),
+      buttons: count('[data-gbdraw-match-id]:is([role], [tabindex], [aria-label], [data-gbdraw-preview-match])')
+    };
+  });
+  expect(saved.matches).toBeGreaterThan(0);
+  expect(saved.buttons).toBe(0);
+});
+
 test('a pan that ends over a feature or a match opens no popup', async ({ page }) => {
   test.setTimeout(180000);
   await page.setViewportSize({ width: 1600, height: 1000 });

@@ -32,7 +32,8 @@ keywords, so a CLI Session records it as keywords only; a CLI Session written
 by gbdraw 0.13.0 stored an existing path given to it as a Blacklist File, and a
 CLI replay keeps that card.
 
-A Result saved by gbdraw 0.12.0 to 0.13.0 (Sessions 29 and 30) names each
+A Result saved by gbdraw 0.12.0 to 0.13.0, or by the web app before 2026-07-19
+(Sessions 29 to 31), names each
 comparison match by `data-gbdraw-pairwise-match-id`. The web app renames it to
 `data-gbdraw-match-id`, the only name gbdraw writes now, when it loads such a
 Session, so match popups and selection work as before.

@@ -105,6 +105,11 @@ const stripEditorOnlyCursorStyles = (svg) => {
   });
 };
 
+// Marks a match band that the preview made a button (role, tabindex and the
+// translated aria-label), so that saving and export find it by this marker,
+// not by its label text.
+export const PREVIEW_MATCH_BUTTON_ATTRIBUTE = 'data-gbdraw-preview-match';
+
 /**
  * @param {Element | null | undefined} svg
  * @param {{ stripCursor?: boolean }} [options]
@@ -120,13 +125,9 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
     .forEach(stripClasses);
   if (stripCursor) {
     stripEditorOnlyCursorStyles(svg);
-    svg.querySelectorAll('[data-gbdraw-match-id][role="button"][tabindex="0"]')
-      .forEach((element) => {
-        if (!/^Pairwise match \d+$/.test(element.getAttribute('aria-label') || '')) return;
-        element.removeAttribute('role');
-        element.removeAttribute('tabindex');
-        element.removeAttribute('aria-label');
-      });
+    svg.querySelectorAll(`[${PREVIEW_MATCH_BUTTON_ATTRIBUTE}]`).forEach((element) => {
+      [PREVIEW_MATCH_BUTTON_ATTRIBUTE, 'role', 'tabindex', 'aria-label'].forEach((name) => element.removeAttribute(name));
+    });
     svg.querySelectorAll('[data-gbdraw-preview-item]').forEach((element) => {
       ['data-gbdraw-preview-item', 'role', 'tabindex', 'aria-haspopup'].forEach((name) => element.removeAttribute(name));
     });

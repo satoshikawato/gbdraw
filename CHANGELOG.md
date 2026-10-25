@@ -14,9 +14,15 @@ write-up of a release.
 
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
-  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 (Sessions 29 and 30), which carry only the old
-  name, still load in the web app and as input to `enrich_svg`: the old name is renamed once when such a file is
-  read.
+  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app before 2026-07-19 (Sessions 29
+  to 31), and the SVG files of those versions, carry only the old name. They still load in the web app, and
+  `enrich_svg` still takes those SVG files: the old name is renamed once when such a file is read. `enrich_svg` no
+  longer refuses an SVG file whose element carries both names with different values; it keeps
+  `data-gbdraw-match-id` and drops the old name.
+- Fixed (web app): a Result saved or exported with the UI in a language other than English kept the preview's
+  `role`, `tabindex` and `aria-label` ("Pairwise match N", translated) on every comparison band. The preview now
+  marks the bands it makes buttons and saving and export remove them by that mark, in every language. Circular
+  conservation bands, which kept these attributes in every language, now lose them too.
 - SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
   `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
   within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a

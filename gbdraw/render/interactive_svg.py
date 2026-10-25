@@ -34,8 +34,9 @@ INTERACTIVE_MATCH_GLOW_FILTER_ID = "gbdraw-interactive-feature-match-glow"
 MATCH_ID_ATTRIBUTE = "data-gbdraw-match-id"
 # Attributes a stored SVG of an older gbdraw wrote under another name: legacy
 # name -> current name. gbdraw 0.12.0, 0.12.1 and 0.13.0 (Sessions 29 and 30)
-# named a comparison match only by ``data-gbdraw-pairwise-match-id``. An SVG
-# from outside is renamed once when it is admitted (`adopt_legacy_svg_attributes`
+# and ``main`` until fca1e886f (Session 31, 2026-07-19) named a comparison
+# match only by ``data-gbdraw-pairwise-match-id``. An SVG
+# from outside is renamed once when it is admitted (`migrate_legacy_svg_attributes`
 # here, `services/svg-result-normalization.js` in the Web, which reads this
 # table through tools/generate_web_contracts.py); every other reader reads
 # only the current name.
@@ -393,7 +394,7 @@ def _is_feature_fill_target(element: ET.Element) -> bool:
     return _FEATURE_CONNECTOR_SUFFIX_RE.search(str(element.get("id") or "")) is None
 
 
-def adopt_legacy_svg_attributes(root: ET.Element) -> None:
+def migrate_legacy_svg_attributes(root: ET.Element) -> None:
     """Rename the attributes of `LEGACY_SVG_ATTRIBUTE_RENAMES` in place.
 
     An element that already has the current attribute keeps its value; the
@@ -1629,7 +1630,7 @@ def enrich_svg(
         raise GbdrawError(f"Malformed SVG source for interactive export: {exc}") from exc
     if _local_name(root.tag) != "svg":
         raise GbdrawError("Interactive SVG export expected an SVG root element.")
-    adopt_legacy_svg_attributes(root)
+    migrate_legacy_svg_attributes(root)
 
     popup_mode: Literal["rich", "simple"] = (
         "simple" if context.popup_mode == "simple" else "rich"
