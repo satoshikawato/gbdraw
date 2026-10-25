@@ -4711,14 +4711,24 @@ def test_manifest_presentation_identity_check_still_rejects_view_fields(key: str
             )
 
 
-def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
+def test_raw_protein_tsv_validation_checks_each_text_and_pair_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from uuid import uuid4
 
-    token = uuid4().hex  # The verdict memo is process-wide; use texts no other test has.
-    query_id, subject_id = f"q_{token}", f"s_{token}"
-    valid = f"{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("record_a", features=[_cds(0, 9, qualifiers={"translation": ["MKT"]})]),
+            _record("record_b", features=[_cds(0, 9, qualifiers={"translation": ["MGG"]})]),
+        ],
+        record_instance_keys=("row-1", "row-2"),
+    )
+    manifest = extraction.identity_manifest
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_id = extraction.proteins_by_record[1][0].protein_id
+    # The verdict memo is process-wide; the comment makes texts no other test has.
+    comment = f"# {uuid4().hex}\n"
+    valid = f"{comment}{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
     bad_number = valid.replace("\t100\t", "\tnan\t")
     parse_calls = 0
     real_parse = protein_colinearity_module.parse_losatp_outfmt6
@@ -4729,15 +4739,34 @@ def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
         return real_parse(text)
 
     monkeypatch.setattr(protein_colinearity_module, "parse_losatp_outfmt6", count_parse)
+    id_set_builds = 0
+    real_ids = protein_colinearity_module._binding_runtime_ids
 
-    def matches(text: str) -> bool:
+    def count_ids(authority, record_instance_key):
+        nonlocal id_set_builds
+        id_set_builds += 1
+        return real_ids(authority, record_instance_key)
+
+    monkeypatch.setattr(protein_colinearity_module, "_binding_runtime_ids", count_ids)
+
+    def matches(text: str, authority=manifest, query="row-1", subject="row-2") -> bool:
         return protein_colinearity_module.raw_protein_tsv_matches_bindings(
-            text, query_ids={query_id}, subject_ids={subject_id}
+            text,
+            authority,
+            query_record_instance_key=query,
+            subject_record_instance_key=subject,
         )
 
     assert [matches(valid) for _ in range(4)] == [True] * 4
+    assert (parse_calls, id_set_builds) == (1, 2)  # The rows are read once.
+    # Another manifest object with the same bindings is served from the memo.
+    assert matches(valid, validate_protein_identity_manifest(manifest.to_dict()))
+    assert (parse_calls, id_set_builds) == (1, 2)
+    # The reversed pair is another key; its rows name the wrong bindings, so it
+    # fails before parsing.
+    assert [matches(valid, query="row-2", subject="row-1") for _ in range(2)] == [False] * 2
     assert parse_calls == 1
     assert [matches(bad_number) for _ in range(4)] == [False] * 4
     assert parse_calls == 2
-    assert matches(f"# comment {token}\n")
+    assert matches(comment)
     assert parse_calls == 3  # A distinct text parses once, even without rows.
