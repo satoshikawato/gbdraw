@@ -15,6 +15,16 @@ write-up of a release.
 - Web app: the Editor's "N features ready" shows the feature count of the mode on
   screen. After a Generate in Circular and another in Linear, switching modes
   used to leave the other mode's count in the Editor header (OV-1762).
+- Performance (CLI, Python, web app): the Python render path reads a font's
+  kerning only when it is used, writes empty SVG elements directly, builds
+  comparison match paths with per-comparison constants, copies merged Circular
+  records without a generic deep copy, counts GC content and skew windows at the
+  window bounds only, and skips the font-embedding pass when no custom face can
+  be drawn. The MJNV linear comparison of ten genomes took 1.7 s instead of
+  3.0 s and peaked at 280 MiB instead of 420 MiB, and NC_010162 circular peaked
+  at 204 MiB instead of 368 MiB. Replacing or removing a registered font no
+  longer keeps the old font in memory (OV-1749). SVG bytes are unchanged
+  (#1356).
 - Web app: before Generate draws a Circular track row, its **Radius** field says
   "Auto" instead of an estimate that often differed from the drawn radius (for
   example 0.75 R shown and 0.79 R drawn for GC content of E. coli MG1655 after
