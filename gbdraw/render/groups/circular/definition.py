@@ -324,11 +324,13 @@ class DefinitionGroup:
         self.replicon = metadata.replicon
         self.organelle = metadata.organelle
         # One owner chooses the two name lines from the record and the typed
-        # text (the request's label and subtitle win over Species and Strain).
+        # text (the request's label and subtitle win over Species and Strain;
+        # only a typed Species is cut by the Auto rule).
         lines = organism_name_lines(
             metadata,
-            typed_taxon=explicit_label or self.species or "",
+            typed_taxon=self.species or "",
             typed_strain=explicit_subtitle or self.strain or "",
+            record_label=explicit_label,
         )
         self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.taxon)
         self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.strain)

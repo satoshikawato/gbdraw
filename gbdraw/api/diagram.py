@@ -215,6 +215,7 @@ from gbdraw.mode_profiles import (
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
+    painted_title_content,
 )
 from gbdraw.render.group_content import (
     CANVAS_SCOPE,
@@ -1382,9 +1383,8 @@ def _circular_plot_title_content(
 ) -> GroupContent | None:
     """The plot title content, keyed by the record's facts (not the record) and the title geometry.
 
-    None when the title paints nothing: a record with no name to draw and no
-    typed title (OV-1837). The composition planner leaves an empty item out,
-    so the callers place no title target either.
+    None when the title paints nothing (``painted_title_content``): a record
+    with no name to draw and no typed title (OV-1837).
     """
 
     plot_title_canvas_config = CircularCanvasConfigurator(
@@ -1393,7 +1393,7 @@ def _circular_plot_title_content(
         legend="none",
         gb_record=gb_record,
     )
-    content = render_stage(
+    return painted_title_content(render_stage(
         "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
@@ -1405,11 +1405,7 @@ def _circular_plot_title_content(
         plot_title=plot_title,
         definition_group_id="plot_title",
         record_presentation=record_presentation,
-    )
-    bounds = content.local_bounds
-    if bounds is not None and CompositionItem("title", bounds).is_empty:
-        return None
-    return content
+    ))
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:

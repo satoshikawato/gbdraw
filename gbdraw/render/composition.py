@@ -11,6 +11,7 @@ from svgwrite.container import Group
 from svgwrite.drawing import Drawing
 
 from gbdraw.layout.composition import (
+    CompositionItem,
     CompositionPlacement,
     CompositionPlan,
     LegendPlacement,
@@ -21,6 +22,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
 )
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.group_content import GroupContent
 
 COMPOSITION_SCHEMA_VERSION = 1
 COMPOSITION_SCHEMA_ATTRIBUTE = "data-gbdraw-composition-schema"
@@ -97,6 +99,21 @@ class CompositionMetadataPayload(_CompositionMetadataRequired, total=False):
     """
 
     lengthBar: LengthBarPayload
+
+
+def painted_title_content(content: GroupContent) -> GroupContent | None:
+    """The plot title's content, or None when the title paints nothing.
+
+    The planner leaves a title item with no painted extent out
+    (``CompositionItem.is_empty``), and ``apply_composition_plan`` takes a
+    title target only with a title placement, so both modes place no title
+    target for such a title (OV-1837, OV-1845).
+    """
+
+    bounds = content.local_bounds
+    if bounds is not None and CompositionItem(_TITLE_ROLE, bounds).is_empty:
+        return None
+    return content
 
 
 def _wire_number(value: float) -> float:
@@ -465,4 +482,5 @@ __all__ = [
     "COMPOSITION_SCHEMA_ATTRIBUTE",
     "COMPOSITION_SCHEMA_VERSION",
     "apply_composition_plan",
+    "painted_title_content",
 ]

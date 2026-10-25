@@ -119,6 +119,15 @@ def test_a_typed_strain_keeps_both_lines_as_typed() -> None:
     assert organism_name_lines(_K12) == split_organism_lines(_K12)
 
 
+def test_a_typed_record_label_is_line_one_as_typed() -> None:
+    # PD-OI-012: the Record label overrides line 1 as typed and wins over a typed
+    # Species; an empty Subtitle keeps the Auto strain line, a typed one wins.
+    assert organism_name_lines(
+        _K12, typed_taxon="Escherichia coli K-12", record_label="Escherichia coli MG1655"
+    ) == OrganismLines("Escherichia coli MG1655", "str. K-12 substr. MG1655")
+    assert organism_name_lines(_K12, typed_strain="MG1655", record_label="E. coli") == OrganismLines("E. coli", "MG1655")
+
+
 @pytest.mark.parametrize("qualifiers,expected", [
     ({"chromosome": ["1"], "plasmid": ["p1"], "organelle": ["chloroplast"]}, "Chromosome 1"),
     ({"plasmid": ["p1"], "organelle": ["mitochondrion"]}, "p1"),

@@ -12,7 +12,8 @@
     "definition: lineage is the record's lineage, highest taxon first (absent: none, as for GFF3 input);",
     "lines are split_organism_lines' Circular lines (taxon, strain), which only the Python test reads.",
     "The definition cases from 'no name' on are the Auto name rule's examples the Owner approved (2026-10-25).",
-    "A discovery case with \"fastPath\": \"declines\" is one the fast path leaves to the Worker; the Node test expects one Worker call."
+    "A discovery case with \"fastPath\": \"declines\" is one the fast path leaves to the Worker; the Node test expects one Worker call.",
+    "A definition case with \"fastPath\": \"declines\" is one formatInferredOrganismStrain leaves to the Python reader."
   ],
   "definition": [
     {
@@ -687,7 +688,8 @@
       "lines": [
         "Bacillus sp. A&B",
         ""
-      ]
+      ],
+      "fastPath": "declines"
     },
     {
       "name": "virus: the lineage decides for a misspelt virus name",
@@ -1094,16 +1096,42 @@
       ]
     },
     {
-      "name": "fix3: a Candidatus placeholder stays upright",
+      "name": "fix3: a Candidatus placeholder kept whole keeps the italic Ca. and an upright name",
       "organism": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
       "strain": "",
       "lineage": [
         "Bacteria",
         "Candidatus Saccharimonadota"
       ],
-      "expected": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "expected": "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
       "lines": [
-        "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+        "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+        ""
+      ]
+    },
+    {
+      "name": "a Candidatus placeholder with a Bacteria lineage keeps the italic Ca.",
+      "organism": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "lines": [
+        "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+        ""
+      ]
+    },
+    {
+      "name": "a Candidatus family placeholder keeps the italic Ca. and an upright name",
+      "organism": "Candidatus Methanomethylophilaceae archaeon",
+      "strain": "",
+      "lineage": [
+        "Archaea"
+      ],
+      "expected": "<i>Ca.</i> Methanomethylophilaceae archaeon",
+      "lines": [
+        "<i>Ca.</i> Methanomethylophilaceae archaeon",
         ""
       ]
     },
@@ -1990,6 +2018,119 @@
             "recordLength": 60,
             "organism": "Bacillus sp. Ödeme-1",
             "inferredDefinition": "<i>Bacillus</i> sp. Ödeme-1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF before a lineage word declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomlin_1.gbk",
+          "lines": [
+            "LOCUS       BOMLIN_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMLIN_1",
+            "VERSION     BOMLIN_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Lachnospiraceae bacterium A4",
+            "            \ufeffBacteria; Bacillati; Bacillota; Clostridia; Lachnospirales;",
+            "            Lachnospiraceae.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Lachnospiraceae bacterium A4\"",
+            "                     /strain=\"A4\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMLIN_1.1",
+            "recordLength": 60,
+            "organism": "Lachnospiraceae bacterium A4",
+            "inferredDefinition": "Lachnospiraceae bacterium A4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF at the edge of the organism qualifier declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomorg_1.gbk",
+          "lines": [
+            "LOCUS       BOMORG_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMORG_1",
+            "VERSION     BOMORG_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Lachnospiraceae bacterium A4",
+            "            Bacteria; Bacillati; Bacillota; Clostridia; Lachnospirales;",
+            "            Lachnospiraceae.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"\ufeffLachnospiraceae bacterium A4\"",
+            "                     /strain=\"A4\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMORG_1.1",
+            "recordLength": 60,
+            "organism": "\ufeffLachnospiraceae bacterium A4",
+            "inferredDefinition": "\ufeffLachnospiraceae bacterium A4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF at the edge of the strain qualifier declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomstr_1.gbk",
+          "lines": [
+            "LOCUS       BOMSTR_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMSTR_1",
+            "VERSION     BOMSTR_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus subtilis",
+            "            Bacteria; Bacillati; Bacillota.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Bacillus subtilis\"",
+            "                     /strain=\"168\ufeff\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMSTR_1.1",
+            "recordLength": 60,
+            "organism": "Bacillus subtilis",
+            "inferredDefinition": "<i>Bacillus subtilis</i> 168\ufeff"
           }
         ]
       }

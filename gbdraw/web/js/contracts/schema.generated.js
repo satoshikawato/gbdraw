@@ -253,6 +253,11 @@ export const ORGANISM_NAME_RULE = Object.freeze({
     source: '(?:candidatus|ca\\.)\\s+',
     flags: 'i'
   }),
+  candidatusMark: '<i>Ca.</i>',
+  hasLetter: Object.freeze({
+    source: '[A-Za-z]',
+    flags: ''
+  }),
   nonOrganismStart: Object.freeze({
     source: '(?:synthetic|artificial|cloning|expression|shuttle|transformation|binary|gene\\s+trap|vector|unidentified|unknown|unclassified|uncultured|environmental)\\b',
     flags: 'i'
@@ -338,6 +343,11 @@ export const ORGANISM_NAME_RULE = Object.freeze({
     source: '(?:[a-z]-)?[a-z]{2,}(?:-[a-z]+)*',
     flags: ''
   }),
+  unnamedSpecies: 'sp.',
+  unnamedHostWords: Object.freeze(['cf.', 'sp.']),
+  homonymStart: '(in:',
+  formaSpecialis: 'f. sp.',
+  wordStrip: '()\'",;',
   latinRankWords: Object.freeze(['f.', 'forma', 'nothosubsp.', 'nothovar.', 'ssp.', 'subsp', 'subsp.', 'subvar.', 'var.']),
   strainLineWords: Object.freeze(['assemblage', 'biotype', 'biovar', 'breed', 'bv.', 'chemovar', 'cultivar', 'cv.', 'ecotype', 'genomovar', 'genotype', 'gv.', 'isolate', 'morphotype', 'morphovar', 'mutant', 'pathotype', 'pathovar', 'phagovar', 'phylotype', 'pv.', 'race', 'ribotype', 'ser.', 'serogroup', 'serotype', 'serovar', 'str', 'str.', 'strain', 'substr', 'substr.', 'subtype', 'sv.', 'type', 'variant']),
   notEpithets: Object.freeze(['aff', 'agent', 'and', 'archaeon', 'archeaon', 'assemblage', 'at', 'bacteria', 'bacterium', 'biotype', 'biovar', 'breed', 'bv', 'by', 'cf', 'chemovar', 'chromosome', 'clade', 'clone', 'cluster', 'complex', 'contaminant', 'cultivar', 'culture', 'cv', 'cyanobacterium', 'cytoform', 'ecotype', 'ectomycorrhiza', 'endosymbiont', 'environmental', 'eukaryote', 'ex', 'for', 'form', 'from', 'fungal', 'fungus', 'gen', 'genogroup', 'genomosp', 'genomospecies', 'genomovar', 'genosp', 'genospecies', 'genotype', 'group', 'gv', 'hybrid', 'hybrids', 'icg', 'in', 'incertae', 'isolate', 'like', 'lineage', 'metagenome', 'mixed', 'morphotype', 'morphovar', 'mutant', 'mycorrhizal', 'near', 'non', 'nov', 'nr', 'of', 'on', 'oral', 'organism', 'pathotype', 'pathovar', 'phage', 'phagovar', 'phylotype', 'phytoplasma', 'plasmid', 'proteobacterium', 'pv', 'race', 'related', 'ribotype', 'satellite', 'sect', 'sedis', 'segment', 'sensu', 'sequence', 'ser', 'serogroup', 'serotype', 'serovar', 'sp', 'species', 'spp', 'str', 'strain', 'subcluster', 'subgen', 'subgroup', 'subsect', 'subspecies', 'substr', 'subtype', 'sv', 'symbiont', 'symbiote', 'taxon', 'the', 'to', 'type', 'unclassified', 'uncultured', 'unidentified', 'unnamed', 'variant', 'vector', 'virus', 'with', 'x']),
@@ -359,6 +369,10 @@ export const ORGANISM_NAME_RULE = Object.freeze({
   }),
   lowercaseStrain: Object.freeze({
     source: '[a-z]{3,}',
+    flags: ''
+  }),
+  strainSeparator: Object.freeze({
+    source: '\\s*;\\s*',
     flags: ''
   })
 });

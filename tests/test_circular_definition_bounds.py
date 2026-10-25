@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.api.requests import RecordPresentation
@@ -102,3 +103,38 @@ def test_empty_circular_record_title_values_preserve_inference() -> None:
 
     assert "Testus boundsii" in svg
     assert "strain A" in svg
+
+
+def _k12_definition(*, record_label: str = "", species: str | None = None) -> DefinitionGroup:
+    cfg = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    record = SeqRecord(Seq("ATGC" * 250), id="NC_K12.1")
+    record.features = [
+        SeqFeature(
+            SimpleLocation(0, len(record.seq)),
+            type="source",
+            qualifiers={"organism": ["Escherichia coli"], "strain": ["K-12"]},
+        )
+    ]
+    record.annotations["taxonomy"] = ["Bacteria", "Pseudomonadati"]
+    canvas = CircularCanvasConfigurator("test", CircularRenderProfile(cfg), "none", record)
+    return DefinitionGroup(
+        record,
+        canvas.geometry(),
+        style=CircularDefinitionStyle.of(cfg, "full"),
+        species=species,
+        record_presentation=RecordPresentation(label=record_label),
+    )
+
+
+def _plain(parts: list[dict[str, str | bool | None]]) -> str:
+    return "".join(str(part["text"] or "") for part in parts)
+
+
+def test_a_typed_record_label_is_drawn_whole_over_the_inferred_strain_line() -> None:
+    # PD-OI-012: an explicit Record label overrides its line as typed, and the
+    # empty Subtitle keeps the inferred strain line. Only a typed drawing-level
+    # Species is cut by the Auto rule (DF-D09).
+    labelled = _k12_definition(record_label="Escherichia coli MG1655")
+    assert (_plain(labelled.species_parts), _plain(labelled.strain_parts)) == ("Escherichia coli MG1655", "K-12")
+    typed_species = _k12_definition(species="Escherichia coli MG1655")
+    assert (_plain(typed_species.species_parts), _plain(typed_species.strain_parts)) == ("Escherichia coli", "MG1655")
