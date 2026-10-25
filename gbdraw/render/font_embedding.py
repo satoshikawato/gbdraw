@@ -67,6 +67,63 @@ _EMBEDDED_DEFS = re.compile(
 )
 
 
+# Every value an element's font-family attribute (either quote) or style
+# declaration (up to ";" or the end of a style attribute in either quote) can
+# hold, read from the text without parsing it.
+_FONT_FAMILY_VALUES = (
+    r"""font-family\s*(?:=\s*(?:"([^"]*)"|'([^']*)')|:\s*(?=([^;"]*))(?=([^;']*)))"""
+)
+_FONT_FAMILY_TEXT = re.compile(_FONT_FAMILY_VALUES)
+_FONT_FAMILY_BYTES = re.compile(_FONT_FAMILY_VALUES.encode("ascii"))
+# A value the parser reads differently from its text (character references,
+# whitespace an attribute value normalizes) is decided by the parse.
+_PARSED_DIFFERENTLY = frozenset("&\n\r\t")
+# Markup the parser expands before gbdraw reads a value (a DOCTYPE's defaults
+# and entities, a character reference in a style attribute; <style> element
+# text is never read) is decided by the parse, as are bytes it decodes by their
+# own declaration.
+_PARSER_EXPANDS = re.compile(
+    r"<!DOCTYPE|<!ENTITY"
+    r"""|\bstyle\s*=\s*(?:"[^"&]*&|'[^'&]*&)"""
+)
+_PARSER_EXPANDS_BYTES = re.compile(_PARSER_EXPANDS.pattern.encode("ascii"))
+_OTHER_ENCODING = re.compile(
+    rb"""\A\s*<\?xml[^>]*\bencoding\s*=\s*["'](?!(?:utf-?8|us-ascii|ascii)["'])""", re.IGNORECASE
+)
+_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")  # UTF-32 LE starts with the first
+
+
+def _may_use_custom_face(svg: Union[str, bytes]) -> bool:
+    """Whether some text of ``svg`` may be drawn with a custom face, from the
+    font-family values in its text (``fonts.font_family_may_use_custom_face``).
+
+    False only when no value can resolve to a face gbdraw does not bundle;
+    then neither embedding nor the CairoSVG font check has anything to do,
+    and the SVG is not parsed.
+    """
+    if isinstance(svg, bytes):
+        if svg.startswith(_UTF16_BOMS) or b"\0" in svg or _OTHER_ENCODING.match(svg):
+            return True
+        if _PARSER_EXPANDS_BYTES.search(svg):
+            return True
+        found = {
+            value.decode("utf-8", "surrogateescape")
+            for match in _FONT_FAMILY_BYTES.finditer(svg)
+            for value in match.groups()
+            if value is not None
+        }
+    else:
+        if _PARSER_EXPANDS.search(svg):
+            return True
+        found = {value for match in _FONT_FAMILY_TEXT.finditer(svg) for value in match.groups() if value is not None}
+    for value in found:
+        if not _PARSED_DIFFERENTLY.isdisjoint(value):
+            return True
+        if value.strip() and fonts.font_family_may_use_custom_face(value.strip()):
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class FontEmbedding:
     """``@font-face`` rules for the custom faces an SVG uses ("" for none),
@@ -202,8 +259,11 @@ def svg_font_embedding(svg_text: str, kind: Literal["svg", "raster"] = "svg") ->
     characters drawn with it, or the whole face, as ``face_embedding``
     decides for ``kind`` (``svg`` for an SVG file, ``raster`` for the SVG the
     Web PNG export draws, which takes the whole face when subsetting
-    fails). Bundled Liberation faces are never embedded.
+    fails). Bundled Liberation faces are never embedded, and an SVG whose
+    font-family values resolve to none other is not parsed.
     """
+    if not _may_use_custom_face(svg_text):
+        return _NO_EMBEDDING
     drawn = _drawn_characters(ET.fromstring(svg_text))
     by_face: Dict[tuple[str, fonts.FontFace], set[str]] = {}
     for (font_family, font_weight, font_style), characters in drawn.items():
@@ -550,7 +610,7 @@ def fonts_for_cairosvg(svg_source: bytes, fmt: str) -> bytes:
     unchanged when nothing is rewritten.
     """
     kind = _CAIROSVG_KINDS.get(str(fmt).lower())
-    if kind is None:
+    if kind is None or not _may_use_custom_face(svg_source):
         return svg_source
     try:
         root = ET.fromstring(svg_source)

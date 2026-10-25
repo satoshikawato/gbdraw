@@ -42,12 +42,11 @@ def _is_missing_value(value: object) -> bool:
 
 
 def _attribute_text(value: object) -> str:
+    if isinstance(value, float):
+        # NaN (missing) and infinities are not finite.
+        return f"{value:.12g}" if math.isfinite(value) else ""
     if _is_missing_value(value):
         return ""
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            return ""
-        return f"{value:.12g}"
     return str(value).strip()
 
 
@@ -91,14 +90,73 @@ def _normalize_collinearity_color_mode(value: object) -> str:
     return str(value or "").strip().lower().replace("-", "_")
 
 
-def _match_kind(row: object) -> str:
-    collinearity_block_id = _attribute_text(_row_value(row, "collinearity_block_id", ""))
+def _match_kind(collinearity_block_id: str, orthogroup_id: str) -> str:
+    """The kind of a match from its ``_attribute_text`` block and orthogroup ids."""
     if collinearity_block_id:
         return "collinear"
-    orthogroup_id = _attribute_text(_row_value(row, "orthogroup_id", ""))
     if orthogroup_id:
         return "orthogroup"
     return "pairwise"
+
+
+# The required match attributes read from the row, in attribute order after the
+# match ids, the kind and the endpoint records.
+_REQUIRED_ROW_ATTRIBUTES = (
+    ("data-qstart", "qstart"),
+    ("data-qend", "qend"),
+    ("data-sstart", "sstart"),
+    ("data-send", "send"),
+    ("data-identity", "identity"),
+    ("data-alignment-length", "alignment_length"),
+    ("data-evalue", "evalue"),
+    ("data-bitscore", "bitscore"),
+    ("data-mismatches", "mismatches"),
+    ("data-gap-opens", "gap_opens"),
+)
+_ENDPOINT_IDENTITY_COLUMNS = (
+    "query_feature_svg_id",
+    "subject_feature_svg_id",
+    "query_view_feature_svg_id",
+    "subject_view_feature_svg_id",
+)
+_OPTIONAL_METADATA_ATTRIBUTES = (
+    ("collinearity_block_id", "data-collinearity-block-id"),
+    ("collinearity_block_kind", "data-collinearity-block-kind"),
+    ("collinearity_orientation", "data-collinearity-orientation"),
+    ("collinearity_block_score", "data-collinearity-block-score"),
+    ("collinearity_block_evalue", "data-collinearity-block-evalue"),
+    ("collinearity_anchor_index", "data-collinearity-anchor-index"),
+    ("collinearity_anchor_count", "data-collinearity-anchor-count"),
+    ("collinearity_color_mode", "data-collinearity-color-mode"),
+    ("group_kind", "data-group-kind"),
+    ("group_scope", "data-group-scope"),
+    ("collinear_group_scope", "data-collinear-group-scope"),
+    ("orthogroup_id", "data-orthogroup-id"),
+    ("rbh_orthogroup_id", "data-rbh-orthogroup-id"),
+    ("ortholog_path_id", "data-ortholog-path-id"),
+    ("edge_kind", "data-edge-kind"),
+    ("render_role", "data-render-role"),
+    ("query_orthogroup_representative", "data-query-orthogroup-representative"),
+    ("subject_orthogroup_representative", "data-subject-orthogroup-representative"),
+    ("query_orthogroup_member_count", "data-query-orthogroup-member-count"),
+    ("subject_orthogroup_member_count", "data-subject-orthogroup-member-count"),
+    ("query_orthogroup_role", "data-query-orthogroup-role"),
+    ("subject_orthogroup_role", "data-subject-orthogroup-role"),
+    ("query_orthogroup_confidence", "data-query-orthogroup-confidence"),
+    ("subject_orthogroup_confidence", "data-subject-orthogroup-confidence"),
+    ("query_orthogroup_assignment_reason", "data-query-orthogroup-assignment-reason"),
+    ("subject_orthogroup_assignment_reason", "data-subject-orthogroup-assignment-reason"),
+    ("query_protein_id", "data-query-protein-id"),
+    ("subject_protein_id", "data-subject-protein-id"),
+    ("query_feature_index", "data-query-feature-index"),
+    ("subject_feature_index", "data-subject-feature-index"),
+    ("query_unit_id", "data-query-unit-id"),
+    ("subject_unit_id", "data-subject-unit-id"),
+    ("query_locus_id", "data-query-locus-id"),
+    ("subject_locus_id", "data-subject-locus-id"),
+    ("query_display_name", "data-query-display-name"),
+    ("subject_display_name", "data-subject-display-name"),
+)
 
 
 class PairWiseMatchGroup:
@@ -177,6 +235,17 @@ class PairWiseMatchGroup:
         self.match_group.attribs["data-subject-record-index"] = self.subject_record_index
         self.match_group.attribs["data-query-row"] = self.query_placement.row
         self.match_group.attribs["data-subject-row"] = self.subject_placement.row
+        # Endpoint records own record identity; table IDs never override them.
+        self._endpoint_attributes = {
+            "data-query-record-index": _required_attribute_text(self.query_record_index),
+            "data-subject-record-index": _required_attribute_text(self.subject_record_index),
+            "data-query-record-id": _required_attribute_text(self._record_id_for_index(self.query_record_index)),
+            "data-subject-record-id": _required_attribute_text(
+                self._record_id_for_index(self.subject_record_index)
+            ),
+        }
+        # interpolate_default_colors by its arguments, for this comparison only.
+        self._gradient_colors: dict[tuple[tuple[str, str], tuple[str, str], float], str] = {}
         self.add_elements_to_group()
 
     @property
@@ -283,11 +352,18 @@ class PairWiseMatchGroup:
                 rendered_ids.append(rendered_id)
         return ";".join(rendered_ids)
 
+    def _gradient_color(self, min_color: tuple[str, str], max_color: tuple[str, str], factor: float) -> str:
+        key = (min_color, max_color, factor)
+        color = self._gradient_colors.get(key)
+        if color is None:
+            color = self._gradient_colors[key] = interpolate_default_colors(min_color, max_color, factor)
+        return color
+
     def _feature_attachment_y(self, row: object, role: Literal["query", "subject"], default_y: float) -> float:
         index = self.feature_dom_index
-        placement, other = self._placements(role)
         if index is None or not index.attachment_bands:
             return default_y
+        placement, other = self._placements(role)
         view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
             _row_value(row, f"{role}_feature_svg_id", "")
         )
@@ -333,7 +409,7 @@ class PairWiseMatchGroup:
                 100 - self.min_identity
             )
             factor = max(0.0, min(1.0, factor))
-        default_gradient_color = interpolate_default_colors(
+        default_gradient_color = self._gradient_color(
             ("pairwise_match_min", self.match_min_color),
             ("pairwise_match_max", self.match_max_color),
             factor,
@@ -396,33 +472,18 @@ class PairWiseMatchGroup:
         row: DataFrame,
         match_index: int | None = None,
     ) -> None:
-        query_record_index = self.query_record_index
-        subject_record_index = self.subject_record_index
-        # Endpoint records own record identity; table IDs never override them.
-        query_record_id = self._record_id_for_index(query_record_index)
-        subject_record_id = self._record_id_for_index(subject_record_index)
-        match_id = self._next_pairwise_match_id(match_index)
-        required_attributes = {
-            "data-gbdraw-match-id": match_id,
-            "data-gbdraw-pairwise-match-id": match_id,
-            "data-match-kind": _match_kind(row),
-            "data-query-record-index": query_record_index,
-            "data-subject-record-index": subject_record_index,
-            "data-query-record-id": query_record_id,
-            "data-subject-record-id": subject_record_id,
-            "data-qstart": _row_value(row, "qstart", ""),
-            "data-qend": _row_value(row, "qend", ""),
-            "data-sstart": _row_value(row, "sstart", ""),
-            "data-send": _row_value(row, "send", ""),
-            "data-identity": _row_value(row, "identity", ""),
-            "data-alignment-length": _row_value(row, "alignment_length", ""),
-            "data-evalue": _row_value(row, "evalue", ""),
-            "data-bitscore": _row_value(row, "bitscore", ""),
-            "data-mismatches": _row_value(row, "mismatches", ""),
-            "data-gap-opens": _row_value(row, "gap_opens", ""),
-        }
-        for attribute, value in required_attributes.items():
-            path.attribs[attribute] = _required_attribute_text(value)
+        attribs = path.attribs
+        match_id = _required_attribute_text(self._next_pairwise_match_id(match_index))
+        attribs["data-gbdraw-match-id"] = match_id
+        attribs["data-gbdraw-pairwise-match-id"] = match_id
+        attribs["data-match-kind"] = _match_kind(
+            _attribute_text(getattr(row, "collinearity_block_id", None)),
+            _attribute_text(getattr(row, "orthogroup_id", None)),
+        )
+        attribs.update(self._endpoint_attributes)
+        # A missing column and a None value both read as "" (``_row_value``).
+        for attribute, column in _REQUIRED_ROW_ATTRIBUTES:
+            attribs[attribute] = _required_attribute_text(getattr(row, column, None))
 
     def resolve_match_fill_color(
         self,
@@ -450,7 +511,7 @@ class PairWiseMatchGroup:
         if color_mode == "orientation_identity":
             min_key = COLLINEAR_ORIENTATION_MIN_COLOR_KEYS.get(orientation, "pairwise_match_min")
             min_color = self.collinearity_orientation_min_colors.get(orientation, self.match_min_color)
-            return interpolate_default_colors(
+            return self._gradient_color(
                 (min_key, min_color),
                 (COLLINEAR_ORIENTATION_COLOR_KEYS[orientation], orientation_color),
                 factor,
@@ -459,16 +520,10 @@ class PairWiseMatchGroup:
         return default_gradient_color
 
     def add_optional_metadata_attributes(self, path: Path, row: DataFrame) -> None:
-        has_collinearity_metadata = bool(_attribute_text(_row_value(row, "collinearity_block_id", "")))
-        has_orthogroup_metadata = bool(_attribute_text(_row_value(row, "orthogroup_id", "")))
+        has_collinearity_metadata = bool(_attribute_text(getattr(row, "collinearity_block_id", None)))
+        has_orthogroup_metadata = bool(_attribute_text(getattr(row, "orthogroup_id", None)))
         has_endpoint_identity = any(
-            _attribute_text(_row_value(row, column, ""))
-            for column in (
-                "query_feature_svg_id",
-                "subject_feature_svg_id",
-                "query_view_feature_svg_id",
-                "subject_view_feature_svg_id",
-            )
+            _attribute_text(getattr(row, column, None)) for column in _ENDPOINT_IDENTITY_COLUMNS
         )
         if not (
             has_collinearity_metadata
@@ -477,44 +532,6 @@ class PairWiseMatchGroup:
         ):
             return
 
-        metadata_columns = {
-            "collinearity_block_id": "data-collinearity-block-id",
-            "collinearity_block_kind": "data-collinearity-block-kind",
-            "collinearity_orientation": "data-collinearity-orientation",
-            "collinearity_block_score": "data-collinearity-block-score",
-            "collinearity_block_evalue": "data-collinearity-block-evalue",
-            "collinearity_anchor_index": "data-collinearity-anchor-index",
-            "collinearity_anchor_count": "data-collinearity-anchor-count",
-            "collinearity_color_mode": "data-collinearity-color-mode",
-            "group_kind": "data-group-kind",
-            "group_scope": "data-group-scope",
-            "collinear_group_scope": "data-collinear-group-scope",
-            "orthogroup_id": "data-orthogroup-id",
-            "rbh_orthogroup_id": "data-rbh-orthogroup-id",
-            "ortholog_path_id": "data-ortholog-path-id",
-            "edge_kind": "data-edge-kind",
-            "render_role": "data-render-role",
-            "query_orthogroup_representative": "data-query-orthogroup-representative",
-            "subject_orthogroup_representative": "data-subject-orthogroup-representative",
-            "query_orthogroup_member_count": "data-query-orthogroup-member-count",
-            "subject_orthogroup_member_count": "data-subject-orthogroup-member-count",
-            "query_orthogroup_role": "data-query-orthogroup-role",
-            "subject_orthogroup_role": "data-subject-orthogroup-role",
-            "query_orthogroup_confidence": "data-query-orthogroup-confidence",
-            "subject_orthogroup_confidence": "data-subject-orthogroup-confidence",
-            "query_orthogroup_assignment_reason": "data-query-orthogroup-assignment-reason",
-            "subject_orthogroup_assignment_reason": "data-subject-orthogroup-assignment-reason",
-            "query_protein_id": "data-query-protein-id",
-            "subject_protein_id": "data-subject-protein-id",
-            "query_feature_index": "data-query-feature-index",
-            "subject_feature_index": "data-subject-feature-index",
-            "query_unit_id": "data-query-unit-id",
-            "subject_unit_id": "data-subject-unit-id",
-            "query_locus_id": "data-query-locus-id",
-            "subject_locus_id": "data-subject-locus-id",
-            "query_display_name": "data-query-display-name",
-            "subject_display_name": "data-subject-display-name",
-        }
         query_record_index = self.query_record_index
         subject_record_index = self.subject_record_index
         for role, record_index in (
@@ -543,8 +560,8 @@ class PairWiseMatchGroup:
                 )
                 if rendered_ids:
                     path.attribs[f"data-{role}-feature-svg-id"] = rendered_ids
-        for column, attribute in metadata_columns.items():
-            text = _attribute_text(_row_value(row, column, ""))
+        for column, attribute in _OPTIONAL_METADATA_ATTRIBUTES:
+            text = _attribute_text(getattr(row, column, None))
             if text:
                 path.attribs[attribute] = text
 

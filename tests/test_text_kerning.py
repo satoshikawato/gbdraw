@@ -15,6 +15,7 @@ import pytest
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.ttLib import TTFont
 
+from gbdraw.core.fonts import FontFace, load_font
 from gbdraw.core.text import (
     _get_kerning_value,
     font_pair_kerning_table,
@@ -132,6 +133,18 @@ def test_kerning_table_is_the_gpos_kern_feature(face: str) -> None:
     assert {pair: gpos_pairs[pair] for pair in legacy_pairs} == legacy_pairs
     extra = set(gpos_pairs) - set(legacy_pairs)
     assert len(extra) == (1107 if face.startswith("LiberationSans") else 0)
+
+
+@pytest.mark.parametrize("face", FACES)
+def test_a_loaded_face_kerns_as_the_whole_font_read_at_once(face: str) -> None:
+    """``load_font`` reads a face lazily (only the lookups kerning uses are
+    decompiled), from the bytes read once; its kerning is that of the font
+    read eagerly."""
+    loaded = load_font(FontFace(str(DATA_DIR / f"{face}.ttf")))
+
+    assert loaded is not None and loaded.lazy is True
+    assert isinstance(loaded.reader.file, io.BytesIO)
+    assert font_pair_kerning_table(loaded) == font_pair_kerning_table(TTFont(str(DATA_DIR / f"{face}.ttf"), lazy=False))
 
 
 def _reloaded(font: TTFont, tmp_path: Path, name: str) -> str:

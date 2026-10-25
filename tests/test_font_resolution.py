@@ -11,11 +11,13 @@ fonts of the machine.
 from __future__ import annotations
 
 import base64
+import gc
 import json
 import logging
 import os
 import re
 import subprocess
+import weakref
 from pathlib import Path
 
 import pytest
@@ -30,6 +32,7 @@ from gbdraw.core.text import (
     calculate_bbox_dimensions,
     calculate_svg_bbox_dimensions,
     font_metrics_table,
+    font_pair_kerning_table,
     get_text_bbox_size_pixels,
     measurement_font_file,
 )
@@ -242,6 +245,46 @@ def test_an_unregistered_face_is_not_read_again_from_its_path(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="no longer registered"):
         fonts.load_font(face)
+
+
+@pytest.mark.parametrize("forget", ["unregister", "replace"])
+def test_a_forgotten_face_keeps_no_kerning_or_font(tmp_path: Path, forget: str) -> None:
+    """Unregistering a face, or registering another face of its family,
+    weight and style, lets its font go: its kerning is not kept for it."""
+    path = _renamed_font("LiberationSans-Regular", "Gbdraw Test Sans", tmp_path / "a.ttf")
+    face = fonts.register_font_file(path).face
+    font = fonts.load_font(face)
+    assert font_pair_kerning_table(font)
+    forgotten = weakref.ref(font)
+    del font
+
+    if forget == "unregister":
+        fonts.unregister_font_file(path)
+    else:
+        fonts.register_font_file(_renamed_font("LiberationSans-Bold", "Gbdraw Test Sans", tmp_path / "b.ttf"))
+    gc.collect()
+
+    assert forgotten() is None
+
+
+def test_the_kerning_entry_goes_away_with_its_font_and_a_new_font_gets_its_own() -> None:
+    """The kerning cache holds no strong reference to a font: its entry is
+    released with the font, and a font made afterwards is measured afresh."""
+    from gbdraw.core import text
+
+    data_dir = Path(fonts.__file__).resolve().parents[1] / "data"
+    gc.collect()
+    before = len(text._pair_kerning_cache)
+    sans = TTFont(str(data_dir / "LiberationSans-Regular.ttf"))
+    assert font_pair_kerning_table(sans)
+    assert len(text._pair_kerning_cache) == before + 1
+    del sans
+    gc.collect()
+    assert len(text._pair_kerning_cache) == before
+
+    mono = TTFont(str(data_dir / "LiberationMono-Regular.ttf"))
+    assert font_pair_kerning_table(mono) == {}
+    assert len(text._pair_kerning_cache) == before + 1
 
 
 def test_a_registered_font_has_the_metrics_table_of_its_bytes(tmp_path: Path) -> None:

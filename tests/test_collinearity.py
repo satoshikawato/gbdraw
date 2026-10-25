@@ -3850,3 +3850,36 @@ def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatc
     assert identity == row_identity == 0.1
     # CPython 3.12+ sum() values; left-to-right addition gives (0.2345015637431571, 0.645579356667975).
     assert model == (0.23450156374315714, 0.6455793566679746)
+
+
+@pytest.mark.linear
+def test_a_comparison_interpolates_each_gradient_color_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The match colors of one comparison are interpolated once per distinct
+    identity; every match still gets its own color."""
+    import gbdraw.render.groups.linear.pairwise_match as pairwise_match
+
+    calls: list[float] = []
+    real = pairwise_match.interpolate_default_colors
+
+    def counting(min_color: tuple[str, str], max_color: tuple[str, str], factor: float) -> str:
+        calls.append(factor)
+        return real(min_color, max_color, factor)
+
+    monkeypatch.setattr(pairwise_match, "interpolate_default_colors", counting)
+    identities = [90.0, 95.0, 90.0, 100.0, 95.0, 90.0]
+    comparison = pd.DataFrame(
+        {
+            "identity": identities,
+            "qstart": [10 * i + 1 for i in range(6)],
+            "qend": [10 * i + 9 for i in range(6)],
+            "sstart": [10 * i + 1 for i in range(6)],
+            "send": [10 * i + 9 for i in range(6)],
+        }
+    )
+
+    group = ribbon_group([_record("record_a", []), _record("record_b", [])], comparison)
+
+    paths = group.get_group().elements
+    assert len(paths) == 6 and len(calls) == 3
+    fills = {path.attribs["data-identity"]: path.attribs["fill"] for path in paths}
+    assert len(set(fills.values())) == 3
