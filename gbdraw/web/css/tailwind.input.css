@@ -47,11 +47,15 @@
     [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 9px; }
     [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { content: ''; position: absolute; left: 8px; right: 8px; top: -6px; height: 1px; background-color: var(--ui-line); }
     [data-settings-display="rail"] > .settings-index > nav > .at-end { margin-top: auto; }
+    /* A low window also packs the entries closer (1 px apart, 3 px before a line), so that the Linear rail
+       fits below the drawing bar at 1280x720 (OV-1785, Owner 2026-10-25), with the lower Generate of
+       index.html. */
     @media (max-height: 800px) {
+        [data-settings-display="rail"] > .settings-index > nav { gap: 1px; }
         [data-settings-display="rail"] > .settings-index > nav > button { --rail-entry-floor: 30px; --rail-icon: 17px; }
         [data-settings-display="rail"] > .settings-index > nav > button > span { font-size: 9px; }
-        [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 5px; }
-        [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { top: -4px; }
+        [data-settings-display="rail"] > .settings-index > nav > .starts-group { margin-top: 3px; }
+        [data-settings-display="rail"] > .settings-index > nav > .starts-group::after { top: -3px; }
     }
 
     /* Type scale: card title, nested disclosure (details below), group heading, field label, hint. */

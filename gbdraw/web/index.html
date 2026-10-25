@@ -2252,6 +2252,16 @@
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn > span { flex-direction: column; gap: 2px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-long { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-short { display: inline; }
+        /* In a window at most 800 px high, Generate beside a docked section is 48 px tall, 20 px lower than
+           the stacked button, and its room shrinks by as much: the rail then fits below the drawing bar at
+           1280x720 (OV-1785, Owner 2026-10-25; the rail's spacing is in css/tailwind.input.css). The square
+           beside the rail alone keeps its 60 px (PD-OI-093). Docking or closing a section changes the
+           button's height at once: the press effects keep their transition, the size has none. */
+        @media (max-height: 800px) {
+            .settings-pane[data-settings-display="rail"][data-settings-docked] { --generate-room: calc(5.875rem - 20px); }
+            .settings-pane[data-settings-display="rail"][data-settings-docked] > .generate-bar > .btn { height: 48px; padding-top: 0; padding-bottom: 0; }
+            .settings-pane[data-settings-display="rail"] > .generate-bar > .btn { transition-property: color, background-color, border-color, border-width, box-shadow, transform, translate; }
+        }
 
         /* While the Review alignment panel is docked, the pane scrolls it into reach. */
         .result-pane:has(.alignment-review-panel) {
