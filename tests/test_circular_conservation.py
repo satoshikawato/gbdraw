@@ -120,7 +120,6 @@ def _circular_legend_measurement(
         font_weight="normal",
         font_size=float(legend_config.font_size),
         color_rect_size=float(legend_config.color_rect_size),
-        dpi=int(canvas_config.dpi),
         legend_width=layout.width,
         legend_height=layout.height,
         total_feature_legend_width=layout.feature_width,

@@ -335,7 +335,6 @@ def _with_mock_circular_result(
             font_weight="normal",
             font_size=0.0,
             color_rect_size=0.0,
-            dpi=96,
             legend_width=0.0,
             legend_height=0.0,
             total_feature_legend_width=0.0,

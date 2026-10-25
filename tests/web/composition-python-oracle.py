@@ -27,7 +27,6 @@ from gbdraw.render.composition import (  # noqa: E402
 
 LEGEND_REFLOW = {
     "colorRectSize": 14.0,
-    "dpi": 96,
     "fontFile": "LiberationSans-Regular",
     "fontSize": 14.0,
     "lineHeight": 24.0,

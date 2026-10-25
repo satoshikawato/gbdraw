@@ -319,7 +319,7 @@ test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)
     };
   });
   expect(report.side).toBe('top');
-  expect(report.recorded).toEqual(expect.arrayContaining(['dpi', 'fontFile', 'fontSize', 'primaryLocalBounds', 'wrapWidth']));
+  expect(report.recorded).toEqual(expect.arrayContaining(['fontFile', 'fontSize', 'primaryLocalBounds', 'wrapWidth']));
   expect(report.drawn.map(([key]) => key)).toEqual(expect.arrayContaining(rules.map((rule) => rule[3])));
   expect(new Set(report.drawn.map(([, caption]) => caption[1])).size, 'the Legend wraps').toBeGreaterThan(1);
   expect(report.laidOut).toEqual(report.drawn);
