@@ -118,10 +118,11 @@ test('overlapping labels: the dialog shows every row; Cancel writes nothing; App
 
 test('crossing leaders: the notice bar opens the dialog, which computes the rows; Keep as drawn keeps the figure', async ({ page }) => {
   test.setTimeout(600000);
-  // Lambda with labels Out at 16 pt and no blacklist: no labels overlap and leaders cross, the recipe of the
-  // Python twin (tests/test_web_label_fit.py). SARS-CoV-2 with external labels only at 14 pt crossed only
-  // because labels next to the origin could wrap past their neighbours (OV-1366); it fits now.
-  await openWithOuterLabels(page, { name: 'NC_001416.gb', text: LAMBDA(), fontSize: 16 });
+  // Lambda with labels Out at 17 pt and no blacklist: no labels overlap and 10 leader pairs cross, the recipe of
+  // the Python twin (tests/test_web_label_fit.py). 16 pt crossed while labels were laid out in point-mode boxes
+  // (OV-165). SARS-CoV-2 with external labels only at 14 pt crossed only because labels next to the origin could
+  // wrap past their neighbours (OV-1366); it fits now.
+  await openWithOuterLabels(page, { name: 'NC_001416.gb', text: LAMBDA(), fontSize: 17 });
   await generateAndWaitForResult(page);
   const notice = page.getByTestId('label-fit-notice');
   await expect(notice).toBeVisible();
