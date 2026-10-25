@@ -33,7 +33,7 @@ from gbdraw.labels.fit import (
 )
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
-AP027131 = TEST_INPUTS / "AP027131.gb"
+MERS_COV = TEST_INPUTS / "MERS-CoV.gbk"
 DEFINITION = LabelFit(0, 0, definition_track_overlaps=1)
 
 
@@ -150,32 +150,32 @@ def test_the_notice_names_the_definition_text_over_a_track() -> None:
 
 
 @pytest.mark.circular
-def test_cli_draws_ap027131_with_the_warning_and_the_suggested_font_clears_it(
+def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """OV-1606: the bold first line's corners touch the GC skew area of the default AP027131 figure (D-18)."""
+    """OV-1606: the bold first line's corners touch the GC skew area of the default MERS-CoV figure (D-18)."""
 
     from gbdraw import cli
 
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
     output = tmp_path / "ap"
-    monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", "--gbk", str(AP027131), "-o", str(output), "-f", "svg"])
+    monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", "--gbk", str(MERS_COV), "-o", str(output), "-f", "svg"])
     cli.main()
 
     assert output.with_suffix(".svg").is_file()
     assert capsys.readouterr().err == (
         "WARNING: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 17.5   (smaller definition font)\n"
+        "  --definition_font_size 17   (smaller definition font)\n"
     )
 
     fixed = tmp_path / "ap_fixed"
     monkeypatch.setattr(
         sys,
         "argv",
-        ["gbdraw", "circular", "--gbk", str(AP027131), "--definition_font_size", "17.5", "-o", str(fixed), "-f", "svg"],
+        ["gbdraw", "circular", "--gbk", str(MERS_COV), "--definition_font_size", "17", "-o", str(fixed), "-f", "svg"],
     )
     cli.main()
     assert fixed.with_suffix(".svg").is_file()
@@ -187,21 +187,21 @@ def test_python_warns_with_the_report_and_a_figure_without_the_overlap_does_not(
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
     from gbdraw.api.options import CircularDiagramOptions
 
-    record = SeqIO.read(str(AP027131), "genbank")
+    record = SeqIO.read(str(MERS_COV), "genbank")
     with pytest.warns(LabelLeadersCrossWarning):
         drawing = build_circular_diagram(record, options=CircularDiagramOptions())
     report = label_fit_report(drawing)
     assert report is not None and report.drawn
     assert [(item.label_kind, item.fit) for item in report.records] == [("circular_definition", DEFINITION)]
     row = label_fit_row(drawing, "smaller_definition_font")
-    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.5}
+    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.0}
 
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
     cfg = with_config_overrides(
-        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.5}
+        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.0}
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error", LabelLeadersCrossWarning)
@@ -300,7 +300,7 @@ def test_the_row_keeps_a_set_definition_interval_as_a_run_again_does() -> None:
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
-    record = SeqIO.read(str(AP027131), "genbank")
+    record = SeqIO.read(str(MERS_COV), "genbank")
     base = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
     interval = {"objects.definition.circular.interval": 25}
     with pytest.warns(LabelLeadersCrossWarning):
@@ -538,7 +538,7 @@ def test_the_row_keeps_a_set_interval_equal_to_the_one_the_font_derives() -> Non
     from gbdraw.api.diagram import build_circular_diagram, label_fit_row
     from gbdraw.api.options import CircularDiagramOptions
 
-    record = SeqIO.read(str(AP027131), "genbank")
+    record = SeqIO.read(str(MERS_COV), "genbank")
     interval = {"objects.definition.circular.interval": 20}
     with pytest.warns(LabelLeadersCrossWarning):
         drawing = build_circular_diagram(record, options=CircularDiagramOptions(config_overrides=interval))
