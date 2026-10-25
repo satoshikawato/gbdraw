@@ -436,11 +436,14 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   await generate(page);
   const linear = await shown(page);
 
+  // A Session 49 drawing, found by its ID.
+  const drawingOf = (document, id) => document.drawings.find((entry) => entry.id === id);
   const saved = await save(page, info.outputPath('both.gbdraw-session.json.gz'), { title: '' });
-  expect(saved.ui.mode).toBe('linear');
-  expect(saved.renderRequest.mode).toBe('linear');
-  expect(saved.otherModeResult.renderRequest.mode).toBe('circular');
-  expect(saved.otherModeResult.results).toHaveLength(1);
+  expect(saved.drawings.map(({ id }) => id)).toEqual(['circular', 'linear']);
+  expect(saved.ui.activeDrawingId).toBe('linear');
+  expect(drawingOf(saved, 'linear').renderRequest.mode).toBe('linear');
+  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(drawingOf(saved, 'circular').results).toHaveLength(1);
 
   const fresh = await freshPage(browser);
   try {
@@ -454,14 +457,14 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
     expect(await drawing(fresh, loadedCircular.content)).toEqual(await drawing(page, circular.content));
 
     const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'), { title: '' });
-    expect(resaved.ui.mode).toBe('circular');
-    expect(resaved.renderRequest.mode).toBe('circular');
-    expect(resaved.otherModeResult.renderRequest.mode).toBe('linear');
+    expect(resaved.ui.activeDrawingId).toBe('circular');
+    expect(drawingOf(resaved, 'circular').renderRequest.mode).toBe('circular');
+    expect(drawingOf(resaved, 'linear').renderRequest.mode).toBe('linear');
     // Load admission may re-serialize a Result's markup; its drawing stays.
-    expect(await drawing(fresh, resaved.results[0].content))
-      .toEqual(await drawing(page, saved.otherModeResult.results[0].content));
-    expect(await drawing(fresh, resaved.otherModeResult.results[0].content))
-      .toEqual(await drawing(page, saved.results[0].content));
+    for (const id of ['circular', 'linear']) {
+      expect(await drawing(fresh, drawingOf(resaved, id).results[0].content))
+        .toEqual(await drawing(page, drawingOf(saved, id).results[0].content));
+    }
   } finally {
     await fresh.context().close();
   }
