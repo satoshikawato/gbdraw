@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): on a cross-origin-isolated page such as gbdraw.app,
+  Cancel now stops Python in the diagram Worker and keeps the Worker, so the
+  next Generate does not boot Pyodide again and reuses what the Worker had
+  prepared (tobacco chloroplast Gallery Session, unchanged settings: 0.5 s instead of 12 s,
+  best of 3).
+  When the Worker does not stop within 3 s, the page is not cross-origin
+  isolated, or Pyodide is still booting, Cancel ends the Worker as before. The
+  drawing and the saved Session do not change.
+- Fixed: a registered font with a corrupt table failed its first text
+  measurement and then measured without that table, with no error. Every
+  measurement now fails the same way (OV-1756).
 - Performance (CLI, Python): replaying a Session (`gbdraw render --session`,
   `gbdraw circular|linear --session`, the Python Session render functions)
   checks its protein identity manifest once, when the Session loads, instead of
