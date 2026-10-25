@@ -774,7 +774,9 @@ def render_session_drawings_cli(
     prefix; several drawings get ``<prefix>_<ID>``. With a re-save, the
     document is brought to the current version and validated before any
     render; every diagram path and the sidecar are checked together before the
-    first write; and the re-save replaces only the rendered drawings.
+    first write; and the re-save replaces only the rendered drawings. Without
+    a re-save, the resources' embedded data is dropped from ``document`` once
+    its files are written, so the caller does not render it again.
     """
 
     from gbdraw.api.request_render import (
@@ -786,6 +788,7 @@ def render_session_drawings_cli(
     from gbdraw.session import (
         _build_session_document_from_drawings,
         _plan_session_drawings,
+        _release_materialized_resource_data,
         _render_session_drawing_plans,
         _session_parse_cache,
         _write_session_document,
@@ -803,6 +806,9 @@ def render_session_drawings_cli(
         output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
     )
     with materialize_session(base, output_directory=output_directory) as materialized:
+        if not save:
+            # Nothing reads the embedded data again: the files hold the bytes.
+            _release_materialized_resource_data(materialized)
         # The drawings are decoded and rendered in one cache transaction, so a
         # decoded resource is keyed by its resource; the logs and the re-save
         # follow it.
