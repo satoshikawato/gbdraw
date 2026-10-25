@@ -24,6 +24,7 @@ from typing import (
     Literal,
     Mapping,
     NamedTuple,
+    NoReturn,
     Sequence,
     SupportsFloat,
     TypedDict,
@@ -91,6 +92,7 @@ _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = frozenset(
     }
 )
 _MANIFEST_SCALAR_TYPES = frozenset({str, int, float, bool, type(None)})
+_EMPTY_MAPPING: Mapping[str, object] = {}
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
 _INTEGER_COMPARISON_COLUMNS = frozenset(
     {
@@ -260,34 +262,161 @@ class CdsProtein:
     view_feature_svg_id: str | None = None
 
 
-@dataclass(frozen=True)
-class ProteinIdentityManifest:
-    """Schema-2 authority for protein sets, analyses, and runtime bindings."""
+def _refuse_change(self: object, *_args: object, **_kwargs: object) -> NoReturn:
+    raise TypeError(
+        f"{type(self).__name__} is read-only: a validated protein identity manifest "
+        "cannot change. Change a copy from ProteinIdentityManifest.to_dict()."
+    )
 
-    protein_sets: dict[str, dict[str, object]]
-    record_analyses: dict[str, dict[str, object]]
-    record_instances: dict[str, dict[str, object]]
-    schema: int = PROTEIN_IDENTITY_MANIFEST_SCHEMA
+
+class _FrozenDict(dict[str, object]):
+    """A read-only dict inside a protein identity manifest proof.
+
+    It stays a ``dict``, so equality with a plain manifest and ``json.dumps``
+    bytes are those of the same plain data.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, items: Mapping[str, object] = _EMPTY_MAPPING) -> _FrozenDict:
+        frozen = dict.__new__(cls)
+        dict.update(frozen, items)
+        return frozen
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        # dict.__init__ would fill the dict again; __new__ already did.
+        pass
+
+    __setitem__ = __delitem__ = __ior__ = _refuse_change
+    clear = pop = popitem = setdefault = update = _refuse_change
+
+    def __copy__(self) -> _FrozenDict:
+        return self
+
+    def __deepcopy__(self, _memo: object) -> _FrozenDict:
+        return self
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (_FrozenDict, (dict(self),))
+
+
+class _FrozenList(list[object]):
+    """A read-only list inside a protein identity manifest proof."""
+
+    __slots__ = ()
+
+    def __new__(cls, items: Iterable[object] = ()) -> _FrozenList:
+        frozen = list.__new__(cls)
+        list.extend(frozen, items)
+        return frozen
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        # list.__init__ would empty the list; __new__ already filled it.
+        pass
+
+    __setitem__ = __delitem__ = __iadd__ = __imul__ = _refuse_change
+    append = extend = insert = pop = remove = clear = sort = reverse = _refuse_change
+
+    def __copy__(self) -> _FrozenList:
+        return self
+
+    def __deepcopy__(self, _memo: object) -> _FrozenList:
+        return self
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (_FrozenList, (list(self),))
+
+
+# Only the two makers of a proof hold it: validate_protein_identity_manifest and
+# extract_protein_identity_manifest (through _seal_protein_identity_manifest).
+_PROOF_TOKEN = object()
+
+
+class ProteinIdentityManifest(_FrozenDict):
+    """Schema-2 authority for protein sets, analyses, and runtime bindings.
+
+    A proof: a read-only mapping whose items are the manifest, made only by
+    :func:`validate_protein_identity_manifest` (which returns a proof
+    unchanged) or by :func:`extract_protein_identity_manifest`. It equals, and
+    ``json.dumps`` writes, the same plain manifest; every dict and list inside
+    it is read-only, and ``copy.copy`` and ``copy.deepcopy`` return it.
+    """
+
+    __slots__ = ()
+
+    schema = PROTEIN_IDENTITY_MANIFEST_SCHEMA
+
+    def __new__(cls, *args: object, **kwargs: object) -> ProteinIdentityManifest:
+        if len(args) != 2 or args[0] is not _PROOF_TOKEN or kwargs:
+            raise TypeError(
+                "A ProteinIdentityManifest is made only by "
+                "validate_protein_identity_manifest() or extract_protein_identity_manifest()."
+            )
+        proof = dict.__new__(cls)
+        dict.update(proof, cast(Mapping[str, object], args[1]))
+        return proof
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (validate_protein_identity_manifest, (self.to_dict(),))
+
+    @property
+    def protein_sets(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["proteinSets"])
+
+    @property
+    def record_analyses(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["recordAnalyses"])
+
+    @property
+    def record_instances(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["recordInstances"])
 
     def to_dict(self) -> dict[str, object]:
-        return {
-            "schema": self.schema,
-            "proteinSets": self.protein_sets,
-            "recordAnalyses": self.record_analyses,
-            "recordInstances": self.record_instances,
-        }
+        """A detached, mutable plain copy of the manifest."""
+
+        return cast("dict[str, object]", _thawed(self))
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, object]) -> "ProteinIdentityManifest":
+    def from_dict(cls, value: Mapping[str, object]) -> ProteinIdentityManifest:
         return validate_protein_identity_manifest(value)
 
-    def binding_for(self, record_instance_key: str) -> dict[str, object]:
+    def binding_for(self, record_instance_key: str) -> Mapping[str, object]:
         try:
             return self.record_instances[str(record_instance_key)]
         except KeyError as exc:
             raise ValidationError(
                 f"Protein manifest has no record instance {record_instance_key!r}."
             ) from exc
+
+
+def _frozen(value: object) -> object:
+    """``value`` with every dict and list in it read-only; other values as they are."""
+
+    if type(value) in _MANIFEST_SCALAR_TYPES or isinstance(value, (_FrozenDict, _FrozenList)):
+        return value
+    if isinstance(value, dict):
+        return _FrozenDict({key: _frozen(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return _FrozenList([_frozen(item) for item in value])
+    return value
+
+
+def _thawed(value: object) -> object:
+    """A detached copy of ``value`` with plain, mutable dicts and lists."""
+
+    if type(value) in _MANIFEST_SCALAR_TYPES:
+        return value
+    if isinstance(value, dict):
+        return {key: _thawed(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_thawed(item) for item in value]
+    return copy.deepcopy(value)
+
+
+def _seal_protein_identity_manifest(
+    items: Iterable[tuple[str, object]],
+) -> ProteinIdentityManifest:
+    return ProteinIdentityManifest(_PROOF_TOKEN, {key: _frozen(item) for key, item in items})
 
 
 @dataclass(frozen=True)
@@ -1036,7 +1165,36 @@ def _reject_manifest_presentation_identity(value: Mapping[str, object]) -> None:
 def validate_protein_identity_manifest(
     value: Mapping[str, object],
 ) -> ProteinIdentityManifest:
-    """Validate and materialize a schema-2 compact protein manifest."""
+    """Check a schema-2 compact protein manifest and return its proof.
+
+    A :class:`ProteinIdentityManifest` is returned unchanged: it passed this
+    check when it was made and cannot change. Any other value gets the full
+    check, and its proof keeps the value's items in their order, with the
+    keys and runtime handles the check reads as text made ``str``. For JSON
+    data the proof equals the value and ``json.dumps`` writes the same bytes.
+    """
+
+    if isinstance(value, ProteinIdentityManifest):
+        return value
+    checked = dict(
+        zip(
+            ("proteinSets", "recordAnalyses", "recordInstances"),
+            _check_protein_identity_manifest(value),
+        )
+    )
+    return _seal_protein_identity_manifest(
+        (key, checked[key] if key in checked else item) for key, item in value.items()
+    )
+
+
+def _check_protein_identity_manifest(
+    value: Mapping[str, object],
+) -> tuple[
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+]:
+    """The full check: the protein sets, analyses and bindings it read, in input order."""
 
     if not isinstance(value, Mapping) or value.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA:
         raise ValidationError("Protein identity manifest must use schema 2.")
@@ -1162,15 +1320,11 @@ def validate_protein_identity_manifest(
             )
 
         normalized_binding = dict(raw_binding)
-        normalized_binding["runtimeIds"] = dict(sorted(normalized_runtime_ids.items()))
-        normalized_binding["featureMetadata"] = dict(sorted(normalized_metadata.items()))
+        normalized_binding["runtimeIds"] = normalized_runtime_ids
+        normalized_binding["featureMetadata"] = normalized_metadata
         record_instances[instance_key] = normalized_binding
 
-    return ProteinIdentityManifest(
-        protein_sets=protein_sets,
-        record_analyses=record_analyses,
-        record_instances=record_instances,
-    )
+    return protein_sets, record_analyses, record_instances
 
 
 def _safe_web_protein_id_token(value: object) -> str:
@@ -1530,24 +1684,19 @@ def extract_protein_identity_manifest(
         runtime_binding_hashes.append(runtime_binding_hash)
         display_binding_hashes.append(display_binding_hash)
 
+    manifest = {
+        "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+        "proteinSets": protein_sets,
+        "recordAnalyses": record_analyses,
+        "recordInstances": record_instances,
+    }
     # The validator's other checks re-derive what this loop computed with the same helpers;
     # only the key walk can fail on caller input (record keys, selectors, regions).
-    _reject_manifest_presentation_identity(
-        {
-            "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
-            "proteinSets": protein_sets,
-            "recordAnalyses": record_analyses,
-            "recordInstances": record_instances,
-        }
-    )
+    _reject_manifest_presentation_identity(manifest)
     return ProteinExtractionResult(
         proteins_by_record=proteins_by_record,
         protein_map=protein_map,
-        identity_manifest=ProteinIdentityManifest(
-            protein_sets=protein_sets,
-            record_analyses=record_analyses,
-            record_instances=record_instances,
-        ),
+        identity_manifest=_seal_protein_identity_manifest(manifest.items()),
         record_instance_keys=tuple(instance_keys),
         protein_set_hashes=tuple(protein_set_hashes),
         record_analysis_ids=tuple(record_analysis_ids),
@@ -1593,11 +1742,7 @@ def build_protein_losat_pair_identity(
 ) -> ProteinLosatPairIdentity:
     """Resolve one directional pair from a validated identity manifest."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
 
     def resolve(instance_key: str) -> tuple[str, str]:
         binding = authority.binding_for(instance_key)
@@ -1833,11 +1978,7 @@ def validate_protein_raw_entry_references(
     if not is_protein_losat_cache_entry(entry):
         return False
     try:
-        authority = (
-            manifest
-            if isinstance(manifest, ProteinIdentityManifest)
-            else validate_protein_identity_manifest(manifest)
-        )
+        authority = validate_protein_identity_manifest(manifest)
         pair_identity = build_protein_losat_pair_identity(
             authority,
             query_record_instance_key=str(entry["queryRecordInstanceKey"]),
@@ -1881,11 +2022,7 @@ def build_protein_export_id_map(
 ) -> dict[str, str]:
     """Resolve runtime handles to deterministic user-visible export IDs."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
     binding = authority.binding_for(str(record_instance_key))
     runtime_ids = binding.get("runtimeIds")
     feature_metadata = binding.get("featureMetadata")
@@ -1921,11 +2058,7 @@ def hydrate_protein_losat_tsv(
 ) -> str:
     """Replace only QUERY/SUBJECT runtime handles for a raw TSV download."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
     if not validate_protein_raw_entry_references(entry, authority):
         raise ValidationError(
             "Protein raw LOSAT entry does not resolve through the current manifest."
@@ -2299,11 +2432,7 @@ def promote_legacy_protein_raw_cache_entries(
     rejection diagnostic and never enters the current cache.
     """
 
-    manifest = (
-        identity_manifest
-        if isinstance(identity_manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(identity_manifest)
-    )
+    manifest = validate_protein_identity_manifest(identity_manifest)
     if proteins_to_fasta(query_proteins) != str(query_fasta):
         raise ValidationError("query_fasta does not match the current query extraction.")
     if proteins_to_fasta(subject_proteins) != str(subject_fasta):
@@ -2459,13 +2588,9 @@ class LosatpCacheManager(LosatRawCache):
         self.threads_per_job = threads_per_job
         self.runtime_compatibility = runtime_compatibility
         self.identity_manifest = (
-            identity_manifest
-            if isinstance(identity_manifest, ProteinIdentityManifest)
-            else (
-                validate_protein_identity_manifest(identity_manifest)
-                if identity_manifest is not None
-                else None
-            )
+            validate_protein_identity_manifest(identity_manifest)
+            if identity_manifest is not None
+            else None
         )
         self._legacy_entries: list[dict[str, object]] = []
         self._proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
@@ -2554,11 +2679,7 @@ class LosatpCacheManager(LosatRawCache):
         self,
         manifest: ProteinIdentityManifest | Mapping[str, object],
     ) -> None:
-        self.identity_manifest = (
-            manifest
-            if isinstance(manifest, ProteinIdentityManifest)
-            else validate_protein_identity_manifest(manifest)
-        )
+        self.identity_manifest = validate_protein_identity_manifest(manifest)
         authority = self.identity_manifest
         self._retain_entries(
             lambda entry: validate_protein_raw_entry_references(entry, authority)

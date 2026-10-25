@@ -12,6 +12,25 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (CLI, Python): replaying a Session (`gbdraw render --session`,
+  `gbdraw circular|linear --session`, the Python Session render functions)
+  checks its protein identity manifest once, when the Session loads, instead of
+  two times (five with `--session_output`); the render and the Session writer
+  no longer copy it. On the Vibrio collinearity Gallery Session this removes
+  0.54 s of manifest work per replay (1.85 s with `--session_output`); the
+  whole replay took 5.46 s instead of 5.69 s of CPU time (9.71 s instead of
+  10.28 s with `--session_output`, best of 8). The SVG and the saved Session
+  are unchanged.
+- Python API: a protein identity manifest that gbdraw has checked is now a
+  read-only mapping: `ProteinIdentityManifest`, and the
+  `protein_identity_manifest` of `CurrentRequestArtifacts`,
+  `PreparedDiagramRequest`, `RequestRenderResult`,
+  `PreparedCircularBatchRequest` and `CircularBatchRenderResult`. It equals
+  the plain manifest and `json.dumps` writes the same text, but changing it in
+  place raises `TypeError`. `ProteinIdentityManifest.to_dict()` returns a
+  mutable copy, `SessionDocument.to_dict()` still returns plain data, and
+  only `validate_protein_identity_manifest` and
+  `extract_protein_identity_manifest` make a `ProteinIdentityManifest`.
 - Performance (CLI, Python, web app): the protein extraction no longer
   validates the protein identity manifest it has just built; it keeps the one
   check its input can fail (rendered-view field names in record keys,

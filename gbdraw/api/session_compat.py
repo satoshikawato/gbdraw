@@ -1515,7 +1515,7 @@ def _adapt_session_plan(
             current_raw = _deduplicate_raw_entries(
                 (*reusable_current, *promoted, *nucleotide)
             )
-            manifest = extracted_manifest.to_dict()
+            manifest = extracted_manifest
         request = _rewrite_linear_request_protein_references(
             request,
             id_map,

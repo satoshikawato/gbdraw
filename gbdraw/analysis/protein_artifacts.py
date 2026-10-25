@@ -252,17 +252,10 @@ def validate_current_derived_protein_artifacts(
         raise ValidationError(
             "Current derived protein artifacts require protein_identity_manifest."
         )
-    from .protein_colinearity import (
-        ProteinIdentityManifest,
-        validate_protein_identity_manifest,
-    )
+    from .protein_colinearity import validate_protein_identity_manifest
 
     try:
-        authority = (
-            manifest
-            if isinstance(manifest, ProteinIdentityManifest)
-            else validate_protein_identity_manifest(manifest)
-        )
+        authority = validate_protein_identity_manifest(manifest)
     except (TypeError, ValueError, ValidationError) as exc:
         raise ValidationError(
             "Current derived protein artifacts require a valid "
