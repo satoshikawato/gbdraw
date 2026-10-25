@@ -19,6 +19,7 @@ import math
 import re
 import unicodedata
 from typing import (
+    AbstractSet,
     Callable,
     Iterable,
     Literal,
@@ -274,8 +275,8 @@ class _FrozenDict(dict[str, object]):
     It stays a ``dict``, so equality with a plain manifest and ``json.dumps``
     bytes are those of the same plain data. It is built from a mapping or
     from key-value pairs (as ``dataclasses.asdict`` rebuilds one) and freezes
-    what it holds, so it is read-only all the way down; calling ``__init__``
-    again does not change it.
+    what it holds as the seal does; calling ``__init__`` again does not
+    change it.
     """
 
     __slots__ = ()
@@ -344,9 +345,9 @@ class ProteinIdentityManifest(_FrozenDict):
     class checks its argument like :func:`validate_protein_identity_manifest`
     (which returns a proof unchanged); only that check and
     :func:`extract_protein_identity_manifest` seal one. It equals, and
-    ``json.dumps`` writes, the same plain manifest; every mapping and
-    sequence inside it is read-only, and ``copy.copy`` and ``copy.deepcopy``
-    return it. Other objects (sets, custom objects) are kept as given.
+    ``json.dumps`` writes, the same plain manifest; every mapping, sequence
+    and set inside it is read-only, and ``copy.copy`` and ``copy.deepcopy``
+    return it. Other objects, such as custom objects, are kept as given.
     """
 
     __slots__ = ("_json_exact",)
@@ -401,12 +402,12 @@ def is_json_exact_protein_identity_manifest(
 ) -> TypeGuard[ProteinIdentityManifest]:
     """Whether ``value`` is a proof that holds only plain JSON data.
 
-    Plain JSON data is what ``json.loads`` returns: dicts with ``str`` keys,
-    lists, and exactly ``str``, ``int``, finite ``float``, ``bool`` or
-    ``None``. Such
-    a proof can stand where a deep copy or a JSON clone of its input stood; a
-    proof of other Python values (tuples, other mappings, other keys or
-    scalars) is used only as the checked authority.
+    Plain JSON data is data that equals its JSON clone: dicts with ``str``
+    keys, lists, and exactly ``str``, ``int``, finite ``float``, ``bool`` or
+    ``None``. Such a proof can stand where a deep copy or a JSON clone of its
+    input stood; a proof of other Python values (tuples, sets, other
+    mappings, other keys or scalars, NaN or infinities) is used only as the
+    checked authority.
     """
 
     return isinstance(value, ProteinIdentityManifest) and value._json_exact
@@ -431,19 +432,19 @@ def _new_frozen_list(items: list[object]) -> _FrozenList:
 def _frozen(value: object, inexact: list[bool]) -> object:
     """``value`` with every mapping and sequence in it read-only.
 
-    A mapping becomes a read-only dict, a list a read-only list, and any
-    other sequence but ``str`` and ``bytes`` a tuple of frozen items. Other
-    objects (sets, custom objects) are kept as they are. Sets ``inexact[0]``
-    when ``value`` holds anything but plain JSON data. A read-only container
-    is read-only all the way down (its constructors freeze what they hold),
-    so it is kept, and walked only to tell whether it is plain JSON data.
+    A mapping becomes a read-only dict, a list a read-only list, any other
+    sequence but ``str`` and ``bytes`` a tuple of frozen items, and a set a
+    frozenset. Other objects, such as custom objects, are kept as they are.
+    Sets ``inexact[0]`` when ``value`` holds anything but plain JSON data. A
+    read-only container's constructor froze what it holds, so it is kept,
+    and walked only to tell whether it is plain JSON data.
     """
 
     kind = type(value)
     if kind in _MANIFEST_SCALAR_TYPES:
         if kind is float and not math.isfinite(cast("float", value)):
-            # json.loads never returns NaN or infinity unasked, and a JSON
-            # clone of one is a new object that does not equal it.
+            # A JSON clone of NaN or an infinity is a new float that does
+            # not equal it, so it cannot stand for the input.
             inexact[0] = True
         return value
     if kind is _FrozenDict or kind is _FrozenList:
@@ -470,6 +471,9 @@ def _frozen(value: object, inexact: list[bool]) -> object:
         return _new_frozen_list([_frozen(item, inexact) for item in value])
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         return tuple(_frozen(item, inexact) for item in value)
+    if isinstance(value, AbstractSet):
+        # Set items are hashable, so none of them is a dict, list or set.
+        return frozenset(value)
     return value
 
 

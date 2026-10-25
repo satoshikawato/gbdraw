@@ -777,20 +777,24 @@ def test_a_read_only_container_built_by_hand_holds_only_read_only_data() -> None
 
 
 @pytest.mark.linear
-def test_a_proof_holds_no_mutable_sequence_of_its_python_input() -> None:
+def test_a_proof_holds_no_mutable_sequence_or_set_of_its_python_input() -> None:
     from collections import deque
 
     payload = _current_protein_manifest_payload_for_validation()
     protein = next(iter(payload["proteinSets"].values()))["proteins"][0]
     parts = deque(list(part) for part in protein["locationParts"])
     protein["locationParts"] = parts
+    tags = {("tag", 1)}
+    payload["note"] = tags
     proof = validate_protein_identity_manifest(payload)
     before = proof.to_dict()
 
     parts[0][0] = 999_999
     parts.append([1, 2, 3])
+    tags.add(("tag", 2))
 
     assert proof.to_dict() == before
+    assert proof["note"] == {("tag", 1)}
     assert not is_json_exact_protein_identity_manifest(proof)
 
 
