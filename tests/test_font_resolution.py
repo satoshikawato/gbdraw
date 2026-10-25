@@ -135,9 +135,14 @@ def test_a_corrupt_table_fails_the_same_way_on_every_measurement(tmp_path: Path)
     fonts.register_font_file(path)
 
     family = "'Gbdraw Corrupt Cmap', sans-serif"
+    # fontTools versions differ in the error (AssertionError, TTLibError).
+    errors = []
     for _ in range(2):
-        with pytest.raises(AssertionError, match="corrupt cmap table"):
+        with pytest.raises(Exception) as raised:
             calculate_bbox_dimensions(TEXT, family, 14, 72)
+        errors.append((type(raised.value), str(raised.value)))
+    assert "cmap" in errors[0][1]
+    assert errors[1] == errors[0]
 
 
 def test_custom_font_families_among_counts_a_registered_alias_name() -> None:

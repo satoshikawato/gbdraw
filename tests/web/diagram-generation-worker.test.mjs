@@ -363,7 +363,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
 
     // A booted runtime: the buffer reaches Pyodide once, at boot.
     replies.length = 0;
-    const pythonCalls = [];
+    const helperCalls = [];
     let interruptBuffer = null;
     let helperReply = () => 'null';
     const fs = new Proxy({ analyzePath: () => ({ exists: false }), readdir: () => [] }, {
@@ -374,14 +374,14 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
       pyimport: () => ({ install: async () => {} }),
       FS: fs,
       runPythonAsync: async () => {},
-      runPython: (code) => {
-        pythonCalls.push(code.trim());
-        return code.includes('get_web_runtime_capabilities') ? '{}' : undefined;
-      },
+      runPython: (code) => (code.includes('get_web_runtime_capabilities') ? '{}' : undefined),
       setInterruptBuffer: (value) => { interruptBuffer = value; },
       globals: {
         get: (name) => ({
-          call_web_json_helper: (...args) => helperReply(...args),
+          call_web_json_helper: (name, ...args) => {
+            helperCalls.push(name);
+            return helperReply(name, ...args);
+          },
           run_canonical_request_wrapper: () => ({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } })
         })[name]
       }
@@ -410,7 +410,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     assert.deepEqual(replies.filter(({ type }) => type !== 'progress').map(({ type, id }) => [type, id]),
       [['cancel', 'cancel-run']]);
     assert.equal(booted[0], 0);
-    assert.equal(pythonCalls.at(-1), 'clear_web_cancel()');
+    assert.equal(helperCalls.at(-1), 'clear_web_cancel');
 
     // A bounded reply waiting for its part acknowledgement: the Cancel releases it, and the rest is dropped.
     replies.length = 0;

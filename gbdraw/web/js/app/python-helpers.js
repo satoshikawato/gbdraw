@@ -1851,6 +1851,8 @@ _WEB_JSON_HELPERS = {
         _with_prepared_input_lookup(resolve_similarity_alignment_json, 2), "resolveSimilarityAlignment"
     ),
     "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
+    # The drain after a Cancel: part of the Generate it stopped.
+    "clear_web_cancel": (clear_web_cancel, "generate"),
     # Its errors are rule errors: the error vocabulary has no operation of its own for it.
     "synthesize_color_rules_json": (synthesize_color_rules_json, "evaluateRules"),
     "svg_font_embedding_json": (svg_font_embedding_json, "embedFonts"),

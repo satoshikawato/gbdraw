@@ -1514,7 +1514,7 @@ const enqueue = (step) => {
 // runs; the page sends none before this answer.
 const drainCancel = (id) => {
   if (interruptBuffer) Atomics.store(interruptBuffer, 0, 0);
-  runtime?.pyodide.runPython('clear_web_cancel()');
+  if (runtime) callJsonHelper(runtime.pyodide, 'clear_web_cancel', []);
   self.postMessage({ type: 'cancel', id, ok: true });
 };
 
