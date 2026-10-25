@@ -9,6 +9,7 @@ from typing import Dict, Literal, Sequence, cast
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group, Path
+from gbdraw.svg.path_data import path_point
 
 from ....configurators.blast import BlastMatchConfigurator
 from ....core.color import (
@@ -601,7 +602,7 @@ class PairWiseMatchGroup:
         Returns:
             str: SVG path description string.
         """
-        return f"M {query_start_x},{query_start_y}L{query_end_x},{query_end_y} L{subject_end_x},{subject_end_y}L{subject_start_x},{subject_start_y} z"
+        return f"M {path_point(query_start_x, query_start_y)}L{path_point(query_end_x, query_end_y)} L{path_point(subject_end_x, subject_end_y)}L{path_point(subject_start_x, subject_start_y)} z"
 
     def construct_curved_ribbon_path_description(
         self,
@@ -622,10 +623,10 @@ class PairWiseMatchGroup:
         c1y = query_start_y + dy * tension
         c2y = subject_start_y - dy * tension
         return (
-            f"M {query_start_x},{query_start_y}"
-            f"C{query_start_x},{c1y} {subject_start_x},{c2y} {subject_start_x},{subject_start_y} "
-            f"L{subject_end_x},{subject_end_y}"
-            f"C{subject_end_x},{c2y} {query_end_x},{c1y} {query_end_x},{query_end_y} z"
+            f"M {path_point(query_start_x, query_start_y)}"
+            f"C{path_point(query_start_x, c1y)} {path_point(subject_start_x, c2y)} {path_point(subject_start_x, subject_start_y)} "
+            f"L{path_point(subject_end_x, subject_end_y)}"
+            f"C{path_point(subject_end_x, c2y)} {path_point(query_end_x, c1y)} {path_point(query_end_x, query_end_y)} z"
         )
 
     def add_elements_to_group(self) -> Group:

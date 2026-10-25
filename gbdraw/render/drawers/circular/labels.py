@@ -5,6 +5,7 @@ import math
 from typing import Tuple
 
 from gbdraw.svg.elements import Path, Text, TextPath
+from gbdraw.svg.path_data import path_point
 
 from ....config.models import CircularRenderProfile
 from ....auto_sizes import determine_length_parameter
@@ -87,7 +88,7 @@ class LabelDrawer:
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
             label_axis_path_desc: str = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius - center_offset) + "," + str(label_radius - center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius - center_offset, label_radius - center_offset) + param + path_point(end_x, end_y)
             )
         if 90 <= angle < 270:
             param = " 1 0 0 "
@@ -104,7 +105,7 @@ class LabelDrawer:
                 math.radians(360.0 * (label["start"] / record_length) - 90)
             )
             label_axis_path_desc = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius + center_offset) + "," + str(label_radius + center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius + center_offset, label_radius + center_offset) + param + path_point(end_x, end_y)
             )
         elif 270 <= angle <= 360:
             param = " 0 0 1 "
@@ -121,7 +122,7 @@ class LabelDrawer:
                 math.radians(360.0 * ((label["end"]) / record_length) - 90)
             )
             label_axis_path_desc = (
-                "M " + str(start_x_1) + "," + str(start_y_1) + "A" + str(label_radius - center_offset) + "," + str(label_radius - center_offset) + param + str(end_x) + "," + str(end_y)
+                "M " + path_point(start_x_1, start_y_1) + "A" + path_point(label_radius - center_offset, label_radius - center_offset) + param + path_point(end_x, end_y)
             )
 
         group_identifier = str(getattr(group, "attribs", {}).get("id", "labels"))

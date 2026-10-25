@@ -10,6 +10,7 @@ from gbdraw.svg.elements import Circle
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from ..layout.scalar_axis import project_scalar_samples
+from .path_data import join_path_numbers, path_line_to, path_number
 
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     """
@@ -20,14 +21,14 @@ def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
     circle_start_x: float = circle_radius * math.cos(math.radians(360.0 * 0 - 90))
     circle_start_y: float = circle_radius * math.sin(math.radians(360.0 * 0 - 90))
     circle_desc: str = ""
-    start_coordinate: str = "M {} {}".format(circle_start_x, circle_start_y)
+    start_coordinate: str = f"M {join_path_numbers((circle_start_x, circle_start_y))}"
     circle_desc += start_coordinate
     n_list: list[str] = []
     for n in range(0, 10, 1):
         deg: float = (n + 1) * 0.1
         n_x: float = circle_radius * math.cos(math.radians(360.0 * deg - 90))
         n_y: float = circle_radius * math.sin(math.radians(360.0 * deg - 90))
-        n_list.append("A {} {} 0 0 1 {} {}".format(circle_radius, circle_radius, n_x, n_y))
+        n_list.append(f"A {join_path_numbers((circle_radius, circle_radius))} 0 0 1 {join_path_numbers((n_x, n_y))}")
     circle_desc += "".join(n_list)
     circle_desc += "z"
     return circle_desc
@@ -98,9 +99,7 @@ def generate_circular_gc_content_path_desc(
 
     start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
     start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
-    path_segments = [f"M{start_x} {start_y}"]
-
-    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
+    path_segments = [f"M{path_number(start_x)} {path_number(start_y)}", path_line_to(x_coords, y_coords)]
 
     gc_desc: str = "".join(path_segments)
     gc_desc += "z"
@@ -164,8 +163,7 @@ def generate_circular_gc_skew_path_desc(
     skew_start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
     skew_start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
 
-    path_segments = [f"M{skew_start_x} {skew_start_y}"]
-    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
+    path_segments = [f"M{path_number(skew_start_x)} {path_number(skew_start_y)}", path_line_to(x_coords, y_coords)]
 
     skew_desc: str = "".join(path_segments)
     skew_desc += "z"
@@ -244,9 +242,7 @@ def generate_circular_scalar_area_path_desc(
     if len(outer_x) == 0:
         return ""
 
-    path_segments = [f"M{inner_x[0]} {inner_y[0]}", f"L{outer_x[0]} {outer_y[0]}"]
-    path_segments.extend(f"L{x} {y}" for x, y in zip(outer_x[1:], outer_y[1:]))
-    path_segments.extend(f"L{x} {y}" for x, y in zip(reversed(inner_x), reversed(inner_y)))
+    path_segments = [f"M{path_number(inner_x[0])} {path_number(inner_y[0])}", path_line_to(outer_x, outer_y), path_line_to(inner_x[::-1], inner_y[::-1])]
     path_segments.append("z")
     return "".join(path_segments)
 

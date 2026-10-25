@@ -12,6 +12,7 @@ from .arrows import (
     set_arrow_shoulder,
 )
 from ..layout.circular import calculate_feature_position_factors_circular
+from .path_data import path_point
 
 
 def _point_on_radius(radius: float, position: float, total_length: int) -> tuple[float, float]:
@@ -50,12 +51,12 @@ def generate_circular_intron_path_with_radii(
         mid_pos = (arc_start + coord_len_bp / 2.0) % total_length
         mid_x, mid_y = _point_on_radius(intron_radius, mid_pos, total_length)
         feature_path = (
-            f"M {start_x},{start_y} "
-            f"A{intron_radius},{intron_radius}{segment_param}{mid_x},{mid_y} "
-            f"A{intron_radius},{intron_radius}{segment_param}{end_x},{end_y}"
+            f"M {path_point(start_x, start_y)} "
+            f"A{path_point(intron_radius, intron_radius)}{segment_param}{path_point(mid_x, mid_y)} "
+            f"A{path_point(intron_radius, intron_radius)}{segment_param}{path_point(end_x, end_y)}"
         )
     else:
-        feature_path = f"M {start_x},{start_y}A{intron_radius},{intron_radius}{segment_param}{end_x},{end_y}"
+        feature_path = f"M {path_point(start_x, start_y)}A{path_point(intron_radius, intron_radius)}{segment_param}{path_point(end_x, end_y)}"
     return ["line", feature_path]
 
 
@@ -88,7 +89,7 @@ def generate_circular_arrow_path_with_radii(
     start_x_2, start_y_2 = _point_on_radius(outer_radius_px, arrow_start, total_length)
 
     if coord_len_bp < cds_arrow_length:
-        feature_path = f"M {start_x_1},{start_y_1} L{point_x},{point_y} L{start_x_2},{start_y_2} z"
+        feature_path = f"M {path_point(start_x_1, start_y_1)} L{path_point(point_x, point_y)} L{path_point(start_x_2, start_y_2)} z"
         return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
             "open_start" if coord_strand == "positive" else "open_end"
         )))
@@ -111,23 +112,23 @@ def generate_circular_arrow_path_with_radii(
         segment_param_1 = f" 0 0 {sweep_flag_1} "
         segment_param_2 = f" 0 0 {sweep_flag_2} "
         outer_arc_path = (
-            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
-            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{end_x_1},{end_y_1}"
+            f"A{path_point(inner_radius_px, inner_radius_px)}{segment_param_1}{path_point(mid_x_1, mid_y_1)} "
+            f"A{path_point(inner_radius_px, inner_radius_px)}{segment_param_1}{path_point(end_x_1, end_y_1)}"
         )
         inner_arc_path = (
-            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
-            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{start_x_2},{start_y_2}"
+            f"A{path_point(outer_radius_px, outer_radius_px)}{segment_param_2}{path_point(mid_x_2, mid_y_2)} "
+            f"A{path_point(outer_radius_px, outer_radius_px)}{segment_param_2}{path_point(start_x_2, start_y_2)}"
         )
         feature_path = (
-            f"M {start_x_1},{start_y_1} {outer_arc_path} L {point_x},{point_y} "
-            f"L {end_x_2},{end_y_2} {inner_arc_path} z"
+            f"M {path_point(start_x_1, start_y_1)} {outer_arc_path} L {path_point(point_x, point_y)} "
+            f"L {path_point(end_x_2, end_y_2)} {inner_arc_path} z"
         )
     else:
         feature_path = (
-            f"M {start_x_1},{start_y_1}"
-            f"A{inner_radius_px},{inner_radius_px}{param_1}{end_x_1},{end_y_1}"
-            f" L{point_x},{point_y} L{end_x_2},{end_y_2}"
-            f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
+            f"M {path_point(start_x_1, start_y_1)}"
+            f"A{path_point(inner_radius_px, inner_radius_px)}{param_1}{path_point(end_x_1, end_y_1)}"
+            f" L{path_point(point_x, point_y)} L{path_point(end_x_2, end_y_2)}"
+            f"A{path_point(outer_radius_px, outer_radius_px)}{param_2}{path_point(start_x_2, start_y_2)} z"
         )
     return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
             "open_start" if coord_strand == "positive" else "open_end"
@@ -170,8 +171,8 @@ def generate_circular_narrow_arrow_path_with_radii(
     )
     if not has_arrow_shaft(coord_len_bp, resolved_head_length_bp):
         feature_path = (
-            f"M {full_start_x_1},{full_start_y_1} "
-            f"L{point_x},{point_y} L{full_start_x_2},{full_start_y_2} z"
+            f"M {path_point(full_start_x_1, full_start_y_1)} "
+            f"L{path_point(point_x, point_y)} L{path_point(full_start_x_2, full_start_y_2)} z"
         )
         return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
             "open_start" if coord_strand == "positive" else "open_end"
@@ -224,26 +225,26 @@ def generate_circular_narrow_arrow_path_with_radii(
         segment_param_1 = f" 0 0 {sweep_flag_1} "
         segment_param_2 = f" 0 0 {sweep_flag_2} "
         first_shaft_arc = (
-            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
-            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{segment_param_1}{shaft_end_x_1},{shaft_end_y_1}"
+            f"A{path_point(shaft_inner_radius_px, shaft_inner_radius_px)}{segment_param_1}{path_point(mid_x_1, mid_y_1)} "
+            f"A{path_point(shaft_inner_radius_px, shaft_inner_radius_px)}{segment_param_1}{path_point(shaft_end_x_1, shaft_end_y_1)}"
         )
         second_shaft_arc = (
-            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
-            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{segment_param_2}{shaft_start_x_2},{shaft_start_y_2}"
+            f"A{path_point(shaft_outer_radius_px, shaft_outer_radius_px)}{segment_param_2}{path_point(mid_x_2, mid_y_2)} "
+            f"A{path_point(shaft_outer_radius_px, shaft_outer_radius_px)}{segment_param_2}{path_point(shaft_start_x_2, shaft_start_y_2)}"
         )
         feature_path = (
-            f"M {shaft_start_x_1},{shaft_start_y_1} {first_shaft_arc} "
-            f"L {head_base_x_1},{head_base_y_1} L {point_x},{point_y} "
-            f"L {head_base_x_2},{head_base_y_2} L {shaft_end_x_2},{shaft_end_y_2} "
+            f"M {path_point(shaft_start_x_1, shaft_start_y_1)} {first_shaft_arc} "
+            f"L {path_point(head_base_x_1, head_base_y_1)} L {path_point(point_x, point_y)} "
+            f"L {path_point(head_base_x_2, head_base_y_2)} L {path_point(shaft_end_x_2, shaft_end_y_2)} "
             f"{second_shaft_arc} z"
         )
     else:
         feature_path = (
-            f"M {shaft_start_x_1},{shaft_start_y_1}"
-            f"A{shaft_inner_radius_px},{shaft_inner_radius_px}{param_1}{shaft_end_x_1},{shaft_end_y_1}"
-            f" L{head_base_x_1},{head_base_y_1} L{point_x},{point_y}"
-            f" L{head_base_x_2},{head_base_y_2} L{shaft_end_x_2},{shaft_end_y_2}"
-            f"A{shaft_outer_radius_px},{shaft_outer_radius_px}{param_2}{shaft_start_x_2},{shaft_start_y_2} z"
+            f"M {path_point(shaft_start_x_1, shaft_start_y_1)}"
+            f"A{path_point(shaft_inner_radius_px, shaft_inner_radius_px)}{param_1}{path_point(shaft_end_x_1, shaft_end_y_1)}"
+            f" L{path_point(head_base_x_1, head_base_y_1)} L{path_point(point_x, point_y)}"
+            f" L{path_point(head_base_x_2, head_base_y_2)} L{path_point(shaft_end_x_2, shaft_end_y_2)}"
+            f"A{path_point(shaft_outer_radius_px, shaft_outer_radius_px)}{param_2}{path_point(shaft_start_x_2, shaft_start_y_2)} z"
         )
     return block_path_with_open_caps(feature_path, open_tail=bool(coord_dict.get(
             "open_start" if coord_strand == "positive" else "open_end"
@@ -283,26 +284,26 @@ def generate_circular_rectangle_path_with_radii(
         segment_param_1 = f" 0 0 {sweep_flag_1} "
         segment_param_2 = f" 0 0 {sweep_flag_2} "
         outer_arc_path = (
-            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{mid_x_1},{mid_y_1} "
-            f"A{inner_radius_px},{inner_radius_px}{segment_param_1}{end_x_1},{end_y_1}"
+            f"A{path_point(inner_radius_px, inner_radius_px)}{segment_param_1}{path_point(mid_x_1, mid_y_1)} "
+            f"A{path_point(inner_radius_px, inner_radius_px)}{segment_param_1}{path_point(end_x_1, end_y_1)}"
         )
         inner_arc_path = (
-            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{mid_x_2},{mid_y_2} "
-            f"A{outer_radius_px},{outer_radius_px}{segment_param_2}{start_x_2},{start_y_2}"
+            f"A{path_point(outer_radius_px, outer_radius_px)}{segment_param_2}{path_point(mid_x_2, mid_y_2)} "
+            f"A{path_point(outer_radius_px, outer_radius_px)}{segment_param_2}{path_point(start_x_2, start_y_2)}"
         )
-        feature_path = f"M {start_x_1},{start_y_1} {outer_arc_path} L {end_x_2},{end_y_2} {inner_arc_path} z"
+        feature_path = f"M {path_point(start_x_1, start_y_1)} {outer_arc_path} L {path_point(end_x_2, end_y_2)} {inner_arc_path} z"
     else:
         feature_path = (
-            f"M {start_x_1},{start_y_1}"
-            f"A{inner_radius_px},{inner_radius_px}{param_1}{end_x_1},{end_y_1}"
-            f" L{end_x_2},{end_y_2}"
-            f"A{outer_radius_px},{outer_radius_px}{param_2}{start_x_2},{start_y_2} z"
+            f"M {path_point(start_x_1, start_y_1)}"
+            f"A{path_point(inner_radius_px, inner_radius_px)}{param_1}{path_point(end_x_1, end_y_1)}"
+            f" L{path_point(end_x_2, end_y_2)}"
+            f"A{path_point(outer_radius_px, outer_radius_px)}{param_2}{path_point(start_x_2, start_y_2)} z"
         )
     return block_path_with_open_caps(
         feature_path,
         open_tail=bool(coord_dict.get("open_start" if coord_strand == "positive" else "open_end")),
-        tail_cap=f"L {start_x_1},{start_y_1}",
-        end_cap=((f"L {end_x_2},{end_y_2}" if angle_deg > 20.0 else f"L{end_x_2},{end_y_2}") if coord_dict.get(
+        tail_cap=f"L {path_point(start_x_1, start_y_1)}",
+        end_cap=((f"L {path_point(end_x_2, end_y_2)}" if angle_deg > 20.0 else f"L{path_point(end_x_2, end_y_2)}") if coord_dict.get(
             "open_end" if coord_strand == "positive" else "open_start"
         ) else None),
     )
@@ -402,9 +403,9 @@ def generate_circular_intron_path(
             math.radians(360.0 * (mid_pos / total_length) - 90)
         )
         feature_path = (
-            f"M {start_x_1},{start_y_1} "
-            f"A{intron_radius},{intron_radius}{segment_param}{mid_x_1},{mid_y_1} "
-            f"A{intron_radius},{intron_radius}{segment_param}{end_x_1},{end_y_1}"
+            f"M {path_point(start_x_1, start_y_1)} "
+            f"A{path_point(intron_radius, intron_radius)}{segment_param}{path_point(mid_x_1, mid_y_1)} "
+            f"A{path_point(intron_radius, intron_radius)}{segment_param}{path_point(end_x_1, end_y_1)}"
         )
     else:
         feature_path = (
@@ -570,16 +571,16 @@ def generate_circular_arrow_path(
             segment_param_2 = f" 0 0 {sweep_flag_2} "
 
             outer_arc_path = (
-                f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{mid_x_1},{mid_y_1} "
-                f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{end_x_1},{end_y_1}"
+                f"A{path_point(radius * factors[0], radius * factors[0])}{segment_param_1}{path_point(mid_x_1, mid_y_1)} "
+                f"A{path_point(radius * factors[0], radius * factors[0])}{segment_param_1}{path_point(end_x_1, end_y_1)}"
             )
             inner_arc_path = (
-                f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{mid_x_2},{mid_y_2} "
-                f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{start_x_2},{start_y_2}"
+                f"A{path_point(radius * factors[2], radius * factors[2])}{segment_param_2}{path_point(mid_x_2, mid_y_2)} "
+                f"A{path_point(radius * factors[2], radius * factors[2])}{segment_param_2}{path_point(start_x_2, start_y_2)}"
             )
             feature_path = (
-                f"M {start_x_1},{start_y_1} {outer_arc_path} L {point_x},{point_y} "
-                f"L {end_x_2},{end_y_2} {inner_arc_path} z"
+                f"M {path_point(start_x_1, start_y_1)} {outer_arc_path} L {path_point(point_x, point_y)} "
+                f"L {path_point(end_x_2, end_y_2)} {inner_arc_path} z"
             )
 
         else:
@@ -782,15 +783,15 @@ def generate_circular_rectangle_path(
         segment_param_2 = f" 0 0 {sweep_flag_2} "
 
         outer_arc_path = (
-            f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{mid_x_1},{mid_y_1} "
-            f"A{radius * factors[0]},{radius * factors[0]}{segment_param_1}{end_x_1},{end_y_1}"
+            f"A{path_point(radius * factors[0], radius * factors[0])}{segment_param_1}{path_point(mid_x_1, mid_y_1)} "
+            f"A{path_point(radius * factors[0], radius * factors[0])}{segment_param_1}{path_point(end_x_1, end_y_1)}"
         )
         inner_arc_path = (
-            f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{mid_x_2},{mid_y_2} "
-            f"A{radius * factors[2]},{radius * factors[2]}{segment_param_2}{start_x_2},{start_y_2}"
+            f"A{path_point(radius * factors[2], radius * factors[2])}{segment_param_2}{path_point(mid_x_2, mid_y_2)} "
+            f"A{path_point(radius * factors[2], radius * factors[2])}{segment_param_2}{path_point(start_x_2, start_y_2)}"
         )
         feature_path: str = (
-            f"M {start_x_1},{start_y_1} {outer_arc_path} L {end_x_2},{end_y_2} {inner_arc_path} z"
+            f"M {path_point(start_x_1, start_y_1)} {outer_arc_path} L {path_point(end_x_2, end_y_2)} {inner_arc_path} z"
         )
     else:
         feature_path = (

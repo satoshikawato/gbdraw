@@ -14,6 +14,7 @@ from ....legend.linear_layout import (
 from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.ids import stable_svg_id
+from ....svg.path_data import path_number, path_point
 from ....svg.text_path import generate_text_path
 
 
@@ -70,8 +71,8 @@ class LegendGroup:
         start_y_top = -self.rect_size / 2
         start_y_bottom = self.rect_size / 2
         return (
-            f"M 0,{start_y_top} L {self.rect_size},{start_y_top} "
-            f"L {self.rect_size},{start_y_bottom} L 0,{start_y_bottom} z"
+            f"M 0,{path_number(start_y_top)} L {path_point(self.rect_size, start_y_top)} "
+            f"L {path_point(self.rect_size, start_y_bottom)} L 0,{path_number(start_y_bottom)} z"
         )
 
     @staticmethod
@@ -172,10 +173,10 @@ class LegendGroup:
     ) -> Group:
         group = self._pairwise_group(orientation)
         path_desc = (
-            f"M 0,{-self.rect_size / 2} "
-            f"L {layout.bar_width},{-self.rect_size / 2} "
-            f"L {layout.bar_width},{self.rect_size / 2} "
-            f"L 0,{self.rect_size / 2} z"
+            f"M 0,{path_number(-self.rect_size / 2)} "
+            f"L {path_point(layout.bar_width, -self.rect_size / 2)} "
+            f"L {path_point(layout.bar_width, self.rect_size / 2)} "
+            f"L 0,{path_number(self.rect_size / 2)} z"
         )
         for entry in layout.entries:
             properties = entry.properties

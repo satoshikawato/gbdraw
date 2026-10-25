@@ -4632,7 +4632,7 @@ def test_pairwise_match_group_places_each_end_through_its_record_placement() -> 
     ).get_group()
 
     path = group.elements[0]
-    assert 'd="M 100.0,0.0L200.0,0.0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
+    assert 'd="M 100,0L200,0 L200,100L100,100 z"' in path.tostring()
 
 
 @pytest.mark.linear

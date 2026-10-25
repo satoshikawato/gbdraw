@@ -36,6 +36,7 @@ from gbdraw.render.drawers.label_backing import backing_box, backing_rect
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
+from gbdraw.svg.path_data import path_number
 
 
 @dataclass(frozen=True)
@@ -413,10 +414,10 @@ def linear_annotation_track_content(
                     rect.attribs['stroke'] = 'none'
                     top = lane_center - 0.5 * height_factor * lane_height
                     bottom = lane_center + 0.5 * height_factor * lane_height
-                    outline = f"M {x1:g},{top:g} L {x2:g},{top:g} M {x1:g},{bottom:g} L {x2:g},{bottom:g}"
+                    outline = f"M {path_number(x1)},{path_number(top)} L {path_number(x2)},{path_number(top)} M {path_number(x1)},{path_number(bottom)} L {path_number(x2)},{path_number(bottom)}"
                     for x, capped in ((x1, cap_start), (x2, cap_end)):
                         if capped:
-                            outline += f" M {x:g},{top:g} L {x:g},{bottom:g}"
+                            outline += f" M {path_number(x)},{path_number(top)} L {path_number(x)},{path_number(bottom)}"
                     border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
                     if dash:
                         border.attribs["stroke-dasharray"] = dash
@@ -440,8 +441,8 @@ def linear_annotation_track_content(
                 cap = cap_size(lane_height)
                 if style.line_cap == "arrow":
                     path = Path(
-                        d=f"M {x2 - cap:g},{lane_center - cap:g} L {x2:g},{lane_center:g} "
-                        f"L {x2 - cap:g},{lane_center + cap:g}",
+                        d=f"M {path_number(x2 - cap)},{path_number(lane_center - cap)} L {path_number(x2)},{path_number(lane_center)} "
+                        f"L {path_number(x2 - cap)},{path_number(lane_center + cap)}",
                         fill="none",
                         stroke=style.stroke,
                         stroke_width=style.stroke_width,

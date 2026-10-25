@@ -16,6 +16,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
 from gbdraw.api.request_render import plan_request
+from tests.utils.svg_compare import PATH_ROUNDING
 from gbdraw.api.requests import (
     CircularDiagramRequest, InMemoryRecordSource, LinearDiagramRequest,
     RecordDisplayOptions, RecordInput, RecordPresentation,
@@ -108,7 +109,7 @@ def test_source_tick_text_position_and_record_length_definition(mode, reverse, s
             points = _xy([n for n in ticks if n.tag.endswith("}path")][2].get("d"))
             angle = math.radians(360 * (((start - 2000) if reverse else (2000 - start)) % 10000) / 10000 - 90)
             radius = math.hypot(*points[0])
-            assert points[0] == pytest.approx((radius * math.cos(angle), radius * math.sin(angle)))
+            assert points[0] == pytest.approx((radius * math.cos(angle), radius * math.sin(angle)), abs=PATH_ROUNDING)
     assert plan.transforms[0].start_coordinate == start
 
 
@@ -203,7 +204,7 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                            for a, b in zip(points, points[1:]))
                 width = max(x for x, _ in points)
                 for offset in offsets:
-                    assert any(x == pytest.approx(offset * width / 10000) for x, _ in points)
+                    assert any(x == pytest.approx(offset * width / 10000, abs=PATH_ROUNDING) for x, _ in points)
             elif name != "depth":
                 # The outer ring meets itself at the duplicated seam value.
                 outer = _xy(path.get("d").split("z")[0])
@@ -211,7 +212,7 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                 for offset in offsets:
                     angle = math.radians(360 * offset / 10000 - 90)
                     assert any((x / math.hypot(x, y), y / math.hypot(x, y)) == pytest.approx(
-                        (math.cos(angle), math.sin(angle))) for x, y in outer)
+                        (math.cos(angle), math.sin(angle)), abs=PATH_ROUNDING) for x, y in outer)
     pd.testing.assert_frame_equal(frame, before)
     pd.testing.assert_frame_equal(depth, depth_before)
 

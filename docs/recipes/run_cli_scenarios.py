@@ -1410,7 +1410,8 @@ def _assert_similarity_groups(
         if not x_values:
             raise RecipeContractError("H-CLI-07 alignment feature geometry is missing.")
         aligned_centers.append(record_x[record_id] + (min(x_values) + max(x_values)) / 2)
-    if max(aligned_centers) - min(aligned_centers) > 1e-6:
+    # Path numbers carry 3 decimals (gbdraw.svg.path_data).
+    if max(aligned_centers) - min(aligned_centers) > 1e-3:
         raise RecipeContractError("H-CLI-07 CAG38695.1 group is not aligned.")
 
 

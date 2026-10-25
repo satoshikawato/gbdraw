@@ -1811,9 +1811,9 @@ def test_linear_depth_defaults_to_linear_scale_for_plotting() -> None:
     match = re.search(r'id="depth"[^>]*><path d="([^"]+)"', svg)
     assert match is not None
     depth_path = match.group(1)
-    assert "L0.0 1.25" in depth_path
-    assert "L500.0 10.0" in depth_path
-    assert "L1000.0 0.0" in depth_path
+    assert "L0 1.25" in depth_path
+    assert "L500 10" in depth_path
+    assert "L1000 0" in depth_path
 
 
 @pytest.mark.linear

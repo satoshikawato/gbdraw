@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from gbdraw.svg.elements import Path, Text, TextPath
+from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
 from ..core.numeric import scaled_tick_text
@@ -509,7 +510,7 @@ def generate_circular_tick_paths(
         record_transform=record_transform,
         length_threshold=length_threshold,
     ):
-        tick_path_desc: str = "M " + str(prox_x) + "," + str(prox_y) + " L" + str(dist_x) + "," + str(dist_y) + " z"
+        tick_path_desc: str = "M " + path_point(prox_x, prox_y) + " L" + path_point(dist_x, dist_y) + " z"
         tick_path = Path(d=tick_path_desc, stroke="gray", stroke_width=tick_width)
         tick_paths_list.append(tick_path)
     return tick_paths_list
@@ -696,18 +697,8 @@ def generate_circular_tick_labels(
                 math.radians(360.0 * (label_end / total_len) - 90)
             )
         label_axis_path_desc: str = (
-            "M "
-            + str(start_x_1)
-            + ","
-            + str(start_y_1)
-            + "A"
-            + str(path_radius)
-            + ","
-            + str(path_radius)
-            + param
-            + str(end_x)
-            + ","
-            + str(end_y)
+            "M " + path_point(start_x_1, start_y_1) + "A" + path_point(path_radius, path_radius)
+            + param + path_point(end_x, end_y)
         )
         label_axis_path = Path(
             id=stable_svg_id(

@@ -45,6 +45,7 @@ from gbdraw.render.drawers.annotation_marks import (
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
+from gbdraw.svg.path_data import path_number
 
 Polygon = tuple[Point, ...]
 
@@ -59,7 +60,7 @@ def _arc_path(start: float, end: float, total_length: int, radius: float) -> str
     x2, y2 = _point(end, total_length, radius)
     span = max(0.0, end - start)
     large = 1 if span > 0.5 * total_length else 0
-    return f"M {x1:g},{y1:g} A {radius:g},{radius:g} 0 {large} 1 {x2:g},{y2:g}"
+    return f"M {path_number(x1)},{path_number(y1)} A {path_number(radius)},{path_number(radius)} 0 {large} 1 {path_number(x2)},{path_number(y2)}"
 
 
 def _band_path(start: float, end: float, total_length: int, inner: float, outer: float) -> str:
@@ -70,8 +71,8 @@ def _band_path(start: float, end: float, total_length: int, inner: float, outer:
     span = max(0.0, end - start)
     large = 1 if span > 0.5 * total_length else 0
     return (
-        f"M {ox1:g},{oy1:g} A {outer:g},{outer:g} 0 {large} 1 {ox2:g},{oy2:g} "
-        f"L {ix2:g},{iy2:g} A {inner:g},{inner:g} 0 {large} 0 {ix1:g},{iy1:g} Z"
+        f"M {path_number(ox1)},{path_number(oy1)} A {path_number(outer)},{path_number(outer)} 0 {large} 1 {path_number(ox2)},{path_number(oy2)} "
+        f"L {path_number(ix2)},{path_number(iy2)} A {path_number(inner)},{path_number(inner)} 0 {large} 0 {path_number(ix1)},{path_number(iy1)} Z"
     )
 
 
@@ -113,7 +114,7 @@ class CircularLabelArc:
         )
         large = 1 if 2.0 * self.half_span > 180.0 else 0
         sweep = 0 if self.flipped else 1
-        return f"M {x1:g},{y1:g} A {self.radius:g},{self.radius:g} 0 {large} {sweep} {x2:g},{y2:g}"
+        return f"M {path_number(x1)},{path_number(y1)} A {path_number(self.radius)},{path_number(self.radius)} 0 {large} {sweep} {path_number(x2)},{path_number(y2)}"
 
 
 @dataclass(frozen=True)
@@ -898,7 +899,7 @@ def circular_annotation_track_content(
                         if capped:
                             x1, y1 = _point(position, record_length, lane_inner)
                             x2, y2 = _point(position, record_length, lane_outer)
-                            outline += f" M {x1:g},{y1:g} L {x2:g},{y2:g}"
+                            outline += f" M {path_number(x1)},{path_number(y1)} L {path_number(x2)},{path_number(y2)}"
                     border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
                     if dash:
                         border.attribs["stroke-dasharray"] = dash
@@ -909,7 +910,7 @@ def circular_annotation_track_content(
                         x1, y1 = _point(position, record_length, radius - cap)
                         x2, y2 = _point(position, record_length, radius + cap)
                         cap_path = Path(
-                            d=f"M {x1:g},{y1:g} L {x2:g},{y2:g}",
+                            d=f"M {path_number(x1)},{path_number(y1)} L {path_number(x2)},{path_number(y2)}",
                             fill="none",
                             stroke=style.stroke,
                             stroke_width=style.stroke_width,
@@ -930,11 +931,11 @@ def circular_annotation_track_content(
         )
         ring = Path(
             d=(
-                f"M {outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "
-                f"{-outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "
-                f"{outer_radius_px:g},0 Z M {inner_radius_px:g},0 "
-                f"A {inner_radius_px:g},{inner_radius_px:g} 0 1 1 {-inner_radius_px:g},0 "
-                f"A {inner_radius_px:g},{inner_radius_px:g} 0 1 1 {inner_radius_px:g},0 Z"
+                f"M {path_number(outer_radius_px)},0 A {path_number(outer_radius_px)},{path_number(outer_radius_px)} 0 1 0 "
+                f"{path_number(-outer_radius_px)},0 A {path_number(outer_radius_px)},{path_number(outer_radius_px)} 0 1 0 "
+                f"{path_number(outer_radius_px)},0 Z M {path_number(inner_radius_px)},0 "
+                f"A {path_number(inner_radius_px)},{path_number(inner_radius_px)} 0 1 1 {path_number(-inner_radius_px)},0 "
+                f"A {path_number(inner_radius_px)},{path_number(inner_radius_px)} 0 1 1 {path_number(inner_radius_px)},0 Z"
             )
         )
         ring.attribs["clip-rule"] = "evenodd"

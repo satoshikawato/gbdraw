@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 
+from .path_data import path_point
+
 
 def _point_on_radius(radius: float, position: float, total_length: int) -> tuple[float, float]:
     angle = math.radians(360.0 * (float(position) / float(total_length)) - 90.0)
@@ -24,12 +26,12 @@ def generate_full_annulus_path_desc(
     outer_start = _point_on_radius(outer_radius_px, 0.0, total_length)
     outer_mid = _point_on_radius(outer_radius_px, midpoint, total_length)
     return (
-        f"M {inner_start[0]},{inner_start[1]} "
-        f"A{inner_radius_px},{inner_radius_px} 0 1 1 {inner_mid[0]},{inner_mid[1]} "
-        f"A{inner_radius_px},{inner_radius_px} 0 1 1 {inner_start[0]},{inner_start[1]} "
-        f"L {outer_start[0]},{outer_start[1]} "
-        f"A{outer_radius_px},{outer_radius_px} 0 1 0 {outer_mid[0]},{outer_mid[1]} "
-        f"A{outer_radius_px},{outer_radius_px} 0 1 0 {outer_start[0]},{outer_start[1]} z"
+        f"M {path_point(inner_start[0], inner_start[1])} "
+        f"A{path_point(inner_radius_px, inner_radius_px)} 0 1 1 {path_point(inner_mid[0], inner_mid[1])} "
+        f"A{path_point(inner_radius_px, inner_radius_px)} 0 1 1 {path_point(inner_start[0], inner_start[1])} "
+        f"L {path_point(outer_start[0], outer_start[1])} "
+        f"A{path_point(outer_radius_px, outer_radius_px)} 0 1 0 {path_point(outer_mid[0], outer_mid[1])} "
+        f"A{path_point(outer_radius_px, outer_radius_px)} 0 1 0 {path_point(outer_start[0], outer_start[1])} z"
     )
 
 
@@ -66,19 +68,19 @@ def generate_annular_hsp_path_desc(
         inner_mid = _point_on_radius(inner_radius_px, midpoint, total_length)
         outer_mid = _point_on_radius(outer_radius_px, midpoint, total_length)
         return (
-            f"M {inner_start[0]},{inner_start[1]} "
-            f"A{inner_radius_px},{inner_radius_px} 0 0 1 {inner_mid[0]},{inner_mid[1]} "
-            f"A{inner_radius_px},{inner_radius_px} 0 0 1 {inner_end[0]},{inner_end[1]} "
-            f"L {outer_end[0]},{outer_end[1]} "
-            f"A{outer_radius_px},{outer_radius_px} 0 0 0 {outer_mid[0]},{outer_mid[1]} "
-            f"A{outer_radius_px},{outer_radius_px} 0 0 0 {outer_start[0]},{outer_start[1]} z"
+            f"M {path_point(inner_start[0], inner_start[1])} "
+            f"A{path_point(inner_radius_px, inner_radius_px)} 0 0 1 {path_point(inner_mid[0], inner_mid[1])} "
+            f"A{path_point(inner_radius_px, inner_radius_px)} 0 0 1 {path_point(inner_end[0], inner_end[1])} "
+            f"L {path_point(outer_end[0], outer_end[1])} "
+            f"A{path_point(outer_radius_px, outer_radius_px)} 0 0 0 {path_point(outer_mid[0], outer_mid[1])} "
+            f"A{path_point(outer_radius_px, outer_radius_px)} 0 0 0 {path_point(outer_start[0], outer_start[1])} z"
         )
 
     return (
-        f"M {inner_start[0]},{inner_start[1]}"
-        f"A{inner_radius_px},{inner_radius_px} 0 0 1 {inner_end[0]},{inner_end[1]}"
-        f" L{outer_end[0]},{outer_end[1]}"
-        f"A{outer_radius_px},{outer_radius_px} 0 0 0 {outer_start[0]},{outer_start[1]} z"
+        f"M {path_point(inner_start[0], inner_start[1])}"
+        f"A{path_point(inner_radius_px, inner_radius_px)} 0 0 1 {path_point(inner_end[0], inner_end[1])}"
+        f" L{path_point(outer_end[0], outer_end[1])}"
+        f"A{path_point(outer_radius_px, outer_radius_px)} 0 0 0 {path_point(outer_start[0], outer_start[1])} z"
     )
 
 

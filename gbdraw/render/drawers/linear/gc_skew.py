@@ -7,6 +7,7 @@ from gbdraw.svg.elements import ClipPath, Group, Path
 from ....configurators import GcSkewConfigurator
 from ....svg.linear_tracks import calculate_gc_skew_path_desc
 from ....svg.ids import stable_svg_id
+from ....svg.path_data import path_point
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -59,10 +60,10 @@ class SkewDrawer:
         clip_path.add(
             Path(
                 d=(
-                    f"M{start_x},{start_y} "
-                    f"L{alignment_width},{start_y} "
-                    f"L{alignment_width},{start_y + track_height} "
-                    f"L{start_x},{start_y + track_height} z"
+                    f"M{path_point(start_x, start_y)} "
+                    f"L{path_point(alignment_width, start_y)} "
+                    f"L{path_point(alignment_width, start_y + track_height)} "
+                    f"L{path_point(start_x, start_y + track_height)} z"
                 ),
                 fill="white",
                 stroke="none",

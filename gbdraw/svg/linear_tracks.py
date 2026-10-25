@@ -10,6 +10,7 @@ from ..layout.linear_coords import normalize_position_to_linear_track
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from ..layout.scalar_axis import project_scalar_samples
+from .path_data import path_line_to, path_number
 
 def calculate_corrdinate(
     index: int,
@@ -29,7 +30,7 @@ def calculate_corrdinate(
         y_corrdinate = 0.0
     else:
         y_corrdinate = -(0.5 * track_height * (diff / max_diff))
-    corrdinate: str = "L{} {}".format(str(x_corrdinate), str(y_corrdinate))
+    corrdinate: str = f"L{path_number(x_corrdinate)} {path_number(y_corrdinate)}"
     return corrdinate, x_corrdinate
 
 
@@ -46,7 +47,7 @@ def calculate_gc_content_path_desc(
     if gc_df.empty:
         return ""
     coodinates_list: list[str] = []
-    start_position: str = "M{} {}".format(start_x, start_y)
+    start_position: str = f"M{path_number(start_x)} {path_number(start_y)}"
     coodinates_list.append(start_position)
     column: str = f"{dinucleotide} content"
     mean = float(gc_df[column].mean())
@@ -62,9 +63,9 @@ def calculate_gc_content_path_desc(
             index, value, mean, max_diff, record_len, alignment_width, track_height
         )
         coodinates_list.append(corrdinate)
-    penultimate_coordinate: str = "L{} {}".format(str(x_corrdinate), str(start_y))
+    penultimate_coordinate: str = f"L{path_number(x_corrdinate)} {path_number(start_y)}"
     coodinates_list.append(penultimate_coordinate)
-    end_coordinate: str = "L{} {}".format(str(start_x), str(start_y))
+    end_coordinate: str = f"L{path_number(start_x)} {path_number(start_y)}"
     coodinates_list.append(end_coordinate)
     gc_content_desc: str = "{}".format("".join(coodinates_list))
     gc_content_desc += "z"
@@ -83,7 +84,7 @@ def calculate_gc_skew_path_desc(
     if skew_df.empty:
         return ""
     coodinates_list: list[str] = []
-    start_position: str = "M{} {}".format(start_x, start_y)
+    start_position: str = f"M{path_number(start_x)} {path_number(start_y)}"
     coodinates_list.append(start_position)
     column = [col for col in skew_df.columns if "skew" in col and "cumulative" not in col.lower()][0]
     mean = float(skew_df[column].mean())
@@ -101,9 +102,9 @@ def calculate_gc_skew_path_desc(
         )
         coodinates_list.append(corrdinate)
 
-    penultimate_coordinate: str = "L{} {}".format(str(x_corrdinate), str(start_y))
+    penultimate_coordinate: str = f"L{path_number(x_corrdinate)} {path_number(start_y)}"
     coodinates_list.append(penultimate_coordinate)
-    end_coordinate: str = "L{} {}".format(str(start_x), str(start_y))
+    end_coordinate: str = f"L{path_number(start_x)} {path_number(start_y)}"
     coodinates_list.append(end_coordinate)
     gc_skew_desc: str = "{}".format("".join(coodinates_list))
     gc_skew_desc += "z"
@@ -153,13 +154,12 @@ def calculate_linear_scalar_area_path_desc(
     final_x = normalize_position_to_linear_track(
         record_len, record_len, alignment_width
     )
-    path_segments = [f"M{start_x} {baseline_y}", f"L{x_values[0]} {y_values[0]}"]
-    path_segments.extend(
-        f"L{x_value} {y_value}" for x_value, y_value in zip(x_values[1:], y_values[1:])
-    )
-    path_segments.append(f"L{final_x} {y_values[-1]}")
-    path_segments.append(f"L{final_x} {baseline_y}")
-    path_segments.append(f"L{start_x} {baseline_y}z")
+    path_segments = [
+        f"M{path_number(start_x)} {path_number(baseline_y)}",
+        path_line_to(x_values, y_values),
+        path_line_to([final_x, final_x, start_x], [y_values[-1], baseline_y, baseline_y]),
+        "z",
+    ]
     return "".join(path_segments)
 
 
