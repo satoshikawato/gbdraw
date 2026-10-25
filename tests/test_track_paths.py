@@ -97,3 +97,30 @@ def test_circular_scalar_area_draws_the_outer_line_and_an_arc_baseline() -> None
     assert desc.startswith("M0 -90L0 -100")
     assert desc.endswith("L-90 0A90 90 0 0 0 63.64 63.64A90 90 0 0 0 0 -90z")
     assert desc.count("A") == 2
+
+
+def test_index_arrays_are_platform_integers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pyodide's NumPy is 32-bit (intp is int32) and refuses int64 indices in ``ufunc.reduceat``; every index
+    array the simplification builds must be ``np.intp`` so the Web build draws the same path."""
+
+    import gbdraw.svg.track_paths as track_paths
+
+    real_reduceat = np.maximum.reduceat
+
+    class _Maximum:
+        @staticmethod
+        def reduceat(values, indices, *args, **kwargs):
+            assert np.asarray(indices).dtype == np.intp
+            return real_reduceat(values, indices.astype(np.int32), *args, **kwargs)
+
+    class _NumPy:
+        maximum = _Maximum
+
+        def __getattr__(self, name):
+            return getattr(np, name)
+
+    monkeypatch.setattr(track_paths, "np", _NumPy())
+    monkeypatch.setattr(np, "intp", np.int32)
+    xs = np.linspace(0.0, 50.0, 400)
+    ys = np.sin(xs)
+    assert track_paths.kept_track_points(xs, ys, (130, 260)).sum() > 4

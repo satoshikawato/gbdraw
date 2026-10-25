@@ -32,9 +32,10 @@ def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_
     if count <= 2:
         keep[:] = True
         return keep
-    breaks = np.asarray(segment_starts, dtype=np.int64)
+    # Every index array is np.intp: Pyodide's NumPy is 32-bit and ufunc.reduceat refuses int64 indices there.
+    breaks = np.asarray(segment_starts, dtype=np.intp)
     breaks = breaks[(breaks > 0) & (breaks < count)]
-    fixed = np.unique(np.concatenate(([0, count - 1], breaks - 1, breaks)))
+    fixed = np.unique(np.concatenate((np.array([0, count - 1], dtype=np.intp), breaks - 1, breaks)))
     keep[fixed] = True
     starts, ends = fixed[:-1], fixed[1:]
     while True:
@@ -43,9 +44,9 @@ def kept_track_points(xs: NDArray[np.float64], ys: NDArray[np.float64], segment_
         starts, ends, lengths = starts[open_], ends[open_], lengths[open_]
         if not len(starts):
             return keep
-        stretch = np.repeat(np.arange(len(starts)), lengths)
-        first_offsets = np.cumsum(lengths) - lengths
-        points = starts[stretch] + 1 + np.arange(int(lengths.sum())) - np.repeat(first_offsets, lengths)
+        stretch = np.repeat(np.arange(len(starts), dtype=np.intp), lengths)
+        first_offsets = np.cumsum(lengths, dtype=np.intp) - lengths
+        points = starts[stretch] + 1 + np.arange(int(lengths.sum()), dtype=np.intp) - np.repeat(first_offsets, lengths)
         ax, ay = xs[starts][stretch], ys[starts][stretch]
         dx, dy = xs[ends][stretch] - ax, ys[ends][stretch] - ay
         px, py = xs[points] - ax, ys[points] - ay
