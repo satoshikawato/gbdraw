@@ -3,7 +3,12 @@ export const GBDRAW_WHEEL_NAME = "gbdraw-0.14.1-py3-none-any.whl";
 // The gbdraw version: the version field of the wheel's file name (PEP 427),
 // which tools/prepare_browser_wheel.py writes from pyproject.toml.
 export const GBDRAW_VERSION = GBDRAW_WHEEL_NAME.split('-')[1];
-export const GBDRAW_WHEEL_CACHE_BUST = "20260730-014339";
+// The `?v=` query of the wheel URL: the wheel's content hash, which
+// tools/prepare_cloudflare_pages.py writes into the hosted bundle's copy of
+// this file. Null here: the package (`gbdraw gui`) and the test servers load
+// the wheel by its plain name.
+/** @type {string | null} */
+export const GBDRAW_WHEEL_CACHE_BUST = null;
 // The folder of a Pyodide snapshot the diagram Worker restores instead of
 // installing its packages (workers/pyodide-snapshot.js). Null here: only a test
 // server sets it (docs/internal/SELECTIVE_CI.md, "Pyodide snapshot").

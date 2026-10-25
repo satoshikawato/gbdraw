@@ -1,4 +1,5 @@
 import {
+  compileLosatWasm,
   hasDirectLosatApi,
   runLosatPairDirect,
   runLosatPairWasi
@@ -27,14 +28,7 @@ const loadWasiShim = async (wasiShimUrl) => {
 const loadLosatModule = async (wasmUrl = DEFAULT_WASM_URL) => {
   if (!wasmModulePromise || wasmModuleUrl !== wasmUrl) {
     wasmModuleUrl = wasmUrl;
-    wasmModulePromise = (async () => {
-      const response = await fetch(wasmUrl, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`Missing packaged asset: LOSAT wasm not found at ${wasmUrl}`);
-      }
-      const bytes = await response.arrayBuffer();
-      return WebAssembly.compile(bytes);
-    })();
+    wasmModulePromise = compileLosatWasm(wasmUrl, 'LOSAT wasm');
   }
   return wasmModulePromise;
 };

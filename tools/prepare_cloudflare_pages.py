@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
+from collections import deque
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -43,6 +46,91 @@ ISOLATION_HEADERS = """/*
   ! Content-Security-Policy
   Content-Security-Policy: default-src 'self' data: blob:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; frame-ancestors 'self'
 """
+# Vendored files whose URL never serves other bytes: browsers keep them a year
+# without revalidating. The manifest pins each file's SHA-256, and the bundle
+# build fails when a file under these paths changes without a new URL.
+IMMUTABLE_ASSETS_MANIFEST = REPO_ROOT / "tools" / "immutable-web-assets.json"
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def _read_immutable_assets_manifest() -> tuple[tuple[str, ...], dict[str, str]]:
+    manifest = json.loads(IMMUTABLE_ASSETS_MANIFEST.read_text(encoding="utf-8"))
+    return tuple(manifest["prefixes"]), dict(manifest["files"])
+
+
+def render_bundle_headers() -> str:
+    """The bundle's `_headers`: isolation for every path, a year for each pinned file.
+
+    One rule per pinned file, not per folder: Workers static assets answer a
+    missing path with the single-page-app `index.html`, and a folder rule would
+    let that page be cached as immutable.
+    """
+    _, pinned = _read_immutable_assets_manifest()
+    immutable_rules = "".join(
+        f"\n/{name}\n  Cache-Control: {IMMUTABLE_CACHE_CONTROL}\n" for name in sorted(pinned)
+    )
+    return ISOLATION_HEADERS + immutable_rules
+
+
+def verify_immutable_assets(web_root: Path) -> None:
+    """Fail when a file under an immutable path is not the one its URL was pinned to."""
+    prefixes, pinned = _read_immutable_assets_manifest()
+    found = {
+        path.relative_to(web_root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for prefix in prefixes
+        for path in sorted((web_root / prefix).rglob("*"))
+        if path.is_file()
+    }
+    problems = [
+        f"{name}: {'not in the manifest' if name not in pinned else 'bytes changed'} ({digest})"
+        for name, digest in sorted(found.items())
+        if pinned.get(name) != digest
+    ] + [f"{name}: missing" for name in sorted(set(pinned) - set(found))]
+    if problems:
+        raise RuntimeError(
+            "Files under immutable URLs differ from "
+            f"{IMMUTABLE_ASSETS_MANIFEST.relative_to(REPO_ROOT)}:\n"
+            + "\n".join(problems)
+            + "\nA file whose bytes change needs a new URL (a new file name or folder); "
+            "then record the new path and SHA-256 in the manifest."
+        )
+
+
+# The page's module entry and its static imports (`import ... from`, a bare
+# `import '...'`, `export ... from`); dynamic `import()` is not preloaded.
+# tests/web/module-preload-closure.test.mjs compares the closure with V8's parser.
+MODULE_ENTRY = "js/app.js"
+_STATIC_IMPORT_RE = re.compile(
+    r"""(?:^|[;}])[ \t]*(?:import|export)[ \t]+(?:[\w$*{}\s,]+?\s+from\s*)?['"]([^'"\n]+)['"]""",
+    re.MULTILINE,
+)
+
+
+def module_preload_paths(web_root: Path) -> list[str]:
+    """The modules js/app.js imports statically, nearest first, without the entry."""
+    seen = {MODULE_ENTRY}
+    order: list[str] = []
+    pending = deque([MODULE_ENTRY])
+    while pending:
+        module = pending.popleft()
+        source = (web_root / module).read_text(encoding="utf-8")
+        for specifier in _STATIC_IMPORT_RE.findall(source):
+            if not specifier.startswith("."):
+                raise RuntimeError(f"{module} imports {specifier!r}, which is not a relative path")
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(module), specifier))
+            if target not in seen:
+                seen.add(target)
+                order.append(target)
+                pending.append(target)
+    return order
+
+
+def add_module_preloads(index_html: str, web_root: Path) -> str:
+    """Let the browser fetch the whole module graph at once instead of level by level."""
+    links = "".join(
+        f'    <link rel="modulepreload" href="./{path}">\n' for path in module_preload_paths(web_root)
+    )
+    return _replace_once(index_html, "</head>", f"{links}</head>")
 
 
 def _load_repo_module(module_path: Path, module_name: str):
@@ -169,6 +257,7 @@ def build_cloudflare_pages_bundle(
         "connect-src 'self';",
         "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com;",
     )
+    index_html = add_module_preloads(index_html, output_root)
     index_path.write_text(index_html, encoding="utf-8")
     stamp_web_build_module = _load_stamp_web_build_module()
     resolved_commit_sha = str(commit_sha or stamp_web_build_module.resolve_commit_sha()).strip()
@@ -176,7 +265,16 @@ def build_cloudflare_pages_bundle(
         output_root,
         commit_sha=resolved_commit_sha,
     )
-    (output_root / "_headers").write_text(ISOLATION_HEADERS, encoding="utf-8")
+    build_support = _load_build_support_module()
+    # The token hashes the wheel as served: any build-time repack of the wheel
+    # must happen before this point.
+    served_wheel = output_root / build_support.expected_browser_wheel_name()
+    build_support.write_wheel_cache_bust(
+        output_root / "js" / "config.js",
+        build_support.browser_wheel_cache_bust_token(served_wheel),
+    )
+    verify_immutable_assets(output_root)
+    (output_root / "_headers").write_text(render_bundle_headers(), encoding="utf-8")
     _write_remote_gallery_manifest(
         output_root=output_root,
         remote_base=gallery_remote_base
@@ -191,12 +289,11 @@ def build_cloudflare_pages_bundle(
 
 def prepare_cloudflare_pages(
     *,
-    refresh_cache_bust: bool = False,
     google_analytics_measurement_id: str | None = None,
     output_root: Path = DEFAULT_OUTPUT_ROOT,
 ) -> Path:
     prepare_browser_wheel_module = _load_prepare_browser_wheel_module()
-    prepare_browser_wheel_module.prepare_browser_wheel(refresh_cache_bust=refresh_cache_bust)
+    prepare_browser_wheel_module.prepare_browser_wheel()
     build_support = _load_build_support_module()
     build_support.refresh_open_source_notices()
     measurement_id = (
@@ -214,13 +311,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the Cloudflare Pages bundle in dist/cloudflare-pages with the browser wheel, "
-            "Google Analytics 4 tag, the hosted-site analytics flag, and build label."
+            "Google Analytics 4 tag, the hosted-site analytics flag, build label, and the "
+            "wheel's content-hash cache-bust token."
         )
-    )
-    parser.add_argument(
-        "--refresh-cache-bust",
-        action="store_true",
-        help="Refresh GBDRAW_WHEEL_CACHE_BUST while preparing the browser wheel.",
     )
     parser.add_argument(
         "--google-analytics-id",
@@ -231,7 +324,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     output_root = prepare_cloudflare_pages(
-        refresh_cache_bust=args.refresh_cache_bust,
         google_analytics_measurement_id=args.google_analytics_id,
     )
     print(f"Prepared Cloudflare Pages bundle: {output_root.relative_to(REPO_ROOT)}")

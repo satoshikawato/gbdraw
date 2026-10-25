@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (hosted web app): a returning visitor reloads gbdraw.app without
+  downloading the Pyodide runtime, wheels, fonts, icons or LOSAT wasm again. The
+  vendored files are cached for a year (one `_headers` rule per file, pinned by
+  SHA-256 in `tools/immutable-web-assets.json`), the gbdraw wheel's URL carries
+  its content hash, the LOSAT wasm is revalidated instead of re-downloaded, and
+  the page preloads its whole module graph. A reload made 0 body bytes instead of
+  1.6 MB and 243 requests instead of 251. Results, exports and LOSAT output do not
+  change (#1358).
 - Performance (web app): Loading a large Session is faster and keeps less in
   memory: the import Worker passes the Session as UTF-8 text, the feature
   catalog builds each sequence once, the Load's unsafe-key check runs in the

@@ -1044,7 +1044,6 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
         BROWSER_WHEEL_BUILD_ENV="GBDRAW_BUILDING_BROWSER_WHEEL",
         expected_browser_wheel_name=lambda: expected_name,
         refresh_open_source_notices=lambda: calls.append("notices"),
-        generate_cache_bust_token=lambda: "cache-token",
         update_browser_wheel_config=lambda **kwargs: calls.append(("config", kwargs)),
         validate_browser_wheel_prepared=fake_validate_browser_wheel_prepared,
     )
@@ -1055,14 +1054,35 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     )
     monkeypatch.setattr(prepare_module.subprocess, "run", fake_run)
 
-    assert prepare_module.prepare_browser_wheel(refresh_cache_bust=True) == 0
+    assert prepare_module.prepare_browser_wheel() == 0
     assert (web_root / expected_name).exists()
     assert calls == [
         "notices",
         "wheel",
-        ("config", {"wheel_name": expected_name, "cache_bust": "cache-token"}),
+        ("config", {"wheel_name": expected_name}),
         "validate",
     ]
+
+
+@pytest.mark.browser
+def test_cloudflare_bundle_build_fails_when_a_pinned_vendor_file_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ensure_prepared_browser_wheel()
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    prefixes, pinned = cloudflare_module._read_immutable_assets_manifest()
+    name = sorted(pinned)[0]
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_read_immutable_assets_manifest",
+        lambda: (prefixes, {**pinned, name: "0" * 64}),
+    )
+    with pytest.raises(RuntimeError, match=name):
+        cloudflare_module.build_cloudflare_pages_bundle(
+            output_root=tmp_path / "cloudflare-pages",
+            commit_sha="abcdef1234567890abcdef1234567890abcdef12",
+        )
 
 
 @pytest.mark.browser
@@ -1117,7 +1137,18 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
     assert f"Version: v{read_project_version()}+abcdef1" in index_html
     assert f'title="Commit {commit_sha}"' in index_html
+    # The served wheel's URL carries its content hash (the source keeps null).
+    served_wheel = bundle_path / f"gbdraw-{read_project_version()}-py3-none-any.whl"
+    token = hashlib.sha256(served_wheel.read_bytes()).hexdigest()[:16]
+    bundle_config = (bundle_path / "js" / "config.js").read_text(encoding="utf-8")
+    assert f'export const GBDRAW_WHEEL_CACHE_BUST = "{token}";' in bundle_config
     headers = (bundle_path / "_headers").read_text(encoding="utf-8")
+    # The build writes the cache rules and the module preloads, not only the
+    # isolation headers.
+    assert headers == cloudflare_module.render_bundle_headers()
+    assert index_html.count('<link rel="modulepreload"') == len(
+        cloudflare_module.module_preload_paths(bundle_path)
+    )
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers
@@ -1265,9 +1296,7 @@ def test_cloudflare_prepare_treats_gallery_as_read_only(
         cloudflare_module,
         "_load_prepare_browser_wheel_module",
         lambda: SimpleNamespace(
-            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append(
-                ("wheel", refresh_cache_bust)
-            )
+            prepare_browser_wheel=lambda: calls.append(("wheel", None))
         ),
     )
     monkeypatch.setattr(
@@ -1289,7 +1318,7 @@ def test_cloudflare_prepare_treats_gallery_as_read_only(
         cloudflare_module.prepare_cloudflare_pages(output_root=output_root)
         == output_root
     )
-    assert calls == [("wheel", False), ("notices", None), ("bundle", output_root)]
+    assert calls == [("wheel", None), ("notices", None), ("bundle", output_root)]
 
 
 def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
@@ -1304,7 +1333,7 @@ def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
         cloudflare_module,
         "_load_prepare_browser_wheel_module",
         lambda: SimpleNamespace(
-            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append("wheel")
+            prepare_browser_wheel=lambda: calls.append("wheel")
         ),
     )
     monkeypatch.setattr(
