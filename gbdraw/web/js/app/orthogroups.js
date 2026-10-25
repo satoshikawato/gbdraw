@@ -19,6 +19,7 @@ import { downloadTextFile } from '../services/text-download.js';
 import { linearRecordNames } from '../services/linear-sources.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { ownEntry } from '../utils/own-entry.js';
+import { toRaw } from '../utils/vue-raw.js';
 import { clearDormantGroupNames, clearGroupRename, setGroupDescription, setGroupName } from '../services/drawing/group-names.js';
 import {
   ORTHOGROUP_ID_KEYS,
@@ -635,12 +636,15 @@ export const createOrthogroupEditor = ({ state, getCommittedRequest = () => null
     }));
   });
 
+  // The lookup depends on the two array refs, which every writer replaces (services/config.js,
+  // services/history-snapshot.js); it reads the rows through `toRaw`, as state.js does, so Vue records no dependency
+  // on each alias key of every row that `featureIdentity` reads.
   const featureSequenceLookup = computed(() => {
-    const hasBiologicalFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0;
-    const features = hasBiologicalFeatures
-      ? biologicalFeatures.value
-      : (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : []);
-    const renderedIdentities = (Array.isArray(extractedFeatures?.value) ? extractedFeatures.value : [])
+    const biological = toRaw(biologicalFeatures.value);
+    const extracted = Array.isArray(extractedFeatures.value) ? toRaw(extractedFeatures.value) : [];
+    const hasBiologicalFeatures = Array.isArray(biological) && biological.length > 0;
+    const features = hasBiologicalFeatures ? biological : extracted;
+    const renderedIdentities = extracted
       .map(renderedFeatureIdentity)
       .filter((identity) => identity.usable);
     const findRendered = indexFeatureIdentities(renderedIdentities, (identity) => identity);

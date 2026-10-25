@@ -1501,6 +1501,12 @@ test('similarity-group rows update every displayed field and retain current clic
   }).then((selected) => expect(selected).toBe('s05_row_changed'));
   await expect(row('s05_row_1')).toHaveCount(0);
   await expect(row('s05_row_changed')).toContainText('Updated group');
+  // The rows exist only while their tab is shown; the selection is state and comes back with them.
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+  await expect(page.locator('.right-drawer [data-similarity-group-row]')).toHaveCount(0);
+  await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('orthogroups'));
+  await expect(row('s05_row_changed')).toHaveAttribute('aria-current', 'true');
+  await expect(page.locator('.right-drawer [data-similarity-group-row]')).toHaveCount(2);
 });
 
 // Q7: without Similarity groups the tab stays visible and disabled, and
