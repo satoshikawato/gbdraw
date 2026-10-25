@@ -267,24 +267,24 @@ def test_a_forgotten_face_keeps_no_kerning_or_font(tmp_path: Path, forget: str) 
     assert forgotten() is None
 
 
-def test_a_font_at_a_reused_address_gets_its_own_kerning() -> None:
-    """The kerning cache is keyed by the font object: a font allocated where a
-    freed font was never gets that font's kerning."""
+def test_the_kerning_entry_goes_away_with_its_font_and_a_new_font_gets_its_own() -> None:
+    """The kerning cache holds no strong reference to a font: its entry is
+    released with the font, and a font made afterwards is measured afresh."""
+    from gbdraw.core import text
+
     data_dir = Path(fonts.__file__).resolve().parents[1] / "data"
+    gc.collect()
+    before = len(text._pair_kerning_cache)
     sans = TTFont(str(data_dir / "LiberationSans-Regular.ttf"))
     assert font_pair_kerning_table(sans)
-    freed_id = id(sans)
+    assert len(text._pair_kerning_cache) == before + 1
     del sans
     gc.collect()
+    assert len(text._pair_kerning_cache) == before
 
-    candidates = []
-    for _attempt in range(64):
-        mono = TTFont(str(data_dir / "LiberationMono-Regular.ttf"))
-        if id(mono) == freed_id:
-            break
-        candidates.append(mono)
-
+    mono = TTFont(str(data_dir / "LiberationMono-Regular.ttf"))
     assert font_pair_kerning_table(mono) == {}
+    assert len(text._pair_kerning_cache) == before + 1
 
 
 def test_a_registered_font_has_the_metrics_table_of_its_bytes(tmp_path: Path) -> None:

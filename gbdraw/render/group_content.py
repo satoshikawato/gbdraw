@@ -181,8 +181,10 @@ def copy_element_tree(element: BaseElement) -> BaseElement:
     ``elements`` list and new copies of the other lists, dicts and objects it
     keeps (``Path.commands``; a ``TextPath``'s ``href`` element). As with
     ``copy.deepcopy`` of the element, an element referenced twice in the copy
-    (a ``TextPath``'s path that is also a child) is copied once, and an element
-    referenced from outside the subtree is copied apart from it. Strings,
+    (a ``TextPath``'s path that is also a child) is copied once (memo), and an
+    element referenced from outside the subtree is copied apart from it. Lists
+    and dicts are copied per reference, not once per object, so two references
+    to one list become two lists; the copy never aliases the source. Strings,
     numbers and svgwrite's per-element ``Parameter`` (debug flag and profile,
     which elements a ``Drawing`` creates share and nothing changes) are
     shared. A value of any other type is copied with ``copy.deepcopy``.

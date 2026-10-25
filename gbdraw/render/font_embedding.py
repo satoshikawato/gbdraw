@@ -78,6 +78,19 @@ _FONT_FAMILY_BYTES = re.compile(_FONT_FAMILY_VALUES.encode("ascii"))
 # A value the parser reads differently from its text (character references,
 # whitespace an attribute value normalizes) is decided by the parse.
 _PARSED_DIFFERENTLY = frozenset("&\n\r\t")
+# Markup the parser expands before gbdraw reads a value (a DOCTYPE's defaults
+# and entities, a character reference in a style attribute; <style> element
+# text is never read) is decided by the parse, as are bytes it decodes by their
+# own declaration.
+_PARSER_EXPANDS = re.compile(
+    r"<!DOCTYPE|<!ENTITY"
+    r"""|\bstyle\s*=\s*(?:"[^"&]*&|'[^'&]*&)"""
+)
+_PARSER_EXPANDS_BYTES = re.compile(_PARSER_EXPANDS.pattern.encode("ascii"))
+_OTHER_ENCODING = re.compile(
+    rb"""\A\s*<\?xml[^>]*\bencoding\s*=\s*["'](?!(?:utf-?8|us-ascii|ascii)["'])""", re.IGNORECASE
+)
+_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")  # UTF-32 LE starts with the first
 
 
 def _may_use_custom_face(svg: Union[str, bytes]) -> bool:
@@ -89,6 +102,10 @@ def _may_use_custom_face(svg: Union[str, bytes]) -> bool:
     and the SVG is not parsed.
     """
     if isinstance(svg, bytes):
+        if svg.startswith(_UTF16_BOMS) or b"\0" in svg or _OTHER_ENCODING.match(svg):
+            return True
+        if _PARSER_EXPANDS_BYTES.search(svg):
+            return True
         found = {
             value.decode("utf-8", "surrogateescape")
             for match in _FONT_FAMILY_BYTES.finditer(svg)
@@ -96,6 +113,8 @@ def _may_use_custom_face(svg: Union[str, bytes]) -> bool:
             if value is not None
         }
     else:
+        if _PARSER_EXPANDS.search(svg):
+            return True
         found = {value for match in _FONT_FAMILY_TEXT.finditer(svg) for value in match.groups() if value is not None}
     for value in found:
         if not _PARSED_DIFFERENTLY.isdisjoint(value):

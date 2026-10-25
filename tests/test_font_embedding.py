@@ -176,6 +176,18 @@ def _custom_font_svgs(family: str) -> dict[str, str]:
         "character reference": text.replace("<text ", f'<text font-family="\'{encoded}\', serif" ', 1).replace(
             'font-family="\'Liberation Sans\', sans-serif" ', "", 1
         ),
+        "style name as a character reference": text.replace(
+            "<text ", f"<text style=\"font&#45;family: '{family}', serif\" ", 1
+        ).replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1),
+        "style colon as a character reference": text.replace(
+            "<text ", f"<text style=\"font-family&#58; '{family}', serif\" ", 1
+        ).replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1),
+        "DTD attribute default": text.replace(
+            "<svg ", f"<!DOCTYPE svg [<!ATTLIST text font-family CDATA \"'{family}'\">]><svg ", 1
+        ).replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1),
+        "entity in a style value": text.replace("<text ", "<text style=\"font-family: &fam;\" ", 1).replace(
+            "<svg ", f"<!DOCTYPE svg [<!ENTITY fam \"'{family}'\">]><svg ", 1
+        ).replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1),
         "inherited from a group": text.replace("<text ", f"<g font-family=\"'{family}'\"><text ", 1)
         .replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1)
         .replace("</text>", "</text></g>", 1),
@@ -992,3 +1004,18 @@ def test_ov744_a_font_with_a_reserved_unicode_range_bit_still_subsets(tmp_path: 
 
     assert [face["font-family"] for face in _faces(embedding.css)] == ["'Gbdraw Range Bit'"]
     assert "glyf" in TTFont(io.BytesIO(font_embedding.truetype_bytes_for_pdf(registered.face, "Ok")))
+
+
+def test_bytes_in_another_declared_encoding_are_read_as_declared(tmp_path: Path) -> None:
+    family = "Gbdraw Caf\u00e9 Prefilter"
+    fonts.register_font_file(_renamed_font("LiberationSerif-Regular", family, tmp_path / "e.ttf"))
+    svg = _svg((f"'{family}', serif", "normal", "Hello"))
+    declared = '<?xml version="1.0" encoding="ISO-8859-1"?>' + svg
+    assert font_embedding._may_use_custom_face(declared.encode("latin-1"))
+    assert font_embedding._may_use_custom_face(svg.encode("utf-16"))
+
+
+def test_css_text_with_a_reference_does_not_force_the_parse() -> None:
+    svg = _svg(*_BUNDLED_ONLY).replace("</svg>", "<style>a &gt; b { color: red }</style></svg>")
+    assert not font_embedding._may_use_custom_face(svg)
+    assert not font_embedding._may_use_custom_face(svg.encode("utf-8"))
