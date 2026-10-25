@@ -3539,6 +3539,20 @@ def test_typed_tree_decoding_does_not_interpret_hints_per_item(monkeypatch) -> N
     assert count_for(1_000) < 10
 
 
+def test_typed_tree_union_keeps_its_branch_order_across_equal_hints() -> None:
+    import gbdraw.session_request_codec as codec_module
+
+    # The two unions are equal, but the first branch that takes a list decodes it.
+    with pytest.raises(CanonicalRequestDecodingError, match="invalid type"):
+        codec_module._decode_typed_tree(
+            ["a"], list[int] | tuple[str, ...], path="p", resource_schema=3
+        )
+    decoded = codec_module._decode_typed_tree(
+        ["a"], tuple[str, ...] | list[int], path="p", resource_schema=3
+    )
+    assert decoded == ("a",)
+
+
 @dataclass(frozen=True)
 class _ContractLongTuple:
     values: tuple[int, ...]

@@ -4682,8 +4682,14 @@ class _TreeDecoder(NamedTuple):
     accepts: Callable[[object], bool]
 
 
-@lru_cache(maxsize=1024)
 def _typed_tree_decoder(hint: object, resource_schema: int) -> _TreeDecoder:
+    # ``A | B == B | A``, but a union tries its branches in order, so the key
+    # also holds the repr, which keeps the order at every depth.
+    return _build_typed_tree_decoder(hint, repr(hint), resource_schema)
+
+
+@lru_cache(maxsize=1024)
+def _build_typed_tree_decoder(hint: object, hint_repr: str, resource_schema: int) -> _TreeDecoder:
     """Build once per type hint and resource schema the decoder of a typed tree.
 
     A dataclass reads its field hints at its first decode, as when each node
@@ -4844,7 +4850,7 @@ def _mapping_decoder(item: _TreeDecoder | None) -> Callable[[object, str], objec
 class _DataclassDecodePlan(NamedTuple):
     required: set[str]
     optional: set[str]
-    entries: tuple[tuple[str, Field[Any], _TreeDecoder], ...]
+    entries: tuple[tuple[str, Field[object], _TreeDecoder], ...]
 
 
 def _dataclass_decoder(hint: type, resource_schema: int) -> Callable[[object, str], object]:
