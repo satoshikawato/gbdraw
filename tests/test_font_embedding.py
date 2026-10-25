@@ -136,6 +136,80 @@ def isolated_fonts(monkeypatch: pytest.MonkeyPatch):
 # ---- the embedding owner ----
 
 
+# ---- SVGs that need no embedding are not parsed (L2-04) ----
+
+_BUNDLED_ONLY = (
+    ("'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif", "normal", "Hi"),
+    ("serif", "bold", "Bold"),
+    ("'Courier New', monospace", "normal", "Mono"),
+)
+
+
+def _refuse_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_args: object, **_kwargs: object) -> ET.Element:
+        raise AssertionError("the SVG was parsed")
+
+    monkeypatch.setattr(font_embedding.ET, "fromstring", refuse)
+
+
+def test_an_svg_drawn_only_in_bundled_faces_is_not_parsed(monkeypatch: pytest.MonkeyPatch) -> None:
+    svg = _svg(*_BUNDLED_ONLY)
+    _refuse_parse(monkeypatch)
+
+    assert font_embedding.svg_font_embedding(svg) == font_embedding.FontEmbedding(css="", refused_families=())
+    assert font_embedding.fonts_for_cairosvg(svg.encode("utf-8"), "pdf") == svg.encode("utf-8")
+
+
+def _custom_font_svgs(family: str) -> dict[str, str]:
+    """SVGs that draw text in ``family`` through each spelling of a font-family value."""
+    encoded = "&#" + str(ord(family[0])) + ";" + family[1:]
+    text = _svg(("'Liberation Sans', sans-serif", "normal", "plain"))
+    return {
+        "attribute": _svg((f"'{family}', serif", "normal", "Hello")),
+        "after an unknown family": _svg((f"'Gbdraw Not Installed', '{family}', serif", "normal", "Hello")),
+        "bold only": _svg((f"'{family}', serif", "bold", "Hello")),
+        "style declaration": text.replace("<text ", f"<text style=\"font-size: 9px; font-family: '{family}', serif\" ", 1)
+        .replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1),
+        "single-quoted attribute": text.replace("<text ", f"<text font-family='\"{family}\", serif' ", 1).replace(
+            'font-family="\'Liberation Sans\', sans-serif" ', "", 1
+        ),
+        "character reference": text.replace("<text ", f'<text font-family="\'{encoded}\', serif" ', 1).replace(
+            'font-family="\'Liberation Sans\', sans-serif" ', "", 1
+        ),
+        "inherited from a group": text.replace("<text ", f"<g font-family=\"'{family}'\"><text ", 1)
+        .replace('font-family="\'Liberation Sans\', sans-serif" ', "", 1)
+        .replace("</text>", "</text></g>", 1),
+    }
+
+
+@pytest.mark.parametrize("source", ["registered", "fontconfig"])
+def test_an_svg_that_may_draw_a_custom_face_is_embedded_as_the_parse_finds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    family = "Gbdraw Embed Prefilter"
+    path = _renamed_font("LiberationSerif-Regular", family, tmp_path / "p.ttf")
+    if source == "registered":
+        fonts.register_font_file(path)
+    else:
+        real_fontconfig_face = fonts._fontconfig_face
+
+        def installed(name: str, weight: int, italic: bool) -> tuple[fonts.FontFace | None, str]:
+            if fonts._comparable_name(name) == fonts._comparable_name(family):
+                return fonts.FontFace(str(path)), "answered"
+            return real_fontconfig_face(name, weight, italic)
+
+        monkeypatch.setattr(fonts, "_fontconfig_face", installed)
+        fonts._clear_resolution_caches()
+
+    for spelling, svg in _custom_font_svgs(family).items():
+        assert font_embedding._may_use_custom_face(svg), spelling
+        assert font_embedding._may_use_custom_face(svg.encode("utf-8")), spelling
+        embedding = font_embedding.svg_font_embedding(svg)
+        assert [face["font-family"] for face in _faces(embedding.css)] == [f"'{family}'"], spelling
+    for svg in (_svg(*_BUNDLED_ONLY), _svg(("'Gbdraw Not Installed', serif", "normal", "x"))):
+        assert not font_embedding._may_use_custom_face(svg)
+
+
 def test_a_registered_truetype_font_is_embedded_as_a_subset_of_its_used_characters(tmp_path: Path) -> None:
     fonts.register_font_file(_renamed_font("LiberationSerif-Regular", "Gbdraw Embed Serif", tmp_path / "s.ttf"))
 
