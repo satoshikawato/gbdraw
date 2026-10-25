@@ -28,6 +28,7 @@ from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
     LosatpCacheManager,
+    ProteinIdentityManifest,
     build_legacy_protein_reference_map,
     build_protein_export_id_map,
     build_protein_losat_cache_key,
@@ -591,6 +592,173 @@ def test_extracted_identity_manifest_is_its_own_validation() -> None:
     assert len(manifest.record_analyses) == 3
     for built in (manifest, extract_protein_identity_manifest([keyed]).identity_manifest):
         assert repr(validate_protein_identity_manifest(built.to_dict())) == repr(built)
+
+
+def _all_containers(value: object) -> list[object]:
+    pending, found = [value], []
+    while pending:
+        current = pending.pop()
+        if isinstance(current, (dict, list)):
+            found.append(current)
+            pending.extend(current.values() if isinstance(current, dict) else current)
+    return found
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_is_made_only_by_its_two_makers() -> None:
+    proof = validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
+
+    for call in (
+        lambda: ProteinIdentityManifest(),
+        lambda: ProteinIdentityManifest(dict(proof)),
+        lambda: ProteinIdentityManifest(object(), dict(proof)),
+        lambda: ProteinIdentityManifest(protein_sets={}, record_analyses={}, record_instances={}),
+    ):
+        with pytest.raises(TypeError, match="made only by"):
+            call()
+
+
+_DICT_CHANGES = (
+    ("__setitem__", ("extra", 1)),
+    ("__delitem__", ("schema",)),
+    ("__ior__", ({"extra": 1},)),
+    ("clear", ()),
+    ("pop", ("schema",)),
+    ("popitem", ()),
+    ("setdefault", ("extra", 1)),
+    ("update", ({"extra": 1},)),
+)
+_LIST_CHANGES = (
+    ("__setitem__", (0, 1)),
+    ("__delitem__", (0,)),
+    ("__iadd__", ([1],)),
+    ("__imul__", (2,)),
+    ("append", (1,)),
+    ("extend", ([1],)),
+    ("insert", (0, 1)),
+    ("pop", ()),
+    ("remove", (None,)),
+    ("clear", ()),
+    ("sort", ()),
+    ("reverse", ()),
+)
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_proof_is_read_only_throughout() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+    containers = _all_containers(proof)
+    assert {type(container).__name__ for container in containers} == {
+        "ProteinIdentityManifest",
+        "_FrozenDict",
+        "_FrozenList",
+    }
+
+    for container in containers:
+        changes = _DICT_CHANGES if isinstance(container, dict) else _LIST_CHANGES
+        for name, args in changes:
+            with pytest.raises(TypeError, match="read-only"):
+                getattr(container, name)(*args)
+        # Calling __init__ again does not refill it.
+        container.__init__({"extra": 1} if isinstance(container, dict) else [1])
+        assert copy.copy(container) is container
+        assert copy.deepcopy(container) is container
+    with pytest.raises(TypeError, match="read-only"):
+        proof["extra"] = 1
+    with pytest.raises(TypeError, match="read-only"):
+        proof["proteinSets"] |= {}
+    assert proof == payload
+    assert json.dumps(proof) == json.dumps(payload)
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_pickles_through_the_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pickle
+
+    proof = validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
+    checks: list[object] = []
+    check = protein_colinearity_module._check_protein_identity_manifest
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_check_protein_identity_manifest",
+        lambda value: checks.append(value) or check(value),
+    )
+
+    restored = pickle.loads(pickle.dumps(proof))
+
+    assert type(restored) is ProteinIdentityManifest
+    assert restored is not proof and restored == proof
+    assert len(checks) == 1
+    nested = proof["recordInstances"]
+    assert pickle.loads(pickle.dumps(nested)) == nested
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_to_dict_is_a_plain_mutable_copy() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+
+    plain = proof.to_dict()
+
+    assert plain == proof
+    assert {type(container) for container in _all_containers(plain)} == {dict, list}
+    plain["proteinSets"].clear()
+    assert proof == payload
+
+
+@pytest.mark.linear
+def test_validator_trusts_a_proof_and_keeps_raw_input_as_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    binding = next(iter(payload["recordInstances"].values()))
+    # Input order and an extra top-level key stay; the validator used to sort
+    # these maps and drop the extra key.
+    binding["runtimeIds"] = dict(reversed(binding["runtimeIds"].items()))
+    binding["featureMetadata"] = dict(reversed(binding["featureMetadata"].items()))
+    payload = {"extra": {"note": ["kept"]}, **payload}
+    checks: list[object] = []
+    check = protein_colinearity_module._check_protein_identity_manifest
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_check_protein_identity_manifest",
+        lambda value: checks.append(value) or check(value),
+    )
+
+    proof = validate_protein_identity_manifest(payload)
+
+    assert len(checks) == 1
+    assert proof == payload
+    assert json.dumps(proof) == json.dumps(payload)
+    assert json.dumps(proof, sort_keys=True, indent=2) == json.dumps(payload, sort_keys=True, indent=2)
+    assert validate_protein_identity_manifest(proof) is proof
+    assert proof.from_dict(proof) is proof
+    assert len(checks) == 1
+    assert proof.schema == 2
+    assert proof.binding_for(next(iter(payload["recordInstances"]))) == binding
+    with pytest.raises(ValidationError, match="no record instance"):
+        proof.binding_for("missing")
+
+
+@pytest.mark.linear
+def test_extracted_identity_manifest_is_a_proof_of_its_plain_form() -> None:
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("left", features=[_cds(0, 9, qualifiers={"translation": ["MKT*"]})]),
+            _record("right", features=[_cds(3, 12, qualifiers={"translation": ["MK*"]})]),
+        ],
+        record_instance_keys=("row-1", "row-2"),
+    )
+    manifest = extraction.identity_manifest
+
+    assert type(manifest) is ProteinIdentityManifest
+    validated = validate_protein_identity_manifest(manifest.to_dict())
+    assert validated == manifest
+    assert json.dumps(validated) == json.dumps(manifest)
+    assert list(manifest) == ["schema", "proteinSets", "recordAnalyses", "recordInstances"]
 
 
 @pytest.mark.linear
@@ -3687,12 +3855,14 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
         ) for pair in pairs
     ]
     validation_calls = []
+    check = protein_colinearity_module._check_protein_identity_manifest
 
     def validate_once(value):
         validation_calls.append(1)
-        return validate_protein_identity_manifest(value)
+        return check(value)
 
-    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", validate_once)
+    # Full checks: each reader of the proof calls the validator, which returns it.
+    monkeypatch.setattr(protein_colinearity_module, "_check_protein_identity_manifest", validate_once)
     result = json.loads(namespace["build_protein_losat_cache_keys_json"](
         json.dumps(manifest), json.dumps(pairs),
     ))
@@ -4118,13 +4288,14 @@ def test_web_protein_manifest_is_validated_once_for_keys_and_downloads(monkeypat
     )
     manifest_text = json.dumps(extraction.identity_manifest.to_dict())
     validation_calls = []
-    validate = protein_colinearity_module.validate_protein_identity_manifest
+    check = protein_colinearity_module._check_protein_identity_manifest
 
     def counted_validate(value):
         validation_calls.append(1)
-        return validate(value)
+        return check(value)
 
-    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", counted_validate)
+    # Full checks: each reader of the proof calls the validator, which returns it.
+    monkeypatch.setattr(protein_colinearity_module, "_check_protein_identity_manifest", counted_validate)
     pairs = json.dumps([{"queryRecordInstanceKey": "row-a", "subjectRecordInstanceKey": "row-a",
                          "expectedOptions": {"program": "blastp", "outfmt": "6", "args": []}}])
     first = json.loads(namespace["build_protein_losat_cache_keys_json"](manifest_text, pairs))

@@ -556,12 +556,18 @@ class CurrentRequestArtifacts:
                 label="losat_derived_cache_entries",
             )
             manifest = self.protein_identity_manifest
+            # A proof was checked when it was made and is read-only: it is
+            # kept as it is. Raw data is detached here and checked below.
+            authority = manifest if isinstance(manifest, ProteinIdentityManifest) else None
             detached_manifest: Mapping[str, Any] | None = None
-            if manifest is not None:
+            if manifest is not None and authority is None:
                 if not isinstance(manifest, Mapping):
                     raise ValidationError("protein_identity_manifest must be an object.")
                 detached_manifest = copy.deepcopy(dict(manifest))
-            if raw_entries or derived_entries or detached_manifest is not None:
+            if (
+                _REQUEST_RENDER_DIAGNOSTICS.get() is not None
+                and (raw_entries or derived_entries or detached_manifest is not None)
+            ):
                 _record_request_render_diagnostic_metric("artifactBundleCopyCount")
                 _record_request_render_diagnostic_metric(
                     "artifactEntryCount",
@@ -606,13 +612,12 @@ class CurrentRequestArtifacts:
                     )
                 derived_keys.add(key)
 
-            authority: ProteinIdentityManifest | None = None
             if detached_manifest is not None:
                 _record_request_render_diagnostic_metric(
                     "proteinManifestFullValidationCount"
                 )
                 authority = validate_protein_identity_manifest(detached_manifest)
-            if protein_entries and detached_manifest is None:
+            if protein_entries and authority is None:
                 raise ValidationError(
                     "Current protein LOSATP artifacts require protein_identity_manifest."
                 )
@@ -650,7 +655,7 @@ class CurrentRequestArtifacts:
 
         object.__setattr__(self, "losat_cache_entries", raw_entries)
         object.__setattr__(self, "losat_derived_cache_entries", derived_entries)
-        object.__setattr__(self, "protein_identity_manifest", detached_manifest)
+        object.__setattr__(self, "protein_identity_manifest", authority)
 
 
 @dataclass(frozen=True)
@@ -2977,7 +2982,7 @@ def _build_request_plan_diagram(
                 losat_cache_entries,
             )
             protein_identity_manifest = (
-                linear_artifacts.extraction.identity_manifest.to_dict()
+                linear_artifacts.extraction.identity_manifest
                 if linear_artifacts.extraction is not None
                 and linear_artifacts.extraction.identity_manifest is not None
                 else current_artifacts.protein_identity_manifest

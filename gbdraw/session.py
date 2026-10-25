@@ -36,7 +36,9 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
+    seal_protein_identity_manifest,
     session_legend_edits_by_row_key,
+    thaw_protein_identity_manifest,
     validate_session,
 )
 from gbdraw.session_drawings import (
@@ -231,6 +233,8 @@ class SessionDocument:
 
     def _adopt(self, data: dict[str, Any]) -> None:
         expanded = expand_session_feature_catalog(data)
+        # Checked once here; every later reader of the document trusts the proof.
+        seal_protein_identity_manifest(expanded)
         _validate_document(expanded)
         object.__setattr__(self, "_data", expanded)
         object.__setattr__(self, "_drawings", read_session_drawings(expanded))
@@ -300,7 +304,9 @@ class SessionDocument:
     def to_dict(self) -> dict[str, Any]:
         """Return a detached JSON-compatible copy of the document."""
 
-        return copy.deepcopy(dict(self._data))
+        data = copy.deepcopy(dict(self._data))
+        thaw_protein_identity_manifest(data)
+        return data
 
     def _drawing_parts(
         self,

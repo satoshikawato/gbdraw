@@ -692,7 +692,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "record_length": len(record.seq),
             "protein_count": len(proteins),
             "protein_map": protein_map,
-            "identity_manifest": result.identity_manifest.to_dict(),
+            "identity_manifest": result.identity_manifest,
             "protein_set_hash": result.protein_set_hashes[0],
             "record_analysis_id": result.record_analysis_ids[0],
             "record_instance_key": result.record_instance_keys[0],
