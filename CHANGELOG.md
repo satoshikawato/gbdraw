@@ -25,12 +25,15 @@ write-up of a release.
   read-only mapping: `ProteinIdentityManifest`, and the
   `protein_identity_manifest` of `CurrentRequestArtifacts`,
   `PreparedDiagramRequest`, `RequestRenderResult`,
-  `PreparedCircularBatchRequest` and `CircularBatchRenderResult`. It equals
-  the plain manifest and `json.dumps` writes the same text, but changing it in
-  place raises `TypeError`. `ProteinIdentityManifest.to_dict()` returns a
-  mutable copy, `SessionDocument.to_dict()` still returns plain data, and
-  only `validate_protein_identity_manifest` and
-  `extract_protein_identity_manifest` make a `ProteinIdentityManifest`.
+  `PreparedCircularBatchRequest` and `CircularBatchRenderResult` when it holds
+  plain JSON data (a manifest given with tuples or other Python values stays a
+  copy, as before). It equals the plain manifest and `json.dumps` writes the
+  same text, but changing it in place raises `TypeError`.
+  `ProteinIdentityManifest(...)` and `validate_protein_identity_manifest`
+  check their argument and keep its key order and extra keys (the validator
+  used to sort `runtimeIds` and `featureMetadata` and drop extra keys);
+  `ProteinIdentityManifest.to_dict()` returns a mutable copy, and
+  `SessionDocument.to_dict()` still returns plain data.
 - Performance (CLI, Python, web app): the protein extraction no longer
   validates the protein identity manifest it has just built; it keeps the one
   check its input can fail (rendered-view field names in record keys,

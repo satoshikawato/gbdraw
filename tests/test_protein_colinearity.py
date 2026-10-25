@@ -43,6 +43,7 @@ from gbdraw.analysis.protein_colinearity import (
     extract_protein_identity_manifest,
     extract_web_stable_cds_proteins,
     filter_protein_hits_by_thresholds,
+    is_json_exact_protein_identity_manifest,
     hydrate_protein_losat_tsv,
     parse_losatp_outfmt6,
     percent_encode_losat_transport_field,
@@ -604,20 +605,6 @@ def _all_containers(value: object) -> list[object]:
     return found
 
 
-@pytest.mark.linear
-def test_protein_identity_manifest_is_made_only_by_its_two_makers() -> None:
-    proof = validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
-
-    for call in (
-        lambda: ProteinIdentityManifest(),
-        lambda: ProteinIdentityManifest(dict(proof)),
-        lambda: ProteinIdentityManifest(object(), dict(proof)),
-        lambda: ProteinIdentityManifest(protein_sets={}, record_analyses={}, record_instances={}),
-    ):
-        with pytest.raises(TypeError, match="made only by"):
-            call()
-
-
 _DICT_CHANGES = (
     ("__setitem__", ("extra", 1)),
     ("__delitem__", ("schema",)),
@@ -741,6 +728,75 @@ def test_validator_trusts_a_proof_and_keeps_raw_input_as_written(
     assert proof.binding_for(next(iter(payload["recordInstances"]))) == binding
     with pytest.raises(ValidationError, match="no record instance"):
         proof.binding_for("missing")
+
+
+@pytest.mark.linear
+def test_a_proof_shares_no_container_with_its_python_input() -> None:
+    from collections import UserDict
+
+    payload = _current_protein_manifest_payload_for_validation()
+    protein = next(iter(payload["proteinSets"].values()))["proteins"][0]
+    protein["locationParts"] = tuple(list(part) for part in protein["locationParts"])
+    binding = next(iter(payload["recordInstances"].values()))
+    feature_id = next(iter(binding["featureMetadata"]))
+    binding["featureMetadata"][feature_id] = UserDict(binding["featureMetadata"][feature_id])
+    proof = validate_protein_identity_manifest(payload)
+    before = proof.to_dict()
+
+    protein["locationParts"][0][0] = 999_999
+    binding["featureMetadata"][feature_id]["product"] = "changed"
+
+    assert proof.to_dict() == before
+    assert before != payload
+    assert not is_json_exact_protein_identity_manifest(proof)
+    assert is_json_exact_protein_identity_manifest(
+        validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
+    )
+
+
+@pytest.mark.linear
+def test_public_construction_of_a_manifest_validates_it() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+
+    built = ProteinIdentityManifest(payload)
+
+    assert type(built) is ProteinIdentityManifest and built == payload
+    assert ProteinIdentityManifest(payload.items()) == payload
+    with pytest.raises(ValidationError, match="schema 2"):
+        ProteinIdentityManifest({**payload, "schema": 1})
+    with pytest.raises(ValidationError, match="schema 2"):
+        ProteinIdentityManifest()
+
+
+@pytest.mark.linear
+def test_dataclass_asdict_of_results_that_hold_a_proof_matches_plain_data() -> None:
+    import dataclasses
+
+    from gbdraw.api.request_render import (
+        CurrentRequestArtifacts,
+        PreparedDiagramRequest,
+        RequestRenderResult,
+    )
+
+    extraction = extract_protein_identity_manifest(
+        [_record("left", features=[_cds(0, 9, qualifiers={"translation": ["MKT*"]})])],
+        record_instance_keys=("row-1",),
+    )
+    proof = extraction.identity_manifest
+    plain = proof.to_dict()
+    holders = (
+        CurrentRequestArtifacts(protein_identity_manifest=proof),
+        PreparedDiagramRequest(
+            mode="linear", request=None, records=(), drawing=None, protein_identity_manifest=proof,
+        ),
+        RequestRenderResult(
+            mode="linear", request=None, records=(), drawing=None, output_paths=(),
+            protein_identity_manifest=proof,
+        ),
+    )
+    for holder in holders:
+        assert dataclasses.asdict(holder)["protein_identity_manifest"] == plain
+    assert dataclasses.asdict(extraction)["identity_manifest"] == plain
 
 
 @pytest.mark.linear
