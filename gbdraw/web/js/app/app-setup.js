@@ -82,7 +82,6 @@ import {
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
-  serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
@@ -1588,7 +1587,10 @@ export const createAppSetup = () => {
     rebindAnnotationRecords();
   };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
-  setPreviewRuntime(previewRuntime);
+  setPreviewRuntime({
+    clearActiveRuntime: previewRuntime.clearActiveRuntime,
+    currentResults: previewRuntime.currentResults
+  });
 
   const historyFileStore = createHistoryFileStore();
   // Before the History snapshot service, which clears its copy feedback (D-37).
@@ -1609,7 +1611,7 @@ export const createAppSetup = () => {
     applyEditorStateData,
     buildOrthogroupStateData,
     applyOrthogroupStateData,
-    serializeResults,
+    currentResults: previewRuntime.currentResults,
     applyResultsData,
     buildRunStateData,
     applyRunStateData,
@@ -1997,6 +1999,7 @@ export const createAppSetup = () => {
     readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    currentResults: previewRuntime.currentResults,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
     previewTransformInteraction,
@@ -5103,6 +5106,9 @@ export const createAppSetup = () => {
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   // The preview is shown again after this flush's watchers have run: measure on the next tick.
   watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
+  // A diagram or record drag moves the figure the review measured; a live edit
+  // no longer replaces the Result object that the Result watcher follows (R1).
+  watch(() => state.diagramDragging.value, (/** @type {boolean} */ dragging) => { if (!dragging) similarityAlignmentPorts.refreshCanvas(); }, { flush: 'post' });
   const similarityAlignmentReview = computed(() => {
     const draft = similarityAlignmentActions.draft.value;
     const directions = similarityAlignmentActions.directionPreview.value?.records;
@@ -6921,6 +6927,8 @@ export const createAppSetup = () => {
     sessionTitle,
     sessionTitleLabel,
     results,
+    // The Results with the displayed Result's edits written (R1); the test hooks read them.
+    currentResults: previewRuntime.currentResults,
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,

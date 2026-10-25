@@ -492,3 +492,26 @@ test('R2-m2: a dropped Session part is named with the verb its name takes', () =
   }
   assert.match(text, /other mode \(otherModeResult\) could not be read and is left out/);
 });
+
+// U8 (R1): Save reads the shown Results through the preview owner's
+// `currentResults`, which writes the displayed Result's edits into its text.
+test('U8: Save writes the Results that currentResults returns', async () => {
+  await load(BASES.g47L());
+  let reads = 0;
+  const edited = (content) => (content.includes('data-u8-edit') ? content : content.replace('<svg ', '<svg data-u8-edit="1" '));
+  sessionConfig.setPreviewRuntime({
+    clearActiveRuntime: () => {},
+    currentResults: () => {
+      reads += 1;
+      state.results.value = state.results.value.map((result, index) => (index === 0 ? { ...result, content: edited(result.content) } : result));
+      return state.results.value;
+    }
+  });
+  try {
+    const document = await saved();
+    assert.ok(reads > 0);
+    assert.match(document.results[0].content, /data-u8-edit="1"/);
+  } finally {
+    sessionConfig.setPreviewRuntime({ clearActiveRuntime: () => {}, currentResults: () => state.results.value });
+  }
+});

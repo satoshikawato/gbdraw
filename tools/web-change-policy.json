@@ -75,9 +75,7 @@
       "app/feature-selection.js",
       "app/legend-layout/diagram-drag.js",
       "app/legend/drag-actions.js",
-      "services/config.js",
       "services/export.js",
-      "services/history-snapshot.js",
       "services/standalone-interactivity.js",
       "services/svg-result-ingestion.js"
     ],
@@ -127,8 +125,6 @@
       "services/config.js"
     ],
     "SVG serialization": [
-      "services/config.js",
-      "services/history-snapshot.js",
       "services/svg-result-ingestion.js"
     ],
     "SVG/Result admission": [

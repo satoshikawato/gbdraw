@@ -95,7 +95,7 @@ const text = (value) => String(value ?? '').trim();
  * @typedef {object} CommittedSvgState
  * @property {number} identity
  * @property {boolean} mounted
- * @property {string} mountedContent The content the mounted preview shows.
+ * @property {string} mountedContent The markup the mounted preview was built from; never read as the Result's text.
  * @property {CommittedSvgResultMetadata} metadata
  */
 

@@ -6,7 +6,7 @@
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { inputTypeKeyOf } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
-import { serializeCleanSvg } from './svg-serialization.js';
+import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
@@ -93,7 +93,7 @@ const editedIntentPartOf = (path, value) => (
 /** @typedef {{ mode?: unknown, defaultSource?: unknown, edges?: unknown }} LinearComparisonPlanData */
 /** @typedef {{ x?: unknown, y?: unknown }} OffsetData */
 /** @typedef {HistorySnapshotServiceOptions['state']} HistorySnapshotState The app state (state.js has no typedef for it yet). */
-/** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as the fallback capture and restore read it. */
+/** @typedef {{ name?: unknown, content?: unknown }} ResultData One generated Result, as History captures and restores it. */
 /** @typedef {{ receipt?: AlignmentResetReceipt | null, plan?: unknown, recordTranslations?: unknown }} AlignmentStateData */
 /**
  * The `ui` values of an intent, checkpoint, or generated artifact: the fallback fields, the shown
@@ -695,20 +695,6 @@ const applyFallbackOrthogroupStateData = (state, drawing, data = {}) => {
   applyGroupNameIntentData(drawing, data);
 };
 
-/** @param {HistorySnapshotState} state */
-const buildFallbackResultsData = (state) => {
-  const currentSvg = (() => {
-    const svg = state.svgContainer?.value?.querySelector?.('svg');
-    if (!svg || typeof XMLSerializer === 'undefined') return null;
-    return serializeCleanSvg(svg);
-  })();
-  const selected = getRef(state.selectedResultIndex, 0);
-  return (getRef(state.results, []) || []).map((/** @type {ResultData | null | undefined} */ result, /** @type {number} */ index) => ({
-    name: result?.name || `Result ${index + 1}`,
-    content: index === selected && currentSvg ? currentSvg : String(result?.content || '')
-  }));
-};
-
 /**
  * @param {HistorySnapshotState} state
  * @param {unknown} [results]
@@ -995,7 +981,8 @@ const applyFilesData = (state, drawing, filesData, fileStore, normalizeLinearSeq
  * @property {((drawing: D) => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
  * @property {((drawing: D, orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
  *   The orthogroup restore.
- * @property {(() => HistorySnapshotData[]) | null} [serializeResults] The generated Results' capture.
+ * @property {() => ResultData[]} currentResults The generated Results with the displayed Result's
+ *   edits written (R1): every capture of the Results reads them through it.
  * @property {((results: HistorySnapshotData[], ui: HistorySnapshotData) => unknown) | null} [applyResultsData]
  *   The generated Results' restore, with the checkpoint's UI state.
  * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
@@ -1031,14 +1018,14 @@ export const createHistorySnapshotService = ({
   applyEditorStateData = null,
   buildOrthogroupStateData = null,
   applyOrthogroupStateData = null,
-  serializeResults = null,
+  currentResults,
   applyResultsData = null,
   buildRunStateData = null,
   applyRunStateData = null,
   clearSimilarityGroupCopyFeedback = null
 }) => {
-  if (!state || !fileStore) {
-    throw new Error('createHistorySnapshotService requires state and fileStore.');
+  if (!state || !fileStore || typeof currentResults !== 'function') {
+    throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
   }
 
   // A generated artifact holds the settings and edits of the drawing of its
@@ -1117,7 +1104,7 @@ export const createHistorySnapshotService = ({
   /** @typedef {ReturnType<typeof captureGeneratedArtifactOwnerSet>} GeneratedArtifactOwnerSet The owners' values, by reference, key by key. */
   const captureGeneratedArtifactOwnerSet = () => {
     const drawing = displayedArtifactDrawing();
-    const results = toRaw(getGeneratedArtifactRef(state.results, []));
+    const results = toRaw(currentResults());
     const colorRules = COLOR_RULES_SLICE.capture(drawing.slices.colorRules);
     return Object.freeze({
       results,
@@ -1301,17 +1288,20 @@ export const createHistorySnapshotService = ({
 
   // E1: the displayed artifact, by reference, key by key, as the artifact of
   // the drawing it belongs to (`displayedArtifactDrawing`).
-  const captureArtifactSlot = () => createArtifactSlot({
-    drawing: displayedArtifactDrawing(),
-    values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
-      key, toRaw(getGeneratedArtifactRef(state[key], null))
-    ])),
-    legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
-    matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
-    runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
-    transportIdentity: currentGeneratedArtifactIdentity,
-    retainedBytes: currentGeneratedArtifactRetainedBytes
-  });
+  const captureArtifactSlot = () => {
+    const results = toRaw(currentResults());
+    return createArtifactSlot({
+      drawing: displayedArtifactDrawing(),
+      values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
+        key, key === 'results' ? results : toRaw(getGeneratedArtifactRef(state[key], null))
+      ])),
+      legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
+      matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
+      runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
+      transportIdentity: currentGeneratedArtifactIdentity,
+      retainedBytes: currentGeneratedArtifactRetainedBytes
+    });
+  };
 
   // Installs `drawing`'s slot, or its empty slot (no Result, no committed
   // Session, the defaults of the drawing's mode), as the displayed artifact;
@@ -1354,10 +1344,8 @@ export const createHistorySnapshotService = ({
       currentGeneratedArtifactRetainedBytes = 0;
       return false;
     }
-    const committedResults = Array.isArray(results)
-      ? results
-      : getGeneratedArtifactRef(state.results, []);
     const ownerReferences = captureGeneratedArtifactOwnerSet();
+    const committedResults = Array.isArray(results) ? results : ownerReferences.results;
     currentGeneratedArtifactIdentity = Object.freeze({
       schema: 1,
       algorithm: 'SHA-256',
@@ -1749,9 +1737,7 @@ export const createHistorySnapshotService = ({
     const orthogroupState = typeof buildOrthogroupStateData === 'function'
       ? buildOrthogroupStateData(drawing)
       : buildFallbackOrthogroupStateData(state, drawing);
-    const results = typeof serializeResults === 'function'
-      ? serializeResults()
-      : buildFallbackResultsData(state);
+    const results = logicalResultsOf(currentResults());
     const runState = typeof buildRunStateData === 'function'
       ? buildRunStateData()
       : {
