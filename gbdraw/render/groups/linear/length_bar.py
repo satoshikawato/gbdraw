@@ -7,7 +7,7 @@ from gbdraw.svg.elements import Group, Line, Text
 
 from ....auto_sizes import SizeClass, linear_tick_interval
 from ....core.numeric import scaled_tick_text
-from ....core.text import calculate_bbox_dimensions
+from ....core.text import drawn_text_box
 from ....config.models.objects import ObjectsScaleConfig
 from ....layout.spatial import Aabb
 
@@ -178,7 +178,7 @@ class LengthBarGroup:
         label_bounds: list[tuple[float, float]] = []
         first_tick_bbox_width = 0.0
         last_tick_bbox_width = 0.0
-        max_tick_bbox_height = 0
+        max_tick_bbox_height = 0.0
         for index, position in enumerate(tick_positions):
             x_pos = min(
                 self.ruler_width,
@@ -191,8 +191,8 @@ class LengthBarGroup:
                 context_length=ruler_length_bp,
                 tick_interval=tick_interval,
             )
-            bbox_width, bbox_height = calculate_bbox_dimensions(
-                label_text, self.font_family, self.ruler_label_font_size, self.dpi
+            bbox_width, bbox_height = drawn_text_box(
+                label_text, self.font_family, self.ruler_label_font_size, self.font_weight
             )
             current_bounds = _label_bounds(x_pos, bbox_width)
             is_terminal_extra_tick = terminal_tick_is_extra and index == len(tick_positions) - 1
@@ -292,8 +292,8 @@ class LengthBarGroup:
 
     def create_scale_text_linear(self) -> Text:
         """Creates the SVG text element for the 'bar' style label."""
-        self.tick_bbox_width, self.tick_bbox_height = calculate_bbox_dimensions(
-            self.label_text, self.font_family, self.font_size, self.dpi
+        self.tick_bbox_width, self.tick_bbox_height = drawn_text_box(
+            self.label_text, self.font_family, self.font_size, self.font_weight
         )
         self.scale_group_width = self.tick_bbox_width + 10 + self.bar_length
         self.scale_group_height = self.tick_bbox_height

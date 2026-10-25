@@ -11,7 +11,7 @@ from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
 from ..core.numeric import scaled_tick_text
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from .ids import stable_svg_id
 
 
@@ -379,7 +379,7 @@ def resolve_circular_tick_label_geometry(
     if label_radius_base is None:
         return CircularTickLabelGeometry(0.0, 0.0, 0.0, 0.0, 0.0)
 
-    bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
+    bbox_width_px, bbox_height_px = drawn_text_box(label_text, font_family, font_size)
     anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
     angle = 360.0 * (tick / total_len)
     reverse_path = 90 <= angle < 270

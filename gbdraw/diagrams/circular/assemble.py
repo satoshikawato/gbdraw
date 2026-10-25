@@ -51,7 +51,7 @@ from ...configurators import (
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
 from ...render_stages import _pre_keyed, render_stage
-from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
+from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...config.modify import with_config_overrides, with_fit_row_overrides
 from ...exceptions import ValidationError
 from ...features.factory import FeatureBuildResult, create_feature_layers
@@ -1469,9 +1469,10 @@ def _definition_reserved_radius_px(
         record_presentation=record_presentation,
     ).get_group()
 
-    # Track-slot reservation is a record-local compatibility contract. Keep its
-    # historical unstyled text metric independent from the exact painted bounds
-    # used by outer composition, so composition metadata cannot reflow tracks.
+    # Track-slot reservation is a record-local compatibility contract. Keep it on
+    # the drawn box of each line (its text in the line's weight), independent from the
+    # exact painted bounds used by outer composition, so composition metadata cannot
+    # reflow tracks.
     max_extent = 0.0
     for element in getattr(definition_group, "elements", ()):
         attribs = getattr(element, "attribs", None)
@@ -1486,11 +1487,11 @@ def _definition_reserved_radius_px(
         text = _text_element_plain_text(element)
         if not text.strip():
             continue
-        width_px, height_px = calculate_bbox_dimensions(
+        width_px, height_px = drawn_text_box(
             text,
             str(attribs.get("font-family", cfg.objects.text.font_family)),
             font_size,
-            int(geometry.dpi),
+            str(attribs.get("font-weight", "normal")),
         )
         half_width = 0.5 * float(width_px)
         half_height = 0.5 * float(height_px if height_px else font_size)

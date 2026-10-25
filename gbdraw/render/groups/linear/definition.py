@@ -16,6 +16,7 @@ from ....core.record_metadata import format_replicon_label, infer_record_source_
 from ....core.numeric import compensated_sum
 from ....core.text import (
     create_text_element,
+    drawn_text_box,
     measure_mixed_text_line,
     parse_mixed_content_text,
 )
@@ -229,30 +230,27 @@ class DefinitionGroup:
         else:
             self.length_label = record_length_label(self.record_length)
 
-    def _measure_text(
+    def _measure_parts(
         self,
-        text: str,
-        *,
+        parts: list[tuple[str, str]],
         style: _ResolvedDefinitionLineStyle,
-        font_style: str = "normal",
     ) -> tuple[float, float]:
-        """Return rendered SVG width and legacy layout height for styled text."""
-        return measure_mixed_text_line(
-            [(text, font_style)],
-            style.font_family,
-            style.font_size,
-            self.dpi,
-            font_weight=style.font_weight,
-            layout_height=True,
+        """Rendered SVG width and line-box height of ``(text, font_style)`` parts drawn as tspans of one line."""
+        width, _ = measure_mixed_text_line(
+            parts, style.font_family, style.font_size, self.dpi, font_weight=style.font_weight
         )
+        height = max(
+            (
+                drawn_text_box(text, style.font_family, style.font_size, style.font_weight, font_style)[1]
+                for text, font_style in parts
+            ),
+            default=0.0,
+        )
+        return width, height
 
     def _measure_line(self, kind: str, text: str) -> tuple[float, float]:
-        """Return rendered SVG width and legacy layout height for a definition line."""
-        return self._measure_text(
-            text,
-            style=self._style_for_line(kind),
-            font_style="normal",
-        )
+        """Return rendered SVG width and line-box height for a definition line."""
+        return self._measure_parts([(text, "normal")], self._style_for_line(kind))
 
     def _measure_mixed_line(
         self,
@@ -261,18 +259,13 @@ class DefinitionGroup:
         plain_text: str,
     ) -> tuple[float, float]:
         """Measure mixed regular/italic definition content as rendered tspans."""
-        style = self._style_for_line(kind)
-        total_width, max_height = measure_mixed_text_line(
-            (
+        total_width, max_height = self._measure_parts(
+            [
                 (str(part_text), "italic" if part.get("italic") else "normal")
                 for part in parts
                 if (part_text := part.get("text")) is not None
-            ),
-            style.font_family,
-            style.font_size,
-            self.dpi,
-            font_weight=style.font_weight,
-            layout_height=True,
+            ],
+            self._style_for_line(kind),
         )
         if max_height == 0.0 and plain_text:
             _, max_height = self._measure_line(kind, plain_text)
