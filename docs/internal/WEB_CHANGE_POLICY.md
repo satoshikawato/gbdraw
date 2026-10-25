@@ -622,6 +622,13 @@ allowed"). The route takes effect for a pull request only when that pull
 request's base checker implements it; a checker-only pull request follows the
 one that lists the files.
 
+A `replace` of a file that `tools/immutable-web-assets.json` on the pull request
+base pins fails even when the base lists it: the hosted bundle serves pinned
+files with `Cache-Control: public, max-age=31536000, immutable`, so new bytes
+at the same URL would never reach returning visitors. Publish the new bytes
+under a new path. `add` and `remove` follow the rules above. A base manifest
+that cannot be parsed fails closed; a base without the manifest pins nothing.
+
 An update takes two pull requests in this order:
 
 1. Authority only: add the entry to `tools/web-change-policy.json`. Take the
