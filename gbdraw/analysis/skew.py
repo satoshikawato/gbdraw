@@ -45,29 +45,40 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
         yield start, out_seq
 
 
-def _build_prefix_counts(seq_bytes: bytes, target_base: int) -> np.ndarray:
-    """Return prefix counts (length n + 1) for a single nucleotide."""
-    prefix = np.zeros(len(seq_bytes) + 1, dtype=np.int64)
-    np.cumsum(np.frombuffer(seq_bytes, dtype=np.uint8) == target_base, out=prefix[1:])
-    return prefix
+def _prefix_counts_at(seq_bytes: bytes, base: int, positions: np.ndarray) -> np.ndarray:
+    """``seq_bytes[:p].count(base)`` for each position ``p`` (0 to n).
+
+    The base's positions are found once and the counts read at the given
+    positions only, so no count array as long as the sequence is built.
+    """
+    occurrences = np.flatnonzero(np.frombuffer(seq_bytes, dtype=np.uint8) == base)
+    return np.searchsorted(occurrences, positions, side="left").astype(np.int64)
 
 
-def _window_counts(
-    prefix: np.ndarray,
-    seq_length: int,
+def window_base_counts(
+    seq_bytes: bytes,
+    base: int,
     *,
     starts: np.ndarray,
     window: int,
 ) -> np.ndarray:
-    """Count a base in the circular windows beginning at ``starts``."""
-    total_count = int(prefix[seq_length])
+    """Count ``base`` in the circular windows of ``window`` bases beginning at
+    ``starts``: the one window count of the GC content and skew tracks.
+
+    A window longer than the sequence counts it once per full cycle; the
+    counts are read at the window bounds only (``_prefix_counts_at``).
+    """
+    seq_length = len(seq_bytes)
     full_cycles, remainder = divmod(window, seq_length)
+    end = starts + remainder
+    wrapped = end > seq_length
+    stops = np.where(wrapped, end - seq_length, end)
+    prefix = _prefix_counts_at(seq_bytes, base, np.concatenate([starts, stops, [seq_length]]))
+    total_count = int(prefix[-1])
     counts = np.full(len(starts), full_cycles * total_count, dtype=np.int64)
     if remainder == 0:
         return counts
-    end = starts + remainder
-    wrapped = end > seq_length
-    counts += prefix[np.where(wrapped, end - seq_length, end)] - prefix[starts]
+    counts += prefix[len(starts) : 2 * len(starts)] - prefix[: len(starts)]
     counts[wrapped] += total_count
     return counts
 
@@ -111,12 +122,8 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
 
     seq_bytes = seq_str.encode("ascii")
     starts = np.arange(0, seq_length, step, dtype=np.int64)
-    base1_counts = _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_1)), seq_length, starts=starts, window=window
-    )
-    base2_counts = _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_2)), seq_length, starts=starts, window=window
-    )
+    base1_counts = window_base_counts(seq_bytes, ord(nt_1), starts=starts, window=window)
+    base2_counts = window_base_counts(seq_bytes, ord(nt_2), starts=starts, window=window)
     total_counts = base1_counts + base2_counts
     skew_values = np.divide(
         base1_counts - base2_counts,
@@ -148,6 +155,7 @@ __all__ = [
     "counted_sequence",
     "skew_df",
     "sliding_window",
+    "window_base_counts",
 ]
 
 

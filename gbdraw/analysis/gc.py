@@ -12,10 +12,9 @@ from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.skew import (
-    _build_prefix_counts,
-    _window_counts,
     counted_dinucleotide,
     counted_sequence,
+    window_base_counts,
 )
 
 
@@ -96,17 +95,9 @@ def circular_dinucleotide_content_df(
     seq_bytes = seq_str.encode("ascii")
     starts = np.arange(0, seq_length, step, dtype=np.int64)
     circular_starts = (starts - int(window) // 2) % seq_length
-    total_counts = _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_1)),
-        seq_length,
-        starts=circular_starts,
-        window=window,
-    ) + _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_2)),
-        seq_length,
-        starts=circular_starts,
-        window=window,
-    )
+    total_counts = window_base_counts(
+        seq_bytes, ord(nt_1), starts=circular_starts, window=window
+    ) + window_base_counts(seq_bytes, ord(nt_2), starts=circular_starts, window=window)
     content_values = total_counts / float(window)
 
     return pd.DataFrame({content_legend: content_values}, index=starts)
