@@ -1915,7 +1915,7 @@ test('every workflow reads its Node version from the root .node-version', () => 
     const source = WORKFLOW_SOURCES[index];
     assert.doesNotMatch(source, /^\s*node-version:/m, name);
     assert.equal(
-      (source.match(/uses: actions\/setup-node@v\d+\n\s+with:\n\s+node-version-file: (?:\.ci-node-version\/)?\.node-version\n/g) || []).length,
+      (source.match(/uses: actions\/setup-node@(?:v\d+|[0-9a-f]{40} # v\d+\.\d+\.\d+)\n\s+with:\n\s+node-version-file: (?:\.ci-node-version\/)?\.node-version\n/g) || []).length,
       (source.match(/uses: actions\/setup-node@/g) || []).length,
       name
     );

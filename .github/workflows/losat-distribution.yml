@@ -55,6 +55,9 @@ jobs:
         with:
           python-version: '3.12'
           architecture: ${{ matrix.architecture }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
       - name: Read the verified public release pin
         id: pin
         run: |
