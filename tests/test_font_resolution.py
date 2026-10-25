@@ -121,6 +121,25 @@ def test_a_registered_font_is_measured_with_its_own_file(tmp_path: Path) -> None
     assert calculate_bbox_dimensions(TEXT, family, 14, 72) != calculate_bbox_dimensions(TEXT, "sans-serif", 14, 72)
 
 
+def test_a_corrupt_table_fails_the_same_way_on_every_measurement(tmp_path: Path) -> None:
+    # fontTools stores a table before it decompiles it; the cached font must
+    # not keep the half-read table and measure with an empty cmap next time.
+    from fontTools.ttLib.tables.DefaultTable import DefaultTable
+
+    font = _renamed("LiberationSans-Regular", "Gbdraw Corrupt Cmap")
+    cmap = DefaultTable("cmap")
+    cmap.data = font.reader["cmap"][: len(font.reader["cmap"]) // 3]
+    font["cmap"] = cmap
+    path = tmp_path / "corrupt.ttf"
+    font.save(str(path))
+    fonts.register_font_file(path)
+
+    family = "'Gbdraw Corrupt Cmap', sans-serif"
+    for _ in range(2):
+        with pytest.raises(AssertionError, match="corrupt cmap table"):
+            calculate_bbox_dimensions(TEXT, family, 14, 72)
+
+
 def test_custom_font_families_among_counts_a_registered_alias_name() -> None:
     # D-10: a loaded alias name is custom; an alias that was not loaded is not.
     assert fonts.custom_font_families_among("'Times New Roman', 'DejaVu Serif', serif", ()) == ("DejaVu Serif",)
