@@ -959,6 +959,7 @@ const routeCrossOriginIsolated = (context, stubs = {}) => context.route('**/*', 
 
 module.exports = {
   NEWEST_READ_SESSION_VERSION,
+  generatedConstant,
   answerChoicePrompt,
   answerSessionTitle,
   expectNoLoadRepairDialog,

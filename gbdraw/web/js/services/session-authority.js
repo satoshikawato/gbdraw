@@ -158,8 +158,9 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 ]);
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
-// The versions this reader takes, in words, for the refusal of another
-// version (OV-1253): "27–33, 39–42, 44, and 46–48".
+// The versions this reader takes (`SUPPORTED_SESSION_VERSIONS`), in words,
+// for the refusal of another version (OV-1253); session-authority.test.mjs
+// pins the text, "27–33, 39–42, 44, and 46–49" today.
 const READ_SESSION_VERSIONS = (() => {
   /** @type {[number, number][]} */
   const runs = [];
