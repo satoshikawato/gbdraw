@@ -448,7 +448,7 @@ const J3_SESSIONS = [
     draftMarks: ['Core biosynthetic genes', 'Additional biosynthetic genes', 'Transport-related genes', 'Regulatory genes']
       .map((caption) => `data-legend-key="${caption}"`).concat('Aminoglycoside biosynthetic gene clusters from') },
   { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'),
-    draftMarks: ['d="M 1350.5,-48.0 L 1450.5,-48.0 L 1450.5,-7.999999999999998 L 1350.5,-7.999999999999998 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
+    draftMarks: ['d="M 1350.5,-48 L 1450.5,-48 L 1450.5,-8 L 1350.5,-8 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
   { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
   { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
 ];
