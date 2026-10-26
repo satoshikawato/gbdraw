@@ -340,7 +340,7 @@ const bandHolds = (root, key) => {
 const bandRepair = (row, stored, root) => {
   if (row.rule === 4 && holdsNothing(storedAt(stored, row.path))) return null;
   const key = topLevelKey(row.path);
-  if (row.path === key && isModeScopedVersion(stored) && FLAT_DRAFT_TOP_LEVEL_FIELDS.includes(key)) return null;
+  if (row.path === key && versionKeepsModeSlices(stored.version) && FLAT_DRAFT_TOP_LEVEL_FIELDS.includes(key)) return null;
   const part = Object.hasOwn(SESSION_TOP_LEVEL_AUTHORITY, key)
     ? SESSION_TOP_LEVEL_AUTHORITY[/** @type {keyof SessionInput} */ (key)].part : null;
   // The legacy `files` of a Session 40+ is named with the inputs it held,
@@ -376,11 +376,10 @@ const heldInputNames = (value) => {
   return [...names];
 };
 
-// The band facts Load reads of a file before Python converts a Session
-// 27-44 (B2d-4): whether it keeps its drafts in mode slices (46 or later),
-// and whether its Legend lists name a row by its shown caption (46 or older).
-/** @param {SessionEnvelope} document */
-export const isModeScopedVersion = (document) => versionKeepsModeSlices(document.version);
+// The band fact Load reads of a file before Python converts a Session 27-44
+// (B2d-4): whether its Legend lists name a row by its shown caption (46 or
+// older). Whether it keeps its drafts in mode slices (46 or later, a Session
+// 49's drawing parts too) is `versionKeepsModeSlices`.
 /** @param {SessionEnvelope} document */
 export const holdsCaptionLegendRows = (document) => document.version < ROW_KEYED_LEGEND_SESSION_VERSION;
 

@@ -790,7 +790,6 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
@@ -1719,7 +1718,6 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state,
     recordDisplayRows,
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -2738,7 +2736,6 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     recordDisplayRows: { value: [] },
     serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
@@ -3061,7 +3058,6 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       return serializeActiveRenderFiles(state.mode.value, state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => {
@@ -3434,7 +3430,6 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
       return afterTask();
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
-    canonicalSessionVersion: SESSION_VERSION,
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3554,7 +3549,6 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
       serializeActiveRenderFiles(state.mode.value, state, activeDrawing, snapshot)
     ),
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3624,7 +3618,6 @@ test('Circular Generate gives a Depth series without settings its default color'
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
       serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
     ),
-    canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({

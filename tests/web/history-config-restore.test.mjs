@@ -333,6 +333,39 @@ console.log('History restores nullable config values and preserves key guards.')
   console.log('History Undo and Redo keep unset settings unset.');
 }
 
+// OIC-030, DESIGN §1: a drawing's History step holds its own input type, from
+// its inputs slice, not the field of its mode: with two Linear drawings of
+// different input types, the step of one and its Undo keep the other's.
+{
+  const { buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const { createDrawingState } = await import('../../gbdraw/web/js/state.js');
+  installShownDrawing('linear');
+  const linear = state.drawingOf('linear');
+  const second = createDrawingState('linear-2', 'linear');
+  state.addDrawing(second, 'Linear 2', state.drawingTabs.value.length);
+  linear.inputType.value = 'gff';
+  second.inputType.value = 'gb';
+  const typeSnapshots = createHistorySnapshotService({
+    state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData,
+    applyConfigData: applyCapturedConfigData, buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
+  });
+  const typeHistory = createHistoryManager({ ...typeSnapshots.drawingHistory('linear'), signatureFor: typeSnapshots.snapshotSignature });
+  await typeHistory.captureBaseline();
+  await typeHistory.initializeIntentBaseline();
+  const intent = typeSnapshots.drawingHistory('linear').buildIntent();
+  assert.equal(intent.files.inputType, 'gff', 'the step holds the drawing\'s own input type');
+  assert.equal(Object.hasOwn(intent.ui, 'lInputType') || Object.hasOwn(intent.ui, 'cInputType'), false, 'no mode field');
+  await typeHistory.runUndoable('Input type', () => { linear.inputType.value = 'gb'; });
+  await typeHistory.undo();
+  assert.equal(linear.inputType.value, 'gff', 'Undo restores the drawing\'s own input type');
+  assert.equal(second.inputType.value, 'gb', 'the other Linear drawing keeps its input type');
+  await typeHistory.redo();
+  assert.equal(linear.inputType.value, 'gb');
+  linear.inputType.value = 'gb';
+  state.removeDrawing('linear-2', { takeSlot: () => null });
+  console.log('A History step holds its drawing\'s own input type.');
+}
+
 // D-03 (Q-R1): the Rich Feature Popup is a UI preference outside History. A
 // toggle records no step, Undo and Redo of other steps leave it as set, and
 // the checkbox opens no History transaction.

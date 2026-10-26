@@ -212,7 +212,6 @@ import {
   isDrawingsBand,
   isCanonicalBand,
   isModeScopedBand,
-  isModeScopedVersion,
   holdsCaptionLegendRows,
   hasBiologicalSessionInputs,
   holdsNothing,
@@ -233,6 +232,7 @@ import {
   storedRequestSchemas,
   storedResultSets,
   validateSessionAuthorityInventory,
+  versionKeepsModeSlices,
   withStoredResultSet
 } from './session-authority.js';
 import {
@@ -293,7 +293,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { firstDrawingOfMode, inputTypeKeyOf, sessionInputTypes } from './drawing-view.js';
+import { firstDrawingOfMode } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -2684,9 +2684,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
-  // Session 46 keeps each mode's draft in its slice (PD-OI-086); a Session
-  // 27-44 keeps one flat draft.
-  const modeScopedSession = isModeScopedVersion(sessionData);
+  // Session 46 and later keep each mode's draft in its slice (PD-OI-086), a
+  // Session 49 in each drawing's part; a Session 27-44 keeps one flat draft.
+  const modeScopedSession = versionKeepsModeSlices(sessionData.version);
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
@@ -2935,7 +2935,7 @@ const restoreLoadedSetSequenceSources = async ({
 export const savedResultEdits = (data, mode, setEditorState, sessionVersion, storedRules) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
-  const slice = isModeScopedVersion({ format: 'gbdraw-session', version: sessionVersion })
+  const slice = versionKeepsModeSlices(sessionVersion)
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});
@@ -5274,7 +5274,6 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     generatedCircularPlotTitlePosition,
     layoutPreferences: cloneJsonData(drawing.layoutPreferences),
     featurePanelTab,
-    ...sessionInputTypes(state.drawingList()),
     losatProgram: drawing.losatProgram.value,
     downloadDpi,
     autoLabelReflow,
@@ -5321,9 +5320,6 @@ export const applySessionUiData = (ui) => {
  */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true, artifact = true } = {}) => {
   applySessionUiData(ui);
-  // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
-  const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
     SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
@@ -5897,7 +5893,7 @@ const exportSessionDocument = async (
     const shown = saved.id === drawing.id;
     return {
       id: saved.id,
-      name: /** @type {{ name: string }} */ (state.drawingTabs.value.find((tab) => tab.id === saved.id)).name,
+      name: state.drawingTabOf(saved.id).name,
       view: {
         format: 'gbdraw-session',
         version: SESSION_DRAWINGS_LAYOUT.version,
@@ -6991,7 +6987,7 @@ const importSessionDocument = async (e, options = {}) => {
     committed.forEach((drawing) => {
       INPUTS_SLICE.install(drawing.slices.inputs, {
         // A Session 49 drawing's own; else the field of its mode.
-        inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[inputTypeKeyOf(drawing)])
+        inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]])
       });
     });
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;

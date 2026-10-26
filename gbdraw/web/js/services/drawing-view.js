@@ -16,7 +16,7 @@
 /** @import { ColorRulesSlice, ColorRulesView } from './drawing/color-rules.js' */
 /** @import { FeatureEditsSlice, FeatureEditsView } from './drawing/feature-edits.js' */
 /** @import { GroupNamesSlice, GroupNamesView } from './drawing/group-names.js' */
-/** @import { InputType, InputsSlice, InputsView } from './drawing/inputs.js' */
+/** @import { InputsSlice, InputsView } from './drawing/inputs.js' */
 /** @import { LabelTablesSlice, LabelTablesView } from './drawing/label-tables.js' */
 /** @import { PaintSlice, PaintView } from './drawing/paint.js' */
 /** @import { PaletteSlice, PaletteView } from './drawing/palette.js' */
@@ -146,26 +146,4 @@ export const drawingNamesProblem = (names) => {
   if (names.some((name) => name.trim() === '')) return 'BLANK_NAME';
   const folded = names.map((name) => name.toUpperCase().toLowerCase());
   return new Set(folded).size === folded.length ? null : 'REPEATED_NAME';
-};
-
-/**
- * The Session 48 and History `ui` key of a drawing's input type: the field of
- * its mode. A History restore of one drawing writes only its own (OIC-030).
- * @param {DrawingIdentity} drawing
- * @returns {'cInputType' | 'lInputType'}
- */
-export const inputTypeKeyOf = (drawing) => (drawing.mode === 'linear' ? 'lInputType' : 'cInputType');
-
-/**
- * The Session 48 input type fields (`ui.cInputType`, `ui.lInputType`), each
- * the input type of the drawing of its mode: Save, the Load rollback, and
- * History write them from the drawings until the flip saves each drawing's own.
- * @param {readonly (DrawingIdentity & { readonly inputType: Ref<InputType> })[]} drawings
- * @returns {{ cInputType: InputType, lInputType: InputType }}
- */
-export const sessionInputTypes = (drawings) => {
-  /** @type {{ cInputType: InputType, lInputType: InputType }} */
-  const types = { cInputType: 'gb', lInputType: 'gb' };
-  drawings.forEach((drawing) => { types[inputTypeKeyOf(drawing)] = drawing.inputType.value; });
-  return types;
 };
