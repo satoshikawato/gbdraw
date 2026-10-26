@@ -305,6 +305,14 @@ _OUTPUT_INPUT_FILES = {
 }
 
 
+def _active_drawing(session: dict) -> dict:
+    """The drawing a Session opens: the ``drawings[]`` entry named by ``ui.activeDrawingId``."""
+
+    active_id = session.get("ui", {}).get("activeDrawingId")
+    matches = [d for d in session.get("drawings", []) if d.get("id") == active_id]
+    return matches[0] if len(matches) == 1 else {}
+
+
 def _parse_commands(recipe: str, *, scenario_id: str) -> list[list[str]]:
     commands = [
         shlex.split(line)
@@ -2156,20 +2164,23 @@ def _assert_session_roundtrip(
         if (
             payload.get("format") != "gbdraw-session"
             or payload.get("version") != CURRENT_SESSION_VERSION
-            or payload.get("renderRequest", {}).get("schema")
+            or _active_drawing(payload).get("renderRequest", {}).get("schema")
             != CANONICAL_REQUEST_SCHEMA
-            or payload.get("renderRequest", {}).get("mode") != "circular"
+            or _active_drawing(payload).get("mode") != "circular"
+            or _active_drawing(payload).get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")
-    ignored_session_metadata = {"createdAt", "runMetadata"}
-    normalized_plain = {
-        key: value for key, value in plain.items() if key not in ignored_session_metadata
-    }
-    normalized_compressed = {
-        key: value
-        for key, value in compressed.items()
-        if key not in ignored_session_metadata
-    }
+    def _semantics(session: dict) -> dict:
+        return {
+            **{key: value for key, value in session.items() if key != "createdAt"},
+            "drawings": [
+                {key: value for key, value in drawing.items() if key != "runMetadata"}
+                for drawing in session.get("drawings", [])
+            ],
+        }
+
+    normalized_plain = _semantics(plain)
+    normalized_compressed = _semantics(compressed)
     if normalized_plain != normalized_compressed:
         changed = sorted(
             key
@@ -2179,7 +2190,7 @@ def _assert_session_roundtrip(
         raise RecipeContractError(
             f"H-CLI-12 plain and gzip session semantics differ: {changed}."
         )
-    run_metadata = compressed.get("runMetadata", {})
+    run_metadata = _active_drawing(compressed).get("runMetadata", {})
     geometry = run_metadata.get("trackSlotGeometry", {})
     records = geometry.get("records", [])
     if (
@@ -2381,9 +2392,10 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     if (
         session.get("format") != "gbdraw-session"
         or session.get("version") != CURRENT_SESSION_VERSION
-        or session.get("renderRequest", {}).get("schema")
+        or _active_drawing(session).get("renderRequest", {}).get("schema")
         != CANONICAL_REQUEST_SCHEMA
-        or session.get("renderRequest", {}).get("mode") != "circular"
+        or _active_drawing(session).get("mode") != "circular"
+        or _active_drawing(session).get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2
         or not any(
             str(resource.get("name", "")).endswith("HmmtDNA.gbk")

@@ -756,7 +756,12 @@ assert resources_expired
 assert replay_output_removed
 
 wrong_mode_payload = loaded_document.to_dict()
-wrong_mode_payload["renderRequest"]["diagramOptions"]["tracks"][
+opened_drawing = next(
+    drawing
+    for drawing in wrong_mode_payload["drawings"]
+    if drawing["id"] == wrong_mode_payload["ui"]["activeDrawingId"]
+)
+opened_drawing["renderRequest"]["diagramOptions"]["tracks"][
     "linearTrackAxisIndex"
 ] = 0
 wrong_mode_document = load_session_document(wrong_mode_payload)
