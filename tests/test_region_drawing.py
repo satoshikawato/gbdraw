@@ -43,6 +43,7 @@ from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
+from tests.utils.session_drawing_view import drawing_view
 from tests.utils.two_mode_session import two_mode_session
 
 REPO = Path(__file__).resolve().parents[1]
@@ -166,7 +167,7 @@ def test_region_of_a_circular_drawing_is_linear_with_adapted_sizes(materialize, 
     rendered = render_request(request)
     assert all(path.is_file() for path in rendered.output_paths)
     document = build_session_document(request)
-    assert document.to_dict()["renderRequest"]["records"][0]["region"] == {
+    assert drawing_view(document.to_dict())["renderRequest"]["records"][0]["region"] == {
         "selector": None,
         "start": 11737,
         "end": 14748,
@@ -269,7 +270,7 @@ def test_a_row_of_every_record_of_a_file_is_pinned_by_index(tmp_path: Path) -> N
             records=[RecordInput(GenBankInputSource(TWO_RECORDS), selector=RecordSelector("#1", None, 0), record_key="pair")]
         )
     ).to_dict()
-    document["renderRequest"]["records"][0].update(cardinality="all", selector=None)
+    document["drawings"][0]["renderRequest"]["records"][0].update(cardinality="all", selector=None)
     with materialize_session(document, output_directory=tmp_path / "out") as materialized:
         region = derive_region_drawing(materialized, [RegionSelection("pair:2", 1, 20)])
     [record] = region.drawing.request.records

@@ -88,3 +88,22 @@ def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
     return _drawings_document(
         [view], ids=[mode], names=[mode.capitalize()], active=0, project_views=[view]
     )
+
+
+# fixround C1
+@contextmanager
+def without_drawings_move_in_session_module() -> Iterator[None]:
+    """``without_drawings_move`` for the paths through ``gbdraw.session`` (a CLI save, ``save_session_document``).
+
+    ``gbdraw.session`` binds ``drawings_document_from_mode_scoped`` by name, so it is skipped there too.
+    """
+
+    from unittest import mock
+
+    from gbdraw import session as session_module
+
+    def keep_mode_scoped(data: Mapping[str, Any], *_args: Any, **_kwargs: Any) -> tuple[Mapping[str, Any], None]:
+        return data, None
+
+    with without_drawings_move(), mock.patch.object(session_module, "drawings_document_from_mode_scoped", keep_mode_scoped):
+        yield
