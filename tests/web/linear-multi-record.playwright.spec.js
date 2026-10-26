@@ -2692,7 +2692,8 @@ ${origin}
     return {
       defaultColor,
       targetId: target.svg_id,
-      targetInstance: target.selector.instance,
+      // The feature instance Python composes from the catalog identity.
+      targetInstance: `${target.biological_feature_id}@${target.record_key}`,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))

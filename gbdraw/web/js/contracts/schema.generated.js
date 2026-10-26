@@ -113,6 +113,15 @@ export const LEGEND_POSITIONS = Object.freeze({
   linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
 });
 
+// gbdraw/features/ids.py: FEATURE_INSTANCE_SEPARATOR
+export const FEATURE_INSTANCE_SEPARATOR = '@';
+
+// gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
+export const CLI_RECORD_KEY_PREFIX = 'record-';
+
+// gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
+export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
+
 // gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);

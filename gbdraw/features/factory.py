@@ -48,7 +48,8 @@ def create_repeat_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -96,7 +97,8 @@ def create_feature_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -140,7 +142,8 @@ def create_gene_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.

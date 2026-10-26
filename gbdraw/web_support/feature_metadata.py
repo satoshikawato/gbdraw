@@ -19,6 +19,7 @@ from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash,
+    compute_source_feature_hash,
     feature_instances,
     make_linear_rendered_feature_id,
     shared_source_feature_hashes,
@@ -339,12 +340,15 @@ def extract_features_from_records_payload(
                 continue
             # An undrawn source feature stays out of the catalog unless it has
             # its own Feature visibility, which keeps it in the Web Features
-            # list so it can be shown again (R-5).
+            # list so it can be shown again (R-5), or an identical source
+            # feature: the catalog then names each of them as the source
+            # feature catalog and the drawing do, counting all of them.
             if (
                 include_biological_features
                 and not is_rendered_feature
                 and str(getattr(feat, "type", "") or "").lower() == "source"
                 and getattr(feature_override, "feature_visibility", None) is None
+                and compute_source_feature_hash(feat, record) not in shared_hashes
             ):
                 continue
             selector_values = _biological_selector_values(

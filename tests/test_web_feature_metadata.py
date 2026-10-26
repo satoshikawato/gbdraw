@@ -727,6 +727,7 @@ def test_web_feature_selector_record_location_matches_visibility_rule(
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is False
     )

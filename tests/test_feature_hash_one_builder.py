@@ -280,7 +280,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
             feature
             for feature in record.features
             if not should_render_feature(
-                feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id
+                feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id, instance=None
             )
         ]
         # The one feature drawn from the row's source feature (each has its own product).

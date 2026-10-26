@@ -183,8 +183,9 @@ def _color_rule_ranks(item: _MatchFeature, color_rules: IndexedColorRules) -> di
     one colors it), each with its first rank."""
     feature = SimpleNamespace(type=item["type"], qualifiers=item["qualifiers"])
     ranks: dict[int, int] = {}
+    selector = item["selector"]
     for color, _, rank in iter_specific_color_rules(feature, color_rules, item["record"],
-                                                    selector=item["selector"]):
+                                                    selector=selector, instance=selector["instance"]):
         ranks.setdefault(int(color), rank)
     return ranks
 

@@ -303,7 +303,8 @@ def should_render_feature(
     record_id: Optional[str] = None,
     specific_color_rules: Optional[Mapping] = None,
     feature_override: Any = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> bool:
     """Decide whether a feature is drawn.
 

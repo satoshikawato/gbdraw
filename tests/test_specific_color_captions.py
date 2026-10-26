@@ -167,12 +167,14 @@ def test_a_caption_in_two_colors_is_kept_and_its_rows_are_numbered(mode, tmp_pat
         prepared.specific_color_rules,
         prepared.default_color_map,
         "record",
+        instance=None,
     ) == ("#112233", "Shared")
     assert get_color_with_info(
         record.features[1],
         prepared.specific_color_rules,
         prepared.default_color_map,
         "record",
+        instance=None,
     ) == ("#445566", "Shared")
 
 

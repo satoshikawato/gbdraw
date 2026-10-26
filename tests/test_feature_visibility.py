@@ -221,6 +221,7 @@ def test_should_render_feature_matches_supported_qualifiers(
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -252,6 +253,7 @@ def test_should_render_feature_first_match_wins() -> None:
             selected_features_set=["CDS"],
             feature_visibility_rules=rules_off_first,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -261,6 +263,7 @@ def test_should_render_feature_first_match_wins() -> None:
             selected_features_set=["CDS"],
             feature_visibility_rules=rules_show_first,
             record_id=record.id,
+            instance=None,
         )
         is True
     )
@@ -279,6 +282,7 @@ def test_should_render_feature_exclude_matching_preserves_base_drawing_decision(
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is True
     )
@@ -288,6 +292,7 @@ def test_should_render_feature_exclude_matching_preserves_base_drawing_decision(
             selected_features_set=["tRNA"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -370,6 +375,7 @@ def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches(
             selected_features_set=["D-loop"],
             feature_visibility_rules=rules,
             record_id="rec1",
+            instance=None,
         )
         is False
     )
@@ -387,6 +393,7 @@ def test_should_render_feature_feature_object_origin_spanning_record_location_ru
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id="rec1",
+            instance=None,
         )
         is True
     )

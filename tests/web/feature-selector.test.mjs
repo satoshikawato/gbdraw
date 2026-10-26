@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,9 +8,12 @@ const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-selector.js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-selector-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+await mkdir(join(tempDir, 'services'));
+await mkdir(join(tempDir, 'contracts'));
+await writeFile(join(tempDir, 'services', 'feature-selector.js'), await readFile(sourcePath, 'utf8'), 'utf8');
 await writeFile(
-  join(tempDir, 'feature-selector.js'),
-  await readFile(sourcePath, 'utf8'),
+  join(tempDir, 'contracts', 'schema.generated.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), 'utf8'),
   'utf8'
 );
 
@@ -19,7 +22,7 @@ const {
   collectFeatureQualifierNames,
   specificColorQualifierSuggestions,
   exactRegexValue
-} = await import(pathToFileURL(join(tempDir, 'feature-selector.js')));
+} = await import(pathToFileURL(join(tempDir, 'services', 'feature-selector.js')));
 
 assert.equal(exactRegexValue('YP_009725295.1'), '^YP_009725295\\.1$');
 

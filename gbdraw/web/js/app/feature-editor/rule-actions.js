@@ -867,12 +867,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // (`moveLegendRecords`). So a Save, an Undo or a Redo
   // finds the whole change. When it is shown, the display draws its figure
   // again if its Legend cannot show the rules (app-setup.js, the rule table
-  // its Result was last shown with).
-  /** @param {DrawingState} drawing Not shown. */
-  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
+  // its Result was last shown with). Delete settings takes back the same way,
+  // inside its step, the rows that name a feature instance of a record whose
+  // drawing is turned off (R2): no Result draws what they color.
+  /**
+   * @param {DrawingState} drawing Not shown, or the drawing of turned-off records.
+   * @param {(rules: SpecificColorRule[]) => SpecificColorRule[]} [keep] The rows that stay.
+   */
+  const takeBackRuleRows = (drawing, keep = (rules) => withoutImportedRows(rules, 't_color')) => {
     /** @type {SpecificColorRule[]} */
     const before = [...drawing.manualSpecificRules];
-    const kept = withoutImportedRows(before, 't_color');
+    const kept = keep(before);
     const entries = drawing.legendEntries.value;
     const listedKeys = [...entries, ...drawing.deletedLegendEntries.value, ...drawing.dormantLegendEntries.value].map(legendEntryKey);
     const { gone, rekeyed } = listedRuleRowRemoval(before, kept, listedKeys);
@@ -886,7 +891,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
     }
     return queueRuleWrite(async () => {
-      takeBackFileRulesOfHiddenDrawing(drawing);
+      takeBackRuleRows(drawing);
       return true;
     });
   };
@@ -1159,6 +1164,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     ruleWritePending: () => writesOnLine.value > 0,
     importSpecificRules,
     removeImportedSpecificRules,
+    takeBackRuleRows,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,

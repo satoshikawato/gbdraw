@@ -705,7 +705,8 @@ const drawnFills = (page, ids) => page.evaluate((ids) => {
 }, ids);
 
 // Fills the feature `id` with "This feature only" from its popup and returns
-// the specific color rules and the feature instance the catalog gives it.
+// the specific color rules and the feature instance Python composes from the
+// feature's catalog identity.
 const fillThisFeatureOnly = async (page, id, color) => {
   await evaluateWithRetainedPromise(page, async ({ id, color }) => {
     const app = window.__GBDRAW_APP__;
@@ -720,7 +721,8 @@ const fillThisFeatureOnly = async (page, id, color) => {
     return {
       error: app.errorLog,
       rules: app.manualSpecificRules.map((rule) => rule.val),
-      instance: app.extractedFeatures.find((item) => item.svg_id === id).selector.instance
+      instance: (({ biological_feature_id: featureId, record_key: recordKey }) => `${featureId}@${recordKey}`)(
+        app.extractedFeatures.find((item) => item.svg_id === id))
     };
   }, id);
 };
@@ -751,6 +753,33 @@ test('a This feature only fill on a duplicated record colors that copy only', as
   await generateAndWaitForResult(page);
   await settle(page);
   expect(await drawnFills(page, copies)).toEqual([live, twin]);
+
+  // A rule of an older Session names the stable hash both copies share.
+  // Resetting This feature only on the first copy takes back its own row and
+  // leaves the second copy colored by the shared row.
+  const stable = await page.evaluate((id) => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => item.svg_id === id).selector.hash, copies[0]);
+  await evaluateWithRetainedPromise(page, async (stable) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'hash', val: stable, color: '#2255aa', cap: 'Shared' });
+    await app.addSpecificRule();
+  }, stable);
+  await settle(page);
+  expect(await drawnFills(page, copies)).toEqual([live, '#2255aa']);
+  await evaluateWithRetainedPromise(page, async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    await app.resetClickedFeatureFillColor();
+    if (app.resetColorDialog.show) await app.handleResetColorChoice('this');
+    app.clickedFeature = null;
+  }, copies[0]);
+  await settle(page);
+  const [reset, kept] = await drawnFills(page, copies);
+  expect(reset).not.toBe('#2255aa');
+  expect(kept).toBe('#2255aa');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await drawnFills(page, copies)).toEqual([reset, kept]);
 });
 
 // PD-OI-069 revision 2 (OV-1947): the same file in two Linear File cards draws

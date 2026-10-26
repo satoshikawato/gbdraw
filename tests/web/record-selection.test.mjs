@@ -10,6 +10,7 @@ import { createRecordSelection } from '../../gbdraw/web/js/app/record-selection.
 import { ANNOTATION_SETS_SLICE, removeAnnotations } from '../../gbdraw/web/js/services/drawing/annotation-sets.js';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
 import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
+import { namedFeatureInstance } from '../../gbdraw/web/js/services/feature-selector.js';
 import {
   RECORD_SETTINGS_DEFAULTS,
   linearCardHasSettings,
@@ -243,6 +244,36 @@ test('Delete settings removes the record edits, annotations, pairs, and rotation
   }], circular);
   assert.deepEqual(Object.values(circularEdits.view.featureOverrides).map((row) => row.recordKey), ['record-1', 'record-2:1']);
   assert.deepEqual(circular.recordDisplayDrafts, [{ sourceUid: 'circular', selector: '#1' }]);
+});
+
+// PD-OI-069 revision 2: a "This feature only" fill is a `hash` row naming a
+// feature instance of one record; it is an edit of that record. Turning the
+// record OFF keeps it; Delete settings counts and removes it.
+test('Delete settings counts and removes the color rows that name a feature instance of its records', () => {
+  const rows = [
+    { feat: 'CDS', qual: 'hash', val: '^f1@uid-a$', color: '#ff0000', cap: 'A' },
+    { feat: 'CDS', qual: 'hash', val: 'f2~1@uid-a:2', color: '#ff0000', cap: 'A2' },
+    { feat: 'CDS', qual: 'hash', val: '^f1@uid-b$', color: '#00ff00', cap: 'B' },
+    { feat: 'CDS', qual: 'hash', val: 'f1', color: '#0000ff', cap: 'Every copy' },
+    { feat: 'CDS', qual: 'hash', val: '^f1@uid-a.*$', color: '#0000ff', cap: 'A pattern' },
+    { feat: 'CDS', qual: 'product', val: 'uid-a', color: '#0000ff', cap: 'Product' }
+  ];
+  const colorRules = [...rows];
+  // As app-setup's recordEditData builds it, fresh for every call.
+  const data = () => ({
+    colorRuleEdits: colorRules.flatMap((rule) => {
+      const instance = namedFeatureInstance(rule);
+      return instance ? [{ recordKey: instance.recordKey, remove: () => colorRules.splice(colorRules.indexOf(rule), 1) }] : [];
+    }),
+    annotationBindingField: 'binding'
+  });
+  const owners = [{
+    key: 'uid-a', requestKeys: ['uid-a'], ownsExpansions: true, bindingKeys: [], displaySource: 'uid-a', displaySelector: null
+  }];
+  assert.deepEqual([...recordsWithEdits(owners, data())], ['uid-a']);
+  assert.equal(removeRecordEdits(owners, data()), 2);
+  assert.deepEqual(colorRules, rows.slice(2));
+  assert.equal(recordsWithEdits(owners, data()).size, 0);
 });
 
 test('a card holds settings when a field Delete settings resets differs from its default', () => {

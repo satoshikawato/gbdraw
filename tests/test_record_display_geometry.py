@@ -113,7 +113,7 @@ def test_feature_fragment_coverage_terminals_and_unknown_strand(strand, reverse,
     from gbdraw.render.drawers.circular.features import FeaturePathGenerator as Circular
     from gbdraw.render.drawers.linear.features import FeaturePathGenerator as Linear
     feature = create_gene_object("gene", plan.records[0].features[0], {}, {"CDS": "gray"}, 10, {}, None,
-                                 glyph_kind="arrow", compute_label_text=False)
+                                 glyph_kind="arrow", compute_label_text=False, instance=None)
     feature.display_parts = fragments
     circular = Circular(100, 10, .1, .5, 0, "middle", False, head_length_ratio=1.0).generate_circular_gene_path(feature)
     linear = Linear(10, 100, 10, 1, feature.strand, False, 1).generate_linear_gene_path(feature)

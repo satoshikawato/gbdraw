@@ -248,6 +248,7 @@ export const createFeatureEditor = ({
     ruleWritePending: ruleActions.ruleWritePending,
     importSpecificRules: ruleActions.importSpecificRules,
     removeImportedSpecificRules: ruleActions.removeImportedSpecificRules,
+    takeBackRuleRows: ruleActions.takeBackRuleRows,
     followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,

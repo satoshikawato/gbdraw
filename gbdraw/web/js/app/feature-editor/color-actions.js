@@ -11,7 +11,7 @@ import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
-import { exactRegexValue, isLiteralPattern } from '../../services/feature-selector.js';
+import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
   legendRowFeatureIds,
@@ -334,15 +334,18 @@ export const createFeatureColorActions = ({
     return renderedId && renderedId !== getFeatureColorRuleHash(feature) ? [renderedId, exactRegexValue(renderedId)] : [];
   };
   // A `hash` rule targets a feature exactly when its value is one literal
-  // text (as written or as an exact pattern) that Python matches to the
-  // feature: its feature instance, which Python composes (PD-OI-069 revision
-  // 2), or its stable hash, which older rules name it by and which the other
-  // copies of the feature share. It reads the prepared matches of the rule.
+  // text (as written or as an exact pattern) that names the feature: its
+  // feature instance, which Python composes and matches whole (PD-OI-069
+  // revision 2; the rule's prepared match says whether it is this feature's),
+  // or its stable hash, which older rules name it by and which the other
+  // copies of the feature share.
   /** @param {ColorRule} rule @param {ColorFeature} feature */
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
     if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
     const value = String(rule?.val || '').trim();
-    return (isLiteralPattern(value) && ruleMatchesFeature(feature, rule) === true) || renderedIdValues(feature).includes(value);
+    if (namedFeatureInstance(rule)) return ruleMatchesFeature(feature, rule) === true;
+    const hash = getFeatureColorRuleHash(feature);
+    return (Boolean(hash) && literalPatternText(value) === hash) || renderedIdValues(feature).includes(value);
   };
   // Whether a rule targets one of `features` exactly.
   /**

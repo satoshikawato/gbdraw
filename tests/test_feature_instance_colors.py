@@ -14,10 +14,22 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+import json
+
+import pytest
+
 from gbdraw import cli
+from gbdraw.api import RenderOutputRequest
+from gbdraw.api.options import ColorOptions, LinearDiagramOptions
+from gbdraw.api.request_render import build_request_diagram, plan_request
+from gbdraw.api.requests import InMemoryRecordSource, LinearDiagramRequest, RecordInput
 from gbdraw.features.colors import get_color, preprocess_color_tables
 from gbdraw.features.ids import compute_source_feature_hash, feature_instance, feature_instances
-from gbdraw.web_support.rule_matching import exact_value_pattern
+from gbdraw.features.overrides import FeatureOverride
+from gbdraw.exceptions import ValidationError
+from gbdraw.session import build_session_document
+from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pattern
 
 REPO = Path(__file__).resolve().parents[1]
 LAMBDA = REPO / "tests" / "test_inputs" / "NC_001416.gb"
@@ -67,6 +79,20 @@ def test_an_instance_rule_names_one_of_identical_features_of_a_record():
     assert _fills([record], exact_value_pattern(f"{feature_hash}@k")) == [[False, False]]
 
 
+def test_a_typed_instance_value_names_the_whole_instance_and_a_hash_keeps_its_search():
+    # Eleven identical features in two records: `~1` is not `~10`, and `@k-1` is not `@k-10`.
+    twin = SeqFeature(SimpleLocation(10, 70, strand=1), type="CDS")
+    record = SeqRecord(Seq("A" * 300), id="r", features=[SeqFeature(twin.location, type="CDS") for _ in range(11)])
+    records = [_keyed(record, "k-1"), _keyed(record, "k-10")]
+    feature_hash = compute_source_feature_hash(twin, record)
+    one = [[index == 1 for index in range(11)], [False] * 11]
+    assert _fills(records, f"{feature_hash}~1@k-1") == one
+    assert _fills(records, exact_value_pattern(f"{feature_hash}~1@k-1")) == one
+    assert _fills(records, f"{feature_hash}~1") == [[False] * 11, [False] * 11]
+    # A part of the stable hash still names every feature that shares it.
+    assert _fills(records, feature_hash[:5]) == [[True] * 11, [True] * 11]
+
+
 def test_the_instances_of_a_record_follow_its_record_key_and_feature_list():
     feature = SeqFeature(SimpleLocation(10, 70, strand=1), type="CDS")
     record = _keyed(SeqRecord(Seq("A" * 300), id="r", features=[feature]), "k1")
@@ -114,3 +140,80 @@ def test_the_cli_colors_the_feature_of_the_nth_record_input_by_its_record_key(tm
     assert filled == [f"{feature_hash}_record_2"] and legend_rows == 1
     filled, legend_rows = _filled_features(tmp_path, feature_hash)
     assert sorted(filled) == [f"{feature_hash}_record_1", f"{feature_hash}_record_2"] and legend_rows == 1
+
+
+def _source_twins_request(**options) -> LinearDiagramRequest:
+    record = SeqRecord(Seq("ATG" * 40), id="dup", annotations={"molecule_type": "DNA", "topology": "linear"})
+    record.features = [
+        SeqFeature(SimpleLocation(0, 120, 1), type="source", qualifiers={"note": [note]}) for note in ("a", "b")
+    ]
+    return LinearDiagramRequest(
+        records=(RecordInput(InMemoryRecordSource(record), record_key="one"),),
+        options=LinearDiagramOptions(**options),
+        output=RenderOutputRequest(output_prefix="twins", formats=("svg",)),
+    )
+
+
+def _web_render(tmp_path: Path, request: LinearDiagramRequest) -> tuple[list[dict], str]:
+    document = build_session_document(request).to_dict()
+    reply = render_embedded_canonical_web_request(
+        document["renderRequest"], resources=document["resources"],
+        workspace=tmp_path / str(len(list(tmp_path.iterdir()))),
+    )
+    assert reply["featureCatalog"] is not None
+    return reply["featureCatalog"]["items"][0]["biologicalFeatures"], reply["results"][0]["content"]
+
+
+def test_a_shown_source_feature_with_an_undrawn_identical_twin_colors_alike_live_and_after_generate(tmp_path: Path):
+    # Two identical source features; the first is shown by its own Feature
+    # visibility, the second stays undrawn. The catalog names them as the
+    # source feature catalog does, so the instance the live preview colors is
+    # the one Generate colors.
+    first, second = (
+        entry.biological_feature_id
+        for entry in plan_request(_source_twins_request()).provenance[0].source_feature_catalog
+    )
+    shown = {"feature_overrides": (FeatureOverride("one", first, feature_visibility="on"),)}
+    rows, _ = _web_render(tmp_path, _source_twins_request(**shown))
+    assert [(row["biologicalFeatureId"], row["recordKey"]) for row in rows] == [(first, "one"), (second, "one")]
+
+    value = exact_value_pattern(feature_instance(first, "one"))
+    rule = {"feat": "source", "qual": "hash", "val": value, "color": FILL, "cap": "mine"}
+    payloads = [
+        {"type": "source", "record": row["record_id"], "qualifiers": row["qualifiers"], "label": "",
+         "selector": {"hash": row["stableFeatureId"], "record_key": row["recordKey"],
+                      "feature_id": row["biologicalFeatureId"], "location": None, "record_location": None}}
+        for row in rows
+    ]
+    assert json.loads(evaluate_rules_json(json.dumps(payloads), json.dumps([rule])))["winners"] == [0, -1]
+
+    table = DataFrame([dict(feature_type="source", qualifier_key="hash", value=value, color=FILL, caption="mine")])
+    _, svg = _web_render(tmp_path, _source_twins_request(**shown, colors=ColorOptions(color_table=table)))
+    filled = re.findall(r'<path [^>]*data-gbdraw-source-feature-index="(\d+)"[^>]*fill="' + FILL, svg)
+    assert filled == ["0"]
+
+
+def test_a_fill_and_a_label_edit_of_one_feature_both_name_its_record_key():
+    # OV-1949 (open): a "This feature only" fill names the record key as a
+    # per-feature label edit does, so a presentation change that gives the
+    # record another key drops both. The Web sends no label row of a record key
+    # the request lacks (Python refuses one); the fill row stays and colors nothing.
+    record = SeqRecord(Seq("ATG" * 40), id="r", annotations={"molecule_type": "DNA", "topology": "linear"})
+    record.features = [SeqFeature(SimpleLocation(20, 80, 1), type="CDS")]
+
+    def request(record_key: str, **options) -> LinearDiagramRequest:
+        return LinearDiagramRequest(
+            records=(RecordInput(InMemoryRecordSource(copy.deepcopy(record)), record_key=record_key),),
+            options=LinearDiagramOptions(selected_features_set=("CDS",), **options),
+        )
+
+    feature_id = plan_request(request("k1")).provenance[0].source_feature_catalog[0].biological_feature_id
+    value = exact_value_pattern(feature_instance(feature_id, "k1"))
+    fill = ColorOptions(color_table=DataFrame([dict(feature_type="CDS", qualifier_key="hash", value=value, color=FILL,
+                                                    caption="mine")]))
+    label = (FeatureOverride("k1", feature_id, label_visibility="on", label_text="Mine"),)
+    svg = build_request_diagram(request("k1", colors=fill, feature_overrides=label)).drawing.tostring()
+    assert FILL in svg and "Mine" in svg
+    with pytest.raises(ValidationError, match="record key 'k1'"):
+        build_request_diagram(request("k2", colors=fill, feature_overrides=label))
+    assert FILL not in build_request_diagram(request("k2", colors=fill)).drawing.tostring()

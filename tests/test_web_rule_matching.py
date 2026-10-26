@@ -44,7 +44,7 @@ def test_browser_rule_targets_equal_native_color_and_label_rules(pattern):
         DataFrame([dict(feature_type='CDS', color='miss')]))
     label_rules = _build_label_override_rules(DataFrame([
         dict(record_id='*', feature_type='CDS', qualifier='product', value=pattern, label_text='hit')]))
-    color_expected = [0 if find_specific_color_rule(f, color_map, 'rec') else -1 for f in features]
+    color_expected = [0 if find_specific_color_rule(f, color_map, 'rec', instance=None) else -1 for f in features]
     label_expected = [0 if _resolve_label_override(f, f.type, f.qualifiers, text, label_rules, 'rec') else -1
                       for f, text in zip(features, CORPUS)]
     assert json.loads(evaluate_rules_json(json.dumps(payload), json.dumps(color)))['winners'] == color_expected
@@ -109,6 +109,7 @@ def test_should_render_feature_answers_the_shared_drawn_vectors(case):
         record_id=spec["recordId"],
         specific_color_rules=color_map,
         feature_override=override,
+        instance=None,
     ) is case["drawn"]
 
 

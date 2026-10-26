@@ -57,7 +57,8 @@ def get_color_with_info(
     color_map: Mapping[str, Any],
     default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> Tuple[str, Optional[str]]:
     """
     Determines the color for a given feature based on its type and qualifiers.
@@ -71,7 +72,7 @@ def get_color_with_info(
         Tuple of (color, caption). Caption is None if default color was used.
         If record_id is provided, hash matching includes the record id.
         ``instance`` is the feature's instance (``ids.feature_instances``),
-        which a `hash` rule may name.
+        which a `hash` rule may name; None for a feature without one.
     """
     matched_rule = find_specific_color_rule(feature, color_map, record_id=record_id, instance=instance)
     if matched_rule is not None:
@@ -86,7 +87,8 @@ def get_color(
     color_map: Mapping[str, Any],
     default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
-    instance: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.

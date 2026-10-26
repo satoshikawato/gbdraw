@@ -1463,7 +1463,10 @@ test('a feature instance color row names its record by the CLI record key and th
     session, recipe, buildRunInfo({ mode: 'linear', sourceRecipe: recipe }), 'feature instance color'
   );
   const svg = await readFile(cliSvg, 'utf8');
-  assert.equal((svg.match(/#ff0000/gi) || []).length > 0, true, 'the CLI draws the instance color');
+  // One copy only: the CLI fills the third feature of the second record and not its twin in the first.
+  const filled = new Set([...svg.matchAll(/<path [^>]*data-gbdraw-feature-id="([^"]+)"[^>]*fill="#ff0000"/gi)]
+    .map((match) => match[1]));
+  assert.deepEqual([...filled], [`${third}_record_2`], 'the CLI draws the instance color on one copy');
   const colors = session.renderRequest.diagramOptions.colors;
   await webRenderMatches(session, cliSvg, 'colors', { ...colors, colorTableFile: null });
 });
@@ -1490,11 +1493,35 @@ test('a table without feature instance rows is passed as it is', async () => {
   assert.notEqual(recipe.args.indexOf('-t'), -1);
 });
 
-test('a feature instance color row naming a record this render does not draw makes the Source recipe unavailable', async () => {
+// A row whose record this render does not draw (a removed card, a changed
+// record key) colors nothing in it, so the recipe's table leaves it out.
+test('a feature instance color row naming a record this render does not draw stays out of the recipe table', async () => {
   const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
-  const recipe = await buildSourceRecipe(twoCardColorSession([['CDS', 'hash', `^${first}@linear-seq-gone$`, '#ff0000', 'Gone']]));
+  const gone = ['CDS', 'hash', `^${first}@linear-seq-gone$`, '#ff0000', 'Gone'];
+  let recipe = await buildSourceRecipe(twoCardColorSession([gone, ['CDS', 'product', 'kept', '#00ff00', 'Kept']]));
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  assert.equal(table?.data, 'CDS\tproduct\tkept\t#00ff00\tKept\n');
+  // With no row left, the recipe names no table.
+  recipe = await buildSourceRecipe(twoCardColorSession([gone]));
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.equal(recipe.args.includes('-t'), false, JSON.stringify(recipe.args));
+});
+
+// Python matches an instance row whole, written bare or as an exact pattern.
+test('a bare feature instance color row names its record by the CLI record key too', async () => {
+  const [, second] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const recipe = await buildSourceRecipe(twoCardColorSession([['CDS', 'hash', `${second}@LINEAR-seq-b`, '#ff0000', 'B']]));
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  assert.equal(table?.data, `CDS\thash\t^${second}@record-2$\t#ff0000\tB\n`);
+});
+
+test('a hash pattern that names feature instances by the Web record keys makes the Source recipe unavailable', async () => {
+  const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const recipe = await buildSourceRecipe(twoCardColorSession([['CDS', 'hash', `^${first}@linear-seq-.$`, '#ff0000', 'Both']]));
   assert.equal(recipe.available, false);
-  assert.match(recipe.unavailableReason, /feature color rule names a record/);
+  assert.match(recipe.unavailableReason, /names feature instances by a pattern/);
 });
 
 test('feature edit rows that the table cannot read back make the Source recipe unavailable', async () => {
