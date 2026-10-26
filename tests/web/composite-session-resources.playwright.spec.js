@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
 const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerChoicePrompt, answerLoadRepairs, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 // Three single-record GenBank files: Circular binds them as one composite File.
 const seed = 'tests/fixtures/sessions/composite-circular-three-files.v44-schema8.gbdraw-session.json.gz';
@@ -154,7 +155,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
         .toEqual(seedIds.map(id => resourceIdentity(seedSession.resources[id])));
       if (journey === 'minimal') {
         const control = await save(page, testInfo, 'before-generate');
-        expect(control.session.results).toHaveLength(1);
+        expect(shownSavedDrawing(control.session).results).toHaveLength(1);
       }
       await generate(page);
       if (journey === 'grid-batch-grid') {
@@ -170,8 +171,8 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated', { again: journey === 'minimal' });
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
-      const composite = session.webFiles.bindings.c_gb;
+      expect([session.version, shownSavedDrawing(session).webFiles.bindings.schema, shownSavedDrawing(session).renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
+      const composite = shownSavedDrawing(session).webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);
       expect(composite.components.map(part => resourceIdentity(session.resources[part.resourceId])))
@@ -189,11 +190,11 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       for (const component of original.components) {
         expect(Object.values(resources)).toContainEqual({ size: component.size, sha256: component.sha256 });
       }
-      expect(session.renderRequest).toEqual(generated.request);
+      expect(shownSavedDrawing(session).renderRequest).toEqual(generated.request);
       await fs.writeFile(testInfo.outputPath('resource-inspection.json'), JSON.stringify({
         original: { ...original, results: original.results.map(hash) },
         generated: { ...generated, results: generated.results.map(hash) },
-        resources, webFiles: session.webFiles
+        resources, webFiles: shownSavedDrawing(session).webFiles
       }, null, 2));
       expect(external).toEqual([]);
       await page.context().close();
@@ -206,9 +207,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(loaded.request).toEqual(generated.request);
       expect(loaded.resultNames).toEqual(generated.resultNames);
       expect(loaded.source.isArray).toBe(false);
-      expect(loaded.results).toEqual(session.results.map(result => result.content));
+      expect(loaded.results).toEqual(shownSavedDrawing(session).results.map(result => result.content));
       const resaved = await save(restored.page, testInfo, 'restored');
-      expect(resaved.session.webFiles.bindings.c_gb).toEqual(composite);
+      expect(shownSavedDrawing(resaved.session).webFiles.bindings.c_gb).toEqual(composite);
       await generate(restored.page);
       const regenerated = await snapshot(restored.page);
       expect(regenerated.records).toEqual(generated.records);
@@ -221,9 +222,9 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
           buffer: Buffer.from(seedSession.resources[seedIds[0]].data, 'base64')
         });
         const replaced = await save(restored.page, testInfo, 'replaced', { again: true });
-        expect(replaced.session.webFiles.bindings.c_gb.kind).toBeUndefined();
-        expect(replaced.session.webFiles.bindings.c_gb.components).toBeUndefined();
-        expect(resourceIdentity(replaced.session.resources[replaced.session.webFiles.bindings.c_gb.resourceId]))
+        expect(shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.kind).toBeUndefined();
+        expect(shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.components).toBeUndefined();
+        expect(resourceIdentity(replaced.session.resources[shownSavedDrawing(replaced.session).webFiles.bindings.c_gb.resourceId]))
           .toEqual(resourceIdentity(seedSession.resources[seedIds[0]]));
         const mobile = await load(browser, saved, contexts, { width: 390, height: 844 });
         const mobileState = await snapshot(mobile.page);
@@ -262,18 +263,18 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
-    const expected = session.webFiles.bindings.c_gb;
-    const actual = replayed.webFiles.bindings.c_gb;
+    expect([replayed.version, shownSavedDrawing(replayed).webFiles.bindings.schema, shownSavedDrawing(replayed).renderRequest.schema]).toEqual([CURRENT_SESSION_VERSION, 2, CURRENT_REQUEST_SCHEMA]);
+    const expected = shownSavedDrawing(session).webFiles.bindings.c_gb;
+    const actual = shownSavedDrawing(replayed).webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(recordCount);
     expect(actual.components.map(({ resourceId, ...metadata }) => metadata))
       .toEqual(expected.components.map(({ resourceId, ...metadata }) => metadata));
     expect(actual.components.map(part => resourceIdentity(replayed.resources[part.resourceId])))
       .toEqual(expected.components.map(part => resourceIdentity(session.resources[part.resourceId])));
     expect({ ...actual, components: [] }).toEqual({ ...expected, components: [] });
-    expect(replayed.results[0].content).toBe(await fs.readFile(`${prefix}.svg`, 'utf8'));
-    expect(replayed.results[0].name).toBe(path.basename(prefix));
-    expect(replayed.editorState.featureCatalog.items[0].resultName).toBe(path.basename(prefix));
+    expect(shownSavedDrawing(replayed).results[0].content).toBe(await fs.readFile(`${prefix}.svg`, 'utf8'));
+    expect(shownSavedDrawing(replayed).results[0].name).toBe(path.basename(prefix));
+    expect(shownSavedDrawing(replayed).editorState.featureCatalog.items[0].resultName).toBe(path.basename(prefix));
     const restored = await load(browser, sidecar, contexts);
     const loaded = await snapshot(restored.page);
     expect(loaded.source).toEqual(original.source);
@@ -283,9 +284,9 @@ test('Session CLI sidecar preserves the composite draft for fresh Web Load and G
     const admittedContents = await restored.page.evaluate(async results => {
       const { sanitizeSvgContent } = await import('./js/services/svg-sanitization.js');
       return results.map(result => sanitizeSvgContent(result.content, window.DOMPurify));
-    }, replayed.results);
+    }, shownSavedDrawing(replayed).results);
     expect(loaded.results.map(hash)).toEqual(admittedContents.map(hash));
-    expect(loaded.request).toEqual(replayed.renderRequest);
+    expect(loaded.request).toEqual(shownSavedDrawing(replayed).renderRequest);
     await generate(restored.page);
     expect((await snapshot(restored.page)).records).toEqual(original.records);
     expect(restored.external).toEqual([]);

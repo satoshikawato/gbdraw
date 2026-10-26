@@ -4,6 +4,7 @@ const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise } = require('./help
 const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const snapshot = async (page) => {
   // Opening an imported Editor hydrates transient DOM label bindings and its
@@ -510,7 +511,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   // the established last-Result availability semantics.
   const replacement = await page.evaluate(async () => {
     const session = await (await fetch('/gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')).json();
-    const resource = session.resources[session.renderRequest.records[0].source.resourceId];
+    const resource = session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId];
     return atob(resource.data);
   });
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
@@ -983,12 +984,11 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   // The Python writer has no Web draft: Load takes the request's projection, and
-  // the mode's slice (Session 46) holds only the comparison plan this test sets.
+  // the shown drawing's config holds the comparison plan this test sets.
   const session = Buffer.from(await page.evaluate(async (source) => {
     const document = JSON.parse(source);
-    document.modes = { [document.renderRequest.mode]: {
-      config: { linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } }
-    } };
+    const shown = document.drawings.find((drawing) => drawing.id === document.ui.activeDrawingId);
+    shown.config = { ...shown.config, linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } };
     return JSON.stringify(document);
   }, typedSession));
   const importSession = async (bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
@@ -1071,7 +1071,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   const saved = readFileSync(await download.path());
   const document = JSON.parse(gunzipSync(saved).toString('utf8'));
   expect(document.version).toBe(CURRENT_SESSION_VERSION);
-  expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
+  expect(shownSavedDrawing(document).editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
   expect(await verifyGroups()).toEqual(before);
   const rollback = await evaluateWithRetainedPromise(page, async (bytes) => {

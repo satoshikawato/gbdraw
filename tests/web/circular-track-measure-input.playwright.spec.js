@@ -4,6 +4,7 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   openApp, reveal, answerSessionTitle, getDiagramWorkerActivity, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings, answerLoadRepairs,
   settleLive
@@ -372,7 +373,7 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   expect(await snapshot(page)).toEqual(edited);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  const row = saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
+  const row = savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content');
   expect(row.width).toEqual({ value: '1.', unit: 'px' });
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
@@ -383,14 +384,14 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     await expect(unitControl(fresh, 'gc_content', 'Width')).toHaveValue('px');
     const restored = await snapshot(fresh);
     await testInfo.attach('fresh-result.svg', { body: await fresh.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content), contentType: 'image/svg+xml' });
-    await testInfo.attach('original-result.svg', { body: saved.results[0].content, contentType: 'image/svg+xml' });
+    await testInfo.attach('original-result.svg', { body: shownSavedDrawing(saved).results[0].content, contentType: 'image/svg+xml' });
     expect(restored.config.adv.circular_track_slots).toEqual(edited.config.adv.circular_track_slots);
     expect(restored.request).toEqual(before.request);
     expect(restored.resultHashes).toEqual(before.resultHashes);
     await expectCounts(fresh, 0);
     const rejected = structuredClone(saved);
-    const gcIndex = rejected.modes.circular.config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
-    rejected.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    const gcIndex = savedDrawing(rejected, 'circular').config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
+    savedDrawing(rejected, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
     // A Width Load cannot use is listed before Load changes anything (OV-758);
     // after Cancel the notice of the earlier Load stays and the state is unchanged.
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
@@ -594,7 +595,7 @@ for (const continuation of ['disabled', 'inactive biological']) {
       expect(before.resultHashes).toEqual([]);
     }
     const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
-    expect(saved.document.modes.circular.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
+    expect(savedDrawing(saved.document, 'circular').config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
       expect(restored.config.adv.circular_track_slots).toEqual(circular.config.adv.circular_track_slots);
@@ -660,7 +661,7 @@ test('CLI-origin Session continues through numeric edits, Generate, Save and fre
   expect(cli.modes).toBeUndefined();
   await load(page, path);
   const before = await snapshot(page);
-  expect(before.request).toEqual(cli.renderRequest);
+  expect(before.request).toEqual(shownSavedDrawing(cli).renderRequest);
   expect(before.resultHashes).toHaveLength(1);
   const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
   await reveal(panel);
@@ -771,7 +772,7 @@ test('OV-1656: a gap typed as 1px is stored, saved, and shown as 1 after a fresh
   await download.saveAs(path);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionSavePending);
   const saved = JSON.parse(gunzipSync(readFileSync(path)));
-  expect(saved.modes.circular.config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
+  expect(savedDrawing(saved, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').inner_gap_px).toBe('1');
   const fresh = await browser.newPage({ baseURL: testInfo.project.use.baseURL });
   try {
     await prepare(fresh);

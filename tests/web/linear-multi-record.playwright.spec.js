@@ -8,6 +8,7 @@ const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { createHash } = require('node:crypto');
 const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -231,7 +232,7 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
   const fixturePath = join(repoRoot, 'tests/fixtures/sessions', fixture);
   const bytes = readFileSync(fixturePath);
   const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
-  const subtitles = session.renderRequest.records.map(record => record.presentation?.subtitle || '');
+  const subtitles = shownSavedDrawing(session).renderRequest.records.map(record => record.presentation?.subtitle || '');
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadDefinitionSession(page, fixturePath);
@@ -249,7 +250,7 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
           attrs.map(attr => el.getAttribute(attr))]);
     };
     return [snapshot(saved), snapshot(window.__GBDRAW_APP__.currentResults()[0].content)];
-  }, session.results[0].content);
+  }, shownSavedDrawing(session).results[0].content);
   expect(previews[1]).toEqual(previews[0]);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
@@ -420,8 +421,8 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
     const savedPath = await (await download).path();
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.modes.linear.config.form.keep_definition_left_aligned).toBe(locked);
-    expect(saved.renderRequest).toEqual(requestBefore);
+    expect(savedDrawing(saved, 'linear').config.form.keep_definition_left_aligned).toBe(locked);
+    expect(shownSavedDrawing(saved).renderRequest).toEqual(requestBefore);
     await page.reload();
     await waitForAppShell(page);
     await loadDefinitionSession(page, savedPath);
@@ -442,7 +443,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     // so it goes last.
     for (const malformed of ['false', 0, {}, null]) {
       const invalid = structuredClone(saved);
-      invalid.modes.linear.config.form.keep_definition_left_aligned = malformed;
+      savedDrawing(invalid, 'linear').config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
       const pending = evaluateWithRetainedPromise(page, async raw => {
@@ -1539,13 +1540,13 @@ test('Automatic Linear renders every record from one GenBank source and survives
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
-  expect(session.webFiles.bindings.linearSeqs).toHaveLength(2);
-  expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
-  expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
-  expect(session.renderRequest.records.map((record) => record.selector)).toEqual([{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }]);
-  expect(session.modes.linear.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
+  expect(shownSavedDrawing(session).webFiles.bindings.linearSeqs).toHaveLength(2);
+  expect(shownSavedDrawing(session).webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
+  expect(shownSavedDrawing(session).renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
+  expect(shownSavedDrawing(session).renderRequest.records.map((record) => record.selector)).toEqual([{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }]);
+  expect(savedDrawing(session, 'linear').config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
   expect(new Set(
-    session.renderRequest.records.map((record) => record.source.resourceId)
+    shownSavedDrawing(session).renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);
 
   await page.addInitScript(() => {
@@ -2176,7 +2177,7 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
     );
     const text = await response.text();
     const session = JSON.parse(text);
-    const sourceVisibleEntries = session.losatCache.entries.filter(
+    const sourceVisibleEntries = shownSavedDrawing(session).losatCache.entries.filter(
       (entry) => entry.display !== false
     );
     const file = new File(

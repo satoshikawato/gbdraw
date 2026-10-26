@@ -5,6 +5,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_REQUEST_SCHEMA, generateAndWaitForResult, evaluateWithRetainedPromise, expectNoLoadRepairDialog, openLinearFileCards
 } = require('./helpers/app-lifecycle.cjs');
@@ -518,7 +519,7 @@ test('a v31 schema-1 Session takes a live edit and Save before Generate', async 
   const download = page.waitForEvent('download', { timeout: 120_000 });
   await page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click();
   const saved = JSON.parse(gunzipSync(readFileSync(await (await download).path())).toString('utf8'));
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
 });
 
 test('loading a JSON file that is not a Session reports a recognized diagnostic', async ({ page }) => {
