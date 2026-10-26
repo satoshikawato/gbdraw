@@ -122,7 +122,8 @@ import {
   setComparisonEdgeFile
 } from './linear-comparisons.js';
 import { foldLoadedLinearSources, groupLinearSourceRecords, restoreFoldedLinearSources } from './linear-sources.js';
-import { buildSessionResources as assembleSessionResources } from './session-resources.js';
+import { buildSessionDrawingResources } from './session-resources.js';
+import { savedDrawingsOf } from './session-drawings.js';
 import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
@@ -270,6 +271,7 @@ import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
+  SESSION_DRAWINGS_LAYOUT,
   SESSION_VERSION,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -282,7 +284,8 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
-  drawingViewOf, sessionLegendEditsByRowKey, upgradeRowKeyedModeScopedSession
+  drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey, sliceDiffersFromDefault,
+  upgradeRowKeyedModeScopedSession
 } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from './drawing/group-names.js';
@@ -349,7 +352,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 // The Session document's types are generated from gbdraw/session_contract.py:
 // `GbdrawSession` is the writer's type (the current version only); a reader
 // takes unvalidated data (R14).
-/** @import { GbdrawSession, SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice, SessionOtherModeResult } from '../contracts/session.generated.js' */
+/** @import { SessionChecked, SessionChecked27, SessionChecked31, SessionChecked39, SessionEnvelope, SessionInput, SessionLosatExecution, SessionModeSlice } from '../contracts/session.generated.js' */
 /** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
@@ -827,8 +830,16 @@ const normalizeStringArray = (source, at, losses = null) => {
 
 /** @type {string | null} */
 let lastSessionFilename = null;
-/** @type {Record<string, any> | null} */
-let preservedCliOptions = null;
+/**
+ * The CLI options a Session's request was written with, kept for Save: Load
+ * reads them as provenance (`SESSION_TOP_LEVEL_AUTHORITY.cliOptions`).
+ * @typedef {Readonly<Record<string, unknown>>} SessionCliOptions
+ */
+/** @param {unknown} value @returns {SessionCliOptions | null} */
+const cliOptionsOf = (value) => (isPlainObject(value) ? cloneJsonData(value) : null);
+// Each drawing's CLI options, by drawing ID (B2-D9: they go with the request's drawing).
+/** @type {Map<DrawingId, SessionCliOptions>} */
+const preservedCliOptions = new Map();
 // The variable keeps its earlier type: `applyResultsData` passes the request's
 // `diagramOptions.selectedFeaturesSet` on as feature types without a check,
 // which the true type refuses (stage 1d).
@@ -1877,12 +1888,6 @@ const readLegacyConfigPayload = (data, drawing, mode) => {
   return { value: mode === 'linear' ? withBoundLinearRecordsOff(migrated, drawing.linearSeqs) : migrated, repairs };
 };
 
-// Whether any drawing holds a biological input (its input fields or record
-// rows): what a Session holds when it asks whether any input is loaded.
-const anyDrawingHasBiologicalInputs = () => state.drawingList().some((drawing) => (
-  hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs })
-));
-
 /**
  * A Linear drawing turns OFF only records it has: a card uid it does not have
  * turned nothing off and is dropped, unlisted.
@@ -2406,6 +2411,8 @@ const drawingProjectionInputOf = (view, {
  *   when its draft holds none (the editor-draft loop reads a draft's).
  * @property {RequestFeatureEdits | null} requestFeatureEdits Its request's per-feature edits, which a
  *   draft without them takes (`featureEditsOverProjection`, OV-220); null: the drawing holds no request.
+ * @property {SessionCliOptions | null} cliOptions The CLI options the drawing's request was written with
+ *   (B2-D9); null: none.
  */
 /**
  * @param {Session49} document
@@ -2423,7 +2430,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     const files = projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (view), sessionResourceTable).files;
     return {
       files, comparisonClassification: null, inputType: drawingInputTypeOf(storedInputType, null),
-      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null
+      restoredConfig: null, requestOverrides: null, requestFeatureEdits: null, cliOptions: cliOptionsOf(view.cliOptions)
     };
   }
   const comparisonClassification = classifyImportedComparisonIntent(/** @type {Parameters<typeof classifyImportedComparisonIntent>[0]} */ ({
@@ -2452,7 +2459,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     files: projection.files, comparisonClassification, inputType,
     restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
-    requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState }
+    requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
+    cliOptions: cliOptionsOf(view.cliOptions)
   };
 };
 
@@ -5142,7 +5150,7 @@ const commitDrawingCopy = (drawing) => {
 // (`commitLoadedDrawings`), and its rollback puts the previous ones back.
 const resetSessionProject = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
-  preservedCliOptions = null;
+  preservedCliOptions.clear();
   setCommittedCanonicalSession(null);
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
@@ -5557,11 +5565,15 @@ const applySessionFeatureRecoveryPlan = (drawing, plan) => {
  *   activeSessionResourceTable: any
  * }} SessionArtifactView
  */
-/** @returns {SessionArtifactView} */
-const displayedArtifactView = () => Object.freeze({
+/**
+ * The shown drawing's artifact (its Result and committed request are in `state`).
+ * @param {DrawingState} drawing The shown drawing.
+ * @returns {SessionArtifactView}
+ */
+const displayedArtifactView = (drawing) => Object.freeze({
   ...Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
   originalLegendOrder: state.originalLegendOrder.value,
-  mode: state.generatedMode.value === 'linear' ? 'linear' : 'circular',
+  mode: drawing.mode,
   committedCanonicalSession,
   activeSessionResourceTable
 });
@@ -5578,19 +5590,18 @@ const stashedArtifactView = (slot) => Object.freeze({
 });
 /** @param {SessionArtifactView | null} view */
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
-// Save writes every Result (Owner, 2026-10-07). The top level holds the shown
-// mode's set when it has a Result, otherwise the other mode's set;
-// `otherModeResult` holds the remaining set only when it has a Result. A
-// Session holds one set per mode: the other set is the kept artifact of a
-// drawing of the other mode.
-/** @param {readonly Readonly<ArtifactSlot>[]} keptSlots The kept artifacts of the drawings not shown. */
-const chooseSessionArtifacts = (keptSlots) => {
-  const displayed = displayedArtifactView();
-  const other = keptSlots.map(stashedArtifactView).find((view) => view.mode !== displayed.mode) ?? null;
-  if (!other || !artifactHasResult(other)) return { artifact: displayed, otherArtifact: null };
-  if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
-  return { artifact: displayed, otherArtifact: other };
-};
+// Save writes every Result (Owner, 2026-10-07): each drawing's artifact, by
+// drawing ID, the shown drawing's from `state` and any other's from its kept
+// slot; a drawing without either has none.
+/**
+ * @param {DrawingState} shown
+ * @param {readonly Readonly<ArtifactSlot>[]} keptSlots The kept artifacts of the drawings not shown.
+ * @returns {ReadonlyMap<DrawingId, SessionArtifactView>}
+ */
+const sessionArtifactsByDrawing = (shown, keptSlots) => new Map([
+  ...keptSlots.filter((slot) => slot.drawingId !== shown.id).map((slot) => /** @type {const} */ ([slot.drawingId, stashedArtifactView(slot)])),
+  [shown.id, displayedArtifactView(shown)]
+]);
 // Live edits are committed into a Result's content at once, so its content is
 // what Save writes, also for the displayed Result.
 /** @param {SessionArtifactView} view */
@@ -5671,44 +5682,6 @@ const artifactUiState = (view) => ({
   appliedPaletteName: view.appliedPaletteName,
   appliedPaletteColors: cloneColors(view.appliedPaletteColors)
 });
-// The other mode's set: its Results, admitted catalog and committed request
-// are written as one unit beside the top-level set (PD-OI-045).
-/** @param {SessionArtifactView} view */
-const prepareOtherModeArtifact = (view) => {
-  const results = serializeArtifactResults(view);
-  const editorState = buildArtifactEditorState(view);
-  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, view.mode);
-  if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
-  const committed = isAdoptedCanonicalSession(view.committedCanonicalSession)
-    ? view.committedCanonicalSession
-    : cloneCanonicalSession(view.committedCanonicalSession);
-  return { view, results, editorState, committed };
-};
-/**
- * @param {ReturnType<typeof prepareOtherModeArtifact>} other
- * @param {CanonicalRenderRequest} renderRequest Its resource references name the Session's table.
- * @returns {SessionOtherModeResult}
- */
-const buildOtherModeResult = (other, renderRequest) => {
-  const cliInvocation = artifactCliInvocation(other.view);
-  return {
-    renderRequest,
-    results: other.results,
-    editorState: {
-      featureCatalog: other.editorState.featureCatalog,
-      alignmentResetReceipt: other.editorState.alignmentResetReceipt ?? null,
-      legend: {
-        originalOrder: other.editorState.legend.originalOrder,
-        originalColors: other.editorState.legend.originalColors
-      },
-      originalSvgStroke: other.editorState.originalSvgStroke
-    },
-    ui: artifactUiState(other.view),
-    runMetadata: artifactRunMetadata(other.view),
-    ...(cliInvocation ? { cliInvocation } : {})
-  };
-};
-
 // `askChoice`: the root's choice dialog; Save asks with it before a repeated or a large download.
 /**
  * @typedef {{
@@ -5717,12 +5690,23 @@ const buildOtherModeResult = (other, renderRequest) => {
  *   linearRecordCatalog?: any,
  *   omittedAnnotationRecordKeys?: string[],
  *   recordDisplayRows?: any,
- *   modes: Record<'circular' | 'linear', SessionModeSlice & { config: ActiveWebConfig }>,
- *   savedUi: Record<string, any>,
- *   isCurrent: () => boolean,
- *   artifact: SessionArtifactView,
- *   otherArtifact: SessionArtifactView | null
+ *   written: readonly SavedSessionDrawing[],
+ *   activeDrawingId: DrawingId,
+ *   projectUi: Record<string, unknown>,
+ *   isCurrent: () => boolean
  * }} ExportSessionDocumentOptions
+ */
+/**
+ * One drawing Save writes: the drawing, its slice as Save writes it, its
+ * artifact (null: no Result and no committed request), and its view keys
+ * (`ui` of its one-drawing view: its input type, the generated layout of its
+ * Results, the shown one's viewport).
+ * @typedef {{
+ *   drawing: DrawingState,
+ *   slice: SessionModeSlice & { config: ActiveWebConfig },
+ *   artifact: SessionArtifactView | null,
+ *   ui: Record<string, unknown>
+ * }} SavedSessionDrawing
  */
 
 /**
@@ -5733,6 +5717,23 @@ const buildOtherModeResult = (other, renderRequest) => {
  */
 
 /**
+ * The raw LOSAT entries Save writes into one Session 49 drawing (DESIGN §1,
+ * K-3): an entry that names its pair's Linear rows goes to each drawing that
+ * holds both rows, so an entry two drawings use is written in both; an entry
+ * that names no row (a Circular conservation pair) cannot tell its drawing
+ * and goes to every drawing. Load merges every drawing's entries into the one
+ * cache.
+ * @param {DrawingState} drawing
+ * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
+ * @returns {Record<string, unknown>[]}
+ */
+const losatEntriesOfDrawing = (drawing, entries) => {
+  const rows = new Set(drawing.linearSeqs.map((sequence) => String(sequence.uid)));
+  return entries.filter(({ queryUid, subjectUid }) => (typeof queryUid !== 'string' || typeof subjectUid !== 'string'
+    || (rows.has(queryUid) && rows.has(subjectUid))));
+};
+
+/**
  * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  * @returns {Promise<SessionSaveResult>}
@@ -5741,8 +5742,8 @@ const exportSessionDocument = async (
   titleOverride = null,
   {
     askChoice = async () => 'cancel',
-    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, modes, savedUi,
-    isCurrent, artifact, otherArtifact
+    drawing, linearRecordCatalog = null, omittedAnnotationRecordKeys = [], recordDisplayRows = null, written,
+    activeDrawingId, projectUi, isCurrent
   }
 ) => {
   const resolvedTitle =
@@ -5767,87 +5768,92 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-start');
-  const logicalResults = serializeArtifactResults(artifact);
-  const editorState = buildArtifactEditorState(artifact);
-  editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, logicalResults, artifact.mode);
-  const other = otherArtifact ? prepareOtherModeArtifact(otherArtifact) : null;
-
   const {
     entries: losatEntries,
     validatedManifest,
     manifestValidated
   } = serializeLosatCache();
-  const exportableCliInvocation = artifactCliInvocation(artifact);
-  // Each slice's unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
-  for (const mode of SLICE_MODES) {
-    const config = modes[mode].config;
+  // Each drawing's Results, catalog and committed request; its slice's
+  // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
+  const parts = [];
+  for (const { drawing: saved, slice, artifact, ui } of written) {
+    const config = slice.config;
     Object.assign(config.adv, normalizedArrowGeometryState(config.adv));
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
-      mode,
+      mode: saved.mode,
       configOverrides: config.unmanagedConfigOverrides,
       source: 'draft'
     });
-  }
-  let committed = isAdoptedCanonicalSession(artifact.committedCanonicalSession)
-    ? artifact.committedCanonicalSession
-    : cloneCanonicalSession(artifact.committedCanonicalSession);
-  const settingsOnly = !artifact.committedCanonicalSession && logicalResults.length === 0
-    && !anyDrawingHasBiologicalInputs();
-  if (committed) {
-    try {
-      const adoptedCommitted = isAdoptedCanonicalSession(committed);
-      const projected = projectCanonicalSessionRequest({
-        ...committed,
-        sessionResourceTable: adoptedCommitted ? artifact.activeSessionResourceTable : null,
-        deferResourceContent: adoptedCommitted,
-        adoptCanonicalPayloads: adoptedCommitted
-      });
-      validateCurrentWriterActiveConfig({
-        mode: projected.mode,
-        storedConfig: modes[projected.mode === 'linear' ? 'linear' : 'circular'].config
-      });
-    } catch (error) {
-      console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
-      throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'config', reason: 'FIELDS' }));
-    }
-  }
-  if (!committed && !settingsOnly) {
-    const comparisonPlanSnapshot = state.mode.value === 'linear'
-      ? resolveLinearComparisonPlan({
-          plan: drawing.linearComparisonPlan,
-          sequences: normalizeLinearSeqList(drawing.linearSeqs),
-          recordsOff: drawing.recordsOff,
-          layout: drawing.linearRecordLayoutEnabled?.value
-            ? drawing.linearRecordRows
-            : [],
-          losatProgram: drawing.losatProgram?.value,
-          blastpMode: drawing.losat?.blastp?.mode
-        })
-      : null;
-    const activeFiles = await serializeActiveRenderFiles(
-      state.mode.value,
-      state,
-      drawing,
-      {
-        comparisonPlan: comparisonPlanSnapshot,
-        linearRecordCatalog
+    const results = artifact ? serializeArtifactResults(artifact) : [];
+    const editorState = artifact ? buildArtifactEditorState(artifact) : null;
+    if (editorState) editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, saved.mode);
+    let committed = !artifact?.committedCanonicalSession ? null
+      : isAdoptedCanonicalSession(artifact.committedCanonicalSession)
+        ? artifact.committedCanonicalSession
+        : cloneCanonicalSession(artifact.committedCanonicalSession);
+    if (committed && artifact) {
+      try {
+        const adoptedCommitted = isAdoptedCanonicalSession(committed);
+        // Save writes the drawing's bindings itself; the request is checked without the ones it holds.
+        const { bindings: _heldBindings, ...requestWebFiles } = committed.webFiles ?? {};
+        projectCanonicalSessionRequest({
+          ...committed,
+          webFiles: requestWebFiles,
+          sessionResourceTable: adoptedCommitted ? artifact.activeSessionResourceTable : null,
+          deferResourceContent: adoptedCommitted,
+          adoptCanonicalPayloads: adoptedCommitted
+        });
+        validateCurrentWriterActiveConfig({ mode: saved.mode, storedConfig: config });
+      } catch (error) {
+        console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
+        throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'config', reason: 'FIELDS' }));
       }
-    );
-    committed = buildCanonicalRenderRequest({
-      state,
-      drawing,
-      filesData: activeFiles,
-      recordDisplayRows: recordDisplayRows?.value || [],
-      comparisonPlanSnapshot,
-      omittedAnnotationRecordKeys,
-      omitUnsourcedDepth: true
-    });
+    }
+    if (!committed && results.length) throw sessionSaveRequiresGenerate({ diagramMode: saved.mode });
+    // The shown drawing's inputs without a Generate are saved as its draft
+    // request; another drawing's inputs are saved as its bindings.
+    if (!committed && saved.id === drawing.id
+      && hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })) {
+      const comparisonPlanSnapshot = saved.mode === 'linear'
+        ? resolveLinearComparisonPlan({
+            plan: saved.linearComparisonPlan,
+            sequences: normalizeLinearSeqList(saved.linearSeqs),
+            recordsOff: saved.recordsOff,
+            layout: saved.linearRecordLayoutEnabled?.value
+              ? saved.linearRecordRows
+              : [],
+            losatProgram: saved.losatProgram?.value,
+            blastpMode: saved.losat?.blastp?.mode
+          })
+        : null;
+      const activeFiles = await serializeActiveRenderFiles(
+        saved.mode,
+        state,
+        saved,
+        {
+          comparisonPlan: comparisonPlanSnapshot,
+          linearRecordCatalog
+        }
+      );
+      committed = buildCanonicalRenderRequest({
+        state,
+        drawing: saved,
+        filesData: activeFiles,
+        recordDisplayRows: recordDisplayRows?.value || [],
+        comparisonPlanSnapshot,
+        omittedAnnotationRecordKeys,
+        omitUnsourcedDepth: true
+      });
+    }
+    parts.push({ saved, slice, artifact, ui, results, editorState, committed });
   }
-  const canonical = await assembleSessionResources(state, committed, state.drawingList(), other?.committed ?? null);
-  await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
-  if (other) {
-    await validateSimilarityAlignmentResetReceipt(other.editorState.alignmentResetReceipt, {
-      renderRequest: canonical.otherRenderRequest, resources: canonical.resources
+  const built = await buildSessionDrawingResources(
+    state, parts.map(({ saved, committed }) => ({ drawing: saved, committed }))
+  );
+  for (const [index, { editorState }] of parts.entries()) {
+    if (!editorState) continue;
+    await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, {
+      renderRequest: built.written[index].renderRequest, resources: built.resources
     });
   }
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
@@ -5862,49 +5868,63 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
-  /** @type {GbdrawSession} */
-  const sessionData = /** @satisfies {GbdrawSession} */ ({
-    format: 'gbdraw-session',
-    version: SESSION_VERSION,
-    createdAt: new Date().toISOString(),
-    title: resolvedTitle || undefined,
-    ui: savedUi,
-    renderRequest: canonical.renderRequest,
-    resources: canonical.resources,
-    webFiles: canonical.webFiles,
-    results: logicalResults,
-    ...(!settingsOnly ? { runMetadata: artifactRunMetadata(artifact) } : {}),
-    ...(other ? { otherModeResult: buildOtherModeResult(other, canonical.otherRenderRequest) } : {}),
-    editorState,
-    // The group names are the Linear drawing's (`modes.linear.config.webEdits`).
-    orthogroupState: {
-      selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-      selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || '')
-    },
-    modes,
-    ...(preservedCliOptions ? { cliOptions: cloneJsonData(preservedCliOptions) } : {}),
-    losatCache: {
-      entries: losatEntries
-    },
-    losatDerivedCache: {
-      entries: []
-    },
-    proteinIdentityManifest: toRaw(state.proteinIdentityManifest.value)
-      === adoptedProteinIdentityManifest
-      ? toRaw(state.proteinIdentityManifest.value)
-      : cloneJsonData(state.proteinIdentityManifest.value),
-    cliInvocation: exportableCliInvocation
-  });
-
+  // The project's original-name hints, from every drawing's request metadata.
+  const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
+  const createdAt = new Date().toISOString();
+  const proteinIdentityManifest = toRaw(state.proteinIdentityManifest.value) === adoptedProteinIdentityManifest
+    ? toRaw(state.proteinIdentityManifest.value)
+    : cloneJsonData(state.proteinIdentityManifest.value);
   const legacyArtifacts = buildSessionLegacyArtifacts({
     legacyRawCandidates,
     legacyDerivedEvidence
   });
-  if (legacyArtifacts) {
-    sessionData.legacyArtifacts = legacyArtifacts;
-  }
+  // Each drawing as its one-drawing view; `sessionDocumentOfViews` places its
+  // fields in the Session 49 layout (DESIGN §1, §4.4).
+  const sessionData = sessionDocumentOfViews(parts.map(({ saved, slice, artifact, ui, results, editorState, committed }, index) => {
+    const cliInvocation = artifact ? artifactCliInvocation(artifact) : undefined;
+    const shown = saved.id === drawing.id;
+    return {
+      id: saved.id,
+      name: /** @type {{ name: string }} */ (state.drawingTabs.value.find((tab) => tab.id === saved.id)).name,
+      view: {
+        format: 'gbdraw-session',
+        version: SESSION_DRAWINGS_LAYOUT.version,
+        createdAt,
+        title: resolvedTitle || undefined,
+        ...(legacyArtifacts ? { legacyArtifacts } : {}),
+        ui: { ...projectUi, ...ui },
+        renderRequest: built.written[index].renderRequest,
+        resources: built.resources,
+        webFiles: {
+          ...built.written[index].webFiles,
+          ...(Object.keys(resourceOriginalNames).length ? { resourceOriginalNames } : {})
+        },
+        results,
+        ...(committed && artifact ? { runMetadata: artifactRunMetadata(artifact) } : {}),
+        ...(editorState ? { editorState } : {}),
+        // The shown drawing's selected Similarity group: transient UI that a
+        // drawing switch clears (`resetModeTransientUi`), so no other drawing
+        // holds one. The group names are each drawing's draft's (`config.webEdits`).
+        ...(shown ? {
+          orthogroupState: {
+            selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
+            selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || '')
+          }
+        } : {}),
+        modes: { [saved.mode]: slice },
+        ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
+        losatCache: { entries: losatEntriesOfDrawing(saved, losatEntries) },
+        losatDerivedCache: { entries: [] },
+        proteinIdentityManifest,
+        ...(cliInvocation ? { cliInvocation } : {})
+      }
+    };
+  }), activeDrawingId);
   try {
-    validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
+    // Each drawing's one-drawing view, through Save's checks.
+    sessionData.drawings.forEach((entry) => validateSessionAuthorityInventory(
+      /** @type {SessionEnvelope} */ (/** @type {unknown} */ (drawingViewOf(sessionData, entry))), sessionData.version
+    ));
   } catch (error) {
     console.error('Session writer validation failed.', normalizeUserFacingError(error));
     throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'schema' }));
@@ -6989,7 +7009,14 @@ const importSessionDocument = async (e, options = {}) => {
     // projection may name a thread count), the rich popup, CLI provenance.
     if (isPlainObject(appUi.losatExecution)) applyLosatExecutionData(appUi.losatExecution);
     state.richFeaturePopup.value = readRichFeaturePopup(appUi.richFeaturePopup).value;
-    preservedCliOptions = isPlainObject(sessionCliOptions) ? cloneJsonData(sessionCliOptions) : null;
+    // The committed set's CLI options and each other Session 49 drawing's own.
+    preservedCliOptions.clear();
+    /** @type {[DrawingId, SessionCliOptions | null][]} */
+    const cliOptionsByDrawing = [
+      [committedSetDrawingId, cliOptionsOf(sessionCliOptions)],
+      ...[...storedDrawingInputs].map(([id, inputs]) => /** @type {[DrawingId, SessionCliOptions | null]} */ ([id, inputs.cliOptions]))
+    ];
+    for (const [id, options] of cliOptionsByDrawing) if (options) preservedCliOptions.set(id, options);
     const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
       state.linearRecordTranslations.value = cloneJsonData(
@@ -7381,47 +7408,61 @@ export const exportSession = (titleOverride = null, options) => {
     savedDrawings.forEach((saved) => validateCurrentWriterActiveConfig({
       mode: saved.mode, storedConfig: buildConfigData(saved)
     }));
-    /** @type {Partial<Record<DiagramMode, ReturnType<typeof buildModeSliceData>>>} */
-    const slices = {};
-    savedDrawings.forEach((saved) => {
-      slices[saved.mode] = buildModeSliceData(saved, saved.mode, {
-        selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
-      });
-    });
-    const modes = /** @type {Record<DiagramMode, ReturnType<typeof buildModeSliceData>>} */ (slices);
-    SLICE_MODES.forEach((mode) => validateModeSliceFields(modes[mode]));
-    const readArtifacts = () => chooseSessionArtifacts(options?.readKeptArtifacts?.() ?? []);
-    let { artifact, otherArtifact } = readArtifacts();
-    if (!artifact.committedCanonicalSession
-      && anyDrawingHasBiologicalInputs()) {
+    /** @type {Map<DrawingId, ReturnType<typeof buildModeSliceData>>} */
+    const slices = new Map(savedDrawings.map((saved) => [saved.id, buildModeSliceData(saved, saved.mode, {
+      selectedFeatureRecordIdx: saved.id === drawing.id ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+    })]));
+    slices.forEach((slice) => validateModeSliceFields(slice));
+    const readArtifacts = () => sessionArtifactsByDrawing(drawing, options?.readKeptArtifacts?.() ?? []);
+    let artifacts = readArtifacts();
+    // A drawing is written when it has an input file, a setting or an edit
+    // that differs from its mode's default, or a Result (R16-8, DESIGN §4.4).
+    /** @param {DrawingState} saved */
+    const isUsed = (saved) => {
+      const artifact = artifacts.get(saved.id) ?? null;
+      return artifactHasResult(artifact) || Boolean(artifact?.committedCanonicalSession)
+        || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })
+        || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
+    };
+    const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
+    const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));
+    if (!shownArtifact.committedCanonicalSession
+      && hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs })) {
       assertDrawingInputs(drawing);
     }
-    const artifactUi = artifactUiState(artifact);
-    const savedUi = {
-      mode: state.mode.value,
-      ...previewViewportToPersist(),
-      selectedResultIndex: artifactUi.selectedResultIndex,
-      generatedLegendPosition: artifactUi.generatedLegendPosition,
-      generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,
-      generatedCircularPlotTitlePosition: artifactUi.generatedCircularPlotTitlePosition,
+    // App-level settings shared by every drawing.
+    const projectUi = {
       featurePanelTab: state.featurePanelTab.value,
-      ...sessionInputTypes(state.drawingList()),
       downloadDpi: state.downloadDpi.value,
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-      appliedPaletteName: artifactUi.appliedPaletteName,
-      appliedPaletteColors: artifactUi.appliedPaletteColors,
-      // App-level settings shared by both drawings.
       losatExecution: buildLosatExecutionData(),
       richFeaturePopup: Boolean(state.richFeaturePopup.value)
     };
-    const prepared = await options.beforeExport?.({ draftRequest: !artifact.committedCanonicalSession });
+    const prepared = await options.beforeExport?.({ draftRequest: !shownArtifact.committedCanonicalSession });
     if (!isCurrent()) return { status: 'canceled' };
     // `beforeExport` may show edits on the displayed Result, which commits
     // its content: the Results are read as they are now.
-    ({ artifact, otherArtifact } = readArtifacts());
+    artifacts = readArtifacts();
+    /** @type {SavedSessionDrawing[]} */
+    const written = writtenDrawings.map((saved) => {
+      const artifact = artifacts.get(saved.id) ?? null;
+      return {
+        drawing: saved,
+        slice: /** @type {SavedSessionDrawing['slice']} */ (slices.get(saved.id)),
+        artifact,
+        // The view keys of the drawing's one-drawing view: its mode and input
+        // type, the generated layout of its Results, the shown one's viewport.
+        ui: {
+          mode: saved.mode,
+          [SESSION_DRAWINGS_LAYOUT.inputTypeFields[saved.mode]]: saved.inputType.value,
+          ...(saved.id === drawing.id ? previewViewportToPersist() : {}),
+          ...(artifact ? artifactUiState(artifact) : {})
+        }
+      };
+    });
     const result = await exportSessionDocument(title, {
-      ...options, ...prepared, drawing, modes, savedUi, isCurrent, artifact, otherArtifact
+      ...options, ...prepared, drawing, written, activeDrawingId, projectUi, isCurrent
     });
     if (result?.status === 'saved') options.onSaved?.(result);
     return result;

@@ -13,6 +13,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { savedDrawingView, savedModesView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 
@@ -158,6 +159,8 @@ const savedSession = async (title) => {
   assert.equal(result?.status, 'saved', JSON.stringify(result));
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
+// The saved Session 49 read as the 46-48-shaped view of every drawing (`modes.<mode>`), for reads.
+const savedView = async (title) => savedModesView(await savedSession(title));
 const leafPaths = (value, parts = []) => [
   ...(parts.length ? [parts] : []),
   ...(value && typeof value === 'object' ? Object.entries(value).flatMap(([key, child]) => (
@@ -254,7 +257,8 @@ const filledSession = async ({ overrides = false } = {}) => {
   for (const drawing of state.drawingList()) {
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...modeDrawing(state, 'linear').linearSeqs.map(({ uid }, index) => ({ uid, row: index + 1 })));
   }
-  return savedSession('g2-filled');
+  // The G2 file is the saved drawings as one 48-shaped file (every leaf has a place `modes.<mode>...`).
+  return { ...(await savedView('g2-filled')), version: 48 };
 };
 /**
  * Loads `base` with each mutation of each leaf under `roots` and saves it
@@ -266,7 +270,7 @@ const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
   const loadedBase = await importSession(input(base), { confirmLoadRepairs: async ({ items }) => assert.fail(items.join('\n')) });
   assert.ok(['ok', 'legacy'].includes(loadedBase.status), JSON.stringify(loadedBase.error));
   assert.ok(Object.isFrozen(loadedBase.repairs));
-  const baseSaved = await savedSession('g2-base');
+  const baseSaved = await savedView('g2-base');
   const leaves = roots.flatMap((root) => leafPaths(valueAt(base, root)).map((rest) => [...root, ...rest]))
     // A leaf the Save writes differently without a change is not this check's.
     .filter((parts) => JSON.stringify(valueAt(baseSaved, savedParts(parts))) === JSON.stringify(valueAt(base, parts)));
@@ -293,7 +297,7 @@ const mutationFindings = async (base, roots, savedParts = (parts) => parts) => {
       checked += 1;
       let savedFile;
       try {
-        savedFile = await savedSession(`g2-${checked}`);
+        savedFile = await savedView(`g2-${checked}`);
       } catch (error) {
         silent.push(`${kind} ${path}: ${JSON.stringify(mutated)} -> Save fails: ${error.message}`);
         continue;
@@ -1006,6 +1010,8 @@ test('no file the Web loaded before the dialog existed is refused (BA-OD100)', a
 // the defaults lack that names no shape is dropped. The apply reads them with
 // the readers the dialog lists them by.
 test('a configuration file with a shape or Linear visibility that is no text, or an unknown shape of a new feature type, loads with its rows (BA-OD100)', async () => {
+  // A Linear Session first: Save of a Session 49 needs the shown Linear drawing to hold a sequence.
+  await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
   const shownMode = state.mode.value;
   installShownDrawing('linear');
   try {
@@ -1340,7 +1346,7 @@ test('a cleared Feature overlap tolerance saves and reads as its default (OV-826
     assert.equal(state.mode.value, mode);
     modeDrawing(state, mode).adv.feature_overlap_tolerance_bp = '';
     const saved = await savedSession(`tolerance-${mode}`);
-    assert.equal(saved.modes[mode].config.adv.feature_overlap_tolerance_bp, 0, mode);
+    assert.equal(savedDrawingView(saved, mode).modes[mode].config.adv.feature_overlap_tolerance_bp, 0, mode);
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
     assert.equal(modeDrawing(state, mode).adv.feature_overlap_tolerance_bp, 0, mode);
@@ -1354,7 +1360,7 @@ test('a cleared Linear record gap saves and reads as its default, 24 px (OV-828)
     await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
     modeDrawing(state, 'linear').linearRecordGap.value = blank;
     const saved = await savedSession(`record-gap-${JSON.stringify(blank)}`);
-    assert.equal(saved.modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
+    assert.equal(savedDrawingView(saved, 'linear').modes.linear.config.linearRecordLayout.recordGap, 24, JSON.stringify(blank));
     const { items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
     assert.equal(modeDrawing(state, 'linear').linearRecordGap.value, 24, JSON.stringify(blank));
@@ -1499,12 +1505,12 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(DEPTH_ROUND_TRI
     });
     stack.splice(0, stack.length, ...slots);
     const saved = await savedSession(`depth-${mode}`);
-    assert.equal(saved.modes[mode].config.adv.depth_tracks.length, 2);
+    assert.equal(savedDrawingView(saved, mode).modes[mode].config.adv.depth_tracks.length, 2);
     const { loaded, items } = await loadAnswering(saved);
     assert.deepEqual(items, []);
     assert.deepEqual(codes(loaded), []);
     const again = await savedSession(`depth-${mode}-again`);
-    assert.deepEqual(again.modes[mode].config.adv, saved.modes[mode].config.adv);
+    assert.deepEqual(savedDrawingView(again, mode).modes[mode].config.adv, savedDrawingView(saved, mode).modes[mode].config.adv);
   });
 }
 
@@ -1536,11 +1542,12 @@ for (const [mode, [name, stackKey, manualRow]] of Object.entries(UNSOURCED_DEPTH
       canonicalRenderArtifactOwner.restore(null);
       state.results.value = [];
       const saved = await savedSession(`unsourced-depth-${mode}`);
-      const tracks = saved.renderRequest.diagramOptions.tracks;
+      const view = savedDrawingView(saved, mode);
+      const tracks = view.renderRequest.diagramOptions.tracks;
       const requested = (mode === 'linear' ? tracks.linearTrackSlots : tracks.circularTrackSlots) ?? [];
       assert.deepEqual(requested.filter(({ renderer }) => renderer === 'depth'), []);
       assert.ok(requested.length > 0);
-      const stored = saved.modes[mode].config.adv;
+      const stored = view.modes[mode].config.adv;
       assert.equal(stored[`${stackKey}_enabled`], true);
       assert.deepEqual(stored[stackKey].filter(({ id }) => id === 'my_depth').map(({ enabled }) => enabled), [true]);
       const { items } = await loadAnswering(saved);
@@ -1815,10 +1822,12 @@ test('a failed protein result conversion fails the Load and keeps what was commi
 // loads nothing.
 test('the font question of a lossy Session comes after the repair dialog', async () => {
   await loadAnswering(fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'));
-  const session = await savedSession('fonts');
-  session.modes.circular.config.adv.font_family = null;
-  session.modes.linear.config.adv.font_family = "'Missing Probe Font'";
-  session.modes.linear.config.adv.linear_label_spacing = -5;
+  const saved = await savedSession('fonts');
+  const circularSaved = withSavedDrawingView(saved, 'circular', (view) => { view.modes.circular.config.adv.font_family = null; });
+  const session = withSavedDrawingView(circularSaved, 'linear', (view) => {
+    view.modes.linear.config.adv.font_family = "'Missing Probe Font'";
+    view.modes.linear.config.adv.linear_label_spacing = -5;
+  });
   /** @param {boolean} loadRepairs @param {boolean} loadFont */
   const answered = async (loadRepairs, loadFont) => {
     const asked = [];

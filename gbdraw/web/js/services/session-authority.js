@@ -1614,7 +1614,8 @@ const validateBandFields = (sessionData, version) => {
 };
 
 /**
- * Save's check of the Session it writes, and Load's (`load`), which leaves the
+ * Save's check of the Session it writes (of a Session 49, each drawing's
+ * one-drawing view), and Load's (`load`), which leaves the
  * values of the drawings' settings to the reader table: Load drops what it
  * cannot read with a dialog row before it applies the file (E-OD02).
  * @param {SessionEnvelope} sessionData Unvalidated Session data.
@@ -1665,13 +1666,15 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       }
     }
     // Load read the committed Result sets (`readSessionAuthorityParts`): it
-    // keeps Results whose catalog it dropped, which Save refuses.
-    if (!load) {
+    // keeps Results whose catalog it dropped, which Save refuses. A Session 49
+    // drawing without a request holds no Result set (`projectsWithoutRequest`).
+    if (!load && !(versionHoldsDrawings(Number(version)) && sessionData.renderRequest == null)) {
       validateCommittedResultSet(sessionData, version,
         storedSchemas[''] ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
     }
   }
-  if (!load) validateStoredResultSets(sessionData, version, storedSchemas);
+  // A Session 49 drawing's one-drawing view holds one set, its own (`drawingViewOf`).
+  if (!load && !versionHoldsDrawings(Number(version))) validateStoredResultSets(sessionData, version, storedSchemas);
   // Load read the run notices (`readSessionAuthorityParts`). A Session 31-39
   // reaches these checks with `results` unvalidated: they read it by index only.
   if (!load) validateRunNotices(sessionData);

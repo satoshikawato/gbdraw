@@ -9,7 +9,6 @@ import { adoptCurrentSessionResources } from '../../gbdraw/web/js/services/sessi
 import { projectSettingsOnlySession } from '../../gbdraw/web/js/services/session-request.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createInputFileStore } from '../../gbdraw/web/js/services/history-files.js';
-import { bindingDrawings } from './helpers/input-files.mjs';
 import { unreadFieldRepairs } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 
@@ -57,8 +56,8 @@ test('inactive biological inputs cannot be classified or saved as settings-only'
     { c_conservation_fastas: [null, {}] }, { c_conservation_sequence_sources: [{}] },
     { linearSeqs: [{ gb: {} }] }, { linearSeqs: [{ gff: {}, fasta: {} }] }
   ]) {
+    // Save writes them as a drawing's draft request or bindings, not as settings only (DESIGN §4.4).
     assert.equal(hasBiologicalSessionInputs(inventory), true);
-    await assert.rejects(buildSessionResources({}, null, bindingDrawings({ files: inventory, linearSeqs: inventory.linearSeqs ?? [] })), /canonical render request/);
   }
   const inactive = structuredClone(full);
   inactive.ui = { mode: 'linear' };

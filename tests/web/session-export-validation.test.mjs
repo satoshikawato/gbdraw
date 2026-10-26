@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 if (!globalThis.crypto?.subtle) {
   Object.defineProperty(globalThis, 'crypto', {
@@ -195,9 +196,10 @@ try {
   const session = JSON.parse(gunzipSync(
     Buffer.from(await saved.blob.arrayBuffer())
   ).toString('utf8'));
-  assert.equal(session.modes.circular.config.adv.circular_track_slots[0].width, '16px');
+  const circular = savedDrawingView(session, 'circular');
+  assert.equal(circular.modes.circular.config.adv.circular_track_slots[0].width, '16px');
   assert.equal(
-    session.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
+    circular.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
     null
   );
 
@@ -248,9 +250,9 @@ try {
     JSON.stringify = originalJsonStringify;
   }
   assert.equal(rawTextCloneAttempts, 0, 'fresh raw LOSAT text must not be deep-cloned');
-  const replacementSession = JSON.parse(gunzipSync(
+  const replacementSession = savedDrawingView(JSON.parse(gunzipSync(
     Buffer.from(await regenerated.blob.arrayBuffer())
-  ).toString('utf8'));
+  ).toString('utf8')), 'circular');
   assert.deepEqual(replacementSession.losatCache.entries.map(entry => entry.key),
     ['current', 'valid-dormant', 'nucleotide']);
   // An entry without a Raw LOSAT row is cache only: hidden, without a name, as
@@ -284,11 +286,13 @@ try {
   }
   for (const rawEntries of [[], [entries.at(-1)]]) {
     state.losatCache.value = new Map(rawEntries);
-    state.proteinIdentityManifest.value = structuredClone(session.proteinIdentityManifest);
+    state.proteinIdentityManifest.value = structuredClone(circular.proteinIdentityManifest);
     const valid = await exportSession(`valid-empty-manifest-${rawEntries.length}`);
-    const document = JSON.parse(gunzipSync(Buffer.from(await valid.blob.arrayBuffer())).toString('utf8'));
+    const document = savedDrawingView(
+      JSON.parse(gunzipSync(Buffer.from(await valid.blob.arrayBuffer())).toString('utf8')), 'circular'
+    );
     assert.equal(valid.status, 'saved');
-    assert.deepEqual(document.proteinIdentityManifest, session.proteinIdentityManifest);
+    assert.deepEqual(document.proteinIdentityManifest, circular.proteinIdentityManifest);
     assert.equal(document.losatCache.entries.length, rawEntries.length);
     assert.doesNotThrow(() => validateSessionLosatArtifacts(document, document.version));
   }
@@ -305,9 +309,9 @@ try {
     { key: 'ring-c', filename: 'comparison-c-copy.tsv', display: true }
   ];
   const sharedRing = await exportSession('shared-ring-cache');
-  const sharedRingDocument = JSON.parse(
+  const sharedRingDocument = savedDrawingView(JSON.parse(
     gunzipSync(Buffer.from(await sharedRing.blob.arrayBuffer())).toString('utf8')
-  );
+  ), 'circular');
   assert.deepEqual(
     sharedRingDocument.losatCache.entries.map(({ key, filename, text }) => [key, filename, text]),
     [['ring-b', 'comparison-b.tsv', 'b\n'], ['ring-c', 'comparison-c.tsv', 'c\n']]
@@ -346,7 +350,7 @@ assert.ok(downloadedBlob instanceof Blob);
     assert.equal(saved.status, 'saved');
     const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
     assert.deepEqual(
-      session.modes.circular.config.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
+      savedDrawingView(session, 'circular').modes.circular.config.recordDisplayDrafts.map(({ selector, recordId, startCoordinate }) => [selector, recordId, startCoordinate]),
       [['#1', 'NC_004603.1', 1000], ['#2', 'NC_004605.1', 2000]],
       'OV-325: Save after Load writes each draft on its record'
     );

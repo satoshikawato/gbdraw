@@ -9,6 +9,8 @@ import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
+import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
+import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
@@ -77,31 +79,34 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   modeDrawing(state, 'linear').dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 
-  assert.equal(saved.version, SESSION_VERSION);
-  assert.equal(saved.renderRequest, null);
+  assert.equal(saved.version, SESSION_DRAWINGS_LAYOUT.version);
+  // Each drawing is read as its one-drawing view, found by its ID.
+  const views = Object.fromEntries(MODES.map((mode) => [mode, savedDrawingView(saved, mode)]));
+  assert.equal(views.circular.renderRequest ?? null, null);
   for (const retired of ['config', 'features']) assert.equal(Object.hasOwn(saved, retired), false, retired);
   for (const retired of ['layoutPreferences', 'canvasPadding', 'pendingPaletteName', 'pendingPaletteColors',
     'linearTypographyLinked']) {
     assert.equal(Object.hasOwn(saved.ui, retired), false, `ui.${retired}`);
   }
-  assert.equal(Object.hasOwn(saved.editorState, 'featureStrokes'), false);
-  assert.deepEqual(Object.keys(saved.modes).sort(), MODES);
-  assert.equal(saved.modes.circular.config.adv.label_font_size, 13);
-  assert.equal(saved.modes.circular.config.form.separate_strands, false);
-  assert.equal(saved.modes.circular.config.adv.gc_content_mode, 'percent');
-  assert.equal(saved.modes.linear.config.adv.label_font_size, 7);
-  assert.equal(saved.modes.linear.config.adv.depth_min, 3);
-  assert.equal(saved.modes.linear.config.form.plot_title, 'Linear only');
-  assert.equal(saved.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
+  assert.equal(Object.hasOwn(views.circular.editorState ?? {}, 'featureStrokes'), false);
+  assert.deepEqual(saved.drawings.map(({ id }) => id).sort(), MODES);
+  for (const mode of MODES) assert.deepEqual(Object.keys(views[mode].modes), [mode]);
+  assert.equal(views.circular.modes.circular.config.adv.label_font_size, 13);
+  assert.equal(views.circular.modes.circular.config.form.separate_strands, false);
+  assert.equal(views.circular.modes.circular.config.adv.gc_content_mode, 'percent');
+  assert.equal(views.linear.modes.linear.config.adv.label_font_size, 7);
+  assert.equal(views.linear.modes.linear.config.adv.depth_min, 3);
+  assert.equal(views.linear.modes.linear.config.form.plot_title, 'Linear only');
+  assert.equal(views.linear.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
   // The waiting row follows the shown rows of its slice, marked `dormant`.
-  assert.deepEqual(saved.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
-  assert.deepEqual(saved.modes.circular.editorState.legend.entries, []);
+  assert.deepEqual(views.linear.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
+  assert.deepEqual(views.circular.modes.circular.editorState.legend.entries, []);
   assert.equal(typeof saved.ui.losatExecution, 'object');
   assert.equal(typeof saved.ui.richFeaturePopup, 'boolean');
 
   // S7: a slice holds registry fields only.
   for (const mode of MODES) {
-    const unknown = sliceKeys(saved.modes[mode]).filter(([container, key]) => !MODE_SLICE_CONTAINERS[container]?.has(key));
+    const unknown = sliceKeys(views[mode].modes[mode]).filter(([container, key]) => !MODE_SLICE_CONTAINERS[container]?.has(key));
     assert.deepEqual(unknown, [], `modes.${mode} holds only registry fields`);
   }
 
@@ -124,9 +129,10 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   // A slice may omit any field, and the slice of a mode not shown may be
   // absent: Load fills them with that mode's defaults. (A settings-only
   // Session keeps the slice of its shown mode.)
-  const partial = structuredClone(saved);
-  delete partial.modes.circular.config.adv.label_font_size;
-  delete partial.modes.linear;
+  const partial = withSavedDrawingView(saved, 'circular', (view) => {
+    delete view.modes.circular.config.adv.label_font_size;
+  });
+  partial.drawings = partial.drawings.filter(({ id }) => id !== 'linear');
   resetDrawings();
   modeDrawing(state, 'linear').dormantLegendEntries.value = [];
   modeDrawing(state, 'circular').adv.label_font_size = 99;
@@ -162,7 +168,10 @@ test('a file that is not a gbdraw Session is refused as such before its contents
 // key no writer wrote with one.
 test('Session 45 is refused; a Session 46 drops its retired homes with no row and an unknown key with one (S3, S4)', async () => {
   resetDrawings();
-  const saved = await save('current');
+  // The one-drawing view of a saved drawing is the Session 46 shape this test loads.
+  const current = await save('current');
+  const viewOf = (id) => ({ ...structuredClone(savedDrawingView(current, id)), version: 46 });
+  const saved = viewOf('circular');
   const rows = async (session, label) => {
     const outcome = await load(session);
     assert.equal(outcome.status, 'ok', `${label}: ${JSON.stringify(outcome.error)}`);
@@ -180,8 +189,8 @@ test('Session 45 is refused; a Session 46 drops its retired homes with no row an
   assert.deepEqual(await rows(retiredLegend, 'editorState.legend.entries'), []);
   // A field no slice holds (a flat draft's `modeProfiles`) is dropped with a row (E-OD03).
   const unknownSliceField = structuredClone(saved);
-  unknownSliceField.modes.linear.config.modeProfiles = { activeMode: 'linear' };
-  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.linear.config.modeProfiles']);
+  unknownSliceField.modes.circular.config.modeProfiles = { activeMode: 'circular' };
+  assert.deepEqual(await rows(unknownSliceField, 'modeProfiles'), ['setting-replaced@modes.circular.config.modeProfiles']);
   const thirdMode = structuredClone(saved);
   thirdMode.modes.radial = {};
   assert.deepEqual(await rows(thirdMode, 'modes.radial'), ['session-field-dropped@modes.radial']);
@@ -194,16 +203,17 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
   resetDrawings();
   installShownDrawing('circular');
   const saved = await save('named colors');
-  const named = structuredClone(saved);
-  const legend = named.modes.circular.editorState.legend;
-  legend.colorOverrides = { CDS: 'SeaShell' };
-  legend.strokeOverrides = {
-    CDS: { strokeColor: 'navy', strokeWidth: 2, originalStrokeColor: 'gray', originalStrokeWidth: 1 }
-  };
-  named.modes.circular.editorState.featureStrokes = {
-    overrides: { feature_1: { strokeColor: 'rebeccapurple', strokeWidth: 3, originalStrokeColor: 'darkgrey' } }
-  };
-  named.editorState.originalSvgStroke = { color: 'gray', width: 1 };
+  const named = withSavedDrawingView(saved, 'circular', (view) => {
+    const legend = view.modes.circular.editorState.legend;
+    legend.colorOverrides = { CDS: 'SeaShell' };
+    legend.strokeOverrides = {
+      CDS: { strokeColor: 'navy', strokeWidth: 2, originalStrokeColor: 'gray', originalStrokeWidth: 1 }
+    };
+    view.modes.circular.editorState.featureStrokes = {
+      overrides: { feature_1: { strokeColor: 'rebeccapurple', strokeWidth: 3, originalStrokeColor: 'darkgrey' } }
+    };
+    view.editorState = { ...view.editorState, originalSvgStroke: { color: 'gray', width: 1 } };
+  });
   const loaded = await load(named);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   const drawing = modeDrawing(state, 'circular');
@@ -214,10 +224,11 @@ test('named Legend and stroke colors load as their CSS hex values (OV-160)', asy
     { strokeColor: '#663399', strokeWidth: 3, originalStrokeColor: '#a9a9a9' });
   assert.equal(state.originalSvgStroke.value.color, '#808080');
 
-  const unknown = structuredClone(saved);
-  unknown.modes.circular.editorState.legend.strokeOverrides = {
-    CDS: { strokeColor: 'notacolor', strokeWidth: 2, originalStrokeColor: 'notacolor' }
-  };
+  const unknown = withSavedDrawingView(saved, 'circular', (view) => {
+    view.modes.circular.editorState.legend.strokeOverrides = {
+      CDS: { strokeColor: 'notacolor', strokeWidth: 2, originalStrokeColor: 'notacolor' }
+    };
+  });
   const loadedUnknown = await load(unknown);
   assert.equal(loadedUnknown.status, 'ok', JSON.stringify(loadedUnknown.error));
   assert.deepEqual({ ...modeDrawing(state, 'circular').legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
@@ -238,9 +249,11 @@ test('a stored Legend entry color outside the Default colors domain is dropped a
 
   resetDrawings();
   installShownDrawing('circular');
-  const current = structuredClone(await save('legend colors'));
-  current.modes.circular.editorState.legend.entries = structuredClone(stored);
-  current.modes.circular.editorState.legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
+  const current = withSavedDrawingView(await save('legend colors'), 'circular', (view) => {
+    const legend = view.modes.circular.editorState.legend;
+    legend.entries = structuredClone(stored);
+    legend.deletedEntries = [{ caption: 'W', color: 'currentColor', featureIds: [] }];
+  });
   alerts.length = 0;
   loadDialogs.length = 0;
   const loaded = await load(current);
@@ -282,7 +295,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   Object.assign(drawing.legendColorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
   Object.assign(drawing.legendStrokeOverrides, { 'GC skew': { strokeColor: '#00aa00', strokeWidth: 2 } });
   const saved = await save('two rows of one name');
-  const legend = saved.modes.circular.editorState.legend;
+  const legend = savedDrawingView(saved, 'circular').modes.circular.editorState.legend;
   assert.deepEqual(legend.entries.map(({ caption, originalCaption }) => [caption, originalCaption]),
     [['GC', 'GC content'], ['GC', 'GC skew']]);
   assert.deepEqual(legend.colorOverrides, { 'GC content': '#ff0000', 'GC skew': '#0000ff' });
@@ -303,8 +316,7 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   assert.deepEqual({ ...loadedDrawing.legendStrokeOverrides['GC skew'] }, { strokeColor: '#00aa00', strokeWidth: 2 });
 
   // DESIGN 1a: GC skew renamed Z, then GC content renamed GC skew and colored red.
-  const older = structuredClone(saved);
-  older.version = 46;
+  const older = { ...structuredClone(savedDrawingView(saved, 'circular')), version: 46 };
   older.modes.circular.editorState.legend = {
     ...older.modes.circular.editorState.legend,
     entries: [
@@ -330,13 +342,14 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
   const first = await save('gallery round trip');
-  const rows = first.webFiles.bindings.linearSeqs;
+  const linearRows = (document) => savedDrawingView(document, 'linear').webFiles.bindings.linearSeqs;
+  const rows = linearRows(first);
   assert.deepEqual(rows.map((row) => row.depth), [null]);
-  assert.equal(first.modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
+  assert.equal(savedDrawingView(first, 'linear').modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
   assert.equal((await load(first)).status, 'ok');
   assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map((seq) => seq.depth), [null]);
   const second = await save('gallery round trip again');
-  assert.deepEqual(second.webFiles.bindings.linearSeqs.map((row) => row.depth), rows.map((row) => row.depth));
+  assert.deepEqual(linearRows(second).map((row) => row.depth), rows.map((row) => row.depth));
 });
 
 // A Session does not save the label fit report, so a loaded Result has no
@@ -365,8 +378,9 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, uid);
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   const saved = await save('records off');
-  assert.deepEqual(saved.modes.linear.config.recordsOff, [uid]);
-  assert.deepEqual(saved.modes.circular.config.recordsOff, ['#2']);
+  const configOf = (document, mode) => savedDrawingView(document, mode).modes[mode].config;
+  assert.deepEqual(configOf(saved, 'linear').recordsOff, [uid]);
+  assert.deepEqual(configOf(saved, 'circular').recordsOff, ['#2']);
 
   modeDrawing(state, 'linear').recordsOff.splice(0);
   modeDrawing(state, 'circular').recordsOff.splice(0);
@@ -375,34 +389,35 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], ['#2']);
   assert.deepEqual(modeDrawing(state, 'linear').drawnLinearSeqs.value, []);
 
-  const omitted = structuredClone(saved);
-  delete omitted.modes.linear.config.recordsOff;
-  delete omitted.modes.circular.config.recordsOff;
+  const omitted = withSavedDrawingView(withSavedDrawingView(saved, 'linear', (view) => {
+    delete view.modes.linear.config.recordsOff;
+  }), 'circular', (view) => {
+    delete view.modes.circular.config.recordsOff;
+  });
   assert.equal((await load(omitted)).status, 'ok');
   assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   // Review F6: with every record ON a Save writes no list, so the Session keeps its bytes.
   const allOn = await save('records on');
-  assert.equal('recordsOff' in allOn.modes.linear.config, false);
-  assert.equal('recordsOff' in allOn.modes.circular.config, false);
+  assert.equal('recordsOff' in configOf(allOn, 'linear'), false);
+  assert.equal('recordsOff' in configOf(allOn, 'circular'), false);
 
-  const loaded = async (mutate, label, { linear, circular, rows = [] }) => {
-    const session = structuredClone(saved);
-    mutate(session.modes);
+  const loaded = async (mode, edit, label, { linear, circular, rows = [] }) => {
+    const session = withSavedDrawingView(saved, mode, (view) => edit(view.modes[mode].config));
     const result = await load(session);
     assert.equal(result.status, 'ok', label);
     assert.deepEqual(result.repairs.map(({ code, path }) => `${code}@${path}`), rows, label);
     assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], linear, label);
     assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], circular, label);
   };
-  await loaded((modes) => { modes.linear.config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
+  await loaded('linear', (config) => { config.recordsOff = ['not-a-bound-card']; }, 'unbound Linear uid',
     { linear: [], circular: ['#2'] });
-  await loaded((modes) => { modes.linear.config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
-  await loaded((modes) => { modes.circular.config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
+  await loaded('linear', (config) => { config.recordsOff = [uid, uid]; }, 'duplicate key', { linear: [uid], circular: ['#2'] });
+  await loaded('circular', (config) => { config.recordsOff = ['contig_2']; }, 'Circular key is not #N',
     { linear: [uid], circular: [] });
   // Review F8: a list of the wrong shape is listed; every record is drawn.
-  await loaded((modes) => { modes.circular.config.recordsOff = '#2'; }, 'not a list',
-    { linear: [uid], circular: [], rows: ['setting-replaced@modes.circular.config.recordsOff'] });
+  await loaded('circular', (config) => { config.recordsOff = '#2'; }, 'not a list',
+    { linear: [uid], circular: [], rows: [`setting-replaced@drawings[${saved.drawings.findIndex(({ id }) => id === 'circular')}].config.recordsOff`] });
 });
 
 // Review #992 finding 1: a Session without a slice of a mode (a Gallery
@@ -489,7 +504,7 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   // Save writes them back as they were loaded.
   const saved = await save('file cards');
   for (const field of ['rules', 'qualifierPriorityRules', 'whitelist', 'blacklistText', 'fileImports']) {
-    assert.deepEqual(saved.modes.circular.config[field], stored[field], field);
+    assert.deepEqual(savedDrawingView(saved, 'circular').modes.circular.config[field], stored[field], field);
   }
   // Remove on each card, as the card's owner takes it back.
   assert.deepEqual(fileImports.withoutImportedRows(drawing.manualSpecificRules, 't_color').map((rule) => [rule.val, rule.color]),
@@ -991,4 +1006,85 @@ test('a Session 49 Load lists each drawing\'s stored override fault once, at its
   assert.deepEqual(loaded.repairs.filter((repair) => repair.path.includes('unmanagedConfigOverrides'))
     .map((repair) => `${repair.code} ${repair.path}`).sort(), faulted
     .map(({ entry, index }) => `setting-replaced drawings[${index}].config.unmanagedConfigOverrides["no_such.${entry.id}.key"]`).sort());
+});
+
+// Save writes Session 49 (B2d-3, DESIGN §4.4): every used drawing in tab order and the shown one.
+test('Save writes each drawing of a Session 49 as its own entry; a fresh Load restores the drawings, each Result and the shown one', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const kept = [first.opening, ...first.stashed].filter(Boolean);
+  const saved = await (async () => {
+    const result = await exportSession(null, { readKeptArtifacts: () => kept });
+    assert.equal(result.status, 'saved', result.error?.message);
+    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  })();
+  assert.equal(saved.version, 49);
+  for (const retired of ['modes', 'otherModeResult', 'renderRequest', 'results', 'config']) assert.equal(Object.hasOwn(saved, retired), false, retired);
+  assert.equal(Object.hasOwn(saved.ui, 'mode'), false);
+  assert.deepEqual(saved.drawings.map((entry) => entry.id).slice(0, 2), ['linear', 'linear-2']);
+  assert.equal(saved.ui.activeDrawingId, 'linear-2');
+  saved.drawings.slice(0, 2).forEach((entry) => assert.equal(entry.results.length, 1, entry.id));
+  resetDrawings();
+  assertLoadedDrawings(saved, await loadKeepingSlots(saved));
+});
+
+test('Save writes each Session 49 drawing\'s own CLI options, found by drawing ID, the drawing Load does not open too', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const optionsOf = (id) => ({ rawArgs: ['--gbk', `${id}.gb`, '-o', id] });
+  session.drawings.forEach((entry) => { entry.cliOptions = optionsOf(entry.id); });
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  const result = await exportSession('cli-options', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  for (const id of ['linear', 'linear-2']) {
+    assert.deepEqual(saved.drawings.find((entry) => entry.id === id).cliOptions, optionsOf(id), id);
+  }
+});
+
+test('Save checks each Session 49 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, first);
+  // Load reads such a type as GenBank with a row (OV-594); Save refuses to write one.
+  state.activeDrawing().inputType.value = 'embl';
+  await assert.rejects(
+    exportSession('input-type', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) }),
+    /INPUT_INVALID/
+  );
+});
+
+test('Save writes into each Session 49 drawing the LOSAT entries of its own Linear rows (K-3)', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const first = session.drawings.find((entry) => entry.id === 'linear');
+  const entry = first.losatCache.entries[0];
+  // linear-2 holds other rows: each uid of linear's renamed throughout it, with its own entry.
+  const renamed = (text) => text.replaceAll(entry.queryUid, `${entry.queryUid}-2`).replaceAll(entry.subjectUid, `${entry.subjectUid}-2`);
+  const index = session.drawings.findIndex((candidate) => candidate.id === 'linear-2');
+  session.drawings[index] = JSON.parse(renamed(JSON.stringify(session.drawings[index])));
+  session.drawings[index].losatCache.entries = [JSON.parse(renamed(JSON.stringify({ ...entry, key: `${entry.key}-second`, filename: 'second.tsv' })))];
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assertLoadedDrawings(session, loaded);
+  const result = await exportSession('losat-entries', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
+  assert.deepEqual(keysOf('linear'), [entry.key]);
+  assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
+});
+
+// OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
+// Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
+test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  resetDrawings();
+  const first = await loadKeepingSlots(session);
+  const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
 });

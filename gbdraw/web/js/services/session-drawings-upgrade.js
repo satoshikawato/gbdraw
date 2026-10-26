@@ -422,6 +422,33 @@ const keyedEntries = (value, key) => {
 };
 
 /**
+ * A registry row's value in `mode`'s slice when the slice holds it and it
+ * differs from `mode`'s packaged default; ABSENT otherwise.
+ * @param {Fields} modeSlice
+ * @param {DrawingMode} mode
+ * @param {RegistryRow} row
+ * @returns {unknown}
+ */
+const changedRowValue = (modeSlice, mode, row) => {
+  if (row.modes !== 'both' && row.modes !== mode) return ABSENT;
+  const value = rowValue(modeSlice, row);
+  if (value === ABSENT) return ABSENT;
+  const fallback = defaultValue(mode, row);
+  return fallback !== ABSENT && canonical(value) === canonical(fallback) ? ABSENT : value;
+};
+
+/**
+ * Whether a drawing's slice (as Save writes it, `buildModeSliceData`) holds a
+ * registry row that differs from its mode's packaged default: a changed
+ * setting or an edit, which makes the drawing one Save writes (DESIGN §4.4).
+ * @param {Fields} modeSlice
+ * @param {DrawingMode} mode
+ */
+export const sliceDiffersFromDefault = (modeSlice, mode) => /** @type {readonly RegistryRow[]} */ (
+  MODE_SCOPED_SETTINGS.rows
+).some((row) => changedRowValue(modeSlice, mode, row) !== ABSENT);
+
+/**
  * `_used_by_settings`, rule d: a registry row of `mode`'s slice that differs
  * from `mode`'s packaged default and, unless the row is `mode`'s alone, from
  * `other`'s value (entry by entry for a keyed row).
@@ -433,11 +460,8 @@ const usedBySettings = (slices, mode, other) => {
   const own = mapping(slices[mode]);
   const shown = mapping(slices[other]);
   return /** @type {readonly RegistryRow[]} */ (MODE_SCOPED_SETTINGS.rows).some((row) => {
-    if (row.modes !== 'both' && row.modes !== mode) return false;
-    const value = rowValue(own, row);
+    const value = changedRowValue(own, mode, row);
     if (value === ABSENT) return false;
-    const fallback = defaultValue(mode, row);
-    if (fallback !== ABSENT && canonical(value) === canonical(fallback)) return false;
     if (row.modes === mode) return true;
     const shownValue = rowValue(shown, row);
     if (shownValue === ABSENT) return true;
@@ -574,6 +598,23 @@ export const drawingViewOf = (project, drawing) => {
 };
 
 /**
+ * A Session 49 of one-drawing views (`_drawings_document`): each drawing from
+ * its view (`drawingOf`) with its ID and name, in tab order; the views share
+ * their project fields by construction (one source, or one Save), so the
+ * first gives them. Save writes it; the move of a Session 46-48 builds it.
+ * @param {readonly { id: string, name: string, view: Fields }[]} saved
+ * @param {string} activeDrawingId
+ * @returns {Session49}
+ */
+export const sessionDocumentOfViews = (saved, activeDrawingId) => {
+  const project = projectOf(saved[0].view);
+  project.version = LAYOUT.version;
+  project.ui = { ...mapping(project.ui), activeDrawingId };
+  project.drawings = saved.map(({ id, name, view }) => ({ ...drawingOf(view), id, name }));
+  return /** @type {Session49} */ (/** @type {unknown} */ (project));
+};
+
+/**
  * A Session 46-48's Session 49, what only the source says, and where the
  * file holds each drawing's saved Result set (`setSources`, by drawing ID;
  * a drawing without a saved set has none), so Load finds a set's reading and
@@ -616,15 +657,12 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   if (!committed.size) throw layoutInvalid();
   const order = migratedDrawingModes(source, committed);
   const views = order.map((mode) => committed.get(mode)?.view || undrawnView(source, mode));
-  // The views share their project fields by construction (one source), so
-  // the first gives them (`_drawings_document`'s `project_views`).
-  const project = projectOf(views[0]);
-  const migrated = views.map(drawingOf);
+  const project = sessionDocumentOfViews(views.map((view, index) => ({
+    id: order[index], name: LAYOUT.drawingNames[order[index]], view
+  })), order[0]);
+  const migrated = project.drawings;
   const referenced = new Set(migrated.flatMap((drawing) => [...drawingResourceIds(drawing)]));
   project.resources = only(mapping(project.resources), new Set(Object.keys(mapping(project.resources)).filter((id) => referenced.has(id))));
-  project.version = LAYOUT.version;
-  project.ui = { ...mapping(project.ui), activeDrawingId: migrated[0].id };
-  project.drawings = migrated;
   const hasDraft = Object.values(mapping(source.modes)).some((value) => isObject(mapping(value).config));
   /** @type {Map<string, ResultSetPath>} */
   const setSources = new Map();
