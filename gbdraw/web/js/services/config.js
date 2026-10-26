@@ -239,6 +239,7 @@ import {
   versionKeepsModeSlices,
   withStoredResultSet
 } from './session-authority.js';
+import { isUnsafeObjectKey } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -1940,7 +1941,7 @@ const overlayCanonicalObject = (stored, canonical) => {
   const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
   if (!isPlainObject(canonical)) return merged;
   Object.entries(canonical).forEach(([key, value]) => {
-    if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
+    if (isUnsafeObjectKey(key)) return;
     merged[key] = isPlainObject(value)
       ? overlayCanonicalObject(merged[key], value)
       : cloneJsonData(value);

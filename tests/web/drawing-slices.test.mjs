@@ -443,3 +443,15 @@ test('Reset Settings keeps the record layout, the OFF records, and the compariso
   assert.equal(after.linearComparisonPlan.edges[0].file, file, 'an edge keeps its file');
   settings.install(handle, before);
 });
+
+// 8. Install merges the layout preferences only into objects the member owns:
+// a saved `__proto__` key reads `Object.prototype` (OV-1915, CodeQL alert 61).
+test('installing the layout preferences never merges into Object.prototype', () => {
+  const { handle } = DRAWING_SLICES.settings.create();
+  try {
+    DRAWING_SLICES.settings.install(handle, { layoutPreferences: JSON.parse('{"__proto__": {"polluted": true}}') });
+    assert.equal(Reflect.get({}, 'polluted'), undefined);
+  } finally {
+    Reflect.deleteProperty(Object.prototype, 'polluted');
+  }
+});
