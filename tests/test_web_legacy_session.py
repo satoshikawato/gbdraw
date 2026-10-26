@@ -5,16 +5,26 @@ from __future__ import annotations
 import gzip
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from gbdraw.exceptions import GbdrawError
+
 from gbdraw.session import load_session_document, materialize_session, render_session
 from gbdraw import session_drawings
-from gbdraw.session_io import DRAWINGS_SESSION_MIN_VERSION, SessionDraftMigration
+from gbdraw.session_io import (
+    CLI_SESSION_ADMISSION,
+    DRAWINGS_SESSION_MIN_VERSION,
+    WEB_READ_SESSION_ADMISSION,
+    SessionAdmission,
+    SessionDraftMigration,
+)
 from gbdraw.session_migration import session_draft_migration_repairs
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 
 SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
+REPLY_FIELDS = {"document", "storedResults", "resultSetSources", "warnings"}
 
 
 def _text(name: str) -> str:
@@ -34,7 +44,7 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
 ) -> None:
     source = json.loads(_text(name))
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
-    assert set(payload) == {"document", "storedResults", "warnings"}
+    assert set(payload) == REPLY_FIELDS
     assert payload["warnings"] == []
     # A Session 40-44 keeps its Results with their catalog in the document.
     assert payload["storedResults"] == {}
@@ -43,6 +53,8 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
     first = document["drawings"][0]
     assert first["mode"] == mode
     assert document["ui"]["activeDrawingId"] == first["id"]
+    # The file's one Result set (top level) is the drawing's that holds its request.
+    assert payload["resultSetSources"] == {first["id"]: ""}
     assert first["results"] == source["results"]
     # The catalog is promoted to the current schema, one item per kept Result.
     assert len(first["editorState"]["featureCatalog"]["items"]) == len(source["results"])
@@ -69,10 +81,11 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
 def test_stored_results_session_49_cannot_hold_travel_beside_the_document(name: str, mode: str) -> None:
     source = json.loads(_text(name))
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
-    assert set(payload) == {"document", "storedResults", "warnings"}, payload.get("error")
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
     document = payload["document"]
     assert load_session_document(document).version == DRAWINGS_SESSION_MIN_VERSION
     (drawing_id, stored), = payload["storedResults"].items()
+    assert payload["resultSetSources"] == {drawing_id: ""}
     (drawing,) = (drawing for drawing in document["drawings"] if drawing["id"] == drawing_id)
     assert drawing["mode"] == mode
     assert drawing["results"] == []
@@ -103,8 +116,10 @@ def test_a_legacy_session_keeps_its_shown_mode_and_opens_its_stored_result(
     if not settings_used:
         monkeypatch.setattr(session_drawings, "_used_by_settings", lambda *_args: False)
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
-    assert set(payload) == {"document", "storedResults", "warnings"}, payload.get("error")
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
     document = payload["document"]
+    # The shown mode's drawing took no Result set of the file.
+    assert payload["resultSetSources"] == {result_mode: ""}
     assert [(drawing["id"], drawing["mode"]) for drawing in document["drawings"]] == [
         (result_mode, result_mode),
         (shown_mode, shown_mode),
@@ -114,6 +129,50 @@ def test_a_legacy_session_keeps_its_shown_mode_and_opens_its_stored_result(
     shown = document["drawings"][1]
     assert shown["renderRequest"] is None
     assert shown["results"] == []
+
+
+def _web_read_44_without_catalog() -> dict[str, Any]:
+    # Web Load's readers dropped the catalog of a Session 44's Result (vector a7b).
+    document = json.loads(_text("HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz"))
+    document["editorState"] = {"featureCatalog": None}
+    return document
+
+
+def _web_read_39_with_unresolved_protein_cache() -> dict[str, Any]:
+    # Web Load's LOSAT reader kept the first of two entries with one key (vector a13);
+    # Python's manifest does not resolve it under that key.
+    document = json.loads(_text("BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"))
+    entries = document["losatCache"]["entries"]
+    entries[0]["key"] = "DUP"
+    del entries[1]
+    return document
+
+
+def test_the_web_entry_does_not_check_again_what_the_web_readers_read() -> None:
+    # D-15-131: the CLI refuses these Sessions; the Web entry converts what the
+    # Web's readers kept, here and in the check of the Session 49.
+    for document, refusal in (
+        (_web_read_44_without_catalog(), "Results require editorState.featureCatalog"),
+        (_web_read_39_with_unresolved_protein_cache(), "does not resolve through the manifest"),
+    ):
+        with pytest.raises(GbdrawError, match=refusal):
+            load_session_document(document)
+        payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+        assert set(payload) == REPLY_FIELDS, payload.get("error")
+        assert payload["document"]["version"] == DRAWINGS_SESSION_MIN_VERSION
+        (drawing_id, stored), = payload["storedResults"].items()
+        assert payload["resultSetSources"] == {drawing_id: ""}
+        assert json.dumps(stored, sort_keys=True) == json.dumps(document["results"], sort_keys=True)
+
+
+def test_the_web_admission_skips_only_the_catalog_and_manifest_checks() -> None:
+    assert WEB_READ_SESSION_ADMISSION == SessionAdmission(feature_catalog=False, losat_manifest=False)
+    assert CLI_SESSION_ADMISSION == SessionAdmission(feature_catalog=True, losat_manifest=True)
+    # Another refusal of the CLI's admission stays a refusal of the Web entry.
+    document = _web_read_44_without_catalog()
+    document["results"] = {"not": "a list"}
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == {"error"}
 
 
 def test_a_document_that_is_not_json_is_refused_in_the_error_shape() -> None:

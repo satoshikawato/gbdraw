@@ -215,6 +215,26 @@ _SOURCE_RECORD_SELECTOR = re.compile(r"#[1-9][0-9]*")
 
 
 @dataclass(frozen=True)
+class SessionAdmission:
+    """The admission checks of :func:`validate_session` that a reading runs.
+
+    The CLI runs them all (:data:`CLI_SESSION_ADMISSION`). Web Load of a
+    Session 27-44 reads the file with the Web's own readers first, which
+    repair or drop the parts they refuse, and Python then converts what they
+    kept (:data:`WEB_READ_SESSION_ADMISSION`, D-15-131): it does not check
+    again that Results hold their feature catalog (a Result without one is
+    set aside) or that protein LOSAT caches resolve through the manifest.
+    """
+
+    feature_catalog: bool
+    losat_manifest: bool
+
+
+CLI_SESSION_ADMISSION = SessionAdmission(feature_catalog=True, losat_manifest=True)
+WEB_READ_SESSION_ADMISSION = SessionAdmission(feature_catalog=False, losat_manifest=False)
+
+
+@dataclass(frozen=True)
 class SessionFileBinding:
     argIndex: int
     slot: str
@@ -637,7 +657,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
-    _validate_document(payload)
+    _validate_document(payload, CLI_SESSION_ADMISSION)
     return payload
 
 
@@ -673,8 +693,12 @@ def _read_session_text(path: str | Path) -> str:
     return session_path.read_text(encoding="utf-8")
 
 
-def validate_session(session: Mapping[str, Any]) -> None:
-    """Validate the conservative session envelope used by the CLI."""
+def validate_session(
+    session: Mapping[str, Any],
+    admission: SessionAdmission = CLI_SESSION_ADMISSION,
+) -> None:
+    """Validate the conservative session envelope used by the CLI, with the
+    checks of ``admission``."""
 
     if not isinstance(session, Mapping):
         raise ValidationError("Session JSON must be an object.")
@@ -694,12 +718,16 @@ def validate_session(session: Mapping[str, Any]) -> None:
         from .session_drawings import checked_drawing_views
 
         for view in checked_drawing_views(session):
-            _validate_document_body(view, version)
+            _validate_document_body(view, version, admission)
         return
-    _validate_document_body(session, version)
+    _validate_document_body(session, version, admission)
 
 
-def _validate_document_body(session: Mapping[str, Any], version: int) -> None:
+def _validate_document_body(
+    session: Mapping[str, Any],
+    version: int,
+    admission: SessionAdmission,
+) -> None:
     """Validate a Session 27-48, or one Session 49 drawing seen as one."""
 
     if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
@@ -744,13 +772,15 @@ def _validate_document_body(session: Mapping[str, Any], version: int) -> None:
             raise ValidationError("Session files are required for CLI regeneration.")
     _validate_web_file_bindings(session)
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
-        validate_current_session_artifacts(session)
+        validate_current_session_artifacts(session, admission)
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_top_level_fields(session)
         _validate_mode_scoped_fields(session, version)
         _validate_current_retired_active_config_paths(session, version)
         _validate_current_comparison_authority(session, version)
-        _validate_current_feature_catalog_authority(session, version)
+        _validate_current_feature_payloads(session, version)
+        if admission.feature_catalog:
+            _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
         _validate_other_mode_result(session, version)
     if version >= MODE_SCOPED_SESSION_MIN_VERSION:
@@ -1542,6 +1572,7 @@ def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> Non
     ):
         raise ValidationError("Session otherModeResult requires a committed request of the other mode.", diagnostic=_OTHER_MODE_RESULT_INVALID)
     view = other_mode_result_view(session)
+    _validate_current_feature_payloads(view, version)
     _validate_current_feature_catalog_authority(view, version)
     if not other.get("results"):
         raise ValidationError("Session otherModeResult requires a Result.", diagnostic=_OTHER_MODE_RESULT_INVALID)
@@ -1641,13 +1672,12 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
             raise ValidationError("runMetadata.featureIdentityNotices contains an invalid notice.", diagnostic=_OTHER_MODE_RESULT_INVALID)
 
 
-def _validate_current_feature_catalog_authority(
+def _validate_current_feature_payloads(
     session: Mapping[str, Any],
     version: int,
 ) -> None:
-    """Require the version-owned catalog and reject duplicated payloads."""
-
-    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
+    """Reject the derived feature payloads a current Session never stores, and
+    require its results array."""
 
     features = session.get("features")
     if isinstance(features, Mapping):
@@ -1670,10 +1700,19 @@ def _validate_current_feature_catalog_authority(
         raise ValidationError(
             "Session orthogroupState must be an object when present."
         )
-
-    results = session.get("results")
-    if "results" not in session or not isinstance(results, list):
+    if not isinstance(session.get("results"), list):
         raise ValidationError(f"Session version {version} requires a results array.")
+
+
+def _validate_current_feature_catalog_authority(
+    session: Mapping[str, Any],
+    version: int,
+) -> None:
+    """Require the version-owned catalog of the Results, each a named plain SVG."""
+
+    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
+    results = session.get("results")
+    assert isinstance(results, list)
     editor_state = session.get("editorState")
     if (
         not isinstance(editor_state, Mapping)
@@ -1807,8 +1846,12 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
     return "invalid"
 
 
-def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
-    """Validate current cache, manifest, and legacy artifact boundaries."""
+def validate_current_session_artifacts(
+    session: Mapping[str, Any],
+    admission: SessionAdmission = CLI_SESSION_ADMISSION,
+) -> None:
+    """Validate current cache, manifest, and legacy artifact boundaries; the
+    manifest resolution of protein caches only with ``admission.losat_manifest``."""
 
     session_version = session.get("version")
     for _, config in _session_draft_configs(session):
@@ -1868,28 +1911,29 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     )
     if manifest is not None and validated_manifest is None:
         raise ValidationError("Invalid proteinIdentityManifest schema-2 artifact.")
-    if protein_entries and manifest is None:
-        raise ValidationError(
-            "Current protein LOSATP cache entries require proteinIdentityManifest."
-        )
-    if protein_entries:
-        assert validated_manifest is not None
-        for index, entry in enumerate(protein_entries):
-            if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
-                raise ValidationError(
-                    "Protein LOSATP cache entry does not resolve through the manifest: "
-                    f"losatCache.entries[{index}]."
-                )
-    if derived_entries:
-        try:
-            validate_current_derived_protein_artifacts(
-                derived_entries,
-                validated_manifest,
-            )
-        except ValidationError as exc:
+    if admission.losat_manifest:
+        if protein_entries and manifest is None:
             raise ValidationError(
-                "Current derived LOSATP cache contains unresolved protein references."
-            ) from exc
+                "Current protein LOSATP cache entries require proteinIdentityManifest."
+            )
+        if protein_entries:
+            assert validated_manifest is not None
+            for index, entry in enumerate(protein_entries):
+                if not _protein_raw_entry_matches_manifest(entry, validated_manifest):
+                    raise ValidationError(
+                        "Protein LOSATP cache entry does not resolve through the manifest: "
+                        f"losatCache.entries[{index}]."
+                    )
+        if derived_entries:
+            try:
+                validate_current_derived_protein_artifacts(
+                    derived_entries,
+                    validated_manifest,
+                )
+            except ValidationError as exc:
+                raise ValidationError(
+                    "Current derived LOSATP cache contains unresolved protein references."
+                ) from exc
 
     legacy_artifacts = session.get("legacyArtifacts")
     if legacy_artifacts is None:
@@ -5518,7 +5562,7 @@ def build_session_json(
         ):
             from .session import _validate_document
 
-            _validate_document(context.source_session)
+            _validate_document(context.source_session, CLI_SESSION_ADMISSION)
             source_composite = _project_web_file_binding(
                 context.source_session["resources"], explicit, schema=source_bindings["schema"],
             )

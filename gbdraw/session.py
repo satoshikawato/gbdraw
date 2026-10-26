@@ -14,7 +14,7 @@ from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession49, SessionResult
@@ -33,6 +33,9 @@ from gbdraw.session_io import (
     _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
+    CLI_SESSION_ADMISSION,
+    WEB_READ_SESSION_ADMISSION,
+    SessionAdmission,
     _write_validated_session_json,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -225,7 +228,7 @@ class SessionDocument:
     )
 
     def __post_init__(self) -> None:
-        self._adopt(copy.deepcopy(dict(self._data)))
+        self._adopt(copy.deepcopy(dict(self._data)), CLI_SESSION_ADMISSION)
 
     @classmethod
     def _from_parsed(cls, data: dict[str, Any], source_path: Path) -> SessionDocument:
@@ -233,14 +236,23 @@ class SessionDocument:
 
         document = object.__new__(cls)
         object.__setattr__(document, "source_path", source_path)
-        document._adopt(data)
+        document._adopt(data, CLI_SESSION_ADMISSION)
         return document
 
-    def _adopt(self, data: dict[str, Any]) -> None:
+    @classmethod
+    def _admitted(cls, data: Mapping[str, Any], admission: SessionAdmission) -> SessionDocument:
+        """A copy of ``data`` checked with the checks of ``admission``."""
+
+        document = object.__new__(cls)
+        object.__setattr__(document, "source_path", None)
+        document._adopt(copy.deepcopy(dict(data)), admission)
+        return document
+
+    def _adopt(self, data: dict[str, Any], admission: SessionAdmission) -> None:
         expanded = expand_session_feature_catalog(data)
         # Checked once here; every later reader of the document trusts the proof.
         seal_protein_identity_manifest(expanded)
-        _validate_document(expanded)
+        _validate_document(expanded, admission)
         object.__setattr__(self, "_data", expanded)
         object.__setattr__(self, "_drawings", read_session_drawings(expanded))
         if self.source_path is not None:
@@ -1423,6 +1435,24 @@ def _dropped_results_warning(
 StoredResults = dict[str, list[SessionResult]]
 
 
+# Where a Session 27-44 holds its Result set: the top level, its one set (a
+# Session before 46 has no ``otherModeResult``).
+LegacyResultSetPath = Literal[""]
+# The file Result set each Session 49 drawing of a Session 27-44 took, by the
+# drawing's ID: the drawing that holds the file's request or its set-aside
+# Results (D-15-130). A drawing that took none is not named.
+LegacyResultSetSources = dict[str, LegacyResultSetPath]
+
+
+class LegacyDrawings(NamedTuple):
+    """:func:`drawings_document_from_legacy` of a Session 27-44."""
+
+    document: GbdrawSession49
+    stored_results: StoredResults
+    result_set_sources: LegacyResultSetSources
+    repairs: tuple[DraftMigrationRepair, ...]
+
+
 def _set_aside_results(stored_results: StoredResults, drawing_id: str, state: dict[str, Any]) -> None:
     """Move the Results a Session 49 cannot hold out of ``state`` (OV-1659).
 
@@ -1584,8 +1614,13 @@ def drawings_document_from_legacy(
     data: SessionDocument | Mapping[str, Any],
     *,
     temporary_directory: str | Path | None = None,
-) -> tuple[GbdrawSession49, StoredResults, tuple[DraftMigrationRepair, ...]]:
-    """A Session 27-44 as a Session 49, as Web Load reads it, with its stored Results and Load repairs.
+) -> LegacyDrawings:
+    """A Session 27-44 as a Session 49, as Web Load reads it, with its stored
+    Results, where each drawing's Result set was in the file, and Load repairs.
+
+    Web Load's readers read the file first and send what they kept; it is
+    admitted with :data:`gbdraw.session_io.WEB_READ_SESSION_ADMISSION`, here
+    and in the check of the Session 49 (D-15-131).
 
     The migrations are those of :func:`upgrade_session_document` (the mode
     split, feature edits, annotation targets, hash rules, placements, legacy
@@ -1605,7 +1640,7 @@ def drawings_document_from_legacy(
     versions raise :class:`SessionVersionError`.
     """
 
-    loaded = load_session_document(data)
+    loaded = data if isinstance(data, SessionDocument) else _web_read_document(data)
     if not loaded.version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise SessionVersionError(
             f"Only a Session 27-{MODE_SCOPED_SESSION_MIN_VERSION - 2} moves to drawings "
@@ -1628,8 +1663,32 @@ def drawings_document_from_legacy(
             "The drawings " + ", ".join(sorted(stored_results.keys() - drawing_ids))
             + " of the stored Results are not in the Session 49."
         )
-    SessionDocument(cast(Mapping[str, Any], drawings))
-    return drawings, stored_results, tuple(repairs)
+    _web_read_document(cast(Mapping[str, Any], drawings))
+    # The file's one set went to the drawing of its request, or was set aside
+    # for the drawing of its Results.
+    set_sources: LegacyResultSetSources = {
+        drawing["id"]: ""
+        for drawing in drawings["drawings"]
+        if drawing.get("renderRequest") is not None or drawing["id"] in stored_results
+    }
+    if len(set_sources) > 1:
+        raise SessionConversionError(
+            "The Result set of a Session 27-44 went to more than one drawing: "
+            + ", ".join(sorted(set_sources)) + "."
+        )
+    return LegacyDrawings(drawings, stored_results, set_sources, tuple(repairs))
+
+
+def _web_read_document(data: Mapping[str, Any]) -> SessionDocument:
+    """``data`` as a document checked as Web Load admits it after its own
+    readers (:data:`WEB_READ_SESSION_ADMISSION`)."""
+
+    try:
+        return SessionDocument._admitted(data, WEB_READ_SESSION_ADMISSION)
+    except SessionError:
+        raise
+    except ValidationError as exc:
+        raise _classify_validation_error(exc) from exc
 
 
 def _project_adjunct(
@@ -1847,9 +1906,9 @@ def with_request_output(
     )
 
 
-def _validate_document(data: Mapping[str, Any]) -> None:
+def _validate_document(data: Mapping[str, Any], admission: SessionAdmission) -> None:
     try:
-        validate_session(data)
+        validate_session(data, admission)
     except ValidationError as exc:
         raise _classify_validation_error(exc) from exc
     if int(data.get("version", 0)) < CANONICAL_SESSION_MIN_VERSION:

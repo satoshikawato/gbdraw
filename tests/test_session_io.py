@@ -803,7 +803,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
             ValidationError,
             match="derived feature payloads",
         ):
-            session_io_module._validate_current_feature_catalog_authority(duplicated_legacy, 44)
+            session_io_module._validate_current_feature_payloads(duplicated_legacy, 44)
 
 
 def test_feature_catalog_compaction_falls_back_for_partial_metadata() -> None:
