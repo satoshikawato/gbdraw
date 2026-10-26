@@ -6,11 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const source = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-const numericConstant = (text, name) => {
-  const matches = [...text.matchAll(new RegExp(`\\bconst\\s+${name}\\s*=\\s*(\\d+)\\s*;`, 'g'))];
-  assert.equal(matches.length, 1, `Expected one declaration of ${name}`);
-  return Number(matches[0][1]);
-};
 
 // Load the fallback's declarations without selecting an adapter or a browser.
 // Compare independent schema namespaces; released input fixtures keep their
@@ -39,12 +34,15 @@ test('Node LOSAT acceptance expects the current writer for every output schema',
   const helper = source('tests/web/helpers/app-lifecycle.cjs');
   assert.match(helper, /const CURRENT_REQUEST_SCHEMA = generatedConstant\('CANONICAL_REQUEST_SCHEMA'\);/);
   assert.match(helper, /const CURRENT_SESSION_VERSION = generatedConstant\('SESSION_VERSION'\);/);
+  // The protein cache schemas come from the generated contract too.
+  assert.match(adapter, /const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant\('PROTEIN_LOSAT_CACHE_SCHEMA'\);/);
+  assert.match(adapter, /const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant\('LOSAT_DERIVED_CACHE_SCHEMA'\);/);
   const generated = await import('../../gbdraw/web/js/contracts/schema.generated.js');
   assert.deepEqual({
     session: generated.SESSION_VERSION,
     request: generated.CANONICAL_REQUEST_SCHEMA,
-    proteinRaw: numericConstant(adapter, 'CURRENT_PROTEIN_RAW_SCHEMA'),
-    proteinDerived: numericConstant(adapter, 'CURRENT_PROTEIN_DERIVED_SCHEMA')
+    proteinRaw: generated.PROTEIN_LOSAT_CACHE_SCHEMA,
+    proteinDerived: generated.LOSAT_DERIVED_CACHE_SCHEMA
   }, python.writer);
 });
 

@@ -56,7 +56,7 @@ const read = (path) => {
 // A bundled Session is a 49; the tests read the shown drawing as its one-drawing view.
 // The view carries `drawingOrigin` so `load` can write it back as the drawing's 49.
 const galleryView = (saved) => {
-  if (!saved.drawings) return saved;
+  if (saved?.format !== 'gbdraw-session' || !saved.drawings) return saved;
   const id = saved.ui.activeDrawingId;
   const drawing = saved.drawings.find((entry) => entry.id === id);
   return { ...savedDrawingView(saved, id), drawingOrigin: { id, name: drawing.name } };
