@@ -23,13 +23,18 @@ row not reached is computed later with :meth:`CircularLabelFitSearch.row`.
 When nothing is drawn and a lever has no value that fits, its mildest value
 that leaves no overlapping labels is offered with what it leaves (LP-D57).
 
-A record's centre definition text that reaches into a track's band is drawn
-and warns too (D-12). A drawn figure with it gets two more rows: a smaller
-definition font, scanned down with the full assembly like the inner labels'
-font, and narrowing the inside tracks, which sets ``center_reserved_radius``
-to the band the definition takes on one line (PD-OI-097; the tracks never
-narrow for the definition on their own, PD-OI-078) and may leave the letters
-on a track, then draws with the notice. Each row is checked for what it
+A record's centre definition text whose painted lines meet a track's ink is
+drawn and warns too (D-12). A drawn figure with it gets two more rows: a
+smaller definition font, scanned down with the full assembly like the inner
+labels' font, and narrowing the inside tracks, offered when the definition's
+band enters a track's band and no ``center_reserved_radius`` is set. That row
+sets ``center_reserved_radius`` to the band the definition takes on one line
+(PD-OI-097; the tracks never narrow for the definition on their own,
+PD-OI-078). "Over a track" is read two ways: the notice and the rows'
+verification read the lines against the ink, the narrow row reads the band
+against the tracks' bands. The band is a square extent, not the line boxes'
+corners, so the narrowed figure may still have letters on a track and then
+draws with the notice. Each row is checked for what it
 fixes: the label rows for the labels, the definition rows for the definition
 text (neither may stop the figure).
 """
@@ -145,6 +150,8 @@ class CircularLabelLayout:
     """
 
     record_id: str
+    # The index of the record's drawn groups (``data-gbdraw-record-index``): the record's identity on the figure.
+    record_index: int
     placement: CircularLabelPlacement
     font_size: float
     label_counts: Mapping[LabelKind, int]
@@ -157,11 +164,12 @@ class CircularLabelLayout:
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
     # The largest font of the record's region labels, when some are cut or lie on another track (``circular_region``).
     region_font_size: float = 0.0
-    # The centre definition's font, when its text reaches into a track's band (``circular_definition``).
+    # The centre definition's font, when its painted lines meet a track's ink (``circular_definition``).
     definition_font_size: float = 0.0
     definition_probe: CircularDefinitionFitProbe | None = field(default=None, compare=False, repr=False)
-    # The ``center_reserved_radius`` that keeps the inside tracks out of the definition's one-line band, when its
-    # drawn band enters a track's band and no radius is set (``circular_definition``); 0 otherwise.
+    # The ``center_reserved_radius`` that keeps the inside tracks out of the definition's one-line band, when that
+    # band enters a track's band (not the ink the notice reads) and no radius is set (``circular_definition``); 0
+    # otherwise.
     definition_narrow_radius_px: float = 0.0
 
     @property
@@ -359,8 +367,8 @@ def _applicable_rows(
 
     Overlapping embedded labels add the switch that separates overlapping
     features, unless they are separated already. A drawn figure whose
-    definition text reaches into a track's band adds the smaller definition
-    font, and narrowing the inside tracks when the definition's band enters a
+    definition lines meet a track's ink adds the smaller definition font, and
+    narrowing the inside tracks when the definition's band also enters a
     track's band and no ``center_reserved_radius`` is set (when nothing was
     drawn, the labels come first).
     """
@@ -748,6 +756,7 @@ def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord
             font_size=_kind_font_size(layout, kind),
             fit=layout.kind_fits.get(kind, FITS),
             refused=layout.refused and kind not in _UNMOVED_LABEL_KINDS,
+            record_index=layout.record_index,
         )
         for layout in layouts
         for kind in layout.failing_kinds

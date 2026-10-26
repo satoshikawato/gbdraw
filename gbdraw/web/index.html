@@ -8587,7 +8587,7 @@
                 ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
-                <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
+                <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
                     <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
                 </li>
             </ul>
@@ -8616,9 +8616,9 @@
                 </ul>
             </fieldset>
             <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
-            <div v-if="labelFitDialog.definitionRecordIds.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
-                <button v-for="recordId in labelFitDialog.definitionRecordIds" :key="recordId" type="button" data-history-ignore
-                        :data-label-fit-edit-record="recordId" @click="editLabelFitRecordText(recordId)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecordIds.length > 1"> ({{ recordId }})</template></button>
+            <div v-if="labelFitDialog.definitionRecords.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
+                <button v-for="record in labelFitDialog.definitionRecords" :key="record.recordIndex" type="button" data-history-ignore
+                        :data-label-fit-edit-record="record.recordIndex" @click="editLabelFitRecordText(record.recordIndex)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecords.length > 1"> ({{ record.recordId }}, #{{ record.recordIndex + 1 }})</template></button>
             </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>

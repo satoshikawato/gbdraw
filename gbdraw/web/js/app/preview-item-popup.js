@@ -483,15 +483,16 @@ export const createPreviewItemPopup = ({
   };
 
   // The label fit dialog's "Edit Species / Strain…" (PD-OI-097): the settings
-  // a click on the drawn record definition with this record ID would show,
-  // found by the ID's drawn definition group.
-  /** @param {string} recordId */
-  const showRecordTextSettings = (recordId) => {
-    const group = [...(state.svgContainer.value?.querySelectorAll('[data-gbdraw-role="record-definition"][data-gbdraw-record-id]') || [])]
-      .find((element) => element.getAttribute('data-gbdraw-record-id') === recordId);
-    const recordIndex = Number(group?.getAttribute('data-gbdraw-record-index'));
-    if (!group || !Number.isInteger(recordIndex) || recordIndex < 0) return false;
-    return showRecordSettings(recordView({ recordIndex, recordId }));
+  // a click on the drawn record definition with this record index would show,
+  // found by that index's drawn definition group (two records may share an ID).
+  /** @param {number} recordIndex */
+  const showRecordTextSettings = (recordIndex) => {
+    if (!Number.isSafeInteger(recordIndex) || recordIndex < 0) return false;
+    const group = state.svgContainer.value?.querySelector(
+      `[data-gbdraw-role="record-definition"][data-gbdraw-record-index="${recordIndex}"][data-gbdraw-record-id]`
+    );
+    if (!group) return false;
+    return showRecordSettings(recordView({ recordIndex, recordId: String(group.getAttribute('data-gbdraw-record-id')) }));
   };
 
   // A rename may ask a choice first (a name another row has) and may change

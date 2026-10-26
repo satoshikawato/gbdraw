@@ -1509,8 +1509,17 @@ def _definition_reserved_radius_px(
 
 
 def _definition_clearance_px(layout: CircularRadialLayout) -> float:
-    """How far the centre definition's band may reach before it enters a drawn track's band (``_track_bands``, the
-    bands the notice reads too)."""
+    """How far the centre definition's band may reach before it enters a drawn track's band (``_track_bands``).
+
+    This is the narrow row's reading of "the definition over a track": the
+    definition's band (``_definition_reserved_radius_px``: the largest
+    ``max(|x +/- w/2|, |y +/- h/2|)`` of its lines, plus padding) against each
+    track's band (its drawing, its tick or axis labels, and its labels' room).
+    The notice reads another one: the painted line boxes against what the
+    tracks paint (``_definition_lines_on_tracks`` over ``_record_track_ink``).
+    The band is not the boxes' corner distance, so a figure narrowed to it may
+    still have letters on a track and warn (MERS-CoV at 231.99 px).
+    """
 
     return min((float(band.inner_px) for _slot, band in _track_bands(layout)), default=float("inf"))
 
@@ -1520,9 +1529,9 @@ class _CentreDefinitionFit:
     """The tracks and the centre definition drawn among them (PD-OI-078).
 
     ``reserved_radius_px`` is the definition's band (None without a centre definition); radial labels keep out of
-    it. ``narrow_radius_px`` is that band when it enters a track's band, the ``center_reserved_radius`` that narrows
-    the inside tracks around it (the notice's "narrow the inside tracks" row); 0 when the band clears the tracks or
-    the radius is explicit already.
+    it. ``narrow_radius_px`` is that band when it enters a track's band (``_definition_clearance_px``), the
+    ``center_reserved_radius`` that narrows the inside tracks around it (the "narrow the inside tracks" row); 0 when
+    the band clears the tracks' bands or the radius is explicit already.
     """
 
     layout: CircularRadialLayout
@@ -1549,7 +1558,8 @@ def _resolve_radial_layout_fitting_definition(
     The definition never narrows or moves a track (DF-D02) and is never
     wrapped (DF-D25): the tracks are placed as without a definition, and a
     definition whose band enters a track band is drawn over the tracks; the
-    label fit check warns when its letters meet a track (PD-OI-097). An
+    label fit check warns when its painted lines meet a track's ink
+    (``_definition_lines_on_tracks``, PD-OI-097). An
     explicit ``center_reserved_radius`` keeps the tracks out of the centre
     (DF-D05).
     """
@@ -2208,6 +2218,7 @@ def _record_label_layout(
     drawn_labels: Sequence[CircularLabel],
     place_labels: Callable[..., list[CircularLabel]] | None,
     *,
+    record_index: int,
     definition_text: Sequence[Aabb],
     radial_refused: bool,
     region_labels: Sequence[CircularAnnotationLabel] = (),
@@ -2269,6 +2280,7 @@ def _record_label_layout(
     outer_offsets = cfg.labels.unified_adjustment.outer_labels
     return CircularLabelLayout(
         record_id=str(gb_record.id),
+        record_index=record_index,
         placement="horizontal" if horizontal else "radial",
         font_size=circular_label_font_size(cfg, total_length),
         label_counts=counts,
@@ -3197,6 +3209,8 @@ def add_record_on_circular_canvas(
             if label_state is not None
             else None
         ),
+        # The index the record's definition group carries (``definition_kwargs``).
+        record_index=int(annotation_record_index),
         definition_text=definition_text,
         radial_refused=radial_refused,
         region_labels=tuple(label for labels in annotation_labels.values() for label in labels),

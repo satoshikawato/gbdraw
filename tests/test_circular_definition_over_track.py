@@ -40,10 +40,13 @@ MERS_COV = TEST_INPUTS / "MERS-CoV.gbk"
 DEFINITION = LabelFit(0, 0, definition_track_overlaps=1)
 
 
-def _definition_layout(record_id: str = "rec", *, also: Mapping[str, LabelFit] | None = None) -> CircularLabelLayout:
+def _definition_layout(
+    record_id: str = "rec", *, record_index: int = 0, also: Mapping[str, LabelFit] | None = None
+) -> CircularLabelLayout:
     kind_fits = {"circular_definition": DEFINITION, **(also or {})}
     return CircularLabelLayout(
         record_id=record_id,
+        record_index=record_index,
         placement="horizontal",
         font_size=14.0,
         label_counts={"circular_definition": 1, **({"circular_outer": 40} if also else {})},
@@ -77,12 +80,13 @@ def test_definition_over_a_track_warns_with_the_mildest_definition_font(monkeypa
     verify, calls = _verifier(16.5)
 
     with pytest.warns(LabelLeadersCrossWarning) as caught:
-        checked = check_circular_label_fit([_definition_layout()], verify)
+        checked = check_circular_label_fit([_definition_layout(record_index=3)], verify)
 
     assert checked is not None
     report, _ = checked
     assert report.drawn and report.definition_track_overlaps == 1
-    assert report.records == (LabelFitRecord("rec", "circular_definition", 1, 18.0, DEFINITION),)
+    # The record carries the index its drawn definition group has (``data-gbdraw-record-index``).
+    assert report.records == (LabelFitRecord("rec", "circular_definition", 1, 18.0, DEFINITION, record_index=3),)
     assert report.rows == (
         LabelFitRow("smaller_definition_font", "found", {DEFINITION_FONT_PATH: 16.5}, (1000.0, 1000.0)),
     )
@@ -304,6 +308,7 @@ def test_a_record_failing_only_by_its_definition_leaves_the_label_rows_alone() -
     definition_only = dataclasses.replace(_definition_layout("long"), font_size=10.0, label_spacing=1.0)
     labels = CircularLabelLayout(
         record_id="short",
+        record_index=1,
         placement="horizontal",
         font_size=14.0,
         label_counts={"circular_outer": 40},

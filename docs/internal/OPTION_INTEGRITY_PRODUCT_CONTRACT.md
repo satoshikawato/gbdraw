@@ -3217,9 +3217,10 @@ Status: active Product authority
     area (as `DEF-TRACK-WARN` does today), A2 the definition band enters a
     track band, or A3 any wrap or overlap. Reply: 「Q-a 通知を出す条件: A1」
     (the trigger of scenario revision `17`).
-  - DF-D15 (`2026-10-25`). The session asked whether tracks of a preset lane
-    may move toward the axis, keeping their width, before the definition is
-    placed (M-a never, M-b move first). Reply: 「Q-d そのほか：M-a 寄せない」
+  - DF-D15 (`2026-10-25`). The session asked whether the tracks may move
+    toward the axis, keeping their width, out of their preset lanes: M-a
+    never, the tracks stay at their preset positions; M-b move them before the
+    name is wrapped (「折り返す前に寄せる」). Reply: 「Q-d そのほか：M-a 寄せない」
   - DF-D16 (`2026-10-25`). After an examples page, the session asked what the
     notice dialog lists. Reply: 「Q-b 通知のダイアログに何を並べるか: F、N-a, W3, E-b, K-a」
     (F smaller definition font; N-a narrow the inside tracks by writing the
@@ -3251,6 +3252,8 @@ Status: active Product authority
     `PD-OI-097` scenario revision `18` keeps every outcome and field of
     scenario revision `17` and appends to its Choice, Rationale, Must
     preserve, and Accepted residual risk.
+  - The `PD-OI-078` record title changes to state scenario revision `2`
+    (no link targets its anchor); its concern key keeps its wording.
   - No other record is amended or retired. A later user setting to wrap the
     definition (W3) is not recorded here; it comes with its own receipts.
   - This change is a static Product Contract co-change: the runtime, tests, and
@@ -7199,7 +7202,7 @@ Decision date: 2026-09-30
 }
 ```
 
-### PD-OI-078: Circular definition wrap on fit failure
+### PD-OI-078: Circular definition drawn on one line, without wrapping or narrowing the tracks
 
 - Concern key: `diagram-generation.circular-definition-fit`
 - Scenario revision: `2`

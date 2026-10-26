@@ -87,6 +87,7 @@ def _layout(
 
     return CircularLabelLayout(
         record_id=record_id,
+        record_index=0,
         placement="horizontal",
         font_size=14.0,
         label_counts={"circular_outer": 111},
@@ -346,6 +347,7 @@ def _inner_layout(*, placement: CircularLabelPlacement = "horizontal", refused: 
     kind = "circular_inner" if inner else "circular_outer"
     return CircularLabelLayout(
         record_id="P1",
+        record_index=0,
         placement=placement,
         font_size=14.0,
         label_counts=counts,

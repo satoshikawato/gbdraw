@@ -195,9 +195,9 @@ test('the definition text over a track: the notice offers a smaller font, narrow
   await expect(narrow).toContainText('1 definition line still overlaps a track');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
-  // E-b: the name field of that record, found by its record ID; nothing is applied.
+  // E-b: the name field of that record, found by its drawn record index; nothing is applied.
   const undo = await undoCount(page);
-  const edit = dialog.locator('[data-label-fit-edit-record="NC_019843.3"]');
+  const edit = dialog.locator('[data-label-fit-edit-record="0"]');
   await expect(edit).toHaveText('Edit Species / Strain…');
   await edit.click();
   await expect(dialog).toBeHidden();

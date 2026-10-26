@@ -5009,34 +5009,6 @@ export const createAppSetup = () => {
         fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
     });
   });
-  // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
-  // drew nothing, or over crossing leaders from the notice bar.
-  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
-    reactive,
-    computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
-    )).result,
-    writeRowSettings: (values, rowMode) => applyLabelFitValues(state.drawingOfMode(rowMode), values, rowMode),
-    withHistory: dialogChoice.withHistory,
-    closeAfterChoice: dialogChoice.closeAfterChoice,
-    choicePending: () => dialogChoice.pending.value,
-    runAnalysis: () => runAnalysis(),
-    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
-    // The record-definition popup owns which field writes a record's name lines (created below).
-    showRecordText: (recordId) => previewItemPopup.showRecordTextSettings(recordId)
-  });
-  // The notice bar over the shown Result drawn with crossing leaders or labels
-  // over the definition text (WARN-NOTICE, DEF-WARN).
-  const labelFitNotice = computed(() => {
-    const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
-      && item.resultName === results.value[selectedResultIndex.value]?.name);
-    return entry && entry.report.drawn ? entry : null;
-  });
-  const openLabelFitNotice = () => {
-    const entry = labelFitNotice.value;
-    if (!entry) return undefined;
-    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
-  };
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
     if (choice === 'generate') {
@@ -6149,6 +6121,35 @@ export const createAppSetup = () => {
       const stop = watch(() => legendRenameDialog.show, (/** @type {unknown} */ shown) => { if (!shown) { stop(); resolve(undefined); } });
     }) : Promise.resolve())
   });
+
+  // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
+  // drew nothing, or over crossing leaders from the notice bar.
+  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
+    reactive,
+    computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
+    )).result,
+    writeRowSettings: ({ values, trackOptions }, rowMode) => applyLabelFitValues(state.drawingOfMode(rowMode), values, rowMode, trackOptions),
+    withHistory: dialogChoice.withHistory,
+    closeAfterChoice: dialogChoice.closeAfterChoice,
+    choicePending: () => dialogChoice.pending.value,
+    runAnalysis: () => runAnalysis(),
+    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
+    // The record-definition popup (created above) owns which field writes a record's name lines.
+    showRecordText: (recordIndex) => previewItemPopup.showRecordTextSettings(recordIndex)
+  });
+  // The notice bar over the shown Result drawn with crossing leaders or labels
+  // over the definition text (WARN-NOTICE, DEF-WARN).
+  const labelFitNotice = computed(() => {
+    const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
+      && item.resultName === results.value[selectedResultIndex.value]?.name);
+    return entry && entry.report.drawn ? entry : null;
+  });
+  const openLabelFitNotice = () => {
+    const entry = labelFitNotice.value;
+    if (!entry) return undefined;
+    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
+  };
 
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'

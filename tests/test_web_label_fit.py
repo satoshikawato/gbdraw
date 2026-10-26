@@ -22,7 +22,6 @@ from gbdraw.api import (
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.circular_fit import ROW_KINDS
 from gbdraw.labels.fit import (
-    CENTER_RESERVED_RADIUS_PATH,
     DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
@@ -67,7 +66,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["schema"] == 1 and payload["drawn"] is False
     assert (payload["overlapPairs"], payload["crossingPairs"]) == (20, 21)
     assert payload["records"] == [{
-        "recordId": "rec-1", "labelKind": "circular_outer", "labelKindTitle": "outer labels",
+        "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
         "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
@@ -75,7 +74,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     vertical, font, tighter, combination = payload["rows"]
     assert vertical == {
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
-        "values": {Y_OFFSET_PATH: 1.15},
+        "values": {Y_OFFSET_PATH: 1.15}, "trackOptions": {},
         "settings": [{"name": "Outer Y Offset", "unit": "", "value": 1.15}],
         "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None, "note": None,
     }
@@ -321,19 +320,36 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     searches = LabelFitRowSearches()
     (entry,) = _web_render(_mers_request(), tmp_path, searches)["metadata"]["labelFitReports"]
     assert entry["report"]["drawn"] is True
-    assert [(record["recordId"], record["labelKind"]) for record in entry["report"]["records"]] == [
-        ("NC_019843.3", "circular_definition")
+    # The record is named by its drawn index too: "Edit Species / Strain…" finds its definition by it.
+    assert [(record["recordId"], record["recordIndex"], record["labelKind"]) for record in entry["report"]["records"]] == [
+        ("NC_019843.3", 0, "circular_definition")
     ]
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
     font = searches.row(entry["rowToken"], "smaller_definition_font")
     assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 10.5})
     narrow = searches.row(entry["rowToken"], "narrow_tracks")
-    assert (narrow["status"], narrow["values"]) == ("found_with_notice", {CENTER_RESERVED_RADIUS_PATH: 231.99})
+    # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
+    assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (
+        "found_with_notice", {}, {"centerReservedRadius": 231.99}
+    )
+    assert font["trackOptions"] == {}
     assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 231.99}]
     assert narrow["note"] == "1 definition line still overlaps a track"
 
     (narrowed,) = _web_render(_mers_request(231.99), tmp_path / "narrowed")["metadata"]["labelFitReports"]
     assert narrowed["report"]["notice"] == ["The definition text overlaps a track (1 line)."]
+    # An explicit Center Reserved Radius is never offered again: only the font row is left.
+    assert [row["kind"] for row in narrowed["report"]["rows"]] == ["smaller_definition_font"]
+
+
+@pytest.mark.parametrize("radius", [231.99, 100.0])
+def test_an_explicit_center_reserved_radius_leaves_out_the_narrow_row(tmp_path, radius: float) -> None:
+    """PD-OI-097 (N-a): the narrow row writes ``center_reserved_radius`` only when none is set; with one set (the
+    row's own value or a smaller one), the definition over a track offers the smaller font alone."""
+
+    (entry,) = _web_render(_mers_request(radius), tmp_path)["metadata"]["labelFitReports"]
+    assert entry["report"]["drawn"] is True
+    assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font"]
 
 
 def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_later(tmp_path) -> None:
