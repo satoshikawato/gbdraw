@@ -1,3 +1,4 @@
+import { pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import assert from 'node:assert/strict';
@@ -66,6 +67,10 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
