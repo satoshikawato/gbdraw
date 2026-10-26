@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_REQUEST_SCHEMA, openApp, expectSessionLoadedWithoutWarnings } = require('../helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -283,10 +284,11 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expectRenderedAtColors(paletteGenerate.svg);
 
   const { path: savedPath, saved } = await saveSessionThroughUi(page);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
+  const savedDrawing = shownSavedDrawing(saved);
+  expect(savedDrawing.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(requestEvidence(savedDrawing.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
-    saved.modes.circular.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params
+    savedDrawing.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params
   ).toEqual(expectedAtParams);
 
   const freshContext = await browser.newContext();

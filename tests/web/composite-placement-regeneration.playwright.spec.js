@@ -4,6 +4,7 @@ const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const singleSeed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const allPlacements = ['auto', 'main', 'outward', 'inward'];
@@ -11,19 +12,21 @@ const allPlacements = ['auto', 'main', 'outward', 'inward'];
 const compositeSeed = async (testInfo) => {
   const single = JSON.parse(await fs.readFile(singleSeed, 'utf8'));
   const lambda = JSON.parse(await fs.readFile('gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', 'utf8'));
-  const second = { ...lambda.renderRequest.records[0], recordKey: 'record-2',
+  const singleDrawing = shownSavedDrawing(single);
+  const lambdaRequest = shownSavedDrawing(lambda).renderRequest;
+  const second = { ...lambdaRequest.records[0], recordKey: 'record-2',
     source: { kind: 'genbank', resourceId: 'record-2-genbank' } };
   const input = testInfo.outputPath('two-source-input.json');
   const output = testInfo.outputPath('two-source.gbdraw-session.json.gz');
-  await fs.writeFile(input, JSON.stringify({ format: single.format, version: single.version,
-    results: [], editorState: { featureCatalog: null }, ui: { ...single.ui, generatedMultiRecordCanvas: true },
-    modes: { circular: { ...single.modes.circular, config: { ...single.modes.circular.config,
-      form: { ...single.modes.circular.config.form, multi_record_canvas: true } } } },
-    renderRequest: { ...single.renderRequest, grouping: 'grid',
-      records: [...single.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
-        multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
-        multiRecordPositions: null } },
-    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambda.renderRequest.records[0].source.resourceId] } }));
+  await fs.writeFile(input, JSON.stringify({ ...single,
+    drawings: [{ ...singleDrawing, results: [], editorState: { featureCatalog: null },
+      ui: { ...singleDrawing.ui, generatedMultiRecordCanvas: true },
+      config: { ...singleDrawing.config, form: { ...singleDrawing.config.form, multi_record_canvas: true } },
+      renderRequest: { ...singleDrawing.renderRequest, grouping: 'grid',
+        records: [...singleDrawing.renderRequest.records, second], layout: { multiRecordSizeMode: 'auto',
+          multiRecordMinRadiusRatio: 0.55, multiRecordColumnGapRatio: 0.1, multiRecordRowGapRatio: 0.05,
+          multiRecordPositions: null } } }],
+    resources: { ...single.resources, 'record-2-genbank': lambda.resources[lambdaRequest.records[0].source.resourceId] } }));
   // The normal writer creates matching SVG, feature metadata and current file bindings.
   const { stdout, stderr } = await promisify(execFile)('python', ['-m', 'gbdraw.cli', 'circular',
     '--session', input, '-o', testInfo.outputPath('two-source'), '--session_output', output],
