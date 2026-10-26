@@ -344,8 +344,9 @@ change through `showEditorIntent` (R3):
   and colors the rules draw;
 - a Change Scope choice;
 - until each drawing binds its own auxiliary file cards, the Specific rules file card Remove for a drawing that is not shown, which
-  calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
-  `app/feature-editor/rule-actions.js`);
+  calls `moveLegendRecords` (`takeBackRuleRows` in
+  `app/feature-editor/rule-actions.js`, which Delete settings also uses for the
+  `hash` color rows of a turned-off record's feature instances);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
   of Legend rows (a rename of a row that no rule or feature names writes the
   row's name in the step the Legend name input or the popup's rename action

@@ -1212,6 +1212,22 @@
       "reason": "Both test suites read only its sha256 to prove the frozen Session is unchanged; it holds no expected values. Registered because the detector sees it; classification awaits the Owner.",
       "retireWhen": "never: a frozen historical fixture keeps its readers",
       "source": "OV-1665 (tests/fixtures subfolders; twin.unregistered.v1 on origin/dev f0b23d4ac)"
+    },
+    {
+      "id": "concern:feature-instance-record-key",
+      "concern": "Feature instance text (<biological feature ID>@<record key>) and the CLI record key of a record input (record-<n>, record-<n>:<k> for an input that expands to several records)",
+      "pythonOwner": [
+        "gbdraw/features/ids.py:feature_instance",
+        "gbdraw/api/record_planning.py:resolve_record_inputs"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:namedFeatureInstance",
+        "gbdraw/web/js/app/run-info.js:cliSpecificColorTable"
+      ],
+      "vector": null,
+      "reason": "A \"This feature only\" hash rule names one feature instance, which Python composes and matches whole. The Web reads the record key out of a rule at the separator (Delete settings, Run Info) and rewrites it to the CLI record key of the render request for the Source recipe -t table. The separator and the record key prefix and expansion separator are generated constants (tools/generate_web_contracts.py: FEATURE_INSTANCE_SEPARATOR, CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR); the order of the parts is copied. tests/web/run-info.test.mjs runs the CLI on the rewritten table for a plain and an expanded record and checks that it colors one copy; no shared vector.",
+      "retireWhen": "Python writes the CLI form of the specific color table for the Source recipe and names the record of an instance row, so the Web neither parses nor composes an instance",
+      "source": "PR #1395 (feature-color-leak-20261026, REVIEW-2 item 1); the detector does not see it"
     }
   ]
 }
