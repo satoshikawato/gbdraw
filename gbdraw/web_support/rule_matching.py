@@ -340,14 +340,16 @@ def _spellings(value: str) -> tuple[str, str]:
 
 def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_MatchFeature]) -> SynthesizedColorRules:
     """The table without the `hash` rows that name a target: its instance rows,
-    and its stable-hash rows. A stable-hash row that also colors other features
-    (an older "This feature only" row on a feature drawn twice) gives way to a
-    copy per instance of each of those features, with its color and caption,
-    so they and the Legend keep it. A target that another rule still colors
+    and its stable-hash rows. A stable-hash row that still colors other features
+    (an older "This feature only" row on a feature drawn twice: the row wins for
+    them) gives way to a copy per instance of each of those features, with its
+    color and caption, so they and the Legend keep it; a feature that another
+    row colors takes no copy. A target that another rule still colors
     then takes `color` and `caption` by itself, unless `color` is empty. A
     table that would change the winner of any other feature is refused."""
     rules = request["rules"]
     hash_of, targets, holders = _hash_targets(features, request["selected"])
+    old_winners = _winners(features, rules)
     own: set[tuple[str, str]] = set()
     stable_of: dict[tuple[str, str], tuple[str, str]] = {}
     for i in targets:
@@ -365,7 +367,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
         if named in own:
             continue
         if named in stable_of:
-            others = holders[stable_of[named]] - targets
+            others = {i for i in holders[stable_of[named]] - targets if old_winners[i] == position}
             if any(hash_of[i] is None for i in others):
                 raise ValueError("The rule synthesis could not reset the color of the selected features.")
             for instance in sorted({key[1] for key in (hash_of[i] for i in others) if key}):
@@ -376,7 +378,6 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
         table.append(position)
         rows.append(rule)
         origin.append(position)
-    old_winners = _winners(features, rules)
     winners = _winners(features, rows)
     if any((origin[winners[i]] if winners[i] >= 0 else -1) != old_winners[i]
            for i in range(len(features)) if i not in targets):

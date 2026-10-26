@@ -1243,7 +1243,11 @@ instance: the feature's biological feature ID in its record, written
 record only, also when two records share a record ID or the same file is drawn
 twice, live and after Generate. The feature ID comes from the feature's hash in
 its source record, so the rule keeps matching the feature when the region or
-orientation of its Linear record changes. Resetting **This feature only** on
+orientation of its Linear record changes. Like the other per-feature edits,
+the rule belongs to the record key: it does not apply while the record is
+drawn under another key (a Circular record drawn alone or on the
+**Multi-record canvas**, a Linear File card that draws all of its records or
+one of them), and it applies again when that key returns. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared
 hash is narrowed to the copies it still colors. **Delete settings** of a record
 that is turned off removes the `hash` rules that name its feature instances;

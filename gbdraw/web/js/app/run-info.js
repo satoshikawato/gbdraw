@@ -327,7 +327,9 @@ const identityTableCells = (renderRequest, row, kind) => {
 // written bare or as an exact pattern (`namedFeatureInstance`). The CLI keys
 // its n-th record input CLI_RECORD_KEY_PREFIX n (gbdraw/api/record_planning.py),
 // so the recipe's table names that key. A row whose record this render does
-// not draw colors nothing and stays out of the table. Another `hash` pattern
+// not draw colors nothing and stays out of the table. The order of the parts
+// copies Python's (a twin: feature_instance, resolve_record_inputs); the CLI
+// runs in tests/web/run-info.test.mjs pin it. Another `hash` pattern
 // with the separator matches instances by the Web's record keys, which the CLI
 // does not have (R12).
 /**

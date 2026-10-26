@@ -63,7 +63,7 @@ const declinesVisibilityMatch = (feature, rule) => {
 // feature instance, which names one feature of one record (PD-OI-069 revision
 // 2): Python composes it from the catalog identity every catalog feature
 // carries (`record_key`, `biological_feature_id`), so a catalog saved before
-// rules named instances matches the same way; the Web never composes one.
+// rules named instances matches the same way; the payload composes none.
 // The payload of a feature without a label is built once per feature object;
 // its type is Python's (gbdraw/web_support/rule_matching.py, R7).
 /** @type {WeakMap<object, RuleFeaturePayload>} */

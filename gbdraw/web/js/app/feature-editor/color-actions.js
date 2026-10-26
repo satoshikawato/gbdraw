@@ -339,21 +339,28 @@ export const createFeatureColorActions = ({
   // revision 2; the rule's prepared match says whether it is this feature's),
   // or its stable hash, which older rules name it by and which the other
   // copies of the feature share.
-  /** @param {ColorRule} rule @param {ColorFeature} feature */
-  const hashRuleTargetsFeatureExactly = (rule, feature) => {
-    if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
+  // The rule is read once; the test runs per feature.
+  /** @param {ColorRule} rule @returns {(feature: ColorFeature) => boolean} */
+  const hashRuleExactTarget = (rule) => {
+    if (!isHashSpecificRule(rule)) return () => false;
     const value = String(rule?.val || '').trim();
-    if (namedFeatureInstance(rule)) return ruleMatchesFeature(feature, rule) === true;
-    const hash = getFeatureColorRuleHash(feature);
-    return (Boolean(hash) && literalPatternText(value) === hash) || renderedIdValues(feature).includes(value);
+    const literal = literalPatternText(value);
+    const ofType = (/** @type {ColorFeature} */ feature) => rule?.feat === feature?.type;
+    if (namedFeatureInstance(rule)) return (feature) => ofType(feature) && ruleMatchesFeature(feature, rule) === true;
+    return (feature) => {
+      if (!ofType(feature)) return false;
+      const hash = getFeatureColorRuleHash(feature);
+      return (Boolean(hash) && literal === hash) || renderedIdValues(feature).includes(value);
+    };
   };
+  /** @param {ColorRule} rule @param {ColorFeature} feature */
+  const hashRuleTargetsFeatureExactly = (rule, feature) => hashRuleExactTarget(rule)(feature);
   // Whether a rule targets one of `features` exactly.
   /**
    * @param {readonly ColorFeature[]} features
    * @returns {(rule: ColorRule) => boolean}
    */
-  const targetsSomeFeatureExactly = (features) => (rule) => isHashSpecificRule(rule)
-    && features.some((feature) => hashRuleTargetsFeatureExactly(rule, feature));
+  const targetsSomeFeatureExactly = (features) => (rule) => features.some(hashRuleExactTarget(rule));
 
   /** @param {unknown} value */
   const normalizeStrokeWidthValue = (value) => {

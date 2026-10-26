@@ -21,7 +21,9 @@ write-up of a release.
   Info Source recipe writes it with the CLI record key `record-<n>` and leaves
   out a row whose record is not drawn. Resetting one copy leaves the others as
   they are, and **Delete settings** of a record removes its rows. Other `hash`
-  values keep their meaning (PD-OI-069 revision 2).
+  values keep their meaning (PD-OI-069 revision 2). Like the other
+  per-feature edits, the color belongs to the record key, so it does not apply
+  while the record is drawn under another key.
 - Fixed: two identical `source` features of a record, one shown by its own
   Feature visibility, now have the same feature IDs in the Web feature list as
   in the drawing and in a feature identity table.

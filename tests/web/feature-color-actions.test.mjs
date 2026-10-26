@@ -617,10 +617,10 @@ await actions.setFeatureColor(duplicateFeatureA, '#112233', 'one duplicate');
 const ownDuplicateRule = { feat: 'CDS', qual: 'hash', val: '^f44444444@linear-seq-a$', color: '#112233', cap: 'one duplicate' };
 assert.deepEqual(duplicateRules(), [ownDuplicateRule, sharedDuplicateRule]);
 assert.deepEqual(await duplicateWinners(), [0, 1]);
-// The other copy's reset takes back only what names it: the shared rule keeps
-// naming the clicked copy, whose own rule still wins.
+// The other copy's reset takes back what names it. The shared rule colors no
+// other copy (the clicked copy's own rule wins), so it leaves no row behind.
 await actions.setFeatureColorValue(duplicateFeatureB, null);
-assert.deepEqual(duplicateRules(), [ownDuplicateRule, { ...sharedDuplicateRule, val: '^f44444444@linear-seq-a$' }]);
+assert.deepEqual(duplicateRules(), [ownDuplicateRule]);
 assert.deepEqual(await duplicateWinners(), [0, -1]);
 
 const sharedHashCds = {

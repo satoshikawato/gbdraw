@@ -1471,6 +1471,28 @@ test('a feature instance color row names its record by the CLI record key and th
   await webRenderMatches(session, cliSvg, 'colors', { ...colors, colorTableFile: null });
 });
 
+// A card that draws every record of its file keys them `<card key>:<k>`, as the
+// CLI keys its record input `record-<n>:<k>` (gbdraw/api/record_planning.py).
+// The CLI run pins the composed key against Python's matcher.
+test('a feature instance color row of an expanded record names it by the CLI record key and its record number', async () => {
+  const [, , third] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const session = twoCardColorSession([['CDS', 'hash', `^${third}@linear-seq-a:2$`, '#ff0000', 'Third of 2']]);
+  session.renderRequest.records = [{ ...session.renderRequest.records[0], cardinality: 'all' }];
+  Object.assign(session.resources.source, resource('genbank', 'source-dup.gbk', `${IDENTITY_GENBANK}${IDENTITY_GENBANK}`));
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  assert.equal(table?.data, `CDS\thash\t^${third}@record-1:2$\t#ff0000\tThird of 2\n`);
+  const cliSvg = await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: 'linear', sourceRecipe: recipe }), 'expanded feature instance color'
+  );
+  const svg = await readFile(cliSvg, 'utf8');
+  const filled = [...svg.matchAll(/<path [^>]*data-gbdraw-feature-id="([^"]+)"[^>]*fill="#ff0000"/gi)].map((match) => match[1]);
+  assert.equal(filled.length, 1, `the CLI draws the instance color on one copy: ${filled}`);
+  const colors = session.renderRequest.diagramOptions.colors;
+  await webRenderMatches(session, cliSvg, 'colors', { ...colors, colorTableFile: null });
+});
+
 test('a feature instance color row of a table whose bytes a File holds is read through readResourceText', async () => {
   const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
   const text = `CDS\thash\t^${first}@linear-seq-a$\t#ff0000\tFirst of A\n`;

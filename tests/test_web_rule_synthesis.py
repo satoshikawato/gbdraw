@@ -213,18 +213,6 @@ def test_a_feature_listed_as_drawn_and_from_its_source_is_one_target():
     assert _colors(features, table) == [COLOR, None, COLOR, None]
 
 
-def test_a_feature_of_a_catalog_saved_before_this_change_colors_only_its_instance():
-    # A 0.14.1 catalog row carries `recordKey` and `biologicalFeatureId` and no
-    # instance; Python composes the instance from them, so a saved Session's
-    # copy keeps its color too.
-    row = {"type": "CDS", "biologicalFeatureId": None, "recordKey": None}
-    first, twin = _instances(_cds(0, product="unique thing"), "linear-seq-a", "linear-seq-b")
-    assert set(first["selector"]) - {"hash", "location", "record_location"} == {"record_key", "feature_id"}
-    assert set(row) - {"type"} == {"biologicalFeatureId", "recordKey"}
-    table = _next_table(_synthesize([first, twin], [1], scope="features"), [])
-    assert _colors([first, twin], table) == [None, COLOR]
-
-
 def test_a_feature_without_a_catalog_identity_takes_no_hash_rule():
     features = [_payload(_cds(0), "rec", catalog=False)]
     assert _synthesize(features, [0], scope="features")["table"] == []
@@ -242,6 +230,17 @@ def test_a_reset_of_one_copy_retargets_the_hash_rule_its_twin_shares():
     table = _next_table(answer, current)
     assert table[0] == {**shared, "val": exact_value_pattern(_instance(twin))}
     assert _colors(features, table) == [None, "#0000ff", None, "#0000ff"]
+
+
+def test_a_reset_of_one_copy_narrows_the_shared_hash_rule_to_the_copies_it_still_colors():
+    # The twin wins by its own instance row, so the shared row colors only the
+    # reset copy; the reset leaves no row behind that colors nothing.
+    first, twin = _instances(_cds(0), "k1", "k2")
+    current = [dict(feat="CDS", qual="hash", val=exact_value_pattern(_instance(first)), color="#ff0000", cap="red"),
+               dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#999999", cap="grey")]
+    answer = _synthesize([first, twin], [1], rules=current, scope="reset", color="")
+    assert answer["table"] == [0]
+    assert _colors([first, twin], _next_table(answer, current)) == ["#ff0000", None]
 
 
 def test_a_reset_takes_back_the_instance_row_and_a_hash_row_no_other_feature_holds():

@@ -12,6 +12,7 @@ import {
   validateFeatureCatalog
 } from '../../gbdraw/web/js/services/feature-catalog.js';
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
+import { ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
 
 const results = [{ name: 'diagram.svg', content: '<svg />' }];
 const featureCatalogSource = await readFile(
@@ -118,6 +119,17 @@ test('schema-4 catalog validates and expands stable biological identities', () =
   assert.equal(state.orthogroups[0].members[0].renderedFeatureSvgId, 'f0001');
   assert.equal(state.orthogroups[0].members[0].proteinId, 'public-protein');
   assert.equal(state.orthogroups[0].members[0].featureIndex, 4);
+});
+
+// PD-OI-069 revision 2: a stored catalog holds no feature instance. Python
+// composes it from the catalog identity the live rule payload sends, so a
+// catalog saved before rules named instances colors one instance too.
+test('an admitted stored catalog feature sends its record key and biological feature ID to the rule matcher', () => {
+  const state = featureStateFromCatalog(validateFeatureCatalog(structuredClone(catalog), results));
+  const { selector } = ruleFeaturePayload(state.extractedFeatures[0]);
+  assert.equal(selector.record_key, 'record-instance-a');
+  assert.equal(selector.feature_id, 'source-feature-a');
+  assert.equal('instance' in selector, false);
 });
 
 // OV-269: a schema 3 writer named a duplicated stable identity
