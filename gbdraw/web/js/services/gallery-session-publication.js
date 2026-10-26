@@ -122,7 +122,8 @@ export const galleryPublicationView = (document) => {
   if (!holdsDrawings(document)) return { view: document, drawing: null };
   const drawn = document.drawings.filter((drawing) => drawing.renderRequest !== null);
   if (drawn.length !== 1) {
-    throw new Error(`Gallery publication requires a Session with one drawn drawing; this one has ${drawn.length}.`);
+    // A Gallery Session shows one drawn drawing (`tools/refresh_gallery_sessions.py`).
+    throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }
   const [shown] = drawn;
   // The view holds the drawing's request (not null, tested above) at the top level.
