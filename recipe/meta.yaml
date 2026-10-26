@@ -9,7 +9,7 @@ build:
   number: 0
   noarch: python
   entry_points:
-    - gbdraw = gbdraw.cli:main
+    - gbdraw = _gbdraw_console:main
 
 requirements:
   host:

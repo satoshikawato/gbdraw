@@ -28,7 +28,7 @@ assert.strictEqual(a.committedCanonicalSession.renderRequest, getCommittedCanoni
 state.activeDrawing().form.labels_mode = 'out';
 state.results.value = [{ name: 'a.svg', content: '<svg id="a"/>' }];
 const snapshots = createHistorySnapshotService({
-  state, fileStore: createInputFileStore(), buildConfigData, applyConfigData: applyCapturedConfigData
+  state, fileStore: createInputFileStore(), currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
 });
 snapshots.setGeneratedArtifactRuntimeOwner(canonicalRenderArtifactOwner);
 const history = createHistoryManager({

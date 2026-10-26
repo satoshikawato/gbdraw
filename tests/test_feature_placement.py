@@ -31,8 +31,9 @@ from gbdraw.api.requests import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import _LANE_SIDES, FeaturePlacementOverride, FeaturePlacementTarget
-from gbdraw.features.source import build_source_feature_catalog
+from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import parse_region_spec
+from tests.utils.svg_compare import PATH_ROUNDING
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     encode_canonical_request,
@@ -113,7 +114,8 @@ def _table(selector="locus_tag=alpha", placement="main", **extra):
 def _exact(record, index=1, key="one", target=None):
     return FeaturePlacementOverride(
         key,
-        build_source_feature_catalog(record)[index].biological_feature_id,
+        # Capture stamps the features it reads; the caller's record stays as it was.
+        capture_source_features(copy.deepcopy(record)).entries[index].biological_feature_id,
         target or FeaturePlacementTarget("main"),
     )
 
@@ -248,7 +250,7 @@ def test_source_selector_zero_and_many_error(selector, count):
 
 def test_hash_selector_names_one_of_identical_source_features():
     record = _record()
-    alpha, beta = build_source_feature_catalog(record)[1:3]
+    alpha, beta = capture_source_features(record).entries[1:3]
     assert alpha.stable_feature_id == beta.stable_feature_id
     assert beta.biological_feature_id == f"{beta.stable_feature_id}~2"
     plan = plan_request(
@@ -575,13 +577,13 @@ def test_resource_catalog_is_built_once_and_reused_across_crop_reverse_display(
     cache = PreparedBiologicalInputCache()
     identity = PreparedResourceIdentity("source", "stable", path.stat().st_size)
     calls = []
-    build = owner.build_source_feature_catalog
+    capture = owner.capture_source_features
     monkeypatch.setattr(
         owner,
-        "build_source_feature_catalog",
-        lambda r: (calls.append(r.id), build(r))[1],
+        "capture_source_features",
+        lambda r: (calls.append(r.id), capture(r))[1],
     )
-    catalog = None
+    holder = catalog = None
     for start, crop, reverse in [
         (None, None, False),
         (25, None, False),
@@ -603,7 +605,9 @@ def test_resource_catalog_is_built_once_and_reused_across_crop_reverse_display(
                 _request(records=(inp,), feature_placement_table=_table())
             )
         if catalog is not None:
+            assert plan.provenance[0].source_features is holder
             assert plan.provenance[0].source_feature_catalog is catalog
+        holder = plan.provenance[0].source_features
         catalog = plan.provenance[0].source_feature_catalog
         layers = _planned_layers(plan)
         assert len(layers.foreground_features) == (1 if crop else 3)
@@ -640,7 +644,7 @@ def test_source_catalog_is_immutable_and_only_requested_types_are_public():
     import gbdraw
     import gbdraw.api
 
-    catalog = build_source_feature_catalog(_record())
+    catalog = capture_source_features(_record()).entries
     with pytest.raises(FrozenInstanceError):
         catalog[0].source_feature_index = 100
     assert isinstance(catalog[0].qualifiers, tuple)
@@ -963,7 +967,7 @@ def test_unsupported_lane_diagnostic_names_the_placement_row(mode, direction, se
     from gbdraw.web_support.error_adapter import serialize_web_error
 
     record = _record()
-    ids = sorted(entry.biological_feature_id for entry in build_source_feature_catalog(record)[1:3])
+    ids = sorted(entry.biological_feature_id for entry in capture_source_features(record).entries[1:3])
     rows = (
         FeaturePlacementOverride("one", ids[1], FeaturePlacementTarget("lane", side, 1)),
         FeaturePlacementOverride("one", ids[0], FeaturePlacementTarget("main")),
@@ -1387,7 +1391,7 @@ def test_final_svg_isolated_secondary_lane_keeps_empty_main(monkeypatch, mode, s
         assert abs(lane.center_px - main_center) == pytest.approx(23.9)
         for path in paths:
             x, y = map(float, re.search(rf"M\s*({number})[,\s]+({number})", path.get("d")).groups())
-            assert lane.inner_px - 1e-6 <= math.hypot(x, y) <= lane.outer_px + 1e-6
+            assert lane.inner_px - PATH_ROUNDING <= math.hypot(x, y) <= lane.outer_px + PATH_ROUNDING
         label = result[0]
         assert label["is_inner"] == (side == "inward")
         assert math.hypot(label["feature_middle_x"], label["feature_middle_y"]) == pytest.approx(lane.center_px)
@@ -1590,8 +1594,8 @@ def test_final_placement_ribbons_follow_paint_with_four_unit_clearance(start, fe
         query_y, subject_y = [absolute_y(path, float(endpoints[i][1])) for i in (0, 1 if style == "curve" else 2)]
         query_band = feature_bands[path.get("data-query-feature-svg-id")] if feature_bound else bands[0]
         subject_band = feature_bands[path.get("data-subject-feature-svg-id")] if feature_bound else bands[1]
-        assert (query_band[0] - query_y if reverse else query_y - query_band[1]) == pytest.approx(4)
-        assert (subject_y - subject_band[1] if reverse else subject_band[0] - subject_y) == pytest.approx(4)
+        assert (query_band[0] - query_y if reverse else query_y - query_band[1]) == pytest.approx(4, abs=2 * PATH_ROUNDING)
+        assert (subject_y - subject_band[1] if reverse else subject_band[0] - subject_y) == pytest.approx(4, abs=2 * PATH_ROUNDING)
     def identity(tree):
         return {p.get("data-gbdraw-match-id") for p in tree.iter() if p.get("data-pairwise-match-style")}
     assert identity(roots[0]) == identity(root)

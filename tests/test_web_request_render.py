@@ -705,8 +705,13 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the Legend took the drawn text width (Owner V-D03,
     # 2026-10-24): only the Legend group, its composition bounds and the canvas
     # width moved.
-    "similarity_groups": "4fa202e997099a886947e5b3846b441f5e714c2b07044c1a59180116b8a8d052",
-    "collinear": "830fdaeffcb2f0cad8bff7cf41abe2390c117fa6047ecc968b1860d3e4abb669",
+    # Updated again when every path number took 3 decimals and track paths
+    # were simplified (perf-audit D-13 D2, OV-1230): only path data moved.
+    # Updated again when the duplicate match attribute stopped being written
+    # (perf-audit D-41): only that attribute and the segment byte counts and
+    # revision hashes derived from the segment text moved.
+    "similarity_groups": "d43ebe46b19f3e40a10b90e58e72eecdf689ba0c73a9aa692097c09a12549f90",
+    "collinear": "357a95a175463246c5f9e2395cac5c40201e6e608fa31b158104b84fd0d2cddb",
 }
 
 

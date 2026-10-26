@@ -260,7 +260,7 @@ test('Label Line and Label Protection draw in their mode and survive Save and Lo
   await editStep(page, 'Labels', { 'form.show_labels_linear': 'all' });
   await generate(page);
   const drawn = () => page.evaluate(() => {
-    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.results[0].content), 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.currentResults()[0].content), 'image/svg+xml');
     const labelIds = new Set([...svg.querySelectorAll('text[data-label-feature-id]')].map((text) => `#${text.id}`));
     return {
       halos: [...svg.querySelectorAll('use')].filter((use) => labelIds.has(use.getAttribute('href') || use.getAttribute('xlink:href'))).length,
@@ -600,7 +600,7 @@ test('OV-84 source replacement: the stroke of a feature the new Circular file la
     const { getFeatureElements } = await import('/gbdraw/web/js/services/feature-dom.js');
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((item) => item.stable_override_key === key);
-    const svg = new DOMParser().parseFromString(String(app.results[app.selectedResultIndex]?.content || ''), 'image/svg+xml').documentElement;
+    const svg = new DOMParser().parseFromString(String(app.currentResults()[app.selectedResultIndex]?.content || ''), 'image/svg+xml').documentElement;
     const elements = feature ? getFeatureElements(svg, feature.svg_id) : [];
     return elements.length > 0 && elements.every((element) => element.getAttribute('stroke') === strokeColor
       && element.getAttribute('stroke-width') === String(strokeWidth));

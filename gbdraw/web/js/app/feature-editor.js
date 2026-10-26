@@ -5,6 +5,8 @@
 /** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort, ShowElementSettings, ShownLegendNamePort } from './feature-editor/svg-actions.js' */
 /** @import { FindLegendRowNamedPort, KeepBothNamesPort, LegendEntryNamePort, LegendRowIsNamedPort, LegendRowNamePort, ReadDrawnTracksPort, ReadUserDefaultColorPort, SetDefaultColorPort, WriteLegendRowColorPort } from './feature-editor/color-actions.js' */
 /** @import { AskChoice, ShowNotice } from './app-messages.js' */
+/** @import { CurrentResultsPort } from '../services/svg-result-ingestion.js' */
+/** @import { ResultIdentityPort } from './feature-editor/label-actions.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
@@ -52,6 +54,9 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {CurrentResultsPort} currentResults
+ *   The preview owner's reader of the Results with the displayed Result's edits written (R1, R13).
+ * @property {ResultIdentityPort} getResultIdentity The preview owner's identity of a Result.
  * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
  *   The root's port of the editor intent onto the displayed Result (R3, R13).
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
@@ -102,6 +107,8 @@ export const createFeatureEditor = ({
   readLegendRowColors,
   featureSelection = null,
   commitActiveResultEdit = null,
+  currentResults,
+  getResultIdentity,
   showEditorIntent,
   selectResult,
   isPatternEditAvailable = () => true,
@@ -181,7 +188,7 @@ export const createFeatureEditor = ({
     showNotice
   });
   const labelActions = createFeatureLabelActions({
-    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
+    state, commitActiveResultEdit, currentResults, getResultIdentity, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest, showNotice,
     setFeatureVisibility: visibilityActions.setFeatureVisibility,
     prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
     evaluateLabelRules

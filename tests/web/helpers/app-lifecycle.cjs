@@ -487,7 +487,7 @@ const generateAndWaitForResult = async (
       committedResult: Boolean(
         Array.isArray(app.results)
         && app.results.length > 0
-        && String(app.results[0]?.content || '').includes('<svg')
+        && String(app.currentResults()[0]?.content || '').includes('<svg')
       )
     };
   });

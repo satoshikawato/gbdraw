@@ -618,7 +618,8 @@ def with_current_artifacts(
     updated["losatDerivedCache"] = {
         "entries": [dict(entry) for entry in losat_derived_cache_entries]
     }
-    updated["proteinIdentityManifest"] = dict(
+    # A render's manifest is a read-only proof; the writer keeps it as it is.
+    updated["proteinIdentityManifest"] = (
         protein_identity_manifest or empty_protein_identity_manifest()
     )
     legacy_artifacts: dict[str, Any] = {}

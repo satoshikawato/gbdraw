@@ -49,7 +49,6 @@ const installInteractionProbe = (page) => page.addInitScript(() => {
   ].join(', ');
   const MATCH_SELECTOR = [
     'path[data-gbdraw-match-id]',
-    'path[data-gbdraw-pairwise-match-id]',
     'path[data-match-kind]',
     'path[data-pairwise-match-style]'
   ].join(', ');
@@ -835,7 +834,7 @@ const readGeometry = (page) => page.evaluate(() => {
     'path[id^="f"]',
     'polygon[id^="f"]',
     'rect[id^="f"]',
-    '[data-gbdraw-pairwise-match-id]',
+    '[data-gbdraw-match-id]',
     '[data-match-kind]',
     '[data-pairwise-match-style]',
     '[data-collinearity-block-id]',

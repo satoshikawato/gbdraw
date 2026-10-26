@@ -411,7 +411,7 @@ test('match popup feature sections show the shared split location', () => {
   const origin = features.find((feature) => feature.svg_id === 'f-origin');
   const rendered = { ...origin, fileIdx: 0, sourceFeatureIndex: 5, stable_feature_id: 'stable-origin' };
   const attributes = {
-    'data-gbdraw-pairwise-match-id': 'match-origin',
+    'data-gbdraw-match-id': 'match-origin',
     'data-match-kind': 'pairwise',
     'data-query-record-id': 'REC',
     'data-subject-record-id': 'OTHER',
@@ -448,7 +448,7 @@ test('match popup span rows use the input-file coordinates of the Interval rows 
     getAttribute: (name) => (name === 'data-gbdraw-record-index' ? index : group[name] ?? null)
   })) };
   const attributes = {
-    'data-gbdraw-pairwise-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
+    'data-gbdraw-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
     'data-query-record-id': 'Q', 'data-subject-record-id': 'S',
     'data-query-record-index': '0', 'data-subject-record-index': '1',
     'data-qstart': '1', 'data-qend': '4', 'data-sstart': '4', 'data-send': '1'

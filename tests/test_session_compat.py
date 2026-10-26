@@ -799,6 +799,59 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
         adapt_session_request(request, _drawing(session))
 
 
+def test_session_adaptation_scans_each_protein_artifact_string_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import gbdraw.api.session_compat as session_compat
+
+    base_request = _linear_request(tmp_path)
+    # Two records, so the protein table has its pair (OV-977).
+    second = SeqRecord(Seq("ATGCGCAT"), id="second", annotations={"molecule_type": "DNA"})
+    base_request = replace(
+        base_request,
+        records=(
+            *base_request.records,
+            RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
+        ),
+    )
+    session = build_session_document(base_request).to_dict()
+    session["version"] = 33
+    # Each string holds both prefixes and matches neither pattern.
+    texts = [f"p_f_{index}" for index in range(20)]
+    request = replace(
+        base_request,
+        options=replace(
+            base_request.options,
+            protein_comparisons=(DataFrame({"query_protein_id": texts}),),
+        ),
+    )
+    scans: dict[str, int] = {}
+
+    class CountingPattern:
+        def __init__(self, pattern: re.Pattern[str]) -> None:
+            self._pattern = pattern
+
+        def search(self, text: str) -> re.Match[str] | None:
+            scans[text] = scans.get(text, 0) + 1
+            return self._pattern.search(text)
+
+        def finditer(self, text: str) -> Any:
+            scans[text] = scans.get(text, 0) + 1
+            return self._pattern.finditer(text)
+
+    for name in ("_LEGACY_PROTEIN_REFERENCE_RE", "_FEATURE_ANALYSIS_REFERENCE_RE"):
+        monkeypatch.setattr(
+            session_compat, name, CountingPattern(getattr(session_compat, name))
+        )
+
+    adapt_session_request(request, _drawing(session))
+
+    # One scan reads each string with each pattern once; the check for
+    # unresolved IDs reuses it when no ID is rewritten.
+    assert scans == {text: 2 for text in texts}
+
+
 @pytest.mark.parametrize("compound", [False, True], ids=["exact", "compound"])
 @pytest.mark.parametrize(
     "owner",

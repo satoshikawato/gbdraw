@@ -43,17 +43,23 @@ test('malformed JSON/gzip and fatal UTF-8 stay structured failures', async () =>
   }
 });
 
+// The Option Integrity Product Contract cites this title; the production Worker now refuses the key itself.
 test('unsafe own keys remain untrusted after the production whole-object reply', async () => {
   for (const key of ['__proto__', 'constructor', 'prototype']) {
-    const reply = await decode(new Blob([`{"nested":{"${key}":{}}}`]));
-    assert.equal(reply.status, 'ok');
-    assert.equal(Object.hasOwn(reply.data.nested, key), true);
-    // OV-952: the Session-schema diagnostic, never the key.
-    assert.throws(() => assertSafeObjectKeys(reply.data), (error) => (
-      error.code === 'INPUT_INVALID' && error.context.field === 'schema' && error.context.reason === 'FIELDS'
-      && !error.message.includes(key)
-    ));
+    const reply = await decode(new Blob([`{"nested":[{"kept":1},{"${key}":{}}]}`]));
+    assert.equal(reply.status, 'error');
+    // OV-952: the diagnostic the main thread gave before the walk moved into the Worker, never the key.
+    assert.equal(reply.error.message, 'INPUT_INVALID/FIELDS');
+    assert.equal(reply.error.code, 'INPUT_INVALID');
+    assert.equal(reply.error.stage, 'request-validation');
+    assert.deepEqual(reply.error.context, { field: 'schema', reason: 'FIELDS' });
+    assert.ok(!JSON.stringify(normalizeUserFacingError(reply.error)).includes(key));
   }
+  // The same walk still serves the routes that check a value on the main thread.
+  assert.throws(() => assertSafeObjectKeys(JSON.parse('{"a":[{"constructor":1}]}')), (error) => (
+    error.code === 'INPUT_INVALID' && error.context.field === 'schema' && error.context.reason === 'FIELDS'
+  ));
+  assert.doesNotThrow(() => assertSafeObjectKeys({ a: [{ b: 'constructor' }], proto: 1 }));
 });
 
 test('codec rejects exact file and expanded caps before reading/decoding oversize data', async () => {

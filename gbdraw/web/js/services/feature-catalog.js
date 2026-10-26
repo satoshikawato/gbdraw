@@ -520,7 +520,7 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
         || Object.prototype.hasOwnProperty.call(feature, 'nucleotide_sequence')
         || Object.prototype.hasOwnProperty.call(feature, 'nucleotideSequence')
         || !isObject(source)
-        || !reconstructCatalogNucleotideSequence(
+        || !hasCatalogNucleotideSequence(
           feature,
           sequenceSources,
           sourceSequences,
@@ -1001,30 +1001,60 @@ const selectorForFeature = (feature, stableId) => {
   return selector;
 };
 
-/** @param {unknown} sequence */
+// The complement of each IUPAC base and of the gap, as base/complement pairs. Any other character becomes `N`.
+const COMPLEMENT_PAIRS = 'ATCGGCTAUARYYRSSWWKMMKBVDHHDVBNN--';
+// The complement's code of each ASCII character: a lower-case base reads as its upper case, and 0 drops a JavaScript
+// `\s` whitespace character.
+const ASCII_COMPLEMENTS = (() => {
+  const table = new Uint8Array(128).fill('N'.charCodeAt(0));
+  for (let index = 0; index < COMPLEMENT_PAIRS.length; index += 2) {
+    const base = COMPLEMENT_PAIRS.charCodeAt(index);
+    const complement = COMPLEMENT_PAIRS.charCodeAt(index + 1);
+    table[base] = complement;
+    if (base >= 0x41 && base <= 0x5a) table[base + 0x20] = complement;
+  }
+  for (const space of [0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20]) table[space] = 0;
+  return table;
+})();
+const ASCII_TEXT = new TextDecoder();
+
+/**
+ * The reverse complement of `sequence` with whitespace removed and case ignored. An ASCII sequence is read through
+ * the table; any other one is upper-cased first and read by code point, as Unicode upper-casing can change its length
+ * or turn a character into an ASCII base.
+ * @param {string} sequence
+ * @returns {string}
+ */
 const reverseComplementSequence = (sequence) => {
-  // Looked up by one character at a time, which can never name a prototype property.
-  /** @type {Record<string, string>} */
-  const complements = {
-    A: 'T', C: 'G', G: 'C', T: 'A', U: 'A', R: 'Y', Y: 'R',
-    S: 'S', W: 'W', K: 'M', M: 'K', B: 'V', D: 'H', H: 'D',
-    V: 'B', N: 'N', '-': '-'
-  };
-  const normalized = String(sequence || '').replace(/\s+/g, '').toUpperCase();
-  return [...normalized]
-    .reverse()
-    .map((base) => complements[base] || 'N')
-    .join('');
+  const output = new Uint8Array(sequence.length);
+  let length = 0;
+  for (let index = sequence.length - 1; index >= 0; index--) {
+    const code = sequence.charCodeAt(index);
+    if (code > 0x7f) {
+      return [...sequence.replace(/\s+/g, '').toUpperCase()]
+        .reverse()
+        .map((base) => (base.charCodeAt(0) <= 0x7f ? String.fromCharCode(ASCII_COMPLEMENTS[base.charCodeAt(0)]) : 'N'))
+        .join('');
+    }
+    if (ASCII_COMPLEMENTS[code]) output[length++] = ASCII_COMPLEMENTS[code];
+  }
+  return ASCII_TEXT.decode(output.subarray(0, length));
 };
+
+/**
+ * The source text and the bounds of each part of a feature's nucleotide sequence, read once for validation and
+ * expansion; null when the feature's source reference or a bound does not resolve.
+ * @typedef {{ source: string, parts: { start: number, end: number, reverse: boolean }[] }} CatalogSequenceSlices
+ */
 
 /**
  * @param {FeatureCatalogRow | null | undefined} feature
  * @param {readonly unknown[] | null | undefined} sequenceSources
  * @param {readonly string[] | null | undefined} sourceSequences
  * @param {number | undefined} expectedRecordIndex
- * @returns {string}
+ * @returns {CatalogSequenceSlices | null}
  */
-const reconstructCatalogNucleotideSequence = (
+const catalogNucleotideSlices = (
   feature,
   sequenceSources,
   sourceSequences,
@@ -1040,14 +1070,15 @@ const reconstructCatalogNucleotideSequence = (
     || !Number.isInteger(source.recordIndex)
     || source.recordIndex !== expectedRecordIndex
   ) {
-    return '';
+    return null;
   }
   const sourceSequence = sourceSequences[sourceIndex];
   const rawParts = feature?.location_parts ?? feature?.locationParts;
   const parts = Array.isArray(rawParts) && rawParts.length
     ? rawParts
     : [feature];
-  const sequences = [];
+  /** @type {CatalogSequenceSlices['parts']} */
+  const slices = [];
   for (const part of parts) {
     const start = locationPartBound(part, 'start');
     const end = locationPartBound(part, 'end');
@@ -1058,17 +1089,34 @@ const reconstructCatalogNucleotideSequence = (
       || end < start
       || end > sourceSequence.length
     ) {
-      return '';
+      return null;
     }
-    const sequence = sourceSequence.slice(start, end);
     const strand = part?.strand ?? feature?.strand;
-    sequences.push(
-      strand === '-' || Number(strand) < 0
-        ? reverseComplementSequence(sequence)
-        : sequence
-    );
+    slices.push({ start, end, reverse: strand === '-' || Number(strand) < 0 });
   }
-  return sequences.join('');
+  return { source: sourceSequence, parts: slices };
+};
+
+/**
+ * Whether a feature's source reference gives a non-empty sequence, without building it. Sources hold no whitespace
+ * (`canonicalSequenceSourceStrings`) and upper-casing never empties a text, so a non-empty bound is a non-empty part.
+ * @param {Parameters<typeof catalogNucleotideSlices>} args
+ */
+const hasCatalogNucleotideSequence = (...args) => (
+  catalogNucleotideSlices(...args)?.parts.some(({ start, end }) => end > start) === true
+);
+
+/**
+ * @param {Parameters<typeof catalogNucleotideSlices>} args
+ * @returns {string}
+ */
+const reconstructCatalogNucleotideSequence = (...args) => {
+  const slices = catalogNucleotideSlices(...args);
+  if (!slices) return '';
+  return slices.parts.map(({ start, end, reverse }) => {
+    const sequence = slices.source.slice(start, end);
+    return reverse ? reverseComplementSequence(sequence) : sequence;
+  }).join('');
 };
 
 /**

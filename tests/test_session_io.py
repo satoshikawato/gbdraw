@@ -76,6 +76,7 @@ from gbdraw.session_io import (
     session_legend_edits_by_row_key,
     materialize_embedded_file,
     migrate_legacy_repeat_feature_shape_args,
+    normalize_current_session_artifacts,
     migrate_persisted_web_state_field_names,
     session_to_cli_args,
     validate_current_web_state_field_names,
@@ -86,6 +87,7 @@ from tests.utils.session_drawing_view import build_mode_scoped_session_json, dra
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.session import (
+    SessionDocument,
     SessionFormatError,
     SessionVersionError,
     build_session_document,
@@ -392,19 +394,18 @@ def test_current_session_materializes_manifest_once_for_multiple_protein_entries
             args=second_args,
         ),
     }
-    real_validate = (
-        protein_colinearity_module.validate_protein_identity_manifest
-    )
+    # Count full checks; the readers of the proof call the validator, which returns it.
+    real_check = protein_colinearity_module._check_protein_identity_manifest
     validation_calls = 0
 
     def count_validation(value):
         nonlocal validation_calls
         validation_calls += 1
-        return real_validate(value)
+        return real_check(value)
 
     monkeypatch.setattr(
         protein_colinearity_module,
-        "validate_protein_identity_manifest",
+        "_check_protein_identity_manifest",
         count_validation,
     )
 
@@ -4355,3 +4356,63 @@ def test_a_cli_resave_writes_a_hidden_losat_entry_without_a_name_as_the_web_does
     assert [(entry["filename"], entry["display"]) for entry in session["losatCache"]["entries"]] == [
         (first["filename"], True), ("", False), (third["filename"], True)
     ]
+
+
+_PROTEIN_GALLERY_SESSION = (
+    Path(__file__).resolve().parents[1]
+    / "gbdraw" / "web" / "gallery" / "sessions" / "BGC0000708-BGC0000713.gbdraw-session.json"
+)
+
+
+def _container_types(value: object) -> set[type]:
+    pending, found = [value], set()
+    while pending:
+        current = pending.pop()
+        if isinstance(current, (dict, list, tuple)):
+            found.add(type(current))
+            pending.extend(current.values() if isinstance(current, dict) else current)
+    return found
+
+
+def test_session_document_to_dict_returns_a_plain_mutable_manifest() -> None:
+    document = load_session_document(_PROTEIN_GALLERY_SESSION)
+
+    data = document.to_dict()
+
+    manifest = data["proteinIdentityManifest"]
+    assert _container_types(manifest) == {dict, list}
+    binding = next(iter(manifest["recordInstances"].values()))
+    binding["runtimeIds"].clear()
+    manifest["extra"] = 1
+    assert document.to_dict()["proteinIdentityManifest"] != manifest
+
+
+def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_writer() -> None:
+    from gbdraw.api.request_render import CurrentRequestArtifacts
+
+    payload = json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))
+    raw = copy.deepcopy(payload["proteinIdentityManifest"])
+    protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
+    protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])
+    json_clone = json.loads(json.dumps(raw))
+
+    artifacts = CurrentRequestArtifacts(
+        losat_cache_entries=tuple(payload["losatCache"]["entries"]),
+        protein_identity_manifest=raw,
+    )
+
+    # As before: CurrentRequestArtifacts keeps its deep copy, with the tuples.
+    stored = artifacts.protein_identity_manifest
+    assert type(stored) is dict and stored == raw
+    assert type(next(iter(stored["proteinSets"].values()))["proteins"][0]["locationParts"]) is tuple
+    normalize_current_session_artifacts(payload, protein_identity_manifest=stored)
+    # The writer writes a JSON clone of it.
+    assert payload["proteinIdentityManifest"] == json_clone
+    assert _container_types(payload["proteinIdentityManifest"]) == {dict, list}
+    assert json.dumps(payload["proteinIdentityManifest"]) == json.dumps(json_clone)
+    document = SessionDocument(payload)
+    assert document.to_dict()["proteinIdentityManifest"] == json_clone
+
+    # A Session payload that still holds the tuples is checked as raw data.
+    payload["proteinIdentityManifest"] = raw
+    assert type(SessionDocument(payload)._data["proteinIdentityManifest"]) is dict

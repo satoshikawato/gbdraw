@@ -84,7 +84,7 @@ const snapshot = page => page.evaluate(async () => {
     request: committed.renderRequest,
     resources: Object.fromEntries(await Promise.all(Object.entries(committed.resources)
       .map(async ([id, descriptor]) => [id, await identity(descriptor)]))),
-    results: state.results.value.map(result => result.content),
+    results: window.__GBDRAW_APP__.currentResults().map(result => result.content),
     resultNames: state.results.value.map(result => result.name),
     error: state.errorLog.value
   };

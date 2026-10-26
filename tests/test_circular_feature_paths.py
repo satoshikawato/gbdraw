@@ -10,6 +10,7 @@ from svgwrite.container import Group
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.layout.circular import calculate_feature_position_factors_circular
 from gbdraw.render.drawers.circular.features import FeatureDrawer
+from tests.utils.svg_compare import PATH_ROUNDING
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.svg.circular_features import generate_circular_arrowhead_path
 from gbdraw.svg.circular_features import generate_circular_arrow_path
@@ -355,14 +356,15 @@ def test_narrow_arrow_uses_reduced_shaft_radii(
         shaft_outer,
         shaft_outer,
     ]
-    assert [_radius(point) for point in endpoints] == pytest.approx(expected_radii)
+    assert [_radius(point) for point in endpoints] == pytest.approx(expected_radii, abs=PATH_ROUNDING)
 
     positions = [_position_from_xy(x, y, 1000) for x, y in endpoints]
     if strand == "positive":
         expected_positions = [100.0, 140.0, 140.0, 150.0, 140.0, 140.0, 100.0]
     else:
         expected_positions = [150.0, 110.0, 110.0, 100.0, 110.0, 110.0, 150.0]
-    assert positions == pytest.approx(expected_positions)
+    # A 3-decimal point at radius 80 or more of a 1000 bp circle is within 0.005 bp of its position.
+    assert positions == pytest.approx(expected_positions, abs=0.005)
 
 
 @pytest.mark.parametrize("strand", ["positive", "negative"])
@@ -521,10 +523,11 @@ def test_origin_spanning_narrow_arrow_is_coalesced_with_reduced_shaft(
             shaft_outer,
             shaft_outer,
             shaft_outer,
-        ]
+        ],
+        abs=PATH_ROUNDING,
     )
     assert _position_from_xy(*endpoints[4], 1000) == pytest.approx(
-        expected_tip_position
+        expected_tip_position, abs=0.005
     )
 
 
@@ -629,8 +632,8 @@ def test_multipart_narrow_arrow_uses_shaft_width_before_terminal_head() -> None:
     assert [path[0] for path in paths] == ["block", "line", "block"]
     first_block_radii = [_radius(point) for point in _path_command_endpoints(paths[0][1])]
     terminal_radii = [_radius(point) for point in _path_command_endpoints(paths[2][1])]
-    assert max(first_block_radii) - min(first_block_radii) == pytest.approx(10.0)
-    assert max(terminal_radii) - min(terminal_radii) == pytest.approx(20.0)
+    assert max(first_block_radii) - min(first_block_radii) == pytest.approx(10.0, abs=2 * PATH_ROUNDING)
+    assert max(terminal_radii) - min(terminal_radii) == pytest.approx(20.0, abs=2 * PATH_ROUNDING)
 
 
 def test_undefined_strand_narrow_arrow_falls_back_to_rectangle() -> None:

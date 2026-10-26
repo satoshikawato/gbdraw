@@ -1,4 +1,5 @@
 import { readSessionText } from '../services/session-file.js';
+import { assertSafeObjectKeys } from '../services/safe-object-keys.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
@@ -26,6 +27,8 @@ self.addEventListener('message', async ({ data: { operationId, file, ack } }) =>
     stage = 'parse';
     const data = JSON.parse(text);
     const parseCompleted = performance.now();
+    // Session Load's one check of unsafe own keys (OV-952), off the main thread; its diagnostic names its stage.
+    assertSafeObjectKeys(data);
     stage = 'reply';
     const replyStarted = performance.now();
     await sendBoundedJson(data, (part, transfers) => sendPart(operationId, part, transfers), { consume: true });

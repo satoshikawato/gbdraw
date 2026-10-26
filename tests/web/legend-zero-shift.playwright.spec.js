@@ -298,7 +298,7 @@ test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)
     const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
     const actions = createLegendLayoutActions({ readRegisteredFontFaces: () => [] });
     await actions.prepareLegendLayout();
-    const content = s.results.value[s.selectedResultIndex.value].content;
+    const content = window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value].content;
     const parse = () => new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
     const numbers = (value) => (String(value || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || []).map(Number);
     const rows = (svg) => Array.from(svg.getElementById('legend').querySelectorAll('g[data-legend-key]')).map((entry) => [

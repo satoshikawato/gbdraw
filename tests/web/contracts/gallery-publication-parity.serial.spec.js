@@ -60,7 +60,7 @@ for (const example of commonExamples) {
         });
         const app = window.__GBDRAW_APP__;
         const { state } = await import('/gbdraw/web/js/state.js');
-        const selected = app.results?.[app.selectedResultIndex];
+        const selected = app.currentResults()[app.selectedResultIndex];
         return {
           status: result?.status,
           svg: String(selected?.content || ''),
@@ -97,7 +97,7 @@ for (const example of commonExamples) {
         const result = await app.runAnalysis();
         const { state } = await import('/gbdraw/web/js/state.js');
         const error = state.errorLog.value;
-        const selected = app.results?.[app.selectedResultIndex];
+        const selected = app.currentResults()[app.selectedResultIndex];
         const svg = String(selected?.content || '');
         return {
           status: result?.status,
@@ -105,7 +105,7 @@ for (const example of commonExamples) {
             || app.similarityAlignmentRepair?.reason || result?.reason || error?.summary
             || error?.message || (error ? JSON.stringify(error) : null),
           svg,
-          matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
+          matchCount: (svg.match(/data-gbdraw-match-id=/g) || []).length,
           losatCalls: window.__GBDRAW_GALLERY_LOSAT_CALLS__
         };
       });

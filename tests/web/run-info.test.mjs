@@ -178,9 +178,9 @@ const materializeAndRunRecipe = async (session, recipe, info, fixture) => {
 const sourceFeatureIds = (genbank) => evaluatePython([
   'import io',
   'from Bio import SeqIO',
-  'from gbdraw.features.source import build_source_feature_catalog',
+  'from gbdraw.features.source import capture_source_features',
   'record = SeqIO.read(io.StringIO(payload), "genbank")',
-  'result = [entry.biological_feature_id for entry in build_source_feature_catalog(record)]'
+  'result = [entry.biological_feature_id for entry in capture_source_features(record).entries]'
 ].join('\n'), genbank);
 
 assert.equal(quoteShellArg('simple.tsv'), 'simple.tsv');

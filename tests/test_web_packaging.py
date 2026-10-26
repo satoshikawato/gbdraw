@@ -9,6 +9,7 @@ import importlib.util
 import io
 import json
 import os
+import posixpath
 import re
 import shutil
 import socket
@@ -225,6 +226,85 @@ def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
     verify_module.BUILD_SUPPORT.inspect_browser_wheel_payload(expected_wheel_path)
     verify_module._assert_packaged_assets()
+
+
+def _load_browser_wheel_bytecode_module():
+    spec = importlib.util.spec_from_file_location("browser_wheel_bytecode", REPO_ROOT / "tools" / "browser_wheel_bytecode.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_browser_wheel_bytecode_adds_an_unchecked_pyc_per_module_to_record(tmp_path: Path) -> None:
+    bytecode = _load_browser_wheel_bytecode_module()
+    source = tmp_path / "pkg-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(source, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("pkg/__init__.py", (2020, 1, 2, 3, 4, 6)), "VALUE = 1\n")
+        zf.writestr(zipfile.ZipInfo("pkg/data.toml", (2020, 1, 2, 3, 4, 6)), "a = 1\n")
+        zf.writestr("pkg-1.0.dist-info/RECORD", "pkg/__init__.py,sha256=x,10\npkg/data.toml,sha256=y,6\npkg-1.0.dist-info/RECORD,,\n")
+    targets = [tmp_path / "first.whl", tmp_path / "second.whl"]
+    assert [bytecode.add_bytecode(str(source), str(target)) for target in targets] == [1, 1]
+    assert targets[0].read_bytes() == targets[1].read_bytes()
+    pyc_name = f"pkg/__pycache__/__init__.{sys.implementation.cache_tag}.pyc"
+    with zipfile.ZipFile(targets[0]) as zf:
+        assert zf.namelist() == [
+            "pkg/__init__.py", pyc_name, "pkg/data.toml", "pkg-1.0.dist-info/RECORD"
+        ]
+        pyc = zf.read(pyc_name)
+        record = zf.read("pkg-1.0.dist-info/RECORD").decode().splitlines()
+        assert zf.getinfo(pyc_name).date_time == (2020, 1, 2, 3, 4, 6)
+    # PEP 552: this interpreter's magic, then flags 0b01 (hash-based, unchecked).
+    assert pyc[:4] == importlib.util.MAGIC_NUMBER
+    assert int.from_bytes(pyc[4:8], "little") == 1
+    digest = base64.urlsafe_b64encode(hashlib.sha256(pyc).digest()).rstrip(b"=").decode()
+    assert record == [
+        "pkg/__init__.py,sha256=x,10",
+        "pkg/data.toml,sha256=y,6",
+        f"{pyc_name},sha256={digest},{len(pyc)}",
+        "pkg-1.0.dist-info/RECORD,,",
+    ]
+
+
+def _pyodide_bytecode_tag() -> str:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR
+
+    python = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))["info"]["python"]
+    major, minor = python.split(".")[:2]
+    return f"cpython-{major}{minor}"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node.js")
+def test_pyodide_bytecode_step_takes_the_pyodide_directory_from_the_web_asset_manifest(tmp_path: Path) -> None:
+    # The step runs before config.js is rewritten, so it must not read PYODIDE_INDEX_URL from it.
+    from gbdraw._build_support import pyodide_runtime_dir
+
+    prepare_module = _load_prepare_browser_wheel_module()
+    wheel = tmp_path / "pkg-1.0-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as zf:
+        zf.writestr("pkg/__init__.py", "VALUE = 1\n")
+        zf.writestr("pkg-1.0.dist-info/RECORD", "pkg/__init__.py,sha256=x,10\npkg-1.0.dist-info/RECORD,,\n")
+    prepare_module.add_pyodide_bytecode(wheel, pyodide_runtime_dir())
+    with zipfile.ZipFile(wheel) as zf:
+        assert [name for name in zf.namelist() if name.endswith(".pyc")] == [f"pkg/__pycache__/__init__.{_pyodide_bytecode_tag()}.pyc"]
+    assert "PYODIDE_INDEX_URL" not in (REPO_ROOT / "tools" / "compile_browser_wheel_bytecode.mjs").read_text(encoding="utf-8")
+
+
+@pytest.mark.browser
+def test_browser_wheel_carries_the_pyodide_bytecode_of_every_module() -> None:
+    _, browser_wheel_path = ensure_prepared_browser_wheel()
+    tag = _pyodide_bytecode_tag()
+    with zipfile.ZipFile(browser_wheel_path) as zf:
+        names = set(zf.namelist())
+        sources = sorted(name for name in names if name.endswith(".py"))
+        expected = {
+            posixpath.join(posixpath.dirname(name), "__pycache__", f"{posixpath.basename(name)[:-3]}.{tag}.pyc")
+            for name in sources
+        }
+        assert sources and expected <= names
+        assert {name for name in names if name.endswith(".pyc")} == expected
+        flags = {int.from_bytes(zf.read(name)[4:8], "little") for name in expected}
+    assert flags == {1}
 
 
 @pytest.mark.browser
@@ -446,19 +526,45 @@ def test_open_source_notices_include_local_pyodide_wheels() -> None:
         assert wheel_path.as_posix() in notices_html
 
 
-def test_web_config_pyodide_local_wheels_match_shared_manifest() -> None:
-    from gbdraw._web_assets import PYODIDE_LOCAL_WHEELS
+def test_web_config_pyodide_values_are_written_from_the_web_asset_manifest() -> None:
+    # tools/prepare_browser_wheel.py writes them (update_browser_wheel_config).
+    from gbdraw._build_support import CONFIG_PATH, render_pyodide_asset_config
 
-    config_js = (WEB_ROOT / "js" / "config.js").read_text(encoding="utf-8")
-    match = re.search(
-        r"export const PYODIDE_LOCAL_WHEELS\s*=\s*\[(.*?)\];", config_js, re.DOTALL
+    config_text = CONFIG_PATH.read_text(encoding="utf-8")
+    assert render_pyodide_asset_config(config_text) == config_text, (
+        "gbdraw/web/js/config.js differs from gbdraw/_web_assets.py: run `python tools/prepare_browser_wheel.py`."
     )
-    assert match is not None
-    configured_wheels = tuple(
-        Path(raw.lstrip("./"))
-        for raw in re.findall(r"""["']([^"']+\.whl)["']""", match.group(1))
-    )
-    assert configured_wheels == PYODIDE_LOCAL_WHEELS
+
+
+def test_update_browser_wheel_config_writes_the_web_asset_manifest(tmp_path, monkeypatch) -> None:
+    from gbdraw import _build_support as build_support
+
+    config_path = tmp_path / "config.js"
+    stale = build_support.CONFIG_PATH.read_text(encoding="utf-8").replace(
+        '"pyodide.asm.wasm",', '"pyodide.asm.wasm", "stale.bin",', 1
+    ).replace('"./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl",', "", 1)
+    config_path.write_text(stale, encoding="utf-8")
+    monkeypatch.setattr(build_support, "CONFIG_PATH", config_path)
+
+    build_support.update_browser_wheel_config(wheel_name="gbdraw-9.9.9-py3-none-any.whl")
+
+    written = config_path.read_text(encoding="utf-8")
+    assert written == build_support.render_pyodide_asset_config(written)
+    assert '"stale.bin"' not in written
+    assert '"./vendor/pyodide-wheels/six-1.17.0-py2.py3-none-any.whl"' in written
+    assert 'export const GBDRAW_WHEEL_NAME = "gbdraw-9.9.9-py3-none-any.whl";' in written
+
+
+def test_pyodide_runtime_wheels_are_the_lock_files_of_their_packages() -> None:
+    from gbdraw._web_assets import PYODIDE_RUNTIME_DIR, PYODIDE_RUNTIME_PACKAGE_WHEELS, PYODIDE_RUNTIME_WHEELS
+
+    # The diagram Worker loads each by its name field (PEP 427); Pyodide then
+    # fetches the lock file's wheel for that name.
+    lock = json.loads((PYODIDE_RUNTIME_DIR / "pyodide-lock.json").read_text(encoding="utf-8"))
+    assert {
+        path.name.split("-", 1)[0]: lock["packages"][path.name.split("-", 1)[0]]["file_name"]
+        for path in PYODIDE_RUNTIME_WHEELS
+    } == PYODIDE_RUNTIME_PACKAGE_WHEELS
 
 
 def test_index_uses_title_logo_separately_from_icon_assets() -> None:
@@ -822,8 +928,8 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         feature_catalog = editor_state.get("featureCatalog", {})
         catalog_items = feature_catalog.get("items", [])
         svg_text = "\n".join(result.get("content", "") for result in results)
-        pairwise_ids = set(
-            re.findall(r"data-gbdraw-pairwise-match-id=[\"']([^\"']+)[\"']", svg_text)
+        match_ids = set(
+            re.findall(r"data-gbdraw-match-id=[\"']([^\"']+)[\"']", svg_text)
         )
         collinearity_ids = set(
             re.findall(r"data-collinearity-block-id=[\"']([^\"']+)[\"']", svg_text)
@@ -937,7 +1043,7 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
                 for entry in losat_derived_cache_entries
             ), session_name
         if session_name in GALLERY_MULTI_RECORD_LINEAR_SESSION_FILES:
-            assert pairwise_ids or collinearity_ids, session_name
+            assert match_ids or collinearity_ids, session_name
 
     assert observed_losat_cache_sessions == GALLERY_LOSAT_CACHE_SESSION_FILES
     assert (
@@ -1018,6 +1124,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
     expected_name = "gbdraw-0.14.1-py3-none-any.whl"
+    pyodide_dir = tmp_path / "pyodide"
     calls: list[object] = []
 
     def fake_run(
@@ -1044,8 +1151,8 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     build_support = SimpleNamespace(
         BROWSER_WHEEL_BUILD_ENV="GBDRAW_BUILDING_BROWSER_WHEEL",
         expected_browser_wheel_name=lambda: expected_name,
+        pyodide_runtime_dir=lambda: pyodide_dir,
         refresh_open_source_notices=lambda: calls.append("notices"),
-        generate_cache_bust_token=lambda: "cache-token",
         update_browser_wheel_config=lambda **kwargs: calls.append(("config", kwargs)),
         validate_browser_wheel_prepared=fake_validate_browser_wheel_prepared,
     )
@@ -1055,15 +1162,38 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
         prepare_module, "_load_build_support_module", lambda: build_support
     )
     monkeypatch.setattr(prepare_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(prepare_module, "add_pyodide_bytecode", lambda wheel, index: calls.append(("bytecode", wheel.name, index)))
 
-    assert prepare_module.prepare_browser_wheel(refresh_cache_bust=True) == 0
+    assert prepare_module.prepare_browser_wheel() == 0
     assert (web_root / expected_name).exists()
     assert calls == [
         "notices",
         "wheel",
-        ("config", {"wheel_name": expected_name, "cache_bust": "cache-token"}),
+        ("bytecode", expected_name, pyodide_dir),
+        ("config", {"wheel_name": expected_name}),
         "validate",
     ]
+
+
+@pytest.mark.browser
+def test_cloudflare_bundle_build_fails_when_a_pinned_vendor_file_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    ensure_prepared_browser_wheel()
+    cloudflare_module = _load_prepare_cloudflare_pages_module()
+    prefixes, pinned = cloudflare_module._read_immutable_assets_manifest()
+    name = sorted(pinned)[0]
+    monkeypatch.setattr(
+        cloudflare_module,
+        "_read_immutable_assets_manifest",
+        lambda: (prefixes, {**pinned, name: "0" * 64}),
+    )
+    with pytest.raises(RuntimeError, match=name):
+        cloudflare_module.build_cloudflare_pages_bundle(
+            output_root=tmp_path / "cloudflare-pages",
+            commit_sha="abcdef1234567890abcdef1234567890abcdef12",
+        )
 
 
 @pytest.mark.browser
@@ -1118,7 +1248,18 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_analytics_flag(
     assert "GBDRAW_HOSTED_BUILD_LABEL" not in index_html
     assert f"Version: v{read_project_version()}+abcdef1" in index_html
     assert f'title="Commit {commit_sha}"' in index_html
+    # The served wheel's URL carries its content hash (the source keeps null).
+    served_wheel = bundle_path / f"gbdraw-{read_project_version()}-py3-none-any.whl"
+    token = hashlib.sha256(served_wheel.read_bytes()).hexdigest()[:16]
+    bundle_config = (bundle_path / "js" / "config.js").read_text(encoding="utf-8")
+    assert f'export const GBDRAW_WHEEL_CACHE_BUST = "{token}";' in bundle_config
     headers = (bundle_path / "_headers").read_text(encoding="utf-8")
+    # The build writes the cache rules and the module preloads, not only the
+    # isolation headers.
+    assert headers == cloudflare_module.render_bundle_headers()
+    assert index_html.count('<link rel="modulepreload"') == len(
+        cloudflare_module.module_preload_paths(bundle_path)
+    )
     assert "Cross-Origin-Opener-Policy: same-origin" in headers
     assert "Cross-Origin-Embedder-Policy: require-corp" in headers
     assert "Cross-Origin-Resource-Policy: same-origin" in headers
@@ -1266,9 +1407,7 @@ def test_cloudflare_prepare_treats_gallery_as_read_only(
         cloudflare_module,
         "_load_prepare_browser_wheel_module",
         lambda: SimpleNamespace(
-            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append(
-                ("wheel", refresh_cache_bust)
-            )
+            prepare_browser_wheel=lambda: calls.append(("wheel", None))
         ),
     )
     monkeypatch.setattr(
@@ -1290,7 +1429,7 @@ def test_cloudflare_prepare_treats_gallery_as_read_only(
         cloudflare_module.prepare_cloudflare_pages(output_root=output_root)
         == output_root
     )
-    assert calls == [("wheel", False), ("notices", None), ("bundle", output_root)]
+    assert calls == [("wheel", None), ("notices", None), ("bundle", output_root)]
 
 
 def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
@@ -1305,7 +1444,7 @@ def test_cloudflare_prepare_refreshes_open_source_notices_before_copy(
         cloudflare_module,
         "_load_prepare_browser_wheel_module",
         lambda: SimpleNamespace(
-            prepare_browser_wheel=lambda refresh_cache_bust=False: calls.append("wheel")
+            prepare_browser_wheel=lambda: calls.append("wheel")
         ),
     )
     monkeypatch.setattr(

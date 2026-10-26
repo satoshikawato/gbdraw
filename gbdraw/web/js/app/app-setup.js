@@ -36,6 +36,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -83,7 +84,6 @@ import {
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
-  serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
@@ -1614,8 +1614,13 @@ export const createAppSetup = () => {
     storeCircularMultiRecordDefaults(state.activeDrawing());
     rebindAnnotationRecords();
   };
-  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
-  setPreviewRuntime(previewRuntime);
+  // Bumped by each edit of the displayed Result's root (R1).
+  const resultEditRevision = shallowRef(0);
+  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg, editRevision: resultEditRevision });
+  setPreviewRuntime({
+    clearActiveRuntime: previewRuntime.clearActiveRuntime,
+    currentResults: previewRuntime.currentResults
+  });
 
   // Before the History snapshot service, which clears its copy feedback (D-37).
   const orthogroupActions = createOrthogroupEditor({ state, getCommittedRequest: getCommittedCanonicalRenderRequest });
@@ -1636,7 +1641,7 @@ export const createAppSetup = () => {
     applyEditorStateData,
     buildOrthogroupStateData,
     applyOrthogroupStateData,
-    serializeResults,
+    currentResults: previewRuntime.currentResults,
     applyResultsData,
     buildRunStateData,
     applyRunStateData,
@@ -2030,6 +2035,8 @@ export const createAppSetup = () => {
     readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    currentResults: previewRuntime.currentResults,
+    getResultIdentity: previewRuntime.getResultIdentity,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
     previewTransformInteraction,
@@ -3774,6 +3781,9 @@ export const createAppSetup = () => {
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
     // without a Result leaves the pane as it was.
     if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) settingsPaneActions.showPhonePane('preview');
+    // A loaded Session makes a Generate likely: download the Worker's boot
+    // files now, after the Load, so they never slow its own requests.
+    if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
     return result;
   };
   /** @param {SessionFileInput} event */
@@ -5213,6 +5223,9 @@ export const createAppSetup = () => {
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   // The preview is shown again after this flush's watchers have run: measure on the next tick.
   watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
+  // An edit of the shown root (a drag, Reset Layout, an Undo of a record move)
+  // leaves the Result object in place (R1), so the review measures again on it.
+  watch(resultEditRevision, similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   const similarityAlignmentReview = computed(() => {
     const draft = similarityAlignmentActions.draft.value;
     const directions = similarityAlignmentActions.directionPreview.value?.records;
@@ -7077,6 +7090,8 @@ export const createAppSetup = () => {
     sessionTitle,
     sessionTitleLabel,
     results,
+    // The Results with the displayed Result's edits written (R1); the test hooks read them.
+    currentResults: previewRuntime.currentResults,
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,

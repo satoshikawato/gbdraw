@@ -236,7 +236,6 @@ const {
   buildRunStateData,
   buildUiStateData,
   serializeActiveRenderFiles,
-  serializeResults,
   SESSION_VERSION,
   installShownDrawing
 } = await import('../../gbdraw/web/js/services/config.js');
@@ -278,7 +277,7 @@ const artifactSnapshots = createHistorySnapshotService({
   applyEditorStateData,
   buildOrthogroupStateData,
   applyOrthogroupStateData,
-  serializeResults,
+  currentResults: () => state.results.value,
   applyResultsData,
   buildRunStateData,
   applyRunStateData

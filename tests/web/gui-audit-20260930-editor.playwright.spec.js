@@ -166,7 +166,7 @@ test('Selected features annotations generate for a Circular multi-record batch',
   });
   await generateAndWaitForResult(page);
   // Python binds each explicit target to its own record's output only.
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => (
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => (
     new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
       .querySelectorAll('[data-gbdraw-annotation-id]').length > 0
   )))).toEqual([true, false]);
@@ -330,7 +330,7 @@ test('a Linear legend side change applies on Generate with the note, or at once 
       const mounted = app.svgContainer.querySelector('svg');
       const toRoot = mounted.getScreenCTM().inverse();
       return {
-        result: app.results[app.selectedResultIndex].content,
+        result: app.currentResults()[app.selectedResultIndex].content,
         mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
         viewBox: mounted.getAttribute('viewBox'),
         legendRows: [...mounted.querySelectorAll('g[data-legend-key]')].map((row) => {
@@ -416,7 +416,7 @@ test('a horizontal legend keeps a sort and a featureless rename through Generate
 test('canvas padding reaches every batch Result through Generate and applies once', async ({ page }) => {
   test.setTimeout(600_000);
   await openBatch(page);
-  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
     const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
     return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
   }));
@@ -490,7 +490,7 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
     const { state } = await import('./js/state.js');
     const ingestion = await import('./js/services/svg-result-ingestion.js');
     const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const result = state.results.value[state.selectedResultIndex.value];
+    const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
     const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
     return {
       identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
@@ -542,7 +542,7 @@ test('a successful Generate clears the note of a failed live edit, and a failed 
   test.setTimeout(300_000);
   await openBatch(page);
   const note = page.locator('[data-live-application-feedback]');
-  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => result.content));
+  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content));
   const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -575,7 +575,7 @@ test('a successful Generate clears the note of a failed live edit, and a failed 
 const labelEditorState = (page, scopePath) => page.evaluate(async (path) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const result = state.results.value[state.selectedResultIndex.value];
+  const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
   const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
   return {
     processing: state.labelReflowProcessing.value || state.processing.value,

@@ -49,7 +49,7 @@ const observeRequests = (page) => page.addInitScript(() => {
   };
 });
 const lastRequest = (page) => page.evaluate(() => structuredClone(window.__GBDRAW_REQUESTS__.at(-1) || null));
-const drawnRecordIds = (page) => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+const drawnRecordIds = (page) => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
   const svg = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml');
   return [...new Set([...svg.querySelectorAll('g[data-gbdraw-record-id]')]
     .map((element) => element.getAttribute('data-gbdraw-record-id')))];
@@ -378,7 +378,7 @@ test('a Legend rename waits while its record is OFF, also across a source replac
 const labelFontNote = (page) => page.locator(
   '.auto-value-field:has(> input[aria-label="Label Font Size"]) > .auto-value-placeholder'
 );
-const drawnLabelFontSizes = (page) => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+const drawnLabelFontSizes = (page) => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
   const svg = new DOMParser().parseFromString(String(result.content || ''), 'image/svg+xml');
   return [...new Set([...svg.querySelectorAll('text[data-label-feature-id]')]
     .map((label) => Number(label.getAttribute('font-size'))))];

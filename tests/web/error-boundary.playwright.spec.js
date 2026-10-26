@@ -109,7 +109,7 @@ for (const mode of ['circular', 'linear']) {
       const snapshot = () => page.evaluate(async () => {
         const { getCommittedCanonicalSession } = await import('./js/services/config.js');
         const a = window.__GBDRAW_APP__, h = window.__GBDRAW_HISTORY__;
-        return { results: JSON.stringify(a.results), session: JSON.stringify(getCommittedCanonicalSession()),
+        return { results: JSON.stringify(a.currentResults()), session: JSON.stringify(getCommittedCanonicalSession()),
           undo: h.getUndoCount(), redo: h.getRedoCount() };
       });
       const before = await snapshot();
@@ -225,7 +225,7 @@ test('a live edit that fails the same way for the same request offers no Retry',
   test.setTimeout(180000);
   await openApp(page);
   await loadSession(page, 'BGC0000708-BGC0000713');
-  const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const before = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   await setNextDisplayStart(page, 1);
   // The forced reflow request is the path a label visibility edit uses.
   await page.evaluate(async () => {
@@ -242,7 +242,7 @@ test('a live edit that fails the same way for the same request offers no Retry',
   await expect(note).toContainText('The diagram engine failed while drawing this diagram.');
   await expect(note).toContainText('Change the edit, or change the settings and use Generate.');
   await expect(note).not.toContainText('Retry the live edit');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before);
 });
 
 test('@pr-smoke live and downloaded standalone search retain JavaScript regex and word targets', async ({page}, info) => {

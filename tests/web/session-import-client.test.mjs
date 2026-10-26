@@ -119,7 +119,7 @@ test('bounded assembly preserves empty containers, batches, Unicode code units a
   part({ kind: 'value', path: [], value: {} });
   part({ kind: 'value', path: ['array'], value: [] });
   part({ kind: 'batch', path: ['array'], index: 0, value: [null, {}, []] });
-  part({ kind: 'string-start', path: ['text'] });
+  part({ kind: 'string-start', path: ['text'], encoding: 'utf-16' });
   part({ kind: 'string-chunk', units: new Uint16Array([0xd800, 0x61, 0xd83d, 0xde00]) });
   part({ kind: 'string-end' });
   part({ kind: 'value', path: ['__proto__'], value: { preserved: true } });

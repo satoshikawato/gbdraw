@@ -6,6 +6,7 @@ import random
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -25,13 +26,16 @@ def row(q, s, score=1.0, coverage=1.0, **kwargs):
 
 
 def directed(best, pm):
-    """The live directed-hit records for the oracle's rows, keyed by direction."""
+    """The live directed-hit table for the oracle's rows."""
     frame = pd.DataFrame([{"domain_only": False} | vars(item) for item in best.values()])
     return pc._directed_hits_from_tables({(0, 1): frame}, pm)
 
 
-def ranked(hits):
-    return sorted(hits.values(), key=lambda hit: hit.rank)
+def direction(hits, query, subject):
+    """The record of one direction's row in the live table."""
+    query_code, subject_code = hits.codes((query, subject)).tolist()
+    (row,) = np.flatnonzero((hits.query == query_code) & (hits.subject == subject_code)).tolist()
+    return hits.hit(row)
 
 
 def view(candidate):
@@ -87,7 +91,7 @@ def test_seeded_candidate_and_local_competition_equivalence(seed):
             for q, s in [(u, m), (m, u)]:
                 if rng.random() < .55:
                     best[q, s] = row(q, s, rng.choice([0., .4, 1., 1., 2.]), rng.choice([.1, .3, .7, 1.]), evalue=rng.choice([1e-20, 1e-30]))
-    thresholds = {pid: pc._LocalThreshold(pid, rng.choice([.5, 1., 3.]), "fixture", 0, 0) for pid in pm if rng.random() < .6}
+    thresholds = {pid: rng.choice([.5, 1., 3.]) for pid in pm if rng.random() < .6}
     mapping = {pid: gid for gid, members in groups.items() for pid in members}
     index = pc._index_core_support_evidence(directed(best, pm), mapping)
     for u in ["u", "v"]:
@@ -109,14 +113,14 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
         (("u", "v"), 1.), (("v", "w"), 1.), (("w", "v"), 1.),
         (("x", "y"), 1.), (("y", "x"), 1.)]}
     hits = directed(best, pm)
-    anchors = [pc._AnchorCoreEvidenceEdge("a", "b", hits["a", "b"], 1., 1., "rbh")]
+    anchors = [pc._AnchorCoreEvidenceEdge("a", "b", direction(hits, "a", "b"), 1., 1., "rbh")]
     snapshots = []
     original = pc._index_core_support_evidence
     def observe(evidence, mapping):
         snapshots.append(dict(mapping))
         return original(evidence, mapping)
     with patch.object(pc, "_index_core_support_evidence", observe):
-        result = pc._build_anchor_core_orthogroups(hits, anchors, pm, ranked_hits=ranked(hits), include_singletons=False, max_related_edges_per_orthogroup=2)
+        result = pc._build_anchor_core_orthogroups(hits, anchors, pm, include_singletons=False, max_related_edges_per_orthogroup=2)
     assert "u" not in snapshots[0] and snapshots[1]["u"] == "og_1"
     assert result.member_by_protein_id["u"].role == "inparalog"
     # v cannot chain through u during assignment; u competes in the later local phase.
@@ -131,6 +135,23 @@ def test_fixed_core_then_expanded_competition_and_local_addition():
     local = {"v": 1., "w": 1.}
     assert not old._record_local_component_has_competing_core_support(["v", "w"], core, best, thresholds, pm, local)
     assert old._record_local_component_has_competing_core_support(["v", "w"], expanded, best, thresholds, pm, local)
+
+
+def test_anchor_core_thresholds_by_protein():
+    pm = {pid: bench.protein(pc, pid, r, i) for i, (pid, r) in enumerate([
+        ("a", 0), ("b", 1), ("c", 1), ("u", 0), ("s", 0), ("z", 0)])}
+    best = {pair: row(*pair, score) for pair, score in [
+        (("a", "b"), 2.), (("b", "a"), 1.6), (("a", "c"), 3.), (("u", "c"), 4.), (("u", "b"), 1.),
+        (("c", "u"), .8), (("s", "z"), 5.)]}
+    hits = directed(best, pm)
+    anchors = [
+        pc._AnchorCoreEvidenceEdge("a", "b", direction(hits, "a", "b"), 2., 1.6, "rbh"),
+        pc._AnchorCoreEvidenceEdge("a", "c", direction(hits, "a", "c"), 3., .5, "coortholog"),
+        # Infinite and non-positive anchor scores never set a floor.
+        pc._AnchorCoreEvidenceEdge("u", "b", direction(hits, "u", "b"), float("inf"), 0., "coortholog"),
+    ]
+    # The lowest anchor score, else the best cross-record score; same-record hits alone set none.
+    assert pc._derive_anchor_core_thresholds(hits, anchors) == {"a": .75 * 2., "b": .75 * 1.6, "c": .75 * .5, "u": .75 * 4.}
 
 
 def test_sparse_visits_and_giant_groups():
@@ -220,8 +241,8 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
         for member in ["a", "c"]:
             best[pid, member] = row(pid, member, .8)
     hits = directed(best, pm)
-    anchors = [pc._AnchorCoreEvidenceEdge(q, s, hits[q, s], 1., 1., "rbh") for q, s in [("a", "b"), ("c", "d")]]
-    result = pc._build_anchor_core_orthogroups(hits, anchors, pm, ranked_hits=ranked(hits), include_singletons=False, max_related_edges_per_orthogroup=cap)
+    anchors = [pc._AnchorCoreEvidenceEdge(q, s, direction(hits, q, s), 1., 1., "rbh") for q, s in [("a", "b"), ("c", "d")]]
+    result = pc._build_anchor_core_orthogroups(hits, anchors, pm, include_singletons=False, max_related_edges_per_orthogroup=cap)
     assert (result.member_by_protein_id["high"].role, result.member_by_protein_id["high"].confidence) == ("inparalog", "high")
     assert (result.member_by_protein_id["low"].role, result.member_by_protein_id["low"].confidence) == ("low_confidence", "low")
     assert result.member_by_protein_id["low"].best_core_support == .15
@@ -234,6 +255,92 @@ def test_complete_ties_best_second_confidence_and_related_order(cap):
     thresholds = pc._derive_anchor_core_thresholds(hits, anchors)
     scores = [old._build_core_support_candidate("tie0", gid, members, best, thresholds, pm) for gid, members in [("og_1", ["a", "b"]), ("og_2", ["c", "d"])]]
     assert [(s.support, s.diagnostic_score) for s in scores] == [(.8, .8), (.8, .8)]
+
+
+def sequential_related_edges(ranked_hits, pm, group_by_protein, member_roles, membership, related, cap):
+    """The related-edge pass as one loop over ranked records, as it ran before the table."""
+    def canonical(hit):
+        if hit.query_record_index != hit.subject_record_index:
+            forward = hit.query_record_index < hit.subject_record_index
+            return (hit.query, hit.subject) if forward else (hit.subject, hit.query)
+        return tuple(sorted((hit.query, hit.subject)))
+    membership_pairs = {tuple(sorted((e.query_protein_id, e.subject_protein_id))) for edges in membership.values() for e in edges}
+    seen = set()
+    full = {None, *(gid for gid, edges in related.items() if len(edges) >= cap)}
+    for hit in ranked_hits:
+        query, subject = canonical(hit)
+        query_group, subject_group = group_by_protein.get(query), group_by_protein.get(subject)
+        if query_group in full and subject_group in full:
+            continue
+        if hit.domain_only:
+            kind = "domain_only"
+        elif query_group is not None and subject_group is not None and query_group != subject_group:
+            kind = "weak_bridge"
+        elif query_group == subject_group and "inparalog" in {member_roles.get(query), member_roles.get(subject)}:
+            kind = "same_record_inparalog"
+        else:
+            kind = "related_homolog"
+        pair = tuple(sorted((query, subject)))
+        if pair in membership_pairs or (*pair, kind) in seen:
+            continue
+        seen.add((*pair, kind))
+        for gid in dict.fromkeys(g for g in (query_group, subject_group) if g is not None):
+            edges = related.setdefault(gid, [])
+            if gid in full:
+                continue
+            # An equal edge in either direction is not added twice.
+            if not any({e.query_protein_id, e.subject_protein_id} == {query, subject} and e.edge_kind == kind for e in edges):
+                edges.append(pc._make_ortholog_edge(
+                    orthogroup_id=gid, source_rbh_orthogroup_id=query_group, target_rbh_orthogroup_id=subject_group,
+                    query_id=query, subject_id=subject, hit=hit, protein_map=pm, edge_kind=kind, render_role="display_edge"))
+            if len(edges) >= cap:
+                full.add(gid)
+
+
+@pytest.mark.parametrize("cap", [1, 2, 5])
+@pytest.mark.parametrize("seed", range(30))
+def test_related_edges_match_the_sequential_pass(seed, cap):
+    rng = random.Random(20261025 + seed)
+    ids = [f"p{i}" for i in range(rng.randrange(6, 14))]
+    # ID order differs from feature order, and records interleave.
+    rng.shuffle(ids)
+    pm = {pid: bench.protein(pc, pid, rng.randrange(3), i) for i, pid in enumerate(ids)}
+    best = {(q, s): row(q, s, rng.choice([.5, 1., 1., 2.]), rng.choice([.1, .3, .7, 1., 1.]), evalue=rng.choice([1e-20, 1e-30]))
+            for q in ids for s in ids if q != s and rng.random() < .4}
+    hits = directed(best, pm)
+    ranked = [hits.hit(r) for r in range(len(hits))]
+    group_by_protein = {pid: f"og_{rng.randrange(3)}" for pid in ids if rng.random() < .6}
+    member_roles = {pid: rng.choice(["anchor", "coortholog", "inparalog"]) for pid in group_by_protein}
+    groups = list(dict.fromkeys(group_by_protein.values()))
+    membership = {gid: [SimpleNamespace(query_protein_id=q, subject_protein_id=s) for q, s in rng.sample(list(best), min(2, len(best)))]
+                  for gid in groups}
+    # Edges held before the pass, in either direction, some groups at or over the cap.
+    held = {}
+    for gid in groups:
+        if ranked and rng.random() < .7:
+            held[gid] = []
+            for hit in rng.choices(ranked, k=rng.randrange(cap + 2)):
+                q, s = (hit.query, hit.subject) if rng.random() < .5 else (hit.subject, hit.query)
+                held[gid].append(pc._make_ortholog_edge(
+                    orthogroup_id=gid, source_rbh_orthogroup_id=gid, target_rbh_orthogroup_id=None, query_id=q, subject_id=s,
+                    hit=hit, protein_map=pm, edge_kind=rng.choice(["ambiguous_paralog", "domain_only", "related_homolog", "weak_bridge"]),
+                    render_role="display_edge"))
+    expected = {gid: list(edges) for gid, edges in held.items()}
+    sequential_related_edges(ranked, pm, group_by_protein, member_roles, membership, expected, cap)
+    actual = {gid: list(edges) for gid, edges in held.items()}
+    pc._append_related_edges(hits, pm, group_by_protein=group_by_protein, member_roles=member_roles,
+                             ortholog_edges_by_group=membership, related_edges_by_group=actual, max_related_edges_per_orthogroup=cap)
+    assert list(actual) == list(expected)
+    assert actual == expected
+
+
+def test_negative_record_indices_keep_record_buckets_apart():
+    # B's best hit into record 0 and C's into record -1 are different buckets.
+    pm = {pid: bench.protein(pc, pid, record, i) for i, (pid, record) in enumerate([("A", -1), ("B", -1), ("C", 0)])}
+    tables = {(0, 1): bench.frame([bench.hit("B", "C")]), (1, 0): bench.frame([bench.hit("C", "B")])}
+    result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=2, comparison_pairs=())
+    assert {pid: (m.role, m.assignment_reason) for pid, m in result.orthogroups.member_by_protein_id.items()} == {
+        pid: ("anchor", "cross-record reciprocal best anchor") for pid in ("B", "C")}
 
 
 # Normalized tables hold float scores; the record builder drops every non-positive one.

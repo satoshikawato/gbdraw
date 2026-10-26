@@ -231,7 +231,7 @@ class GcContentDrawer:
             if line is None:
                 return ()
             base = float(radius) * float(norm_factor)
-            area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
+            area = CircularInkProfile.between(line.positions, line.radii, record_length=record_len, base_px=base, pad_px=pad)
             return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
         plot_df = gc_content_percent_df(
             gc_df, dinucleotide=dinucleotide, min_percent=self.min_percent, max_percent=self.max_percent
@@ -242,7 +242,7 @@ class GcContentDrawer:
         )
         if scalar_line is None:
             return ()
-        positions, outer_radii, baseline_radius = scalar_line
+        positions, outer_radii, baseline_radius = scalar_line.positions, scalar_line.radii, scalar_line.baseline_radius
         inks: list[CircularInk] = [
             CircularInkProfile.between(positions, outer_radii, record_length=record_len, base_px=baseline_radius,
                                        pad_px=pad)

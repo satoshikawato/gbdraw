@@ -43,6 +43,22 @@
 /** @type {Promise<WebAssembly.Instance> | null} */
 let directInstancePromise = null;
 
+/**
+ * Fetch and compile a packaged LOSAT wasm. Its URL carries no version, so the
+ * request always revalidates (`no-cache`): an unchanged file costs a 304, and a
+ * file replaced at the same URL is never served from a stale cache.
+ * @param {string} wasmUrl
+ * @param {string} label the asset named when it is missing
+ * @returns {Promise<WebAssembly.Module>}
+ */
+export const compileLosatWasm = async (wasmUrl, label) => {
+  const response = await fetch(wasmUrl, { cache: 'no-cache' });
+  if (!response.ok) {
+    throw new Error(`Missing packaged asset: ${label} not found at ${wasmUrl}`);
+  }
+  return WebAssembly.compile(await response.arrayBuffer());
+};
+
 /** @param {Uint8Array[]} chunks */
 export const concatUint8Arrays = (chunks) => {
   const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);

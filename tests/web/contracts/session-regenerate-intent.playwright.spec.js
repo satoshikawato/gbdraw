@@ -192,7 +192,7 @@ const saveCurrentSession = async (page, title) => {
     const { getCommittedCanonicalRenderRequest } = await import(
       '/gbdraw/web/js/services/config.js'
     );
-    const resultBefore = state.results.value;
+    const resultBefore = window.__GBDRAW_APP__.currentResults();
     const requestBefore = getCommittedCanonicalRenderRequest();
     const overridesBefore = JSON.stringify([
       state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
@@ -203,7 +203,7 @@ const saveCurrentSession = async (page, title) => {
     return {
       result,
       busyCheckpoint: result.status === 'busy' ? {
-        resultUnchanged: state.results.value === resultBefore,
+        resultUnchanged: window.__GBDRAW_APP__.currentResults() === resultBefore,
         requestUnchanged: getCommittedCanonicalRenderRequest() === requestBefore,
         overridesUnchanged: JSON.stringify([
           state.activeDrawing().featureColorOverrides, state.activeDrawing().featureStrokeOverrides,
@@ -448,7 +448,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       legendCaption: String(legendEntry.caption || ''),
       baselineMountedContent: serializeCleanSvg(svg),
       loadedResultContent: String(
-        state.results.value[state.selectedResultIndex.value]?.content || ''
+        window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || ''
       )
     };
     if (!target.featureOverrideKey) {
@@ -541,7 +541,7 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     target.labelVisibilityKey = String(resolved.labelVisibilityEntry.key || '');
     target.baselineMountedContent = serializeCleanSvg(svg);
     target.loadedResultContent = String(
-      state.results.value[state.selectedResultIndex.value]?.content || ''
+      window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || ''
     );
     return {
       labelFeatureId: target.labelFeatureId,
@@ -601,7 +601,7 @@ const startLoadedPreviewDirectEditProbe = (page) => page.evaluate(async () => {
   XMLSerializer.prototype.serializeToString = trackedSerializeToString;
 
   const stopResultWatch = window.Vue.watch(
-    () => state.results.value[state.selectedResultIndex.value]?.content,
+    () => window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content,
     (content, previousContent) => {
       if (active && content !== previousContent) counters.directEditResultFlushCount += 1;
     },
@@ -637,7 +637,7 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
   const svg = state.svgContainer.value?.querySelector?.('svg');
   if (!svg) throw new Error('The loaded SVG preview is no longer mounted.');
   const resultContent = String(
-    state.results.value[state.selectedResultIndex.value]?.content || ''
+    window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || ''
   );
   const resultDocument = new DOMParser().parseFromString(resultContent, 'image/svg+xml');
   const resultSvg = resultDocument.documentElement;
@@ -872,7 +872,7 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
   // that synchronization differ only by this mark (OV-42, OV-43, #857).
   const svgContent = (savedSvg ?? (mountedSvg
     ? serializeCleanSvg(mountedSvg)
-    : String(app.results?.[app.selectedResultIndex]?.content || ''))).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '');
+    : String(app.currentResults()[app.selectedResultIndex]?.content || ''))).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '');
   const svgDocument = new DOMParser().parseFromString(svgContent, 'image/svg+xml');
   const root = svgDocument.documentElement;
   if (!root || root.localName === 'parsererror') {
@@ -1563,7 +1563,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   await page.waitForFunction((color) => {
     const app = window.__GBDRAW_APP__;
     return app.currentColors?.[window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type] === color
-      && String(app.results?.[app.selectedResultIndex]?.content || '').includes(color);
+      && String(app.currentResults()[app.selectedResultIndex]?.content || '').includes(color);
   }, DIRECT_FILL);
   await settleMountedDom(page);
   const afterFill = await captureLoadedPreviewDirectEditState(page);
@@ -1717,7 +1717,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(
     saved.session.results[saved.session.ui.selectedResultIndex].content
   ).toBe(await page.evaluate(() => (
-    window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex].content
+    window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content
   )));
   const savedDraft = sessionDraft(saved.session);
   expect(savedDraft.config).toMatchObject({
@@ -2019,7 +2019,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   await freshPage.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     window.__GBDRAW_LOADED_DRAFT_CONTENT__ = String(
-      app.results?.[app.selectedResultIndex]?.content || ''
+      app.currentResults()[app.selectedResultIndex]?.content || ''
     );
   });
 
@@ -2057,7 +2057,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   const undoRedo = await evaluateWithRetainedPromise(freshPage, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
-    const content = () => String(app.results?.[app.selectedResultIndex]?.content || '');
+    const content = () => String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const generated = content();
     const undo = await history.undo();
     const loaded = content();

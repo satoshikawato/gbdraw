@@ -27,7 +27,6 @@ const setup = async (page, mode = 'circular') => {
   await reveal(page.getByLabel('Color rule 1 pattern', { exact: true }));
 };
 const snapshot = page => page.evaluate(async () => {
-  const { serializeResults } = await import('/gbdraw/web/js/services/config.js');
   const xml = content => {
     const parsed = new DOMParser().parseFromString(content, 'image/svg+xml');
     if (parsed.querySelector('parsererror')) throw new Error('Invalid Result SVG');
@@ -37,7 +36,7 @@ const snapshot = page => page.evaluate(async () => {
   // Observe the same accepted Result boundary as Save/Export. XML round trips
   // remove only lexical empty-tag spelling; every node/attribute stays exact.
   return { canonical: JSON.stringify(a.manualSpecificRules), svg: xml(a.svgContent),
-    result: serializeResults().map(r => ({ name: r.name, content: xml(r.content) })), undo: h.getUndoCount(), redo: h.getRedoCount() };
+    result: a.currentResults().map(r => ({ name: r.name, content: xml(r.content) })), undo: h.getUndoCount(), redo: h.getRedoCount() };
 });
 const draft = page => page.evaluate(() => {
   const a = window.__GBDRAW_APP__;

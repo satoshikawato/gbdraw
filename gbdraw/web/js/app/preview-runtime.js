@@ -44,6 +44,8 @@ import {
  * @typedef {object} PreviewRuntimeOptions
  * @property {PreviewRuntimeState} state
  * @property {(svg: Element) => string} serializeSvg The clean serializer of services/svg-serialization.js.
+ * @property {{ value: number }} [editRevision] Counts the edits of the displayed Result's root, which
+ *   leave its Result object in place (R1); the app passes a ref that views of the root watch.
  */
 
 /**
@@ -220,7 +222,7 @@ const makeRuntime = ({
 });
 
 /** @param {PreviewRuntimeOptions} options */
-export const createPreviewRuntime = ({ state, serializeSvg }) => {
+export const createPreviewRuntime = ({ state, serializeSvg, editRevision = { value: 0 } }) => {
   if (!state) throw new Error('createPreviewRuntime requires state.');
   if (typeof serializeSvg !== 'function') throw new Error('createPreviewRuntime requires serializeSvg.');
 
@@ -399,8 +401,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return expectation;
   };
 
+  // The release writes the departing Result's edits first (R1).
   const releaseActiveResult = () => {
     if (!activeRuntime) return;
+    flushActiveResult();
     bindingSteps.disposeMountedResult?.(activeRuntime);
     markCommittedSvgResultUnmounted(activeRuntime.result);
   };
@@ -460,6 +464,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     if (released?.root === svg) {
       if (released.resultIdentity !== selectedResultIdentity()) return null;
       released = null;
+      // The Results selected again may be a copy taken before the root's last
+      // edit (a Load's rollback): the root is written on the next read (R1).
+      const rebound = mountResultSvg(Number(state.selectedResultIndex?.value || 0), svg);
+      if (rebound) rebound.dirty = true;
+      return rebound;
     }
     const resultIndex = Number(state.selectedResultIndex?.value || 0);
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
@@ -980,44 +989,42 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   };
 
   // The one write of a Result's committed content; the Result keeps its
-  // committed identity.
+  // identity (a Result never committed keeps its runtime identity too).
   /**
    * @param {number} resultIndex
    * @param {string} content
    */
   const writeResultContent = (resultIndex, content) => {
+    const current = state.results.value[resultIndex];
+    const next = { ...current, content };
+    const fallbackIdentity = fallbackResultIdentities.get(current);
+    if (fallbackIdentity) fallbackResultIdentities.set(next, fallbackIdentity);
     const nextResults = [...state.results.value];
-    nextResults[resultIndex] = {
-      ...state.results.value[resultIndex],
-      content
-    };
+    nextResults[resultIndex] = next;
     state.results.value = nextResults;
   };
 
-  // Only commitActiveResultEdit marks the runtime dirty, and it flushes at once.
+  // R1: the one write of the mounted root into its Result, made only while
+  // that Result (its identity at `resultIndex`) is still the one the root
+  // shows. Text equal to the Result's is not written (OV-345).
   const flushActiveResult = () => {
     const runtime = activeRuntime;
-    if (!runtime?.svg) return false;
-    if (!runtime.dirty) return false;
-
-    const resultIndex = Number(runtime.resultIndex);
-    if (!Number.isInteger(resultIndex) || resultIndex < 0 || resultIndex >= state.results.value.length) {
-      runtime.dirty = false;
-      runtime.dirtyReasons.clear();
-      return false;
-    }
-
-    const content = serializeSvg(runtime.svg);
-    if (state.results.value[resultIndex]?.content === content) {
-      runtime.dirty = false;
-      runtime.dirtyReasons.clear();
-      return false;
-    }
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    writeResultContent(resultIndex, content);
+    if (!runtime?.dirty) return false;
     runtime.dirty = false;
     runtime.dirtyReasons.clear();
+    const current = state.results.value[runtime.resultIndex];
+    if (!current || resultRuntimeIdentity(current) !== runtime.resultIdentity) return false;
+    const content = serializeSvg(runtime.svg);
+    if (current.content === content) return false;
+    writeResultContent(runtime.resultIndex, content);
     return true;
+  };
+
+  // R1: the reader of the Results. The displayed Result's text follows its
+  // mounted root on demand: edits since the last write are written first.
+  const currentResults = () => {
+    flushActiveResult();
+    return state.results.value;
   };
 
   // The readiness of a Result about to be displayed by selection: a batch
@@ -1076,16 +1083,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   // The readiness of the Result being bound, while its binding runs.
   const pendingReadiness = () => activeExpectation?.promise ?? null;
 
-  // R1: the one commit for an editor's edit of the displayed Result's SVG.
-  // Serializes the mounted root into its Result at once, so no edit waits for
-  // a Result switch; unchanged content is not written.
+  // R1: the one commit for an editor's edit of the displayed Result's SVG. It
+  // marks the mounted root changed and serializes nothing: `currentResults`
+  // and the release of the Result write it. True when a Result is displayed.
   /** @param {string} reason */
   const commitActiveResultEdit = (reason) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
+    if (!runtime) return false;
     runtime.dirty = true;
     runtime.dirtyReasons.add(String(reason || 'preview-edit'));
-    return flushActiveResult();
+    editRevision.value += 1;
+    return true;
   };
 
   // B17 (R1, R11): an edit of one Result's SVG. The displayed Result is
@@ -1146,6 +1154,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     commitResultEdit,
     configureMountedResultBinder,
     createMountedResultContext,
+    currentResults,
     getActiveRuntime,
     getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,

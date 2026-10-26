@@ -3,6 +3,7 @@ import { diagnosticError, normalizeUserFacingError } from '../utils/error-normal
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {
+  compileLosatWasm,
   hasDirectLosatApi,
   runLosatPairDirect,
   runLosatPairWasi
@@ -189,15 +190,7 @@ const loadWasiShim = async () => {
 const loadLosatModule = async (wasmPath = DEFAULT_WASM_PATH) => {
   const key = String(wasmPath || DEFAULT_WASM_PATH);
   if (!wasmModulePromises.has(key)) {
-    wasmModulePromises.set(key, (async () => {
-      const resolvedWasmPath = resolveAssetUrl(wasmPath);
-      const response = await fetch(resolvedWasmPath, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`Missing packaged asset: LOSAT wasm not found at ${resolvedWasmPath}`);
-      }
-      const bytes = await response.arrayBuffer();
-      return WebAssembly.compile(bytes);
-    })());
+    wasmModulePromises.set(key, compileLosatWasm(resolveAssetUrl(wasmPath), 'LOSAT wasm'));
   }
   return /** @type {Promise<WebAssembly.Module>} */ (wasmModulePromises.get(key)); // set above
 };

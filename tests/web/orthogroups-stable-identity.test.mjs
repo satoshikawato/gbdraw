@@ -47,6 +47,7 @@ await copyModule(
   'gbdraw/web/js/services/svg-serialization.js',
   'services/svg-serialization.js'
 );
+await copyModule('gbdraw/web/js/services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule(
   'gbdraw/web/js/services/orthogroup-feature-metadata.js',
   'services/orthogroup-feature-metadata.js'
@@ -138,9 +139,12 @@ const advanceCopyFeedbackTime = (duration) => {
   copyFeedbackNow = target;
 };
 
+// The objects behind the test's stand-ins for Vue proxies (`toRaw`).
+const rawTargets = new WeakMap();
 globalThis.window = {
   Vue: {
     computed: (getter) => ({ get value() { return getter(); } }),
+    toRaw: (value) => rawTargets.get(value) ?? value,
     reactive: (value) => value,
     watch: () => () => {}
   },
@@ -1787,25 +1791,17 @@ const matchElement = (attributes) => ({
   getAttribute(name) { return attributes[name] ?? null; }
 });
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-1'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-match-id': 'match-1' })),
   'match-1'
 );
+// The embedded runtime reads only the current attribute (a file it ships in never carries the legacy one).
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-2'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-pairwise-match-id': 'match-2' })),
   ''
 );
 embeddedMatchIdFunctions.ambiguousMatchElementIds.add('match-1');
 assert.equal(
-  embeddedMatchIdFunctions.getElementMatchId(matchElement({
-    'data-gbdraw-match-id': 'match-1',
-    'data-gbdraw-pairwise-match-id': 'match-1'
-  })),
+  embeddedMatchIdFunctions.getElementMatchId(matchElement({ 'data-gbdraw-match-id': 'match-1' })),
   ''
 );
 
@@ -2060,4 +2056,36 @@ console.log('orthogroup stable identity tests passed');
     shown({ orthogroupNameOverrides: { constructor: 'Renamed' }, orthogroupDescriptionOverrides: { constructor: 'Edited' } }),
     [['Renamed', 'Edited'], ['Renamed', 'Edited']]
   );
+}
+
+// The member sequence lookup reads the feature rows through `toRaw`, as state.js does: Vue tracks the two array refs,
+// which every writer replaces, and none of the alias keys of every row (L4-03).
+{
+  let proxiedReads = 0;
+  /** Stands in for a deep Vue proxy: every read through it is a dependency Vue would record. */
+  const deepProxy = (target) => {
+    const proxy = new Proxy(target, {
+      get(object, key, receiver) {
+        proxiedReads += 1;
+        const value = Reflect.get(object, key, receiver);
+        return value && typeof value === 'object' ? deepProxy(value) : value;
+      }
+    });
+    rawTargets.set(proxy, target);
+    return proxy;
+  };
+  const trackedState = { ...state,
+    biologicalFeatures: ref(deepProxy(originalBiologicalFeatures)),
+    extractedFeatures: ref(deepProxy([])) };
+  const trackedEditor = createOrthogroupEditor({ state: withDrawings(trackedState) });
+  const resolve = () => trackedEditor.getEnrichedOrthogroupMembers({ id: 'tracked',
+    members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
+  assert.equal(resolve().nucleotideSequence, 'GGGG');
+  assert.equal(proxiedReads, 0);
+  // A writer replaces the array; the lookup follows it.
+  trackedState.biologicalFeatures.value = deepProxy(originalBiologicalFeatures.map((feature) => (
+    feature.biologicalFeatureId === 'biological-c' ? { ...feature, nucleotide_sequence: 'TTTT' } : feature
+  )));
+  assert.equal(resolve().nucleotideSequence, 'TTTT');
+  assert.equal(proxiedReads, 0);
 }

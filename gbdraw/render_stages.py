@@ -840,6 +840,7 @@ def render_stage(
         _metric("Uncacheable", name)
         # It may take a record without an identity (O-2).
         prepared.mark_record_touched(transaction)
+        prepared.cancel_checkpoint()
         result = function(*args, **kwargs)
         _register_result(result, prepared.NO_IDENTITY, _argument_locators(args, kwargs))
         return result
@@ -855,6 +856,8 @@ def render_stage(
         _register_hit(stored, key, args, kwargs)
         return cast(R, stored.result)
 
+    # A canceled Worker request stops before the build, never inside it (D7).
+    prepared.cancel_checkpoint()
     if prepared.key_names_record(key):
         prepared.mark_record_touched(transaction)
     frame = _StageFrame(name)

@@ -41,7 +41,7 @@ const uploadLinear = async (page, index, name, text) => {
 };
 
 const recordDefinitions = (page) => page.evaluate(() => {
-  const content = window.__GBDRAW_APP__.results[0]?.content || '';
+  const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const document = new DOMParser().parseFromString(content, 'image/svg+xml');
   return Object.fromEntries([...document.querySelectorAll('g[data-gbdraw-role="record-definition"]')]
     .map((group) => [
@@ -79,7 +79,7 @@ const prokkaStyle = (record) => record.replace(/^ACCESSION .*$/m, 'ACCESSION   '
 const [PROKKA_R2C, PROKKA_R3C] = splitRecords('tests/fixtures/web_comparison_shared_block.gb').map(prokkaStyle);
 
 const resultRecordIds = (page) => page.evaluate(() => {
-  const content = window.__GBDRAW_APP__.results[0]?.content || '';
+  const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const document = new DOMParser().parseFromString(content, 'image/svg+xml');
   return [...new Set([...document.querySelectorAll('[data-gbdraw-record-id]')]
     .map((element) => element.getAttribute('data-gbdraw-record-id')))].sort();
@@ -115,9 +115,9 @@ test('Prokka-style GenBank records keep their LOCUS names through Circular Gener
   await generateAndWaitForResult(page);
   expect(await resultRecordIds(page)).toEqual(['R2c', 'R3c']);
   expect(await page.evaluate(() => {
-    const content = window.__GBDRAW_APP__.results[0]?.content || '';
+    const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
     return new DOMParser().parseFromString(content, 'image/svg+xml')
-      .querySelectorAll('[data-gbdraw-pairwise-match-id]').length;
+      .querySelectorAll('[data-gbdraw-match-id]').length;
   })).toBeGreaterThan(0);
 });
 
@@ -165,11 +165,11 @@ test('a Circular definition edit after Generate leaves the committed Result unch
     });
   });
   await generateAndWaitForResult(page);
-  const committed = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const committed = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   expect(committed).toContain('8,001 bp');
   await page.evaluate(() => { window.__GBDRAW_APP__.form.species = 'Homo sapiens'; });
   const rewritten = await page.waitForFunction(
-    (original) => window.__GBDRAW_APP__.results[0].content !== original,
+    (original) => window.__GBDRAW_APP__.currentResults()[0].content !== original,
     committed,
     { timeout: 15_000 }
   ).then(() => true, () => false);

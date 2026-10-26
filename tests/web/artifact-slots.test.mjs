@@ -19,7 +19,7 @@ const { ARTIFACT_SLOT_KEYS, createArtifactSlotStore } = await import('../../gbdr
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
 const { readFile } = await import('node:fs/promises');
 
-const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
 snapshots.setGeneratedArtifactRuntimeOwner({
   capture: () => ({ canonical: canonicalRenderArtifactOwner.capture(), cli: 'circular helper files' }),
   restore: (runtime) => { canonicalRenderArtifactOwner.restore(runtime?.canonical ?? null); }
@@ -202,7 +202,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
 // it does not fall back to the drawing's draft palette.
 test('a null applied palette restored in the shown drawing keeps the displayed palette', async () => {
   const { applyUiStateData } = await import('../../gbdraw/web/js/services/config.js');
-  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), applyUiStateData });
+  const service = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, applyUiStateData });
   installShownDrawing('circular');
   const drawing = modeDrawing(state, 'circular');
   const draftPalette = drawing.selectedPalette.value;
@@ -279,4 +279,20 @@ test('a rerender lands in the artifact of its Result\'s drawing', async () => {
   for (const key of ['featureCatalog', 'extractedFeatures', 'biologicalFeatures', 'labelFitReports']) {
     assert.strictEqual(state[key].value, redrawn[key], key);
   }
+});
+
+// U7 (R1): each capture of the Results (an artifact slot, a generated
+// artifact's owner set, a History checkpoint) reads them through the preview
+// owner's `currentResults`, which writes the displayed Result's edits first.
+test('the slot, owner-set and checkpoint captures read the Results through currentResults', async () => {
+  const written = [{ name: 'shown.svg', content: '<svg id="written"></svg>' }];
+  let reads = 0;
+  const service = createHistorySnapshotService({
+    state, fileStore: createInputFileStore(), currentResults: () => { reads += 1; return written; }
+  });
+  assert.equal(service.captureArtifactSlot().values.results, written);
+  assert.equal(service.captureGeneratedArtifactOwnerSet(state.activeDrawing()).results, written);
+  const checkpoint = await service.drawingHistory(state.activeDrawingId.value).buildCheckpoint();
+  assert.deepEqual(checkpoint.results, [{ name: 'shown.svg', content: '<svg id="written"></svg>' }]);
+  assert.equal(reads, 3);
 });

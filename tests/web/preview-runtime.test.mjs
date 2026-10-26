@@ -26,6 +26,7 @@ const serviceNames = [
   'svg-result-ingestion.js',
   'svg-sanitization.js',
   'svg-serialization.js',
+  'preview-affordances.js',
   'svg-transform.js'
 ];
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-runtime-'));
@@ -43,6 +44,9 @@ await Promise.all(serviceNames.map(async (name) => {
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
 }));
 
+await mkdir(join(tempDir, 'contracts'), { recursive: true });
+// svg-sanitization.js and svg-result-normalization.js read the legacy attribute table.
+await writeFile(join(tempDir, 'contracts', 'schema.generated.js'), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), 'utf8'), 'utf8');
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 await Promise.all(['color-utils.js', 'contract-shape.js', 'error-normalization.js', 'i18n.js', 'named-colors.js', 'own-entry.js', 'reactivity.js', 'tsv-cell.js', 'vue-raw.js'].map(async (name) => {
   await writeFile(join(tempDir, 'utils', name), await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', name), 'utf8'), 'utf8');
@@ -116,8 +120,10 @@ const state = {
   })
 };
 let serializeCount = 0;
+const editRevision = { value: 0 };
 const runtime = createPreviewRuntime({
   state,
+  editRevision,
   serializeSvg: (targetSvg) => {
     serializeCount += 1;
     return `<svg data-count="${serializeCount}" data-elements="${targetSvg.elements.length}"></svg>`;
@@ -134,54 +140,45 @@ const editDisplay = (edits) => {
 };
 
 runtime.mountResultSvg(0, svg);
+// U1 (R1): an editor's edit marks the mounted root changed and serializes
+// nothing; the Results stay as they are.
+const resultsBeforeEdits = state.results.value;
 assert.equal(editDisplay([[featureA, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), 'none');
-assert.equal(serializeCount, 1);
-assert.equal(resultReplacementCount, 1);
-assert.equal(state.results.value[0].content, '<svg data-count="1" data-elements="3"></svg>');
-assert.equal(state.skipCaptureBaseConfig.value, true);
-
-state.skipCaptureBaseConfig.value = false;
-const resultAfterSingleEdit = state.results.value[0];
 assert.equal(editDisplay([[featureA, 'off']]), false);
-assert.equal(serializeCount, 1);
-assert.equal(resultReplacementCount, 1);
-assert.equal(state.results.value[0], resultAfterSingleEdit);
-assert.equal(state.skipCaptureBaseConfig.value, false);
-
 assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), null);
 assert.equal(featureBBlock.getAttribute('display'), 'none');
 assert.equal(featureBConnector.getAttribute('display'), 'none');
-assert.equal(serializeCount, 2);
-assert.equal(resultReplacementCount, 2);
-
-state.skipCaptureBaseConfig.value = false;
-const resultAfterBulkEdit = state.results.value[0];
-assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), false);
-assert.equal(serializeCount, 2);
-assert.equal(resultReplacementCount, 2);
-assert.equal(state.results.value[0], resultAfterBulkEdit);
+assert.deepEqual([serializeCount, resultReplacementCount], [0, 0]);
+assert.equal(state.results.value, resultsBeforeEdits);
+assert.equal(runtime.getActiveRuntime().dirty, true);
 assert.equal(state.skipCaptureBaseConfig.value, false);
+// Each edit of the root counts once, so views of the root that follow no
+// Result object (the Similarity alignment overlay) measure again.
+assert.equal(editRevision.value, 2);
 
-// An editor commit writes at once: the runtime is never left dirty, so a
-// Result switch has nothing left to persist.
+// U2: the first read after edits serializes the root once and writes it once;
+// the Result keeps its identity. A second read serializes nothing.
+const identityBeforeWrite = runtime.getResultIdentity(state.results.value[0]);
+const firstRead = runtime.currentResults();
+assert.deepEqual([serializeCount, resultReplacementCount], [1, 1]);
+assert.equal(firstRead, state.results.value);
+assert.equal(firstRead[0].content, '<svg data-count="1" data-elements="3"></svg>');
+assert.equal(runtime.getResultIdentity(firstRead[0]), identityBeforeWrite);
 assert.equal(runtime.getActiveRuntime().dirty, false);
-assert.equal(runtime.flushActiveResult, undefined);
-assert.equal(serializeCount, 2);
+// The write leaves the remount-only flag alone (OV-1758).
 assert.equal(state.skipCaptureBaseConfig.value, false);
+assert.equal(runtime.currentResults(), firstRead);
+assert.deepEqual([serializeCount, resultReplacementCount], [1, 1]);
 
+// U4: a Result switch writes the departing Result's edits before it releases it.
 featureBBlock.setAttribute('fill', '#abcdef');
 assert.equal(runtime.commitActiveResultEdit('feature-fill'), true);
-assert.equal(serializeCount, 3);
-assert.equal(resultReplacementCount, 3);
-assert.equal(state.results.value[0].content, '<svg data-count="3" data-elements="3"></svg>');
-assert.equal(state.skipCaptureBaseConfig.value, true);
-assert.equal(runtime.getActiveRuntime().dirty, false);
-state.skipCaptureBaseConfig.value = false;
+assert.deepEqual([serializeCount, resultReplacementCount], [1, 1]);
 runtime.selectResult(1);
-assert.equal(serializeCount, 3);
-assert.equal(resultReplacementCount, 3);
+assert.deepEqual([serializeCount, resultReplacementCount], [2, 2]);
+assert.equal(state.results.value[0].content, '<svg data-count="2" data-elements="3"></svg>');
 assert.equal(state.skipCaptureBaseConfig.value, false);
 assert.equal(state.selectedResultIndex.value, 1);
 assert.equal(runtime.getActiveRuntime(), null);
@@ -206,7 +203,7 @@ assert.equal(editDisplay([[legacyBlock, 'off'], [legacyConnector, 'off']]), true
 assert.equal(legacyBlock.getAttribute('display'), 'none');
 assert.equal(legacyConnector.getAttribute('display'), 'none');
 assert.equal(runtime.getActiveRuntime().resultIndex, 1);
-assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements="2"></svg>');
+assert.equal(runtime.currentResults()[1].content, '<svg data-count="3" data-elements="2"></svg>');
 
 // E1: a Session Load releases the displayed Result; a Load that fails and
 // rolls back selects the same Result again, under the same root, which edits
@@ -221,6 +218,29 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   const writes = resultReplacementCount;
   assert.equal(editDisplay([[legacyBlock, 'on'], [legacyConnector, 'on']]), true);
   assert.equal(runtime.getActiveRuntime().svg, legacySvg);
+  assert.equal(resultReplacementCount, writes);
+  assert.equal(runtime.currentResults()[1].content, '<svg data-count="4" data-elements="2"></svg>');
+  assert.equal(resultReplacementCount, writes + 1);
+}
+
+// U6: a released root bound again is marked changed. The Results selected
+// again may be a copy taken before its last edit (a Load's rollback), so the
+// next read writes the root once.
+{
+  const keptBeforeEdit = runtime.currentResults();
+  assert.equal(editDisplay([[legacyBlock, 'off']]), true);
+  // The release writes the edit into the departing Result while it is current.
+  const writesBeforeRelease = resultReplacementCount;
+  runtime.clearActiveRuntime();
+  assert.equal(resultReplacementCount, writesBeforeRelease + 1);
+  assert.equal(state.results.value[1].content, '<svg data-count="5" data-elements="2"></svg>');
+  state.results.value = keptBeforeEdit;
+  const writes = resultReplacementCount;
+  // Binds the released root again and edits nothing.
+  assert.equal(runtime.commitResultEdit(1, () => false), false);
+  assert.equal(runtime.getActiveRuntime().svg, legacySvg);
+  assert.equal(runtime.getActiveRuntime().dirty, true);
+  assert.equal(runtime.currentResults()[1].content, '<svg data-count="6" data-elements="2"></svg>');
   assert.equal(resultReplacementCount, writes + 1);
 }
 
@@ -244,7 +264,8 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? arrivingSvg : null) };
   assert.equal(editDisplay([[arrivingBlock, 'off']]), true);
   assert.equal(runtime.getActiveRuntime().svg, arrivingSvg);
-  assert.equal(state.results.value[0].content, '<svg data-count="6" data-elements="1"></svg>');
+  assert.equal(state.results.value[0].content, '<svg id="arriving"></svg>');
+  assert.equal(runtime.currentResults()[0].content, '<svg data-count="7" data-elements="1"></svg>');
 }
 
 // OV-345: a display, History restore, or Reset that changes nothing in the
@@ -261,6 +282,38 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   assert.equal(runtime.applyEditorOperations(createEmptySvgMutationPlan(1).operationsByResult[0], { domains: [], afterApply }), false);
   assert.deepEqual([serializeCount, resultReplacementCount, laidOut], [serialized, writes, 0]);
   assert.equal(state.results.value[0], shown);
+}
+
+// U3 (OV-345): a read after an edit that leaves the root's text as the
+// Result holds it writes nothing. U5: a release after the Results were
+// replaced writes nothing and drops the edits (their Results were captured).
+{
+  let content = '<svg id="same"></svg>';
+  let serialized = 0;
+  let writes = 0;
+  let list = [{ name: 'same.svg', content }];
+  const root = makeSvg([]);
+  const ownState = {
+    results: { get value() { return list; }, set value(next) { writes += 1; list = next; } },
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? root : null) })
+  };
+  const own = createPreviewRuntime({ state: ownState, serializeSvg: () => { serialized += 1; return content; } });
+  own.mountResultSvg(0, root);
+  const shown = list[0];
+  assert.equal(own.commitActiveResultEdit('palette'), true);
+  assert.equal(own.currentResults()[0], shown);
+  assert.deepEqual([serialized, writes], [1, 0]);
+
+  content = '<svg id="edited"></svg>';
+  assert.equal(own.commitActiveResultEdit('palette'), true);
+  const mounted = own.getActiveRuntime();
+  // A Load or a Generate installed other Results before the release.
+  list = [{ name: 'other.svg', content: '<svg id="other"></svg>' }];
+  own.clearActiveRuntime();
+  assert.deepEqual([serialized, writes], [1, 0]);
+  assert.equal(mounted.dirty, false);
+  assert.equal(list[0].content, '<svg id="other"></svg>');
 }
 
 const structuralMetrics = [];

@@ -778,7 +778,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     'path[' + FEATURE_ID_ATTRIBUTE + '], polygon[' + FEATURE_ID_ATTRIBUTE + '], rect[' + FEATURE_ID_ATTRIBUTE + '], ' +
     'path[id^="f"], polygon[id^="f"], rect[id^="f"]';
   var MATCH_SELECTOR =
-    'path[data-gbdraw-match-id], path[data-gbdraw-pairwise-match-id], path[data-match-kind], path[data-pairwise-match-style]';
+    'path[data-gbdraw-match-id], path[data-match-kind], path[data-pairwise-match-style]';
   var ANNOTATION_SELECTOR = '[data-gbdraw-interactive-annotation="true"][data-gbdraw-annotation-id]';
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var XHTML_NS = 'http://www.w3.org/1999/xhtml';
@@ -2136,14 +2136,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function getElementMatchId(element) {
-    var values = [
-      matchAttr(element, 'data-gbdraw-match-id'),
-      matchAttr(element, 'data-gbdraw-pairwise-match-id')
-    ].filter(function (value, index, entries) {
-      return value && entries.indexOf(value) === index;
-    });
-    if (values.length !== 1 || ambiguousMatchElementIds.has(values[0])) return '';
-    return values[0];
+    var id = matchAttr(element, 'data-gbdraw-match-id');
+    return id && !ambiguousMatchElementIds.has(id) ? id : '';
   }
 
   function getMatchHoverKey(element) {

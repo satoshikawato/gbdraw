@@ -122,7 +122,7 @@ const journey = (id, title, minutes, body) => test(`${id} ${title}`, async ({ pa
 
 const displayedSvg = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  return String(app.results?.[app.selectedResultIndex]?.content || '');
+  return String(app.currentResults()[app.selectedResultIndex]?.content || '');
 });
 
 // The loaded preview, then Generate from the loaded draft.
@@ -300,9 +300,9 @@ const showMode = async (page, mode) => {
   await settleLive(page);
 };
 
-const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length;
+const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-match-id=/g) || []).length;
 // The data-identity of each drawn comparison match.
-const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-pairwise-match-id=[^>]*>/g) || [])
+const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-match-id=[^>]*>/g) || [])
   .map((tag) => Number(tag.match(/data-identity="([^"]*)"/)?.[1]))
   .filter(Number.isFinite);
 
@@ -329,7 +329,7 @@ const inputGenerateExport = async (page, steps, dir, { phone = false } = {}) => 
     await button.click();
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
-      return !app.processing && String(app.results?.[0]?.content || '').includes('<svg');
+      return !app.processing && String(app.currentResults()[0]?.content || '').includes('<svg');
     }, null, { timeout: 300_000 });
     await settleLive(page);
     await assertOperationHealth(page, { operation: 'Generate (button)' });

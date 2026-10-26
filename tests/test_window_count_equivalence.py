@@ -158,3 +158,22 @@ def test_degenerate_windows_and_empty_records_return_empty_frames(
             _old_circular_content_df(record, window, step, "GC"),
         )
 
+
+
+def test_window_counts_build_no_count_array_as_long_as_the_record() -> None:
+    """The counts are read at the window bounds only: a GC or skew frame of a
+    2 Mb record peaks at about 5 bytes per base (the counted text, its bytes,
+    one base mask and the base's positions), not the 19 of two int64 prefix
+    arrays."""
+    import tracemalloc
+
+    length = 2_000_000
+    record = _record(_random_sequence(random.Random(3), length, "ACGT"))
+    for frame in (skew_df, circular_dinucleotide_content_df):
+        tracemalloc.start()
+        try:
+            frame(record, 10_000, 1_000, "GC")
+            peak = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert peak < 8 * length, (frame.__name__, peak / length)

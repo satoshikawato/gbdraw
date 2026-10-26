@@ -89,7 +89,7 @@ const edit = (page, svgId, change) => evaluateWithRetainedPromise(page, async ({
 const drawn = (page, ids, from = 'result') => page.evaluate(({ renderedIds, source }) => {
   const app = window.__GBDRAW_APP__;
   const root = source === 'mounted' ? app.svgContainer.querySelector('svg')
-    : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+    : new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
   const hidden = (element) => Boolean(element.closest('[display="none"]'));
   return Object.fromEntries(renderedIds.map((id) => {
     const paths = [...root.querySelectorAll(`path[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
@@ -156,7 +156,7 @@ const sourceRecipe = async (page) => {
 };
 
 const resultSvg = async (page, file) => {
-  writeFileSync(file, await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  writeFileSync(file, await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
   return file;
 };
 

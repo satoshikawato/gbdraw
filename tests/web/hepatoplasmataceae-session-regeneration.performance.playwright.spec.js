@@ -432,7 +432,6 @@ const semanticSnapshot = (page) => page.evaluate(async () => {
     featureHookCount: svg.querySelectorAll('[data-gbdraw-feature-id]').length,
     stableFeatureHookCount: svg.querySelectorAll('[data-gbdraw-stable-feature-id]').length,
     matchHookCount: svg.querySelectorAll('[data-gbdraw-match-id]').length,
-    pairwiseMatchHookCount: svg.querySelectorAll('[data-gbdraw-pairwise-match-id]').length,
     recordDefinitionCount: svg.querySelectorAll('[data-gbdraw-role="record-definition"]').length,
     comparisonGroups,
     comparisonLegendCount: svg.querySelectorAll('[data-gbdraw-role="comparison-legend"]').length,
@@ -460,7 +459,6 @@ const assertSemanticSnapshot = (snapshot) => {
     featureHookCount: 2_994,
     stableFeatureHookCount: 2_994,
     matchHookCount: 500,
-    pairwiseMatchHookCount: 500,
     recordDefinitionCount: 5,
     comparisonGroups: ['0->1', '1->2', '2->3', '3->4'],
     comparisonLegendCount: 2,
@@ -502,7 +500,7 @@ const exerciseReadyInteractions = async (page) => {
   await featureDialog.getByRole('button', { name: 'Close feature popup' }).click();
 
   const match = page.locator(
-    '.shadow-xl.origin-top > svg [data-gbdraw-pairwise-match-id]'
+    '.shadow-xl.origin-top > svg [data-gbdraw-match-id]'
   ).first();
   await expect(match).toHaveAttribute('role', 'button');
   await match.focus();

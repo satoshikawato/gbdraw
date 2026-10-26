@@ -667,7 +667,8 @@ class _DrawnLabel(NamedTuple):
     y: float
 
 
-_ARC_PATH = re.compile(r"M (\S+),(\S+) A (\S+),(\S+) 0 ([01]) ([01]) (\S+),(\S+)")
+_ARC_START = re.compile(r"M (\S+),(\S+)")
+_ARC_PIECE = re.compile(r" A (\S+),(\S+) 0 ([01]) ([01]) (\S+),(\S+)")
 
 
 def _drawn_label(text, root) -> _DrawnLabel:
@@ -683,14 +684,23 @@ def _drawn_label(text, root) -> _DrawnLabel:
         return _DrawnLabel([corners], _nearest_distance(corners), max(math.hypot(px, py) for px, py in corners), x, y)
     href = text_path.attrib.get("{http://www.w3.org/1999/xlink}href") or text_path.attrib["href"]
     (path,) = [element for element in root.iter() if element.attrib.get("id") == href.removeprefix("#")]
-    match = _ARC_PATH.fullmatch(path.attrib["d"])
-    assert match is not None, path.attrib["d"]
-    x1, y1, radius, radius_y, large, sweep, x2, y2 = (float(value) for value in match.groups())
-    assert radius == radius_y and math.hypot(x1, y1) == pytest.approx(radius, rel=1e-5)
-    flipped = sweep == 0.0
-    start, end = math.atan2(y1, x1), math.atan2(y2, x2)
-    span = ((start - end) if flipped else (end - start)) % (2.0 * math.pi)
-    assert (span > math.pi) == (large == 1.0)
+    d = path.attrib["d"]
+    head = _ARC_START.match(d)
+    assert head is not None, d
+    pieces = [tuple(float(value) for value in piece.groups()) for piece in _ARC_PIECE.finditer(d, head.end())]
+    # The text path is one circle arc, drawn in pieces by gbdraw.svg.circular_arcs (each with its own flags).
+    assert pieces and "".join(piece.group(0) for piece in _ARC_PIECE.finditer(d, head.end())) == d[head.end():], d
+    x1, y1 = float(head.group(1)), float(head.group(2))
+    radius = pieces[0][0]
+    assert all(piece[0] == piece[1] == radius for piece in pieces) and math.hypot(x1, y1) == pytest.approx(radius, rel=1e-5)
+    flipped = pieces[0][3] == 0.0
+    assert all((piece[3] == 0.0) == flipped for piece in pieces)
+    start, span, previous = math.atan2(y1, x1), 0.0, math.atan2(y1, x1)
+    for _rx, _ry, large, _sweep, x2, y2 in pieces:
+        angle = math.atan2(y2, x2)
+        step = ((previous - angle) if flipped else (angle - previous)) % (2.0 * math.pi)
+        assert (step > math.pi) == (large == 1.0)
+        span, previous = span + step, angle
     middle = start - 0.5 * span if flipped else start + 0.5 * span
     assert text_path.attrib["startOffset"] == "50%"
     ink = text_ink(text_path.text or "", family)
@@ -862,7 +872,7 @@ def test_circular_annotation_labels_curve_along_the_circle_and_stay_upright(orie
         # Text in the lower half reads anticlockwise so that it stays upright, as embedded feature labels do.
         href = text_path.attrib["{http://www.w3.org/1999/xlink}href"].removeprefix("#")
         (path,) = [element for element in root.iter() if element.attrib.get("id") == href]
-        sweep = _ARC_PATH.fullmatch(path.attrib["d"]).group(6)
+        sweep = _ARC_PIECE.search(path.attrib["d"]).group(4)
         assert (sweep == "0") == (0.0 < angle % 360.0 < 180.0), (region.label, angle)
     gaps = _circular_label_gaps(drawing)
     assert all(drawn_side == side and gap == pytest.approx(4.0, abs=1e-3) for drawn_side, gap in gaps.values()), gaps

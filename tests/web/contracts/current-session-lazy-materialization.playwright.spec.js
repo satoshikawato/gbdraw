@@ -278,7 +278,7 @@ test('synthetic current session restores and exports without materializing resou
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const loadedValue = Boolean(app.form.show_scale);
-    const loadedContent = app.results[app.selectedResultIndex]?.content || '';
+    const loadedContent = app.currentResults()[app.selectedResultIndex]?.content || '';
     await history.runUndoable('Change coordinate scale', () => {
       app.form.show_scale = !loadedValue;
     });
@@ -295,7 +295,7 @@ test('synthetic current session restores and exports without materializing resou
       redoValue: Boolean(app.form.show_scale),
       undoCount: history.getUndoCount(),
       redoCount: history.getRedoCount(),
-      previewUnchanged: app.results[app.selectedResultIndex]?.content === loadedContent
+      previewUnchanged: app.currentResults()[app.selectedResultIndex]?.content === loadedContent
     };
   });
   expect(intentHistory).toMatchObject({
@@ -370,7 +370,7 @@ test('neutral cached conservation session regenerates three ordered rings offlin
         target: { files: [file], value: '' }
       });
       const { state } = await import('/gbdraw/web/js/state.js');
-      const selected = window.__GBDRAW_APP__.results[
+      const selected = window.__GBDRAW_APP__.currentResults()[
         window.__GBDRAW_APP__.selectedResultIndex
       ];
       const lazyFields = ['text', 'arrayBuffer', 'data', 'resourceId'];
@@ -423,7 +423,7 @@ test('neutral cached conservation session regenerates three ordered rings offlin
     const generated = await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
       const result = await app.runAnalysis();
-      const selected = app.results[app.selectedResultIndex];
+      const selected = app.currentResults()[app.selectedResultIndex];
       const content = String(selected?.content || '');
       const documentRoot = new DOMParser().parseFromString(content, 'image/svg+xml');
       const slots = [...documentRoot.querySelectorAll(
@@ -521,7 +521,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
       probe.read = async () => {
         const { state } = await import('/gbdraw/web/js/state.js');
         const app = window.__GBDRAW_APP__;
-        const content = String(app.results[app.selectedResultIndex]?.content || '');
+        const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
         const documentRoot = new DOMParser().parseFromString(content, 'image/svg+xml');
         return {
           errorLog: app.errorLog ? JSON.parse(JSON.stringify(app.errorLog)) : null,
@@ -689,7 +689,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
       return {
         status: result?.status,
         fastaRun,
-        content: String(app.results[app.selectedResultIndex]?.content || '')
+        content: String(app.currentResults()[app.selectedResultIndex]?.content || '')
       };
     }, neutralConservationSessionText);
     expect(loaded.status).toBe('ok');
@@ -723,7 +723,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
       files[1] = state.inputFiles.registerFile(new File([flatFile], 'comparison-c.gbk', { type: 'text/plain', lastModified: 0 }));
       state.activeDrawing().files.c_conservation_fastas = files;
       const result = await app.runAnalysis();
-      const content = String(app.results[app.selectedResultIndex]?.content || '');
+      const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
       const entries = Array.from(state.losatCache.value.entries());
       return {
         result,
@@ -781,7 +781,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
       return {
         result: window.__GBDRAW_RING_PROBE__.searchRun,
         errorLog: app.errorLog,
-        content: String(app.results[app.selectedResultIndex]?.content || ''),
+        content: String(app.currentResults()[app.selectedResultIndex]?.content || ''),
         losatCalls: window.__GBDRAW_RING_PROBE__.losatCalls,
         runtimes: Array.from(state.losatCache.value.values()).map(({ runtime }) => runtime),
         runInfo: JSON.parse(JSON.stringify(app.lastRunInfo)),
@@ -1020,7 +1020,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
       mode: app.mode,
       generatedMode: app.generatedMode,
       names: app.results.map((result) => String(result?.name || '')),
-      svgIdentities: app.results.map((result) => svgIdentity(result?.content)),
+      svgIdentities: app.currentResults().map((result) => svgIdentity(result?.content)),
       selectedResultIndex: app.selectedResultIndex,
       resultCount: app.results.length,
       featureCount: app.extractedFeatures.length,
@@ -1254,7 +1254,7 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     window.__GBDRAW_LAZY_SESSION_PROBE__.reset();
     const before = history.getDiagnostics();
     const result = await app.runAnalysis();
-    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const after = history.getDiagnostics();
     window.__GBDRAW_PREPARED_CACHE_A__ = content;
     window.__GBDRAW_PREPARED_CACHE_SCALE_A__ = Boolean(app.form.show_scale);
@@ -1287,12 +1287,12 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     const history = window.__GBDRAW_HISTORY__;
     const before = history.getDiagnostics();
     const result = await app.runAnalysis();
-    const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const after = history.getDiagnostics();
     const undoOk = await history.undo();
-    const afterUndo = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const afterUndo = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const redoOk = await history.redo();
-    const afterRedo = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const afterRedo = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     return {
       result,
       outputChanged: content !== window.__GBDRAW_PREPARED_CACHE_A__,
@@ -1382,7 +1382,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     window.__GBDRAW_CANCEL_BASELINE__ = {
-      content: String(app.results?.[app.selectedResultIndex]?.content || ''),
+      content: String(app.currentResults()[app.selectedResultIndex]?.content || ''),
       resultCount: app.results.length,
       selectedResultIndex: app.selectedResultIndex,
       featureCount: app.extractedFeatures.length,
@@ -1392,7 +1392,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
       diagnostics: history.getDiagnostics()
     };
     window.__GBDRAW_CANCEL_BASELINE_REFS__ = {
-      result: app.results?.[app.selectedResultIndex] || null,
+      result: app.currentResults()[app.selectedResultIndex] || null,
       extractedFeatures: app.extractedFeatures,
       orthogroups: app.orthogroups
     };
@@ -1443,7 +1443,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
     return {
       result,
       contentRestored:
-        String(app.results?.[app.selectedResultIndex]?.content || '') === baseline.content,
+        String(app.currentResults()[app.selectedResultIndex]?.content || '') === baseline.content,
       resultCount: app.results.length,
       selectedResultIndex: app.selectedResultIndex,
       featureCount: app.extractedFeatures.length,
@@ -1451,7 +1451,7 @@ test('the real Cancel control restores the committed artifact and leaves no Hist
       baselineFeatureCount: baseline.featureCount,
       baselineOrthogroupCount: baseline.orthogroupCount,
       sameResultObject:
-        app.results?.[app.selectedResultIndex] === baselineRefs.result,
+        app.currentResults()[app.selectedResultIndex] === baselineRefs.result,
       sameExtractedFeatureOwner: app.extractedFeatures === baselineRefs.extractedFeatures,
       sameOrthogroupOwner: app.orthogroups === baselineRefs.orthogroups,
       undoCount: history.getUndoCount(),
@@ -1545,7 +1545,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     const app = window.__GBDRAW_APP__;
     window.__GBDRAW_LAZY_ROLLBACK_BASELINE__ = {
       file: app.files.c_gb,
-      content: app.results[app.selectedResultIndex].content,
+      content: app.currentResults()[app.selectedResultIndex].content,
       selectedResultIndex: app.selectedResultIndex,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount()
     };
@@ -1563,7 +1563,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     const baseline = window.__GBDRAW_LAZY_ROLLBACK_BASELINE__;
     return {
       sameFile: app.files.c_gb === baseline.file,
-      sameContent: app.results[app.selectedResultIndex].content === baseline.content,
+      sameContent: app.currentResults()[app.selectedResultIndex].content === baseline.content,
       selectedResultIndex: app.selectedResultIndex,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg'))
@@ -1582,7 +1582,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   expect(beforeAccess.structural).toEqual(ZERO_PREVIEW_METRICS);
   const access = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    const content = app.results[app.selectedResultIndex].content;
+    const content = app.currentResults()[app.selectedResultIndex].content;
     const { readFileText } = await import('/gbdraw/web/js/services/file-content-cache.js');
     const { state } = await import('/gbdraw/web/js/state.js');
     let first = '';
@@ -1600,7 +1600,7 @@ test('preflight and lazy-access failures preserve the committed preview', async 
     return {
       first,
       second,
-      sameContent: app.results[app.selectedResultIndex].content === content,
+      sameContent: app.currentResults()[app.selectedResultIndex].content === content,
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg'))
     };
   });
@@ -1619,11 +1619,11 @@ test('preflight and lazy-access failures preserve the committed preview', async 
   const failedGenerate = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
-    const loadedContent = app.results[app.selectedResultIndex]?.content || '';
+    const loadedContent = app.currentResults()[app.selectedResultIndex]?.content || '';
     const result = await app.runAnalysis();
     return {
       status: result?.status,
-      previewCommitted: app.results[app.selectedResultIndex]?.content === loadedContent,
+      previewCommitted: app.currentResults()[app.selectedResultIndex]?.content === loadedContent,
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
       undoCount: history.getUndoCount(),
       redoCount: history.getRedoCount(),

@@ -6,9 +6,11 @@ const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 /**
  * Walks every own key; an unsafe key is the Session-schema diagnostic that
  * Load and Save give for any other malformed Session structure (OV-952).
+ * Session Load runs this yielding walk in the import Worker (`workers/session-import-worker.js`); Load's authority
+ * inventory (`validateSessionAuthorityInventory(..., { load: true })`) still runs one synchronous walk on the main thread.
  * @param {unknown} value
  */
-function* safeObjectKeySteps(value) {
+export const assertSafeObjectKeys = (value) => {
   if (!value || typeof value !== 'object') return;
   /** @type {unknown[]} */
   const pending = [value];
@@ -21,24 +23,6 @@ function* safeObjectKeySteps(value) {
       if (UNSAFE_OBJECT_KEYS.has(key)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
       // `key` comes from `Object.keys(current)`.
       pending.push(/** @type {Record<string, unknown>} */ (current)[key]);
-      yield;
-    }
-  }
-};
-
-
-/** @param {unknown} value */
-export const assertSafeObjectKeys = (value) => {
-  for (const _step of safeObjectKeySteps(value)) { /* exhaust validation */ }
-};
-
-/** @param {unknown} value */
-export const assertSafeObjectKeysForImport = async (value) => {
-  let deadline = performance.now() + 16;
-  for (const _step of safeObjectKeySteps(value)) {
-    if (performance.now() >= deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      deadline = performance.now() + 16;
     }
   }
 };

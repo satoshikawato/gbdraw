@@ -10,13 +10,15 @@
 // in place through a Result switch, which records no Undo step (B18); Undo and
 // Redo of that sort and Sort by default reach each Result without copying
 // those entries to another Result (B19, B20). Every
-// editor edit kind commits the displayed Result at once, so none waits for a
-// Result switch (R1), and Undo and Redo of a drag restore the Result it was
-// made on while another Result is shown (B17). The grid and Linear topologies
+// editor edit kind is in the displayed Result when it returns, read through
+// `currentResults`, so none waits for a Result switch, and the edits are
+// written into the Result's text only when something reads it (R1); Undo and
+// Redo of a drag restore the Result it was made on while another Result is
+// shown (B17). The grid and Linear topologies
 // are in live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { editFeature, legendCaptions, openBatch, settle } = require('./helpers/audit-browser.cjs');
+const { editFeature, legendCaptions, openBatch, settle, switchMode } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -115,7 +117,7 @@ const resultState = (page, ids) => page.evaluate((known) => {
     index,
     drawer: [...new Set(app.visibleFeatureRows.map((row) => row.record_id))],
     mounted: describe(app.svgContainer.querySelector('svg')),
-    content: describe(new DOMParser().parseFromString(app.results[index].content, 'image/svg+xml').documentElement)
+    content: describe(new DOMParser().parseFromString(app.currentResults()[index].content, 'image/svg+xml').documentElement)
   };
 }, ids);
 
@@ -421,9 +423,9 @@ test('Circular batch: after Generate on Result 2, Result 1 returns to its own de
   expect.soft(await legendView(page), 'Result 2 shows its default order').toEqual(sameView(result2));
 });
 
-// R1 (A1): each editor edit kind writes the displayed Result when it is made,
+// R1 (A1): each editor edit kind is in the displayed Result when it returns,
 // so nothing stays pending for a Result switch to persist. Right after the
-// edit, the committed content changed and equals the mounted SVG; after a
+// edit, the content `currentResults` reads changed and equals the mounted SVG; after a
 // switch to Result 1 and back, Result 2 is not reverted and still matches its
 // mounted SVG. (Displaying a Result projects the editor intent onto it, D-07,
 // so its bytes may change on the way back.)
@@ -431,14 +433,14 @@ const committed = (page) => page.evaluate(async () => {
   const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
   const app = window.__GBDRAW_APP__;
   const index = app.selectedResultIndex;
-  const content = app.results[index].content;
+  const content = app.currentResults()[index].content;
   const mounted = serializeCleanSvg(app.svgContainer.querySelector('svg'));
   return { index, content, mounted, matchesMounted: mounted === content };
 });
 // Composition offsets of every Result's committed content.
 const offsets = (page) => page.evaluate(async () => {
   const { compositionUserDeltas } = await import('/gbdraw/web/js/app/legend-layout/composition-actions.js');
-  return window.__GBDRAW_APP__.results.map((result) => compositionUserDeltas(
+  return window.__GBDRAW_APP__.currentResults().map((result) => compositionUserDeltas(
     new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement
   ));
 });
@@ -518,7 +520,7 @@ const SWITCH_EDITS = [
   ['track visibility', onApp(() => { window.__GBDRAW_APP__.form.suppress_gc = true; })]
 ];
 
-test('Circular batch: each editor edit kind is committed when made, not by the Result switch', async ({ page }) => {
+test('Circular batch: each editor edit kind is in the current Result when made, not by the Result switch', async ({ page }) => {
   test.setTimeout(600_000);
   await openBatch(page);
   await show(page, 1);
@@ -626,4 +628,119 @@ test('Circular batch: Undo past a Generate returns a dragged Result to its first
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await offsets(page), 'Undo of the drag returns the Result to its first offsets').toEqual(undragged);
+});
+
+// R1 (D6): a live edit serializes nothing; the displayed Result's text is
+// written once, when something reads it. Each reader that needs the text gets
+// the edit: Save (and a fresh Load of that Session), a Result switch, a
+// drawing switch, Export SVG, and the Undo of a Generate. A Legend color edit
+// records a patch step, so no History checkpoint reads the text for it. The
+// binder shows the color again on every display (D-07), so after each reader
+// the stored text (`results`, not `currentResults()`) is what is checked.
+test('Circular batch: an edit is written into the Result text only when read, and every reader gets it', async ({ page, browser }, testInfo) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  await show(page, 1);
+  // Counts the serializations of an SVG root.
+  await page.evaluate(() => {
+    const serialize = XMLSerializer.prototype.serializeToString;
+    window.__SERIALIZED__ = 0;
+    XMLSerializer.prototype.serializeToString = function countedSerialize(node) {
+      if (node?.localName === 'svg') window.__SERIALIZED__ += 1;
+      return serialize.call(this, node);
+    };
+  });
+  const serialized = () => page.evaluate(() => window.__SERIALIZED__);
+  const recolorTrna = (target, color) => evaluateWithRetainedPromise(target, (value) => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), value);
+  }, color);
+  // The tRNA Legend swatch of the mounted root (null) or of an SVG text.
+  const trnaFillIn = (target, content) => target.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    const root = text === null
+      ? app.svgContainer.querySelector('svg')
+      : new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+    const entry = [...root.querySelectorAll('g[data-legend-key]')]
+      .find((item) => item.querySelector('text')?.textContent === 'tRNA');
+    return [...(entry?.querySelectorAll('path,rect') || [])]
+      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null;
+  }, content);
+  const shownTextOf = (target) => target.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.currentResults()[app.selectedResultIndex].content;
+  });
+  const storedText = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.results[app.selectedResultIndex].content;
+  });
+  // A Result's text as stored, read without writing the shown root.
+  const storedTextOf = (target, index) => target.evaluate((at) => window.__GBDRAW_APP__.results[at].content, index);
+
+  // Live edits serialize nothing; the stored text still lacks them.
+  const before = await storedText();
+  const count = await serialized();
+  await recolorTrna(page, RED);
+  await recolorTrna(page, TEAL);
+  await settle(page);
+  expect(await serialized(), 'no serialization during the edits').toBe(count);
+  expect(await storedText()).toBe(before);
+  expect(await trnaFillIn(page, null)).toBe(TEAL);
+  // The first read writes the edits once; a second read serializes nothing.
+  expect(await trnaFillIn(page, await shownTextOf(page))).toBe(TEAL);
+  expect(await serialized()).toBe(count + 1);
+  await shownTextOf(page);
+  expect(await serialized()).toBe(count + 1);
+
+  // Export SVG right after an edit reads the mounted root.
+  await recolorTrna(page, '#1d3557');
+  await settle(page);
+  const exported = (await download(page, 'SVG', testInfo.outputPath('on-demand.svg'))).toString('utf8');
+  expect(await trnaFillIn(page, exported)).toBe('#1d3557');
+
+  // Save right after an edit, then Load: the edit is there.
+  await recolorTrna(page, '#e76f51');
+  await settle(page);
+  const sessionPath = testInfo.outputPath('on-demand.gbdraw-session.json');
+  await download(page, 'Save Session', sessionPath, { title: 'on-demand' });
+  const fresh = await load(browser, sessionPath);
+  try {
+    await settle(fresh);
+    expect(await fresh.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(1);
+    expect(await trnaFillIn(fresh, await storedTextOf(fresh, 1)), 'the Session holds the edit').toBe('#e76f51');
+  } finally {
+    await fresh.context().close();
+  }
+
+  // Edit, switch Result and back: the DOM and the Result text hold the edit.
+  await recolorTrna(page, '#264653');
+  await settle(page);
+  await show(page, 0);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'the release wrote Result 2').toBe('#264653');
+  await show(page, 1);
+  expect(await trnaFillIn(page, null)).toBe('#264653');
+  expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#264653');
+
+  // Edit, drawing switch and back: the same.
+  await recolorTrna(page, '#8338ec');
+  await settle(page);
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex)).toBe(1);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'the kept slot holds the edit').toBe('#8338ec');
+  expect(await trnaFillIn(page, null)).toBe('#8338ec');
+  expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#8338ec');
+
+  // Edit, Generate, Undo the Generate: the Result before the Generate, with the edit, comes back.
+  await recolorTrna(page, '#ff006e');
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  await show(page, 1);
+  expect(await trnaFillIn(page, await storedTextOf(page, 1)), 'Undo restores the edited text').toBe('#ff006e');
+  expect(await trnaFillIn(page, null)).toBe('#ff006e');
+  expect(await trnaFillIn(page, await shownTextOf(page))).toBe('#ff006e');
 });

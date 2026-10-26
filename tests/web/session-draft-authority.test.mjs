@@ -1208,7 +1208,7 @@ artifactSlots.replaceLoaded([stashedLinearArtifact]);
 // Result's artifact values (its feature-editor status among them) back.
 const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
 const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
-const artifactPort = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+const artifactPort = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
 const capturedArtifacts = [];
 const installedArtifacts = [];
 // OV-1769: the History router's members as the Load found them come back.

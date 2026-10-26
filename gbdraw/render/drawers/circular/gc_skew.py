@@ -47,7 +47,7 @@ class SkewDrawer:
             return ()
         base = float(radius) * float(norm_factor)
         pad = stroke_pad_px(self.skew_stroke_color, self.skew_stroke_width)
-        area = CircularInkProfile.between(*line, record_length=record_len, base_px=base, pad_px=pad)
+        area = CircularInkProfile.between(line.positions, line.radii, record_length=record_len, base_px=base, pad_px=pad)
         return (area, CircularInkRing(RadialBand(base - pad, base + pad))) if pad > 0 else (area,)
 
     def draw(

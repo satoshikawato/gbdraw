@@ -12,8 +12,12 @@ from gbdraw.analysis import collinearity as cc, collinearity_units as cu, protei
 
 # S07.7 predates the LOSAT runtime owner (gbdraw.comparisons.losat_runtime).
 # The runtime class moved there and the raw-cache manager now extends its
-# store. Neither is part of the frozen collinear algorithm; keep frozen copies.
-RUNTIME_OWNER_CLASSES = frozenset({'ProteinBlastpRuntime', 'LosatpCacheManager'})
+# store. The identity manifest became a read-only proof that only the live
+# validator and extraction construct. None of them is part of the frozen
+# collinear algorithm; keep frozen copies.
+FROZEN_COPY_CLASSES = frozenset({
+    'ProteinBlastpRuntime', 'LosatpCacheManager', 'ProteinIdentityManifest',
+})
 
 
 def load_frozen(current):
@@ -29,7 +33,7 @@ def load_frozen(current):
     # public classes; private accumulators and their methods remain frozen.
     for node in tree.body:
         if isinstance(node, ast.ClassDef) and not node.name.startswith('_'):
-            if node.name in RUNTIME_OWNER_CLASSES:
+            if node.name in FROZEN_COPY_CLASSES:
                 continue
             live_node = live[node.name]
             assert ast.dump(node) == ast.dump(live_node), node.name

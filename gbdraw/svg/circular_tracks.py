@@ -2,35 +2,41 @@
 # coding: utf-8
 
 import math
+from typing import NamedTuple
+
 import numpy as np
-from numpy.typing import ArrayLike, NDArray
+from numpy.typing import NDArray
 from pandas import DataFrame
 from gbdraw.svg.elements import Circle
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
-from ..layout.scalar_axis import project_scalar_samples
+from ..layout.scalar_axis import project_scalar_line
+from .circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
+from .path_data import path_point
+from .track_paths import track_line_to, track_polyline
+
+
+class CircularTrackLine(NamedTuple):
+    """The line a Circular track path draws: display positions, their radii, and where each drawn segment
+    after the first starts."""
+
+    positions: NDArray[np.float64]
+    radii: NDArray[np.float64]
+    segment_starts: tuple[int, ...] = ()
+
+
+class CircularAreaLine(NamedTuple):
+    """The outer line of a Circular scalar area and the baseline radius the area is filled down to."""
+
+    positions: NDArray[np.float64]
+    radii: NDArray[np.float64]
+    baseline_radius: float
+    segment_starts: tuple[int, ...] = ()
 
 def generate_circle_path_desc(radius: float, norm_factor: float) -> str:
-    """
-    Generates the SVG path description for a circle.
-    """
-    norm_radius: float = radius * norm_factor
-    circle_radius: float = norm_radius
-    circle_start_x: float = circle_radius * math.cos(math.radians(360.0 * 0 - 90))
-    circle_start_y: float = circle_radius * math.sin(math.radians(360.0 * 0 - 90))
-    circle_desc: str = ""
-    start_coordinate: str = "M {} {}".format(circle_start_x, circle_start_y)
-    circle_desc += start_coordinate
-    n_list: list[str] = []
-    for n in range(0, 10, 1):
-        deg: float = (n + 1) * 0.1
-        n_x: float = circle_radius * math.cos(math.radians(360.0 * deg - 90))
-        n_y: float = circle_radius * math.sin(math.radians(360.0 * deg - 90))
-        n_list.append("A {} {} 0 0 1 {} {}".format(circle_radius, circle_radius, n_x, n_y))
-    circle_desc += "".join(n_list)
-    circle_desc += "z"
-    return circle_desc
+    """The closed circle of ``radius * norm_factor`` from 12 o'clock, clockwise (two arcs)."""
+    return circle_arc(radius * norm_factor, -90.0, 360.0) + "z"
 
 
 def circular_gc_content_line(
@@ -41,7 +47,7 @@ def circular_gc_content_line(
     norm_factor: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
-) -> tuple[ArrayLike, ArrayLike] | None:
+) -> CircularTrackLine | None:
     """The GC content line the path draws: display positions and their radii; the area lies between it and the
     circle at ``radius * norm_factor``."""
 
@@ -63,13 +69,11 @@ def circular_gc_content_line(
 
     positions = gc_df.index.to_numpy(dtype=float)
     if record_transform is not None and record_transform.start_coordinate is not None:
-        segments = project_scalar_samples(positions, radius_of_coordinate, record_transform)
-        positions = np.array([p.position for segment in segments for p in segment.points])
-        radius_of_coordinate = np.array([p.value for segment in segments for p in segment.points])
-    elif len(positions) > 0 and np.isclose(positions[0], 0.0):
+        return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
+    if len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         radius_of_coordinate = np.append(radius_of_coordinate, radius_of_coordinate[0])
-    return positions, radius_of_coordinate
+    return CircularTrackLine(positions, np.asarray(radius_of_coordinate, dtype=float))
 
 
 def generate_circular_gc_content_path_desc(
@@ -89,24 +93,18 @@ def generate_circular_gc_content_path_desc(
     )
     if line is None:
         return ""
-    positions, radius_of_coordinate = line
+    return _closed_line_desc(line, float(record_len)) + generate_circle_path_desc(radius, norm_factor)
 
-    angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90)
 
-    x_coords = radius_of_coordinate * np.cos(angles_rad)
-    y_coords = radius_of_coordinate * np.sin(angles_rad)
+def _closed_line_desc(line: CircularTrackLine, total_len: float) -> str:
+    """The closed line of a GC content (deviation) or skew path: it starts at 12 o'clock on the radius of the
+    first sample, runs through every sample, and closes; the baseline circle follows as its own subpath."""
 
-    start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
-    start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
-    path_segments = [f"M{start_x} {start_y}"]
-
-    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
-
-    gc_desc: str = "".join(path_segments)
-    gc_desc += "z"
-    circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-    gc_desc += circle_desc
-    return gc_desc
+    positions, radii, segment_starts = line
+    angles_rad = np.radians(360.0 * (positions / total_len) - 90)
+    x_coords = np.concatenate(([radii[0] * math.cos(math.radians(-90))], radii * np.cos(angles_rad)))
+    y_coords = np.concatenate(([radii[0] * math.sin(math.radians(-90))], radii * np.sin(angles_rad)))
+    return track_polyline(x_coords, y_coords, [start + 1 for start in segment_starts]) + "z"
 
 
 def circular_gc_skew_line(
@@ -117,7 +115,7 @@ def circular_gc_skew_line(
     norm_factor: float,
     dinucleotide: str,
     record_transform: RecordDisplayTransform | None = None,
-) -> tuple[ArrayLike, ArrayLike] | None:
+) -> CircularTrackLine | None:
     """The skew line the path draws: display positions and their radii; the areas lie between it and the circle
     at ``radius * norm_factor``."""
 
@@ -137,10 +135,8 @@ def circular_gc_skew_line(
 
     positions = df.index
     if record_transform is not None and record_transform.start_coordinate is not None:
-        segments = project_scalar_samples(positions, radius_of_coordinate, record_transform)
-        positions = np.array([p.position for segment in segments for p in segment.points])
-        radius_of_coordinate = np.array([p.value for segment in segments for p in segment.points])
-    return positions, radius_of_coordinate
+        return CircularTrackLine(*project_scalar_line(positions, radius_of_coordinate, record_transform))
+    return CircularTrackLine(positions.to_numpy(dtype=float), np.asarray(radius_of_coordinate, dtype=float))
 
 
 def generate_circular_gc_skew_path_desc(
@@ -155,23 +151,7 @@ def generate_circular_gc_skew_path_desc(
     line = circular_gc_skew_line(radius, df, total_len, track_width, norm_factor, dinucleotide, record_transform)
     if line is None:
         return ""
-    positions, radius_of_coordinate = line
-    angles_rad = np.radians(360.0 * (positions / total_len) - 90)
-
-    x_coords = radius_of_coordinate * np.cos(angles_rad)
-    y_coords = radius_of_coordinate * np.sin(angles_rad)
-
-    skew_start_x = radius_of_coordinate[0] * math.cos(math.radians(-90))
-    skew_start_y = radius_of_coordinate[0] * math.sin(math.radians(-90))
-
-    path_segments = [f"M{skew_start_x} {skew_start_y}"]
-    path_segments.extend([f"L{x} {y}" for x, y in zip(x_coords, y_coords)])
-
-    skew_desc: str = "".join(path_segments)
-    skew_desc += "z"
-    circle_desc: str = generate_circle_path_desc(radius, norm_factor)
-    skew_desc += circle_desc
-    return skew_desc
+    return _closed_line_desc(line, float(total_len)) + generate_circle_path_desc(radius, norm_factor)
 
 
 def circular_scalar_area_line(
@@ -185,7 +165,7 @@ def circular_scalar_area_line(
     position_column: str = "position",
     close_at_record_len: bool = False,
     record_transform: RecordDisplayTransform | None = None,
-) -> tuple[NDArray[np.float64], NDArray[np.float64], float] | None:
+) -> CircularAreaLine | None:
     """The outer line of a scalar area as the path draws it: display positions, their radii, and the baseline
     radius the area is filled down to."""
 
@@ -196,14 +176,13 @@ def circular_scalar_area_line(
     values = scalar_df[value_column].to_numpy(dtype=float)
     values = np.clip(values, 0.0, 1.0)
     positions = scalar_df[position_column].to_numpy(dtype=float)
+    segment_starts: tuple[int, ...] = ()
     if record_transform is not None and record_transform.start_coordinate is not None:
-        segments = project_scalar_samples(positions, values, record_transform)
-        positions = np.array([p.position for segment in segments for p in segment.points])
-        values = np.array([p.value for segment in segments for p in segment.points])
+        positions, values, segment_starts = project_scalar_line(positions, values, record_transform)
     elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
         positions = np.append(positions, float(record_len))
         values = np.append(values, values[0])
-    return positions, baseline_radius + (float(track_width) * values), baseline_radius
+    return CircularAreaLine(positions, baseline_radius + (float(track_width) * values), baseline_radius, segment_starts)
 
 
 def generate_circular_scalar_area_path_desc(
@@ -233,22 +212,20 @@ def generate_circular_scalar_area_path_desc(
     )
     if line is None:
         return ""
-    positions, outer_radii, baseline_radius = line
-    angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
-
-    outer_x = outer_radii * np.cos(angles_rad)
-    outer_y = outer_radii * np.sin(angles_rad)
-    inner_x = baseline_radius * np.cos(angles_rad)
-    inner_y = baseline_radius * np.sin(angles_rad)
-
-    if len(outer_x) == 0:
+    positions, outer_radii, baseline_radius, segment_starts = line
+    if len(positions) == 0:
         return ""
-
-    path_segments = [f"M{inner_x[0]} {inner_y[0]}", f"L{outer_x[0]} {outer_y[0]}"]
-    path_segments.extend(f"L{x} {y}" for x, y in zip(outer_x[1:], outer_y[1:]))
-    path_segments.extend(f"L{x} {y}" for x, y in zip(reversed(inner_x), reversed(inner_y)))
-    path_segments.append("z")
-    return "".join(path_segments)
+    angles_rad = np.radians(360.0 * (positions / float(record_len)) - 90.0)
+    first = position_angle(positions[0], record_len)
+    last = position_angle(positions[-1], record_len)
+    # The outer line, then the baseline back from the last sample to the first as arcs (Circular wrap kept).
+    return (
+        f"M {path_point(*circle_point(baseline_radius, first))}"
+        + track_line_to(outer_radii * np.cos(angles_rad), outer_radii * np.sin(angles_rad), segment_starts)
+        + f"L {path_point(*circle_point(baseline_radius, last))} "
+        + circle_arc_to(baseline_radius, last, first - last)
+        + "z"
+    )
 
 
 def generate_circular_depth_path_desc(

@@ -105,7 +105,7 @@ const svgComparisonSummary = (content) => {
   const source = String(content || '');
   return {
     comparisonGroups: (source.match(/<g[^>]*\bid="comparison\d+"/g) || []).length,
-    pairwiseMatches: (source.match(/data-gbdraw-pairwise-match-id=/g) || []).length,
+    pairwiseMatches: (source.match(/data-gbdraw-match-id=/g) || []).length,
     comparisonLegends: (source.match(/data-gbdraw-role="comparison-legend"/g) || []).length
   };
 };
@@ -113,7 +113,7 @@ const svgComparisonSummary = (content) => {
 const recordPlacementSummary = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const svg = new DOMParser().parseFromString(
-    app.results?.[app.selectedResultIndex]?.content || '',
+    app.currentResults()[app.selectedResultIndex]?.content || '',
     'image/svg+xml'
   );
   const placements = [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
@@ -697,7 +697,7 @@ const invokeGeneration = async (page, terminal, runnerEvidence, terminalSignal) 
       const started = performance.now();
       try {
         const result = await app.runAnalysis();
-        const selected = app.results?.[app.selectedResultIndex];
+        const selected = app.currentResults()[app.selectedResultIndex];
         const historyAfter = history.getDiagnostics();
         return {
           status: String(result?.status || ''),
@@ -781,7 +781,7 @@ const assertRecoverableErrorState = async (page, diagnostic, originalPreview) =>
   expect(page.isClosed(), JSON.stringify(diagnostic, null, 2)).toBe(false);
   const recovery = await page.evaluate(async ({ expectedPreview }) => {
     const app = window.__GBDRAW_APP__;
-    const selected = app.results?.[app.selectedResultIndex];
+    const selected = app.currentResults()[app.selectedResultIndex];
     const {
       DIAGRAM_HELPER_OPERATIONS,
       runDiagramHelperOperation
@@ -852,7 +852,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
 
   const loaded = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const selected = app.results?.[app.selectedResultIndex];
+    const selected = app.currentResults()[app.selectedResultIndex];
     return {
       originalPreview: String(selected?.content || ''),
       previewVisible: Boolean(document.querySelector('.shadow-xl.origin-top > svg')),
@@ -936,7 +936,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   });
   const firstGeneratedSvg = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    return String(app.results?.[app.selectedResultIndex]?.content || '');
+    return String(app.currentResults()[app.selectedResultIndex]?.content || '');
   });
   const firstRecordPlacements = await recordPlacementSummary(page);
   const firstSvgPath = testInfo.outputPath('vibrio-generate-1.svg');
@@ -973,7 +973,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   });
   const secondGeneratedSvg = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    return String(app.results?.[app.selectedResultIndex]?.content || '');
+    return String(app.currentResults()[app.selectedResultIndex]?.content || '');
   });
   const secondSvgPath = testInfo.outputPath('vibrio-generate-2.svg');
   writeFileSync(secondSvgPath, secondGeneratedSvg, 'utf8');
@@ -1407,7 +1407,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     historyRoundTrip = await page.evaluate((expectedCharacters) => {
       const history = window.__GBDRAW_HISTORY__;
       const app = window.__GBDRAW_APP__;
-      const currentSvg = String(app.results?.[app.selectedResultIndex]?.content || '');
+      const currentSvg = String(app.currentResults()[app.selectedResultIndex]?.content || '');
       return {
         undoCountBefore: history.getUndoCount(),
         historyEntryCreated: false,
@@ -1430,9 +1430,9 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       const app = window.__GBDRAW_APP__;
       const undoCountBefore = history.getUndoCount();
       const undoOk = await history.undo();
-      const afterUndo = String(app.results?.[app.selectedResultIndex]?.content || '');
+      const afterUndo = String(app.currentResults()[app.selectedResultIndex]?.content || '');
       const redoOk = await history.redo();
-      const afterRedo = String(app.results?.[app.selectedResultIndex]?.content || '');
+      const afterRedo = String(app.currentResults()[app.selectedResultIndex]?.content || '');
       return {
         undoCountBefore,
         historyEntryCreated: true,

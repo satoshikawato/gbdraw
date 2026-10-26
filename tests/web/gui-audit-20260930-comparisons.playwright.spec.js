@@ -66,7 +66,7 @@ const svgRibbons = (page, content) => page.evaluate((text) => {
   const svg = new DOMParser().parseFromString(text, 'image/svg+xml');
   const numbers = (value) => (String(value || '').match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/gi) || []).map(Number);
   const span = (values) => [Math.round(Math.min(...values)), Math.round(Math.max(...values))];
-  return [...svg.querySelectorAll('[data-gbdraw-pairwise-match-id]')].map((element) => {
+  return [...svg.querySelectorAll('[data-gbdraw-match-id]')].map((element) => {
     const point = numbers(element.getAttribute('d'));
     const data = Object.fromEntries([...element.attributes]
       .filter(({ name }) => name.startsWith('data-'))
@@ -76,13 +76,13 @@ const svgRibbons = (page, content) => page.evaluate((text) => {
 }, content);
 const committedRibbons = async (page) => svgRibbons(page, await page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  return String(app.results?.[app.selectedResultIndex]?.content || '');
+  return String(app.currentResults()[app.selectedResultIndex]?.content || '');
 }));
 
 const featureSpan = (page, locusTag) => page.evaluate((tag) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.locus_tag === tag);
-  const content = String(app.results?.[app.selectedResultIndex]?.content || '');
+  const content = String(app.currentResults()[app.selectedResultIndex]?.content || '');
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
   const xs = [...svg.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(feature.svg_id)}"]`)]
     .flatMap((element) => (String(element.getAttribute('d') || '').match(/-?\d+(?:\.\d+)?/g) || [])
@@ -340,7 +340,7 @@ test('the match popup and its FASTA header report source coordinates of a croppe
   const popup = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.clickedPairwiseMatch = null;
-    app.svgContainer.querySelector('svg [data-gbdraw-pairwise-match-id]')
+    app.svgContainer.querySelector('svg [data-gbdraw-match-id]')
       .dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 100, clientY: 100 }));
     for (let attempt = 0; attempt < 100 && !app.clickedPairwiseMatch; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 50));

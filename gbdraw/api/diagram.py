@@ -223,6 +223,7 @@ from gbdraw.render.group_content import (
     GroupKey,
     GroupKind,
     build_group_content,
+    copy_element_tree,
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
@@ -1231,13 +1232,14 @@ def merge_circular_record(
     The copies drop the single-record composition roles, suffix the fixed
     top-level ids, and rename ids that an earlier record (``previous``) or this
     one already uses, with the references to them. The stored contents are not
-    changed: their children are deep copies (perf-0140 D-07 keeps the copy).
+    changed: their children are copies (``copy_element_tree``; perf-0140 D-07
+    keeps the copy).
     """
 
     used_ids = set(previous.used_ids) if previous is not None else set()
     used_ids.add(f"record_{record_index}")
     copied_definitions: list[BaseElement] = [
-        copy.deepcopy(placed[content_index][0].definitions[definition_index])
+        copy_element_tree(placed[content_index][0].definitions[definition_index])
         for content_index, definition_index in definition_positions
     ]
     copied_elements: list[Group] = []
@@ -1247,7 +1249,7 @@ def merge_circular_record(
             group._parameter = content.parameter
         group.attribs = dict(attributes)
         group.elements = list(content.children)
-        copied = copy.deepcopy(group)
+        copied = cast(Group, copy_element_tree(group))
         _strip_nested_composition_roles(copied)
         _suffix_fixed_top_level_group_id(copied, record_index)
         copied_elements.append(copied)

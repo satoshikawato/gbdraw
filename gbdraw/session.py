@@ -38,7 +38,9 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
+    seal_protein_identity_manifest,
     session_legend_edits_by_row_key,
+    thaw_protein_identity_manifest,
     validate_session,
 )
 from gbdraw.session_drawings import (
@@ -207,7 +209,13 @@ def _select_drawing(
 
 @dataclass(frozen=True)
 class SessionDocument:
-    """Validated session envelope detached from caller-owned mutable mappings."""
+    """Validated session envelope detached from caller-owned mutable mappings.
+
+    ``render_session_drawings_cli`` without a re-save drops the resources'
+    embedded data (``_release_materialized_resource_data``). After that the
+    document, and any drawing artifacts that share its resources, are no
+    longer valid for saving or reuse.
+    """
 
     _data: Mapping[str, Any]
     source_path: Path | None = None
@@ -229,6 +237,8 @@ class SessionDocument:
 
     def _adopt(self, data: dict[str, Any]) -> None:
         expanded = expand_session_feature_catalog(data)
+        # Checked once here; every later reader of the document trusts the proof.
+        seal_protein_identity_manifest(expanded)
         _validate_document(expanded)
         object.__setattr__(self, "_data", expanded)
         object.__setattr__(self, "_drawings", read_session_drawings(expanded))
@@ -298,7 +308,9 @@ class SessionDocument:
     def to_dict(self) -> dict[str, Any]:
         """Return a detached JSON-compatible copy of the document."""
 
-        return copy.deepcopy(dict(self._data))
+        data = copy.deepcopy(dict(self._data))
+        thaw_protein_identity_manifest(data)
+        return data
 
     def _drawing_parts(
         self,
@@ -492,6 +504,21 @@ def materialize_session(
         output_directory=output_directory,
         temporary_directory=temporary_directory,
     )
+
+
+def _release_materialized_resource_data(materialized: MaterializedSession) -> None:
+    """Drop each resource's embedded data once its file is materialized.
+
+    Only for a document its caller owns and neither reads nor saves again:
+    the CLI render without a re-save. The resource descriptors keep every
+    other field, the materialized files hold the bytes, and the Session file
+    is untouched. A re-save and the Python API keep the data.
+    """
+
+    _active_materialization(materialized)
+    resources = materialized.document._data.get("resources", {})
+    for resource_id in materialized.resource_paths:
+        resources[resource_id].pop("data", None)
 
 
 def _active_materialization(materialized: MaterializedSession) -> None:
@@ -696,7 +723,11 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
 
     One ``PreparedBiologicalInputCache`` transaction spans the call, so its
     retention is the selected drawings' resources; the cache ends with the
-    call.
+    call. The callers decode the drawings inside it, as a Worker Generate
+    decodes inside its transaction, so a decoded resource is keyed by its
+    resource identity instead of by its value. An error of the body keeps its
+    own type; opening or committing the cache raises
+    :class:`SessionRenderError`.
     """
 
     from gbdraw.api.prepared import (
@@ -704,19 +735,33 @@ def _session_parse_cache(materialized: MaterializedSession) -> Iterator[None]:
         PreparedResourceIdentity,
     )
 
-    identities: dict[str | Path, PreparedResourceIdentity] = {
-        path: PreparedResourceIdentity(
-            resource_id=resource_id,
-            cache_token=f"session-{resource_id}",
-            size=path.stat().st_size,
-        )
-        for resource_id, path in materialized.resource_paths.items()
-    }
-    with PreparedBiologicalInputCache().transaction(
-        resource_paths=identities,
-        diagnostics=None,
-    ):
-        yield
+    # Before the files are read: a closed materialization is a resource error.
+    _active_materialization(materialized)
+    body_failed = False
+    try:
+        identities: dict[str | Path, PreparedResourceIdentity] = {
+            path: PreparedResourceIdentity(
+                resource_id=resource_id,
+                cache_token=f"session-{resource_id}",
+                size=path.stat().st_size,
+            )
+            for resource_id, path in materialized.resource_paths.items()
+        }
+        with PreparedBiologicalInputCache().transaction(
+            resource_paths=identities,
+            diagnostics=None,
+        ):
+            try:
+                yield
+            except BaseException:
+                body_failed = True
+                raise
+    except SessionError:
+        raise
+    except Exception as exc:
+        if body_failed:
+            raise
+        raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
 
 
 def _render_session_drawing_plans(
@@ -725,20 +770,25 @@ def _render_session_drawing_plans(
     *,
     include_feature_catalog: bool = False,
 ) -> dict[str, RequestRenderResult | CircularBatchRenderResult]:
-    """Render planned drawings in one parse-cache transaction."""
+    """Render planned drawings inside the call's :func:`_session_parse_cache`.
+
+    Its callers (``render_session``, ``render_session_drawings`` and the CLI's
+    ``render_session_drawings_cli``) open that cache around decoding and
+    rendering; without it a decoded resource is keyed by its value and the
+    drawings parse their records again.
+    """
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
     _active_materialization(materialized)
     results: dict[str, RequestRenderResult | CircularBatchRenderResult] = {}
     try:
-        with _session_parse_cache(materialized):
-            for plan in plans:
-                results[plan.drawing.id] = render_session_compatible_request(
-                    plan.request,
-                    plan.drawing.artifacts,
-                    include_feature_catalog=include_feature_catalog,
-                )
+        for plan in plans:
+            results[plan.drawing.id] = render_session_compatible_request(
+                plan.request,
+                plan.drawing.artifacts,
+                include_feature_catalog=include_feature_catalog,
+            )
     except SessionError:
         raise
     except Exception as exc:
@@ -757,10 +807,10 @@ def render_session(
     have one drawing.
     """
 
-    _active_materialization(materialized)
-    selected = materialized.document._drawing_parts(drawing)
-    plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
-    return _render_session_drawing_plans(materialized, (plan,))[selected.id]
+    with _session_parse_cache(materialized):
+        selected = materialized.document._drawing_parts(drawing)
+        plan = _SessionDrawingRender(selected, _decode_drawing(materialized, selected))
+        return _render_session_drawing_plans(materialized, (plan,))[selected.id]
 
 
 def render_session_drawings(
@@ -788,19 +838,20 @@ def render_session_drawings(
 
     from gbdraw.api.request_render import preflight_diagram_request_outputs
 
-    plans = _plan_session_drawings(
-        materialized,
-        drawings,
-        output_prefix=output_prefix,
-        formats=formats,
-        overwrite=overwrite,
-    )
-    try:
-        preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
-    except ValidationError as exc:
-        raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
-    # A copy typed as the public union (``dict`` is invariant in its values).
-    return dict(_render_session_drawing_plans(materialized, plans))
+    with _session_parse_cache(materialized):
+        plans = _plan_session_drawings(
+            materialized,
+            drawings,
+            output_prefix=output_prefix,
+            formats=formats,
+            overwrite=overwrite,
+        )
+        try:
+            preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
+        except ValidationError as exc:
+            raise SessionRenderError(f"Canonical session rendering failed: {exc}") from exc
+        # A copy typed as the public union (``dict`` is invariant in its values).
+        return dict(_render_session_drawing_plans(materialized, plans))
 
 
 @dataclass(frozen=True)
@@ -932,7 +983,9 @@ def _session_data_from_drawings(
             drawing_id, name = drawing.id or drawing.mode, drawing.name or ""
         taken_ids.append(drawing_id)
         names.append(name)
-        state = copy.deepcopy(dict(drawing.state))
+        # The views are assembled from new mappings; SessionDocument(data) below
+        # detaches the document from ``drawing.state`` with one deep copy.
+        state = dict(drawing.state)
         conflicting = _RESERVED_DRAWING_FIELDS & set(state)
         if conflicting:
             raise SessionFormatError(
@@ -1415,7 +1468,10 @@ def upgrade_session_document(
     upgrade = _upgrade_to_current(load_session_document(document), temporary_directory)
     if upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
         return upgrade
-    drawings = _drawings_of_current(upgrade.document.to_dict())
+    # The move reads the document's own data, whose manifest stays sealed
+    # (``to_dict`` thaws it), and builds a new document that SessionDocument
+    # copies: the manifest is not checked again.
+    drawings = _drawings_of_current(upgrade.document._data)
     return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
 
 

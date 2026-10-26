@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { SvgResultRoot } from './svg-result-ingestion.js' */
+import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
 import { DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups } from './drawn-groups.js';
 
 const PAIRWISE_LEGEND_SELECTOR =
@@ -169,9 +170,30 @@ export const ensureUniquePairwiseGradientIds = (svg) => {
   return changed;
 };
 
+/**
+ * Renames the attributes a stored Result of an older gbdraw wrote under another
+ * name (`LEGACY_SVG_ATTRIBUTE_RENAMES`, owned by gbdraw/render/interactive_svg.py,
+ * which renames an admitted SVG by the same rule): an element that has the
+ * current attribute keeps its value, and the legacy attribute is removed.
+ * @param {SvgResultRoot | null | undefined} svg
+ * @returns {boolean} Whether an attribute changed.
+ */
+const migrateLegacySvgAttributes = (svg) => {
+  let changed = false;
+  Object.entries(LEGACY_SVG_ATTRIBUTE_RENAMES).forEach(([legacy, current]) => {
+    svg?.querySelectorAll(`[${legacy}]`).forEach((element) => {
+      if (!element.getAttribute(current)) element.setAttribute(current, element.getAttribute(legacy) || '');
+      element.removeAttribute(legacy);
+      changed = true;
+    });
+  });
+  return changed;
+};
+
 /** @param {SvgResultRoot | null | undefined} svg */
 export const normalizeSvgResultIds = (svg) => {
+  const renamed = migrateLegacySvgAttributes(svg);
   const skewChanged = ensureUniqueSkewClipPathIds(svg);
   const gradientChanged = ensureUniquePairwiseGradientIds(svg);
-  return Boolean(skewChanged || gradientChanged);
+  return Boolean(renamed || skewChanged || gradientChanged);
 };

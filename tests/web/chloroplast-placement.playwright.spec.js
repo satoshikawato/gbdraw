@@ -32,7 +32,7 @@ test('chloroplast multipart placement survives strand and label changes and sess
       const { state } = await import('./js/state.js');
       return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
     }), { timeout: 180000 }).toMatchObject({ key: before + 1, processing: false, error: null });
-    const svg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+    const svg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     await fs.writeFile(testInfo.outputPath(`${name}.svg`), svg);
     // Check the actual SVG after the Web editor's composition reflow as well.
     const overlap = await page.evaluate(() => {

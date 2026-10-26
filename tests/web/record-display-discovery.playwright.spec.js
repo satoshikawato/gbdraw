@@ -80,7 +80,7 @@ const snapshot = (page) => page.evaluate(async () => {
     viewStatus: window.__GBDRAW_APP__.circularRecordDiscoveryState.status,
     rows: circular.circularRecordList.value.map(row => [row.selector, row.record_id]),
     primary: fileName(circular.files.c_gb) || fileName(circular.files.c_gff) || null,
-    result: state.results.value[0]?.content || null,
+    result: window.__GBDRAW_APP__.currentResults()[0]?.content || null,
     selector: state.activeDrawing().form.circular_record_selector,
     grouping: state.activeDrawing().adv.circular_grouping_intent,
     grid: state.activeDrawing().form.multi_record_canvas

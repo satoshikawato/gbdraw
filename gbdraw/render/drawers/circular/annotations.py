@@ -45,6 +45,8 @@ from gbdraw.render.drawers.annotation_marks import (
 from gbdraw.render.group_content import GroupContent
 from gbdraw.render.patterns import hatch_pattern, hatch_pattern_id, hatch_pattern_paint
 from gbdraw.svg.ids import stable_svg_id
+from gbdraw.svg.circular_arcs import circle_arc, circle_arc_to, circle_point, position_angle
+from gbdraw.svg.path_data import path_number, path_point
 
 Polygon = tuple[Point, ...]
 
@@ -54,24 +56,20 @@ def _point(position: float, total_length: int, radius: float) -> tuple[float, fl
     return radius * math.cos(angle), radius * math.sin(angle)
 
 
+def _span_deg(start: float, end: float, total_length: int) -> float:
+    return 360.0 * max(0.0, end - start) / max(1, total_length)
+
+
 def _arc_path(start: float, end: float, total_length: int, radius: float) -> str:
-    x1, y1 = _point(start, total_length, radius)
-    x2, y2 = _point(end, total_length, radius)
-    span = max(0.0, end - start)
-    large = 1 if span > 0.5 * total_length else 0
-    return f"M {x1:g},{y1:g} A {radius:g},{radius:g} 0 {large} 1 {x2:g},{y2:g}"
+    return circle_arc(radius, position_angle(start, max(1, total_length)), _span_deg(start, end, total_length))
 
 
 def _band_path(start: float, end: float, total_length: int, inner: float, outer: float) -> str:
-    ox1, oy1 = _point(start, total_length, outer)
-    ox2, oy2 = _point(end, total_length, outer)
-    ix2, iy2 = _point(end, total_length, inner)
-    ix1, iy1 = _point(start, total_length, inner)
-    span = max(0.0, end - start)
-    large = 1 if span > 0.5 * total_length else 0
+    start_angle = position_angle(start, max(1, total_length))
+    span = _span_deg(start, end, total_length)
     return (
-        f"M {ox1:g},{oy1:g} A {outer:g},{outer:g} 0 {large} 1 {ox2:g},{oy2:g} "
-        f"L {ix2:g},{iy2:g} A {inner:g},{inner:g} 0 {large} 0 {ix1:g},{iy1:g} Z"
+        f"{circle_arc(outer, start_angle, span)} "
+        f"L {path_point(*circle_point(inner, start_angle + span))} {circle_arc_to(inner, start_angle + span, -span)} Z"
     )
 
 
@@ -104,16 +102,10 @@ class CircularLabelArc:
     def path(self) -> str:
         """The SVG path the label's ``<textPath>`` follows, in reading order."""
 
-        start, end = self.angle - self.half_span, self.angle + self.half_span
+        span = 2.0 * self.half_span
         if self.flipped:
-            start, end = end, start
-        (x1, y1), (x2, y2) = (
-            (self.radius * math.cos(math.radians(value)), self.radius * math.sin(math.radians(value)))
-            for value in (start, end)
-        )
-        large = 1 if 2.0 * self.half_span > 180.0 else 0
-        sweep = 0 if self.flipped else 1
-        return f"M {x1:g},{y1:g} A {self.radius:g},{self.radius:g} 0 {large} {sweep} {x2:g},{y2:g}"
+            return circle_arc(self.radius, self.angle + self.half_span, -span)
+        return circle_arc(self.radius, self.angle - self.half_span, span)
 
 
 @dataclass(frozen=True)
@@ -898,7 +890,7 @@ def circular_annotation_track_content(
                         if capped:
                             x1, y1 = _point(position, record_length, lane_inner)
                             x2, y2 = _point(position, record_length, lane_outer)
-                            outline += f" M {x1:g},{y1:g} L {x2:g},{y2:g}"
+                            outline += f" M {path_number(x1)},{path_number(y1)} L {path_number(x2)},{path_number(y2)}"
                     border = Path(d=outline, fill="none", stroke=style.stroke, stroke_width=style.stroke_width, stroke_linecap="butt")
                     if dash:
                         border.attribs["stroke-dasharray"] = dash
@@ -909,7 +901,7 @@ def circular_annotation_track_content(
                         x1, y1 = _point(position, record_length, radius - cap)
                         x2, y2 = _point(position, record_length, radius + cap)
                         cap_path = Path(
-                            d=f"M {x1:g},{y1:g} L {x2:g},{y2:g}",
+                            d=f"M {path_number(x1)},{path_number(y1)} L {path_number(x2)},{path_number(y2)}",
                             fill="none",
                             stroke=style.stroke,
                             stroke_width=style.stroke_width,
@@ -929,13 +921,7 @@ def circular_annotation_track_content(
             else f"gbdraw-annotation-clip-{track.slot_id}-{record_index + 1}"
         )
         ring = Path(
-            d=(
-                f"M {outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "
-                f"{-outer_radius_px:g},0 A {outer_radius_px:g},{outer_radius_px:g} 0 1 0 "
-                f"{outer_radius_px:g},0 Z M {inner_radius_px:g},0 "
-                f"A {inner_radius_px:g},{inner_radius_px:g} 0 1 1 {-inner_radius_px:g},0 "
-                f"A {inner_radius_px:g},{inner_radius_px:g} 0 1 1 {inner_radius_px:g},0 Z"
-            )
+            d=f"{circle_arc(outer_radius_px, 0.0, -360.0)} Z {circle_arc(inner_radius_px, 0.0, 360.0)} Z"
         )
         ring.attribs["clip-rule"] = "evenodd"
         clip_path = ClipPath(id=clip_id)

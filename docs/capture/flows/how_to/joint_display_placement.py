@@ -101,7 +101,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         page.locator('.drawer-toggle').click()
         final = generate_and_inspect(page, _inspect_tracks_svg, _assert_safe_svg)
         values = page.evaluate('''() => ({request: window.__GBDRAW_APP__.lastSuccessfulRunRequest,
-            svg: window.__GBDRAW_APP__.results[0].content})''')
+            svg: window.__GBDRAW_APP__.currentResults()[0].content})''')
         (download_dir / 'joint.svg').write_text(values['svg'])
         # The next action remains Save/Load; formal joint browser tests exercise fresh Load and replay.
         page.on('dialog', lambda dialog: (print('Capture dialog:', dialog.type, dialog.message), dialog.accept()))

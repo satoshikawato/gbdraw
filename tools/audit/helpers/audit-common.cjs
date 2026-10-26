@@ -56,7 +56,7 @@ const runGenerate = (page) => helpers().evaluateWithRetainedPromise(page, async 
     errorDetails: Array.isArray(app.errorLog?.details)
       ? app.errorLog.details.map((d) => (d && typeof d === 'object') ? `${d.label}: ${d.text}` : String(d))
       : [],
-    svg: String(app.results?.[0]?.content || ''),
+    svg: String(app.currentResults()[0]?.content || ''),
     command: recipe?.command || app.lastRunInfo?.command || '',
     sourceRecipe: recipe
       ? { level: recipe.level, reason: recipe.reason || recipe.unavailableReason || '' }

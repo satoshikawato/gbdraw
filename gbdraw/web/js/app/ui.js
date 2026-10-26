@@ -208,7 +208,7 @@ export const createPanZoom = (state) => {
           'path[id^="f"]',
           'polygon[id^="f"]',
           'rect[id^="f"]',
-          '[data-gbdraw-pairwise-match-id]',
+          '[data-gbdraw-match-id]',
           '[data-match-kind]',
           '[data-pairwise-match-style]',
           '[data-collinearity-block-id]',

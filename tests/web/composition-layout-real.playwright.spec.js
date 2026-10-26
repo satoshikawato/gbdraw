@@ -252,7 +252,7 @@ const inspectLiveComposition = async (page, key = addedLegendKey) => (
       }
       return null;
     })();
-    const resultText = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const resultText = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     const resultDocument = new DOMParser().parseFromString(resultText, 'image/svg+xml');
     const resultSvg = resultDocument.documentElement;
     const resultDeltas = resultDocument.querySelector('parsererror')
@@ -494,7 +494,7 @@ const reloadSession = async (page, file, mode, legendSide) => {
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
     if (!svg) return false;
     const liveMetadata = JSON.parse(svg.getAttribute('data-gbdraw-composition'));
-    const resultText = String(app?.results?.[app.selectedResultIndex]?.content || '');
+    const resultText = String(app?.currentResults()[app.selectedResultIndex]?.content || '');
     const resultDocument = new DOMParser().parseFromString(resultText, 'image/svg+xml');
     const resultSvg = resultDocument.documentElement;
     const resultMetadata = resultDocument.querySelector('parsererror')
@@ -852,7 +852,7 @@ const canvasState = (page) => page.evaluate(async () => {
   const rootOf = (root) => ({
     viewBox: root.getAttribute('viewBox'), width: root.getAttribute('width'), height: root.getAttribute('height')
   });
-  const saved = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml').documentElement;
+  const saved = new DOMParser().parseFromString(app.currentResults()[0].content, 'image/svg+xml').documentElement;
   return {
     root: rootOf(svg),
     saved: rootOf(saved),
@@ -979,7 +979,7 @@ const scaleState = (page) => page.evaluate(async () => {
   const index = binding.primary.targets.indexOf(scale);
   return {
     root: { viewBox: svg.getAttribute('viewBox'), width: svg.getAttribute('width'), height: svg.getAttribute('height') },
-    stored: app.results[0].content,
+    stored: app.currentResults()[0].content,
     scaleBox: { x: local.x + lx, y: local.y + ly, width: local.width, height: local.height },
     delta: composition.compositionUserDeltas(svg).primary[index],
     edge: binding.metadata.spacing.edgePaddingPx,

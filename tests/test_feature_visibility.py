@@ -899,10 +899,10 @@ def _capture_gff_candidate_features(
     """Serve ``record`` as the parsed GFF3 and note the types the request keeps from it."""
 
     def fake_parse_gff_fasta(*args, **kwargs):
-        from gbdraw.features.source import build_source_feature_catalog
+        from gbdraw.features.source import capture_source_features
         for feature in record.features:
             feature.sub_features = []  # as BCBio leaves a feature without children
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
+        kwargs["source_feature_catalogs"].append(capture_source_features(record))
         return [record]
 
     def spy_resolve_record_inputs(*args, **kwargs):

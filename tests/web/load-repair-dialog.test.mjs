@@ -635,7 +635,7 @@ test('an older Session whose feature information cannot be restored lists it (B5
   const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
   const { createInputFileStore } = await import('../../gbdraw/web/js/services/history-files.js');
   const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
-  const slots = createHistorySnapshotService({ state, fileStore: createInputFileStore() });
+  const slots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value });
   const failedSlot = slots.captureArtifactSlot();
   const circular = modeDrawing(state, 'circular');
   const rows = [{ svg_id: 'f1' }, { svg_id: 'f2' }, { svg_id: 'f3' }];

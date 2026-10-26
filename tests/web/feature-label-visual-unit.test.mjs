@@ -113,6 +113,8 @@ const buildHarness = ({
       mutations.commit += 1;
       return true;
     },
+    currentResults: () => state.results.value,
+    getResultIdentity: () => 'result:1',
     rulePreparation,
     evaluateLabelRules,
     showNotice,

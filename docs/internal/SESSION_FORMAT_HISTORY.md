@@ -37,6 +37,27 @@ part into its own drawing (`circular`, `linear`), the rules of
 `upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
 once at Load. Fixtures: `tests/fixtures/sessions/drawings-v49/`.
 
+## Unreleased: one comparison-match attribute in saved Results
+
+No Session or request version changes. On the first-parent line of `main`,
+from cc707a5be (#254, 2026-06-18, Session 27) until 7ec9ce7cc (#304,
+2026-07-19 13:01, Session 32), the writers named a comparison match only
+`data-gbdraw-pairwise-match-id`. That range includes gbdraw 0.12.0, 0.12.1 and
+0.13.0 (Sessions 29 and 30), Session 31, and Session 32 from be13a5c03
+(2026-07-17). From 7ec9ce7cc the writers added `data-gbdraw-match-id` with the same value, and now
+they write only `data-gbdraw-match-id`. The legacy name is a row of
+`LEGACY_SVG_ATTRIBUTE_RENAMES` (`gbdraw/render/interactive_svg.py`, written to
+`js/contracts/schema.generated.js` by `tools/generate_web_contracts.py`). The
+Web legacy Result admission (`admitLegacyImportedResults`, through
+`normalizeSvgResultIds`) and `enrich_svg` rename it once; an element that
+already has `data-gbdraw-match-id` keeps it. Every other reader reads only
+`data-gbdraw-match-id`. A Session of 40 or later never holds a Result with only
+the legacy name: such a Result can be saved only after a Generate, and the
+Python upgrade drops Results without a feature catalog. Fixtures:
+`tests/fixtures/sessions/BGC0000708-BGC0000713.v29`/`.v30` and
+`cli-linear-protein.v30`; no fixture holds a Session 27, 28, 31 or 32 comparison, which takes
+the same legacy admission (below Session 40).
+
 ## Unreleased: Session 48 stores protein results in the search frame, what each file card loaded, and the feature label style
 
 Session version 48 stores the protein results of a reverse-complemented Linear

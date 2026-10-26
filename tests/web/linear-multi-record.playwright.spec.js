@@ -6,7 +6,7 @@ const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { createHash } = require('node:crypto');
-const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, answerLoadRepairs, answerSessionTitle, openApp, waitForAppShell, evaluateWithRetainedPromise, getDiagramWorkerActivity, settleLive, expectSessionLoadedWithoutWarnings, fetchRoute, openLinearFileCards, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { forceColdPyodideBoot } = require('./helpers/pyodide-snapshot-test-server.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
@@ -74,7 +74,7 @@ const makeDefinitionGenbank = (id, qualifiers = '', repeats = 100) => makeCompar
 ${qualifiers}`);
 
 const definitionLines = (page) => page.evaluate(() => {
-  const svg = window.__GBDRAW_APP__.results[0]?.content || '';
+  const svg = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   return [...doc.querySelectorAll('text[data-definition-line-kind]')].map((text) => ({
     kind: text.dataset.definitionLineKind, text: text.textContent,
@@ -90,7 +90,7 @@ const loadDefinitionSession = async (page, path) => {
 
 test('Linear automatic replicon names follow Generate and preserve saved subtitles', async ({ page }, testInfo) => {
   test.setTimeout(120000);
-  // The case counts the wheel requests of the cold boot.
+  // The case counts the wheel requests of the prefetch and the cold boot.
   await forceColdPyodideBoot(page);
   const wheelResponses = [];
   await page.context().route(/\/gbdraw-[^/]+\.whl(?:\?|$)/, async route => {
@@ -132,10 +132,18 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
       .toEqual(enabled ? ['p1', 'p2', 'Plastid:chloroplast'] : []);
   }
+  // One Worker serves every Generate. With a served snapshot, the Worker that
+  // cannot restore it is replaced once by one that boots cold. The page
+  // downloads the wheel when the file is chosen, and each Worker downloads it
+  // again (a routed request bypasses the HTTP cache).
+  const expectedWorkers = process.env.GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR ? 2 : 1;
+  expect((await getDiagramWorkerActivity(page)).constructions).toBe(expectedWorkers);
   const servedWheels = wheelResponses;
-  expect(servedWheels).toHaveLength(1);
-  const wheelPath = new URL(servedWheels[0].url).pathname.replace(/^\//, '');
-  expect(servedWheels[0].sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
+  expect(servedWheels).toHaveLength(1 + expectedWorkers);
+  for (const served of servedWheels) {
+    const wheelPath = new URL(served.url).pathname.replace(/^\//, '');
+    expect(served.sha256).toBe(createHash('sha256').update(readFileSync(join(repoRoot, wheelPath))).digest('hex'));
+  }
   await testInfo.attach('browser-wheel.json', { body: JSON.stringify(servedWheels), contentType: 'application/json' });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -240,7 +248,7 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
         .map(el => [el.tagName, el.tagName === 'text' ? el.textContent : '',
           attrs.map(attr => el.getAttribute(attr))]);
     };
-    return [snapshot(saved), snapshot(window.__GBDRAW_APP__.results[0].content)];
+    return [snapshot(saved), snapshot(window.__GBDRAW_APP__.currentResults()[0].content)];
   }, session.results[0].content);
   expect(previews[1]).toEqual(previews[0]);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
@@ -291,7 +299,7 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
 const measureDefinitionColumns = (page) => page.evaluate(async () => {
     const host = document.createElement('div');
     host.style.cssText = 'position:absolute;left:-10000px;visibility:hidden';
-    host.innerHTML = window.__GBDRAW_APP__.results[0].content;
+    host.innerHTML = window.__GBDRAW_APP__.currentResults()[0].content;
     document.body.append(host);
     await document.fonts.ready;
     const svg = host.querySelector('svg');
@@ -522,7 +530,7 @@ test('Linear Lock Definition Column measures single, shared, and mixed rows afte
   }
   writeFileSync(testInfo.outputPath('definition-column-measurements.json'), JSON.stringify(measurements, null, 2));
   const beforeSave = await measureDefinitionColumns(page);
-  writeFileSync(testInfo.outputPath('locked-definition.svg'), await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  writeFileSync(testInfo.outputPath('locked-definition.svg'), await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'translated-definition-columns'; });
   const download = page.waitForEvent('download');
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
@@ -1345,7 +1353,7 @@ test('No comparison completes a real render without touching dormant comparison 
     const { state } = await import('./js/state.js');
     const result = await app.runAnalysis();
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
-    const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(app.currentResults()[0].content, 'image/svg+xml');
     return {
       result,
       error: app.errorLog,
@@ -1673,7 +1681,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
     const app = window.__GBDRAW_APP__;
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
     const svg = new DOMParser().parseFromString(
-      app.results[app.selectedResultIndex].content,
+      app.currentResults()[app.selectedResultIndex].content,
       'image/svg+xml'
     );
     const placements = [...svg.querySelectorAll('[data-record-row]')].map((group) => ({
@@ -2468,7 +2476,7 @@ ${origin}
 
   const regenerated = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    const svgText = app.results?.[0]?.content || '';
+    const svgText = app.currentResults()[0]?.content || '';
     const svg = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
     const featureIds = app.extractedFeatures
       .filter((feature) => feature.product === 'wsv360-like protein')
@@ -2530,7 +2538,7 @@ ${origin}
       draftText: 'Keep after post-processing failure'
     }];
     const snapshot = () => JSON.stringify({
-      results: app.results,
+      results: app.currentResults(),
       resultGenerationKey: app.resultGenerationKey,
       selectedResultIndex: app.selectedResultIndex,
       selectedFeatureIds: [...app.selectedFeatureIds].sort(),
@@ -2602,7 +2610,7 @@ ${origin}
     const app = window.__GBDRAW_APP__;
     app.errorLog = null;
     const snapshot = () => JSON.stringify({
-      results: app.results,
+      results: app.currentResults(),
       resultGenerationKey: app.resultGenerationKey,
       selectedResultIndex: app.selectedResultIndex,
       selectedFeatureIds: [...app.selectedFeatureIds].sort(),
@@ -2705,7 +2713,7 @@ ${origin}
   const thirdRun = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
-    const svg = new DOMParser().parseFromString(app.results?.[0]?.content || '', 'image/svg+xml').documentElement;
+    const svg = new DOMParser().parseFromString(app.currentResults()[0]?.content || '', 'image/svg+xml').documentElement;
     const fillsById = Object.fromEntries(
       app.extractedFeatures
         .filter((feature) => feature.product === 'wsv360-like protein')
@@ -2957,7 +2965,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     const { state } = await import('/gbdraw/web/js/state.js');
     const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
     const result = await app.runAnalysis();
-    const selected = app.results?.[app.selectedResultIndex];
+    const selected = app.currentResults()[app.selectedResultIndex];
     const svg = String(selected?.content || '');
     const latestDerived = [...state.losatDerivedCache.value.values()].at(-1);
     return {
@@ -2969,7 +2977,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
       provenance: plain(latestDerived?.payload?.provenance),
       telemetry: plain(app.lastRunInfo?.losatTelemetry),
       svg,
-      matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length
+      matchCount: (svg.match(/data-gbdraw-match-id=/g) || []).length
     };
   });
 
@@ -3015,7 +3023,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
   // A changed search setting must miss; canceling it preserves the prior Result.
   await page.evaluate(() => { window.__GBDRAW_APP__.losat.blastp.candidateLimit = 7; });
   await cancelAfterRawSearch();
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(recovered.svg);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(recovered.svg);
   const changedSearch = await runAndInspect();
   expect(changedSearch.result, changedSearch.errorSummary).toEqual({ status: 'ok' });
   expect(changedSearch.executorCalls).toBe(2);
@@ -3128,7 +3136,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
 
   const rejected = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
-    const selectedBefore = String(app.results?.[app.selectedResultIndex]?.content || '');
+    const selectedBefore = String(app.currentResults()[app.selectedResultIndex]?.content || '');
     app.losat.blastp.maxHits = 0;
     const executorCallsBefore = window.__GBDRAW_DERIVED_EXECUTOR_CALLS__;
     const result = await app.runAnalysis();
@@ -3138,7 +3146,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
       executorCallsUnchanged:
         window.__GBDRAW_DERIVED_EXECUTOR_CALLS__ === executorCallsBefore,
       committedResultPreserved:
-        String(app.results?.[app.selectedResultIndex]?.content || '') === selectedBefore
+        String(app.currentResults()[app.selectedResultIndex]?.content || '') === selectedBefore
     };
   });
   expect(rejected).toMatchObject({
@@ -3208,7 +3216,7 @@ const uploadCompleteRecordSources = async (page, contents =
 const completeComparisonSnapshot = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
-  const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+  const svg = new DOMParser().parseFromString(app.currentResults()[0].content, 'image/svg+xml');
   const pairKeys = [...svg.querySelectorAll('[data-pairwise-match-style]')].map((node) => [
     Number(node.getAttribute('data-query-record-index')),
     Number(node.getAttribute('data-subject-record-index'))
@@ -3246,7 +3254,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
 
   const before = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__ = app.results[0].content;
+    window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__ = app.currentResults()[0].content;
     return {
       selectors: app.linearSeqs.map((seq) => seq.region_record_id),
       uids: app.linearSeqs.map((seq) => seq.uid),
@@ -3289,7 +3297,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
       )).sort(([left], [right]) => left.localeCompare(right)),
       canonicalComparisonCount: app.files.linearCanonicalComparisons.length,
       undoCount: window.__GBDRAW_HISTORY__.getUndoCount(),
-      resultPreserved: app.results[0].content === window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__,
+      resultPreserved: app.currentResults()[0].content === window.__GBDRAW_RESULT_BEFORE_SOURCE_MOVE__,
       runCount: window.__GBDRAW_DIAGRAM_RUNS__.length
     };
   });
@@ -3340,7 +3348,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   const generated = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
-    const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(app.currentResults()[0].content, 'image/svg+xml');
     return {
       selectors: request.records.map((record) => record.selector.value),
       rows: request.records.map((record) => record.presentation.gridRow),
@@ -3412,7 +3420,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
       cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
         [edgeKey, queryIndex, subjectIndex]
       )),
-      result: app.results[0].content,
+      result: app.currentResults()[0].content,
       history: window.__GBDRAW_HISTORY__.getUndoCount()
     };
   });
@@ -3428,7 +3436,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
       cache: app.losatCacheInfo.map(({ edgeKey, queryIndex, subjectIndex }) => (
         [edgeKey, queryIndex, subjectIndex]
       )),
-      result: app.results[0].content,
+      result: app.currentResults()[0].content,
       history: window.__GBDRAW_HISTORY__.getUndoCount()
     };
   });
@@ -3465,7 +3473,7 @@ test('CLI per-record rows keep File order available and move whole File blocks',
 
   expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const drawnOrder = await page.evaluate(() => {
-    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml');
     return [...svg.querySelectorAll('[data-record-key]')]
       .map((group) => ({
         y: Number(group.getAttribute('data-record-translation-y')),
@@ -3758,7 +3766,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   expect(await page.evaluate(() => ({
     grouping: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).grouping,
     count: window.__GBDRAW_APP__.results.length,
-    both: ['CircularA', 'CircularB'].every((id) => window.__GBDRAW_APP__.results[0].content.includes(id))
+    both: ['CircularA', 'CircularB'].every((id) => window.__GBDRAW_APP__.currentResults()[0].content.includes(id))
   }))).toEqual({ grouping: 'grid', count: 1, both: true });
   await uploadCompleteRecordSources(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
@@ -3926,7 +3934,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
-    const svg = new DOMParser().parseFromString(app.results[0]?.content || '', 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(app.currentResults()[0]?.content || '', 'image/svg+xml');
     return {
       result, error: app.errorLog, firstRecord: request?.records[0],
       jobCount: window.__GBDRAW_COMPLETE_RECORD_JOBS__.flat().length,
@@ -3974,7 +3982,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   const popup = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
-    const svg = new DOMParser().parseFromString(app.results[0]?.content || '', 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(app.currentResults()[0]?.content || '', 'image/svg+xml');
     return {
       firstRecord: request.records[0],
       records: request.records,
@@ -4000,7 +4008,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   ))).toBe(31);
   await expect.poll(() => page.evaluate(() => {
     const svg = new DOMParser().parseFromString(
-      window.__GBDRAW_APP__.results[0]?.content || '',
+      window.__GBDRAW_APP__.currentResults()[0]?.content || '',
       'image/svg+xml'
     );
     return [...svg.querySelectorAll('path')]

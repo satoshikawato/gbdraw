@@ -60,7 +60,7 @@ from .options import (
     LinearDiagramOptions,
     LinearMultiRecordOptions,
 )
-from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+from gbdraw.features.source import SourceFeatureCatalog, SourceFeatureIdentity, capture_source_features
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
@@ -169,7 +169,12 @@ class ResolvedRecordProvenance:
     # No other record of the source has this record's ID, so the ID selects it.
     source_record_id_unique: bool = True
     resolved_display: ResolvedRecordDisplay | None = None
-    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, repr=False)
+    source_features: SourceFeatureCatalog = field(kw_only=True, repr=False)
+
+    @property
+    def source_feature_catalog(self) -> tuple[SourceFeatureIdentity, ...]:
+        """The identities of the original source's features, built on first read."""
+        return self.source_features.entries
 
 
 @dataclass(frozen=True)
@@ -256,7 +261,7 @@ class ComparisonRecordBinding:
 
 def comparison_record_binding(
     record: SeqRecord,
-    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None,
+    source_features: SourceFeatureCatalog,
     search_frame: bool,
 ) -> ComparisonRecordBinding:
     """The feature binding of one record (render stage ``comparison_rows``)."""
@@ -279,8 +284,7 @@ def comparison_record_binding(
             )
             spans[index] = (int(location.start), int(location.end),
                             location.strand if location.strand in (-1, 1) else None)
-    source = {feature.source_feature_index: feature.stable_feature_id
-              for feature in source_feature_catalog or ()}
+    source = source_features.source_hashes
     reverse = record_is_reverse_complemented(record)
     if search_frame and reverse:
         current, opposite = opposite, current
@@ -309,7 +313,7 @@ def comparison_record_bindings(
             "comparison_rows",
             comparison_record_binding,
             record,
-            item.source_feature_catalog,
+            item.source_features,
             search_frame,
         )
         for record, item in zip(records, provenance, strict=True)
@@ -699,10 +703,6 @@ def _alignment_source_feature(
             f"Similarity alignment record {provenance.record_key!r} has no anchor."
         )
     catalog = provenance.source_feature_catalog
-    if catalog is None:
-        raise ValidationError(
-            f"Similarity alignment record {provenance.record_key!r} has no source feature catalog."
-        )
     if anchor.source_feature_index is not None:
         matches = [
             feature
@@ -820,7 +820,7 @@ def _similarity_candidate_from_orthogroup_member(
     member: OrthogroupMember,
 ) -> SimilarityAlignmentCandidate:
     provenance = collection.provenance[member.record_index]
-    catalog = provenance.source_feature_catalog or ()
+    catalog = provenance.source_feature_catalog
     matches = [
         feature
         for feature in catalog
@@ -1029,7 +1029,7 @@ def _source_key(source: RecordInputSource) -> tuple[object, ...]:
     if isinstance(source, GffFastaInputSource):
         return ("gff_fasta", str(source.gff_path), str(source.fasta_path))
     if isinstance(source, InMemoryRecordSource):
-        return ("memory", id(source.record), id(source.source_feature_catalog))
+        return ("memory", id(source.record), id(source.source_features))
     raise ValidationError("Unsupported record input source.")
 
 
@@ -1059,7 +1059,7 @@ def _load_source_records(
     gff_loader: GffFastaLoader,
 ) -> ParsedRecordInputs:
     def load() -> ParsedRecordInputs:
-        gff_catalogs: list[tuple[SourceFeatureIdentity, ...]] = []
+        gff_catalogs: list[SourceFeatureCatalog] = []
         if isinstance(source, GenBankInputSource):
             records = genbank_loader([str(source.path)])
         elif isinstance(source, GffFastaInputSource):
@@ -1077,10 +1077,10 @@ def _load_source_records(
         if not records:
             raise ValidationError("A record input source resolved to no records.")
         catalogs = (
-            (source.source_feature_catalog,)
-            if isinstance(source, InMemoryRecordSource) and source.source_feature_catalog is not None
+            (source.source_features,)
+            if isinstance(source, InMemoryRecordSource) and source.source_features is not None
             else tuple(gff_catalogs) if isinstance(source, GffFastaInputSource)
-            else tuple(build_source_feature_catalog(record) for record in records)
+            else tuple(capture_source_features(record) for record in records)
         )
         return ParsedRecordInputs(tuple(records), catalogs)
 
@@ -1433,7 +1433,7 @@ def resolve_record_inputs(
                                if source_cropped else len(source_record)),
                 detected_topology=_detected_topology(source_record, source_kind),
                 is_cropped=source_cropped,
-                source_feature_catalog=parsed.source_feature_catalogs[source_record_index],
+                source_features=parsed.source_features[source_record_index],
             )
             _apply_record_key(record, record_key=record_key)
             _apply_provenance_annotations(record, item)

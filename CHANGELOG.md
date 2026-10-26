@@ -12,9 +12,137 @@ write-up of a release.
 
 ## [Unreleased]
 
+- SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
+  `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
+  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app from 2026-06-18 to
+  2026-07-19 (Sessions 27 to 32), and the SVG files of those versions, carry only the old name. They still load in the web app, and
+  `enrich_svg` still takes those SVG files: the old name is renamed once when such a file is read. `enrich_svg` no
+  longer refuses an SVG file whose element carries both names with different values; it keeps
+  `data-gbdraw-match-id` and drops the old name.
+- Fixed (web app): a Result saved or exported with the UI in a language other than English kept the preview's
+  `role`, `tabindex` and `aria-label` ("Pairwise match N", translated) on every comparison band. The preview now
+  marks the bands it makes buttons and saving and export remove them by that mark, in every language. Circular
+  conservation bands, which kept these attributes in every language, now lose them too.
+- SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
+  `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
+  within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a
+  near-full circle bowed up to 0.8 px once rounded). Depth, GC content and GC skew paths keep a sample
+  only where dropping it would move the outline by more than 0.02 SVG px, and a Circular Depth or GC percent area
+  closes on its baseline with two arcs (one for a span of 20 degrees or less). The drawing looks the same (largest grey-level change 9 of 255 at 1x and 16
+  at 4x outside text set on a path), and files get smaller: Circular AP027078 with Depth 5.6 MB -> 0.48 MB, Linear
+  2.5 MB -> 0.21 MB, NC_010162 4.3 MB -> 3.2 MB, the hepatoplasmataceae collinear Gallery figure 6.3 MB -> 3.8 MB;
+  25 test figures together 86.1 MB -> 64.8 MB (-25%). Tools that compare SVG bytes or parse path numbers with a fixed
+  precision see new values.
+- Performance (web app): on a cross-origin-isolated page such as gbdraw.app,
+  Cancel now stops Python in the diagram Worker and keeps the Worker, so the
+  next Generate does not boot Pyodide again and reuses what the Worker had
+  prepared (tobacco chloroplast Gallery Session, unchanged settings: 0.5 s instead of 12 s,
+  best of 3).
+  When the Worker does not stop within 3 s, the page is not cross-origin
+  isolated, or Pyodide is still booting, Cancel ends the Worker as before. The
+  drawing and the saved Session do not change.
+- Fixed: a registered font with a corrupt table failed its first text
+  measurement and then measured without that table, with no error. Every
+  measurement now fails the same way (OV-1756).
+- Performance (CLI, Python): replaying a Session (`gbdraw render --session`,
+  `gbdraw circular|linear --session`, the Python Session render functions)
+  checks its protein identity manifest once, when the Session loads, instead of
+  two times (five with `--session_output`); the render and the Session writer
+  no longer copy it. On the Vibrio collinearity Gallery Session this removes
+  0.54 s of manifest work per replay (1.85 s with `--session_output`); the
+  whole replay took 5.46 s instead of 5.69 s of CPU time (9.71 s instead of
+  10.28 s with `--session_output`, best of 8). The SVG and the saved Session
+  are unchanged.
+- Python API: a protein identity manifest that gbdraw has checked is now a
+  read-only mapping: `ProteinIdentityManifest`, and the
+  `protein_identity_manifest` of `CurrentRequestArtifacts`,
+  `PreparedDiagramRequest`, `RequestRenderResult`,
+  `PreparedCircularBatchRequest` and `CircularBatchRenderResult` when it holds
+  plain JSON data (a manifest given with tuples, sets, NaN, infinities or
+  other Python values stays a copy, as before). For JSON data it equals the
+  plain manifest and `json.dumps` writes the same text; in a
+  `ProteinIdentityManifest` made from other Python values, every sequence
+  that is not a list becomes a tuple and every set a frozenset. Changing it
+  in place raises `TypeError`.
+  `ProteinIdentityManifest(...)` and `validate_protein_identity_manifest`
+  check their argument and keep its key order and extra keys (the validator
+  used to sort `runtimeIds` and `featureMetadata` and drop extra keys);
+  `ProteinIdentityManifest.to_dict()` returns a mutable copy, and
+  `SessionDocument.to_dict()` still returns plain data.
+- Performance (CLI, Python, web app): the protein extraction no longer
+  validates the protein identity manifest it has just built; it keeps the one
+  check its input can fail (rendered-view field names in record keys,
+  selectors and regions). The extraction for the Vibrio collinearity Gallery
+  Session took 0.53 s instead of 0.67 s; the SVG and the saved Session are
+  unchanged (#1370).
+- Performance (CLI): the installed `gbdraw` command now starts through a private `_gbdraw_console.py` module that sets
+  `OPENBLAS_NUM_THREADS=1` before NumPy loads, only when you have not set the variable yourself. A one-shot render no
+  longer starts an OpenBLAS thread pool it does not use (NC_010162 circular: user CPU 5.2 s -> 1.9 s, wall 1.87 s ->
+  1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda
+  recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line names
+  `_gbdraw_console:main`.
+- Performance (web app): the first Generate of a page starts faster. The diagram
+  Worker downloads its wheels while Pyodide loads and installs them in one
+  micropip call, without its 10 HEAD checks, and the gbdraw browser wheel ships
+  with Pyodide bytecode, which halves the Worker's Python import time. Choosing
+  a file, or loading a Session once the Load finishes, now downloads the
+  Worker's boot files (about 32 MB) into the HTTP cache at low priority, two at
+  a time, unless the browser asks to save data (Save-Data) or a Worker has
+  already started. At 10 Mbit/s a first Generate after that download took 15 s
+  instead of 34 s. The browser wheel grows from 3.7 MB to 6.5 MB, so the PyPI
+  wheel and the sdist, which embed it, each grow by about 2.8 MB. The drawing
+  and the saved Session do not change (#1364).
+- Web app: a dependency wheel that fails to download on the network now names
+  the wheel in the error. The Pyodide file lists in `config.js` are written
+  from `gbdraw/_web_assets.py` by `tools/prepare_browser_wheel.py`.
+- Performance (CLI, Python, web app): each source feature's hash is computed
+  once, when its source loads, and read back by the drawing, the shared-hash
+  count, the interactive context and the protein extraction; the source feature
+  catalog builds its entries only when a selector, an identity table or a
+  similarity alignment reads them. NC_010162 circular computed 19,515 feature
+  hashes instead of 48,787 and normalized no qualifiers instead of 120,771, and
+  took 1.41 s instead of 1.67 s. Output bytes are unchanged. The stored hash is
+  used only while the feature keeps the type and the location object it was
+  computed for (an in-place change of a location object, such as setting its
+  strand, is not detected), and a plan built from bare records writes nothing
+  on your records. Typed API:
+  `InMemoryRecordSource.source_feature_catalog` is now `source_features` and
+  takes a `SourceFeatureCatalog` (from `capture_source_features`), which
+  replaces `build_source_feature_catalog`;
+  `ResolvedRecordProvenance.source_feature_catalog` still returns the entries.
+- Performance (CLI, Python, web app): Generates and CLI renders hold less
+  memory: the prepared-input cache keeps one hash per feature field as its owner
+  stamp, SVG text is written to its file in chunks, and `gbdraw render --session`
+  without a re-save drops the embedded resource data once its files are written
+  (vibrio Gallery Session max RSS 696 -> 563 MiB). Outputs do not change (#1360).
+- Performance (hosted web app): a returning visitor reloads gbdraw.app without
+  downloading the Pyodide runtime, wheels, fonts, icons or LOSAT wasm again. The
+  vendored files are cached for a year (one `_headers` rule per file, pinned by
+  SHA-256 in `tools/immutable-web-assets.json`), the gbdraw wheel's URL carries
+  its content hash, the LOSAT wasm is revalidated instead of re-downloaded, and
+  the page preloads its whole module graph. A reload made 0 body bytes instead of
+  1.6 MB and 243 requests instead of 251. Results, exports and LOSAT output do not
+  change (#1358).
+- Performance (web app): Loading a large Session is faster and keeps less in
+  memory: the import Worker passes the Session as UTF-8 text, the feature
+  catalog builds each sequence once, the Load's unsafe-key check runs in the
+  import Worker, and the Similarity group rows exist only while the drawer shows
+  their tab. The Vibrio Gallery Session loaded in 4.4 s instead of 8.3 s, with
+  211 MB of JavaScript heap instead of 307 MB. The drawing and the saved Session
+  do not change (#1355).
 - Web app: the Editor's "N features ready" shows the feature count of the mode on
   screen. After a Generate in Circular and another in Linear, switching modes
   used to leave the other mode's count in the Editor header (OV-1762).
+- Performance (CLI, Python, web app): the Python render path reads a font's
+  kerning only when it is used, writes empty SVG elements directly, builds
+  comparison match paths with per-comparison constants, copies merged Circular
+  records without a generic deep copy, counts GC content and skew windows at the
+  window bounds only, and skips the font-embedding pass when no custom face can
+  be drawn. The MJNV linear comparison of ten genomes took 1.7 s instead of
+  3.0 s and peaked at 280 MiB instead of 420 MiB, and NC_010162 circular peaked
+  at 204 MiB instead of 368 MiB. Replacing or removing a registered font no
+  longer keeps the old font in memory (OV-1749). SVG bytes are unchanged
+  (#1356).
 - Web app: before Generate draws a Circular track row, its **Radius** field says
   "Auto" instead of an estimate that often differed from the drawn radius (for
   example 0.75 R shown and 0.79 R drawn for GC content of E. coli MG1655 after
@@ -50,6 +178,23 @@ write-up of a release.
   a deleted palette row back in the color the Legend shows, and a rule named
   like such a row in that color is accepted instead of refused as a Legend row
   conflict (OV-282).
+- Performance (CLI, Python): `gbdraw <mode> --session` and the Python Session
+  render functions key their render cache by the Session's resources instead
+  of by the decoded comparison, as the web app does. Replaying the Vibrio
+  collinearity Gallery Session took 13.4 s and 704 MiB instead of 20.4 s and
+  1,083 MiB; SVG bytes are unchanged (#1354).
+- Performance (CLI, Python): replaying a Session with protein LOSAT results
+  checks each saved LOSATP blastp table against its record pair once instead
+  of once in each of five validation steps. For the Hepatoplasmataceae
+  Similarity group Gallery Session these checks took 0.54 s instead of 0.88 s;
+  the SVG and the saved Session are unchanged (#1357).
+- Performance (CLI, Python): replaying a Session decodes its stored
+  orthogroups and ortholog paths with a decoder built once per type, scans
+  its protein tables for legacy protein IDs once instead of three times, and
+  with `--session_output` copies each drawing's state once instead of three
+  times. Replaying the Vibrio collinearity Gallery Session used 12.7 s of CPU
+  time instead of 16.8 s (21.3 s instead of 26.4 s with `--session_output`);
+  the SVG and the saved Session are unchanged (#1359).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

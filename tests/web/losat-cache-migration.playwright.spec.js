@@ -523,7 +523,7 @@ const inspectLayout = async (page) => {
         childCount: element.childElementCount
       })),
       resultComparisonGroup: String(
-        state.results.value[state.selectedResultIndex.value]?.content || ''
+        window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || ''
       ).match(/<g[^>]*id="comparison1"[^>]*>/)?.[0] || '',
       recordGroupCount: recordGroups.length,
       definitionGroupCount: definitionGroups.length,

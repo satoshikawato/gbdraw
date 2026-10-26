@@ -1128,6 +1128,7 @@ const createLayoutPreferences = () => ({
   const snapshots = createHistorySnapshotService({
     state: withTwoDrawings(state),
     fileStore,
+    currentResults: () => state.results.value,
     nextTick: async () => {},
     buildConfigData: () => ({
       form: state.form,
@@ -1404,6 +1405,7 @@ const createLayoutPreferences = () => ({
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
+    currentResults: () => state.results.value,
     nextTick: async () => {
       if (!pendingModeReset) return;
       pendingModeReset = false;
@@ -1593,9 +1595,9 @@ const createLayoutPreferences = () => ({
       forbiddenArtifactBuilds += 1;
       throw new Error('orthogroup artifacts must not be built for intent');
     },
-    serializeResults: () => {
+    currentResults: () => {
       forbiddenArtifactBuilds += 1;
-      throw new Error('Results must not be serialized for intent');
+      throw new Error('Results must not be read for intent');
     }
   });
   // R13: the composition owner is created after the snapshot service and
@@ -1750,7 +1752,7 @@ const createLayoutPreferences = () => ({
   };
   let setting = 'loaded';
   let artifactBuilds = 0;
-  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore });
+  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore, currentResults: () => state.results.value });
   const history = createHistoryManager({
     fileStore,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
@@ -1806,7 +1808,7 @@ const createLayoutPreferences = () => ({
     fileStore,
     buildUiStateData: () => ({}),
     applyUiStateData: () => {},
-    serializeResults: () => [],
+    currentResults: () => [],
     applyResultsData: () => {}
   });
   // The drafts are Session-level values: the router's project stream records them (R15-23).
@@ -2004,6 +2006,7 @@ const createLayoutPreferences = () => ({
   // D-37: installing a Generate's artifact over other shown Results clears the
   // similarity-group copy feedback, also when both share one groups array.
   let copyFeedbackClears = 0;
+  let currentResultsReads = 0;
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore,
@@ -2025,8 +2028,10 @@ const createLayoutPreferences = () => ({
       state.mode.value = ui.mode;
       state.selectedResultIndex.value = ui.selectedResultIndex;
     },
-    serializeResults: () => {
-      throw new Error('Generated Artifact Handles must not serialize Results.');
+    // A handle holds the Results by reference: it reads them, never copies their text.
+    currentResults: () => {
+      currentResultsReads += 1;
+      return state.results.value;
     },
     applyResultsData: () => {
       resultAdmissionCalls += 1;
@@ -2060,7 +2065,10 @@ const createLayoutPreferences = () => ({
     retainedBytes: 400_000
   }, { results: state.results.value });
 
+  const readsBeforeHandle = currentResultsReads;
   const handleA = snapshots.captureGeneratedArtifactHandle(state.activeDrawing());
+  // U7: the handle's owner set reads the Results through the preview owner (R1).
+  assert.equal(currentResultsReads, readsBeforeHandle + 1);
   {
     // A reused Generate's commit: new Results with the shown groups array.
     const clears = copyFeedbackClears;
@@ -2510,6 +2518,7 @@ for (const previousSuppressed of [false, true]) {
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore: createInputFileStore(),
+    currentResults: () => state.results.value,
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);
       throw new Error('restore did not settle');
@@ -3448,6 +3457,7 @@ for (const previousSuppressed of [false, true]) {
   const snapshots = createHistorySnapshotService({
     state: withDrawings(state),
     fileStore: createInputFileStore(),
+    currentResults: () => state.results.value,
     nextTick: async () => {},
     buildConfigData: () => ({ form: state.form, adv: state.adv })
   });
@@ -3668,7 +3678,7 @@ for (const previousSuppressed of [false, true]) {
     mode: ref('linear'), results: ref([]), generatedMode: ref(null), semanticFileWatchersSuppressed: ref(false),
     files: {}, cardFiles: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
-  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), nextTick: async () => {} });
+  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
   const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };
   linear.manualSpecificRules.push(rule);
   const handle = snapshots.captureGeneratedArtifactHandle(state.drawingOf('linear'));

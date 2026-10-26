@@ -5,6 +5,7 @@ import functools
 import logging
 import math
 import re
+import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from collections.abc import Iterable
@@ -87,7 +88,11 @@ class _FontPairKerning:
         return total
 
 
-_pair_kerning_cache: Dict[int, tuple[TTFont, _FontPairKerning]] = {}
+# Keyed by the font object and held weakly: an entry lives as long as its
+# font, so a face ``gbdraw.core.fonts`` forgets (unregistered or replaced)
+# takes its kerning with it, and a new font is a new key even at the address
+# of a freed one. The kerning holds no reference back to its font.
+_pair_kerning_cache: "weakref.WeakKeyDictionary[TTFont, _FontPairKerning]" = weakref.WeakKeyDictionary()
 
 
 def _x_advance(value_record) -> int:
@@ -165,9 +170,9 @@ def _legacy_kern_pairs(font) -> Dict[tuple[str, str], int]:
 
 
 def _font_pair_kerning(font) -> _FontPairKerning:
-    cached = _pair_kerning_cache.get(id(font))
-    if cached is not None and cached[0] is font:
-        return cached[1]
+    cached = _pair_kerning_cache.get(font)
+    if cached is not None:
+        return cached
     try:
         gpos_lookups = _gpos_kern_lookups(font)
     except Exception as e:
@@ -180,7 +185,7 @@ def _font_pair_kerning(font) -> _FontPairKerning:
         except Exception as e:
             logger.debug(f"Error reading kern table: {e}")
     kerning = _FontPairKerning(gpos_lookups=gpos_lookups, legacy_pairs=legacy_pairs)
-    _pair_kerning_cache[id(font)] = (font, kerning)
+    _pair_kerning_cache[font] = kerning
     return kerning
 
 

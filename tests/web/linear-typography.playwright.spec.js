@@ -22,7 +22,7 @@ const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () =>
 });
 
 const lengthBarFontSizes = (page) => page.evaluate(() => {
-  const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+  const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const lengthBar = svg.getElementById('length_bar');
   return [...(lengthBar?.querySelectorAll('text') || [])]
@@ -146,7 +146,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
     const { getCommittedCanonicalSession } = await import('./js/services/config.js');
     const request = getCommittedCanonicalSession().renderRequest;
     const text = new DOMParser()
-      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml')
       .documentElement.textContent;
     return { overrides: request.diagramOptions.configOverrides, text };
   });
@@ -190,7 +190,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
     const { getCommittedCanonicalSession } = await import('./js/services/config.js');
     const request = getCommittedCanonicalSession().renderRequest;
     const text = new DOMParser()
-      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml')
       .documentElement.textContent;
     return { overrides: request.diagramOptions.configOverrides, text };
   });
@@ -228,7 +228,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
   await expect(restoredDisclosure).toContainText('next successful Generate');
   await expect(page.locator('[data-generation-application-feedback]')).toHaveCount(0);
   const savedResultText = await page.evaluate(() => new DOMParser()
-    .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+    .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml').documentElement.textContent);
   expect(savedResultText).toContain('NC_012920.1');
   expect(savedResultText).toContain('16,569 bp');
   expect(await runDiagram(page)).toEqual({
@@ -240,7 +240,7 @@ test('Linear Accession and Length resolve independent Auto modes from rendered r
     const { getCommittedCanonicalSession } = await import('./js/services/config.js');
     const request = getCommittedCanonicalSession().renderRequest;
     const text = new DOMParser()
-      .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml')
+      .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml')
       .documentElement.textContent;
     return {
       selected: [
@@ -294,7 +294,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
     selected: [window.__GBDRAW_APP__.adv.linear_accession_visibility,
       window.__GBDRAW_APP__.adv.linear_length_visibility],
     svg: window.__GBDRAW_APP__.svgContent,
-    results: window.__GBDRAW_APP__.results.map((result) => result.content),
+    results: window.__GBDRAW_APP__.currentResults().map((result) => result.content),
     undo: window.__GBDRAW_HISTORY__.getUndoCount(),
     redo: window.__GBDRAW_HISTORY__.getRedoCount()
   }));
@@ -323,7 +323,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
       }
       expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
       const svgText = await page.evaluate(() => new DOMParser()
-        .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+        .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml').documentElement.textContent);
       expect(svgText.includes('NC_012920.1')).toBe(accessionMode === 'show');
       expect(svgText.includes('16,569 bp')).toBe(lengthMode === 'show');
       shownResult = Object.fromEntries(Object.entries(autoModes)
@@ -383,7 +383,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await expect(length).toBeFocused();
   expect(await snapshot()).toEqual(beforeNavigation);
   const dormantText = await page.evaluate(() => new DOMParser()
-    .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
+    .parseFromString(window.__GBDRAW_APP__.currentResults()[0].content, 'image/svg+xml').documentElement.textContent);
   expect(dormantText).toContain('NC_012920.1');
   expect(dormantText).toContain('16,569 bp');
   await enabled.check();

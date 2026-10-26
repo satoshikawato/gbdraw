@@ -1,4 +1,43 @@
 // @ts-check
+/** @import { buildPyodideAssetManifest } from './pyodide-assets.js' */
+/** @import { FontIdentity } from './font-store.js' */
+
+/**
+ * A font file the page sends a Worker (init `fonts`, and each font it
+ * registers later): the identity of its bytes, its file name or installed
+ * face name, and the bytes. The Worker's font registry reads it.
+ * @typedef {object} WorkerFontFile
+ * @property {FontIdentity} identity
+ * @property {string} label
+ * @property {ArrayBuffer | ArrayBufferView} bytes
+ */
+
+/**
+ * The page's first message to a new diagram Worker: its boot manifest, the
+ * page's fonts, and, on a cross-origin-isolated page, the interrupt buffer
+ * through which a Cancel stops Python (D7); `null` elsewhere, where a Cancel
+ * terminates the Worker.
+ * @typedef {ReturnType<typeof buildPyodideAssetManifest> & {
+ *   type: 'init', id: string, fonts: WorkerFontFile[], interruptBuffer: Uint8Array | null
+ * }} DiagramWorkerInitMessage
+ */
+
+/**
+ * A Cancel while the Worker is kept: every request up to `through` (the last
+ * request ID the page sent) is canceled; the Worker drops their replies,
+ * clears the interrupt and the Python cancel flag after the operation in
+ * flight, and answers with the same `id`.
+ * @typedef {{ type: 'cancel', id: string, through: number }} DiagramWorkerCancelMessage
+ */
+
+/**
+ * The Worker's answer to a Cancel: it is ready for the next request.
+ * @typedef {{ type: 'cancel', id: string, ok: true }} DiagramWorkerCancelReply
+ */
+
+/** The signal a Cancel writes into the interrupt buffer: SIGINT, as Pyodide's `setInterruptBuffer` reads it. */
+export const DIAGRAM_WORKER_INTERRUPT_SIGNAL = 2;
+
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
   EMBED_FONTS: 'embedFonts',

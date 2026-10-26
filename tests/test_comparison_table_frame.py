@@ -22,7 +22,7 @@ from gbdraw.exceptions import GbdrawError
 
 _RNG = random.Random(7)
 _X, _Y, _Z = ("".join(_RNG.choice("ACGT") for _ in range(size)) for size in (3000, 1000, 2000))
-_RIBBON = re.compile(r'<path [^>]*data-gbdraw-pairwise-match-id="[^"]*"[^>]*>')
+_RIBBON = re.compile(r'<path [^>]*data-gbdraw-match-id="[^"]*"[^>]*>')
 
 
 def _write_record(directory: Path, record_id: str, sequence: str) -> Path:

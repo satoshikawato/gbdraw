@@ -470,7 +470,7 @@ def test_gallery_svg_is_the_frozen_similarity_group_reference() -> None:
     orthogroup_links = [
         element
         for element in elements
-        if element.get("data-gbdraw-pairwise-match-id")
+        if element.get("data-gbdraw-match-id")
         and element.get("data-match-kind") == "orthogroup"
     ]
     assert len(orthogroup_links) == 77

@@ -57,8 +57,8 @@ pip install -e ".[dev]"
 # Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
 
-# Refresh the cache-bust token when preparing a deployable web bundle
-python tools/prepare_browser_wheel.py --refresh-cache-bust
+# Prepare the hosted bundle (wheel URL carries the wheel's content hash)
+python tools/prepare_cloudflare_pages.py
 
 # Build distribution
 python -m build

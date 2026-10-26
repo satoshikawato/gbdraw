@@ -14,17 +14,26 @@ import { msg } from '../utils/i18n.js';
 import { ORTHOGROUP_INFERENCE_VERSION } from '../contracts/schema.generated.js';
 import { createWorkerFontRegistry } from './worker-font-registry.js';
 import {
-  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep
+  fetchPyodideSnapshot, installRuntimePackages, pyodideSnapshotFailureDetail, pyodideSnapshotStep, runtimeWheelDownloads
 } from './pyodide-snapshot.js';
 
 let runtimePromise = null;
 let runtime = null;
 let operationQueue = Promise.resolve();
 let auxiliaryAcknowledgement = null;
+// The page's interrupt buffer (DiagramWorkerInitMessage); null where a Cancel terminates this Worker.
+let interruptBuffer = null;
+// The last request ID a Cancel named (DiagramWorkerCancelMessage): no reply of
+// a request up to it is posted.
+let canceledThrough = 0;
+const isCanceled = (requestId) => typeof requestId === 'number' && requestId <= canceledThrough;
 const sendAuxiliaryResult = async (type, requestId, result) => {
+  if (isCanceled(requestId)) return;
   let wholeReply = false;
   try {
     await sendBoundedJson(result, (part, transfers = []) => {
+      // A Cancel during a bounded reply: its remaining parts are dropped.
+      if (isCanceled(requestId)) return Promise.resolve();
       if (part.whole) {
         wholeReply = true;
         self.postMessage({ type, requestId, ok: true, result: part.value });
@@ -35,7 +44,7 @@ const sendAuxiliaryResult = async (type, requestId, result) => {
         self.postMessage({ type, requestId, status: 'part', ...part }, transfers);
       });
     }, { consume: true });
-    if (!wholeReply) self.postMessage({ type, requestId, ok: true });
+    if (!wholeReply && !isCanceled(requestId)) self.postMessage({ type, requestId, ok: true });
   } finally {
     auxiliaryAcknowledgement = null;
   }
@@ -302,14 +311,6 @@ export const resolveGenerationCleanupOutcome = ({
   return result;
 };
 
-const ensureLocalAsset = async (url, label) => {
-  const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Missing packaged asset: ${label} (${response.status}) at ${url}`);
-  }
-  return url;
-};
-
 // The booted runtime with its capabilities. A runtime restored from a Pyodide
 // snapshot first starts this Worker's own state, since the snapshot holds the
 // state of the process that made it (OV-1000), and calls numpy and pandas, so
@@ -360,6 +361,8 @@ const initializeRuntime = async ({
   });
   runtimePromise = (async () => {
     reportStep(0);
+    // The wheels download while Pyodide loads.
+    const wheels = runtimeWheelDownloads({ localWheelUrls, gbdrawWheelUrl });
     // A test server may serve a snapshot of the runtime this function builds
     // (workers/pyodide-snapshot.js). An error in a step of its restore is a
     // snapshot failure (pyodideSnapshotStep); any other error is an ordinary
@@ -367,7 +370,7 @@ const initializeRuntime = async ({
     const [{ loadPyodide }, snapshot] = await Promise.all([
       import(pyodideModuleUrl),
       pyodideSnapshotUrl
-        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, gbdrawWheelUrl, localWheelUrls }))
+        ? pyodideSnapshotStep(() => fetchPyodideSnapshot({ folderUrl: pyodideSnapshotUrl, wheels }))
         : null
     ]);
     const load = () => loadPyodide({
@@ -386,16 +389,10 @@ const initializeRuntime = async ({
     }
     reportStep(1);
     await installRuntimePackages(pyodide, {
-      localWheels: localWheelUrls,
-      gbdrawWheel: gbdrawWheelUrl,
-      beforeInstall: async () => {
+      wheels,
+      beforeInstall: async (installOrder) => {
         reportStep(2);
-        await Promise.all(
-          localWheelUrls.map((url, index) =>
-            ensureLocalAsset(url, `Pyodide dependency wheel #${index + 1}`)
-          )
-        );
-        await ensureLocalAsset(gbdrawWheelUrl, 'gbdraw browser wheel');
+        await Promise.all(installOrder.map(({ bytes }) => bytes));
         reportStep(3);
       }
     });
@@ -1254,6 +1251,14 @@ const runGeneration = async ({
       )
     });
   } catch (error) {
+    // A Cancel stops Python with KeyboardInterrupt (the cancel message is read
+    // only after this run); tests read where it stopped: the traceback's last line.
+    const pythonError = /** @type {{ type?: unknown, message?: unknown }} */ (error);
+    if (pythonError?.type === 'KeyboardInterrupt') {
+      emitTestLifecycle(testLifecycleEnabled, requestId, 'python-keyboard-interrupt', {
+        pythonError: String(pythonError.message ?? '').trim().split('\n').at(-1)
+      });
+    }
     primaryError = serializeError(error, { operation: 'generate', stage: failureStage });
   }
   emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-cleanup-start');
@@ -1421,6 +1426,7 @@ const handleWorkerMessage = async (data) => {
   const { id, requestId, type } = data;
   try {
     if (type === 'init') {
+      interruptBuffer = data.interruptBuffer instanceof Uint8Array ? data.interruptBuffer : null;
       let initialized;
       try {
         initialized = await initializeRuntime(data);
@@ -1432,6 +1438,9 @@ const handleWorkerMessage = async (data) => {
         self.postMessage({ id, type: 'init', ok: false, snapshotError });
         return;
       }
+      // One site for both boots: a Cancel's SIGINT reaches the handler that
+      // _start_web_worker_state installed (D7).
+      if (interruptBuffer) initialized.pyodide.setInterruptBuffer(interruptBuffer);
       // The replay of the page's fonts into a new Worker, font by font; the
       // reply names each font it lost (OV-686), and a Generate that names one
       // fails (FONT_NOT_LOADED).
@@ -1481,11 +1490,13 @@ const handleWorkerMessage = async (data) => {
       requestId,
       testLifecycleEnabled: data.testLifecycleEnabled
     });
+    if (isCanceled(requestId)) return;
     self.postMessage(
       { requestId, type: 'run', ok: true, results },
       collectGenerationResultTransferList(results)
     );
   } catch (error) {
+    if (isCanceled(requestId)) return;
     self.postMessage({
       id,
       requestId,
@@ -1500,6 +1511,21 @@ const handleWorkerMessage = async (data) => {
   }
 };
 
+/** @param {() => Promise<void> | void} step */
+const enqueue = (step) => {
+  const scheduled = operationQueue.then(step, step);
+  operationQueue = scheduled.catch(() => {});
+};
+
+// The drain after a Cancel, once the operation in flight has ended: the
+// interrupt and then Python's cancel flag are cleared, so the next request
+// runs; the page sends none before this answer.
+const drainCancel = (id) => {
+  if (interruptBuffer) Atomics.store(interruptBuffer, 0, 0);
+  if (runtime) callJsonHelper(runtime.pyodide, 'clear_web_cancel', []);
+  self.postMessage({ type: 'cancel', id, ok: true });
+};
+
 self.onmessage = (event) => {
   const data = event.data || {};
   if (data.type === 'auxiliary-ack') {
@@ -1510,9 +1536,15 @@ self.onmessage = (event) => {
     }
     return;
   }
-  const scheduled = operationQueue.then(
-    () => handleWorkerMessage(data),
-    () => handleWorkerMessage(data)
-  );
-  operationQueue = scheduled.catch(() => {});
+  if (data.type === 'cancel') {
+    canceledThrough = Math.max(canceledThrough, Number(data.through) || 0);
+    if (auxiliaryAcknowledgement && isCanceled(auxiliaryAcknowledgement.requestId)) {
+      const pending = auxiliaryAcknowledgement;
+      auxiliaryAcknowledgement = null;
+      pending.resolve();
+    }
+    enqueue(() => drainCancel(data.id));
+    return;
+  }
+  enqueue(() => handleWorkerMessage(data));
 };

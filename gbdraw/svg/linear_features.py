@@ -17,6 +17,7 @@ from .arrows import (
 )
 from ..layout.linear import calculate_feature_position_factors_linear
 from ..layout.linear_coords import normalize_position_to_linear_track
+from .path_data import path_point
 
 
 FeatureYPositions = Tuple[float, float, float]
@@ -91,7 +92,7 @@ def create_intron_path_linear(
         feat_end, genome_length, alignment_width
     )
 
-    feature_path = f"M {normalized_start},{middle_y} L{normalized_end},{middle_y} z"
+    feature_path = f"M {path_point(normalized_start, middle_y)} L{path_point(normalized_end, middle_y)} z"
     return ["line", feature_path]
 
 
@@ -128,15 +129,15 @@ def create_rectangle_path_linear(
     )
 
     feature_path = (
-        f"M {normalized_start},{start_y_top} "
-        f"L {normalized_end},{start_y_top} "
-        f"L {normalized_end},{start_y_bottom} "
-        f"L {normalized_start},{start_y_bottom} z"
+        f"M {path_point(normalized_start, start_y_top)} "
+        f"L {path_point(normalized_end, start_y_top)} "
+        f"L {path_point(normalized_end, start_y_bottom)} "
+        f"L {path_point(normalized_start, start_y_bottom)} z"
     )
     return block_path_with_open_caps(
         feature_path, open_tail=bool(coord_dict.get("open_start")),
-        end_cap=f"L {normalized_end},{start_y_bottom}" if coord_dict.get("open_end") else None,
-        tail_cap=f"L {normalized_start},{start_y_top}",
+        end_cap=f"L {path_point(normalized_end, start_y_bottom)}" if coord_dict.get("open_end") else None,
+        tail_cap=f"L {path_point(normalized_start, start_y_top)}",
     )
 
 
@@ -193,16 +194,16 @@ def construct_arrow_path(
     start_x_2, start_y_2 = arrow_start, bottom_y
 
     if is_legacy_arrow_short(normalized_feat_len, normalized_arrow_length):
-        feature_path = f"M {start_x_1},{start_y_1} L {point_x},{point_y} L {start_x_2},{start_y_2} z"
+        feature_path = f"M {path_point(start_x_1, start_y_1)} L {path_point(point_x, point_y)} L {path_point(start_x_2, start_y_2)} z"
     else:
         end_x_1, end_y_1 = shoulder, top_y
         end_x_2, end_y_2 = shoulder, bottom_y
         feature_path = (
-            f"M {start_x_1},{start_y_1} "
-            f"L {end_x_1},{end_y_1} "
-            f"L {point_x},{point_y} "
-            f"L {end_x_2},{end_y_2} "
-            f"L {start_x_2},{start_y_2} z"
+            f"M {path_point(start_x_1, start_y_1)} "
+            f"L {path_point(end_x_1, end_y_1)} "
+            f"L {path_point(point_x, point_y)} "
+            f"L {path_point(end_x_2, end_y_2)} "
+            f"L {path_point(start_x_2, start_y_2)} z"
         )
 
     return ["block", feature_path]
@@ -221,9 +222,9 @@ def _construct_narrow_arrow_path(
     top_y, middle_y, bottom_y = feature_y_positions
     if not has_arrow_shaft(normalized_feat_len, resolved_head_length):
         feature_path = (
-            f"M {arrow_start},{top_y} "
-            f"L {arrow_end},{middle_y} "
-            f"L {arrow_start},{bottom_y} z"
+            f"M {path_point(arrow_start, top_y)} "
+            f"L {path_point(arrow_end, middle_y)} "
+            f"L {path_point(arrow_start, bottom_y)} z"
         )
         return ["block", feature_path]
 
@@ -234,13 +235,13 @@ def _construct_narrow_arrow_path(
         shaft_width_ratio,
     )
     feature_path = (
-        f"M {arrow_start},{shaft_top_y} "
-        f"L {shoulder},{shaft_top_y} "
-        f"L {shoulder},{top_y} "
-        f"L {arrow_end},{middle_y} "
-        f"L {shoulder},{bottom_y} "
-        f"L {shoulder},{shaft_bottom_y} "
-        f"L {arrow_start},{shaft_bottom_y} z"
+        f"M {path_point(arrow_start, shaft_top_y)} "
+        f"L {path_point(shoulder, shaft_top_y)} "
+        f"L {path_point(shoulder, top_y)} "
+        f"L {path_point(arrow_end, middle_y)} "
+        f"L {path_point(shoulder, bottom_y)} "
+        f"L {path_point(shoulder, shaft_bottom_y)} "
+        f"L {path_point(arrow_start, shaft_bottom_y)} z"
     )
     return ["block", feature_path]
 
@@ -394,15 +395,15 @@ def create_arrow_shaft_path_linear(
         shaft_width_ratio,
     )
     feature_path = (
-        f"M {normalized_start},{shaft_top_y} "
-        f"L {normalized_end},{shaft_top_y} "
-        f"L {normalized_end},{shaft_bottom_y} "
-        f"L {normalized_start},{shaft_bottom_y} z"
+        f"M {path_point(normalized_start, shaft_top_y)} "
+        f"L {path_point(normalized_end, shaft_top_y)} "
+        f"L {path_point(normalized_end, shaft_bottom_y)} "
+        f"L {path_point(normalized_start, shaft_bottom_y)} z"
     )
     return block_path_with_open_caps(
         feature_path, open_tail=bool(coord_dict.get("open_start")),
-        end_cap=f"L {normalized_end},{shaft_bottom_y}" if coord_dict.get("open_end") else None,
-        tail_cap=f"L {normalized_start},{shaft_top_y}",
+        end_cap=f"L {path_point(normalized_end, shaft_bottom_y)}" if coord_dict.get("open_end") else None,
+        tail_cap=f"L {path_point(normalized_start, shaft_top_y)}",
     )
 
 

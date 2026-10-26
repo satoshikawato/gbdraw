@@ -1271,7 +1271,6 @@
         }
         .gbdraw-preview-surface :is(
             path[data-gbdraw-match-id],
-            path[data-gbdraw-pairwise-match-id],
             path[data-match-kind],
             path[data-pairwise-match-style]
         ) {
@@ -1279,7 +1278,6 @@
         }
         .gbdraw-preview-surface :is(
             path[data-gbdraw-match-id],
-            path[data-gbdraw-pairwise-match-id],
             path[data-match-kind],
             path[data-pairwise-match-style]
         ):focus-visible {
@@ -8401,9 +8399,11 @@
                         </div>
                         <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
                         <div data-similarity-group-list class="flex-[2_1_0%] min-h-[6rem] overflow-y-auto border-b border-slate-200 custom-scrollbar">
+                            <!-- The rows (thousands on a large Session) exist only while the drawer shows their tab. No v-memo:
+                                 its cached rows would keep the unmounted buttons alive while the tab is hidden. -->
+                            <template v-if="showRightDrawer && rightDrawerTab === 'orthogroups'">
                             <button v-for="row in orthogroupRows"
                                     :key="row.id"
-                                    v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id, uiLocale.value]"
                                     :data-similarity-group-row="row.id"
                                     :aria-current="selectedOrthogroup && selectedOrthogroup.id === row.id ? 'true' : null"
                                     @click="selectOrthogroup(row.group.id)"
@@ -8418,6 +8418,7 @@
                                 </div>
                                 <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
                             </button>
+                            </template>
                             <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No similarity groups found') }}</div>
                         </div>
 

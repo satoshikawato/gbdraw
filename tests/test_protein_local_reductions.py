@@ -1,9 +1,11 @@
 """Exact S07.6 differential plus independent oracles for local reductions."""
 import math
 from dataclasses import replace
+import random
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
@@ -177,8 +179,12 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
     assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse),
                        frozen.select_reciprocal_best_hit_edges(members, reverse), check_exact=True)
     assert_frame_equal(hits, before, check_exact=True)
-    members.iloc[0, members.columns.get_loc('extra')] = 'changed'
-    assert_frame_equal(hits, before, check_exact=True)
+    if limit is None:
+        # Keeping every HSP copies no column data; callers only read the result.
+        assert np.shares_memory(members['extra'].to_numpy(), hits['extra'].to_numpy())
+    else:
+        members.iloc[0, members.columns.get_loc('extra')] = 'changed'
+        assert_frame_equal(hits, before, check_exact=True)
 
 
 @pytest.mark.parametrize('mode', ['rbh', 'one_to_one', 'all'])
@@ -291,7 +297,7 @@ def independent_evidence_rank(row, proteins):
             proteins[row.subject].record_index, row.subject)
 
 
-def test_record_bucket_top_one_and_stable_evidence_rank_oracle():
+def test_stable_evidence_rank_and_first_occurrence_oracle():
     proteins = {pid: benchmark.protein(pc, pid, record)
                 for pid, record in [('b', 1), ('a', 0), ('c', 1), ('d', 0), ('e', 2)]}
     pairs = [('a', 'c'), ('a', 'b'), ('a', 'd'), ('b', 'a'), ('a', 'e'), ('d', 'a')]
@@ -299,24 +305,25 @@ def test_record_bucket_top_one_and_stable_evidence_rank_oracle():
             for pair in pairs]
     hits = pc._directed_hits_from_tables(
         {(0, 1): pd.DataFrame([vars(row) | {'domain_only': False} for _, row in rows])}, proteins)
-    ranked = sorted(hits.values(), key=lambda hit: hit.rank)
+    # The table holds the rows in rank order, and each row is its record's rank.
+    ranked = [hits.hit(row) for row in range(len(hits))]
     assert [(hit.query, hit.subject) for hit in ranked] == [
         pair for pair, _ in sorted(rows, key=lambda item: independent_evidence_rank(item[1], proteins))]
-    actual = pc._best_hit_by_query_target_record(ranked)
-    # Brute-force every query/target-record combination independently.
-    for q in proteins:
-        for record in range(3):
-            candidates = [row for (query, s), row in rows
-                          if query == q and proteins[s].record_index == record
-                          and proteins[q].record_index != record]
-            if candidates:
-                winner = min(candidates, key=lambda row: independent_evidence_rank(row, proteins))
-                assert (actual[q, record].query, actual[q, record].subject) == (winner.query, winner.subject)
-            else:
-                assert (q, record) not in actual
-    # First equal-rank hit survives, including when supplied as a stable tie.
-    first = hits[rows[0][0]]
-    assert pc._best_hit_by_query_target_record([first, first._replace()])[first.query, 1] is first
+    assert [hit.rank for hit in ranked] == list(range(len(pairs)))
+    for hit, reverse in zip(ranked, hits.reverse.tolist()):
+        assert (reverse >= 0) == ((hit.subject, hit.query) in pairs)
+        if reverse >= 0:
+            assert (ranked[reverse].query, ranked[reverse].subject) == (hit.subject, hit.query)
+    # Every per-bucket first pick (best hit into a record, first row of a pair)
+    # is the earliest position of its key; brute-force it with heavy ties.
+    rng = random.Random(20261025)
+    for size in [0, 1, 2, 7, 50, 300]:
+        keys = np.array([rng.choice([-3, 0, 5, 2**40, 7]) for _ in range(size)], dtype=np.int64)
+        codes, first = pc._first_occurrences(keys)
+        expected = sorted({key: position for position, key in reversed(list(enumerate(keys.tolist())))}.values())
+        assert first.tolist() == expected
+        assert keys[first].tolist() == list(dict.fromkeys(keys.tolist()))
+        assert (keys[first][codes] == keys).all()
 
 
 @pytest.mark.parametrize('scenario', ['sparse-2', 'dense-4', 'support-edges'])
@@ -332,8 +339,8 @@ def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
     with patch.object(pc, 'sorted', sort, create=True):
         result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3)
     assert benchmark.canonical(result) == expected
-    # The three membership phases share one traversal order.
-    assert len(sorts) == 1
+    # The table is built in rank order once; no membership phase sorts hit records.
+    assert sorts == []
 
 
 @pytest.mark.parametrize('baseline', ['s076', 's077'])

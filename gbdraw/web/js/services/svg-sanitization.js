@@ -1,4 +1,6 @@
 // @ts-check
+import { LEGACY_SVG_ATTRIBUTE_RENAMES } from '../contracts/schema.generated.js';
+
 export const SVG_SANITIZE_OPTIONS = Object.freeze({
   USE_PROFILES: { svg: true },
   ADD_TAGS: [
@@ -75,7 +77,8 @@ export const SVG_SANITIZE_OPTIONS = Object.freeze({
     'data-query-orthogroup-role',
     'data-subject-orthogroup-role',
     'data-gbdraw-match-id',
-    'data-gbdraw-pairwise-match-id',
+    // A stored Result of an older gbdraw is renamed after sanitizing (`normalizeSvgResultIds`).
+    ...Object.keys(LEGACY_SVG_ATTRIBUTE_RENAMES),
     'data-match-kind',
     'data-query-record-index',
     'data-subject-record-index',
