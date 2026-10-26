@@ -419,3 +419,23 @@ def test_a_changed_session_threshold_makes_the_session_shape_module_stale(
     monkeypatch.setattr(session_io, "CURRENT_AUTHORITY_SESSION_MIN_VERSION", 41)
 
     assert generator.render_session_shape_module() != current
+
+
+@pytest.mark.browser
+def test_the_circular_conservation_flow_has_one_python_owner() -> None:
+    """The Web reads the raw-entry flow of a conservation search from the generator (no JS literal)."""
+    from gbdraw.comparisons.circular_losat import CIRCULAR_CONSERVATION_FLOW
+
+    generated = (REPO_ROOT / "gbdraw/web/js/contracts/schema.generated.js").read_text(encoding="utf-8")
+    assert f"export const CIRCULAR_CONSERVATION_FLOW = '{CIRCULAR_CONSERVATION_FLOW}';" in generated
+    web_js = REPO_ROOT / "gbdraw" / "web" / "js"
+    holders = sorted(
+        str(path.relative_to(web_js))
+        for path in web_js.rglob("*.js")
+        if path.parent.name != "contracts"
+        and (
+            f"'{CIRCULAR_CONSERVATION_FLOW}'" in (text := path.read_text(encoding="utf-8"))
+            or "const CIRCULAR_CONSERVATION_FLOW" in text
+        )
+    )
+    assert holders == []

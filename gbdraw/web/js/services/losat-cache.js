@@ -1,5 +1,6 @@
 // @ts-check
 import {
+  CIRCULAR_CONSERVATION_FLOW,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -51,9 +52,9 @@ const MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = [
  * @typedef {{ key: unknown, entry: RawLosatCacheEntry }} RawLosatCacheMatch
  */
 
-// The `flow` of a raw entry a Circular conservation ring's search wrote (the
-// CLI's CIRCULAR_CONSERVATION_FLOW): Generate writes it, Save reads it.
-export const CIRCULAR_CONSERVATION_FLOW = 'circular-conservation';
+// The `flow` of a raw entry a Circular conservation ring's search wrote,
+// generated from the CLI's owner: Generate writes it, Save reads it.
+export { CIRCULAR_CONSERVATION_FLOW };
 
 // The runtime identity the Web stores beside each raw entry it searches
 // (design D9/D10, the CLI's losat_runtime_record). It is never part of a raw

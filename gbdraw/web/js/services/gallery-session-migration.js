@@ -25,7 +25,7 @@ import {
 } from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { SESSION_VERSION } from '../contracts/schema.generated.js';
+import { CIRCULAR_CONSERVATION_FLOW, SESSION_VERSION } from '../contracts/schema.generated.js';
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
 /** @typedef {{ losatCache?: { entries?: unknown } | null }} LosatCacheSession A Session as the conservation restore reads it. */
@@ -172,7 +172,7 @@ const conservationCacheEntries = (session) => (
       isPlainObject(entry) &&
       entry.kind === 'raw-losat' &&
       String(entry.program || '').toLowerCase() === 'blastn' &&
-      entry.flow === 'circular-conservation' &&
+      entry.flow === CIRCULAR_CONSERVATION_FLOW &&
       entry.display !== false &&
       typeof entry.text === 'string' &&
       entry.text.length > 0

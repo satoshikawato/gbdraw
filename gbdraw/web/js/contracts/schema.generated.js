@@ -92,6 +92,9 @@ export const ORTHOGROUP_INFERENCE_VERSION = 'anchor_core_v1';
 // gbdraw/comparisons/losat_jobs.py: NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;
 
+// gbdraw/comparisons/circular_losat.py: CIRCULAR_CONSERVATION_FLOW
+export const CIRCULAR_CONSERVATION_FLOW = 'circular-conservation';
+
 // gbdraw/analysis/protein_artifacts.py: CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 export const LOSAT_DERIVED_CACHE_SCHEMA = 3;
 
