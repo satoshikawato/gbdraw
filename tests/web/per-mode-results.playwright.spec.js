@@ -13,6 +13,7 @@ const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
 const { popup, closeEditor, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -170,9 +171,6 @@ const drawing = (page, content) => page.evaluate((text) => {
     legend: root.querySelector('[data-gbdraw-composition-role="legend"]')?.getAttribute('transform') || null
   };
 }, content);
-
-// A Session 49 drawing, found by its ID.
-const drawingOf = (document, id) => document.drawings.find((entry) => entry.id === id);
 
 test('each mode keeps its own Result, with its Legend drag, across switches', async ({ page }) => {
   test.setTimeout(240_000);
@@ -442,9 +440,9 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   const saved = await save(page, info.outputPath('both.gbdraw-session.json.gz'), { title: '' });
   expect(saved.drawings.map(({ id }) => id)).toEqual(['circular', 'linear']);
   expect(saved.ui.activeDrawingId).toBe('linear');
-  expect(drawingOf(saved, 'linear').renderRequest.mode).toBe('linear');
-  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
-  expect(drawingOf(saved, 'circular').results).toHaveLength(1);
+  expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(saved, 'circular').results).toHaveLength(1);
 
   const fresh = await freshPage(browser);
   try {
@@ -459,12 +457,12 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
 
     const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'), { title: '' });
     expect(resaved.ui.activeDrawingId).toBe('circular');
-    expect(drawingOf(resaved, 'circular').renderRequest.mode).toBe('circular');
-    expect(drawingOf(resaved, 'linear').renderRequest.mode).toBe('linear');
+    expect(savedDrawing(resaved, 'circular').renderRequest.mode).toBe('circular');
+    expect(savedDrawing(resaved, 'linear').renderRequest.mode).toBe('linear');
     // Load admission may re-serialize a Result's markup; its drawing stays.
     for (const id of ['circular', 'linear']) {
-      expect(await drawing(fresh, drawingOf(resaved, id).results[0].content))
-        .toEqual(await drawing(page, drawingOf(saved, id).results[0].content));
+      expect(await drawing(fresh, savedDrawing(resaved, id).results[0].content))
+        .toEqual(await drawing(page, savedDrawing(saved, id).results[0].content));
     }
   } finally {
     await fresh.context().close();
@@ -481,8 +479,8 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
 
   const saved = await save(page, info.outputPath('one.gbdraw-session.json.gz'), { title: '' });
   expect(saved.ui.activeDrawingId).toBe('linear');
-  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
-  expect(drawingOf(saved, 'linear').results ?? []).toEqual([]);
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(saved, 'linear').results ?? []).toEqual([]);
 
   const fresh = await freshPage(browser);
   try {
@@ -522,9 +520,9 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
   expect(await cache(page)).toEqual(loadedCache);
 
   const saved = await save(page, info.outputPath('blastp.gbdraw-session.json.gz'));
-  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
-  expect(drawingOf(saved, 'linear').renderRequest.mode).toBe('linear');
-  expect(drawingOf(saved, 'linear').losatCache.entries).toHaveLength(loadedCache.entries);
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
+  expect(savedDrawing(saved, 'linear').losatCache.entries).toHaveLength(loadedCache.entries);
 
   const fresh = await freshPage(browser);
   try {
@@ -577,9 +575,9 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
   expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
   const saved = await save(page, info.outputPath('older-linear.gbdraw-session.json.gz'));
-  expect(drawingOf(saved, 'linear').renderRequest.mode).toBe('linear');
-  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
-  expect(await drawing(page, drawingOf(saved, 'circular').results[0].content)).toEqual(await drawing(page, circular.content));
+  expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(await drawing(page, savedDrawing(saved, 'circular').results[0].content)).toEqual(await drawing(page, circular.content));
 });
 
 // REVIEW-1 M3: Load admits both Result sets through one function. The Linear
@@ -610,8 +608,8 @@ test('an aligned Linear Result saved while Circular is shown keeps its alignment
   await settleLive(page);
   await generate(page);
   const saved = await save(page, info.outputPath('aligned.gbdraw-session.json.gz'));
-  expect(drawingOf(saved, 'circular').renderRequest.mode).toBe('circular');
-  expect(drawingOf(saved, 'linear').renderRequest.layout.similarityAlignment).not.toBeNull();
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(saved, 'linear').renderRequest.layout.similarityAlignment).not.toBeNull();
 
   const fresh = await freshPage(browser);
   try {
@@ -654,8 +652,8 @@ const linearTopResavedSession = (info) => {
   const bytes = readFileSync(path);
   const session = JSON.parse(bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes);
   expect(session.ui.activeDrawingId).toBe('circular');
-  expect(drawingOf(session, 'linear').renderRequest.mode).toBe('linear');
-  expect(drawingOf(session, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(session, 'linear').renderRequest.mode).toBe('linear');
+  expect(savedDrawing(session, 'circular').renderRequest.mode).toBe('circular');
   return { path, session };
 };
 
@@ -674,23 +672,23 @@ test('a CLI re-saved Session opens on its shown mode with each Result in its own
   expect(await page.evaluate(() => window.__E1_READINESS__), 'the Load shows one Result, Circular').toEqual(['session-load']);
   const circular = await holds('Load');
   expect(circular).toMatchObject({ mode: 'circular', count: 1, mounted: true });
-  expect(await drawing(page, circular.content)).toEqual(await drawing(page, drawingOf(session, 'circular').results[0].content));
+  expect(await drawing(page, circular.content)).toEqual(await drawing(page, savedDrawing(session, 'circular').results[0].content));
   // The Circular Result's own Legend rows, none of the Linear set's.
   const ownRows = await page.evaluate((content) => [...new Set([
     ...new DOMParser().parseFromString(content, 'image/svg+xml').querySelectorAll('g[data-legend-key]')
-  ].map((entry) => entry.getAttribute('data-legend-key')))], drawingOf(session, 'circular').results[0].content);
+  ].map((entry) => entry.getAttribute('data-legend-key')))], savedDrawing(session, 'circular').results[0].content);
   expect((await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))).sort())
     .toEqual(ownRows.sort());
   await showMode(page, 'linear');
   const linear = await holds('switch to Linear');
   expect(linear).toMatchObject({ mode: 'linear', count: 1, mounted: true });
-  expect(await drawing(page, linear.content)).toEqual(await drawing(page, drawingOf(session, 'linear').results[0].content));
+  expect(await drawing(page, linear.content)).toEqual(await drawing(page, savedDrawing(session, 'linear').results[0].content));
   await showMode(page, 'circular');
   expect((await holds('switch back')).identity).toBe(circular.identity);
   const resaved = await save(page, info.outputPath('web-resaved.gbdraw-session.json.gz'));
   expect(resaved.ui.activeDrawingId).toBe('circular');
-  expect(drawingOf(resaved, 'circular').renderRequest.mode).toBe('circular');
-  expect(drawingOf(resaved, 'linear').renderRequest.mode).toBe('linear');
+  expect(savedDrawing(resaved, 'circular').renderRequest.mode).toBe('circular');
+  expect(savedDrawing(resaved, 'linear').renderRequest.mode).toBe('linear');
 });
 
 // A Session opened on the mode of its other Result set (a Web Session that

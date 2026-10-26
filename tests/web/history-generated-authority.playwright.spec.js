@@ -6,6 +6,7 @@ const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 // PD-OI-037 revision 2: there is no derived application status. Draft edits stay
 // free of Worker, byte, digest, and SVG-clone work, and never replace the
@@ -96,9 +97,9 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     await page.screenshot({ path: testInfo.outputPath('undo.png') });
 
     const path = testInfo.outputPath('undo.gbdraw-session.json.gz');
-    const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', path)));
+    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', path))));
     expect.soft(saved.renderRequest).toEqual(a.request);
-    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('none');
+    expect(saved.config.form.labels_mode).toBe('none');
     const fresh = await load(browser, path);
     try {
       const loaded = await inspect(fresh, testInfo, 'fresh-load');
@@ -258,10 +259,10 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect(page.locator('[data-applies-on-generate="species-strain"]')).toBeVisible();
     await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
     await expect(page.locator('[data-applies-on-generate="titles"]')).toBeVisible();
-    const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
+    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz')))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
-    expect(saved.modes[saved.ui.mode].config.form.species).toBe('Mus musculus');
-    expect(saved.modes[saved.ui.mode].config.adv.def_font_size).toBe(22);
+    expect(saved.config.form.species).toBe('Mus musculus');
+    expect(saved.config.adv.def_font_size).toBe(22);
 
     await generate(page);
     const applied = await svgFacts(page, await resultContent(page));
@@ -387,7 +388,7 @@ for (const mode of ['circular', 'linear']) {
       await expect(page.getByRole('button',{name:'Save Session',exact:true})).toHaveAccessibleDescription(/current Result.*draft.*does not Generate/);
       await expect(page.getByRole('button',{name:'SVG',exact:true})).toHaveAccessibleDescription(/PNG, and PDF buttons download the current Result.*Neither applies pending/);
       const file=info.outputPath(`${mode}-pending.gbdraw-session.json.gz`);
-      const saved=JSON.parse(gunzipSync(await download(page,'Save Session',file)));
+      const saved=shownSavedDrawing(JSON.parse(gunzipSync(await download(page,'Save Session',file))));
       expectArtifact(await inspect(page,info,`${mode}-after-save`),edited);
       fresh=await load(browser,file);
       const loaded=await inspect(fresh,info,`${mode}-loaded`);
@@ -509,7 +510,7 @@ for (const mode of ['linear', 'circular']) {
       await noDerivedStatus(page);
       const before = await snapshot(page);
       const savedPath = info.outputPath(`${mode}-live-width.json.gz`);
-      const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', savedPath)));
+      const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', savedPath))));
       expect(saved.editorState.originalSvgStroke.width).toBe(2);
       expect(saved.renderRequest).toEqual(before.request);
       fresh = await load(browser, savedPath);
@@ -721,7 +722,7 @@ test('A label rerender keeps the loaded Result name through Undo and Redo (OV-13
       expect(await names(), step).toEqual({ ...expected, rerendered: step === 'colored' });
       expect(await exportName(), step).toBe(`${kept}.svg`);
     }
-    const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', info.outputPath('ov136.gbdraw-session.json.gz'))));
+    const saved = shownSavedDrawing(JSON.parse(gunzipSync(await download(page, 'Save Session', info.outputPath('ov136.gbdraw-session.json.gz')))));
     expect(saved.results.map(result => result.name)).toEqual([kept]);
     expect(saved.editorState.featureCatalog.items.map(item => item.resultName)).toEqual([kept]);
   } finally { await page.context().close(); }

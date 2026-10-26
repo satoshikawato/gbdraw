@@ -5,6 +5,7 @@ const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
 const { showPhonePane, paneTop } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
   const file = new File([new Uint8Array(bytes)], name);
@@ -94,23 +95,22 @@ const loadAmbiguousSession = async (page, testInfo) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const session = Buffer.from(await page.evaluate(async (raw) => {
-    const document = JSON.parse(raw);
-    document.renderRequest.comparisons = [];
-    document.editorState.featureCatalog.items.forEach((item) => {
-      item.orthogroups.forEach((group) => {
-        if (group.id === 'og_1') group.orthologEdges = [];
-      });
+  const document = JSON.parse(source);
+  const drawing = savedDrawing(document, 'linear');
+  drawing.renderRequest.comparisons = [];
+  drawing.editorState.featureCatalog.items.forEach((item) => {
+    item.orthogroups.forEach((group) => {
+      if (group.id === 'og_1') group.orthologEdges = [];
     });
-    // The Python writer has no Web draft: Load takes the request's projection,
-    // and the Linear slice (Session 46) holds the comparison draft of this test.
-    document.modes = { linear: { config: {
-      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
-      losatProgram: 'blastp',
-      losat: { blastp: { mode: 'orthogroup' } }
-    } } };
-    return JSON.stringify(document);
-  }, source));
+  });
+  // The Python writer has no Web draft: Load takes the request's projection,
+  // and the drawing's config (Session 49) holds the comparison draft of this test.
+  drawing.config = {
+    linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    losatProgram: 'blastp',
+    losat: { blastp: { mode: 'orthogroup' } }
+  };
+  const session = Buffer.from(JSON.stringify(document));
   await importSession(page, session, 'similarity-alignment-inparalog.gbdraw-session.json');
 };
 
@@ -960,29 +960,28 @@ test('one usable member applies directly through one Worker resolve and one Hist
   page.on('pageerror', (error) => errors.push(String(error?.message || error)));
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  const session = Buffer.from(await page.evaluate(async (raw) => {
-    const document = JSON.parse(raw);
-    document.renderRequest.comparisons = [];
-    document.editorState.featureCatalog.items.forEach((item) => {
-      const secondCopy = item.biologicalFeatures.find((feature) => (
-        feature.qualifiers?.protein_id?.[0] === 'a1'
-      ))?.biologicalFeatureId;
-      const group = item.orthogroups.find(({ id }) => id === 'og_1');
-      if (!secondCopy || !group) throw new Error('The one-candidate fixture is incomplete.');
-      group.members = group.members.filter(({ biologicalFeatureId }) => (
-        biologicalFeatureId !== secondCopy
-      ));
-      group.orthologEdges = [];
-    });
-    // The Python writer has no Web draft: Load takes the request's projection,
-    // and the Linear slice (Session 46) holds the comparison draft of this test.
-    document.modes = { linear: { config: {
-      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
-      losatProgram: 'blastp',
-      losat: { blastp: { mode: 'orthogroup' } }
-    } } };
-    return JSON.stringify(document);
-  }, source));
+  const document = JSON.parse(source);
+  const drawing = savedDrawing(document, 'linear');
+  drawing.renderRequest.comparisons = [];
+  drawing.editorState.featureCatalog.items.forEach((item) => {
+    const secondCopy = item.biologicalFeatures.find((feature) => (
+      feature.qualifiers?.protein_id?.[0] === 'a1'
+    ))?.biologicalFeatureId;
+    const group = item.orthogroups.find(({ id }) => id === 'og_1');
+    if (!secondCopy || !group) throw new Error('The one-candidate fixture is incomplete.');
+    group.members = group.members.filter(({ biologicalFeatureId }) => (
+      biologicalFeatureId !== secondCopy
+    ));
+    group.orthologEdges = [];
+  });
+  // The Python writer has no Web draft: Load takes the request's projection,
+  // and the drawing's config (Session 49) holds the comparison draft of this test.
+  drawing.config = {
+    linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+    losatProgram: 'blastp',
+    losat: { blastp: { mode: 'orthogroup' } }
+  };
+  const session = Buffer.from(JSON.stringify(document));
   await importSession(page, session, 'one-candidate.gbdraw-session.json');
 
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) {
@@ -1224,10 +1223,11 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
   await download.saveAs(savedPath);
   const saved = JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(saved.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
+  const shown = shownSavedDrawing(saved);
+  expect(shown.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shown.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
   const previous = JSON.parse(source.toString('utf8'));
-  expect(saved.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
+  expect(shown.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
   const previewEquivalent = await page.evaluate(({ before, after }) => {
     const parser = new DOMParser();
     const normalized = (element) => ({
@@ -1243,7 +1243,7 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
     const original = parser.parseFromString(before, 'image/svg+xml').documentElement;
     const retained = parser.parseFromString(after, 'image/svg+xml').documentElement;
     return JSON.stringify(normalized(original)) === JSON.stringify(normalized(retained));
-  }, { before: previous.results[0].content, after: saved.results[0].content });
+  }, { before: previous.results[0].content, after: shown.results[0].content });
   expect(previewEquivalent).toBe(true);
   await expectNoUnhandledRejections(page);
 });
@@ -1668,7 +1668,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   }
   const corrupt=JSON.parse(gunzipSync(readFileSync(savedPath)).toString('utf8'));
-  corrupt.editorState.alignmentResetReceipt.binding='0'.repeat(64);
+  shownSavedDrawing(corrupt).editorState.alignmentResetReceipt.binding='0'.repeat(64);
   // A receipt that no longer binds the request is dropped with a row before
   // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
   const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
@@ -2606,7 +2606,8 @@ test('the docked review takes the popup, the Editor and the view, and gives them
     const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved during review');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { status: result.status, zoom, pan: canvasPan };
   });
   expect(savedView).toEqual({ status: 'saved', ...before });
@@ -2797,7 +2798,8 @@ test('a Session loaded under an open review keeps its own view and Editor when t
     const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved after load');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(loaded);
@@ -2909,7 +2911,8 @@ test('the figure is fitted again whenever the room of the Result changes while R
     const { exportSession } = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('./js/services/config.js'), (await import('./js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
     const result = await exportSession('saved after a fit to the room');
     const text = await new Response(result.blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    const { zoom, canvasPan } = JSON.parse(text).ui;
+    const saved = JSON.parse(text);
+    const { zoom, canvasPan } = saved.drawings.find(({ id }) => id === saved.ui.activeDrawingId).ui;
     return { zoom, pan: canvasPan };
   });
   expect(savedView).toEqual(before);

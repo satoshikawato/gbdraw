@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -243,10 +244,11 @@ for (const width of [1440, 390]) {
         }
         const sessionPath = testInfo.outputPath('combined-disabled.gbdraw-session.json.gz');
         const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', sessionPath)));
-        expect(saved.runMetadata.annotationWarnings).toEqual(final.warnings);
-        expect(saved.renderRequest).toEqual(final.request);
-        expect(saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
-        expect(JSON.stringify(saved.modes[mode].config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
+        const drawing = savedDrawing(saved, mode);
+        expect(drawing.runMetadata.annotationWarnings).toEqual(final.warnings);
+        expect(drawing.renderRequest).toEqual(final.request);
+        expect(drawing.config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content').enabled).toBe(false);
+        expect(JSON.stringify(drawing.config.annotationSets)).not.toContain('PRIVATE-AUX-CELL');
         restored = await load(browser, sessionPath, { width, height: 1000 });
         const loaded = await inspect(restored, mode);
         expect(artifact(loaded)).toEqual(artifact(final)); expect(loaded.rules).toEqual(final.rules);

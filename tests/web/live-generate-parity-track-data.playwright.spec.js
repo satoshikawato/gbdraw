@@ -17,6 +17,7 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   SINGLE_FIXTURE, open, generate, history, DEPTH_TSV, colorLegendRow, openCanvas, renameRow
 } = require('./helpers/live-generate-parity-steps.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -251,7 +252,7 @@ const sessionKeyCount = (saved, key) => {
       }
     }
   };
-  walk(saved.modes);
+  walk(savedDrawing(saved, 'circular'));
   return count;
 };
 
@@ -265,10 +266,10 @@ test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async
   await toggleDepth(page);
   expect(await depthRows(page), 'listed').toEqual(['Coverage']);
   const saved = await saveSessionJson(page, 'depth-key-once');
-  const entries = saved.modes.circular.editorState.legend.entries
+  const entries = savedDrawing(saved, 'circular').editorState.legend.entries
     .filter((entry) => /depth|coverage/i.test(`${entry.originalCaption} ${entry.caption}`));
   expect(entries.map((entry) => `${entry.originalCaption}=>${entry.caption}`), 'saved Legend entries').toEqual(['depth=>Coverage']);
-  const text = JSON.stringify(saved.modes.circular.editorState);
+  const text = JSON.stringify(savedDrawing(saved, 'circular').editorState);
   expect((text.match(/"depth"/g) || []).length, 'the key "depth" in the saved editor state').toBeLessThanOrEqual(1);
   expect(sessionKeyCount(saved, 'Coverage'), 'a "Coverage" object key').toBeLessThanOrEqual(1);
 });

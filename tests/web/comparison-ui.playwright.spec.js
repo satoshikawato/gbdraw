@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { answerLoadRepairs, evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.json';
 
@@ -703,9 +704,10 @@ test('preserved imported comparison generates only after explicit inheritance', 
   const savedSession = JSON.parse(
     gunzipSync(readFileSync(await download.path())).toString('utf8')
   );
-  expect(savedSession.modes.linear.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
-  expect(savedSession.renderRequest.comparisons).toEqual(generated.comparisons);
-  expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
+  const shown = savedDrawing(savedSession, 'linear');
+  expect(shown.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
+  expect(shown.renderRequest.comparisons).toEqual(generated.comparisons);
+  expect(shown.results[shown.ui.selectedResultIndex].content)
     .toBe(generated.result);
 });
 
@@ -1163,7 +1165,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const sessionPath = await sessionDownload.path();
   const sessionBuffer = readFileSync(sessionPath);
   const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
-  expect(session.modes.linear.config.losat.blastp).toMatchObject({
+  expect(savedDrawing(session, 'linear').config.losat.blastp).toMatchObject({
     mode: 'collinear',
     candidateLimit: 23,
     maxHits: 3,
@@ -1176,7 +1178,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     collinearSearchScope: 'all',
     collinearColorMode: 'orientation_identity'
   });
-  expect(session.modes.linear.config.adv).toMatchObject({
+  expect(savedDrawing(session, 'linear').config.adv).toMatchObject({
     pairwise_match_style: 'curve',
     comparison_height: 85
   });
@@ -1781,7 +1783,7 @@ test('unmatched uploaded table IDs show a notice that follows the Result through
     page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click()
   ]);
   const savedSession = JSON.parse(gunzipSync(readFileSync(await saved.path())).toString('utf8'));
-  expect(savedSession.runMetadata.comparisonWarnings).toMatchObject([{
+  expect(shownSavedDrawing(savedSession).runMetadata.comparisonWarnings).toMatchObject([{
     code: 'comparison_record_id_unmatched', queryRecordId: 'Co06A', subjectRecordId: 'Co06B',
     rowCount: 1, exampleIds: ['contig_A', 'contig_B'], message
   }]);

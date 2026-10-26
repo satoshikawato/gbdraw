@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { showDrawing, showPhonePane } = require('./drawing-bar.cjs');
 const { answerSessionTitle, assertOperationHealth, openApp, readErrorSignature } = require('./app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./saved-session.cjs');
 
 const seeds = {
   circular: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
@@ -115,10 +116,11 @@ const loadEditorLegendRows = async (page, rows) => {
   const bytes = await download(page, 'Save Session', path);
   const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
   saved.title = title;
-  expect(saved.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
-  saved.modes[mode].editorState.legend.entries.push(...rows.map(([caption, color]) => (
+  const shown = shownSavedDrawing(saved);
+  expect(shown.renderRequest.mode, 'the saved Results are the shown drawing\'s').toBe(mode);
+  shown.editorState.legend.entries.push(...rows.map(([caption, color]) => (
     { caption, originalCaption: caption, color, featureIds: [] })));
-  saved.results = await page.evaluate(async ({ results, added }) => {
+  shown.results = await page.evaluate(async ({ results, added }) => {
     const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
     return results.map((result) => {
       const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
@@ -139,7 +141,7 @@ const loadEditorLegendRows = async (page, rows) => {
       });
       return { ...result, content: new XMLSerializer().serializeToString(svg) };
     });
-  }, { results: saved.results, added: rows });
+  }, { results: shown.results, added: rows });
   await fs.writeFile(path, JSON.stringify(saved));
   await page.locator('input[accept^=".json,"]').setInputFiles(path);
   await expect.poll(() => page.evaluate(captions => {

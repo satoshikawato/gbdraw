@@ -4,6 +4,7 @@ const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -724,14 +725,15 @@ for (const mode of ['circular', 'linear']) {
 
     const saved = await saveSession(page);
     expect(saved.session.format).toBe('gbdraw-session');
-    expect(saved.session.renderRequest.diagramOptions.output.legend).toBe(initialLegendSide);
-    expect(saved.session.ui.generatedLegendPosition).toBe('bottom');
-    expect(saved.session.results).toHaveLength(1);
-    expect(saved.session.results[0].content).toContain('data-gbdraw-composition-schema="1"');
-    expect(saved.session.results[0].content).toContain(renamedLegendCaption);
+    const shown = shownSavedDrawing(saved.session);
+    expect(shown.renderRequest.diagramOptions.output.legend).toBe(initialLegendSide);
+    expect(shown.ui.generatedLegendPosition).toBe('bottom');
+    expect(shown.results).toHaveLength(1);
+    expect(shown.results[0].content).toContain('data-gbdraw-composition-schema="1"');
+    expect(shown.results[0].content).toContain(renamedLegendCaption);
     const savedComposition = await inspectExportedComposition(
       page,
-      saved.session.results[0].content
+      shown.results[0].content
     );
     expect(savedComposition.error || '').toBe('');
     expect(savedComposition.metadata.legendSide).toBe('bottom');

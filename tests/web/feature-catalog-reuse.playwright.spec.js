@@ -11,6 +11,7 @@ const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, evaluateWithRetainedPromise, settleLive, routeCrossOriginIsolated } = require('./helpers/app-lifecycle.cjs');
 const { generate, switchMode, download } = require('./helpers/mode-transition.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const HMMT = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const SESSIONS = 'gbdraw/web/gallery/sessions';
@@ -288,7 +289,7 @@ test('a Generate keeps the held catalog only while its build is current', async 
     });
     const bytes = await download(page, 'Save Session', testInfo.outputPath('reuse.gbdraw-session.json.gz'));
     const saved = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
-    expect(JSON.stringify(saved.editorState.featureCatalog)).toBe(await shownJson(page));
+    expect(JSON.stringify(shownSavedDrawing(saved).editorState.featureCatalog)).toBe(await shownJson(page));
     await loadSession(page, testInfo.outputPath('reuse.gbdraw-session.json.gz'));
     const loaded = await observeGenerate(page);
     expect(loaded.transports).toEqual([SENT]);
