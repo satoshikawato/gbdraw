@@ -1003,6 +1003,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
 
   const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
     const history = window.__GBDRAW_HISTORY__;
     const svgIdentity = (content) => {
       const documentElement = new DOMParser()
@@ -1018,7 +1019,7 @@ test('Generate materializes only required resources and reuses one Worker', asyn
     };
     const snapshotResultState = () => ({
       mode: app.mode,
-      generatedMode: app.generatedMode,
+      generatedDrawingId: state.generatedDrawingId.value,
       names: app.results.map((result) => String(result?.name || '')),
       svgIdentities: app.currentResults().map((result) => svgIdentity(result?.content)),
       selectedResultIndex: app.selectedResultIndex,

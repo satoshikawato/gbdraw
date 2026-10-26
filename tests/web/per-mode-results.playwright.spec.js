@@ -76,7 +76,8 @@ const shown = (page) => page.evaluate(async () => {
   const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value] || null;
   return {
     mode: state.mode.value,
-    generatedMode: state.generatedMode.value,
+    generatedDrawingId: state.generatedDrawingId.value,
+    generatedDrawingMode: state.drawingOf(state.generatedDrawingId.value).mode,
     count: state.results.value.length,
     identity: result ? ingestion.getCommittedSvgResultRuntimeIdentity(result) : null,
     mounted: result ? ingestion.isCommittedSvgResultMounted(result) : false,
@@ -179,19 +180,19 @@ test('each mode keeps its own Result, with its Legend drag, across switches', as
   await moveDecoration(page, 'legend');
   const circular = await shown(page);
   const circularMove = await displayedMove(page, 'legend');
-  expect(circular).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
+  expect(circular).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
 
   await showMode(page, 'linear');
   await expectEmptyPreview(page, 'linear');
   await generate(page);
   const linear = await shown(page);
-  expect(linear).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+  expect(linear).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
   expect(linear.identity).not.toBe(circular.identity);
   expect(await displayedMove(page, 'legend')).toEqual([0, 0]);
 
   await showMode(page, 'circular');
   const returned = await shown(page);
-  expect(returned).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
+  expect(returned).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
   expect(returned.identity).toBe(circular.identity);
   expectSameMove(await displayedMove(page, 'legend'), circularMove);
 
@@ -424,7 +425,7 @@ test('the mode switch waits for Generate (OIPC-C07)', async ({ page }) => {
     return outcome;
   });
   expect(refused).toMatchObject({ processing: true, disabled: true, result: { status: 'busy' } });
-  expect(await shown(page)).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1 });
+  expect(await shown(page)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1 });
 });
 
 test('Save writes every Result and a fresh Load shows each mode\'s own Result', async ({ page, browser }, info) => {
@@ -448,11 +449,11 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   try {
     await load(fresh, info.outputPath('both.gbdraw-session.json.gz'));
     const loadedLinear = await shown(fresh);
-    expect(loadedLinear).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+    expect(loadedLinear).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
     expect(await drawing(fresh, loadedLinear.content)).toEqual(await drawing(page, linear.content));
     await showMode(fresh, 'circular');
     const loadedCircular = await shown(fresh);
-    expect(loadedCircular).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
+    expect(loadedCircular).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loadedCircular.content)).toEqual(await drawing(page, circular.content));
 
     const resaved = await save(fresh, info.outputPath('both-resaved.gbdraw-session.json.gz'), { title: '' });
@@ -490,7 +491,7 @@ test('a Session with one Result opens on the drawing shown at Save; the other dr
     await expectEmptyPreview(fresh, 'linear');
     await showMode(fresh, 'circular');
     const loaded = await shown(fresh);
-    expect(loaded).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
+    expect(loaded).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loaded.content)).toEqual(await drawing(page, circular.content));
   } finally {
     await fresh.context().close();
@@ -531,7 +532,7 @@ test('a Linear BLASTP Result saved while Circular is shown keeps its comparison 
     expect(await cache(fresh)).toEqual(loadedCache);
     await showMode(fresh, 'linear');
     const restored = await shown(fresh);
-    expect(restored).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+    expect(restored).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
     expect(await drawing(fresh, restored.content)).toEqual(await drawing(page, linear.content));
   } finally {
     await fresh.context().close();
@@ -573,7 +574,7 @@ test('Save names the hidden mode whose older Result needs Generate, and Generate
   await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, { timeout: 300_000 });
   await settleLive(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
-  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
   const saved = await save(page, info.outputPath('older-linear.gbdraw-session.json.gz'));
   expect(savedDrawing(saved, 'linear').renderRequest.mode).toBe('linear');
   expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
@@ -665,7 +666,7 @@ test('a CLI re-saved Session opens on its shown mode with each Result in its own
   const { path, session } = linearTopResavedSession(info);
   const holds = async (label) => {
     const state = await shown(page);
-    expect(state.generatedMode === state.mode || state.count === 0, label).toBe(true);
+    expect(state.generatedDrawingMode === state.mode || state.count === 0, label).toBe(true);
     return state;
   };
   await load(page, path);
@@ -711,7 +712,7 @@ test('a Session opened on its other Result set generates the Legend it shows', a
   const fresh = await freshPage(browser);
   try {
     await load(fresh, resavedPath);
-    expect(await shown(fresh)).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
+    expect(await shown(fresh)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', count: 1, mounted: true });
     const rows = (await legendState(fresh)).rows;
     expect(sorted(rows)).toEqual(sorted(CIRCULAR_ROWS));
     await expectShownAsGenerated(fresh, rows, 'the opened Result');
@@ -762,10 +763,10 @@ test('a Load canceled within its History baseline keeps both modes\' Results', a
       owner: state.matchSequenceRegistry.captureTrustedOwner() === window.__E1_BEFORE_LOAD__.owner
     };
   })).toEqual({ committed: true, owner: true });
-  expect(await shown(page)).toMatchObject({ mode: 'circular', generatedMode: 'circular', identity: circular.identity, mounted: true });
+  expect(await shown(page)).toMatchObject({ mode: 'circular', generatedDrawingId: 'circular', identity: circular.identity, mounted: true });
   expect(await counts()).toEqual(historyBefore);
   await showMode(page, 'linear');
-  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', identity: linear.identity, mounted: true });
+  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', identity: linear.identity, mounted: true });
 });
 
 // OV-1790: a legacy configuration Load commits a copy of the shown drawing
@@ -849,7 +850,7 @@ test('a drawing switch waits for a label rerender', async ({ page }) => {
   expect(attempt).toEqual({ rerendering: true, switched: 'busy', mode: 'circular' });
   await settleLive(page);
   await showMode(page, 'linear');
-  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedMode: 'linear', count: 1, mounted: true });
+  expect(await shown(page)).toMatchObject({ mode: 'linear', generatedDrawingId: 'linear', count: 1, mounted: true });
 });
 
 // REVIEW-2 R: a Load that fails inside its commit rolls back and leaves the
@@ -927,7 +928,7 @@ for (const { session, mode, other, features } of UJ02) {
     await showMode(page, mode);
     await generate(page);
     const own = await shown(page);
-    expect(own).toMatchObject({ mode, generatedMode: mode, count: 1, mounted: true });
+    expect(own).toMatchObject({ mode, generatedDrawingId: mode, count: 1, mounted: true });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(features);
     const exported = await exportSvg();
 
@@ -942,7 +943,7 @@ for (const { session, mode, other, features } of UJ02) {
 
     await showMode(page, mode);
     // (d) its own Result, with its features.
-    expect(await shown(page)).toMatchObject({ mode, generatedMode: mode, identity: own.identity, mounted: true });
+    expect(await shown(page)).toMatchObject({ mode, generatedDrawingId: mode, identity: own.identity, mounted: true });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(features);
     expect(await pending(), 'hasPendingChanges').toBe(false);
     // (e) a feature popup opens.
@@ -957,7 +958,7 @@ for (const { session, mode, other, features } of UJ02) {
 }
 
 // The displayed Result always belongs to the shown mode (Phase E relies on it):
-// after every path that installs a Result or a mode, `generatedMode === mode`
+// after every path that installs a Result or a mode, the displayed Result's drawing mode equals `mode`
 // or no Result is shown. Paths: a switch to a mode with and without a Result,
 // a failed Generate, Reset Settings, Undo and Redo through intent (switch),
 // artifact-handle (Generate) and checkpoint (Reset Settings) steps, a fresh
@@ -970,7 +971,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     const { state } = await import('/gbdraw/web/js/state.js');
     return {
       mode: state.mode.value,
-      holds: state.generatedMode.value === state.mode.value || state.results.value.length === 0
+      holds: state.drawingOf(state.generatedDrawingId.value).mode === state.mode.value || state.results.value.length === 0
     };
   });
   const check = async (target, label) => expect((await holds(target)).holds, label).toBe(true);
@@ -1018,7 +1019,7 @@ test('the displayed Result belongs to the shown mode after every mode path', asy
     await showMode(fresh, 'linear');
     await check(fresh, 'switch after Load');
     await load(fresh, oneResultFile);
-    expect((await holds(fresh)).mode, 'Load opens on the mode that has a Result').toBe('circular');
+    expect((await holds(fresh)).mode, 'Load opens on the drawing shown at Save').toBe('linear');
     await check(fresh, 'Load of a Session whose shown mode has no Result');
     await load(fresh, bothFile);
     const before = await shown(fresh);

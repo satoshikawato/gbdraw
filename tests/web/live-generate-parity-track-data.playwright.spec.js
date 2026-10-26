@@ -943,7 +943,7 @@ test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
     return {
-      mode: state.generatedMode.value,
+      mode: state.drawingOf(state.generatedDrawingId.value).mode,
       identity: getCommittedSvgResultRuntimeIdentity(window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]),
       delta: compositionUserDeltas(svg)[targetRole]
     };

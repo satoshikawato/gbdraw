@@ -50,7 +50,7 @@ const snapshot = page => page.evaluate(async () => {
   } : null;
   return {
     mode: state.mode.value,
-    generatedMode: state.generatedMode.value,
+    generatedDrawingId: state.generatedDrawingId.value,
     config: buildConfigData(state.activeDrawing()),
     request: getCommittedCanonicalRenderRequest(),
     results: window.__GBDRAW_APP__.currentResults().map(result => ({ name: result.name, content: result.content })),
@@ -80,7 +80,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   const before = await snapshot(page);
   // E1: Linear shows its own empty Result slot; the Circular Result waits in its slot.
   expect(before.mode).toBe('linear');
-  expect(before.generatedMode).toBe('linear');
+  expect(before.generatedDrawingId).toBe('linear');
   expect(before.request).toBeNull();
   expect(before.results).toEqual([]);
   expect(before.config.adv.scale_font_size).toBe(19);
@@ -112,7 +112,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     // PD-OI-090 (Session 49): Load opens the drawing shown at Save, here Linear with its draft.
     const restored = await snapshot(fresh);
     expect(restored.mode).toBe('linear');
-    expect(restored.generatedMode).toBe('linear');
+    expect(restored.generatedDrawingId).toBe('linear');
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
     // The Linear drawing's own saved request, with no Result drawn from it.
@@ -134,7 +134,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     await showDrawing(fresh, { kind: 'circular' });
     const circularResult = await snapshot(fresh);
     expect(circularResult.mode).toBe('circular');
-    expect(circularResult.generatedMode).toBe('circular');
+    expect(circularResult.generatedDrawingId).toBe('circular');
     expect(circularResult.request).toEqual(circular.request);
     expect(circularResult.results).toEqual(circular.results);
     expect(circularResult.selectedResultIndex).toBe(circular.selectedResultIndex);
@@ -163,7 +163,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     await generateAndWaitForResult(fresh);
     const generated = await snapshot(fresh);
     expect(generated.mode).toBe('linear');
-    expect(generated.generatedMode).toBe('linear');
+    expect(generated.generatedDrawingId).toBe('linear');
     expect(generated.request.mode).toBe('linear');
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.short']).toBe(19);
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.long']).toBe(19);
@@ -229,7 +229,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   await openApp(page);
   await load(page, fixture);
   let state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
   const previewWorker = await getDiagramWorkerActivity(page);
   expect(previewWorker.runs).toBe(0);
   expect(previewWorker.constructions).toBeLessThanOrEqual(1);
@@ -238,11 +238,11 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   expect(current.ui.activeDrawingId).toBe('circular');
   await load(page, info.outputPath('matching.gbdraw-session.json.gz'));
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   await load(page, path.join(process.cwd(), 'tests/fixtures/sessions/single.v41-bindings1.json'));
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   const cliPrefix = info.outputPath('cli-origin');
   const cliFile = `${cliPrefix}.gbdraw-session.json`;
@@ -254,7 +254,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   expect(cli.config).toBeUndefined();
   await load(page, cliFile);
   state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
+  expect([state.mode, state.generatedDrawingId, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
   const settingsFile = path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz');
   const settings = await readSession(settingsFile);
@@ -307,7 +307,7 @@ test('failed import after draft application restores the prior mode, profiles, s
   expect(failure).toMatchObject({ status: 'error', error: { code: 'UNKNOWN', stage: 'request-validation' } });
   expect(JSON.stringify(failure)).not.toContain('S02 forced rollback');
   const restored = await snapshot(page);
-  for (const key of ['mode', 'generatedMode', 'config', 'request', 'selectedResultIndex',
+  for (const key of ['mode', 'generatedDrawingId', 'config', 'request', 'selectedResultIndex',
     'featurePanelTab', 'downloadDpi', 'circularSource', 'linearSource', 'history']) {
     expect(restored[key], `rollback ${key}`).toEqual(before[key]);
   }

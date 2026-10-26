@@ -1658,8 +1658,8 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.activeDrawing().featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
-      scope: state.generatedMode.value,
+    state.activeDrawing().featureOverrides[JSON.stringify([state.drawingOf(state.generatedDrawingId.value).mode, 'record-a', 'biological-a'])] = {
+      scope: state.drawingOf(state.generatedDrawingId.value).mode,
       recordKey: 'record-a',
       biologicalFeatureId: 'biological-a',
       featureVisibility: null,
@@ -1681,7 +1681,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     URL.revokeObjectURL = () => {};
     HTMLAnchorElement.prototype.click = () => {};
     try {
-      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOfMode(state.generatedMode.value), { interactive: true }));
+      await downloadInteractiveSVG(captureSvgExport(state, state.drawingOf(state.generatedDrawingId.value), { interactive: true }));
       const svgText = await downloadedBlob.text();
       const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
       const metadata = doc.querySelector('#gbdraw-interactive-feature-metadata');
