@@ -578,18 +578,22 @@ await test('a main v33 Web Session with Scale Interval 0 loads into the current 
 // Sessions that store a Scale Interval of 0 or less (main fe6861f0 CLI and typed API,
 // main b05a6bb8 Web; scale-interval.provenance.json) load, and Load Feature Edits TSV
 // reads against their committed request.
+// D-15-136 (A): Python promotes a schema-2 request (Session 33) and reads its
+// interval <= 0 as automatic (D-04), so the committed request holds none; the
+// figure is the same. Every case still pins that no positive interval is committed.
 await test('a Session with a Scale Interval of 0 or less loads and reads a Feature Edits TSV', async () => {
-  for (const [name, stored] of [
-    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval],
-    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval']],
-    // Load rebuilds a schema 2 request from the loaded fields (current path, literal 0).
-    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides['objects.scale.interval']]
+  for (const [name, stored, absentWhenPromoted] of [
+    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval, false],
+    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval'], false],
+    // A promoted schema 2 request: automatic (absent) or the literal value.
+    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides?.['objects.scale.interval'], true]
   ]) {
     const fixture = path.join(root, `tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
     const result = await load(gunzipSync(await readFile(fixture)));
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error?.context ?? result.error)}`);
     const committed = getCommittedCanonicalRenderRequest();
-    assert.ok(stored(committed) <= 0, name);
+    const interval = stored(committed);
+    assert.ok((absentWhenPromoted && interval === undefined) || interval <= 0, `${name}: ${interval}`);
     const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-scale-interval-'));
     try {
       await writeFile(path.join(directory, 'request.json'), JSON.stringify(committed));

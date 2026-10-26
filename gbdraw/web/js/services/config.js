@@ -6085,6 +6085,17 @@ class UncomposedResultSet extends Error {
 const importSessionDocument = async (e, options = {}) => {
   /** @type {readonly ResultSetPath[]} */
   const uncomposedSets = options.uncomposedSets ?? [];
+  // A Result Load cannot admit or compose drops its set's Results (A20,
+  // OV-789): the first reading names the set, and Load reads the file again.
+  /** @template R @param {ResultSetPath} at @param {() => R} admit @returns {R} */
+  const admittedOrUncomposed = (at, admit) => {
+    try {
+      return admit();
+    } catch (error) {
+      if (error instanceof UncomposedResultSet || uncomposedSets.includes(at)) throw error;
+      throw new UncomposedResultSet(at, error);
+    }
+  };
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
   recordSessionLifecycleEvent('sessionSelection');
@@ -6157,7 +6168,8 @@ const importSessionDocument = async (e, options = {}) => {
       /** @type {LoadRepair[]} */
       const fileRepairs = [...fileRead.repairs];
       const fileParts = await readSessionImportParts(fileDocument, fileRead.value, fileRepairs, uncomposedSets);
-      // The stored figure is the Results the readers kept.
+      // The stored figure is the Results the readers kept; one Load cannot
+      // admit drops the file's one set (at its top level) as A20 does.
       if (!storedFigureWithdrawal) {
         storedFigureWithdrawal = {
           results: previewRuntimePorts.currentResults(),
@@ -6165,7 +6177,7 @@ const importSessionDocument = async (e, options = {}) => {
           failedGeneratePreservedResult: state.failedGeneratePreservedResult.value
         };
         const { results: storedResults, ui: storedUi } = /** @type {{ results?: unknown, ui?: { selectedResultIndex?: unknown } }} */ (fileParts.data);
-        applyResultsData(Array.isArray(storedResults) ? storedResults : [], storedUi ?? {});
+        admittedOrUncomposed('', () => applyResultsData(Array.isArray(storedResults) ? storedResults : [], storedUi ?? {}));
         await nextTick();
       }
       // Its one draft is read by the draft field readers here, at the file's
@@ -6540,17 +6552,6 @@ const importSessionDocument = async (e, options = {}) => {
     // A Result of `mode`; `composition` is the legacy composition of the
     // committed set (null for the other set, which has none).
     // A Result's set is the top-level one (`results`) or the other mode's.
-    // A Result Load cannot admit or compose drops its set's Results (A20,
-    // OV-789): the first reading names the set, and Load reads the file again.
-    /** @template R @param {ResultSetPath} at @param {() => R} admit @returns {R} */
-    const admittedOrUncomposed = (at, admit) => {
-      try {
-        return admit();
-      } catch (error) {
-        if (error instanceof UncomposedResultSet || uncomposedSets.includes(at)) throw error;
-        throw new UncomposedResultSet(at, error);
-      }
-    };
     /** @param {'circular' | 'linear'} mode @param {LegacyResultSvgData['composition']} composition @param {ResultSetPath} at */
     const loadedResultTransform = (mode, composition, at) => (/** @type {SVGSVGElement} */ svg) => {
       return admittedOrUncomposed(at, () => {
@@ -7421,28 +7422,34 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
+    // The opened set's committed request: a current-schema Session's adopted
+    // one (installed above), else the one Load read and projected.
+    let committedSession = currentSchemaSession ? adoptedCanonicalSession : null;
     if (!currentSchemaSession) {
       // Only a request Load read and projected is committed: a Session before
       // 31 has none (`readSessionRequests`, OV-862), whatever its file holds (OV-819).
       const stored = canonicalSession ? cloneCanonicalSession(data) : null;
       // OV-1181 B-LOAD: after the stored figure, before History's base (`afterImport`).
-      const committed = stored && await convertDetachedProteinResultFrames(
+      committedSession = stored && await convertDetachedProteinResultFrames(
         proteinFrameSource, stored, canonicalProjectionInput, linearDrawing
       );
-      if (!committed && logicalImportedResults.length > 0) {
-        const { adv } = shownDrawing;
-        loadedTrackSettings = Object.freeze({
-          mode: shownMode,
-          dinucleotide: adv.nt,
-          slots: adv[`${shownMode}_track_slots_enabled`] ? cloneJsonData(adv[`${shownMode}_track_slots`]) : null
-        });
-      }
-      setCommittedCanonicalSession(committed, loadedConservationPairsOf(committedSetDrawingId));
+      setCommittedCanonicalSession(committedSession, loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = null;
     } else {
       // OV-1145 B-LOAD: after the stored figure, before History's base (`afterImport`).
       const convertedKeptSlots = await convertLoadedProteinResultFrames(proteinFrameSource, stashedSlots, shownDrawing);
       if (convertedKeptSlots && options.isCurrent()) installLoadedArtifactSlots?.({ opening: null, stashed: convertedKeptSlots });
+    }
+    // Results the opened set holds without a committed request (a Session
+    // 27-39's, also through Python's conversion) were drawn with the track
+    // settings Load installed: they are recorded with their mode.
+    if (!committedSession && logicalImportedResults.length > 0) {
+      const { adv } = shownDrawing;
+      loadedTrackSettings = Object.freeze({
+        mode: shownMode,
+        dinucleotide: adv.nt,
+        slots: adv[`${shownMode}_track_slots_enabled`] ? cloneJsonData(adv[`${shownMode}_track_slots`]) : null
+      });
     }
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'success',
