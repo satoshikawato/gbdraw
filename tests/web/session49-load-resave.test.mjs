@@ -1,6 +1,7 @@
 // A Session 49 Load keeps every drawing's request metadata (`webFiles` beside
 // its bindings) from its own entry, never from the drawing the Load opened, so
-// a re-Save writes it back (OV-1872).
+// a re-Save writes it back (OV-1872), and a re-Save of drawings without a
+// Result writes what the first Save wrote (OV-1902).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -29,7 +30,9 @@ installSessionImportWorker();
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
+const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
+const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.js');
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const v49Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
   '../fixtures/sessions/drawings-circular-linear.v49.gbdraw-session.json.gz', import.meta.url
@@ -50,6 +53,40 @@ const requestMetadata = (webFiles) => {
   const { bindings: _bindings, resourceOriginalNames: _names, ...metadata } = webFiles ?? {};
   return metadata;
 };
+
+const savedDocument = async (title, readKeptArtifacts) => {
+  // A second Save of the same title downloads again.
+  const result = await exportSession(title, { readKeptArtifacts, askChoice: async () => 'download' });
+  assert.equal(result?.status, 'saved', JSON.stringify(result));
+  return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+};
+
+// OV-1902: a drawing switch keeps the drawing left in its artifact slot, empty
+// when it has no Result; a Load keeps none for a drawing without a request.
+// What Save writes of a drawing without a Result does not depend on that slot,
+// so a Save of the loaded drawings writes them again unchanged. Runs first, on
+// the new app's drawings.
+test('Save, Load and Save of drawings without a Result write the same drawings (OV-1902)', async () => {
+  // The boot palette install, as app.js runs it after setup.
+  const palettes = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/palettes/palettes.json', import.meta.url), 'utf8'));
+  assert.ok(createPaletteLoader({ state }).applyPalettes(palettes.palettes));
+  // Each drawing holds one Depth series as set, so the case does not depend
+  // on how setup or Load fill an empty list.
+  for (const drawing of state.drawingList()) {
+    drawing.adv.depth_tracks = [{
+      color: '#4A90E2', height: null, label: '', large_tick_interval: null, small_tick_interval: null, tick_font_size: null
+    }];
+  }
+  state.drawingOf('circular').form.labels_mode = 'both';
+  state.drawingOf('linear').form.show_labels_linear = 'all';
+  assert.equal(state.activeDrawing().id, 'circular');
+  const switchKept = [createArtifactSlot({ drawing: state.drawingOf('linear'), values: {} })];
+  const first = await savedDocument('ov-1902', () => switchKept);
+  assert.deepEqual(first.drawings.map((entry) => entry.id), ['circular', 'linear']);
+  const stashed = await loadKeepingSlots(first);
+  const second = await savedDocument('ov-1902', () => stashed);
+  assert.deepEqual(second.drawings, first.drawings);
+});
 
 for (const opened of ['linear', 'circular']) {
   test(`a Session 49 Load keeps each drawing's own request metadata in the drawing it does not open (${opened} opened)`, async () => {
