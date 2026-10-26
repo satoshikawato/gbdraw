@@ -10,11 +10,13 @@ from gbdraw.layout.spatial import (
     AabbIndex,
     Interval,
     IntervalIndex,
+    TouchingAabbIndex,
     bounding_aabb,
     candidate_aabb_pairs,
     candidate_aabb_partners,
     finite_aabb,
     split_circular_interval,
+    touching_aabb_indices,
 )
 
 
@@ -176,3 +178,23 @@ def test_aabb_index_remove_takes_an_item_out() -> None:
     assert index.query(Aabb(4, 4, 4, 4)) == ["b"]
     index.insert("a", Aabb(8, 8, 8, 8))
     assert index.query(Aabb(8, 8, 8, 8)) == ["a", "b"]
+
+
+def test_touching_aabb_index_equals_the_scan_as_boxes_change() -> None:
+    rng = random.Random(7)
+
+    def box() -> Aabb | None:
+        if rng.random() < 0.05:
+            return None
+        x, y = rng.uniform(-300.0, 300.0), rng.uniform(-300.0, 300.0)
+        return finite_aabb(x, y, x + rng.uniform(0.0, 40.0), y + rng.uniform(0.0, 20.0))
+
+    index = TouchingAabbIndex.of([box() for _ in range(120)])
+    for _ in range(400):
+        idx = rng.randrange(len(index.boxes))
+        index.replace(idx, box())
+        query = box()
+        if query is not None and rng.random() < 0.1:
+            query = finite_aabb(-400.0, -400.0, 400.0, 400.0)
+        skip = rng.choice([None, idx])
+        assert index.touching(query, skip=skip) == touching_aabb_indices(index.boxes, query, skip=skip)

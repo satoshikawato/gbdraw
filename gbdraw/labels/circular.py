@@ -9,7 +9,7 @@ import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, Literal, NamedTuple, TypeAlias, cast, get_args
+from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
 from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
@@ -35,9 +35,10 @@ from ..layout.circular import (
 )
 from ..layout.spatial import (
     Aabb,
-    AabbIndex,
     bounding_aabb,
     candidate_aabb_partners,
+    grid_bucket_size,
+    TouchingAabbIndex,
     touching_aabb_indices,
     touching_aabb_pairs,
     union_aabbs,
@@ -226,17 +227,6 @@ def _label_pair_index_padding(labels: list[CircularLabel], *, use_min_gap: bool)
     return max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
 
 
-def _label_aabb_bucket_size(bboxes: list[Aabb], padding: float) -> float:
-    max_extent = max(
-        (
-            max(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y)
-            for bbox in bboxes
-        ),
-        default=16.0,
-    )
-    return max(16.0, min(256.0, max_extent + float(padding)))
-
-
 def _candidate_label_pairs(
     labels: list[CircularLabel],
     total_length: int,
@@ -260,7 +250,7 @@ def _candidate_label_pairs(
         candidate_aabb_partners(
             bboxes,
             padding=padding,
-            bucket_size=_label_aabb_bucket_size(bboxes, padding),
+            bucket_size=grid_bucket_size(bboxes, padding),
         ),
         label_count,
     )
@@ -1224,24 +1214,21 @@ class _LabelPeers:
 
     def __init__(self, pad: float, bucket_size: float) -> None:
         self.pad = pad
-        self.boxes: list[Aabb | None] = []
-        self._unknown: list[int] = []
-        self._index = AabbIndex(bucket_size=bucket_size)
+        self._index = TouchingAabbIndex(bucket_size)
 
     @classmethod
     def of(cls, labels: Iterable[CircularLabel], pad: float) -> _LabelPeers:
         boxes = [_label_reach_box(label, pad) for label in labels]
-        peers = cls(pad, _label_aabb_bucket_size([box for box in boxes if box is not None], 0.0))
+        peers = cls(pad, grid_bucket_size([box for box in boxes if box is not None], 0.0))
         for box in boxes:
-            peers.boxes.append(None)
-            peers._place(len(peers.boxes) - 1, box)
+            peers._index.append(box)
         return peers
 
     @classmethod
     def empty(cls, labels: Iterable[CircularLabel], pad: float) -> _LabelPeers:
         """No labels yet, in a grid sized for `labels`."""
         boxes = (_label_reach_box(label, pad, anchors=[(0.0, 0.0)]) for label in labels)
-        return cls(pad, _label_aabb_bucket_size([box for box in boxes if box is not None], 0.0))
+        return cls(pad, grid_bucket_size([box for box in boxes if box is not None], 0.0))
 
     def box(self, label: CircularLabel) -> Aabb | None:
         """The reach box of `label` where it is."""
@@ -1249,29 +1236,15 @@ class _LabelPeers:
 
     def add(self, label: CircularLabel) -> None:
         """Append `label` as the next index."""
-        self.boxes.append(None)
-        self._place(len(self.boxes) - 1, self.box(label))
+        self._index.append(self.box(label))
 
     def move(self, idx: int, label: CircularLabel) -> None:
         """Label `idx` is now `label` (it moved)."""
-        old = self.boxes[idx]
-        if old is None:
-            self._unknown.remove(idx)
-        else:
-            self._index.remove(idx, old)
-        self._place(idx, self.box(label))
+        self._index.replace(idx, self.box(label))
 
     def near(self, box: Aabb | None, *, skip: int | None = None) -> list[int]:
-        """The indexes whose reach boxes touch `box` (an unknown box touches every label)."""
-        nearby = None if box is None else cast("list[int]", self._index.query(box)) + self._unknown
-        return touching_aabb_indices(self.boxes, box, skip=skip, candidates=nearby)
-
-    def _place(self, idx: int, box: Aabb | None) -> None:
-        self.boxes[idx] = box
-        if box is None:
-            self._unknown.append(idx)
-        else:
-            self._index.insert(idx, box)
+        """The indexes, in order, whose reach boxes touch `box` (an unknown box touches every label)."""
+        return self._index.touching(box, skip=skip)
 
 
 class _MovedLabelOverlaps:
@@ -1395,7 +1368,8 @@ def _resolve_label_leader_line_collisions(
         )
 
     def _set_reach_boxes(idx: int) -> None:
-        text_boxes[idx], primary_boxes[idx], reach_boxes[idx] = _label_reach_boxes(idx)
+        for index, box in zip((text_index, primary_index, reach_index), _label_reach_boxes(idx)):
+            index.replace(idx, box)
 
     for _ in range(max_passes):
         current_total_bbox_collisions = _count_label_leader_line_collisions(
@@ -1416,15 +1390,16 @@ def _resolve_label_leader_line_collisions(
         current_min_gap_overlaps = _count_label_overlaps(labels, total_length, use_min_gap=True)
         pass_changed = False
         unwrapped_angles = _derive_monotonic_unwrapped_angles(labels, total_length)
-        text_boxes: list[Aabb | None] = [None for _ in labels]
-        primary_boxes: list[Aabb | None] = [None for _ in labels]
-        reach_boxes: list[Aabb | None] = [None for _ in labels]
-        for idx in range(len(labels)):
-            _set_reach_boxes(idx)
+        label_boxes = [_label_reach_boxes(idx) for idx in range(len(labels))]
+        # The peer lookups look only at the boxes in grid buckets near the query.
+        text_index, primary_index, reach_index = (
+            TouchingAabbIndex.of([boxes[family] for boxes in label_boxes]) for family in range(3)
+        )
+        text_boxes, primary_boxes, reach_boxes = text_index.boxes, primary_index.boxes, reach_index.boxes
         local_scores = []
         for idx in range(len(labels)):
-            crossing_peers = touching_aabb_indices(primary_boxes, primary_boxes[idx], skip=idx)
-            near_peers = touching_aabb_indices(reach_boxes, reach_boxes[idx], skip=idx)
+            crossing_peers = primary_index.touching(primary_boxes[idx], skip=idx)
+            near_peers = reach_index.touching(reach_boxes[idx], skip=idx)
             local_scores.append(
                 (
                     _count_local_leader_line_intersections(
@@ -1464,7 +1439,7 @@ def _resolve_label_leader_line_collisions(
                 continue
 
             current_half = _current_half_from_x(start_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX)
-            current_peers = touching_aabb_indices(text_boxes, text_boxes[label_idx], skip=label_idx)
+            current_peers = text_index.touching(text_boxes[label_idx], skip=label_idx)
             current_plain_for_label = _count_local_label_overlaps(
                 labels, total_length, label_idx, label, use_min_gap=False, peers=current_peers
             )
@@ -1522,16 +1497,14 @@ def _resolve_label_leader_line_collisions(
             if not sweep_points:
                 continue
             middle_point, feature_anchor_point = _leader_segments(label)[1]
-            text_peers = touching_aabb_indices(
-                text_boxes, _label_reach_box(label, reach_pad, anchors=sweep_points), skip=label_idx
+            text_peers = text_index.touching(
+                _label_reach_box(label, reach_pad, anchors=sweep_points), skip=label_idx
             )
-            crossing_peers = touching_aabb_indices(
-                primary_boxes,
+            crossing_peers = primary_index.touching(
                 _label_reach_box(label, reach_pad, anchors=sweep_points, points=[middle_point]),
                 skip=label_idx,
             )
-            collision_peers = touching_aabb_indices(
-                reach_boxes,
+            collision_peers = reach_index.touching(
                 _label_reach_box(
                     label, reach_pad, anchors=sweep_points, points=[middle_point, feature_anchor_point]
                 ),

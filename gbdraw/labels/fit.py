@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_partners
+from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_partners, grid_bucket_size
 from ..layout.text_geometry import Point, convex_polygons_intersect, segments_intersect
 
 LabelKind: TypeAlias = Literal[
@@ -242,10 +242,9 @@ def overlapping_pairs(
     if not shapes:
         return []
     boxes = [_extent([point for part in parts for point in part]) for parts in shapes]
-    extent = max(max(box.width, box.max_y - box.min_y) for box in boxes)
     return [
         (left, right)
-        for left, partners in enumerate(candidate_aabb_partners(boxes, bucket_size=max(16.0, min(256.0, extent))))
+        for left, partners in enumerate(candidate_aabb_partners(boxes, bucket_size=grid_bucket_size(boxes)))
         for right in sorted(partners)
         if shapes_overlap(shapes[left], shapes[right], touching=touching)
     ]

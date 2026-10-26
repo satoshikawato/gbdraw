@@ -9,7 +9,7 @@ import bisect
 import math
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, cast
 
 
 @dataclass(frozen=True)
@@ -248,6 +248,12 @@ def touching_aabb_indices(
     return [idx for idx in indexes if idx != skip and aabbs_touch(query, bboxes[idx])]
 
 
+def grid_bucket_size(bboxes: Sequence[Aabb], padding: float = 0.0) -> float:
+    """A grid bucket for these boxes: the largest box side plus ``padding``, within 16 to 256 (16 + padding for none)."""
+    max_extent = max((max(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y) for bbox in bboxes), default=16.0)
+    return max(16.0, min(256.0, max_extent + float(padding)))
+
+
 def _validate_bucket_size(bucket_size: float) -> float:
     bucket_size = float(bucket_size)
     if not math.isfinite(bucket_size) or bucket_size <= 0.0:
@@ -331,6 +337,68 @@ class AabbIndex:
                 yield from self._buckets.get((bucket_x, bucket_y), empty)
 
 
+class TouchingAabbIndex:
+    """Boxes by index in a grid, kept as boxes change.
+
+    ``touching(query, skip=...)`` equals ``touching_aabb_indices(boxes, query, skip=...)``
+    but looks only at the boxes in the query's buckets. A ``None`` box (unknown
+    extent) touches every box.
+    """
+
+    def __init__(self, bucket_size: float) -> None:
+        self.boxes: list[Aabb | None] = []
+        self._unknown: set[int] = set()
+        self._index = AabbIndex(bucket_size=bucket_size)
+
+    @classmethod
+    def of(cls, bboxes: Sequence[Aabb | None]) -> TouchingAabbIndex:
+        """The boxes in order, in a grid sized by :func:`grid_bucket_size`."""
+        index = cls(grid_bucket_size([bbox for bbox in bboxes if bbox is not None]))
+        for bbox in bboxes:
+            index.append(bbox)
+        return index
+
+    def append(self, bbox: Aabb | None) -> None:
+        """Add ``bbox`` as the next index."""
+        self.boxes.append(None)
+        self._place(len(self.boxes) - 1, bbox)
+
+    def replace(self, idx: int, bbox: Aabb | None) -> None:
+        """Box ``idx`` is now ``bbox``."""
+        old = self.boxes[idx]
+        if old is None:
+            self._unknown.discard(idx)
+        else:
+            self._index.remove(idx, old)
+        self._place(idx, bbox)
+
+    def touching(self, query: Aabb | None, *, skip: int | None = None) -> list[int]:
+        """The indexes of the boxes that touch ``query``, in index order; ``skip`` is left out."""
+        if query is None:
+            return [idx for idx in range(len(self.boxes)) if idx != skip]
+        boxes = self.boxes
+        size = self._index.bucket_size
+        buckets = len(_bucket_range(query.min_x, query.max_x, size)) * len(_bucket_range(query.min_y, query.max_y, size))
+        if buckets >= len(boxes):
+            # A query that spans more buckets than there are boxes: the scan is cheaper.
+            return touching_aabb_indices(boxes, query, skip=skip)
+        found = [
+            idx
+            for idx in cast("list[int]", self._index.query(query))
+            if idx != skip and aabbs_touch(query, boxes[idx])
+        ]
+        found.extend(idx for idx in self._unknown if idx != skip)
+        found.sort()
+        return found
+
+    def _place(self, idx: int, bbox: Aabb | None) -> None:
+        self.boxes[idx] = bbox
+        if bbox is None:
+            self._unknown.add(idx)
+        else:
+            self._index.insert(idx, bbox)
+
+
 def split_circular_interval(start: int, end: int, genome_length: int | None) -> list[Interval]:
     """Split a circular interval into linear pieces for broad-phase indexing."""
     start = int(start)
@@ -396,7 +464,9 @@ __all__ = [
     "candidate_aabb_pairs",
     "candidate_aabb_partners",
     "finite_aabb",
+    "grid_bucket_size",
     "split_circular_interval",
+    "TouchingAabbIndex",
     "touching_aabb_indices",
     "touching_aabb_pairs",
     "union_aabbs",
