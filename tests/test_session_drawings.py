@@ -395,6 +395,19 @@ def test_a_drawing_state_cannot_hold_another_modes_web_files(web_files: dict, fi
         build_session_document(drawings=[SessionDrawingSpec(circular, state={"webFiles": web_files})])
 
 
+@pytest.mark.parametrize(("mode", "own", "other"), [("circular", "cInputType", "lInputType"), ("linear", "lInputType", "cInputType")])
+def test_a_drawing_state_cannot_hold_another_modes_input_type(mode: str, own: str, other: str) -> None:
+    """OV-1889: another mode's input type in ``ui`` is refused by name; the
+    drawing's own is its ``ui.inputType``."""
+
+    request = dict(zip(("circular", "linear"), _requests()))[mode]
+
+    with pytest.raises(ValidationError, match=rf"ui\.{other}\b"):
+        build_session_document(drawings=[SessionDrawingSpec(request, state={"ui": {own: "gff", other: "gb"}})])
+    document = build_session_document(drawings=[SessionDrawingSpec(request, state={"ui": {own: "gff"}})])
+    assert document.to_dict()["drawings"][0]["ui"]["inputType"] == "gff"
+
+
 def test_each_drawing_keeps_its_own_losat_artifacts() -> None:
     def view(mode: str, entries: list) -> dict:
         return {
