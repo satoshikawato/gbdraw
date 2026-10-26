@@ -20,6 +20,7 @@ import pytest
 
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+from tests.utils.session_drawing_view import drawing_view
 from tests.utils.svg_compare import compare_svgs
 
 pytestmark = pytest.mark.browser
@@ -176,8 +177,12 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
     (tmp_path / "history.json").write_text(json.dumps(snapshots), encoding="utf-8")
     with zipfile.ZipFile(archive) as bundle:
         assert bundle.namelist() == ["out.gbdraw-session.json"]
-        session = json.loads(bundle.read("out.gbdraw-session.json"))
-    assert session["version"] == CURRENT_SESSION_VERSION
+        document = json.loads(bundle.read("out.gbdraw-session.json"))
+    assert document["version"] == CURRENT_SESSION_VERSION
+    # A Session 49 of the drawn drawing alone, which it opens (OV-1806).
+    assert [drawing["mode"] for drawing in document["drawings"]] == ["circular"]
+    assert document["ui"]["activeDrawingId"] == document["drawings"][0]["id"]
+    session = drawing_view(document)
     assert session["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert session["renderRequest"] == generated["committed"]["renderRequest"]
     assert session["resources"] == generated["committed"]["resources"]

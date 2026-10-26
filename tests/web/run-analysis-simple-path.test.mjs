@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 globalThis.window = {
   location: { href: 'https://audit.invalid/' },
@@ -898,7 +899,14 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
-  assert.equal(replay.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+  // The exact replay is a Session 49 of the drawn drawing alone, by its ID and name (OV-1806).
+  const drawn = state.activeDrawing();
+  const drawnTab = state.drawingTabs.value.find((tab) => tab.id === drawn.id);
+  assert.deepEqual(replay.drawings.map(({ id, name }) => ({ id, name })), [{ id: drawn.id, name: drawnTab.name }]);
+  assert.equal(replay.ui.activeDrawingId, drawn.id);
+  const replayView = savedDrawingView(replay, drawn.id);
+  assert.equal(replayView.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
+  assert.equal(Object.hasOwn(replay, 'renderRequest'), false);
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
