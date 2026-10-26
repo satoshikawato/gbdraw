@@ -3200,7 +3200,8 @@ Status: active Product authority
   every narrowed track at or above the floor (default 30 px,
   `canvas.circular.track_narrowing_min_px`; narrowing can be switched off with
   `canvas.circular.track_narrowing`); otherwise they keep their widths and the
-  definition is drawn over them with the notice. The definition is never
+  definition is drawn over them, with the notice when its ink touches a drawn
+  track. The definition is never
   wrapped automatically. A name too long for the room is drawn on one line,
   and when its ink touches a drawn track line or area the label-fit warning
   names the record and offers a smaller definition font, narrower inside

@@ -81,14 +81,15 @@ write-up of a release.
   when that clears the definition; otherwise they keep their widths.
   `--no_track_narrowing` (`canvas.circular.track_narrowing = false`) turns the
   narrowing off. A width you set (`--gc_content_width`, `w=`, a Web **Width**)
-  is never narrowed (OV-1853), and the preset rows' widths are Auto widths. A
-  line that still reaches the tracks is drawn on one line over them, and the
-  warning offers a smaller definition font (the size at which every line fits
+  is never narrowed for the definition (OV-1853), and the preset rows' widths
+  are Auto widths. A line that still reaches the tracks is drawn on one line
+  over them; when its ink touches a drawn track, the warning offers a smaller definition font (the size at which every line fits
   on one line), narrower inside tracks (`--center_reserved_radius`, when the
   tracks were not narrowed already; the row says when text still overlaps) and
   a shorter Species or Strain, such as `MjeNMV` for "Marsupenaeus japonicus
   endogenous nimavirus". The `DEFINITION_RESERVED` track failure is gone; an
-  explicit `--center_reserved_radius` still narrows the tracks. In the Web app's **Labels do not fit** dialog, **Edit
+  explicit `--center_reserved_radius` still narrows the tracks as before, a set
+  width included. In the Web app's **Labels do not fit** dialog, **Edit
   Species / Strain…** shows that record's name field, and Cancel reads **Keep
   as drawn** over a drawn figure. A label-fit warning for one record now names
   that record, so records drawn to separate files can be told apart (OV-1836).

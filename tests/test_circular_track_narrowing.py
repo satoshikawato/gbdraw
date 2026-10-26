@@ -28,7 +28,7 @@ from gbdraw.diagrams.circular.presets import (
     circular_radial_plan_for_preset,
     circular_track_slots_from_preset_order,
 )
-from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout, track_layout_reason
+from gbdraw.diagrams.circular.radial_layout import resolve_circular_radial_layout
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import load_default_colors
 from gbdraw.layout.circular import CircularRadialLayout, CircularResolvedSlot
@@ -214,18 +214,47 @@ def test_a_track_narrower_than_the_floor_keeps_its_width() -> None:
 )
 def test_a_typed_width_is_never_narrowed(gc_slots: list[str]) -> None:
     # OV-1853: a width typed on a preset-lane slot was narrowed (to 57.3 px on MjeNMV); one on a custom slot was not.
-    slots = ["features:features", "ticks:ticks", *gc_slots]
-    for band, explicit in ((200.0, False), (170.0, True)):
-        try:
-            layout = _layout(band, slot_specs=slots, center_reserved_radius_explicit=explicit)
-        except ValidationError as error:
-            # An explicit center_reserved_radius that only narrowing could clear names itself (DF-D05).
-            assert explicit
-            assert track_layout_reason(error) == "CENTER_RESERVED"
-            continue
-        inside = [slot for slot in layout.slots if slot.renderer.startswith("dinucleotide")]
-        assert [slot.resolved_width_px for slot in inside] == pytest.approx([74.0, 74.0]), band
-        assert not any(slot.compressed for slot in inside)
+    layout = _layout(200.0, slot_specs=["features:features", "ticks:ticks", *gc_slots])
+    inside = [slot for slot in layout.slots if slot.renderer.startswith("dinucleotide")]
+    assert [slot.resolved_width_px for slot in inside] == pytest.approx([74.0, 74.0])
+    assert not any(slot.compressed for slot in inside)
+
+
+@pytest.mark.parametrize(("band", "dev_width_px"), [(170.0, 68.45), (200.0, 51.8)])
+def test_an_explicit_center_reserved_radius_narrows_typed_lane_widths_as_before(band: float, dev_width_px: float) -> None:
+    # DF-D38: --gc_content_width 74 --gc_skew_width 74 with --center_reserved_radius 170 (or 200) drew on dev, the GC
+    # rows narrowed to 68.45 (51.8) px; the typed-width exemption belongs to rule L's automatic fit only.
+    slots = [
+        "features:features",
+        "ticks:ticks",
+        "gc_content:dinucleotide_content@side=inside,w=74px",
+        "gc_skew:dinucleotide_skew@side=inside,w=74px",
+    ]
+    layout = _layout(band, slot_specs=slots, center_reserved_radius_explicit=True)
+    by_id = _by_id(layout)
+    for slot_id in GC_ROWS:
+        assert by_id[slot_id].compressed, slot_id
+        assert by_id[slot_id].resolved_width_px == pytest.approx(dev_width_px), slot_id
+    assert _inner_edge(layout) >= band - EPS
+
+
+CUSTOM_STACK_SLOTS = [
+    "features:features",
+    "ticks:ticks",
+    "gc_content:dinucleotide_content",
+    "gc_skew:dinucleotide_skew",
+    "at:dinucleotide_skew@nt=AT",
+]
+
+
+def test_turning_narrowing_off_keeps_the_auto_widths_of_a_custom_stack() -> None:
+    # A custom stack's Auto widths narrow for the definition (all three rows at a 180 px band); off keeps them.
+    natural = _layout(None, slot_specs=CUSTOM_STACK_SLOTS)
+    narrowed = _by_id(_layout(180.0, slot_specs=CUSTOM_STACK_SLOTS))
+    assert all(narrowed[slot_id].compressed for slot_id in ("gc_content", "gc_skew", "at"))
+    kept = _layout(180.0, slot_specs=CUSTOM_STACK_SLOTS, overrides={"canvas.circular.track_narrowing": False})
+    assert _geometry(kept) == pytest.approx(_geometry(natural))
+    assert not any(slot.compressed for slot in kept.slots)
 
 
 def test_an_explicit_center_reserved_radius_narrows_auto_widths_below_the_floor() -> None:
@@ -302,6 +331,23 @@ def test_the_mjenmv_name_narrows_the_gc_rows_only_down_to_the_floor(
     assert (_inner_edge(layout) >= float(band.outer_px) - EPS) is narrows
 
 
+def _cli_fit(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> CircularRadialLayout:
+    """The layout of the first definition fit of ``gbdraw circular`` run with ``args``."""
+
+    fits: list[CircularRadialLayout] = []
+    fit = circular_assemble_module._resolve_radial_layout_fitting_definition
+
+    def capture(*fit_args, **kwargs):
+        result = fit(*fit_args, **kwargs)
+        fits.append(result.layout)
+        return result
+
+    monkeypatch.setattr(circular_assemble_module, "_resolve_radial_layout_fitting_definition", capture)
+    monkeypatch.setattr("sys.argv", ["gbdraw", "circular", *args, "-f", "svg"])
+    gbdraw_main()
+    return fits[0]
+
+
 @pytest.mark.parametrize(
     ("width_args", "narrows"),
     [([], True), (["--gc_content_width", "74", "--gc_skew_width", "74"], False)],
@@ -311,28 +357,47 @@ def test_the_cli_width_shortcuts_are_typed_widths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width_args: list[str], narrows: bool
 ) -> None:
     # OV-1853: --gc_content_width and --gc_skew_width write the slots' widths, which the layout never narrows.
-    fits: list[CircularRadialLayout] = []
-    fit = circular_assemble_module._resolve_radial_layout_fitting_definition
-
-    def capture(*args, **kwargs):
-        result = fit(*args, **kwargs)
-        fits.append(result.layout)
-        return result
-
-    monkeypatch.setattr(circular_assemble_module, "_resolve_radial_layout_fitting_definition", capture)
-    monkeypatch.setattr(
-        "sys.argv",
-        [
-            "gbdraw", "circular", "--gbk", str(MJENMV), "--separate_strands", *width_args,
-            "-o", str(tmp_path / "mjenmv"), "-f", "svg",
-        ],
+    by_id = _by_id(
+        _cli_fit(monkeypatch, ["--gbk", str(MJENMV), "--separate_strands", *width_args, "-o", str(tmp_path / "mjenmv")])
     )
-    gbdraw_main()
-    by_id = _by_id(fits[0])
     for slot_id in GC_ROWS:
         assert by_id[slot_id].compressed is narrows, slot_id
         if not narrows:
             assert by_id[slot_id].resolved_width_px == pytest.approx(74.0)
+
+
+@pytest.mark.parametrize(("width_args", "narrows"), [([], True), (["--depth_width", "37"], False)], ids=["auto", "typed"])
+def test_a_typed_depth_width_is_kept_under_rule_l(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width_args: list[str], narrows: bool
+) -> None:
+    # At a 16 pt definition the MjeNMV name narrows the inside rows down to the 30 px floor: the Auto Depth row
+    # (37 px) narrows with them, a typed --depth_width stays.
+    depth = tmp_path / "depth.tsv"
+    depth.write_text("".join(f"LC738868.1\t{position}\t{10 + position % 7}\n" for position in range(1, 306008, 500)))
+    layout = _cli_fit(
+        monkeypatch,
+        [
+            "--gbk", str(MJENMV), "--separate_strands", "--depth_track", str(depth), "--definition_font_size", "16",
+            *width_args, "-o", str(tmp_path / "depth"),
+        ],
+    )
+    row = _by_id(layout)["depth"]
+    assert row.compressed is narrows
+    if not narrows:
+        assert row.resolved_width_px == pytest.approx(37.0)
+    assert _inner_edge(layout) >= float(layout.definition_reserved_band_px.outer_px) - EPS
+
+
+def test_an_explicit_gc_content_radius_is_kept_under_rule_l(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The MjeNMV name's band reaches the GC content row placed at 0.6 of the radius; the row stays there.
+    layout = _cli_fit(
+        monkeypatch,
+        ["--gbk", str(MJENMV), "--separate_strands", "--gc_content_radius", "0.6", "-o", str(tmp_path / "radius")],
+    )
+    row = _by_id(layout)["gc_content"]
+    band = layout.definition_reserved_band_px
+    assert band is not None and float(row.reserved_band_px.inner_px) < float(band.outer_px)
+    assert row.anchor_radius_px == pytest.approx(0.6 * float(layout.axis.radius_px))
 
 
 def test_the_cli_writes_the_narrowing_settings_into_the_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -360,7 +425,36 @@ def test_the_cli_refuses_a_negative_floor(capsys: pytest.CaptureFixture[str], mo
     assert "--track_narrowing_min_px must be a finite number >= 0" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("value", [-1, float("nan"), True])
-def test_the_config_refuses_a_floor_that_is_not_a_nonnegative_number(value: object) -> None:
-    with pytest.raises(ValidationError):
+@pytest.mark.parametrize(("value", "reason"), [(-1, "NONNEGATIVE"), (float("nan"), "FINITE"), (True, "FINITE")])
+def test_the_config_refuses_a_floor_that_is_not_a_nonnegative_number(value: object, reason: str) -> None:
+    with pytest.raises(ValidationError) as caught:
         _config({"canvas.circular.track_narrowing_min_px": value})
+    assert caught.value.diagnostic == {
+        "code": "INPUT_INVALID",
+        "reason": reason,
+        "configPath": "canvas.circular.track_narrowing_min_px",
+    }
+
+
+@pytest.mark.parametrize(
+    ("leaf", "value", "reason"),
+    [("track_narrowing_min_px", -1, "NONNEGATIVE"), ("track_narrowing", "no", "BOOLEAN")],
+)
+def test_a_stored_full_config_with_a_bad_narrowing_leaf_names_it(leaf: str, value: object, reason: str) -> None:
+    raw = load_config_toml("gbdraw.data", "config.toml")
+    raw["canvas"]["circular"][leaf] = value
+    with pytest.raises(ValidationError) as caught:
+        GbdrawConfig.from_dict(raw)
+    assert caught.value.diagnostic == {
+        "code": "INPUT_INVALID",
+        "reason": reason,
+        "configPath": f"canvas.circular.{leaf}",
+    }
+
+
+def test_a_stored_full_config_without_the_narrowing_leaves_takes_the_defaults() -> None:
+    # A Session written before rule L stores a full config without them.
+    raw = load_config_toml("gbdraw.data", "config.toml")
+    del raw["canvas"]["circular"]["track_narrowing"], raw["canvas"]["circular"]["track_narrowing_min_px"]
+    circular = GbdrawConfig.from_dict(raw).canvas.circular
+    assert (circular.track_narrowing, circular.track_narrowing_min_px) == (True, 30.0)

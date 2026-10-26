@@ -29,8 +29,10 @@ smaller definition font, scanned down with the full assembly like the inner
 labels' font, and narrowing the inside tracks, offered when the definition's
 band enters a track's band and no ``center_reserved_radius`` is set. That row
 sets ``center_reserved_radius`` to the band the definition takes on one line
-(PD-OI-097; the tracks never narrow for the definition on their own,
-PD-OI-078). "Over a track" is read two ways: the notice and the rows'
+(PD-OI-097). The tracks narrow for the definition on their own, each Auto
+width down to ``canvas.circular.track_narrowing_min_px`` (PD-OI-078, rule L);
+the narrow row is offered when that did not clear the definition, and its
+radius narrows them below that floor. "Over a track" is read two ways: the notice and the rows'
 verification read the lines against the ink, the narrow row reads the band
 against the tracks' bands. The band is a square extent, not the line boxes'
 corners, so the narrowed figure may still have letters on a track and then

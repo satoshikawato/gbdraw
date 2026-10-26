@@ -199,6 +199,8 @@ class _RadialSlotIntent:
     # The narrowest width (px) an Auto width may take: 0 keeps the readable minimums alone; the "move" pass of rule L
     # sets ``canvas.circular.track_narrowing_min_px`` (infinite with ``track_narrowing`` off).
     narrowing_floor_px: float = 0.0
+    # An explicit center_reserved_radius narrows a typed width on a preset lane, as before rule L (DF-D38).
+    typed_lane_width_narrows: bool = False
 
 
 def _cannot_fit_diagnostic(
@@ -1695,11 +1697,17 @@ def _linear_scales_from_1_to_min(min_scale: float, *, steps: int = 8) -> list[fl
     return [1.0 - ((1.0 - lower) * (idx / float(steps))) for idx in range(0, steps + 1)]
 
 
+def _lane_width_narrows(intent: _RadialSlotIntent) -> bool:
+    """Whether a row on a preset lane may narrow: an Auto width, or any width under an explicit center_reserved_radius."""
+
+    return intent.compress or intent.typed_lane_width_narrows
+
+
 def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
     min_scales = [
         _min_readable_preferred_width_px(intent) / intent.width_px
         for intent in intents
-        if intent.compress and intent.width_px > LAYOUT_EPSILON
+        if _lane_width_narrows(intent) and intent.width_px > LAYOUT_EPSILON
     ]
     if not min_scales:
         return [1.0]
@@ -1707,12 +1715,12 @@ def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[
 
 
 def _scaled_preferred_width(intent: _RadialSlotIntent, scale: float) -> float:
-    """A row's width at ``scale``; a typed width (``compress`` off) is never narrowed (OV-1853)."""
+    """A row's width at ``scale``; rule L never narrows a typed width (``compress`` off, OV-1853)."""
 
     width = max(0.0, float(intent.width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
-    if not intent.compress:
+    if not _lane_width_narrows(intent):
         return width
     return max(_min_readable_preferred_width_px(intent), width * float(scale))
 
@@ -2063,12 +2071,12 @@ def _minimum_future_inside_width_px(
     depth_config: DepthAxisSource | None,
 ) -> float:
     width = max(0.0, float(intent.width_px))
-    if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS and intent.compress:
-        width = (
-            _min_readable_preferred_width_px(intent)
-            if intent.placement_policy == "preferred"
-            else _min_readable_numeric_width_px(intent)
-        )
+    if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
+        if intent.placement_policy == "preferred":
+            if _lane_width_narrows(intent):
+                width = _min_readable_preferred_width_px(intent)
+        elif intent.compress:
+            width = _min_readable_numeric_width_px(intent)
 
     if intent.renderer in {"features", "ticks", "depth"}:
         resolved = _measure_radial_slot(
@@ -2500,6 +2508,8 @@ def _resolve_circular_radial_layout(
         circular = cfg.canvas.circular
         floor_px = float(circular.track_narrowing_min_px) if circular.track_narrowing else math.inf
         intents = [replace(intent, narrowing_floor_px=floor_px) for intent in intents]
+    elif center_reserved_radius_explicit:
+        intents = [replace(intent, typed_lane_width_narrows=True) for intent in intents]
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
     intent_by_index = {intent.slot_index: intent for intent in intents}
     movable_by_index = {

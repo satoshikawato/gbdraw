@@ -71,10 +71,10 @@ at the preset's radius for that row when it fits, otherwise packed below the
 row above it, so a custom stack that repeats the default stack draws the same
 figure. A stack that adds an inside row the preset does not have, such as an AT
 skew row or an inside annotation slot, packs its inside rows from the feature
-track toward the center. The Auto widths of such a stack do not depend on the
-definition text, so a record draws these rows in the same place on a
-Multi-Record Canvas, where it shows only the record summary, or with a plot
-title. A slot with a radius is drawn at that radius, and the
+track toward the center. The Auto widths of such a stack follow the
+full definition the record draws alone, so a record draws these rows in the
+same place on a Multi-Record Canvas, where it shows only the record summary, or
+with a plot title. A slot with a radius is drawn at that radius, and the
 other rows on its side keep the stack order around it: rows before it are
 placed farther from the center, rows after it closer. When the inside rows do
 not fit, numeric rows with an Auto width are compressed together as in an Auto
@@ -97,9 +97,10 @@ less than `canvas.circular.track_narrowing_min_px` (`--track_narrowing_min_px`,
 default 30 px), but only when that clears the definition; otherwise the tracks
 keep their widths. A width you set (`--gc_content_width`, `--gc_skew_width`,
 `--depth_width`, `--conservation_ring_width`, `w=` on a track slot, or a
-**Width** in the Web app), a track already narrower than that floor, and a
-track placed at an explicit radius are never narrowed for the definition, though
-a track with a set width may move outward. `--no_track_narrowing`
+**Width** in the Web app) and a track already narrower than that floor are
+never narrowed for the definition, though a track with a set width may move
+outward. A track placed at an explicit radius keeps that radius; its width
+narrows with the others when it is Auto. `--no_track_narrowing`
 (`canvas.circular.track_narrowing = false`) turns the narrowing off; the tracks
 still move outward. The definition's lines are never
 wrapped: each line (an Auto organism name is drawn as a taxon line and a
@@ -110,7 +111,9 @@ paints (see [Labels that do not fit](#labels-that-do-not-fit)). To keep a long
 name clear of the tracks, type a shorter one in **Species**, for example the
 abbreviation `MjeNMV` for "Marsupenaeus japonicus endogenous nimavirus". An
 explicit **Center Reserved Radius** (`--center_reserved_radius`) reserves that
-radius: the inside tracks are placed outside it and narrowed when needed. If they still do not fit, the error names the slot that
+radius: the inside tracks are placed outside it and narrowed when needed, a
+set width included, below `--track_narrowing_min_px` and also with
+`--no_track_narrowing`. If they still do not fit, the error names the slot that
 could not be placed and that radius; set a smaller radius or place tracks
 outside. When GC content or GC
 skew tracks lie inside the slot that could not be placed, the error also names

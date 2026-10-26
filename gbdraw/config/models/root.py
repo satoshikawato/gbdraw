@@ -29,8 +29,10 @@ _STYLE_LEAF_DOMAINS = (
 )
 # D-04: None keeps the automatic interval. A request (a Session, the Web) that
 # carries <= 0 is read as None before it reaches here (session_request_codec.py).
+# The Circular narrowing floor (PD-OI-078, rule L) is a width in px.
 _EXACT_LEAF_DOMAINS = {
     "objects.scale.interval": ("POSITIVE_INTEGER_OR_AUTO", "expected a positive integer or None"),
+    "canvas.circular.track_narrowing_min_px": ("NONNEGATIVE", "expected a finite number of zero or greater"),
 }
 # P10c (D-13, D-14): text leaves written into SVG attributes. A color leaf is a
 # ``fill``, ``stroke`` or ``*_color`` field (``is_user_color``, any letter case);
@@ -66,7 +68,8 @@ _KEYWORD_LEAF_DOMAINS: dict[str, tuple[str, Callable[[str], bool]]] = {
 def style_leaf_domain(path: str) -> tuple[str, str] | None:
     """Return ``(reason, requirement)`` for a constrained SVG style leaf.
 
-    Numeric leaves: font sizes, stroke widths, the scale interval. Text leaves:
+    Numeric leaves: font sizes, stroke widths, the scale interval, the Circular
+    narrowing floor. Text leaves:
     colors (``COLOR``) and the SVG keywords font-weight, text-anchor,
     dominant-baseline, and a non-empty font-family (``KEYWORD``).
     """
