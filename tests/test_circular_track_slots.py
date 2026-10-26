@@ -2910,7 +2910,7 @@ def _gallery_session_drawing(*edits: Callable[[dict[str, Any]], None]) -> tuple[
 
 def _with_plot_title(plot_title: str) -> Callable[[dict[str, Any]], None]:
     def edit(session: dict[str, Any]) -> None:
-        options = session["renderRequest"]["diagramOptions"]
+        options = session["drawings"][0]["renderRequest"]["diagramOptions"]
         options["plotTitle"] = plot_title
         options["output"]["plotTitlePosition"] = "top"
 
@@ -2922,7 +2922,7 @@ def _on_a_two_record_canvas(session: dict[str, Any]) -> None:
 
     import copy
 
-    request = session["renderRequest"]
+    request = session["drawings"][0]["renderRequest"]
     first = request["records"][0]
     second = copy.deepcopy(first)
     second["recordKey"] = "record-2"
@@ -2943,13 +2943,13 @@ def _on_a_two_record_canvas(session: dict[str, Any]) -> None:
 
 
 def _with_auto_widths(session: dict[str, Any]) -> None:
-    for slot in session["renderRequest"]["diagramOptions"]["tracks"]["circularTrackSlots"]:
+    for slot in session["drawings"][0]["renderRequest"]["diagramOptions"]["tracks"]["circularTrackSlots"]:
         if slot["renderer"] in {"dinucleotide_content", "dinucleotide_skew"}:
             slot["width"] = None
 
 
 def _with_default_stack(session: dict[str, Any]) -> None:
-    tracks = session["renderRequest"]["diagramOptions"]["tracks"]
+    tracks = session["drawings"][0]["renderRequest"]["diagramOptions"]["tracks"]
     tracks["circularTrackSlots"] = None
     tracks["circularTrackAxisIndex"] = None
 

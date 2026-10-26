@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 import tools.capture_gallery_tutorial_screenshots as capture_tool
+from tests.utils.session_drawing_view import drawing_view
 from tools.capture_gallery_tutorial_screenshots import (
     DEFAULT_MAX_FILE_SIZE_KB,
     DEFAULT_MAX_IMAGE_HEIGHT,
@@ -344,7 +345,7 @@ def test_bgc_session_holds_the_mibig_files_with_record_reverse_complement() -> N
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     records = session["renderRequest"]["records"]
     assert [record["presentation"]["reverseComplement"] for record in records] == [
         False,
@@ -369,7 +370,7 @@ def test_bgc_finish_step_types_the_arrow_geometry_of_the_published_figure() -> N
     sample = load_ready_examples("BGC0000708-BGC0000713")[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     published = session["renderRequest"]["diagramOptions"]["configOverrides"]
     step = _load_tutorial(sample)["manualSteps"][9]
     typed = {action["selector"]: action["value"] for action in step["replay"] if action["type"] == "fill"}
@@ -388,7 +389,7 @@ def test_vibrio_capture_keeps_publication_comparisons_active() -> None:
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
     with gzip.open(session_path, "rt", encoding="utf-8") as handle:
-        session = json.load(handle)
+        session = drawing_view(json.load(handle))
     assert session["modes"]["linear"]["config"]["linearComparisonPlan"] == {
         "mode": "adjacent",
         "defaultSource": "losat",
@@ -602,7 +603,7 @@ def test_basic_gallery_capture_session_contains_the_named_record(
     sample = load_ready_examples(example_id)[0]
     session_path = resolve_gallery_reference(str(sample["session"]))
     assert session_path is not None
-    session = json.loads(session_path.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     resource = session["resources"]["record-1-genbank"]
 
     assert resource["encoding"] == "base64"

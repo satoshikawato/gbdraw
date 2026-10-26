@@ -4379,18 +4379,19 @@ def test_session_document_to_dict_returns_a_plain_mutable_manifest() -> None:
 
     data = document.to_dict()
 
-    manifest = data["proteinIdentityManifest"]
+    manifest = drawing_view(data)["proteinIdentityManifest"]
     assert _container_types(manifest) == {dict, list}
     binding = next(iter(manifest["recordInstances"].values()))
     binding["runtimeIds"].clear()
     manifest["extra"] = 1
-    assert document.to_dict()["proteinIdentityManifest"] != manifest
+    assert drawing_view(document.to_dict())["proteinIdentityManifest"] != manifest
 
 
 def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_writer() -> None:
     from gbdraw.api.request_render import CurrentRequestArtifacts
 
-    payload = json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))
+    # The drawing's view is the 48 layout this case exercises (a 49 holds no top-level manifest).
+    payload = {**drawing_view(json.loads(_PROTEIN_GALLERY_SESSION.read_text(encoding="utf-8"))), "version": 48}
     raw = copy.deepcopy(payload["proteinIdentityManifest"])
     protein = next(iter(raw["proteinSets"].values()))["proteins"][0]
     protein["locationParts"] = tuple(tuple(part) for part in protein["locationParts"])

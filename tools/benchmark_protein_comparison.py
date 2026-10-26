@@ -272,7 +272,10 @@ def synthetic(pc, name, seed):
 def gallery_input(root, name, pc):
     from Bio import SeqIO
     path = root / f"gbdraw/web/gallery/sessions/{name}.gbdraw-session.json.gz"
-    session = json.loads(gzip.decompress(path.read_bytes()))
+    from gbdraw.session_drawings import _drawing_view
+    document = json.loads(gzip.decompress(path.read_bytes()))
+    (drawing,) = document["drawings"]  # a Gallery Session holds one drawing
+    session = _drawing_view(document, drawing)
     specs = session["renderRequest"]["records"]
     records, source_hashes, parsed_sources = [], {}, {}
     for spec in specs:

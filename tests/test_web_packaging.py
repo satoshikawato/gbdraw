@@ -21,6 +21,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+from tests.utils.session_drawing_view import drawing_view
 from PIL import Image
 from tests.utils.web_markup import read_english_index
 
@@ -922,7 +924,7 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
 
     for session_name in GALLERY_SESSION_FILES:
         session_path = GALLERY_ROOT / "sessions" / session_name
-        session = load_cached_gallery_session(session_path)
+        session = drawing_view(load_cached_gallery_session(session_path))
         results = session.get("results", [])
         editor_state = session.get("editorState", {})
         feature_catalog = editor_state.get("featureCatalog", {})
@@ -1056,9 +1058,9 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
 def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
-    session = load_cached_gallery_session(
+    session = drawing_view(load_cached_gallery_session(
         GALLERY_ROOT / "sessions" / "tobacco-chloroplast.gbdraw-session.json"
-    )
+    ))
     annotation_sets = (
         session.get("renderRequest", {})
         .get("diagramOptions", {})
@@ -1093,9 +1095,9 @@ def test_tobacco_gallery_session_keeps_chloroplast_region_annotations(
 def test_vnig_gallery_session_multirecord_positions_are_restoreable(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
-    session = load_cached_gallery_session(
+    session = drawing_view(load_cached_gallery_session(
         GALLERY_ROOT / "sessions" / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
-    )
+    ))
     expected_positions = ["#1@1", "#2@1", "#3@2", "#4@2", "#5@2", "#6@2"]
     config_positions = (
         session.get("config", {}).get("adv", {}).get("multi_record_positions")

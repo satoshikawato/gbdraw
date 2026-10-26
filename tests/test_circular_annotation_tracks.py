@@ -11,6 +11,7 @@ from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 import pytest
+from tests.utils.session_drawing_view import drawing_view
 from xml.etree import ElementTree
 
 from gbdraw.api import (
@@ -970,6 +971,7 @@ def test_circular_annotation_labels_of_the_tobacco_gallery_figure_keep_their_lab
         (Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / "tobacco-chloroplast.gbdraw-session.json")
         .read_text(encoding="utf-8")
     )
+    session = drawing_view(session)
     drawings: list = []
     original = api_render.write_svg_document
 

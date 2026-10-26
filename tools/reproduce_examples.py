@@ -469,7 +469,10 @@ class Reproducer:
             return True
 
         session = json.loads(session_path.read_text(encoding="utf-8"))
-        request = session.get("renderRequest")
+        # A Session 49 holds the request in its drawing; the variant edits it in place.
+        active_id = session.get("ui", {}).get("activeDrawingId")
+        drawings = [d for d in session.get("drawings", []) if d.get("id") == active_id]
+        request = drawings[0].get("renderRequest") if len(drawings) == 1 else None
         resources = session.get("resources")
         if not isinstance(request, dict) or not isinstance(resources, dict):
             raise RuntimeError(

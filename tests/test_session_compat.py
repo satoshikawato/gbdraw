@@ -48,7 +48,7 @@ from gbdraw.api.session_compat import (
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
-from tests.utils.session_drawing_view import build_mode_scoped_session_document, build_mode_scoped_session_json, drawing_view
+from tests.utils.session_drawing_view import build_mode_scoped_session_document, build_mode_scoped_session_json, drawing_view, session_view
 from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
@@ -1578,10 +1578,12 @@ def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
 def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
     tmp_path: Path, make_session: Any
 ) -> None:
-    source = make_session(tmp_path)
+    written = make_session(tmp_path)
+    # The Web writes a Session 49 (one drawing); the Python helper builds the 48 view.
+    source = session_view(written)
     assert source["renderRequest"]["mode"] == "circular"
     source_path = tmp_path / "source.gbdraw-session.json"
-    source_path.write_text(json.dumps(source), encoding="utf-8")
+    source_path.write_text(json.dumps(written), encoding="utf-8")
     sidecar = tmp_path / "resaved.gbdraw-session.json"
 
     circular_main(
