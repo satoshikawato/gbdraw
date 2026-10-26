@@ -180,7 +180,7 @@ const DOCUMENT_KEYS = [
   'selectedOrthogroupAlignmentFeature', 'circularRecordList', 'paletteInstantPreviewEnabled', 'losatExecution',
   'richFeaturePopup', 'appliedPaletteName', 'appliedPaletteColors', 'downloadDpi', 'featureCatalog',
   'biologicalFeatures', 'extractedFeatures', 'featureRecordIds', 'selectedFeatureRecordIdx', 'autoLabelReflowEnabled',
-  'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
+  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition',
   'featurePanelTab', 'lastRunInfo', 'zoom', 'canvasPan', 'displayedResultMetadata', 'activeDrawing',
   // What Load reports and the Result artifacts it restores.
   'errorLog', 'comparisonWarnings', 'annotationWarnings', 'featureIdentityNotices', 'originalLegendOrder',

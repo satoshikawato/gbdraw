@@ -30,7 +30,7 @@ const SWAPPED = [
   'results', 'selectedResultIndex', 'featureCatalog', 'extractedFeatures', 'featureEditorStatus', 'biologicalFeatures',
   'featureRecordIds', 'orthogroups', 'featureOrthogroupIndex', 'collinearGroups', 'trackSlotResolvedGeometry',
   'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings', 'labelFitReports', 'lastRunInfo', 'pairwiseMatchFactors',
-  'editableLabels', 'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas',
+  'editableLabels', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
   'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors',
   'similarityAlignmentResetReceipt', 'originalLegendColors', 'originalSvgStroke'
 ];
@@ -60,13 +60,14 @@ const fillCircularArtifact = async () => {
     featureIdentityNotices: [{ status: 'dormant' }], comparisonWarnings: [{ code: 'c' }],
     labelFitReports: [{ resultIndex: 0, resultName: 'a.svg', report: { drawn: true }, rowToken: null }],
     lastRunInfo: { invocation: { mode: 'circular' } }, pairwiseMatchFactors: { p1: 1.5 },
-    editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right', generatedMode: 'circular',
+    editableLabels: [{ key: 'l1' }], generatedLegendPosition: 'right',
     generatedMultiRecordCanvas: true, generatedCircularPlotTitlePosition: 'top',
     appliedPaletteName: 'tableau', appliedPaletteColors: { CDS: '#111111' },
     similarityAlignmentResetReceipt: null,
     originalLegendColors: { CDS: '#111111' }, originalSvgStroke: { color: '#000000', width: 1 }
   };
   Object.entries(values).forEach(([key, value]) => { state[key].value = value; });
+  state.generatedDrawingId.value = modeDrawing(state, 'circular').id; // the displayed artifact is Circular's
   const kept = {
     pendingPaletteName: 'pending', pendingPaletteColors: { CDS: '#222222' }, losatCache: new Map([['k', {}]]),
     losatDerivedCache: new Map([['d', {}]]), losatCacheInfo: [{ edgeKey: 'e' }],
@@ -102,7 +103,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.deepEqual(state.results.value, []);
   assert.equal(state.selectedResultIndex.value, 0);
   assert.equal(state.featureCatalog.value, null);
-  assert.equal(state.generatedMode.value, 'linear');
+  assert.equal(state.generatedDrawingId.value, 'linear');
   assert.equal(canonicalRenderArtifactOwner.capture().committedCanonicalSession, null);
   assert.equal(state.matchSequenceRegistry.values().length, 0);
   // An empty slot keeps the applied palette: it has no Result to project.
@@ -125,7 +126,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   // The Linear slot captured while empty installs as empty again.
   snapshots.installArtifactSlot(linear, { drawing: modeDrawing(state, 'linear') });
   assert.deepEqual(state.results.value, []);
-  assert.equal(state.generatedMode.value, 'linear');
+  assert.equal(state.generatedDrawingId.value, 'linear');
 });
 
 test('installing a slot of another drawing is refused', async () => {
@@ -187,7 +188,7 @@ test('a value of a drawing\'s artifact is read from the shown one, or from the s
   const circularResult = { name: 'circular.svg' };
   const kept = createArtifactSlot({ drawing: modeDrawing(state, 'linear'), values: { results: [otherLinearResult, linearResult], selectedResultIndex: 1 } });
   assert.equal(kept.drawingId, 'linear');
-  assert.equal(kept.values.generatedMode, modeDrawing(state, 'linear').mode, 'an unset value is the empty slot\'s of the drawing\'s mode');
+  assert.equal(Object.hasOwn(kept.values, 'generatedMode'), false, 'the slot names its drawing by ID only');
   const slots = createArtifactSlotStore();
   slots.replaceLoaded([kept]);
   /** @param {'circular' | 'linear'} id @param {'circular' | 'linear'} shownId @param {unknown} shown */

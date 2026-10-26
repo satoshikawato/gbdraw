@@ -373,6 +373,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  * @typedef {Omit<FallbackUiData, 'selectedResultIndex' | 'layoutPreferences'> & {
  *   losatExecution?: unknown, featurePanelTab?: unknown,
  *   circularPlotTitlePosition?: unknown, zoom?: unknown, canvasPan?: OffsetData | null
+ *   generatedDrawingId?: DrawingId
  * }} SavedUiFields
  */
 /**
@@ -3061,7 +3062,6 @@ const buildLoadedArtifactSlot = (set, {
       featureIdentityNotices: cloneJsonData(runMetadata.featureIdentityNotices || []),
       comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
       generatedLegendPosition: generatedLegend.value,
-      generatedMode: mode,
       generatedMultiRecordCanvas: truthy(ui.generatedMultiRecordCanvas).value,
       generatedCircularPlotTitlePosition: readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value,
       appliedPaletteName: String(ui.appliedPaletteName || 'default'),
@@ -5203,7 +5203,6 @@ const resetSessionProject = () => {
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
-  state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
   state.generatedCircularPlotTitlePosition.value = 'none';
@@ -5234,7 +5233,7 @@ const buildProjectUiData = () => ({
   mode: state.mode.value,
   selectedResultIndex: state.selectedResultIndex.value,
   generatedLegendPosition: state.generatedLegendPosition.value,
-  generatedMode: state.generatedMode.value,
+  generatedDrawingId: state.generatedDrawingId.value,
   generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
   generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
     state.generatedCircularPlotTitlePosition.value
@@ -5259,7 +5258,7 @@ const buildProjectUiData = () => ({
 /** @param {DrawingState} drawing */
 export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
   const {
-    title, mode, selectedResultIndex, generatedLegendPosition, generatedMode, generatedMultiRecordCanvas,
+    title, mode, selectedResultIndex, generatedLegendPosition, generatedDrawingId, generatedMultiRecordCanvas,
     generatedCircularPlotTitlePosition, featurePanelTab, downloadDpi, autoLabelReflow, paletteInstantPreviewEnabled,
     losatExecution, appliedPaletteName, appliedPaletteColors, legendCurrentOffset, diagramOffset, lengthBarUserOffset,
     plotTitleUserOffset
@@ -5270,7 +5269,7 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
     selectedResultIndex,
     generatedLegendPosition,
-    generatedMode,
+    generatedDrawingId,
     generatedMultiRecordCanvas,
     generatedCircularPlotTitlePosition,
     layoutPreferences: cloneJsonData(drawing.layoutPreferences),
@@ -5349,10 +5348,10 @@ export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = 
  * @param {{ restorePreviewNavigation?: boolean }} [options]
  */
 const applyShownResultUiData = (ui, { restorePreviewNavigation = true } = {}) => {
-  if (ui.generatedMode) state.generatedMode.value = ui.generatedMode === 'linear' ? 'linear' : 'circular';
+  if (ui.generatedDrawingId) state.generatedDrawingId.value = ui.generatedDrawingId;
   if (ui.generatedLegendPosition) {
     state.generatedLegendPosition.value = legendPositionOrDefault(
-      ui.generatedLegendPosition, state.generatedMode.value
+      ui.generatedLegendPosition, state.drawingOf(state.generatedDrawingId.value).mode
     );
   }
   if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
@@ -7004,7 +7003,7 @@ const importSessionDocument = async (e, options = {}) => {
         ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled
     );
     state.featurePanelTab.value = readFeaturePanelTab(ui.featurePanelTab).value;
-    state.generatedMode.value = generatedMode;
+    state.generatedDrawingId.value = committedSetDrawingId;
     if (generatedLegend) state.generatedLegendPosition.value = generatedLegend.value;
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
     state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value;

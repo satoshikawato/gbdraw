@@ -3666,8 +3666,7 @@ for (const previousSuppressed of [false, true]) {
 }
 
 // A Generate handle restores its owner set into the drawing that owns the
-// handle (`handle.drawingId`), not into a drawing named by the owner set's
-// `generatedMode`: a handle without that key keeps its drawing.
+// handle (`handle.drawingId`): the owner set names no drawing or mode.
 {
   const drawingFixture = (id) => ({
     id, mode: id, manualSpecificRules: [], pendingPaletteName: ref(''), pendingPaletteColors: ref({})
@@ -3675,17 +3674,53 @@ for (const previousSuppressed of [false, true]) {
   const circular = drawingFixture('circular');
   const linear = drawingFixture('linear');
   const state = withModeDrawings({
-    mode: ref('linear'), results: ref([]), generatedMode: ref(null), semanticFileWatchersSuppressed: ref(false),
+    mode: ref('linear'), results: ref([]), semanticFileWatchersSuppressed: ref(false),
     files: {}, cardFiles: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
   }, { circular, linear });
   const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
   const rule = { feat: 'CDS', qual: 'product', val: 'kept', color: '#123456', cap: 'Kept' };
   linear.manualSpecificRules.push(rule);
   const handle = snapshots.captureGeneratedArtifactHandle(state.drawingOf('linear'));
-  assert.equal(handle.ownerSet.generatedMode, null);
+  assert.equal(Object.hasOwn(handle.ownerSet, 'generatedMode'), false);
   assert.deepEqual(handle.ownerSet.specificRules, [rule], 'the handle holds the rules of its drawing');
   linear.manualSpecificRules.splice(0);
   await snapshots.restoreGeneratedArtifactHandle(handle);
   assert.deepEqual([linear.manualSpecificRules, circular.manualSpecificRules], [[rule], []]);
   console.log('history owner set drawing tests passed');
+}
+
+// S6: the displayed Result names its drawing by ID. Two drawings share a mode
+// (`linear`, `linear-2`); the Result of `linear-2`, installed or restored by
+// Undo/Redo while another drawing is shown, stays `linear-2`'s, never the
+// first drawing of its mode.
+{
+  const { createArtifactSlot } = await import(pathToFileURL(join(tempDir, 'services', 'artifact-slot.js')));
+  const drawingFixture = (id, mode) => ({
+    id, mode, manualSpecificRules: [], pendingPaletteName: ref(''), pendingPaletteColors: ref({})
+  });
+  const circular = drawingFixture('circular', 'circular');
+  const linear = drawingFixture('linear', 'linear');
+  const linear2 = drawingFixture('linear-2', 'linear');
+  const state = withModeDrawings({
+    mode: ref('circular'), results: ref([]), selectedResultIndex: ref(0), semanticFileWatchersSuppressed: ref(false),
+    files: {}, cardFiles: {}, linearSeqs: [], linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
+  }, { circular, linear });
+  withModeDrawings({}, { circular: linear2, linear: linear2 }); // gives linear-2 its slice handles
+  const byId = new Map([circular, linear, linear2].map((drawing) => [drawing.id, drawing]));
+  Object.defineProperties(state, {
+    drawingList: { value: () => [...byId.values()], configurable: true },
+    drawingOf: { value: (id) => { if (!byId.has(id)) throw new Error(`Unknown drawing ${id}`); return byId.get(id); }, configurable: true }
+  });
+  const snapshots = createHistorySnapshotService({ state, fileStore: createInputFileStore(), currentResults: () => state.results.value, nextTick: async () => {} });
+  const result = { svg: '<svg id="linear-2"/>' };
+  snapshots.installArtifactSlot(createArtifactSlot({ drawing: linear2, values: { results: [result] } }), { drawing: linear2 });
+  assert.equal(snapshots.displayedArtifactDrawing().id, 'linear-2', 'an installed slot names its drawing');
+  assert.equal(snapshots.captureArtifactSlot().drawingId, 'linear-2', 'the capture keeps it under that drawing');
+  const handle = snapshots.captureGeneratedArtifactHandle(linear2);
+  snapshots.installArtifactSlot(null, { drawing: linear });
+  assert.equal(snapshots.displayedArtifactDrawing().id, 'linear');
+  await snapshots.restoreGeneratedArtifactHandle(handle);
+  assert.equal(snapshots.displayedArtifactDrawing().id, 'linear-2', 'Undo/Redo restores the Result of linear-2');
+  assert.deepEqual(state.results.value, [result]);
+  console.log('history displayed Result drawing ID tests passed');
 }

@@ -196,7 +196,6 @@ const editedIntentPartOf = (path, value) => (
  *   lInputType?: unknown,
  *   downloadDpi?: unknown,
  *   generatedLegendPosition?: unknown,
- *   generatedMode?: unknown,
  *   generatedMultiRecordCanvas?: unknown,
  *   generatedCircularPlotTitlePosition?: unknown,
  *   autoLabelReflow?: unknown,
@@ -313,7 +312,7 @@ const buildUiIntentData = (ui, drawing) => {
   delete intent.mode;
   delete intent[drawing.mode === 'linear' ? 'cInputType' : 'lInputType'];
   delete intent.generatedLegendPosition;
-  delete intent.generatedMode;
+  delete intent.generatedDrawingId;
   delete intent.generatedMultiRecordCanvas;
   delete intent.generatedCircularPlotTitlePosition;
   delete intent.selectedResultIndex;
@@ -573,7 +572,6 @@ const buildFallbackUiStateData = (state, drawing) => ({
   downloadDpi: getRef(state.downloadDpi, 300),
   canvasPadding: CANVAS_SLICE.capture(drawing.slices.canvas).canvasPadding,
   generatedLegendPosition: getRef(state.generatedLegendPosition, 'left'),
-  generatedMode: getRef(state.generatedMode, 'circular'),
   generatedMultiRecordCanvas: Boolean(getRef(state.generatedMultiRecordCanvas, false)),
   generatedCircularPlotTitlePosition: getRef(state.generatedCircularPlotTitlePosition, 'none'),
   autoLabelReflow: Boolean(getRef(state.autoLabelReflowEnabled, false)),
@@ -615,7 +613,6 @@ const applyFallbackUiStateData = (state, drawing, ui = {}) => {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
   if (ui.generatedLegendPosition) setRef(state.generatedLegendPosition, ui.generatedLegendPosition);
-  if (ui.generatedMode) setRef(state.generatedMode, ui.generatedMode);
   if (Object.prototype.hasOwnProperty.call(ui, 'generatedMultiRecordCanvas')) {
     setRef(state.generatedMultiRecordCanvas, Boolean(ui.generatedMultiRecordCanvas));
   }
@@ -987,23 +984,12 @@ export const createHistorySnapshotService = ({
     throw new Error('createHistorySnapshotService requires state, fileStore, and currentResults.');
   }
 
-  // A generated artifact holds the settings and edits of the drawing of its
-  // mode (`generatedMode`, Circular when unset): the one reading of that mode.
-  /**
-   * @param {unknown} generatedMode
-   * @returns {D}
-   */
-  const drawingOfGeneratedMode = (generatedMode) => state.drawingOfMode(generatedMode === 'linear' ? 'linear' : 'circular');
-  // The drawing the displayed artifact belongs to: the shown drawing when it
-  // is of the artifact's mode (`generatedMode`), else the drawing of that mode
-  // (after a Load of a Session with no Result whose request mode is not its
-  // `ui.mode`). A second drawing of a mode keeps its own artifact (OV-1672).
-  // Every capture of the displayed artifact names its drawing so.
-  const displayedArtifactDrawing = () => {
-    const ofMode = drawingOfGeneratedMode(getGeneratedArtifactRef(state.generatedMode, null));
-    return state.drawingList().find((drawing) => drawing.id === state.activeDrawingId?.value && drawing.mode === ofMode.mode)
-      ?? ofMode;
-  };
+  // The drawing the displayed artifact belongs to, by ID (S6,
+  // `state.generatedDrawingId`): each install of an artifact writes it (a slot,
+  // a History handle, a Generate commit, Load). Every capture of the
+  // displayed artifact names its drawing so.
+  /** @returns {D} */
+  const displayedArtifactDrawing = () => state.drawingOf(state.generatedDrawingId.value);
 
   /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
@@ -1128,7 +1114,6 @@ export const createHistorySnapshotService = ({
       ),
       editableLabels: toRaw(getGeneratedArtifactRef(state.editableLabels, null)),
       generatedLegendPosition: getGeneratedArtifactRef(state.generatedLegendPosition, null),
-      generatedMode: getGeneratedArtifactRef(state.generatedMode, null),
       generatedMultiRecordCanvas: getGeneratedArtifactRef(
         state.generatedMultiRecordCanvas,
         false
@@ -1222,7 +1207,7 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.pairwiseMatchFactors, ownerSet.pairwiseMatchFactors || {});
     setGeneratedArtifactRef(state.editableLabels, ownerSet.editableLabels || []);
     setGeneratedArtifactRef(state.generatedLegendPosition, ownerSet.generatedLegendPosition);
-    setGeneratedArtifactRef(state.generatedMode, ownerSet.generatedMode);
+    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
     setGeneratedArtifactRef(
       state.generatedMultiRecordCanvas,
       Boolean(ownerSet.generatedMultiRecordCanvas)
@@ -1293,6 +1278,7 @@ export const createHistorySnapshotService = ({
       setGeneratedArtifactRef(state[key], slot?.values[key]
         ?? ARTIFACT_SLOT_EMPTY[key](drawing.mode, getGeneratedArtifactRef(state[key], null)));
     });
+    setGeneratedArtifactRef(state.generatedDrawingId, drawing.id);
     if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
     else state.matchSequenceRegistry?.reset?.();
     generatedArtifactRuntimeOwner?.restore?.(slot?.runtimeState ?? null, { ui });
@@ -1374,7 +1360,6 @@ export const createHistorySnapshotService = ({
       'pairwiseMatchFactors',
       'editableLabels',
       'generatedLegendPosition',
-      'generatedMode',
       'generatedMultiRecordCanvas',
       'generatedCircularPlotTitlePosition'
     ].every((key) => expected[key] === ownerSet[key]);
@@ -1386,7 +1371,7 @@ export const createHistorySnapshotService = ({
       zoom: _zoom,
       canvasPan: _canvasPan,
       generatedLegendPosition: _generatedLegendPosition,
-      generatedMode: _generatedMode,
+      generatedDrawingId: _generatedDrawingId,
       generatedMultiRecordCanvas: _generatedMultiRecordCanvas,
       generatedCircularPlotTitlePosition: _generatedCircularPlotTitlePosition,
       ...ui
@@ -1622,7 +1607,7 @@ export const createHistorySnapshotService = ({
       const boundedUi = withoutSessionUi(ui);
       [
         'generatedLegendPosition',
-        'generatedMode',
+        'generatedDrawingId',
         'generatedMultiRecordCanvas',
         'generatedCircularPlotTitlePosition',
         'appliedPaletteName',

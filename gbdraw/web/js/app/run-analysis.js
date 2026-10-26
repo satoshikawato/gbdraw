@@ -5169,10 +5169,9 @@ export const createRunAnalysis = ({
         pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
         editableLabels: [],
         generatedLegendPosition: drawing.form.legend,
-        generatedMode: drawing.mode,
         generatedMultiRecordCanvas:
-          mode.value === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
-        generatedCircularPlotTitlePosition: mode.value === 'circular'
+          drawing.mode === 'circular' ? Boolean(drawing.form.multi_record_canvas) : false,
+        generatedCircularPlotTitlePosition: drawing.mode === 'circular'
           ? normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position)
           : currentOwnerSet.generatedCircularPlotTitlePosition,
         appliedPaletteName: String(

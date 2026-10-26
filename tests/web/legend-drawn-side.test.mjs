@@ -201,7 +201,7 @@ for (const [name, resultMode, shownMode, drawnSide, shownLegend] of MODE_SWITCH)
     assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
     assert.deepEqual(dialogs, []);
     assert.deepEqual(transformed.map(({ side, data }) => [data.mode, side]), [[resultMode, drawnSide]]);
-    assert.deepEqual([state.mode.value, state.generatedMode.value, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
+    assert.deepEqual([state.mode.value, state.drawingOf(state.generatedDrawingId.value).mode, state.generatedLegendPosition.value], [resultMode, resultMode, drawnSide]);
     assert.equal(state.results.value.length, 1);
     // The flat draft's legend position is the shown mode's.
     assert.equal(modeDrawing(state, shownMode).form.legend, shownLegend);
