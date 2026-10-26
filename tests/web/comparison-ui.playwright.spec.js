@@ -9,6 +9,7 @@ const bgcSessionPath = 'tests/test_inputs/BGC0000708-BGC0000713.gbdraw-session.j
 
 const preservedComparisonSession = () => {
   const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+  const drawing = shownSavedDrawing(session);
   const comparisonText = 'unmatched-query\tunmatched-subject\t99\t10\t0\t0\t1\t10\t1\t10\t1e-5\t50\n';
   session.resources['imported-repeated-comparison'] = {
     kind: 'nucleotide-blast',
@@ -19,34 +20,35 @@ const preservedComparisonSession = () => {
     encoding: 'base64',
     data: Buffer.from(comparisonText).toString('base64')
   };
-  session.renderRequest.comparisons = Array.from({ length: 2 }, () => ({
+  drawing.renderRequest.comparisons = Array.from({ length: 2 }, () => ({
     kind: 'nucleotideBlast',
     resourceId: 'imported-repeated-comparison',
     queryRecordIndex: 0,
     subjectRecordIndex: 1
   }));
-  session.modes.linear.config.linearComparisonPlan = {
+  drawing.config.linearComparisonPlan = {
     mode: 'none',
     defaultSource: 'losat',
     edges: []
   };
-  session.losatCache = { entries: [] };
-  session.losatDerivedCache = { entries: [] };
+  drawing.losatCache = { entries: [] };
+  drawing.losatDerivedCache = { entries: [] };
   return session;
 };
 
 const decisionRequiredComparisonSession = () => {
   const session = JSON.parse(readFileSync(bgcSessionPath, 'utf8'));
+  const drawing = shownSavedDrawing(session);
   // Keep this missing-resource check independent of saved alignment validation.
-  session.renderRequest.layout.similarityAlignment = null;
-  session.renderRequest.comparisons = [{
+  drawing.renderRequest.layout.similarityAlignment = null;
+  drawing.renderRequest.comparisons = [{
     kind: 'nucleotideBlast',
     resourceId: 'missing-comparison-resource',
     queryRecordIndex: 0,
     subjectRecordIndex: 1
   }];
-  session.losatCache = { entries: [] };
-  session.losatDerivedCache = { entries: [] };
+  drawing.losatCache = { entries: [] };
+  drawing.losatDerivedCache = { entries: [] };
   return session;
 };
 
@@ -533,7 +535,7 @@ test('imported comparison resolutions are explicit and create one History entry 
   // Load lists the comparison that names a resource the Session lacks (OV-951);
   // the Comparisons panel still asks for a decision after Load.
   await answerLoadRepairs(page, [
-    'Settings: renderRequest.comparisons[0] names a file or record this Session does not hold; it is left out.'
+    'Settings: drawings[0].renderRequest.comparisons[0] names a file or record this Session does not hold; it is left out.'
   ]);
   await expectSessionLoadedWithoutWarnings(page);
   await expect(resolution).toContainText('Saved comparison needs a decision');

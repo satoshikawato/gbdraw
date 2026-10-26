@@ -4,6 +4,7 @@ const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const external = new WeakMap();
@@ -131,7 +132,7 @@ for (const committed of [false, true]) {
       const saved = testInfo.outputPath(download.suggestedFilename());
       await download.saveAs(saved);
       const bytes = await fs.readFile(saved);
-      const savedSession = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString());
+      const savedSession = shownSavedDrawing(JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString()));
       expect(savedSession.renderRequest.diagramOptions.featurePlacements || []).toEqual(before.committedPlacements);
       await generate(page);
       const generated = await snapshot(page);

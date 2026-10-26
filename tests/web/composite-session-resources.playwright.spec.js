@@ -307,30 +307,30 @@ test('Session import lists malformed composite bindings and Cancel keeps existin
     const before = await snapshot(page);
     const beforeHistory = await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
     const seedSession = JSON.parse(await fs.readFile(seedPath));
-    const resourceId = seedSession.renderRequest.records[0].source.resourceId;
+    const resourceId = shownSavedDrawing(seedSession).renderRequest.records[0].source.resourceId;
+    const at = `drawings[${seedSession.drawings.indexOf(shownSavedDrawing(seedSession))}]`;
     const leaf = { resourceId, name: 'part.gb', type: 'text/plain', lastModified: 0 };
 
-    const inventoryDropped = ['Session file: the field webFiles.bindings could not be read and was left out.'];
-    const entryDropped = slot => [`Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`];
+    const inventoryDropped = [`Session file: the field ${at}.webFiles.bindings could not be read and was left out.`];
+    const entryDropped = slot => [`Input files: 1 entry of ${at}.webFiles.bindings.${slot} could not be read and was dropped.`];
     const mutations = {
-      schema: s => { s.webFiles.bindings.schema = 99; },
-      kind: s => { s.webFiles.bindings.c_gb.kind = 'unknown'; },
-      nested: s => { s.webFiles.bindings.c_gb.components[0] = structuredClone(s.webFiles.bindings.c_gb); },
-      empty: s => { s.webFiles.bindings.c_gb.components = []; },
-      singleton: s => { s.webFiles.bindings.c_gb.components.length = 1; },
-      missing: s => { delete s.webFiles.bindings.c_gb; },
-      dangling: s => { s.webFiles.bindings.c_gb.components[0].resourceId = 'missing'; },
-      null: s => { s.webFiles.bindings.c_gb.components[0] = null; },
-      metadata: s => { s.webFiles.bindings.c_gb.lastModified = -1; },
-      mixed: s => { s.webFiles.bindings.c_gb.resourceId = resourceId; },
-      slot: s => { s.webFiles.bindings.c_fasta = s.webFiles.bindings.c_gb; },
+      schema: s => { shownSavedDrawing(s).webFiles.bindings.schema = 99; },
+      kind: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.kind = 'unknown'; },
+      nested: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0] = structuredClone(shownSavedDrawing(s).webFiles.bindings.c_gb); },
+      empty: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components = []; },
+      singleton: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components.length = 1; },
+      missing: s => { delete shownSavedDrawing(s).webFiles.bindings.c_gb; },
+      dangling: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0].resourceId = 'missing'; },
+      null: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.components[0] = null; },
+      metadata: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.lastModified = -1; },
+      mixed: s => { shownSavedDrawing(s).webFiles.bindings.c_gb.resourceId = resourceId; },
+      slot: s => { shownSavedDrawing(s).webFiles.bindings.c_fasta = shownSavedDrawing(s).webFiles.bindings.c_gb; },
       payload: s => { s.resources[resourceId].encoding = 'unsupported'; }
     };
     const rows = {
       schema: inventoryDropped, missing: inventoryDropped, slot: entryDropped('c_fasta'),
       payload: [
-        'Saved diagram: the settings of the saved diagram (renderRequest) could not be read. The file loads as settings only;'
-          + ' the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.',
+        `Saved diagram: the settings of the saved diagram (${at}.renderRequest) could not be read. The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.`,
         `Input files: 1 entry of resources.${resourceId} could not be read and was dropped.`,
         ...entryDropped('c_gb')
       ]
@@ -338,8 +338,9 @@ test('Session import lists malformed composite bindings and Cancel keeps existin
     const canceled = [];
     for (const [label, mutate] of Object.entries(mutations)) {
       const invalid = structuredClone(seedSession);
-      invalid.webFiles ||= {};
-      invalid.webFiles.bindings = { schema: 2, c_gb: { kind: 'composite',
+      const invalidDrawing = shownSavedDrawing(invalid);
+      invalidDrawing.webFiles ||= {};
+      invalidDrawing.webFiles.bindings = { schema: 2, c_gb: { kind: 'composite',
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);

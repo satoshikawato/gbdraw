@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
@@ -15,7 +15,7 @@ const upload = async (page, name, linear = true) => {
   const session = JSON.parse(await fs.readFile(seeds[name], 'utf8'));
   const input = linear ? page.getByTestId('linear-genbank-1') : page.getByLabel('GenBank/DDBJ File', { exact: true });
   await input.setInputFiles({ name: `${name}.gb`, mimeType: 'text/plain', buffer: Buffer.from(
-    session.resources[session.renderRequest.records[0].source.resourceId].data, 'base64') });
+    session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId].data, 'base64') });
 };
 const inspect = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
