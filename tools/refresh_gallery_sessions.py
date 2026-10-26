@@ -1227,7 +1227,7 @@ def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
         return session
     view = dict(session)
     _keep_resources(view, drawing_resource_ids(view))
-    return write_session_drawings([view], version=DRAWINGS_SESSION_MIN_VERSION)
+    return write_session_drawings([view])
 
 
 def _edit_staged_session(

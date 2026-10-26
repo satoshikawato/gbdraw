@@ -52,8 +52,8 @@ from gbdraw.session_drawings import (
     allocate_session_drawing,
     drawings_document_from_mode_scoped,
     read_session_drawings,
+    mode_scoped_build_fields,
     replace_session_drawings,
-    write_session_drawings,
 )
 
 if TYPE_CHECKING:
@@ -898,7 +898,7 @@ def _build_session_document_from_drawings(
 ) -> SessionDocument:
     """Build a current (Session 49) document from already-resolved drawings.
 
-    With a Session 49 ``base`` the drawings replace its drawings of their
+    With a ``base`` (a Session 49) the drawings replace its drawings of their
     IDs; otherwise :func:`_session_data_from_drawings` builds the mode-scoped
     document, checked, and it moves to drawings as a Session 48 does at Load
     (:func:`_drawings_of_current`).
@@ -963,9 +963,10 @@ def _session_data_from_drawings(
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument | dict[str, Any]:
-    """The document of already-resolved drawings; with a ``base`` of
-    Session 49 the checked Session 49, otherwise the data of the mode-scoped
-    (Session 48) document, not yet checked.
+    """The document of already-resolved drawings; with a ``base`` (a
+    Session 49) the checked Session 49, otherwise the data of the mode-scoped
+    build intermediate (:func:`gbdraw.session_drawings.mode_scoped_build_fields`),
+    not yet checked.
 
     Every request is encoded through one resource table. With ``base``, each
     drawing replaces the base drawing of its ID and the other drawings stay. ``resources`` are the resources of the Session
@@ -1054,7 +1055,11 @@ def _session_data_from_drawings(
                 + "."
             )
         active = matches[0]
-    if base is not None and base.version >= DRAWINGS_SESSION_MIN_VERSION:
+    if base is not None:
+        if base.version < DRAWINGS_SESSION_MIN_VERSION:
+            raise SessionFormatError(
+                f"A Session {base.version} moves to drawings before it is saved again."
+            )
         return _drawings_session_document(
             base,
             dict(zip(taken_ids, views, strict=True)),
@@ -1064,11 +1069,7 @@ def _session_data_from_drawings(
             web_file_inventory=web_file_inventory,
         )
     try:
-        fields = (
-            write_session_drawings(views, active=active)
-            if base is None
-            else replace_session_drawings(base._data, dict(zip(taken_ids, views, strict=True)))
-        )
+        fields = mode_scoped_build_fields(views, active=active)
     except ValidationError as exc:
         raise SessionFormatError(str(exc)) from exc
     for envelope_field in ("format", "version", "createdAt", "resources"):

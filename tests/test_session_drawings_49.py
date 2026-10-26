@@ -1,7 +1,7 @@
 """The Session 49 drawing layout, tested on documents directly.
 
 ``read_session_drawings`` sees each drawing of a Session 49 as the one-drawing
-view that Sessions 46-48 give, and ``write_session_drawings(version=49)`` is its
+view that Sessions 46-48 give, and ``write_session_drawings`` is its
 inverse (DESIGN §1, D-15-79). These tests build and compare documents; the
 admission of 49 is tested in ``tests/test_session_admission_49.py``.
 """
@@ -20,6 +20,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import (
     active_session_drawing,
     read_session_drawings,
+    mode_scoped_build_fields,
     replace_session_drawings,
     write_session_drawings,
 )
@@ -97,7 +98,6 @@ def _rewritten(document: dict[str, Any]) -> dict[str, Any]:
     assert active is not None
     return write_session_drawings(
         [part.artifacts.fields for part in parts],
-        version=49,
         ids=[part.id for part in parts],
         names=[part.name for part in parts],
         active=parts.index(active),
@@ -153,7 +153,6 @@ def test_written_drawings_read_back_with_their_bindings_and_losat_entries() -> N
 
     document = write_session_drawings(
         [circular, linear, second],
-        version=49,
         ids=["circular", "linear", "linear-2"],
         names=["Circular", "Linear", "Linear 2"],
         active=2,
@@ -217,27 +216,25 @@ def test_replacing_a_49_drawing_keeps_the_others_in_place() -> None:
 def test_a_49_writer_refuses_what_it_cannot_place(change: Any, message: str) -> None:
     view = copy.deepcopy(dict(read_session_drawings(_minimal_49())[0].artifacts.fields))
     view["resources"] = {"lambda-gb": {"name": "lambda.gb"}}
-    assert write_session_drawings([view], version=49)["drawings"][0]["id"] == "linear"
+    assert write_session_drawings([view])["drawings"][0]["id"] == "linear"
     change(view)
 
     with pytest.raises(ValidationError, match=message):
-        write_session_drawings([view], version=49)
+        write_session_drawings([view])
 
 
 def test_49_drawing_names_are_unique_ignoring_case() -> None:
     view = read_session_drawings(_minimal_49())[0].artifacts.fields
 
     with pytest.raises(ValidationError, match="name of its own"):
-        write_session_drawings([view, view], version=49, ids=["linear", "linear-2"], names=["Map", "map"])
+        write_session_drawings([view, view], ids=["linear", "linear-2"], names=["Map", "map"])
 
 
-def test_the_48_writer_is_unchanged_for_an_existing_48_session() -> None:
+def test_the_build_intermediate_is_the_48_layout_the_move_reads() -> None:
     with gzip.open(CARD_FIXTURE, "rt", encoding="utf-8") as handle:
         document = json.load(handle)
     assert document["version"] == 48
 
     views = [part.artifacts.fields for part in read_session_drawings(document)]
 
-    assert write_session_drawings(views) == document
-    with pytest.raises(ValidationError, match="takes no drawing IDs"):
-        write_session_drawings(views, ids=["circular"], names=["Circular"])
+    assert mode_scoped_build_fields(views) == document

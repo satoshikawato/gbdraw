@@ -47,8 +47,8 @@ from gbdraw.session_drawings import (
     _merged_shared,
     _result_set,
     _view,
+    mode_scoped_build_fields,
     replace_session_drawings,
-    write_session_drawings,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION, MODE_SCOPED_SESSION_MAX_VERSION
 from gbdraw.web_support.request_render import render_canonical_web_request
@@ -361,14 +361,14 @@ def test_two_drawings_share_one_set_of_losat_artifacts() -> None:
         }
 
     manifest = {"schema": 2, "proteinSets": {"p": {}}}
-    data = write_session_drawings(
+    data = mode_scoped_build_fields(
         [view("circular", [{"key": "ring"}]), view("linear", [{"key": "ring"}, {"key": "protein"}], manifest)]
     )
     assert data["losatCache"]["entries"] == [{"key": "ring"}, {"key": "protein"}]
     assert data["proteinIdentityManifest"] == manifest
     assert data["otherModeResult"]["renderRequest"] == {"mode": "linear"}
     with pytest.raises(ValidationError, match="one protein identity manifest"):
-        write_session_drawings(
+        mode_scoped_build_fields(
             [
                 view("circular", [], {"schema": 2, "proteinSets": {"q": {}}}),
                 view("linear", [], manifest),
@@ -396,16 +396,16 @@ def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
     def view(mode: str, slices: dict) -> dict:
         return {"renderRequest": {"mode": mode}, "results": [{"name": mode}], "modes": slices}
 
-    data = write_session_drawings(
+    data = mode_scoped_build_fields(
         [view("circular", {"circular": circular_slice}), view("linear", {"linear": linear_slice})]
     )
-    # A replaced drawing gives its own slice; the other drawing keeps its slice.
-    changed = {"config": {"adv": {"axis_stroke_width": 3}}}
-    replaced = replace_session_drawings(
-        {**data, "version": MODE_SCOPED_SESSION_MAX_VERSION},
-        {"circular": view("circular", {"circular": changed, "linear": {}})},
-    )
-    assert replaced["modes"] == {"circular": changed, "linear": linear_slice}
+    assert data["modes"] == {"circular": circular_slice, "linear": linear_slice}
+    # A Session 46-48 moves to drawings before it is saved again.
+    with pytest.raises(ValidationError, match="Only a Session 49"):
+        replace_session_drawings(
+            {**data, "version": MODE_SCOPED_SESSION_MAX_VERSION},
+            {"circular": view("circular", {"circular": circular_slice})},
+        )
 
 
 def test_upgrade_returns_a_current_document_unchanged() -> None:

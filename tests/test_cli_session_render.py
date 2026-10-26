@@ -1035,7 +1035,7 @@ def _circular_pair(tmp_path: Path) -> Path:
     only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v49.gbdraw-session.json.gz")
     view = dict(session_drawing_artifacts(only, "circular").fields)
     path = tmp_path / "circular-pair.v49.gbdraw-session.json"
-    write_session_json(path, write_session_drawings([view, view], version=49))
+    write_session_json(path, write_session_drawings([view, view]))
     return path
 
 

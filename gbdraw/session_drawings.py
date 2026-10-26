@@ -438,15 +438,10 @@ def _merged_slices(
     return slices
 
 
-def _merged_shared(
-    views: Sequence[Mapping[str, Any]],
-    *,
-    kept: Sequence[Mapping[str, Any]] = (),
-) -> dict[str, Any]:
+def _merged_shared(views: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """The fields that the drawings of a Session 46 share, from their views.
 
-    Each drawing owns its mode's slice in ``modes``: it comes from that
-    drawing's view, or from ``kept`` for a drawing that is not replaced. The
+    Each drawing owns its mode's slice in ``modes``, from its view. The
     first view gives every other shared field, and the others may repeat but
     not change it, except the LOSAT artifacts: their entries are merged
     without repeats, the legacy protein artifacts are the Linear view's (the
@@ -455,8 +450,7 @@ def _merged_shared(
     the views.
     """
 
-    owners = [*views, *kept]
-    owned = frozenset(mode for view in owners if (mode := _request_mode(view)) is not None)
+    owned = frozenset(mode for view in views if (mode := _request_mode(view)) is not None)
     shared = _shared(views[0])
     artifact_fields = {*_ARTIFACT_ENTRY_FIELDS, "legacyArtifacts", "proteinIdentityManifest"}
     first = _pruned(_without_slices(_without(shared, frozenset(artifact_fields)), owned))
@@ -475,8 +469,8 @@ def _merged_shared(
                 + "; give these fields to one drawing only.",
                 diagnostic=_LAYOUT_INVALID,
             )
-    if len(owners) > 1:
-        slices = _merged_slices(shared.get("modes"), owners)
+    if len(views) > 1:
+        slices = _merged_slices(shared.get("modes"), views)
         if slices or "modes" in shared:
             shared["modes"] = slices
     if len(views) == 1:
@@ -756,44 +750,53 @@ def _drawings_document(
 def write_session_drawings(
     views: Sequence[Mapping[str, Any]],
     *,
-    version: Literal[48, 49] = 48,
     ids: Sequence[str] | None = None,
     names: Sequence[str] | None = None,
     active: int | None = None,
 ) -> dict[str, Any]:
-    """The document fields that hold ``views``, one one-drawing view per drawing.
+    """The Session 49 document fields that hold ``views``, one one-drawing view per drawing.
 
-    Session 49 (``version=49``) lists the drawings in ``drawings`` in the
-    order of ``views``, with ``ids`` and ``names`` (allocated from each mode
-    when omitted, :func:`allocate_session_drawing`); ``active`` is the index
-    of ``ui.activeDrawingId`` (the first drawing when omitted).
-
-    Session 48 keeps a second drawing, of the other mode, only with its
-    Result (``otherModeResult``). Each drawing's view gives its mode's slice
-    in ``modes``; the drawings share every other field outside a committed
-    Result set (see :func:`_merged_shared`). ``active`` is the index
-    of the drawing the Web app opens (``ui.mode``).
+    The drawings are listed in ``drawings`` in the order of ``views``, with
+    ``ids`` and ``names`` (allocated from each mode when omitted,
+    :func:`allocate_session_drawing`); ``active`` is the index of
+    ``ui.activeDrawingId`` (the first drawing when omitted).
     """
 
     if not views:
         raise ValidationError("A Session holds at least one drawing.", diagnostic=_LAYOUT_INVALID)
-    if version == DRAWINGS_SESSION_MIN_VERSION:
-        if ids is None and names is None:
-            ids, names = [], []
-            for view in views:
-                drawing_id, name = allocate_session_drawing(
-                    _view_mode(view), requested_id=None, requested_name=None, taken_ids=ids
-                )
-                ids.append(drawing_id)
-                names.append(name)
-        if ids is None or names is None:
-            raise ValidationError("Give both the IDs and the names of the drawings, or neither.", diagnostic=_LAYOUT_INVALID)
-        return _drawings_document(views, ids=ids, names=names, active=active or 0, project_views=views)
-    if ids is not None or names is not None:
-        raise ValidationError(
-            f"Session {version} names each drawing by its mode; it takes no drawing IDs or names.",
-            diagnostic=_LAYOUT_INVALID,
-        )
+    if ids is None and names is None:
+        ids, names = [], []
+        for view in views:
+            drawing_id, name = allocate_session_drawing(
+                _view_mode(view), requested_id=None, requested_name=None, taken_ids=ids
+            )
+            ids.append(drawing_id)
+            names.append(name)
+    if ids is None or names is None:
+        raise ValidationError("Give both the IDs and the names of the drawings, or neither.", diagnostic=_LAYOUT_INVALID)
+    return _drawings_document(views, ids=ids, names=names, active=active or 0, project_views=views)
+
+
+def mode_scoped_build_fields(
+    views: Sequence[Mapping[str, Any]],
+    *,
+    active: int | None = None,
+) -> dict[str, Any]:
+    """The mode-scoped (Session 46-48 shaped) fields of new drawings, which
+    ``gbdraw.session`` moves to Session 49 as Load moves a Session 48.
+
+    This intermediate is not a written format: the build of a new Session
+    still goes through it because the move decides what the written
+    Session 49 holds (the drawing order, a used other-mode drawing, the
+    LOSAT artifacts both drawings share). It holds at most one Circular and
+    one Linear drawing, the second only with its Result. Each drawing's view
+    gives its mode's slice in ``modes``; the drawings share every other
+    field outside a committed Result set (see :func:`_merged_shared`).
+    ``active`` is the index of the drawing the Web app opens (``ui.mode``).
+    """
+
+    if not views:
+        raise ValidationError("A Session holds at least one drawing.", diagnostic=_LAYOUT_INVALID)
     if len(views) > 2:
         raise ValidationError(
             f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds at most one Circular and one Linear drawing.",
@@ -826,15 +829,19 @@ def replace_session_drawings(
     data: Mapping[str, Any],
     views: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """``data`` with the drawings named in ``views`` replaced, in place and order.
+    """The Session 49 ``data`` with the drawings named in ``views`` replaced, in place and order.
 
     Each view is one drawing seen as a one-drawing Session, of the same mode.
-    The other drawings keep their committed Result sets and their mode
-    slices. In a Session 49 the replaced views give the project fields. Session 46 drawings share every other field outside a committed
-    Result set, so the replaced drawings' views give those fields (see
-    :func:`_merged_shared`).
+    The other drawings stay as they are, and the replaced views give the
+    project fields. A Session 46-48 moves to drawings before it is saved
+    again (:func:`drawings_document_from_mode_scoped`).
     """
 
+    if int(data["version"]) < DRAWINGS_SESSION_MIN_VERSION:
+        raise ValidationError(
+            "Only a Session 49 has drawings to replace; move this one to drawings first.",
+            diagnostic=_LAYOUT_INVALID,
+        )
     drawings = read_session_drawings(data)
     unknown = sorted(set(views) - {drawing.id for drawing in drawings})
     if unknown:
@@ -843,26 +850,13 @@ def replace_session_drawings(
     for drawing in drawings:
         if drawing.id in views and _view_mode(views[drawing.id]) != drawing.mode:
             raise ValidationError(f"The {drawing.id} drawing keeps its {drawing.mode} mode.", diagnostic=_LAYOUT_INVALID)
-    if int(data["version"]) >= DRAWINGS_SESSION_MIN_VERSION:
-        active = active_session_drawing(data, drawings)
-        return _drawings_document(
-            [views.get(drawing.id, drawing.artifacts.fields) for drawing in drawings],
-            ids=[drawing.id for drawing in drawings],
-            names=[drawing.name for drawing in drawings],
-            active=drawings.index(active) if active is not None else 0,
-            project_views=replaced or [drawings[0].artifacts.fields],
-        )
-    if len(drawings) == 1:
-        return _without(replaced[0], frozenset({"otherModeResult"}))
-    return _assemble(
-        _merged_shared(
-            replaced,
-            kept=[drawing.artifacts.fields for drawing in drawings if drawing.id not in views],
-        ),
-        [
-            _result_set(views[drawing.id] if drawing.id in views else drawing.artifacts.fields)
-            for drawing in drawings
-        ],
+    active = active_session_drawing(data, drawings)
+    return _drawings_document(
+        [views.get(drawing.id, drawing.artifacts.fields) for drawing in drawings],
+        ids=[drawing.id for drawing in drawings],
+        names=[drawing.name for drawing in drawings],
+        active=drawings.index(active) if active is not None else 0,
+        project_views=replaced or [drawings[0].artifacts.fields],
     )
 
 
