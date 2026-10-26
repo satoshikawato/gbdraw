@@ -156,12 +156,13 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
 });
 
-// D-12, D-18 (OV-1606), DF-D02, DF-D16, DF-D25: MERS-CoV's organism name is drawn on one line (never wrapped)
-// over the tracks at the Web defaults, with the notice. The dialog offers the font at which the one line clears
-// the tracks and the narrower inside tracks (N-a, which says the text still overlaps), and Edit Species /
-// Strain… (E-b) closes it and shows the record's name field without a History step. Apply writes Record
-// Labels > Default font size and Generates a figure without the notice.
-test('the definition text over a track: the notice offers a smaller font, narrower tracks, and the name field', async ({ page }) => {
+// D-12, D-18 (OV-1606), DF-D16, DF-D25, DF-D36: MERS-CoV's organism name is drawn on one line (never wrapped)
+// over the tracks at the Web defaults, with the notice. The inside tracks are narrowed around it already (rule L),
+// so the dialog offers the font at which the one line clears the tracks (no narrow row; its data with narrowing
+// off is pinned in tests/test_web_label_fit.py), and Edit Species / Strain… (E-b) closes it and shows the
+// record's name field without a History step. Apply writes Record Labels > Default font size and Generates a
+// figure without the notice.
+test('the definition text over a track: the notice offers a smaller font and the name field', async ({ page }) => {
   test.setTimeout(600000);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
@@ -186,13 +187,9 @@ test('the definition text over a track: the notice offers a smaller font, narrow
   let dialog = await openDialog();
   await expect(dialog.locator('[data-label-fit-records]')).toContainText('1 definition line at 18 pt (1 line overlaps a track)');
   const row = dialog.locator('[data-label-fit-row="smaller_definition_font"]');
-  const narrow = dialog.locator('[data-label-fit-row="narrow_tracks"]');
   await expect(row).toHaveAttribute('data-label-fit-status', 'found', { timeout: 300000 });
-  await expect(narrow).toHaveAttribute('data-label-fit-status', 'found_with_notice', { timeout: 300000 });
-  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font', 'narrow_tracks']);
-  await expect(row).toContainText('Default font size 10.5 pt');
-  await expect(narrow).toContainText('Center Reserved Radius 231.99 px');
-  await expect(narrow).toContainText('1 definition line still overlaps a track');
+  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font']);
+  await expect(row).toContainText('Default font size 17 pt');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
   // E-b: the name field of that record, found by its drawn record index; nothing is applied.
@@ -219,7 +216,7 @@ test('the definition text over a track: the notice offers a smaller font, narrow
     return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
   }), { timeout: 300000 }).toEqual({ key: key + 1, processing: false, error: null });
   await expect(notice).toHaveCount(0);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(10.5);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.def_font_size)).toBe(17);
   // The row's setting is one step; the Generate that follows is its own.
   expect(await undoCount(page)).toBe(undo + 2);
   await pageShots(page, 'definition-fixed-page');
