@@ -304,6 +304,30 @@ def test_circular_legacy_optimizer_equals_its_full_passes(seed: int, count: int)
 
 
 @pytest.mark.circular
+def test_circular_local_overlap_count_equals_the_pair_test() -> None:
+    """`_count_local_label_overlaps` (with or without kept peer bounds) counts what `_labels_overlap` says."""
+    module = circular_labels_module
+    for seed in range(4):
+        labels, total_length = _dense_arc_labels(seed, 120)
+        peer_bounds: dict = {}
+        rng = random.Random(seed)
+        for _ in range(40):
+            idx = rng.randrange(len(labels))
+            candidate = dict(labels[idx], start_x=labels[idx]["start_x"] + rng.uniform(-30.0, 30.0))
+            for use_min_gap in (False, True):
+                expected = sum(
+                    module._labels_overlap(candidate, other, total_length, use_min_gap=use_min_gap)
+                    for other_idx, other in enumerate(labels)
+                    if other_idx != idx
+                )
+                for kept in (None, peer_bounds):
+                    count = module._count_local_label_overlaps(
+                        labels, total_length, idx, candidate, use_min_gap=use_min_gap, peer_bounds=kept
+                    )
+                    assert count == expected
+
+
+@pytest.mark.circular
 def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
     """`_PairGaps` answers `minimum_bbox_gap_px` for every pair without a pair table, also for mixed spacings."""
     module = circular_labels_module

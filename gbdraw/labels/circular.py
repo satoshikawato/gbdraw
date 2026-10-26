@@ -1189,16 +1189,50 @@ def _count_local_label_overlaps(
     use_min_gap: bool,
     peers: Iterable[int] | None = None,
     cap: int | None = None,
+    peer_bounds: dict[tuple[int, float, float], tuple[float, float, float, float]] | None = None,
 ) -> int:
     """Count the labels (except `label_idx`) that `candidate_label` overlaps.
 
     `peers` limits the scan to labels that can touch it; `cap` stops counting once the count exceeds it.
+    `peer_bounds` keeps the other labels' bounds by (index, x margin, y margin) across calls while
+    they do not move.
     """
     overlap_count = 0
+    # `_labels_overlap(candidate_label, other)` with the candidate's bounds taken once per margin.
+    candidate_bounds: dict[tuple[float, float], tuple[float, float, float, float]] = {}
+    margins = (1.0, 0.1)
     for other_idx in range(len(labels)) if peers is None else peers:
         if other_idx == label_idx:
             continue
-        if _labels_overlap(candidate_label, labels[other_idx], total_length, use_min_gap=use_min_gap):
+        other = labels[other_idx]
+        if use_min_gap:
+            margin = minimum_bbox_gap_px(candidate_label, other)
+            margins = (margin, margin)
+        bounds = candidate_bounds.get(margins)
+        if bounds is None:
+            bounds = candidate_bounds[margins] = (
+                *_label_x_bounds(candidate_label, margins[0]),
+                *_label_y_bounds(candidate_label, total_length, margins[1]),
+            )
+        if peer_bounds is None:
+            other_bounds = None
+        else:
+            other_key = (other_idx, *margins)
+            other_bounds = peer_bounds.get(other_key)
+            if other_bounds is None:
+                other_bounds = peer_bounds[other_key] = (
+                    *_label_x_bounds(other, margins[0]),
+                    *_label_y_bounds(other, total_length, margins[1]),
+                )
+        min_a, max_a = bounds[0], bounds[1]
+        min_b, max_b = _label_x_bounds(other, margins[0]) if other_bounds is None else other_bounds[:2]
+        if not (max_a >= min_b if min_a < min_b else max_b >= min_a):
+            continue
+        min_a, max_a = bounds[2], bounds[3]
+        min_b, max_b = (
+            _label_y_bounds(other, total_length, margins[1]) if other_bounds is None else other_bounds[2:]
+        )
+        if max_a >= min_b if min_a < min_b else max_b >= min_a:
             overlap_count += 1
             if cap is not None and overlap_count > cap:
                 break
@@ -4740,6 +4774,7 @@ def _polish_total_leader_distance(
                 skip=label_idx,
             )
 
+            peer_bounds: dict[tuple[int, float, float], tuple[float, float, float, float]] = {}
             best_strict: tuple[float, tuple[int, int, int, float, float]] | None = None
             best_relaxed: tuple[float, tuple[int, int, int, float, float], tuple[float, float, int]] | None = None
             for candidate_angle, candidate_x, candidate_y in candidate_positions:
@@ -4754,6 +4789,7 @@ def _polish_total_leader_distance(
                     candidate_label,
                     use_min_gap=False,
                     peers=peers,
+                    peer_bounds=peer_bounds,
                     cap=current_plain_for_label,
                 )
                 candidate_plain_total = plain_overlaps - current_plain_for_label + candidate_plain_for_label
@@ -4767,6 +4803,7 @@ def _polish_total_leader_distance(
                     candidate_label,
                     use_min_gap=True,
                     peers=peers,
+                    peer_bounds=peer_bounds,
                     cap=max_allowed_min_gap_overlaps - min_gap_overlaps + current_min_gap_for_label,
                 )
                 candidate_min_gap_total = min_gap_overlaps - current_min_gap_for_label + candidate_min_gap_for_label
