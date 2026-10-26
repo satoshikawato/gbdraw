@@ -119,9 +119,13 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.request).toEqual(savedDrawing(first, 'linear').renderRequest);
     expect(restored.request.mode).toBe('linear');
     expect(restored.results).toEqual([]);
-    // A Load that opens Linear resolves the track-slot axis index (0) where the unsaved draft held null (OV-1870).
-    const withoutAxisIndex = (config) => ({ ...config, adv: { ...config.adv, circular_track_slots_axis_index: null, linear_track_slots_axis_index: null } });
-    expect(withoutAxisIndex(restored.config)).toEqual(withoutAxisIndex(before.config));
+    // Load restores a drawing that holds a request over its request's
+    // projection, which resolves its track stacks: an unset axis index of the
+    // draft is installed as the index Generate infers (OV-1786, OV-1870).
+    expect(before.config.adv.circular_track_slots_axis_index).toBeNull();
+    expect(before.config.adv.linear_track_slots_axis_index).toBeNull();
+    const resolvedAxes = { circular_track_slots_axis_index: 0, linear_track_slots_axis_index: 0 };
+    expect(restored.config).toEqual({ ...before.config, adv: { ...before.config.adv, ...resolvedAxes } });
     expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
@@ -143,8 +147,12 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(savedDrawing(first, 'linear').ui.linearTypographyLinked).toBe(true);
     expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
     const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
-    // OV-1872: the re-save drops the Circular drawing's circularInputOriginalName and circularOutputPrefixExplicit and resolves axis_index null to 0 (OV-1870); this line fails until production is fixed.
-    expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(first.drawings);
+    // The re-save writes every drawing back, each with its own request
+    // metadata (OV-1872); the Linear draft holds the axis indexes Load resolved.
+    const firstResolved = first.drawings.map(drawing => (drawing.id === 'linear'
+      ? { ...drawing, config: { ...drawing.config, adv: { ...drawing.config.adv, ...resolvedAxes } } }
+      : drawing));
+    expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(firstResolved);
     expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);
     expect(savedDrawing(second, 'circular').webFiles.bindings.c_gb).toEqual(savedDrawing(first, 'circular').webFiles.bindings.c_gb);
