@@ -6,6 +6,7 @@
 // alignment plan and record translations, and every editor intent.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 
 globalThis.window = { Vue: {
@@ -46,7 +47,8 @@ const KEPT = [
 const memberOf = (key) => (Object.hasOwn(state, key) ? state : state.activeDrawing())[key];
 
 const fillCircularArtifact = async () => {
-  const canonical = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
+  const saved = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
+  const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
   adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
   const values = {
     results: [{ name: 'a.svg', content: '<svg id="a"/>' }, { name: 'b.svg', content: '<svg id="b"/>' }],
