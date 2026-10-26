@@ -320,7 +320,7 @@ def test_bgc_previews_replay_the_reader_steps_through_their_own_generate() -> No
             generate_steps.add(number)
             assert types[-1] == "generate", number
     # Step 7 regenerates through Apply in the Review alignment dialog, not Generate Diagram.
-    assert generate_steps == {4, 5, 6, 8, 9, 10}
+    assert generate_steps == {4, 5, 6, 9, 10, 11}
     assert any("similarity-alignment-apply-reason" in action.get("selector", "") for action in steps[6]["replay"])
 
     previews = {
@@ -371,7 +371,7 @@ def test_bgc_finish_step_types_the_arrow_geometry_of_the_published_figure() -> N
     assert session_path is not None
     session = json.loads(session_path.read_text(encoding="utf-8"))
     published = session["renderRequest"]["diagramOptions"]["configOverrides"]
-    step = _load_tutorial(sample)["manualSteps"][9]
+    step = _load_tutorial(sample)["manualSteps"][10]
     typed = {action["selector"]: action["value"] for action in step["replay"] if action["type"] == "fill"}
     finished = step["operations"][-1]
     for name, label in (("head_length_ratio", "Head Length Ratio"), ("shaft_width_ratio", "Shaft Width Ratio")):

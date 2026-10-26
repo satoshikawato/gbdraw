@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: the aminoglycoside BGC Gallery tutorial (BGC0000708-BGC0000713)
+  shows the antiSMASH `gene_kind` qualifier in a step of its own before the
+  color step, and says that its colors follow the scheme of the MIBiG website
+  (core red, additional pink, transport blue, regulatory green). Step 2 notes
+  that MIBiG ships each cluster already cut out of its genome; the "Find
+  shared proteins across five aminoglycoside gene clusters" tutorial has the
+  same note (#1385).
 - Changed: the Auto organism name has one rule for the Circular centre, the
   Circular plot title and the Web Linear Auto definition. Line 1 is the
   scientific name (genus and epithets italic, rank words such as `subsp.`,
