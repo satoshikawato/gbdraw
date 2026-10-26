@@ -987,6 +987,21 @@
       "source": "inventory C section B (request record cardinality; OV-149)"
     },
     {
+      "id": "concern:exact-value-pattern",
+      "concern": "Exact-value pattern of a rule (^, the value with regex specials escaped, $)",
+      "pythonOwner": [
+        "gbdraw/web_support/rule_matching.py:exact_value_pattern"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:escapeRegexLiteral",
+        "gbdraw/web/js/services/feature-selector.js:exactRegexValue"
+      ],
+      "vector": null,
+      "reason": "Python's color rule synthesis writes exact conditions, and retires hash rows, in the spelling the Web writes for an exact value, so a rule either side wrote reads as the same condition. tests/test_web_rule_synthesis.py and tests/web/feature-selector.test.mjs pin the same literals; no shared vector.",
+      "retireWhen": "the Web writes exact-value rules through the Python owner (Worker) instead of its own copy",
+      "source": "PR #1348 (OV-244 (a), Python color rule synthesis); the detector does not see it (the two functions have different names)"
+    },
+    {
       "id": "constant:LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION",
       "concern": "Last Session version with legacy Linear track slots (32)",
       "pythonOwner": [
