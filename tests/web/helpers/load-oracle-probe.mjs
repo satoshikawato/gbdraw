@@ -26,7 +26,7 @@
 // `config` in the Load's configuration check of a tree older than PR-D,
 // which refuses `canvas.show_labels` there (OV-790): it shows what the rest
 // of that Load does with such a request. From PR-D the check runs it itself.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
@@ -81,6 +81,13 @@ globalThis.File = File;
 globalThis.alert = () => {};
 const { installSessionImportWorker } = await import(treeUrl('tests/web/helpers/session-import-node.mjs'));
 installSessionImportWorker();
+// A tree whose Load converts a Session 27-44 through Python's Web entry gets
+// Python's upgrader, as the Worker gives it in the browser.
+if (existsSync(`${TREE}/gbdraw/web/js/services/legacy-session-upgrade.js`)) {
+  const { pythonLegacySessionUpgrader } = await import(treeUrl('tests/web/helpers/python-evaluator.mjs'));
+  const { setLegacySessionUpgrader } = await import(treeUrl('gbdraw/web/js/services/legacy-session-upgrade.js'));
+  setLegacySessionUpgrader(pythonLegacySessionUpgrader());
+}
 
 const sessionConfig = await import(treeUrl('gbdraw/web/js/services/config.js'));
 const { setUnmanagedConfigOverrideValidator, getCommittedCanonicalSession } = sessionConfig;
