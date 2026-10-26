@@ -92,9 +92,9 @@ const cases = [
 const fileRecordKeys = request => [...new Set(request.records.map(
   record => record.recordKey.replace(/:[1-9]\d*$/, '')
 ))];
-const load = bytes => importSession({ target: {
+const load = (bytes, ports = {}) => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
-} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow });
+} }, { transformLegacyResultSvg, confirmLoadRepairs: acceptNodeFeatureRecoveryRow, ...ports });
 const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
 // is the Web default (No comparison), so Replace with current controls
@@ -812,25 +812,39 @@ await test('every drawing of a Session 49 draws the CLI figure after a Web Load,
         const expected = entry.svgs[drawingId];
         const session = structuredClone(stored);
         session.ui.activeDrawingId = drawingId;
-        const loaded = await load(Buffer.from(JSON.stringify(session)));
+        // The app keeps the Result sets of the drawings Load does not show (`installLoadedArtifactSlots`) and
+        // gives them to Save (`readKeptArtifacts`); the shown drawing's is the committed one here.
+        let slots = { opening: null, stashed: [] };
+        const loaded = await load(Buffer.from(JSON.stringify(session)), { installLoadedArtifactSlots: (loadedSlots) => { slots = loadedSlots; } });
         assert.equal(loaded.status, 'ok', `${entry.id}, ${drawingId}: ${loaded.error?.stack}`);
         assert.equal(state.activeDrawing().id, drawingId, `${entry.id}: Load shows the drawing the file opens`);
+        assert.equal(slots.opening, null, `${entry.id}, ${drawingId}: the shown drawing's Result set is the committed one`);
         const generated = path.join(directory, entry.id, `${drawingId} Generate.json`);
         await writeFile(generated, await renderedSession(await nextGenerate()));
-        const saved = await exportSession(`${entry.id}-${drawingId}`);
+        const saved = await exportSession(`${entry.id}-${drawingId}`, { readKeptArtifacts: () => slots.stashed });
         assert.equal(saved.status, 'saved', saved.error?.message);
         const webSave = path.join(directory, entry.id, `${drawingId} web-save.json`);
         await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
-        // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): a drawing whose
-        // request names another drawing's rows also gets that drawing's entries (OV-1884), so only "kept" is asserted
-        // for a drawing with a request. This harness passes Save no kept artifacts, so another drawing is written
-        // without its request and names no entry (OV-1903).
+        // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): each drawing keeps
+        // its request, and gets every entry of the file whose two rows its request names, so a drawing whose request
+        // names another drawing's rows gets that drawing's entries too (OV-1884). A drawing the file does not hold
+        // (the one Load adds for the mode buttons, written here because this harness boots no palettes) has none.
         const savedSession = JSON.parse(await readFile(webSave, 'utf8'));
-        const savedEntries = entriesOf(savedSession);
-        for (const [id, keys] of Object.entries(entriesOf(stored))) {
-          const hasRequest = savedSession.drawings.find(drawing => drawing.id === id).renderRequest !== null;
-          assert.deepEqual(hasRequest ? keys.filter(key => !savedEntries[id].includes(key)) : savedEntries[id], [],
-            `${entry.id}, ${drawingId}: a Web Save keeps the LOSAT entries of ${id}, or none without a request`);
+        const storedEntries = stored.drawings.flatMap(drawing => drawing.losatCache?.entries ?? []);
+        const requestOf = (session, id) => session.drawings.find(drawing => drawing.id === id)?.renderRequest ?? null;
+        const expectedEntries = Object.fromEntries(savedSession.drawings.map(({ id }) => {
+          const rows = new Set(requestOf(stored, id)?.records.map(record => record.recordKey) ?? []);
+          return [id, [...new Set(storedEntries.filter(item => rows.has(item.queryUid) && rows.has(item.subjectUid))
+            .map(item => item.key))].sort()];
+        }));
+        assert.deepEqual(Object.fromEntries(Object.entries(entriesOf(savedSession)).map(([id, keys]) => [id, [...keys].sort()])),
+          expectedEntries, `${entry.id}, ${drawingId}: a Web Save writes each drawing the LOSAT entries its request names`);
+        for (const { id } of savedSession.drawings) {
+          assert.equal(requestOf(savedSession, id) !== null, requestOf(stored, id) !== null,
+            `${entry.id}, ${drawingId}: ${id} keeps its request, and a drawing the file does not hold has none`);
+        }
+        for (const { id } of stored.drawings) {
+          assert.ok(savedSession.drawings.some(drawing => drawing.id === id), `${entry.id}, ${drawingId}: ${id} is written`);
         }
         const mode = state.mode.value;
         const first = checks.length;
