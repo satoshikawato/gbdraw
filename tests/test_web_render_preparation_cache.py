@@ -51,6 +51,7 @@ from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.regions import parse_region_spec
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.session import build_session_document
+from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.request_render import (
     _render_staged_canonical_web_request_with_prepared_inputs as
     render_staged_canonical_web_request,
@@ -119,7 +120,7 @@ def _document(
             formats=("svg",),
         ),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def _render(
@@ -307,7 +308,7 @@ def _linear_document(source: Path, *, title: str) -> dict[str, object]:
         options=LinearDiagramOptions(plot_title=title),
         output=RenderOutputRequest(output_prefix="prepared-linear", formats=("svg",)),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def test_a_linear_title_change_reuses_the_catalog_item(tmp_path: Path) -> None:
@@ -358,7 +359,7 @@ def _multi_record_document(source: Path, *, title: str) -> dict[str, object]:
         ),
         output=RenderOutputRequest(output_prefix="prepared-multi-record", formats=("svg",)),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def test_a_multi_record_circular_title_change_reuses_the_merged_records(tmp_path: Path) -> None:
@@ -581,7 +582,7 @@ def _orthogroup_document(source: Path, group_id: str) -> dict[str, object]:
             formats=("svg",),
         ),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def test_orthogroup_resource_invalidates_interactive_context_only(
@@ -1146,7 +1147,7 @@ def test_an_input_the_commit_rejected_is_checked_and_counted_once(tmp_path: Path
 
 
 def _label_fit_document(source: Path, overrides: dict[str, object]) -> dict[str, object]:
-    return build_session_document(
+    return drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
             options=CircularDiagramOptions(
@@ -1154,7 +1155,7 @@ def _label_fit_document(source: Path, overrides: dict[str, object]) -> dict[str,
             ),
             output=RenderOutputRequest(output_prefix="label-fit", formats=("svg",)),
         )
-    ).to_dict()
+    ).to_dict())
 
 
 def test_the_generate_after_a_label_fit_failure_parses_no_source_again(
@@ -1808,7 +1809,7 @@ def _circular_batch_document(first: Path, second: Path) -> dict[str, object]:
             RenderOutputRequest(output_prefix=f"batch-{index}", formats=("svg",)) for index in (1, 2)
         ),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def test_a_circular_batch_revision_names_each_result_and_one_changed_record_sends_the_whole_catalog(
@@ -1850,7 +1851,7 @@ def _cw04_document(source: Path, overrides: tuple[FeatureOverride, ...]) -> dict
         ),
         output=RenderOutputRequest(output_prefix="cw04", formats=("svg",)),
     )
-    return build_session_document(request).to_dict()
+    return drawing_view(build_session_document(request).to_dict())
 
 
 def test_cw04_each_generate_leaves_the_catalog_a_fresh_cache_gives(tmp_path: Path) -> None:

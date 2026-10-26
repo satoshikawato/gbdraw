@@ -18,6 +18,9 @@ from gbdraw.api.session_compat import _session_protein_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.session import load_session_document
+from tests.utils.session_drawing_view import without_drawings_move_in_session_module
+
+MODE_SCOPED_VERSION = 48  # the CLI re-saves below keep the 46-48 layout (without_drawings_move_in_session_module)
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -344,10 +347,11 @@ def written_session_46(tmp_path_factory: pytest.TempPathFactory) -> dict[str, An
 
     work = tmp_path_factory.mktemp("session-46")
     sidecar = work / "replay.gbdraw-session.json"
-    linear_main(
-        ["--session", str(FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz"),
-         "--output", str(work / "replay"), "--format", "svg", "--session_output", str(sidecar)]
-    )
+    with without_drawings_move_in_session_module():
+        linear_main(
+            ["--session", str(FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz"),
+             "--output", str(work / "replay"), "--format", "svg", "--session_output", str(sidecar)]
+        )
     return load_session_document(sidecar).to_dict()
 
 
@@ -357,7 +361,7 @@ def session_46(written_session_46: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_session_46_reads_two_mode_slices_and_rejects_session_45(session_46: dict[str, Any]) -> None:
-    assert CURRENT_SESSION_VERSION == 48 and 45 not in SUPPORTED_SESSION_VERSIONS
+    assert CURRENT_SESSION_VERSION == 49 and 45 not in SUPPORTED_SESSION_VERSIONS
     assert set(session_46["modes"]) == {"circular", "linear"}
     validate_session(session_46)
     with pytest.raises(ValidationError, match="Unsupported session version: 45"):
@@ -453,13 +457,14 @@ def test_cli_resave_keeps_a_session_46_slices(tmp_path: Path) -> None:
     first = tmp_path / "first.gbdraw-session.json"
     second = tmp_path / "second.gbdraw-session.json"
     for source, sidecar in ((fixture, first), (first, second)):
-        linear_main(
-            ["--session", str(source), "--output", str(tmp_path / sidecar.stem), "--format", "svg",
-             "--session_output", str(sidecar)]
-        )
+        with without_drawings_move_in_session_module():
+            linear_main(
+                ["--session", str(source), "--output", str(tmp_path / sidecar.stem), "--format", "svg",
+                 "--session_output", str(sidecar)]
+            )
 
     written = [load_session_document(path).to_dict() for path in (first, second)]
-    assert [payload["version"] for payload in written] == [CURRENT_SESSION_VERSION] * 2
+    assert [payload["version"] for payload in written] == [MODE_SCOPED_VERSION] * 2
     assert written[1]["modes"] == written[0]["modes"]
     assert "config" not in written[1] and "features" not in written[1]
 
@@ -481,10 +486,11 @@ def test_session_48_keeps_what_the_file_cards_imported_through_a_cli_resave(
     source = tmp_path / "marked.gbdraw-session.json"
     source.write_text(json.dumps(session_46), encoding="utf-8")
     sidecar = tmp_path / "resaved.gbdraw-session.json"
-    linear_main(
-        ["--session", str(source), "--output", str(tmp_path / "replay"), "--format", "svg",
-         "--session_output", str(sidecar)]
-    )
+    with without_drawings_move_in_session_module():
+        linear_main(
+            ["--session", str(source), "--output", str(tmp_path / "replay"), "--format", "svg",
+             "--session_output", str(sidecar)]
+        )
 
     config = load_session_document(sidecar).to_dict()["modes"]["linear"]["config"]
     assert {key: config[key] for key in marks} == marks
@@ -503,10 +509,11 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
     sidecar = tmp_path / "replay.gbdraw-session.json"
     caplog.set_level("INFO", logger=cli_session_module.__name__)
 
-    linear_main(
-        ["--session", str(source_path), "--output", str(tmp_path / "replay"), "--format", "svg",
-         "--session_output", str(sidecar)]
-    )
+    with without_drawings_move_in_session_module():
+        linear_main(
+            ["--session", str(source_path), "--output", str(tmp_path / "replay"), "--format", "svg",
+             "--session_output", str(sidecar)]
+        )
 
     saved = load_session_document(sidecar).to_dict()
     targets = [
