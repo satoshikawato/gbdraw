@@ -1269,6 +1269,40 @@ def _count_local_label_overlaps(
     return overlap_count
 
 
+def _label_positions(labels: Sequence[CircularLabel]) -> tuple[tuple[float, float], ...]:
+    """Where the labels are: their (start_x, start_y), the key of results that depend only on positions."""
+    return tuple((label["start_x"], label["start_y"]) for label in labels)
+
+
+class _SettledEvaluations:
+    """Which label evaluations of a placement pass can move something (a skipped one would move nothing again).
+
+    A label's evaluation reads only the labels of its window (``windows[idx]``, which holds the
+    label itself). Each move is counted; an evaluation is needed while a label of its window has
+    moved since the label was last evaluated.
+    """
+
+    def __init__(self, windows: list[list[int]]) -> None:
+        self._windows = windows
+        self._changed_at = [0 for _ in windows]
+        self._evaluated_at = [-1 for _ in windows]
+        self._moves = 0
+
+    def moved(self, label_indexes: Iterable[int]) -> None:
+        """One move changed these labels."""
+        self._moves += 1
+        for label_idx in label_indexes:
+            self._changed_at[label_idx] = self._moves
+
+    def needs_evaluation(self, label_idx: int) -> bool:
+        """Whether evaluating `label_idx` can move it; if so, it counts as evaluated now."""
+        changed_at = self._changed_at
+        if self._evaluated_at[label_idx] >= max(changed_at[peer] for peer in self._windows[label_idx]):
+            return False
+        self._evaluated_at[label_idx] = self._moves
+        return True
+
+
 class _LabelPeers:
     """The labels a box can touch, by the labels' reach boxes at `pad` (see `_reach_pad`), kept as labels move.
 
@@ -3326,7 +3360,7 @@ def improved_label_placement_fc(
 
     def overlapping_pairs() -> list[tuple[int, int]]:
         nonlocal pairs_positions, pairs_at_positions
-        positions = tuple((label["start_x"], label["start_y"]) for label in labels)
+        positions = _label_positions(labels)
         if positions != pairs_positions:
             pairs_positions = positions
             pairs_at_positions = list(
@@ -3529,22 +3563,20 @@ def improved_label_placement_fc(
             and all(bool(label.get("is_inner", False)) for label in labels)
         )
         # A label's evaluation reads only the labels of its overlap window (`overlap_indices`, which
-        # holds its order neighbours): their positions and angles. A label whose evaluation moved
-        # nothing is skipped until a label of its window changes (`changed_at` and `settled_at`
-        # count moves); a skipped evaluation would move nothing again.
-        windows = [[label_idx, *overlap_indices(label_idx, full_scan=full_scan_checks)] for label_idx in range(len(labels))]
-        changed_at = [0 for _ in labels]
-        settled_at = [-1 for _ in labels]
-        moves = 0
+        # holds its order neighbours): their positions and angles.
+        skips = _SettledEvaluations(
+            [[label_idx, *overlap_indices(label_idx, full_scan=full_scan_checks)] for label_idx in range(len(labels))]
+        )
         for _ in range(max_iterations):
             changes_made = False
             positions_before = [label["start_x"] for label in labels]
             if enforce_order(min_order_gap):
                 changes_made = True
-                moves += 1
-                for label_idx, label in enumerate(labels):
-                    if label["start_x"] is not positions_before[label_idx]:
-                        changed_at[label_idx] = moves
+                skips.moved(
+                    label_idx
+                    for label_idx, label in enumerate(labels)
+                    if label["start_x"] is not positions_before[label_idx]
+                )
             angles = [float(label["angle_unwrapped"]) for label in labels]
 
             iteration_order = sorted(range(len(labels)), key=local_density_weight)
@@ -3552,9 +3584,8 @@ def improved_label_placement_fc(
             reach_pad = _reach_pad(max_pair_margin)
             reach_boxes = [_label_reach_box(label, reach_pad) for label in labels]
             for label_idx in iteration_order:
-                if settled_at[label_idx] >= max(changed_at[peer] for peer in windows[label_idx]):
+                if not skips.needs_evaluation(label_idx):
                     continue
-                settled_at[label_idx] = moves
                 label = labels[label_idx]
                 current_angle = label["angle_unwrapped"]
                 target_angle = label["target_angle_unwrapped"]
@@ -3673,8 +3704,7 @@ def improved_label_placement_fc(
                     angles[label_idx] = best_angle
                     reach_boxes[label_idx] = _label_reach_box(label, reach_pad)
                     changes_made = True
-                    moves += 1
-                    changed_at[label_idx] = moves
+                    skips.moved((label_idx,))
             if not changes_made:
                 break
         if len(labels) <= HEAVY_CLUSTER_RELAX_MAX_LABELS and count_remaining_overlaps() > 0:

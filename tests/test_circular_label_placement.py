@@ -420,6 +420,112 @@ def test_circular_min_gap_count_of_mixed_spacings_takes_no_gap_per_pair(monkeypa
     assert gaps < count * (count - 1) // 2 // 10
 
 
+def _pile_label_set(seed: int, count: int, center: float, spread: float) -> tuple[list[dict], int, float]:
+    """`_random_label_set` with every feature moved into `center` +/- `spread` (fractions of the record)."""
+    rng = random.Random(seed)
+    labels, total_length, radius = _random_label_set(seed, max_labels=count)
+    feature_radius = radius * 0.8
+    for label in labels:
+        label["middle"] = ((center + rng.uniform(-spread, spread)) % 1.0) * total_length
+        angle = math.radians(360 * label["middle"] / total_length - 90)
+        label_radius = (feature_radius * 0.7 if label["is_inner"] else radius) * rng.uniform(0.97, 1.06)
+        label["start_x"], label["start_y"] = label_radius * math.cos(angle), label_radius * math.sin(angle)
+        label["feature_middle_x"] = label["feature_anchor_x"] = feature_radius * math.cos(angle)
+        label["feature_middle_y"] = label["feature_anchor_y"] = feature_radius * math.sin(angle)
+    labels.sort(key=lambda label: label["middle"])
+    return labels, total_length, radius
+
+
+# Label sets for the comparisons with direct computations: clustered sets, a dense pile, and a pile across the origin.
+_PLACEMENT_CASES = [
+    *((seed, lambda seed: _random_label_set(seed, max_labels=12)) for seed in range(4)),
+    (11, lambda seed: _pile_label_set(seed, 10, 0.4, 0.01)),
+    (12, lambda seed: _pile_label_set(seed, 14, 0.0, 0.01)),
+]
+
+
+def _placement_runs(seed: int, make: Callable[[int], tuple[list[dict], int, float]]) -> tuple[list[dict], ...]:
+    """Arc placement, improved placement and the hemisphere refinement of one label set."""
+    module = circular_labels_module
+    rng = random.Random(seed)
+    labels, total_length, radius = make(seed)
+    x_radius, y_radius = radius * 1.05, radius * 1.1
+    arc = (0.0, 0.0, x_radius, y_radius, 0, 360, total_length)
+    placed = module.place_labels_on_arc_fc(copy.deepcopy(labels), *arc, spacing_px=rng.choice([None, 0.5, 2.0]))
+    improved = module.improved_label_placement_fc(
+        copy.deepcopy(placed),
+        0.0,
+        0.0,
+        x_radius,
+        y_radius,
+        radius * 0.8,
+        total_length,
+        0,
+        360,
+        max_iterations=rng.choice([3, 60]),
+        spacing_px=rng.choice([None, 1.0]),
+    )
+    refined = module._refine_labels_to_preferred_hemisphere(
+        copy.deepcopy(labels), total_length, 0.0, 0.0, x_radius, y_radius
+    )
+    return placed, improved, refined
+
+
+@pytest.mark.circular
+def test_circular_improved_placement_skips_only_evaluations_that_move_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skipping settled label evaluations gives the result of evaluating every label in every pass."""
+    module = circular_labels_module
+    original = module._SettledEvaluations.needs_evaluation
+    skipped = 0
+
+    def counting(self: object, label_idx: int) -> bool:
+        nonlocal skipped
+        needed = original(self, label_idx)
+        skipped += not needed
+        return needed
+
+    monkeypatch.setattr(module._SettledEvaluations, "needs_evaluation", counting)
+    skipping = [_placement_runs(*case)[1] for case in _PLACEMENT_CASES]
+    monkeypatch.setattr(module._SettledEvaluations, "needs_evaluation", lambda self, label_idx: True)
+    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == skipping
+    assert skipped > 0
+
+
+@pytest.mark.circular
+def test_circular_improved_placement_pair_cache_equals_recounts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The overlapping pairs kept for unchanged positions equal a recount at every request."""
+    module = circular_labels_module
+    positions = module._label_positions
+    keys: list[object] = []
+
+    def recording(labels: list[dict]) -> tuple[tuple[float, float], ...]:
+        keys.append(positions(labels))
+        return keys[-1]
+
+    monkeypatch.setattr(module, "_label_positions", recording)
+    cached = [_placement_runs(*case)[1] for case in _PLACEMENT_CASES]
+    # `overlapping_pairs` is the only reader: a key equal to the one before it was answered from the kept pairs.
+    assert any(key == before for before, key in zip(keys, keys[1:]))
+    monkeypatch.setattr(module, "_label_positions", lambda labels: (object(),))  # never equal: always recount
+    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == cached
+
+
+@pytest.mark.circular
+def test_circular_placement_peer_lookups_equal_full_scans(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The placement passes give the same labels when every peer lookup (`_LabelPeers.near`) returns every label."""
+    module = circular_labels_module
+    pruned = [_placement_runs(*case) for case in _PLACEMENT_CASES]
+    monkeypatch.setattr(
+        module._LabelPeers,
+        "near",
+        lambda self, box, *, skip=None: [idx for idx in range(len(self._index.boxes)) if idx != skip],
+    )
+    scanned = [_placement_runs(*case) for case in _PLACEMENT_CASES]
+    assert scanned == pruned
+
+
 @pytest.mark.circular
 def test_circular_label_peers_follow_moved_labels() -> None:
     """Counts over `_LabelPeers.near` equal full scans while labels move and join."""
