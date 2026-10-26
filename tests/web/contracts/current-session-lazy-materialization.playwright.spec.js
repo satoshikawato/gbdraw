@@ -3,6 +3,7 @@ const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   NEWEST_READ_SESSION_VERSION,
@@ -225,7 +226,8 @@ const loadSyntheticSession = (page, variant = 'normal') => evaluateWithRetainedP
       encoding: 'base64',
       data: btoa('unused\n')
     };
-    const recordResourceId = session.renderRequest.records[0].source.resourceId;
+    const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+    const recordResourceId = shown.renderRequest.records[0].source.resourceId;
     if (requestedVariant === 'newer-version') {
       // A Session version newer than any the app reads is refused (receipt 〔拒否〕);
       // a resource that nothing names is dropped, so its size no longer refuses a Load.
@@ -595,7 +597,7 @@ test('two rings of one sequence save and restore with one cached LOSAT table', a
     const savedPath = testInfo.outputPath('shared-ring-cache.gbdraw-session.json');
     writeFileSync(savedPath, savedText, 'utf8');
     const savedRows = generated.cacheInfo.slice(0, 3);
-    expect(JSON.parse(savedText).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
+    expect(shownSavedDrawing(JSON.parse(savedText)).losatCache.entries.map(({ key, filename }) => ({ key, filename })))
       .toEqual(savedRows);
 
     const restored = await evaluateWithRetainedPromise(page, async (sessionText) => {
@@ -1677,8 +1679,8 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   const roundTripPath = await (await downloadPromise).path();
   const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
   expect(roundTrip.version).toBe(CURRENT_SESSION_VERSION);
-  expect(roundTrip.results).toHaveLength(1);
-  expect(roundTrip.editorState.featureCatalog).toBeTruthy();
+  expect(shownSavedDrawing(roundTrip).results).toHaveLength(1);
+  expect(shownSavedDrawing(roundTrip).editorState.featureCatalog).toBeTruthy();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__GBDRAW_APP__), null, {
