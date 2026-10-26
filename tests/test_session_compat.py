@@ -1141,9 +1141,14 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
     )
     # The projection of a Session 39 splits its flat draft into both modes'
     # slices (Session 48's layout). A Session 49 drawing holds its own mode's
-    # slice only, so the Linear replay takes the Linear slice; the dormant
-    # comparison lives in that slice's plan and in the Web file inventory.
-    linear_state = {**adjunct, "modes": {"linear": adjunct["modes"]["linear"]}}
+    # slice and input type only, so the Linear replay takes the Linear ones;
+    # the dormant comparison lives in that slice's plan and in the Web file
+    # inventory.
+    linear_state = {
+        **adjunct,
+        "modes": {"linear": adjunct["modes"]["linear"]},
+        "ui": {key: value for key, value in adjunct["ui"].items() if key != "cInputType"},
+    }
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
