@@ -119,7 +119,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.request).toEqual(savedDrawing(first, 'linear').renderRequest);
     expect(restored.request.mode).toBe('linear');
     expect(restored.results).toEqual([]);
-    // A Load that opens Linear resolves the track-slot axis index (0) where the unsaved draft held null (OV-1820).
+    // A Load that opens Linear resolves the track-slot axis index (0) where the unsaved draft held null (OV-1870).
     const withoutAxisIndex = (config) => ({ ...config, adv: { ...config.adv, circular_track_slots_axis_index: null, linear_track_slots_axis_index: null } });
     expect(withoutAxisIndex(restored.config)).toEqual(withoutAxisIndex(before.config));
     expect(restored.config.adv.scale_font_size).toBe(19);
@@ -143,7 +143,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(savedDrawing(first, 'linear').ui.linearTypographyLinked).toBe(true);
     expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
     const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
-    // OV-1822: the re-save drops the Circular drawing's circularInputOriginalName and circularOutputPrefixExplicit and resolves axis_index null to 0 (OV-1820); this line fails until production is fixed.
+    // OV-1872: the re-save drops the Circular drawing's circularInputOriginalName and circularOutputPrefixExplicit and resolves axis_index null to 0 (OV-1870); this line fails until production is fixed.
     expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(first.drawings);
     expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);

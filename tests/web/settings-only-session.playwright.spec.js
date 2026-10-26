@@ -279,7 +279,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['config', d => { savedDrawing(d, 'circular').config.form = []; }, ['Settings: the value "[]" (drawings[0].config.form) cannot be used; its default is used.']],
     ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
-    // OV-1821: these three currently end differently from what is asserted (see FINDINGS); kept last so the cases above still run.
+    // OV-1871: these three currently end differently from what is asserted (see FINDINGS); kept last so the cases above still run.
     // A top-level `config` is the pre-49 shape: the file takes the migrated path and opens the Circular drawing, not the one shown at Save.
     // A Session 49 holds each drawing's settings in its drawing only (Session format).
     ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded'],
