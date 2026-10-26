@@ -10,7 +10,7 @@
 // values Session 46 Load fills for the pointers the split leaves absent, and
 // this test checks them on the drawings Load installs.
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -53,6 +53,10 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 const { normalizePaletteDefinitions } = await import('../../gbdraw/web/js/utils/color-utils.js');
 
 const REPO = new URL('../../', import.meta.url);

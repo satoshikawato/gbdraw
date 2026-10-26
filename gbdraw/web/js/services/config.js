@@ -174,8 +174,10 @@ import {
 } from './session-file.js';
 import { importSessionFile } from './session-import-client.js';
 import {
-  convertMainSessionComparisonFrames, convertStoredProteinResultFrames, withConvertedResources
+  convertStoredProteinResultFrames, withConvertedResources
 } from './main-session-comparison-frame.js';
+import { upgradeLegacySession } from './legacy-session-upgrade.js';
+/** @import { LegacySessionUpgrade } from './legacy-session-upgrade.js' */
 import { askBeforeLargeDownload, downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance, savedFeatureColorEdits, savedRuleRowRekeys, savedSpecificRules } from './specific-color-rules.js';
@@ -214,7 +216,6 @@ import {
   isAdoptedCanonicalSession,
   isAuthorityBand,
   isDrawingsBand,
-  isCanonicalBand,
   isModeScopedBand,
   holdsCaptionLegendRows,
   hasBiologicalSessionInputs,
@@ -2537,12 +2538,16 @@ const openedDrawingPathOf = (sessionData) => {
 };
 
 /**
+ * Load's readers of a Session's parts, at the file's own paths: its requests,
+ * Result sets, receipts, catalogs, editor state, resources and LOSAT caches.
+ * They read every Session the same way; a Session 27-44 is read here and
+ * then converted by Python (D-15-129), which receives `data`.
  * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
  */
-const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets) => {
+const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSets) => {
   const sourceSessionVersion = sessionData.version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
@@ -2554,11 +2559,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   // (`storedResultSets`); its tables are framed and its Legend edits row keyed.
   const drawingsBand = isDrawingsBand(sessionData);
   const openedDrawingAt = openedDrawingPathOf(sessionData);
-  // A Session before 31 holds no request (OV-862), so no stored table of it is converted.
-  const framed = isCanonicalBand(sessionData) ? await convertMainSessionComparisonFrames(sessionData) : sessionData;
   const legendRead = drawingsBand
-    ? { session: framed, outcomes: [] }
-    : sessionLegendEditsByRowKey(framed, sourceSessionVersion, unreadLegendEdits);
+    ? { session: sessionData, outcomes: [] }
+    : sessionLegendEditsByRowKey(sessionData, sourceSessionVersion, unreadLegendEdits);
   unreadLegendEdits.forEach(({ slice, unread }) => repairs.push(
     ...legendEditRepairs(unread, `${slice === 'draft' ? '' : `modes.${slice}.`}editorState.legend`)
   ));
@@ -2655,16 +2658,8 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     normalizedData = normalizeSessionData(rawData, repairs);
   }
 
-  // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
-  // its promotion from the request its reader read.
-  const promotedData = !currentSession && (
-    sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(requestRead.storedSchemas['']) === 2
-  )
-    ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
-    : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
-  const cacheData = await readSessionLosatArtifacts(promotedData, sourceSessionVersion, repairs, openedDrawingAt);
+  const cacheData = await readSessionLosatArtifacts(normalizedData, sourceSessionVersion, repairs, openedDrawingAt);
   // Every other Session 49 drawing's caches go through the same reader, at
   // its own path; the opened drawing's are its view's, read above.
   if (drawingsBand && upgrade) {
@@ -2680,9 +2675,37 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     upgrade = { ...upgrade, document: { ...document, drawings } };
   }
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
+  return {
+    sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, upgrade, adoptedSession,
+    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData
+  };
+};
+
+/**
+ * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
+ * @param {SessionChecked} sessionData The document `readSessionDocument` read.
+ * @param {LoadRepair[]} repairs Collects what Load cannot restore.
+ * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
+ */
+const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets) => {
+  const read = await readSessionImportParts(stored, sessionData, repairs, uncomposedSets);
+  const {
+    sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, adoptedSession,
+    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData
+  } = read;
+  let { upgrade } = read;
+  const normalizedData = cacheData;
+  // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
+  // its promotion from the request its reader read.
+  const promotedData = !currentSession && (
+    sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
+    Number(requestRead.storedSchemas['']) === 2
+  )
+    ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
+    : normalizedData;
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
-    : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
+    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion), repairs);
   // The Session 49 of a Session 46-48 (DESIGN §4.2): each drawing's part of
   // the file is its own entry, found by drawing ID, and so is where the file
   // holds its saved Result set (`setSources`). Its Legend edits were read by
@@ -6049,6 +6072,16 @@ class UncomposedResultSet extends Error {
 }
 
 /**
+ * A Session 27-44 read by Load's readers at the file's own paths, with their
+ * rows and Python's, and Python's conversion of the read document.
+ * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[] }} LegacySessionRead
+ */
+/**
+ * The Results a Session 27-44's stored figure replaced while Python upgrades
+ * it (DESIGN 4.3); a Load that does not end ok puts them back.
+ * @typedef {{ results: unknown[], selectedResultIndex: number, failedGeneratePreservedResult: boolean }} StoredFigureWithdrawal
+ */
+/**
  * @param {{ target: { files: ArrayLike<File>, value?: string } }} e
  * @param {Record<string, any>} [options] The options of `importSession` with
  * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
@@ -6071,6 +6104,20 @@ const importSessionDocument = async (e, options = {}) => {
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
   let commitStarted = false;
+  // The stored figure of a Session 27-44 shown while Python upgrades it
+  // (DESIGN 4.3): the Results it replaced, put back unless the Load ends ok.
+  /** @type {StoredFigureWithdrawal | null} */
+  let storedFigureWithdrawal = /** @type {StoredFigureWithdrawal | undefined} */ (options.storedFigureWithdrawal) ?? null;
+  let loadedOk = false;
+  /** @type {LegacySessionRead | null} A Session 27-44 as Load's readers read it and Python converted it (below). */
+  let legacyRead = null;
+  /**
+   * Where a Session 27-44 held each Result set of Python's Session 49: the
+   * 49 document's set (`setSources`, by drawing ID) mapped to the file's set
+   * Python's reply names for the drawing (`resultSetSources`, D-15-130).
+   * @type {Map<ResultSetPath, ResultSetPath>}
+   */
+  const legacyFileSets = new Map();
   const previousAlert = state.errorLog.value;
 
   try {
@@ -6105,14 +6152,42 @@ const importSessionDocument = async (e, options = {}) => {
       return { status: 'legacy', repairs: Object.freeze(legacyRepairs) };
     }
 
+    // A Session 27-44 (DESIGN 4.3, PD-OI-044 rev 4, D-15-129): its stored
+    // figure shows at once; Load's readers read the file at its own paths
+    // (their rows are the dialog's); Python converts the read document to a
+    // Session 49 in one Worker call, which Load reads as it reads a Session 49
+    // file; the drawing that opens is Python's. A retry of the Load (A20)
+    // keeps the stored figure and reads the file again.
+    const fileDocument = readSessionInput(parsed);
+    if (!versionKeepsModeSlices(fileDocument.version)) {
+      const fileRead = readSessionDocument(fileDocument);
+      /** @type {LoadRepair[]} */
+      const fileRepairs = [...fileRead.repairs];
+      const fileParts = await readSessionImportParts(fileDocument, fileRead.value, fileRepairs, uncomposedSets);
+      // The stored figure is the Results the readers kept.
+      if (!storedFigureWithdrawal) {
+        storedFigureWithdrawal = {
+          results: previewRuntimePorts.currentResults(),
+          selectedResultIndex: state.selectedResultIndex.value,
+          failedGeneratePreservedResult: state.failedGeneratePreservedResult.value
+        };
+        const { results: storedResults, ui: storedUi } = /** @type {{ results?: unknown, ui?: { selectedResultIndex?: unknown } }} */ (fileParts.data);
+        applyResultsData(Array.isArray(storedResults) ? storedResults : [], storedUi ?? {});
+        await nextTick();
+      }
+      const upgrade = await upgradeLegacySession(fileParts.data);
+      if (!options.isCurrent()) return { status: 'canceled' };
+      legacyRead = { upgrade, repairs: [...fileRepairs, ...upgrade.warnings] };
+    }
     recordSessionLifecycleEvent('current-session-preflight-start');
     // What Load cannot restore as stored, listed in the dialog before the
     // commit (BA-D25); frozen there, so no step after the commit adds one.
+    // A Session 27-44's rows are its readers' and Python's (above).
     /** @type {LoadRepair[]} */
-    const repairs = [];
+    const repairs = [...(legacyRead?.repairs ?? [])];
     // The one read of the document (D1c 2.2): its band's description, repaired.
     // The document as the file holds it (R4 reads it), and as its band reads it.
-    const storedDocument = readSessionInput(parsed);
+    const storedDocument = legacyRead ? readSessionInput(legacyRead.upgrade.document) : fileDocument;
     const document = readSessionDocument(storedDocument);
     repairs.push(...document.repairs);
     const preflight = await preflightSessionImport(storedDocument, document.value, repairs, uncomposedSets);
@@ -6138,6 +6213,16 @@ const importSessionDocument = async (e, options = {}) => {
       openedDrawingAt,
       projectedDrawingId
     } = preflight;
+    if (legacyRead && upgrade) {
+      const { resultSetSources } = legacyRead.upgrade;
+      upgrade.setSources.forEach((at, drawingId) => {
+        const fileAt = resultSetSources.get(drawingId);
+        if (fileAt !== undefined) legacyFileSets.set(at, fileAt);
+      });
+      // The opened drawing's set is admitted as the committed one, at the top level ('').
+      const openedFileAt = projectedDrawingId === null ? undefined : resultSetSources.get(projectedDrawingId);
+      if (openedFileAt !== undefined) legacyFileSets.set('', openedFileAt);
+    }
     /**
      * Where a drawing's draft part is in the file: a Session 49's
      * entry in its list of drawings, a Session 46-48's `modes.<mode>` (OV-1791).
@@ -6359,9 +6444,14 @@ const importSessionDocument = async (e, options = {}) => {
     const filesOf = (drawingId) => (projectedDrawingId === null || drawingId === projectedDrawingId
       ? projectedFiles : storedFiles.get(drawingId) ?? noFiles);
     recordSessionLifecycleEvent('session-candidate-files-end');
-    const importedResults = canonicalSession
+    // The stored Results of a Session 27-39 a Session 49 cannot hold come
+    // beside Python's document, for the drawing it opens; they have no
+    // catalog, so Save refuses them until one Generate (PD-OI-079).
+    const legacyStoredResults = legacyRead && projectedDrawingId !== null
+      ? legacyRead.upgrade.storedResults.get(projectedDrawingId) : undefined;
+    const importedResults = legacyStoredResults ?? (canonicalSession
       ? projectionResult.artifactState.results
-      : data.results;
+      : data.results);
     const logicalImportedResults = normalizeLogicalResults(
       (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
         name: result?.name || `Result ${index + 1}`,
@@ -7361,6 +7451,7 @@ const importSessionDocument = async (e, options = {}) => {
       isCurrent: options.isCurrent
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
+    loadedOk = true;
     return {
       status: 'ok',
       // What the load changed without a loss, for the caller's notice; what
@@ -7378,8 +7469,18 @@ const importSessionDocument = async (e, options = {}) => {
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
     // Nothing is committed before the dialog: read the file again without the set (A20).
-    if (err instanceof UncomposedResultSet && !commitStarted) {
-      return importSessionDocument(e, { ...options, uncomposedSets: [...uncomposedSets, err.at] });
+    // A Session 27-44's set is dropped where the file holds it: the retry
+    // reads the file again and Python converts it without the set.
+    const uncomposedAt = err instanceof UncomposedResultSet && !commitStarted
+      ? (legacyRead ? legacyFileSets.get(err.at) : err.at)
+      : undefined;
+    if (uncomposedAt !== undefined) {
+      // The retry owns the stored figure's withdrawal from here on.
+      const withdrawal = storedFigureWithdrawal;
+      storedFigureWithdrawal = null;
+      return importSessionDocument(e, {
+        ...options, uncomposedSets: [...uncomposedSets, uncomposedAt], storedFigureWithdrawal: withdrawal
+      });
     }
     // The inner operation names the cause; a failure without one is the Load's.
     const caught = normalizeCaughtError(err, { stage: 'request-validation' });
@@ -7411,6 +7512,12 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
+    // A Load that did not end ok withdraws the stored figure it showed.
+    if (storedFigureWithdrawal && !loadedOk) {
+      state.skipCaptureBaseConfig.value = true;
+      applyResultsData(storedFigureWithdrawal.results, { selectedResultIndex: storedFigureWithdrawal.selectedResultIndex });
+      state.failedGeneratePreservedResult.value = storedFigureWithdrawal.failedGeneratePreservedResult;
+    }
   }
 };
 

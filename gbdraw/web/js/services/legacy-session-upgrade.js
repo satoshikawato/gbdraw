@@ -9,12 +9,15 @@ import { diagnosticError } from '../utils/error-normalization.js';
 
 /**
  * Python's reply: the Session 49, the stored Results a Session 49 cannot
- * hold (Sessions 27-39), by drawing ID, and the Load repairs of the draft
- * migrations (`LegacySessionDrawings`, gbdraw/web_support/legacy_session.py).
- * The document is read by Load's band-49 reader, as a file's would be.
+ * hold (Sessions 27-39), by drawing ID, where the file held the Result set
+ * each drawing took (`resultSetSources`, by drawing ID: the file's one set is
+ * at its top level, `''`), and the Load repairs of the draft migrations
+ * (`LegacySessionDrawings`, gbdraw/web_support/legacy_session.py). The
+ * document is read by Load's band-49 reader, as a file's would be.
  * @typedef {object} LegacySessionUpgrade
  * @property {Record<string, unknown>} document
  * @property {ReadonlyMap<string, readonly unknown[]>} storedResults
+ * @property {ReadonlyMap<string, ''>} resultSetSources
  * @property {readonly LoadRepair[]} warnings
  */
 
@@ -64,7 +67,8 @@ export const upgradeLegacySession = async (document, { upgrade = legacySessionUp
   const response = await upgrade({ document });
   const reply = isRecord(response) ? response.result : null;
   const invalid = () => diagnosticError('RESULT_INVALID', {}, LEGACY_SESSION_UPGRADE);
-  if (!isRecord(reply) || !isRecord(reply.document) || !isRecord(reply.storedResults) || !Array.isArray(reply.warnings)) {
+  if (!isRecord(reply) || !isRecord(reply.document) || !isRecord(reply.storedResults)
+    || !isRecord(reply.resultSetSources) || !Array.isArray(reply.warnings)) {
     throw invalid();
   }
   /** @type {Map<string, readonly unknown[]>} */
@@ -73,11 +77,18 @@ export const upgradeLegacySession = async (document, { upgrade = legacySessionUp
     if (!Array.isArray(results)) throw invalid();
     storedResults.set(drawingId, results);
   }
+  /** @type {Map<string, ''>} */
+  const resultSetSources = new Map();
+  for (const [drawingId, at] of Object.entries(reply.resultSetSources)) {
+    if (at !== '') throw invalid();
+    resultSetSources.set(drawingId, at);
+  }
   const warnings = reply.warnings.map(readDraftMigrationRepair);
   if (warnings.some((warning) => warning === null)) throw invalid();
   return {
     document: reply.document,
     storedResults,
+    resultSetSources,
     warnings: /** @type {LoadRepair[]} */ (warnings)
   };
 };
