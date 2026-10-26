@@ -244,18 +244,24 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   expect(inactive.circularSources[0]).toBe(true);
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
   // E1: Linear has no Result of its own, so it shows and exports none; Save
-  // still writes the Circular Result, and a Session 49 Load opens the drawing
-  // shown at Save (PD-OI-090), here Linear. Run metadata belongs to each drawing.
+  // still writes the Circular Result. The Linear drawing shown at Save has no
+  // file, changed setting, edit, or Result, so Save does not write it and Load
+  // opens the saved drawing of the previous tab, the Circular one (PD-OI-090
+  // 〔Save と Load〕, R16-8). Run metadata belongs to each drawing.
   expect(inactive.results).toBe(0);
   expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(savedDrawing(inactiveSave.document, 'circular').renderRequest).toEqual(promoted);
   expect(savedDrawing(inactiveSave.document, 'circular').runMetadata).toEqual(runMetadata);
+  expect(inactiveSave.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
+  expect(inactiveSave.document.ui.activeDrawingId).toBe('circular');
   await loadFile(page, inactiveSave.file);
   const runState = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
   });
+  expect(await runState()).toEqual(runMetadata);
+  await showDrawing(page, { kind: 'linear' });
   expect(await runState()).toEqual({ annotationWarnings: [], trackSlotGeometry: null });
   await showDrawing(page, { kind: 'circular' });
   expect(await runState()).toEqual(runMetadata);
@@ -274,6 +280,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // the same Session.
   // A Session 49 Load names a drawing's value by its place in `drawings`.
   const at = id => full.document.drawings.findIndex(drawing => drawing.id === id);
+  expect(full.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
   const unbound = (slot, id = 'circular') => `Input files: 1 entry of drawings[${at(id)}].webFiles.bindings.${slot} could not be read and was dropped.`;
   const requestDropped = `Saved diagram: the settings of the saved diagram (drawings[${at('circular')}].renderRequest) could not be read.`
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
@@ -286,8 +293,9 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded'],
     // A null request of a file that holds Results reads as a missing one (E-OD29).
     ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
-    // Each drawing binds its own color table, so each loses it.
-    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color'), unbound('d_color', 'linear')]]
+    // Each drawing binds its own color table, so each saved drawing loses it;
+    // the unused Linear drawing is not saved (R16-8).
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]]
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);

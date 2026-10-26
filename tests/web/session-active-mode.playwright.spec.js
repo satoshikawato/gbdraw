@@ -120,12 +120,24 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.request.mode).toBe('linear');
     expect(restored.results).toEqual([]);
     // Load restores a drawing that holds a request over its request's
-    // projection, which resolves its track stacks: an unset axis index of the
-    // draft is installed as the index Generate infers (OV-1786, OV-1870).
+    // projection, which resolves its track stacks (`resolvedTrackStacks`): an
+    // unset axis index of the draft is installed as the index Generate infers
+    // (OV-1786, OV-1870), and an unset slot placement as the one it resolves.
+    // The Linear drawing Load added beside the Circular Session is a new
+    // drawing at its mode's defaults, whose placements are unset (D-15-120).
     expect(before.config.adv.circular_track_slots_axis_index).toBeNull();
     expect(before.config.adv.linear_track_slots_axis_index).toBeNull();
-    const resolvedAxes = { circular_track_slots_axis_index: 0, linear_track_slots_axis_index: 0 };
-    expect(restored.config).toEqual({ ...before.config, adv: { ...before.config.adv, ...resolvedAxes } });
+    const resolvedStacks = await fresh.evaluate(async ({ adv, form }) => {
+      const { resolvedTrackStacks } = await import('./js/services/config-field-readers.js');
+      const stacks = resolvedTrackStacks(adv, form);
+      return {
+        circular_track_slots_axis_index: stacks.circularAxis, circular_track_slots: stacks.circularSlots,
+        linear_track_slots_axis_index: stacks.linearAxis, linear_track_slots: stacks.linearSlots
+      };
+    }, before.config);
+    expect(resolvedStacks.circular_track_slots_axis_index).toBe(0);
+    expect(resolvedStacks.linear_track_slots_axis_index).toBe(0);
+    expect(restored.config).toEqual({ ...before.config, adv: { ...before.config.adv, ...resolvedStacks } });
     expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
@@ -148,9 +160,9 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
     const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
     // The re-save writes every drawing back, each with its own request
-    // metadata (OV-1872); the Linear draft holds the axis indexes Load resolved.
+    // metadata (OV-1872); the Linear draft holds the track stacks Load resolved.
     const firstResolved = first.drawings.map(drawing => (drawing.id === 'linear'
-      ? { ...drawing, config: { ...drawing.config, adv: { ...drawing.config.adv, ...resolvedAxes } } }
+      ? { ...drawing, config: { ...drawing.config, adv: { ...drawing.config.adv, ...resolvedStacks } } }
       : drawing));
     expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(firstResolved);
     expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
