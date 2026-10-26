@@ -219,7 +219,7 @@ const INPUTS_NO_HANDLE_CALLS = new Set([
   'bindDrawingCanonicalComparisons'
 ]);
 const isHandleCall = (name, key) => !NOT_WRITERS.has(key) && !(name === 'inputs' && INPUTS_NO_HANDLE_CALLS.has(key));
-const inputStore = { registerFile: (file) => ({ id: 'file-1', name: file.name }) };
+const inputStore = { registerFile: (file) => (file ? { id: 'file-1', name: file.name } : null) };
 const legendRow = (caption, originalCaption, color) => ({ caption, originalCaption, color, xPos: 0, yPos: 0, featureIds: [] });
 const SEEDS = {
   canvas: () => ({ canvasPadding: { top: 1, right: 2, bottom: 3, left: 4 } }),
@@ -362,6 +362,9 @@ const WRITES = {
   },
   inputs: {
     bindLinearSeqFile: (h, drawing) => modules.inputs.bindLinearSeqFile(inputStore, h, drawing.linearSeqs[0].uid, 'gb', { name: 'a.gb' }),
+    // A History step's capture of this slice, installed as Undo installs it.
+    installBoundInputs: (h) => modules.inputs.installBoundInputs(inputStore, h,
+      { ...modules.inputs.INPUTS_SLICE.capture(h), linearSeqs: [createLinearSeq({ uid: 'installed' })] }),
     addLinearSeq: (h) => modules.inputs.addLinearSeq(h, createLinearSeq({ uid: 'added' })),
     removeLinearSeq: (h, drawing) => modules.inputs.removeLinearSeq(h, drawing.linearSeqs[0].uid),
     moveLinearSeq: (h, drawing) => modules.inputs.moveLinearSeq(h, drawing.linearSeqs[1].uid, 0),
