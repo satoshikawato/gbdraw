@@ -3779,8 +3779,8 @@ export const createAppSetup = () => {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
-    // without a Result leaves the pane as it was.
-    if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) settingsPaneActions.showPhonePane('preview');
+    // without a Result shows Settings.
+    if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
     // A loaded Session makes a Generate likely: download the Worker's boot
     // files now, after the Load, so they never slow its own requests.
     if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
