@@ -100,7 +100,7 @@ Apply these display settings. They follow the Interactive SVG Gallery entry but 
 
 | Control | Value |
 |---|---|
-| Palette | `galaxy` |
+| Palette | `orange` |
 | Default colors file | `BGC0000708-BGC0000713_default_colors.tsv` |
 | Specific rules file | `BGC0000708-BGC0000713_specific_colors.tsv` |
 | Show Labels | First Record Only |
@@ -275,7 +275,7 @@ gbdraw linear \
   --identity 30 \
   --alignment_length 0 \
   --similarity_alignment_feature CAG38695.1 \
-  --palette galaxy \
+  --palette orange \
   --default_colors BGC0000708-BGC0000713_default_colors.tsv \
   --table BGC0000708-BGC0000713_specific_colors.tsv \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
@@ -405,7 +405,7 @@ request = LinearDiagramRequest(
         colors=ColorOptions(
             color_table_file="BGC0000708-BGC0000713_specific_colors.tsv",
             default_colors_file="BGC0000708-BGC0000713_default_colors.tsv",
-            default_colors_palette="galaxy",
+            default_colors_palette="orange",
         ),
         qualifier_priority_file="cds_gene_qualifier_priority.tsv",
         plot_title="LOSATP Similarity groups across five whole BGC records",

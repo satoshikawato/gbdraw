@@ -424,16 +424,16 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'CDS gene ^dnaA$ #d95f02 DnaA'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText(/color the genes by its value in the colors of the MIBiG website/)).toBeVisible();
+  await expect(tutorialPanel.getByText(/color the genes by it in the color scheme of the MIBiG website/)).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Feature' }).first()).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Qualifier' }).first()).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'CDS gene_kind biosynthetic$ #810e15 Core biosynthetic genes'
+      name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Palette galaxy' }).first()).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Default Colors › CDS feature color #808080' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Palette orange' }).first()).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Default Colors › CDS feature color #dddddd' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 30 (default 0)' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'File 5 › Record options › Reverse complement On' })

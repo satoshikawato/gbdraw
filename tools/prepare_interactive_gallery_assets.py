@@ -175,7 +175,7 @@ BGC_COMMAND = (
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
     "--reverse_complement 0 --reverse_complement 0 --reverse_complement 0 "
     "--reverse_complement 0 --reverse_complement 1 "
-    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p galaxy "
+    "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
     "-t BGC0000708-BGC0000713_specific_colors.tsv "
     "--qualifier_priority BGC0000708-BGC0000713_qualifier_priority.tsv "
@@ -426,8 +426,7 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         tags=("Linear", "Similarity groups", "LOSAT", "Interactive SVG"),
         description=(
             "Five aminoglycoside biosynthetic gene clusters from MIBiG (lividomycin, two neomycin, "
-            "paromomycin, and ribostamycin), colored by antiSMASH gene kind in the MIBiG website "
-            "colors and linked by LOSATP "
+            "paromomycin, and ribostamycin), colored by antiSMASH gene kind and linked by LOSATP "
             "similarity groups at 30% identity or more. The records are aligned on the group of "
             "the ABC transporter <i>neoU</i> from the first neomycin cluster; the lividomycin "
             "cluster has two members of that group, and its <i>livU</i> is the anchor. Only the "

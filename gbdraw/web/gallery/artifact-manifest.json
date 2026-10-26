@@ -13,12 +13,12 @@
   ],
   "files": {
     "gallery/examples.json": {
-      "bytes": 26127,
-      "sha256": "5423fad29d61525c6b0a0e703217e166d35ab217d166eb41c4d539baabeffa39"
+      "bytes": 26099,
+      "sha256": "ac373f2eb9e357dda555d214611f9099afa67df19ffa78bbcd8b1df99b8d058e"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
       "bytes": 1352773,
-      "sha256": "5147734aecbe88f5f3cfed0a59e403bf5b09cc11f31a2c3d0b2b1ab1b6f4a56f"
+      "sha256": "646719a3f051e7bf9065a0c3de490d5f29904fcd9300af862a6474a407b45644"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 446702,
@@ -57,8 +57,8 @@
       "sha256": "643d401fa9e243003cc2b27f29eaa231314018c4e077d9e91145cad8a03345e0"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3060769,
-      "sha256": "2ddd119d554f48b202a0c4cf2e923f48248e60341b320eddbe948130c5740e09"
+      "bytes": 3060825,
+      "sha256": "234247f85bae0032b9e3f3e8af1922650496378a74ac41698df03b29b8211cf6"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 278025,
@@ -98,7 +98,7 @@
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 233251,
-      "sha256": "801acd23f97b6120d4035d77f8df84686c935f494579dfba6fadb68d5121833c"
+      "sha256": "5620adda9639acfc8e7f17604159fc839b4cfb083cf274a1934d452151d68277"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 87199,
@@ -137,8 +137,8 @@
       "sha256": "1e2daae271ac021d4e98fa4b4c87ae5c07a77f2bed0a9cef0b3b249f2cce6057"
     },
     "gallery/thumbnails/BGC0000708-BGC0000713.webp": {
-      "bytes": 18710,
-      "sha256": "611c7b8be0d5a634592c0e24e985195d1f8a210a318ed1cbb165f23fbd94ebbb"
+      "bytes": 19626,
+      "sha256": "19826138fbeefbed2a58e9d55a2e4d14dad3ac407c718306fef3a1518db70755"
     },
     "gallery/thumbnails/HmmtDNA_ATskew.webp": {
       "bytes": 22322,

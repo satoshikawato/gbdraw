@@ -1829,7 +1829,7 @@
       "mediaType": "text/tab-separated-values",
       "inputType": "default-color-table",
       "sizeBytes": 12,
-      "sha256": "47fda3759c6ca7f2f20daaa47ef727ca5fab662adc646e8613edb9464099e95c",
+      "sha256": "85eaab9bc372ed31b0253487e01747a29fecec246bae3aedaba010c4f2a16d5b",
       "packageTier": "core",
       "records": [],
       "provenance": {
@@ -1861,7 +1861,7 @@
       "mediaType": "text/tab-separated-values",
       "inputType": "feature-specific-color-table",
       "sizeBytes": 242,
-      "sha256": "5f02cafcb7ab21fea8c54868b0226fba3ac5960ad5589ab835ed4055df291bce",
+      "sha256": "f8881e9b64ddecb9732103fe8b11a86c1c7a7972007bdca161bce3055a5597af",
       "packageTier": "core",
       "records": [],
       "expectedSemantics": {

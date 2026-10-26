@@ -515,25 +515,23 @@ opened the loaded Session's folded card, showed the caret mid-turn.
 | `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture; recipe unchanged | Exact Lambda Session; open File 1 card from its header line, with the caret at rest, to the **GenBank / DDBJ File** uploader containing `NC_001416.gb` | Recaptured at DSF 3, 864x336 (was 930x324; the same two elements are 22 px narrower and 4 px taller in the current pane); compared side by side |
 | `Vnig_TUMSAT-TG-2018` | `manual-02-01-gbff-upload.webp` | Recapture; recipe added | Exact Vnig Session; `dataDependent`; clip from the **Input Genomes** card header to the **GenBank/DDBJ File** uploader; `assertAppState` and `visibleText` name `GCF_015097735.1_ASM1509773v1_genomic.gbff`; the zone shows the name cut at its end with an ellipsis. The rest of the card is outside the clip: the restored Session shows the record hints of the finished figure (Multi-Record Canvas on), not the state at the upload step | Recaptured at DSF 3, 942x483 (was a manual 656x542 crop); compared side by side |
 
-## MIBiG colors and the qualifier step (Gallery revision 2026-10-26)
+## The qualifier step before the colors (Gallery revision 2026-10-26)
 
-Issue #1385. The `BGC0000708-BGC0000713` tutorial colors the CDS by
-`gene_kind` in the MIBiG website colors (`#810e15`, `#f16d75`, `#6495ed`,
-`#2e8b57`, other CDS `#808080`) with the `galaxy` palette, and the qualifier
-inspection (old step 12) is now step 8, before the colors; the old steps 8-11
-are steps 9-12. The Gallery Session was saved again from a fresh upload, so it
-keeps the File card rows (`webFiles.bindings`) and its record keys are the
-uids `linear-seq-…`, not `record-N`; the recipes of steps 6 and 7 find the
-File 5 card and the alignment review cards by those uids. This section
-replaces the capture state of the same media in the rows of the earlier
-sections; those rows stay as history.
+Issue #1385. In the `BGC0000708-BGC0000713` tutorial the qualifier inspection
+(old step 12) is now step 8, before the colors; the old steps 8-11 are steps
+9-12. The colors, the palette and the color tables stay as they were. The
+Gallery Session was saved again from a fresh upload, so it keeps the File card
+rows (`webFiles.bindings`) and its record keys are the uids `linear-seq-…`, not
+`record-N`; the recipes of steps 6 and 7 find the File 5 card and the
+alignment review cards by those uids. This section replaces the capture state
+of the same media in the rows of the earlier sections; those rows stay as
+history.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
 | `BGC0000708-BGC0000713` | `manual-08-01-feature-popup.webp` (was `manual-12-01-feature-popup.webp`) | Recapture; recipe changed | Replay through step 7 (every CDS still blue); `livE` typed in **Search features** and Enter; the livE CDS of BGC0000708 clicked; popup on **Qualifiers** with `gene` `livE` and `gene_kind` `biosynthetic` | Recaptured at DSF 3, 2511x945; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-09-02-preview-colors.webp` (were `manual-08-01`, `manual-08-02`) | Recapture | Step 9: **Palette** `galaxy`, **CDS feature color** `#808080`, the four `gene_kind` rules in the MIBiG colors; preview after Generate with gray ribbons | Recaptured at DSF 3, 1254x2421 and 3372x1332; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-10-02-preview-labels.webp`, `manual-11-04-preview-final.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-09-02`, `manual-10-04`, `manual-11-01`) | Recapture | The same states one step later, in the new colors | Recaptured at DSF 3, 3372x1521, 3372x1128 and 2256x1428; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-10-01-show-labels-first.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp` (were `manual-09-01`, `manual-10-01`, `manual-10-02`, `manual-10-03`) | Rename; keep bytes | The controls do not show the colors; the recaptures were pixel-identical or within raster noise | Renamed with the committed bytes |
-| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp` | Recapture | Previews before the color step; the current app draws the legend 3 px apart from the committed crops | Recaptured at DSF 3; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-09-02-preview-colors.webp`, `manual-10-02-preview-labels.webp`, `manual-11-04-preview-final.webp` (were `manual-08-02`, `manual-09-02`, `manual-10-04`) | Recapture | The same previews one step later; the current app draws the legend 3 px apart from the committed crops | Recaptured at DSF 3, 3372x1332, 3372x1521 and 3372x1128; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-10-01-show-labels-first.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-08-01`, `manual-09-01`, `manual-10-01`, `manual-10-02`, `manual-10-03`, `manual-11-01`) | Rename; keep bytes | Recaptures pixel-identical or within raster noise | Renamed with the committed bytes |
+| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp` | Recapture | Previews of steps 4-7; the legend 3 px apart, as above | Recaptured at DSF 3; compared by eye |
 | `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp`, `manual-07-01-align-og6.webp` | Recapture | Current labels: **Max hits per protein for groups**; current tab widths in the alignment panel | Recaptured at DSF 3, 1422x3204 and 1926x858; compared by eye |
 | `BGC0000708-BGC0000713` | `manual-07-02-anchor-candidates.webp` and the other media of steps 1-7 | Keep | Recaptures within raster noise (`07-02` maximum channel difference 8) | Recaptured and reverted |
