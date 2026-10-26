@@ -4,7 +4,7 @@
 // (BA-D25, PLAN 12.7 (4)); case and outer spaces read as the position. A Result saved without composition metadata (Session
 // 27 to 30) whose Session stored no side keeps `none`.
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -27,6 +27,10 @@ globalThis.document = {};
 installFakeSvgDom();
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setUnmanagedConfigOverrideValidator } = sessionConfig;
