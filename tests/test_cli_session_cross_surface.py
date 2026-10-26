@@ -23,6 +23,7 @@ from tests.utils.cli_session_cross_surface import (
     replay_cli,
     write_case,
 )
+from tests.utils.session_drawing_view import session_view
 
 CASES = load_cases()
 # The table options of the CLI and the request field each one writes.
@@ -49,7 +50,7 @@ def test_label_blacklist_is_recorded_as_keywords_never_as_a_file(mode):
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
 def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_path):
     files = write_case(case, tmp_path)
-    session = json.loads(files.cli_session.read_text())
+    session = session_view(json.loads(files.cli_session.read_text()))
     request = session["renderRequest"]
     for option, path in TABLE_FIELDS.items():
         if option in case["args"]:
@@ -60,7 +61,7 @@ def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_pat
     if "-b" in case["args"]:
         assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]
     # A CLI Session has no Web draft, so its CLI re-save writes none (D-02).
-    resaved_modes = json.loads(files.cli_resave.read_text()).get("modes", {})
+    resaved_modes = session_view(json.loads(files.cli_resave.read_text())).get("modes", {})
     assert [mode for mode, scoped in resaved_modes.items() if "config" in scoped] == []
 
     drawings = {

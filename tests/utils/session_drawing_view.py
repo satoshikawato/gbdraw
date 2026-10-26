@@ -107,3 +107,10 @@ def without_drawings_move_in_session_module() -> Iterator[None]:
 
     with without_drawings_move(), mock.patch.object(session_module, "drawings_document_from_mode_scoped", keep_mode_scoped):
         yield
+
+
+# fixround C2
+def session_view(document: Mapping[str, Any]) -> dict[str, Any]:
+    """The one-drawing view of a 49, or the 27-48 document itself (a fixture an older writer made)."""
+
+    return drawing_view(document) if "drawings" in document else dict(document)

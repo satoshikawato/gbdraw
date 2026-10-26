@@ -15,6 +15,7 @@ from gbdraw.api import LosatRuntimeOptions, LosatSearchOptions
 from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAMBDA = REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"
@@ -84,7 +85,7 @@ def _searches(log: Path) -> list[list[str]]:
 
 
 def _session(prefix: Path) -> dict:
-    return json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
 
 
 def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:

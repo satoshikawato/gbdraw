@@ -70,6 +70,7 @@ from gbdraw.io.genome import load_gff_fasta
 from tests.utils.comparison_tables import converted_pair_rows, ribbon_group
 from gbdraw.io.record_select import reverse_records
 from gbdraw.linear_comparison import ProteinComparisonFrames
+from tests.utils.session_drawing_view import session_view
 
 
 MG1655_START_CODON_SUBSET = (
@@ -2914,7 +2915,7 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
         ]
     )
 
-    payload = json.loads(output_prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    payload = session_view(json.loads(output_prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
     entries = payload["losatCache"]["entries"]
     assert len(entries) == 1
     assert entries[0]["schema"] == PROTEIN_LOSAT_CACHE_SCHEMA
