@@ -14,7 +14,8 @@ const { resolveLinearComparisonPlan } = await import(
 
 const {
   applyDerivedCachePublicationPolicy,
-  createGallerySessionPublication
+  createGallerySessionPublication,
+  galleryPublicationView
 } = await import('../../gbdraw/web/js/services/gallery-session-publication.js');
 const {
   CANONICAL_REQUEST_SCHEMA,
@@ -57,12 +58,14 @@ const sessionNames = examples.map((example) => String(example.session).split('/'
 assert.equal(sessionNames.length, 10);
 assert.equal(new Set(sessionNames).size, 10);
 
+// A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 49's one
+// drawn drawing as its one-drawing view, an older Session as it is.
 const loadSessionFile = async (path) => {
   const bytes = await readFile(path);
   const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
     ? gunzipSync(bytes)
     : bytes;
-  return JSON.parse(decoded.toString('utf8'));
+  return galleryPublicationView(JSON.parse(decoded.toString('utf8'))).view;
 };
 const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
 // The released Session 44 Gallery files (first-parent main fe6861f0), kept to
@@ -515,18 +518,29 @@ assert.rejects(
     size: Buffer.byteLength(text), lastModified: 0, encoding: 'base64', data: Buffer.from(text, 'utf8').toString('base64') });
   const binding = (resourceId, name) => ({ resourceId, name, type: 'text/tab-separated-values', lastModified: 0 });
   const tableText = (session, ref) => Buffer.from(session.resources[ref.resourceId].data, 'base64').toString('utf8');
+  // The Linear File card rows a Save writes beside the table bindings: one per request record, bound to its
+  // GenBank resource (OV-1819).
+  const linearSeqs = source.renderRequest.records.map((record) => ({
+    uid: record.recordKey,
+    gb: { resourceId: record.source.resourceId, name: `${record.recordKey}.gbk`, type: 'text/plain', lastModified: 0 },
+    gff: null, fasta: null, depth: null, losat_gencode: 1,
+    definition: '', record_subtitle: record.presentation.subtitle || '', file_definition: '', file_subtitle: '',
+    inferred_definition: record.presentation.label,
+    region_record_id: '', region_start: null, region_end: null,
+    region_reverse: Boolean(record.presentation.reverseComplement)
+  }));
   const generatedDefaultColors = 'CDS\t#d3d3d3\nrRNA\t#71ee7d\ntRNA\t#e8b441\ntmRNA\t#ded44e\n'
     + 'skew_high\t#6dded3\nskew_low\t#ad72e3\npairwise_match_min\t#FFE7E7\npairwise_match_max\t#FF7272\n';
   const savedDefaultColors = structuredClone(source);
   savedDefaultColors.resources['resource-0001'] = source.resources['colors-default-colors-file'];
   savedDefaultColors.resources['colors-default-colors-file'] = tsvResource('colors-default-colors-file',
     'colors-default-colors-file-default-colors.tsv', generatedDefaultColors);
-  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
+  savedDefaultColors.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, d_color: binding('resource-0001', 'colors-default-colors.tsv') };
   const sourceColors = source.renderRequest.diagramOptions.colors;
   const importedRules = `${tableText(source, sourceColors.colorTable || sourceColors.colorTableFile)}CDS\tgene\tneoU\t#000000\tRemoved after import\n`;
   const savedRules = structuredClone(source);
   savedRules.resources['resource-0002'] = tsvResource('colors-color-table-file', 'resource-0002-specific-colors.tsv', importedRules);
-  savedRules.webFiles.bindings = { schema: 2, c_gb: null, t_color: binding('resource-0002', 'specific-colors.tsv') };
+  savedRules.webFiles.bindings = { schema: 2, c_gb: null, linearSeqs, t_color: binding('resource-0002', 'specific-colors.tsv') };
   for (const [name, saved] of Object.entries({ savedDefaultColors, savedRules })) {
     const { session, equivalence } = await prepareGallerySessionForPublication(saved);
     assert.deepEqual(equivalence.differences, [], name);
@@ -581,7 +595,7 @@ assert.rejects(
       execFileSync('python', ['-m', 'gbdraw.cli', mode, ...args, '-o', path.join(directory, id),
         '-f', mode === 'circular' ? 'interactive_svg' : 'svg',
         '--session_output', file], { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-      const source = JSON.parse(await readFile(file, 'utf8'));
+      const source = await loadSessionFile(file);
       const { session, equivalence } = await prepareGallerySessionForPublication(source);
       assert.deepEqual(equivalence.differences, [], id);
       assert.equal((await validateGalleryPublicationReadiness(session)).equivalence.equivalent, true, id);
@@ -625,7 +639,7 @@ assert.rejects(
       '--circular_track_slot', 'gc_content:dinucleotide_content@side=inside,r=0.56,w=0.08',
       '-o', path.join(directory, 'slots'), '-f', 'interactive_svg', '--session_output', file],
     { env: { ...process.env, PYTHONPATH: process.cwd() }, stdio: 'pipe', timeout: 1_800_000 });
-    const source = JSON.parse(await readFile(file, 'utf8'));
+    const source = await loadSessionFile(file);
     const { tracks } = source.renderRequest.diagramOptions;
     assert.deepEqual([tracks.circularTrackSlots[1].params.padding_px, tracks.circularTrackSlots[1].params.show_labels,
       tracks.circularTrackSlots[2].params.padding_px, tracks.circularTrackAxisIndex ?? null], ['0', 'false', '1', null]);
