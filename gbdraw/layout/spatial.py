@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
+import bisect
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import Sequence, cast
 
@@ -197,31 +198,38 @@ def aabbs_touch(first: Aabb | None, second: Aabb | None) -> bool:
     )
 
 
-def touching_aabb_pairs(bboxes: Sequence[Aabb | None]) -> list[tuple[int, int]]:
-    """Return every index pair whose boxes touch; edge contact counts.
+def touching_aabb_pairs(bboxes: Sequence[Aabb | None]) -> Iterator[tuple[int, int]]:
+    """Yield every index pair whose boxes touch; edge contact counts.
 
     A ``None`` box (unknown extent) touches every box. A predicate that needs two
     shapes to meet is false for every other pair, so a count over these pairs
-    equals the count over all pairs.
+    equals the count over all pairs. The pairs are yielded one at a time, not held.
     """
     finite = sorted(
         ((idx, bbox) for idx, bbox in enumerate(bboxes) if bbox is not None),
         key=lambda item: item[1].min_x,
     )
-    pairs: list[tuple[int, int]] = []
+    unknown = [idx for idx, bbox in enumerate(bboxes) if bbox is None]
+    return _touching_aabb_pairs(bboxes, finite, unknown)
+
+
+def _touching_aabb_pairs(
+    bboxes: Sequence[Aabb | None],
+    finite: list[tuple[int, Aabb]],
+    unknown: list[int],
+) -> Iterator[tuple[int, int]]:
     for position, (idx, bbox) in enumerate(finite):
-        for jdx, other in finite[position + 1:]:
+        for later in range(position + 1, len(finite)):
+            jdx, other = finite[later]
             if other.min_x > bbox.max_x:
                 break
             if other.min_y > bbox.max_y or other.max_y < bbox.min_y:
                 continue
-            pairs.append((idx, jdx))
-    unknown = [idx for idx, bbox in enumerate(bboxes) if bbox is None]
+            yield idx, jdx
     for idx in unknown:
         for jdx in range(len(bboxes)):
             if jdx != idx and (bboxes[jdx] is not None or jdx > idx):
-                pairs.append((idx, jdx))
-    return pairs
+                yield idx, jdx
 
 
 def touching_aabb_indices(
@@ -238,6 +246,12 @@ def touching_aabb_indices(
     """
     indexes = range(len(bboxes)) if candidates is None else candidates
     return [idx for idx in indexes if idx != skip and aabbs_touch(query, bboxes[idx])]
+
+
+def grid_bucket_size(bboxes: Sequence[Aabb], padding: float = 0.0) -> float:
+    """A grid bucket for these boxes: the largest box side plus ``padding``, within 16 to 256 (16 + padding for none)."""
+    max_extent = max((max(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y) for bbox in bboxes), default=16.0)
+    return max(16.0, min(256.0, max_extent + float(padding)))
 
 
 def _validate_bucket_size(bucket_size: float) -> float:
@@ -304,6 +318,12 @@ class AabbIndex:
             for bucket_y in _bucket_range(bbox.min_y, bbox.max_y, self.bucket_size):
                 self._buckets.setdefault((bucket_x, bucket_y), []).append(item_id)
 
+    def remove(self, item_id: object, bbox: Aabb) -> None:
+        """Take out ``item_id``, inserted with ``bbox``; it keeps its place in the query order."""
+        for bucket_x in _bucket_range(bbox.min_x, bbox.max_x, self.bucket_size):
+            for bucket_y in _bucket_range(bbox.min_y, bbox.max_y, self.bucket_size):
+                self._buckets[(bucket_x, bucket_y)].remove(item_id)
+
     def query(self, bbox: Aabb, padding: float = 0.0) -> list[object]:
         candidates = list(dict.fromkeys(self._bucket_items(bbox, _validate_padding(padding))))
         candidates.sort(key=self._order.__getitem__)
@@ -315,6 +335,75 @@ class AabbIndex:
         for bucket_x in _bucket_range(bbox.min_x - padding, bbox.max_x + padding, self.bucket_size):
             for bucket_y in _bucket_range(bbox.min_y - padding, bbox.max_y + padding, self.bucket_size):
                 yield from self._buckets.get((bucket_x, bucket_y), empty)
+
+
+class TouchingAabbIndex:
+    """Boxes by index in a grid, kept as boxes change.
+
+    ``touching(query, skip=...)`` equals ``touching_aabb_indices(boxes, query, skip=...)``
+    but looks only at the boxes in the query's buckets. A ``None`` box (unknown
+    extent) touches every box.
+    """
+
+    def __init__(self, bucket_size: float) -> None:
+        self.boxes: list[Aabb | None] = []
+        self._unknown: set[int] = set()
+        self._index = AabbIndex(bucket_size=bucket_size)
+        # The grid answers in first-insertion order. That is index order until an unknown box
+        # becomes finite: its index then enters the grid after later ones.
+        self._grid_in_index_order = True
+
+    @classmethod
+    def of(cls, bboxes: Sequence[Aabb | None]) -> TouchingAabbIndex:
+        """The boxes in order, in a grid sized by :func:`grid_bucket_size`."""
+        index = cls(grid_bucket_size([bbox for bbox in bboxes if bbox is not None]))
+        for bbox in bboxes:
+            index.append(bbox)
+        return index
+
+    def append(self, bbox: Aabb | None) -> None:
+        """Add ``bbox`` as the next index."""
+        self.boxes.append(None)
+        self._place(len(self.boxes) - 1, bbox)
+
+    def replace(self, idx: int, bbox: Aabb | None) -> None:
+        """Box ``idx`` is now ``bbox``."""
+        old = self.boxes[idx]
+        if old is None:
+            self._unknown.discard(idx)
+            if bbox is not None:
+                self._grid_in_index_order = False
+        else:
+            self._index.remove(idx, old)
+        self._place(idx, bbox)
+
+    def touching(self, query: Aabb | None, *, skip: int | None = None) -> list[int]:
+        """The indexes of the boxes that touch ``query``, in index order; ``skip`` is left out."""
+        if query is None:
+            return [idx for idx in range(len(self.boxes)) if idx != skip]
+        boxes = self.boxes
+        size = self._index.bucket_size
+        buckets = (math.floor(query.max_x / size) - math.floor(query.min_x / size) + 1) * (
+            math.floor(query.max_y / size) - math.floor(query.min_y / size) + 1
+        )
+        if buckets >= len(boxes):
+            # A query that spans more buckets than there are boxes: the scan is cheaper.
+            return touching_aabb_indices(boxes, query, skip=skip)
+        candidates = cast("list[int]", self._index.query(query))
+        found = [idx for idx in candidates if idx != skip and aabbs_touch(query, boxes[idx])]
+        if self._unknown:
+            found.extend(idx for idx in self._unknown if idx != skip)
+            found.sort()
+        elif not self._grid_in_index_order:
+            found.sort()
+        return found
+
+    def _place(self, idx: int, bbox: Aabb | None) -> None:
+        self.boxes[idx] = bbox
+        if bbox is None:
+            self._unknown.add(idx)
+        else:
+            self._index.insert(idx, bbox)
 
 
 def split_circular_interval(start: int, end: int, genome_length: int | None) -> list[Interval]:
@@ -329,21 +418,47 @@ def split_circular_interval(start: int, end: int, genome_length: int | None) -> 
     return [Interval(start, length), Interval(1, end)]
 
 
+def candidate_aabb_partners(
+    bboxes: Sequence[Aabb],
+    padding: float = 0.0,
+    bucket_size: float = 128.0,
+) -> Iterator[set[int]]:
+    """Yield, for each box in order, the later boxes it may touch, using an AABB broad phase.
+
+    Box ``j`` is a partner of box ``i < j`` when a grid bucket holds box ``i`` and meets
+    box ``j`` grown by ``padding``. Only one box's partners are held at a time, so the
+    pairs of a crowded set are never all in memory at once.
+    """
+    padding = _validate_padding(padding)
+    bucket_size = _validate_bucket_size(bucket_size)
+    grown: dict[tuple[int, int], list[int]] = {}
+    for item_idx, bbox in enumerate(bboxes):
+        for bucket_x in _bucket_range(bbox.min_x - padding, bbox.max_x + padding, bucket_size):
+            for bucket_y in _bucket_range(bbox.min_y - padding, bbox.max_y + padding, bucket_size):
+                grown.setdefault((bucket_x, bucket_y), []).append(item_idx)
+    empty: list[int] = []
+    for item_idx, bbox in enumerate(bboxes):
+        partners: set[int] = set()
+        for bucket_x in _bucket_range(bbox.min_x, bbox.max_x, bucket_size):
+            for bucket_y in _bucket_range(bbox.min_y, bbox.max_y, bucket_size):
+                bucket = grown.get((bucket_x, bucket_y), empty)
+                # Bucket lists hold indexes in increasing order: the later boxes are at the end.
+                position = bisect.bisect_right(bucket, item_idx)
+                partners.update(bucket[position:])
+        yield partners
+
+
 def candidate_aabb_pairs(
     bboxes: Sequence[Aabb],
     padding: float = 0.0,
     bucket_size: float = 128.0,
 ) -> set[tuple[int, int]]:
-    """Return candidate bbox index pairs using an AABB broad phase."""
-    pairs: set[tuple[int, int]] = set()
-    padding = _validate_padding(padding)
-    index = AabbIndex(bucket_size=bucket_size)
-    for item_idx, bbox in enumerate(bboxes):
-        for candidate_idx in index._bucket_items(bbox, padding):
-            left = cast(int, candidate_idx)  # ids inserted below are earlier item indexes
-            pairs.add((left, item_idx))
-        index.insert(item_idx, bbox)
-    return pairs
+    """Return candidate bbox index pairs using an AABB broad phase (see :func:`candidate_aabb_partners`)."""
+    return {
+        (item_idx, partner)
+        for item_idx, partners in enumerate(candidate_aabb_partners(bboxes, padding, bucket_size))
+        for partner in partners
+    }
 
 
 __all__ = [
@@ -354,8 +469,11 @@ __all__ = [
     "aabbs_touch",
     "bounding_aabb",
     "candidate_aabb_pairs",
+    "candidate_aabb_partners",
     "finite_aabb",
+    "grid_bucket_size",
     "split_circular_interval",
+    "TouchingAabbIndex",
     "touching_aabb_indices",
     "touching_aabb_pairs",
     "union_aabbs",
