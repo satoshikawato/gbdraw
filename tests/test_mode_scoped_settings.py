@@ -18,9 +18,7 @@ from gbdraw.api.session_compat import _session_protein_mode
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.session import load_session_document, upgrade_session_document
-from tests.utils.session_drawing_view import drawing_view, without_drawings_move_in_session_module
-
-MODE_SCOPED_VERSION = 48  # the upgrade's layout before its move to drawings (without_drawings_move_in_session_module)
+from tests.utils.session_drawing_view import drawing_view, upgrade_to_mode_scoped
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -41,6 +39,8 @@ from gbdraw.web_support.mode_scoped_settings import (
     SLICE_CONTAINERS,
     unmanaged_config_override_modes,
 )
+
+MODE_SCOPED_VERSION = 48  # the upgrade's layout before its move to drawings (upgrade_to_mode_scoped)
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -349,11 +349,10 @@ def written_session_46(tmp_path_factory: pytest.TempPathFactory) -> dict[str, An
     since Session 49 (the CLI re-save upgrades its base first).
     """
 
-    with without_drawings_move_in_session_module():
-        upgraded = upgrade_session_document(
-            FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz",
-            temporary_directory=tmp_path_factory.mktemp("session-46"),
-        ).document.to_dict()
+    upgraded = upgrade_to_mode_scoped(
+        FIXTURES / "feature-placements-linear.v44.gbdraw-session.json.gz",
+        tmp_path_factory.mktemp("session-46"),
+    )
     assert upgraded["version"] == MODE_SCOPED_VERSION
     return upgraded
 
