@@ -50,28 +50,38 @@ def test_label_blacklist_is_recorded_as_keywords_never_as_a_file(mode):
 @pytest.mark.parametrize("case", CASES, ids=[case["id"] for case in CASES])
 def test_cli_session_draws_the_cli_figure_on_the_cli_and_in_python(case, tmp_path):
     files = write_case(case, tmp_path)
-    session = session_view(json.loads(files.cli_session.read_text()))
-    request = session["renderRequest"]
-    for option, path in TABLE_FIELDS.items():
-        if option in case["args"]:
-            ref = request["diagramOptions"]
-            for key in path:
-                ref = ref[key]
-            assert ref["resourceId"] in session["resources"], option
-    if "-b" in case["args"]:
-        assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]
-    # A CLI Session has no Web draft, so its CLI re-save writes none (D-02).
-    resaved_modes = session_view(json.loads(files.cli_resave.read_text())).get("modes", {})
-    assert [mode for mode, scoped in resaved_modes.items() if "config" in scoped] == []
+    if "args" in case:
+        session = session_view(json.loads(files.cli_session.read_text()))
+        request = session["renderRequest"]
+        for option, path in TABLE_FIELDS.items():
+            if option in case["args"]:
+                ref = request["diagramOptions"]
+                for key in path:
+                    ref = ref[key]
+                assert ref["resourceId"] in session["resources"], option
+        if "-b" in case["args"]:
+            assert "nucleotideBlast" in [item["kind"] for item in request["comparisons"]]
+        # A CLI Session has no Web draft, so its CLI re-save writes none (D-02).
+        resaved_modes = session_view(json.loads(files.cli_resave.read_text())).get("modes", {})
+        assert [mode for mode, scoped in resaved_modes.items() if "config" in scoped] == []
 
-    drawings = {
-        "CLI replay": tmp_path / "cli-replay.svg",
-        "CLI replay of the CLI re-save": replay_cli(case["mode"], files.cli_resave, tmp_path / "cli-resave-replay"),
-        "CLI replay of the Python re-save": replay_cli(case["mode"], files.python_resave, tmp_path / "python-resave-replay"),
-        "Python": render_python(files.cli_session, tmp_path / "python"),
-        "Python, CLI re-save": render_python(files.cli_resave, tmp_path / "python-cli-resave"),
-        "Python, Python re-save": render_python(files.python_resave, tmp_path / "python-python-resave"),
-    }
-    for surface, svg in drawings.items():
-        result = check(files.svg, svg)
-        assert result.equal, f"{surface}: {result.message}\n" + "\n".join(result.differences[:3])
+    for drawing, expected in files.svgs.items():
+        python_resave = files.python_resaves[drawing]
+        # A drawing of a Session of several is found by its ID; a Python re-save holds that one drawing.
+        mode = case.get("mode") or next(
+            item["mode"] for item in json.loads(files.cli_session.read_text())["drawings"] if item["id"] == drawing
+        )
+        named = {"drawing": drawing} if "args" not in case else {}
+        drawings = {
+            **({"CLI replay": tmp_path / "cli-replay.svg"} if "args" in case else {}),
+            "CLI replay of the CLI re-save": replay_cli(
+                mode, files.cli_resave, tmp_path / f"cli-resave-replay-{drawing}", **named),
+            "CLI replay of the Python re-save": replay_cli(
+                mode, python_resave, tmp_path / f"python-resave-replay-{drawing}"),
+            "Python": render_python(files.cli_session, tmp_path / f"python-{drawing}", **named),
+            "Python, CLI re-save": render_python(files.cli_resave, tmp_path / f"python-cli-resave-{drawing}", **named),
+            "Python, Python re-save": render_python(python_resave, tmp_path / f"python-python-resave-{drawing}"),
+        }
+        for surface, svg in drawings.items():
+            result = check(expected, svg)
+            assert result.equal, f"{drawing}, {surface}: {result.message}\n" + "\n".join(result.differences[:3])

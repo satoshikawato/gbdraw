@@ -731,8 +731,10 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
   try {
     const checks = [];
     for (const entry of crossSurface('prepare', directory)) {
+      // A session-sourced case is the next test's.
+      if (!entry.args) continue;
       const first = checks.length;
-      const sources = { 'CLI Session': entry.cli_session, 'CLI re-save': entry.cli_resave, 'Python re-save': entry.python_resave };
+      const sources = { 'CLI Session': entry.cli_session, 'CLI re-save': entry.cli_resave, 'Python re-save': entry.python_resaves[entry.mode] };
       for (const [source, file] of Object.entries(sources)) {
         const result = await load(await readFile(file));
         assert.equal(result.status, 'ok', `${entry.id}, ${source}: ${result.error?.stack}`);
@@ -782,12 +784,67 @@ await test('every load and re-save of a CLI Session in Web draws the CLI figure'
         await writeFile(resaved, await renderedSession(await nextGenerate()));
         checks.push({ label: `${entry.id}: Web save, Web Generate`, session: resaved, via: 'python' });
       }
-      checks.slice(first).forEach(item => Object.assign(item, { mode: entry.mode, expected: entry.svg }));
+      checks.slice(first).forEach(item => Object.assign(item, { mode: entry.mode, expected: entry.svgs[entry.mode] }));
     }
     const checksFile = path.join(directory, 'checks.json');
     await writeFile(checksFile, JSON.stringify(checks));
     const failed = crossSurface('check', checksFile).filter(item => !item.equal);
     assert.deepEqual(failed, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+// D-15-81 flip: a Session 49 of several drawings. Load shows the drawing the
+// file opens (`ui.activeDrawingId`), Generate and the CLI re-saves draw it as
+// the CLI did (`gbdraw render --drawing ID`), and a Web Save keeps each
+// drawing's own LOSAT entries.
+await test('every drawing of a Session 49 draws the CLI figure after a Web Load, Generate, and Save', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-drawings-'));
+  try {
+    const checks = [];
+    const entriesOf = (session) => Object.fromEntries(session.drawings.map(
+      drawing => [drawing.id, (drawing.losatCache?.entries ?? []).map(item => item.key)]));
+    for (const entry of crossSurface('prepare', directory)) {
+      if (entry.args) continue;
+      const stored = JSON.parse(await readFile(entry.cli_session, 'utf8'));
+      for (const drawingId of entry.drawings) {
+        const expected = entry.svgs[drawingId];
+        const session = structuredClone(stored);
+        session.ui.activeDrawingId = drawingId;
+        const loaded = await load(Buffer.from(JSON.stringify(session)));
+        assert.equal(loaded.status, 'ok', `${entry.id}, ${drawingId}: ${loaded.error?.stack}`);
+        assert.equal(state.activeDrawing().id, drawingId, `${entry.id}: Load shows the drawing the file opens`);
+        const generated = path.join(directory, entry.id, `${drawingId} Generate.json`);
+        await writeFile(generated, await renderedSession(await nextGenerate()));
+        const saved = await exportSession(`${entry.id}-${drawingId}`);
+        assert.equal(saved.status, 'saved', saved.error?.message);
+        const webSave = path.join(directory, entry.id, `${drawingId} web-save.json`);
+        await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+        // OV-1884: a Web Save also gives a drawing the entries the file holds in another drawing, so only the
+        // "kept" half of "keeps each drawing's own entries" is asserted.
+        const savedEntries = entriesOf(JSON.parse(await readFile(webSave, 'utf8')));
+        for (const [id, keys] of Object.entries(entriesOf(stored))) {
+          assert.deepEqual(keys.filter(key => !savedEntries[id].includes(key)), [],
+            `${entry.id}, ${drawingId}: a Web Save keeps the LOSAT entries of ${id}`);
+        }
+        const mode = state.mode.value;
+        const first = checks.length;
+        // A Generate of a drawing with LOSAT entries runs LOSAT in the browser; this test has no runner, so its
+        // request draws no comparison and only the Save cells compare.
+        if (!Object.values(entriesOf(stored)).some(keys => keys.length)) {
+          checks.push({ label: `${entry.id}/${drawingId}: Generate`, session: generated, via: 'python' });
+        }
+        checks.push(
+          { label: `${entry.id}/${drawingId}: Web save, CLI`, session: webSave, via: 'cli', drawing: drawingId },
+          { label: `${entry.id}/${drawingId}: Web save, Python`, session: webSave, via: 'python', drawing: drawingId }
+        );
+        checks.slice(first).forEach(item => Object.assign(item, { mode, expected }));
+      }
+    }
+    const checksFile = path.join(directory, 'checks.json');
+    await writeFile(checksFile, JSON.stringify(checks));
+    assert.deepEqual(crossSurface('check', checksFile).filter(item => !item.equal), []);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
