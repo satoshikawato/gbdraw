@@ -27,7 +27,7 @@ from gbdraw.session_io import (
     load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tests.utils.session_drawing_view import drawings_document_of_view
+from tests.utils.session_drawing_view import drawing_view, drawings_document_of_view
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -956,7 +956,7 @@ def test_refresh_leaves_a_test_input_pipeline_unresolved(
     def pipelines(path: Path) -> list[tuple[str, object]]:
         return [
             (item["kind"], item.get("mode"))
-            for item in load_session(path)["renderRequest"]["comparisons"]
+            for item in _published_drawing(path)["renderRequest"]["comparisons"]
         ]
 
     before = pipelines(source)
@@ -978,7 +978,7 @@ def test_refresh_records_resolved_track_geometry(
 
     _refresh_one_session(source, destination_path=destination)
 
-    refreshed = load_session(destination)
+    refreshed = _published_drawing(destination)
     assert refreshed["version"] == CURRENT_SESSION_VERSION
     assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert refreshed["renderRequest"]["output"]["interactiveMetadataPolicy"] == "auto"
@@ -1166,7 +1166,7 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
     assert _stored_output_prefixes(session) == ("declared", "declared")
     # The Session stores the collinear result its command computed, with the
@@ -1248,7 +1248,7 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
     )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert session["cliInvocation"]["args"] == argv[2:]
     assert _stored_output_prefixes(session) == ("declared", "declared")
     assert [
@@ -1284,7 +1284,7 @@ def test_linear_schema5_publication_preserves_materialized_cardinality_round_tri
 
     _refresh_one_session(source, destination_path=destination)
 
-    refreshed = load_session(destination)
+    refreshed = _published_drawing(destination)
     assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert [
         record["cardinality"]
@@ -2184,6 +2184,14 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     assert args[binding["argIndex"]] == "A.gb"
 
 
+def _published_drawing(path: Path) -> dict[str, Any]:
+    """The drawing a refreshed Session shows, as its one-drawing view: a
+    Session 49 holds one drawing; a tracked Session 46-48 is its own view."""
+
+    document = load_session(path)
+    return drawing_view(document) if "drawings" in document else document
+
+
 def _stored_output_prefixes(session: dict[str, object]) -> tuple[object, object]:
     """The Output Prefix as the form field of the Result's mode slice and the
     render request store it."""
@@ -2226,7 +2234,7 @@ def test_stored_session_refresh_publishes_gallery_id_and_input_file_names(
 
     _refresh_one_session(staged, destination_path=destination)
 
-    session = load_session(destination)
+    session = _published_drawing(destination)
     assert _stored_output_prefixes(session) == (gallery_id, gallery_id)
     args = session["cliInvocation"]["args"]
     assert _recorded_output(args) == gallery_id

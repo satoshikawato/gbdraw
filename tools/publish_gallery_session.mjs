@@ -5,7 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-comparisons.js';
 import {
-  createGallerySessionPublication
+  createGallerySessionPublication, galleryPublicationDocument, galleryPublicationView
 } from '../gbdraw/web/js/services/gallery-session-publication.js';
 import { promoteGallerySessionToCurrent } from '../gbdraw/web/js/services/gallery-session-migration.js';
 import {
@@ -32,12 +32,14 @@ const {
   resolveComparisonPlan: resolveLinearComparisonPlan
 });
 
+// A Session file as the publication reads it: the one-drawing view of the
+// drawing it shows, and that drawing's ID and name (Session 49).
 const readSession = async (path) => {
   const payload = await readFile(path);
   const decoded = payload[0] === 0x1f && payload[1] === 0x8b
     ? gunzipSync(payload)
     : payload;
-  return JSON.parse(decoded.toString('utf8'));
+  return galleryPublicationView(JSON.parse(decoded.toString('utf8')));
 };
 
 const writeSession = async (path, session) => {
@@ -73,8 +75,9 @@ const main = async () => {
     if (!inputPath || !outputPath) {
       throw new Error('Usage: publish_gallery_session.mjs prepare INPUT OUTPUT [REPORT]');
     }
-    const result = await prepareGallerySessionForPublication(await readSession(inputPath));
-    await writeSession(outputPath, result.session);
+    const input = await readSession(inputPath);
+    const result = await prepareGallerySessionForPublication(input.view);
+    await writeSession(outputPath, galleryPublicationDocument(result.session, input.drawing));
     await writeReport(reportPath, safeReport(result.session, result.equivalence));
     return;
   }
@@ -85,11 +88,12 @@ const main = async () => {
         'Usage: publish_gallery_session.mjs finalize PREPARED REPLAYED OUTPUT [REPORT]'
       );
     }
+    const prepared = await readSession(preparedPath);
     const result = await finalizeGallerySessionPublication({
-      prepared: await readSession(preparedPath),
-      replayed: await readSession(replayedPath)
+      prepared: prepared.view,
+      replayed: (await readSession(replayedPath)).view
     });
-    await writeSession(outputPath, result.session);
+    await writeSession(outputPath, galleryPublicationDocument(result.session, prepared.drawing));
     await writeReport(reportPath, safeReport(result.session, result.equivalence));
     return;
   }
@@ -98,7 +102,7 @@ const main = async () => {
     if (!inputPath) {
       throw new Error('Usage: publish_gallery_session.mjs verify INPUT [REPORT]');
     }
-    const session = await readSession(inputPath);
+    const session = (await readSession(inputPath)).view;
     const result = await validateGalleryPublicationReadiness(session);
     await writeReport(reportPath, safeReport(session, result.equivalence));
     return;

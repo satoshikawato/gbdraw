@@ -76,8 +76,11 @@ def replay_cli(mode: str, session: Path, output_prefix: Path, *extra: str) -> Pa
 
 
 def render_python(session: Path, output_directory: Path) -> Path:
-    with materialize_session(load_session_document(session), output_directory=output_directory) as materialized:
-        result = render_session(materialized)
+    """Draw the drawing a Session opens in Web (a Web Save holds one per mode)."""
+
+    document = load_session_document(session)
+    with materialize_session(document, output_directory=output_directory) as materialized:
+        result = render_session(materialized, drawing=document.active_drawing_id)
     return next(path for path in result.output_paths if path.suffix == ".svg")
 
 

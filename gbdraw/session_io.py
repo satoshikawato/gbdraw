@@ -5644,7 +5644,8 @@ def build_session_json(
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
     )
-    validate_session(payload)
+    # One check, of the Session 49 returned (OV-1815): the mode-scoped payload
+    # is this builder's own and moves unchecked.
     from .session_drawings import drawings_document_from_mode_scoped
 
     drawings, _source_facts = drawings_document_from_mode_scoped(payload)

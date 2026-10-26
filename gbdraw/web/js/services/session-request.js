@@ -183,7 +183,8 @@ import {
   adoptCurrentSessionResources,
   createCombinedSessionResourceFileView,
   createSessionResourceFileView,
-  validateWebFileBindings
+  validateWebFileBindings,
+  webBindingInputSlot
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
@@ -4759,7 +4760,7 @@ export const projectCanonicalSessionRequest = ({
   deferResourceContent = false,
   adoptCanonicalPayloads = false,
   markCardFileRows = false,
-  bindingInputSlot = 'c_gb'
+  bindingInputSlot
 }) => {
   // Every request reaches the projection at the current schema: a stored one
   // through its reader (`readStoredRenderRequest`), a new one from the writer.
@@ -4830,7 +4831,11 @@ export const projectCanonicalSessionRequest = ({
     : {};
   // The checked bindings; the CLI initialization below rebuilds them field by field.
   /** @type {Readonly<Record<string, unknown>> | undefined} */
-  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources, bindingInputSlot);
+  // A Load passes the input slot of the Session it reads (`c_gb` for a Session 41-48); a committed request
+  // projected again (label reflow, orientation, alignment) holds its own mode's input slot (OV-1814).
+  let explicitBindings = validateWebFileBindings(
+    webMetadata, canonicalResources, bindingInputSlot ?? webBindingInputSlot(true, renderRequest.mode)
+  );
   // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
   // values, not a user's cleared inputs. Keep real original CLI bindings (in
   // particular GFF + FASTA), and initialize absent slots from the typed request.

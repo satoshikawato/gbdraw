@@ -2236,6 +2236,21 @@ assert.deepEqual(
 assertLabelStyleRoundTrip(() => buildCanonicalRenderRequestRaw({
   state, filesData: materializedFilesData, comparisonPlanSnapshot: materializedSnapshot
 }));
+// A Session 49 Linear drawing binds only its own mode's inputs (no `c_gb`);
+// a committed request projected again (label reflow, orientation, alignment)
+// checks the bindings by its own mode's input slot (OV-1814).
+{
+  const resourceId = materializedCanonical.renderRequest.records[0].source.resourceId;
+  const gb = { resourceId, name: 'multi.gb', type: 'text/plain', lastModified: 0 };
+  const linearDrawingBindings = {
+    schema: 2, d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null,
+    linearSeqs: [{ uid: 'multi-source', gb, gff: null, fasta: null, depth: null }], linearComparisons: []
+  };
+  assert.equal(Object.hasOwn(linearDrawingBindings, 'c_gb'), false);
+  assert.doesNotThrow(() => projectCanonicalSessionRequest({
+    ...materializedCanonical, webFiles: { ...materializedCanonical.webFiles, bindings: linearDrawingBindings }
+  }));
+}
 
 const oneSourceFilesData = {
   linearSeqs: [{
@@ -5696,7 +5711,9 @@ if (roundTripSessionIndex >= 0) {
   const linear = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
   const inactive = projectCanonicalSessionRequest({ ...linear,
     resources: { ...linear.resources, first: resources.first, second: resources.second },
-    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } } });
+    webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } },
+    // The Load of a Session 41-48 checks its bindings by `c_gb` whatever the mode.
+    bindingInputSlot: 'c_gb' });
   assert.equal(linear.renderRequest.mode, 'linear');
   assert.equal(await backing.readSessionResourceText(inactive.files.c_gb), 'second\r\nfirst\nsecond\r\n');
   const leaf = frozen.webFiles.bindings.c_gb;

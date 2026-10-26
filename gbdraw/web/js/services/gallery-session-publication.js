@@ -4,7 +4,7 @@ import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
 import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
-import { sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
+import { drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
@@ -14,6 +14,7 @@ import {
   MODE_SCOPED_SESSION_VERSION,
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA,
+  SESSION_DRAWINGS_LAYOUT,
   SESSION_VERSION as CURRENT_VERSION
 } from '../contracts/schema.generated.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
@@ -44,6 +45,7 @@ const clone = (value) => value === undefined ? value : JSON.parse(JSON.stringify
  */
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { Session49 } from './session-drawings-upgrade.js' */
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -98,6 +100,47 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  * @property {unknown} [otherModeResult]
  */
 
+/**
+ * The drawing a published Session holds: its source's, or its mode's for a Session 27-48 source.
+ * @typedef {{ id: string, name: string }} PublishedDrawing
+ */
+/**
+ * @param {PublicationSession | Session49} document
+ * @returns {document is Session49} The document lists its drawings (Session 49).
+ */
+const holdsDrawings = (document) => Array.isArray(document.drawings);
+/**
+ * The drawing a Gallery Session shows, as the one-drawing view the publication rebuilds
+ * (`drawingViewOf`), and its ID and name. A Gallery Session shows one drawing: a Session 49's only
+ * drawing with a committed render. A Web Save also holds an undrawn drawing of the other mode; the
+ * publication leaves it out, as it left out the other mode's slice of a Session 46-48. A Session
+ * 27-48 is its own view.
+ * @param {PublicationSession | Session49} document A Session file as read, before admission.
+ * @returns {{ view: PublicationSession, drawing: PublishedDrawing | null }}
+ */
+export const galleryPublicationView = (document) => {
+  if (!holdsDrawings(document)) return { view: document, drawing: null };
+  const drawn = document.drawings.filter((drawing) => drawing.renderRequest !== null);
+  if (drawn.length !== 1) {
+    throw new Error(`Gallery publication requires a Session with one drawn drawing; this one has ${drawn.length}.`);
+  }
+  const [shown] = drawn;
+  // The view holds the drawing's request (not null, tested above) at the top level.
+  const view = /** @type {PublicationSession} */ (/** @type {unknown} */ (drawingViewOf(document, shown)));
+  return { view, drawing: { id: shown.id, name: shown.name } };
+};
+/**
+ * The Session 49 a publication writes of its one-drawing view (`sessionDocumentOfViews`): one drawing,
+ * of the source's ID and name, or of its mode's (`drawing` null, a Session 27-48 source).
+ * @param {PublicationSession} view
+ * @param {PublishedDrawing | null} drawing
+ */
+export const galleryPublicationDocument = (view, drawing) => {
+  const mode = /** @type {'circular' | 'linear'} */ (view.renderRequest.mode);
+  const { id, name } = drawing ?? { id: mode, name: SESSION_DRAWINGS_LAYOUT.drawingNames[mode] };
+  return sessionDocumentOfViews([{ id, name, view }], id);
+};
+
 /** @param {PublicationSession['orthogroupState']} value */
 const currentOrthogroupState = (value) => {
   if (!isObject(value)) return value;
@@ -121,12 +164,6 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
   if (!entries?.length || !regenerableProteinCache(session) || new TextEncoder().encode(JSON.stringify(entries)).byteLength <= limitBytes) return session;
   return { ...session, losatDerivedCache: { ...session.losatDerivedCache, entries: [] } };
 };
-// A CLI-written Session has no Web configuration; publication derives it from
-// the request, as Session Load does, so a Gallery Session can be built from its
-// declared command.
-/** @param {PublicationSession} session */
-const isCliWritten = (session) => !has(session, 'config') && !has(session, 'modes')
-  && session?.cliInvocation?.generatedBy === 'gbdraw';
 // The draft of the Session's mode: its slice (Session 46) or the flat draft of
 // an older Session that admission promoted. Publication writes the slice of the
 // Session's mode only; the other mode takes its defaults (plan 4.3).
@@ -135,15 +172,26 @@ const modeSlice = (session) => {
   const slice = isObject(session?.modes) ? session.modes[session.renderRequest?.mode] : null;
   return isObject(slice) ? slice : null;
 };
+// The Session holds the Web draft of its mode in that mode's slice, as Session
+// Load reads it (`hasStoredDraft`, services/config.js): a CLI drawing of a
+// Session 49 has a slice without a draft.
+/** @param {PublicationSession} session */
+const holdsSliceDraft = (session) => isObject(modeSlice(session)?.config);
+// A CLI-written Session has no Web configuration; publication derives it from
+// the request, as Session Load does, so a Gallery Session can be built from its
+// declared command.
+/** @param {PublicationSession} session */
+const isCliWritten = (session) => !has(session, 'config') && !holdsSliceDraft(session)
+  && session?.cliInvocation?.generatedBy === 'gbdraw';
 /** @param {unknown} output */
 const outputEntries = (output) => {
   const entries = Array.isArray(output) ? output : [output];
   return entries.every(isObject) ? entries : null;
 };
 /** @param {PublicationSession} session */
-const draftConfig = (session) => (has(session, 'modes') ? modeSlice(session)?.config || {} : session?.config);
+const draftConfig = (session) => (holdsSliceDraft(session) ? modeSlice(session)?.config : session?.config);
 /** @param {PublicationSession} session */
-const draftFeatures = (session) => (has(session, 'modes') ? modeSlice(session)?.features : session?.features);
+const draftFeatures = (session) => (holdsSliceDraft(session) ? modeSlice(session)?.features : session?.features);
 /** @param {PublicationSession} session */
 const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
@@ -209,7 +257,7 @@ const publicationLayout = (session, config, projection) => {
   const mode = projection.mode;
   const slot = modeSlice(session)?.ui?.layoutPreferences;
   const ui = isObject(session.ui) ? session.ui : {};
-  const layout = has(session, 'modes')
+  const layout = holdsSliceDraft(session)
     ? normalizeLayoutPreferences({ ...normalizeLayoutPreferences(projection.layoutPreferences),
       ...(isObject(slot) ? { [mode]: slot } : {}) })
     : restoredLayoutPreferences(ui, { mode, multiRecord: Boolean(config.form?.multi_record_canvas),
@@ -234,7 +282,7 @@ const publicationLayout = (session, config, projection) => {
  */
 const publishedSession = (session, config, layout, projection, features) => {
   const mode = projection.mode;
-  const flat = !has(session, 'modes');
+  const flat = !holdsSliceDraft(session);
   // Display drafts that carry no scope (those projected from a CLI request and
   // those of a Session 46 slice) belong to the committed mode, so the split
   // keeps them there (OV-217).
