@@ -5,6 +5,7 @@ const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, NEWEST_READ_SESSION_VER
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
@@ -154,10 +155,10 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     const saved = await save(page, testInfo, 'first', { title: 'J08 settings' });
     expect(saved.document.version).toBe(CURRENT_SESSION_VERSION);
     expect(saved.document).not.toHaveProperty('runMetadata');
-    // Each mode's settings are its slice (Session 46).
-    for (const mode of ['circular', 'linear']) {
-      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_accession');
-      expect(saved.document.modes[mode].config.adv).not.toHaveProperty('linear_show_length');
+    // Each drawing's settings are its own (Session 49).
+    for (const id of ['circular', 'linear']) {
+      expect(savedDrawing(saved.document, id).config.adv).not.toHaveProperty('linear_show_accession');
+      expect(savedDrawing(saved.document, id).config.adv).not.toHaveProperty('linear_show_length');
     }
     assertSourceFree(await snapshot(page));
     await assertDiagramWorkerIdle(page);
@@ -174,7 +175,7 @@ test('settings-only Session preserves non-default Circular and Linear profiles t
     expect(after.config).toEqual(before.config);
     await assertDiagramWorkerIdle(restored);
     const again = await save(restored, testInfo, 'second');
-    expect(again.document.modes).toEqual(saved.document.modes);
+    expect(again.document.drawings).toEqual(saved.document.drawings);
     expect(again.document.resources).toEqual(saved.document.resources);
     await showDrawing(restored, { kind: 'linear' });
     expect((await snapshot(restored)).config.form.show_labels_linear).toBe('all');
@@ -247,8 +248,8 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   expect(inactive.results).toBe(0);
   expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
-  expect(inactiveSave.document.renderRequest).toEqual(promoted);
-  expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
+  expect(savedDrawing(inactiveSave.document, 'circular').renderRequest).toEqual(promoted);
+  expect(savedDrawing(inactiveSave.document, 'circular').runMetadata).toEqual(runMetadata);
   await loadFile(page, inactiveSave.file);
   expect(await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -267,18 +268,18 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   // anything (BA-D25), and Cancel keeps the prior Session. A retired home that
   // the mode slice fills is dropped with no row (E-OD03), so that file loads as
   // the same Session.
-  const unbound = slot => `Input files: 1 entry of webFiles.bindings.${slot} could not be read and was dropped.`;
-  const requestDropped = 'Saved diagram: the settings of the saved diagram (renderRequest) could not be read.'
+  const unbound = slot => `Input files: 1 entry of drawings[0].webFiles.bindings.${slot} could not be read and was dropped.`;
+  const requestDropped = 'Saved diagram: the settings of the saved diagram (drawings[0].renderRequest) could not be read.'
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
     // A null request of a file that holds Results reads as a missing one (E-OD29).
-    ['null-request-with-result', d => { d.renderRequest = null; }, [requestDropped]],
+    ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
     ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
-    ['config', d => { d.modes.circular.config.form = []; }, ['Settings: the value "[]" (modes.circular.config.form) cannot be used; its default is used.']],
-    ['binding', d => { d.webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
+    ['config', d => { savedDrawing(d, 'circular').config.form = []; }, ['Settings: the value "[]" (drawings[0].config.form) cannot be used; its default is used.']],
+    ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
-    // A Session 46 holds the draft in `modes` only (Session format).
-    ['retired-config', d => { d.config = structuredClone(d.modes.circular.config); }, 'Session loaded']
+    // A Session 49 holds each drawing's settings in its drawing only (Session format).
+    ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded']
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
@@ -312,7 +313,7 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     expect(replacedActivity[field], `settings-only Load starts no Worker work: ${field}`).toBe(priorActivity[field]);
   }
   const saved = await save(page, testInfo, 'replacement');
-  expect(saved.document.renderRequest).toBeNull();
+  expect(shownSavedDrawing(saved.document).renderRequest).toBeNull();
   expect(saved.document.resources).toEqual({});
 });
 
@@ -338,10 +339,10 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
   });
   const original = await save(page, testInfo, 'profiles', { title: 'Profiles and priority' });
   await assertDiagramWorkerIdle(page);
-  const binding = original.document.webFiles.bindings.qualifier_priority;
+  const binding = savedDrawing(original.document, 'linear').webFiles.bindings.qualifier_priority;
   expect(Buffer.from(original.document.resources[binding.resourceId].data, 'base64')).toEqual(bytes);
-  expect(original.document.modes.circular.config.adv.axis_stroke_color).toBe('#13579b');
-  expect(original.document.modes.linear.config.adv.axis_stroke_color).toBe('#2468ac');
+  expect(savedDrawing(original.document, 'circular').config.adv.axis_stroke_color).toBe('#13579b');
+  expect(savedDrawing(original.document, 'linear').config.adv.axis_stroke_color).toBe('#2468ac');
   const context = await browser.newContext();
   try {
     const restored = await context.newPage();
@@ -353,8 +354,7 @@ test('both modes\' settings and auxiliary file bytes survive settings-only Save 
     expect(state.mode).toBe('linear');
     expect(state.config.adv.axis_stroke_color).toBe('#2468ac');
     const again = await save(restored, testInfo, 'profiles-again');
-    expect(again.document.modes).toEqual(original.document.modes);
-    expect(again.document.webFiles).toEqual(original.document.webFiles);
+    expect(again.document.drawings).toEqual(original.document.drawings);
     expect(again.document.resources).toEqual(original.document.resources);
     await showDrawing(restored, { kind: 'circular' });
     expect((await snapshot(restored)).config.adv.axis_stroke_color).toBe('#13579b');

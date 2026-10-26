@@ -6,6 +6,7 @@ const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertSessionLoadLeftWorkerIdle,
@@ -89,11 +90,11 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   const firstFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
   const first = await save(page, firstFile);
   expect(first.version).toBe(CURRENT_SESSION_VERSION);
-  expect(first.ui.mode).toBe('linear');
-  expect(first.renderRequest.mode).toBe('circular');
-  // The Linear drawing is the Linear slice (Session 46); the Circular slice keeps its own.
-  expect(first.modes.linear.config.adv.scale_font_size).toBe(19);
-  expect(first.modes.circular.config.adv.scale_font_size).not.toBe(19);
+  expect(first.ui.activeDrawingId).toBe('linear');
+  expect(savedDrawing(first, 'circular').renderRequest.mode).toBe('circular');
+  // Each drawing keeps its own settings (Session 49).
+  expect(savedDrawing(first, 'linear').config.adv.scale_font_size).toBe(19);
+  expect(savedDrawing(first, 'circular').config.adv.scale_font_size).not.toBe(19);
 
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`,
@@ -129,21 +130,19 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(linearDraft.config.adv.scale_font_size).toBe(19);
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
-    expect(second.ui.mode).toBe('linear');
+    expect(second.ui.activeDrawingId).toBe('linear');
     // Load opens the Linear typography unlinked, as the draft's scale and ruler
     // label sizes differ (the step above set only the scale size).
-    expect(first.modes.linear.ui.linearTypographyLinked).toBe(true);
-    expect(second.modes.linear.ui.linearTypographyLinked).toBe(false);
-    const linked = { ...second.modes.linear, ui: { ...second.modes.linear.ui, linearTypographyLinked: true } };
-    expect({ ...second.modes, linear: linked }).toEqual(first.modes);
-    expect(second.modes.linear.config.adv.scale_font_size).toBe(19);
-    expect(second.renderRequest).toEqual(first.renderRequest);
-    expect(second.results).toEqual(first.results);
+    expect(savedDrawing(first, 'linear').ui.linearTypographyLinked).toBe(true);
+    expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
+    const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
+    expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(first.drawings);
+    expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);
-    expect(second.webFiles.bindings.c_gb).toEqual(first.webFiles.bindings.c_gb);
-    expect(second.webFiles.bindings.linearSeqs[0].gb).toEqual(first.webFiles.bindings.linearSeqs[0].gb);
-    expect(second.webFiles.resourceOriginalNames).toEqual(first.webFiles.resourceOriginalNames);
-    expect(second.ui.selectedResultIndex).toBe(first.ui.selectedResultIndex);
+    expect(savedDrawing(second, 'circular').webFiles.bindings.c_gb).toEqual(savedDrawing(first, 'circular').webFiles.bindings.c_gb);
+    expect(savedDrawing(second, 'linear').webFiles.bindings.linearSeqs[0].gb).toEqual(savedDrawing(first, 'linear').webFiles.bindings.linearSeqs[0].gb);
+    expect(second.webFiles?.resourceOriginalNames).toEqual(first.webFiles?.resourceOriginalNames);
+    expect(savedDrawing(second, 'circular').ui.selectedResultIndex).toBe(savedDrawing(first, 'circular').ui.selectedResultIndex);
 
     await generateAndWaitForResult(fresh);
     const generated = await snapshot(fresh);
@@ -191,9 +190,9 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
 
   const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
   const saved = await save(page, file);
-  // Each mode's drawing is its slice (Session 46).
-  expect(saved.modes.circular.config.form.plot_title).toBe('Circular title');
-  expect(saved.modes.linear.config.form.plot_title).toBe('Linear title');
+  // Each drawing holds its own settings (Session 49).
+  expect(savedDrawing(saved, 'circular').config.form.plot_title).toBe('Circular title');
+  expect(savedDrawing(saved, 'linear').config.form.plot_title).toBe('Linear title');
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
   });
@@ -220,7 +219,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   expect(previewWorker.constructions).toBeLessThanOrEqual(1);
 
   const current = await save(page, info.outputPath('matching.gbdraw-session.json.gz'));
-  expect(current.ui.mode).toBe('circular');
+  expect(current.ui.activeDrawingId).toBe('circular');
   await load(page, info.outputPath('matching.gbdraw-session.json.gz'));
   state = await snapshot(page);
   expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
@@ -238,12 +237,6 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
   const cli = JSON.parse(await fs.readFile(cliFile, 'utf8'));
   expect(cli.config).toBeUndefined();
   await load(page, cliFile);
-  state = await snapshot(page);
-  expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
-  delete cli.ui.mode;
-  const missingModeFile = info.outputPath('cli-origin-missing-ui-mode.gbdraw-session.json');
-  await fs.writeFile(missingModeFile, JSON.stringify(cli));
-  await load(page, missingModeFile);
   state = await snapshot(page);
   expect([state.mode, state.generatedMode, state.request.mode]).toEqual(['circular', 'circular', 'circular']);
 
@@ -318,6 +311,6 @@ test('failed import after draft application restores the prior mode, profiles, s
   expect((await canonicalSvgHashes(restored.results)).map(digest))
     .toEqual((await canonicalSvgHashes(before.results)).map(digest));
   const saved = await save(page, info.outputPath('after-rollback.gbdraw-session.json.gz'));
-  expect(saved.ui.mode).toBe('linear');
-  expect(saved.renderRequest.mode).toBe('circular');
+  expect(saved.ui.activeDrawingId).toBe('linear');
+  expect(savedDrawing(saved, 'circular').renderRequest.mode).toBe('circular');
 });

@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
@@ -720,7 +721,7 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     expect(await undoCount(), 'closing it records no step').toBe(start + 1);
 
     const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
-    const { legend } = saved.modes.circular.editorState;
+    const { legend } = savedDrawing(saved, 'circular').editorState;
     expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
     expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
     expect(page.externalRequests).toEqual([]);
@@ -813,7 +814,7 @@ for (const mode of ['linear', 'circular']) {
 
       const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
       const session = readSession(await download(page, 'Save Session', saved));
-      expect(session.modes[mode].editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      expect(savedDrawing(session, mode).editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
       const restored = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
       expect(await legendLayoutNumbers(page), 'Restore: the screen is the Generate').toEqual(restored);
