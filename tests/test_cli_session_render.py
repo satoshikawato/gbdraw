@@ -1111,3 +1111,22 @@ def test_a_resave_keeps_the_losat_entries_of_every_drawing(tmp_path: Path) -> No
 
     render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg", "--save_session"])
     assert _losat_entries(load_session_document(tmp_path / "all.gbdraw-session.json")) == expected
+
+
+def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_drawing(tmp_path: Path) -> None:
+    """OV-139, 46-48 form: the one entry of a two-mode Session 48 stays in both drawings of the Session 49 re-save."""
+
+    session = SESSION_FIXTURES / "two-mode-linear-shown.v48.gbdraw-session.json.gz"
+    (key,) = [entry["key"] for entry in json.loads(gzip.decompress(session.read_bytes()))["losatCache"]["entries"]]
+    expected = {"linear": [key], "circular": [key]}
+    for name, run in (
+        ("all", lambda out: render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg",
+                                          "--save_session"])),
+        ("linear", lambda out: linear_main(["--session", str(session), "-o", str(tmp_path / "linear"), "-f", "svg",
+                                             "--session_output", str(out)])),
+    ):
+        output = tmp_path / f"{name}.gbdraw-session.json"
+        run(output)
+        resaved = load_session_document(output)
+        assert resaved.version == 49
+        assert _losat_entries(resaved) == expected, name
