@@ -276,24 +276,36 @@ def _overlapping_label_pairs(
 ) -> Iterator[tuple[int, int]]:
     """The candidate pairs (`_candidate_label_pairs`) whose boxes overlap; touching counts.
 
-    ``margins(i, j)`` is the pair's (x, y) margin. A label's box is computed once per margin, so
-    each pair costs four comparisons: `x_overlap` and then `y_overlap`, with the interval test
-    inlined as in `_labels_overlap`.
+    ``margins(i, j)`` is the pair's (x, y) margin. Each pair costs four comparisons: `x_overlap`
+    and then `y_overlap`, with the interval test inlined as in `_labels_overlap`. The boxes are
+    kept for as long as they repeat and no longer (OV-1937): label i's boxes while its pairs
+    (i, j) run, and each label j's box at the last margin it was asked for, so the memory stays
+    linear when the margin differs per pair (min gap).
     """
-    boxes: list[dict[tuple[float, float], tuple[float, float, float, float]]] = [{} for _ in labels]
+    BoundsBox = tuple[float, float, float, float]
 
-    def box(idx: int, margin: tuple[float, float]) -> tuple[float, float, float, float]:
-        cached = boxes[idx].get(margin)
-        if cached is None:
-            label = labels[idx]
-            cached = (*_label_x_bounds(label, margin[0]), *_label_y_bounds(label, total_length, margin[1]))
-            boxes[idx][margin] = cached
-        return cached
+    def bounds(idx: int, margin: tuple[float, float]) -> BoundsBox:
+        label = labels[idx]
+        return (*_label_x_bounds(label, margin[0]), *_label_y_bounds(label, total_length, margin[1]))
 
+    last: list[tuple[tuple[float, float], BoundsBox] | None] = [None] * len(labels)
+    first_idx = -1
+    first_boxes: dict[tuple[float, float], BoundsBox] = {}
     for idx, jdx in _candidate_label_pairs(labels, total_length, padding=padding):
         margin = margins(idx, jdx)
-        min_xa, max_xa, min_ya, max_ya = box(idx, margin)
-        min_xb, max_xb, min_yb, max_yb = box(jdx, margin)
+        if idx != first_idx:
+            first_idx, first_boxes = idx, {}
+        box_a = first_boxes.get(margin)
+        if box_a is None:
+            box_a = first_boxes[margin] = bounds(idx, margin)
+        held = last[jdx]
+        if held is not None and held[0] == margin:
+            box_b = held[1]
+        else:
+            box_b = bounds(jdx, margin)
+            last[jdx] = (margin, box_b)
+        min_xa, max_xa, min_ya, max_ya = box_a
+        min_xb, max_xb, min_yb, max_yb = box_b
         if (max_xa >= min_xb if min_xa < min_xb else max_xb >= min_xa) and (
             max_ya >= min_yb if min_ya < min_yb else max_yb >= min_ya
         ):

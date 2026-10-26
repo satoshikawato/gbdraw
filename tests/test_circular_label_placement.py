@@ -379,27 +379,38 @@ def test_circular_label_peers_follow_moved_labels() -> None:
 
 
 @pytest.mark.circular
-def test_circular_overlap_count_holds_no_pair_set() -> None:
-    """Counting a pile of labels keeps one label's candidate pairs at a time, not all pairs (OV-1937)."""
+@pytest.mark.parametrize("use_min_gap", [False, True])
+def test_circular_overlap_count_holds_no_pair_set(use_min_gap: bool) -> None:
+    """Counting a pile of labels holds neither all pairs nor a box per pair margin (OV-1937).
+
+    The widths differ, so the min-gap margin differs from pair to pair.
+    """
     import tracemalloc
 
     module = circular_labels_module
     labels = [
-        {"middle": float(idx), "start_x": 300.0 + (idx % 7), "start_y": float(idx % 11), "width_px": 60.0, "height_px": 9.0}
+        {
+            "middle": float(idx),
+            "start_x": 300.0 + (idx % 7),
+            "start_y": float(idx % 11),
+            "width_px": 400.0 + 0.37 * (idx % 97),
+            "height_px": 9.0,
+        }
         for idx in range(900)
     ]
+    module._count_label_overlaps(labels, 10000, use_min_gap=use_min_gap)  # fills the bounded offset caches
     tracemalloc.start()
     try:
-        count = module._count_label_overlaps(labels, 10000, use_min_gap=False)
+        count = module._count_label_overlaps(labels, 10000, use_min_gap=use_min_gap)
         peak = tracemalloc.get_traced_memory()[1]
     finally:
         tracemalloc.stop()
     assert count == sum(
-        module._labels_overlap(labels[i], labels[j], 10000, use_min_gap=False)
+        module._labels_overlap(labels[i], labels[j], 10000, use_min_gap=use_min_gap)
         for i in range(len(labels))
         for j in range(i + 1, len(labels))
     )
-    assert peak < 16 * 2**20
+    assert peak < 4 * 2**20
 
 
 @pytest.mark.circular
