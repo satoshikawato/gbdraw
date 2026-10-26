@@ -1,4 +1,4 @@
-"""The counted bytes and window counts read a sequence without per-base arrays (OV-1942..OV-1946)."""
+"""The counted bytes and window counts read a sequence without per-base arrays."""
 
 from __future__ import annotations
 

@@ -39,13 +39,12 @@ def _old_window_count(prefix, seq_length, *, start, window, total_count) -> int:
 
 
 def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
-    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
-    seq_length = len(seq_str)
+    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
+    seq_length = len(seq_bytes)
     content_legend, skew_legend = f"{nt} content", f"{nt} skew"
     cumulative_legend = f"Cumulative {nt} skew, normalized"
     if seq_length == 0 or window <= 0 or step <= 0:
         return pd.DataFrame(columns=[content_legend, skew_legend, cumulative_legend])
-    seq_bytes = seq_str.encode("ascii")
     p1, p2 = _old_prefix(seq_bytes, ord(nt_1)), _old_prefix(seq_bytes, ord(nt_2))
     starts, content, skews, cumulative = [], [], [], []
     skew_sum = 0.0
@@ -73,12 +72,11 @@ def _old_skew_df(record, window, step, nt) -> pd.DataFrame:
 
 
 def _old_circular_content_df(record, window, step, nt) -> pd.DataFrame:
-    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
-    seq_length = len(seq_str)
+    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
+    seq_length = len(seq_bytes)
     legend = f"{nt} content"
     if seq_length == 0 or window <= 0 or step <= 0:
         return pd.DataFrame(columns=[legend])
-    seq_bytes = seq_str.encode("ascii")
     p1, p2 = _old_prefix(seq_bytes, ord(nt_1)), _old_prefix(seq_bytes, ord(nt_2))
     half_window = int(window) // 2
     starts, values = [], []
@@ -161,10 +159,9 @@ def test_degenerate_windows_and_empty_records_return_empty_frames(
 
 
 def test_window_counts_build_no_count_array_as_long_as_the_record() -> None:
-    """The counts are read at the window bounds only: a GC or skew frame of a
-    2 Mb record peaks at about 5 bytes per base (the counted text, its bytes,
-    one base mask and the base's positions), not the 19 of two int64 prefix
-    arrays."""
+    """The counts are read a chunk at a time: a GC or skew frame of a 2 Mb
+    record peaks at about 2.6 bytes per base (the counted bytes and one
+    chunk's mask and offsets), not the 19 of two int64 prefix arrays."""
     import tracemalloc
 
     length = 2_000_000
@@ -176,4 +173,4 @@ def test_window_counts_build_no_count_array_as_long_as_the_record() -> None:
             peak = tracemalloc.get_traced_memory()[1]
         finally:
             tracemalloc.stop()
-        assert peak < 8 * length, (frame.__name__, peak / length)
+        assert peak < 4 * length, (frame.__name__, peak / length)
