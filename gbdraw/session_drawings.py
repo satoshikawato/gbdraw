@@ -411,13 +411,15 @@ _DRAWING_WEB_FILE_KEYS = PROJECT_WEB_FILES_FIELDS | {"bindings"} | frozenset().u
 
 def other_mode_fields(state: Mapping[str, Any], mode: str) -> list[str]:
     """The fields of a new drawing's ``state`` that belong to the other mode:
-    its ``modes`` slice, Web file bindings and request metadata, which
-    :func:`_drawing_of_view` leaves out (D-15-125: a new build refuses them)."""
+    its ``modes`` slice, input type, Web file bindings and request metadata,
+    which :func:`_drawing_of_view` leaves out (D-15-125: a new build refuses
+    them)."""
 
     (other,) = set(DRAWING_NAMES) - {mode}
     web_files = _mapping(state.get("webFiles"))
     return [
         *(f"modes.{key}" for key in sorted(set(_mapping(state.get("modes"))) - {mode})),
+        *(f"ui.{key}" for key in (_INPUT_TYPE_FIELDS[other],) if key in _mapping(state.get("ui"))),
         *(f"webFiles.{key}" for key in sorted(_DRAWING_WEB_FILES_FIELDS[other] & set(web_files))),
         *(
             f"webFiles.bindings.{key}"

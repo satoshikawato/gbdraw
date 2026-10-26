@@ -35,6 +35,7 @@ from gbdraw.render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     SessionBuildContext,
     SessionFileBinding,
     _write_validated_session_json,
@@ -676,10 +677,12 @@ def _session_sidecar_path(
 def _rendered_drawing_build(
     plan: Any,
     rendered: RequestRenderResult | CircularBatchRenderResult,
-    *,
-    source_version: int,
 ) -> tuple[Any, dict[str, Any] | None]:
-    """The re-save of one rendered drawing: its request, Results and artifacts."""
+    """The re-save of one rendered drawing: its request, Results and artifacts.
+
+    ``plan`` is a drawing of the current Session the re-save was upgraded to,
+    so its artifacts are that drawing's own view (OV-1910).
+    """
 
     from gbdraw.api.request_render import CircularBatchRenderResult, stored_protein_result_request
     from gbdraw.session import _DrawingBuild, require_search_frame_protein_results
@@ -690,7 +693,7 @@ def _rendered_drawing_build(
     # built from the drawing copies its data once (SessionDocument).
     state, web_file_inventory = project_session_adjunct_for_current_write(
         plan.drawing.artifacts.fields,
-        source_version=source_version,
+        source_version=CURRENT_SESSION_VERSION,
     )
     state = with_current_artifacts(
         state,
@@ -863,11 +866,7 @@ def render_session_drawings_cli(
         builds = []
         web_file_inventory: dict[str, Any] | None = None
         for plan in plans:
-            build, inventory = _rendered_drawing_build(
-                plan,
-                rendered[plan.drawing.id],
-                source_version=base.version,
-            )
+            build, inventory = _rendered_drawing_build(plan, rendered[plan.drawing.id])
             builds.append(build)
             # The drawings of a current Session share their Web file inventory.
             web_file_inventory = web_file_inventory or inventory

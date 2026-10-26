@@ -93,9 +93,11 @@ def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
 # fixround C1
 @contextmanager
 def without_drawings_move_in_session_module() -> Iterator[None]:
-    """``without_drawings_move`` for the paths through ``gbdraw.session`` (a CLI save, ``save_session_document``).
+    """``without_drawings_move`` for the upgrade in ``gbdraw.session`` (``upgrade_session_document``).
 
     ``gbdraw.session`` binds ``drawings_document_from_mode_scoped`` by name, so it is skipped there too.
+    A save builds Session 49 directly (D-15-125) and a CLI re-save needs its
+    base upgraded to 49 (OV-1910), so this context is for upgrades only.
     """
 
     from unittest import mock
