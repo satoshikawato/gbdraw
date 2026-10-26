@@ -399,18 +399,18 @@ test('a Linear comparison in a Circular request of a v44 keeps the Comparisons n
     ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
 });
 
-// OV-1873: the same request in a Session 49 Circular drawing shows the notice nowhere: the Linear drawing the file
-// does not hold takes no classification, and the Circular drawing's intent is not restored. Which drawing holds it
-// is an open Product question (handoff flip3-F3b): restoring it on the Circular drawing would hold its Generate on a
-// choice only the Linear card offers.
-test('a Linear comparison in a Session 49 Circular request keeps the Comparisons notice (C-OD14)', { todo: 'OV-1873' }, async () => {
+// OV-1873, Owner PQ-F3-1 (C, 2026-10-26): in a Session 49 a Linear comparison in a Circular drawing's request is a
+// setting only the other diagram type uses, so Load drops it with no notice and holds no Generate on a choice.
+test('a Linear comparison in a Session 49 Circular request is dropped with no notice (OV-1873, PQ-F3-1 C)', async () => {
   const session = gallery('HmmtDNA_basic_circular');
   session.renderRequest.comparisons = linearComparison();
   const { result } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
-  assert.deepEqual([intent.disposition, intent.message],
-    ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
+  for (const mode of ['circular', 'linear']) {
+    const intent = modeDrawing(state, mode).importedComparisonIntent;
+    assert.notEqual(intent?.disposition, 'DECISION_REQUIRED', mode);
+  }
+  assert.deepEqual((result.repairs || []).filter(requestRow), []);
 });
 
 test('Save writes the request Load read: the legacy alignment keeps the feature the Load context names (OV-770, BC-1)', async () => {
