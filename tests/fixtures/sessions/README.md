@@ -66,8 +66,9 @@ compressed with `gzip -n -9`. Its decompressed SHA-256 is
 `cli-linear-protein.v30.replay.svg` is the SVG written by replaying
 `cli-linear-protein.v30.gbdraw-session.json.gz` (see its `.provenance.json`) with
 `gbdraw linear --session ... -o replay -f svg` before the LOSATP option rename. The
-rename must not change it. SHA-256:
-`68dc33b5c065bc0340ab379726998f6f5b5fc7baee914bfae5f2d06d1c5d150c`.
+rename must not change it. It was redrawn when the Legend took the drawn text width
+(Owner V-D03, 2026-10-24; only the Legend moved) and again for the OV-165 labels, ticks, definition and canvas change. SHA-256:
+`d10b2c96e88477a1b1ae6b53988591fb143a7c86eced9129dcab132517370e55`.
 
 `conservation-fasta.v39.gbdraw-session.json.gz` is a version 39 Circular CLI
 session written by first-parent `main` commit
@@ -319,8 +320,8 @@ Linear label packing changed its record rows and again after the label boxes
 added white boxes to its turned labels, whose text is unchanged, once more for float last bits when one
 owner placed the Linear records, when `above_feature` labels kept their row gap, and when the
 gradient Legend block took its title's width and the plot title its painted width, and both
-replays when the composition metadata recorded the Linear scale bounds
-(`.v47.provenance.json`), and `tests/test_api_session.py`
+replays when the composition metadata recorded the Linear scale bounds and when the
+Legend took the drawn text width and once more for the OV-165 labels, ticks, definition and canvas change (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
 `BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and

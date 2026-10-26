@@ -7,6 +7,7 @@ import { createRulePreparation, runWhenPrepared } from '../../gbdraw/web/js/app/
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 // The Legend owner's writer of a row's own color (app/feature-editor.js wires it); these tests record its calls.
 const legendRowColorWrites = [];
@@ -16,7 +17,8 @@ const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); }
 const ref = (value) => ({ value });
 
 const features = ['p0', 'p1'].map((product, index) => ({
-  id: `feature-${index}`, svg_id: `f${index}`, type: 'CDS', product, qualifiers: { product: [product] }
+  id: `feature-${index}`, svg_id: `f${index}`, record_key: 'record-1', biological_feature_id: `f${index}`,
+  type: 'CDS', product, qualifiers: { product: [product] }
 }));
 const savedRule = { feat: 'CDS', qual: 'product', val: '^p1$', color: '#111111', cap: 'p1' };
 const hashRule = { feat: 'CDS', qual: 'hash', val: 'f0', color: '#222222', cap: 'p0' };
@@ -51,6 +53,10 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
     evaluate: (payload) => {
       stages.push(`worker:evaluateRules:${payload.kind}:${payload.rules.map((rule) => rule.qual).join('+')}`);
       return evaluateRules(payload);
+    },
+    synthesize: (request) => {
+      stages.push(`worker:synthesizeColorRules:${request.scope}`);
+      return synthesizePythonColorRules(request);
     }
   });
   const history = createHistoryManager({
@@ -66,7 +72,7 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
       // The rule owner's commit lands after its own preparation (a later task).
       commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
-        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+        const rules = await build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
         return true;
@@ -77,7 +83,8 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
       getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
       effectiveLegendCaptions: () => () => 'CDS',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      getLabelSpecificRule: (feature, label) => (label ? { feat: feature.type, qual: 'product', val: `^${label}$` } : null),
+      // Python takes the feature's own rules back (PD-OI-069 revision 2).
+      groupColorRules: groupColorRulesOver(preparation),
       getLegendRowRules: () => []
     }
   });
@@ -88,7 +95,8 @@ test('a popup fill reset without a dialog commits inside its History step', asyn
   assert.equal(resetColorDialog.show, false);
   assert.deepEqual(manualSpecificRules, [savedRule]);
   assert.deepEqual(stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:product', 'commitSpecificRules',
+    // The rules it may add are prepared already: no label rule is a candidate since OV-244.
+    'history:buildIntent', 'history:signature', 'commitSpecificRules', 'worker:synthesizeColorRules:reset',
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(history.getUndoCount(), 1);

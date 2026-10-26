@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 
-import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from '../../gbdraw/web/js/app/candidate-render.js';
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { normalizeGenerationResponse, selectHeldRenderState } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { SEGMENTS } from '../../gbdraw/web/js/services/current-worker-result-source.js';
 import {
@@ -802,7 +803,7 @@ test('the Legend owner shows a row by its drawn name and reads which typed names
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: ['#112233', '#445566'].map((color) => ({ feat: 'CDS', qual: 'gene', val: color, color, cap: 'Shared' })) })
     },
-    readShownLegendColor: (entry) => String(entry?.color || ''),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
     legendRowNames
   });
   reconcileMountedResult(mounted, two);
@@ -839,7 +840,7 @@ test('the Legend owner finds the row a typed name names, by its key', async () =
       originalLegendOrder: { value: [] }, originalLegendColors: { value: {} },
       activeDrawing: () => ({ manualSpecificRules: [], legendEntries, deletedLegendEntries: { value: [] } })
     },
-    readShownLegendColor: (entry) => String(entry?.color || ''),
+    readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []),
     legendRowNames: { value: new Map() }
   });
   reconcileMountedResult(mounted, two);
@@ -879,7 +880,7 @@ test('the Legend owner keeps the edits of two rows of one name under their keys'
     legendStrokeOptionsOpen: strokeOptionsOpen,
     activeDrawing: () => drawing
   };
-  const owner = createLegendEntryActions({ state, readShownLegendColor: (entry) => String(entry?.color || '') });
+  const owner = createLegendEntryActions({ state, readLegendRowColors: (drawing) => displayedLegendRowColors({}, drawing, []) });
   const strokes = createLegendStrokeActions({ state });
   assert.equal(owner.updateLegendEntryColor(1, '#ff0000'), true);
   assert.equal(owner.updateLegendEntryColor(0, '#0000ff'), true);
@@ -1380,6 +1381,39 @@ const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
   `../fixtures/sessions/${name}`, import.meta.url
 ))).toString('utf8'));
 const FORCED_STROKES = 'forced-label-underlay-strokes.v44.gbdraw-session.json.gz';
+
+// `main` from 2026-06-18 to 2026-07-19 (Sessions 27 to 32), which includes
+// gbdraw 0.12.0, 0.12.1 and 0.13.0 (the Session 29 and 30 fixtures below), named
+// a comparison match only by `data-gbdraw-pairwise-match-id`. The legacy admission (here
+// with a sanitizer that keeps its input) renames it once: the admitted Result
+// has the stored IDs under `data-gbdraw-match-id` only, and the popup payload
+// reads them from there. The real sanitizer and selection on a legacy Result
+// are covered by "Pairwise pointer feedback" in linear-multi-record.playwright.spec.js.
+test('a Session 29 or 30 Result is admitted with one match attribute', () => {
+  const textParser = class { parseFromString(content) { return { documentElement: parseSvgText(content) }; } };
+  [
+    ['BGC0000708-BGC0000713.v29.gbdraw-session.json.gz', 77],
+    ['BGC0000708-BGC0000713.v30.gbdraw-session.json.gz', 77],
+    ['cli-linear-protein.v30.gbdraw-session.json.gz', 2]
+  ].forEach(([name, count]) => {
+    const session = sessionFixture(name);
+    const stored = parseSvgText(session.results[0].content);
+    const legacyIds = stored.querySelectorAll('[data-gbdraw-pairwise-match-id]')
+      .map((element) => element.getAttribute('data-gbdraw-pairwise-match-id'));
+    assert.equal(legacyIds.length, count, name);
+    assert.equal(stored.querySelectorAll('[data-gbdraw-match-id]').length, 0, name);
+
+    const [admitted] = admitLegacyImportedResults(
+      createLegacyImportResultSource(normalizeLogicalResults(session.results)),
+      { sanitizer: { sanitize: (value) => value }, parser: textParser }
+    );
+    const content = getCommittedSvgContent(admitted);
+    assert.equal(content.includes('data-gbdraw-pairwise-match-id'), false, name);
+    const matches = parseSvgText(content).querySelectorAll('[data-gbdraw-match-id]');
+    assert.deepEqual(matches.map((element) => element.getAttribute('data-gbdraw-match-id')), legacyIds, name);
+    assert.deepEqual(matches.map((element) => buildMatchPopupPayload(element)?.id), legacyIds, name);
+  });
+});
 const loadSavedResults = (session, {
   mode = 'circular', results = normalizeLogicalResults(session.results),
   featureCatalog = session.editorState.featureCatalog, patch = () => {}

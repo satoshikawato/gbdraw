@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 from gbdraw.svg.elements import Path, Text, TextPath
+from gbdraw.svg.circular_arcs import circle_arc, position_angle
+from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
 from ..core.numeric import scaled_tick_text
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from .ids import stable_svg_id
 
 
@@ -201,7 +203,6 @@ def get_circular_tick_label_radius_bounds(
     strandedness: bool,
     font_size: float,
     font_family: str,
-    dpi: int,
     manual_interval: int | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
@@ -236,7 +237,6 @@ def get_circular_tick_label_radius_bounds(
             font_family=font_family,
             track_type=track_type,
             strandedness=strandedness,
-            dpi=dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -353,7 +353,6 @@ def resolve_circular_tick_label_geometry(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -377,7 +376,7 @@ def resolve_circular_tick_label_geometry(
     if label_radius_base is None:
         return CircularTickLabelGeometry(0.0, 0.0, 0.0, 0.0, 0.0)
 
-    bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
+    bbox_width_px, bbox_height_px = drawn_text_box(label_text, font_family, font_size)
     anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
     angle = 360.0 * (tick / total_len)
     reverse_path = 90 <= angle < 270
@@ -509,7 +508,7 @@ def generate_circular_tick_paths(
         record_transform=record_transform,
         length_threshold=length_threshold,
     ):
-        tick_path_desc: str = "M " + str(prox_x) + "," + str(prox_y) + " L" + str(dist_x) + "," + str(dist_y) + " z"
+        tick_path_desc: str = "M " + path_point(prox_x, prox_y) + " L" + path_point(dist_x, dist_y) + " z"
         tick_path = Path(d=tick_path_desc, stroke="gray", stroke_width=tick_width)
         tick_paths_list.append(tick_path)
     return tick_paths_list
@@ -567,7 +566,6 @@ def circular_tick_labels(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -598,7 +596,6 @@ def circular_tick_labels(
             font_family=font_family,
             track_type=track_type,
             strandedness=strandedness,
-            dpi=dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -622,7 +619,6 @@ def generate_circular_tick_labels(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -646,7 +642,6 @@ def generate_circular_tick_labels(
             font_family,
             track_type,
             strandedness,
-            dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -667,47 +662,9 @@ def generate_circular_tick_labels(
             reverse_path=reverse_path,
             text_anchor=geometry.text_anchor,
         )
-        if not reverse_path:
-            param = " 0 0 1 "
-            start_x_1: float = path_radius * math.cos(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            start_y_1: float = path_radius * math.sin(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            end_x: float = path_radius * math.cos(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-            end_y: float = path_radius * math.sin(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-        else:
-            param = " 1 0 0 "
-            start_x_1 = path_radius * math.cos(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            start_y_1 = path_radius * math.sin(
-                math.radians(360.0 * (label_start / total_len) - 90)
-            )
-            end_x = path_radius * math.cos(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-            end_y = path_radius * math.sin(
-                math.radians(360.0 * (label_end / total_len) - 90)
-            )
-        label_axis_path_desc: str = (
-            "M "
-            + str(start_x_1)
-            + ","
-            + str(start_y_1)
-            + "A"
-            + str(path_radius)
-            + ","
-            + str(path_radius)
-            + param
-            + str(end_x)
-            + ","
-            + str(end_y)
+        # Clockwise from label_start to label_end, or anticlockwise on a reversed (lower-half) path.
+        label_axis_path_desc: str = circle_arc(
+            path_radius, position_angle(label_start, total_len), 360.0 * (label_end - label_start) / total_len
         )
         label_axis_path = Path(
             id=stable_svg_id(

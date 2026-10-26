@@ -514,3 +514,18 @@ opened the loaded Session's folded card, showed the caret mid-turn.
 | --- | --- | --- | --- | --- |
 | `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture; recipe unchanged | Exact Lambda Session; open File 1 card from its header line, with the caret at rest, to the **GenBank / DDBJ File** uploader containing `NC_001416.gb` | Recaptured at DSF 3, 864x336 (was 930x324; the same two elements are 22 px narrower and 4 px taller in the current pane); compared side by side |
 | `Vnig_TUMSAT-TG-2018` | `manual-02-01-gbff-upload.webp` | Recapture; recipe added | Exact Vnig Session; `dataDependent`; clip from the **Input Genomes** card header to the **GenBank/DDBJ File** uploader; `assertAppState` and `visibleText` name `GCF_015097735.1_ASM1509773v1_genomic.gbff`; the zone shows the name cut at its end with an ellipsis. The rest of the card is outside the clip: the restored Session shows the record hints of the finished figure (Multi-Record Canvas on), not the state at the upload step | Recaptured at DSF 3, 942x483 (was a manual 656x542 crop); compared side by side |
+
+## The qualifier step before the colors (Gallery revision 2026-10-26)
+
+Issue #1385. In the `BGC0000708-BGC0000713` tutorial the qualifier inspection
+(old step 12) is now step 8, before the colors; the old steps 8-11 are steps
+9-12. The colors, the palette, the color tables and the Gallery Session stay
+as they were, so the media of the moved steps keep their bytes under the new
+step numbers. This section replaces the capture state of the same media in the
+rows of the earlier sections; those rows stay as history.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-08-01-feature-popup.webp` (was `manual-12-01-feature-popup.webp`) | Recapture; recipe unchanged except `replayThrough` 7 | Exact Session replayed through step 7 (every CDS still blue); the capture clicks the livE CDS of BGC0000708 by its feature id (`fed46a3a6_record_1`) with the **Search features** bar hidden, and opens **Qualifiers** with `gene` `livE` and `gene_kind` `biosynthetic` | Recaptured at DSF 3, 2511x945; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-09-02-preview-colors.webp`, `manual-10-01-show-labels-first.webp`, `manual-10-02-preview-labels.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp`, `manual-11-04-preview-final.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-08-01`, `08-02`, `09-01`, `09-02`, `10-01`, `10-02`, `10-03`, `10-04`, `11-01`) | Rename; keep bytes | The same states one step number later | Renamed with the committed bytes; `--check` passes |
+| `BGC0000708-BGC0000713` | Media of steps 1-7 | Keep | Unchanged recipes and Session | Committed bytes |

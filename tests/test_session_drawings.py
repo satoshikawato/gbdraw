@@ -30,6 +30,7 @@ from gbdraw.api import (
     SessionDrawingSpec,
     SessionFormatError,
     SessionRenderError,
+    SessionResourceError,
     SessionUpgrade,
     SessionVersionError,
     build_session_document,
@@ -213,6 +214,66 @@ def test_render_session_drawings_parses_each_resource_once(
         with materialize_session(document, output_directory=tmp_path / drawing) as materialized:
             render_session(materialized, drawing=drawing)
     assert len(loads) == 2
+
+
+def test_drawings_that_share_a_resource_draw_as_each_drawing_alone(tmp_path: Path) -> None:
+    """One call parses a shared record once for every drawing; no stage changes the shared parsed records."""
+
+    document = _two_drawing_session(tmp_path)
+    with materialize_session(document, output_directory=tmp_path / "together") as materialized:
+        together = render_session_drawings(materialized, formats="svg")
+    for drawing, result in together.items():
+        (path,) = result.output_paths
+        with materialize_session(document, output_directory=tmp_path / drawing) as materialized:
+            (alone,) = render_session_drawings(
+                materialized, drawings=[drawing], output_prefix=path.stem, formats="svg"
+            ).values()
+        assert alone.output_paths[0].name == path.name
+        assert alone.output_paths[0].read_bytes() == path.read_bytes()
+
+
+def test_session_renders_keep_their_error_surface(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from gbdraw.api.prepared import PreparedBiologicalInputCache
+    from gbdraw.cli_utils.session import render_main
+    from gbdraw.render.output_paths import OutputExistsError
+
+    document = _two_drawing_session(tmp_path)
+    with materialize_session(document, output_directory=tmp_path / "out") as materialized:
+        pass
+    with pytest.raises(SessionResourceError, match="no longer active"):
+        render_session(materialized, drawing="circular")
+    with pytest.raises(SessionResourceError, match="no longer active"):
+        render_session_drawings(materialized)
+
+    # An error of the body keeps its type: the CLI words this refusal with --overwrite.
+    source = tmp_path / "two.gbdraw-session.json"
+    source.write_text(json.dumps(document.to_dict()), encoding="utf-8")
+    sidecar = tmp_path / "existing.gbdraw-session.json"
+    sidecar.write_text("keep", encoding="utf-8")
+    with pytest.raises(OutputExistsError) as refused:
+        render_main(["--session", str(source), "-o", str(tmp_path / "fig"), "--session_output", str(sidecar)])
+    assert type(refused.value) is OutputExistsError
+    assert refused.value.paths == (str(sidecar),)
+    assert sidecar.read_text(encoding="utf-8") == "keep"
+
+    # Opening the cache fails inside another transaction.
+    with materialize_session(document, output_directory=tmp_path / "nested") as materialized:
+        with PreparedBiologicalInputCache().transaction(resource_paths={}, diagnostics=None):
+            with pytest.raises(SessionRenderError, match="Canonical session rendering failed: .*cannot be nested"):
+                render_session(materialized, drawing="circular")
+
+    def failing_commit(self, transaction):
+        raise ValidationError("probe")
+
+    monkeypatch.setattr(PreparedBiologicalInputCache, "_commit", failing_commit)
+    with materialize_session(document, output_directory=tmp_path / "commit") as materialized:
+        with pytest.raises(SessionRenderError, match="Canonical session rendering failed: probe"):
+            render_session(materialized, drawing="circular")
+        with pytest.raises(SessionRenderError, match="Canonical session rendering failed: probe"):
+            render_session_drawings(materialized)
 
 
 def test_drawing_selection_errors_name_the_drawings(tmp_path: Path) -> None:

@@ -5,8 +5,8 @@ import { FALLBACK_FACE_PREFIX, bundledFacePrefix, comparableFamilyName, isGeneri
 // Python's Legend measurement and layout, ported operation for operation so
 // that the Web places an edited Legend's rows, sizes the Legend and docks it
 // exactly where Python would (zero shift). Sources:
-// - text: gbdraw/core/text.py `calculate_bbox_dimensions` → `get_text_bbox_size_pixels`
-//   and gbdraw/core/fonts.py `resolve_font_face`;
+// - text: gbdraw/core/text.py `drawn_text_box` and gbdraw/core/fonts.py
+//   `resolve_font_face`;
 // - rows: gbdraw/legend/metrics.py, linear_layout.py, circular_layout.py;
 // - Legend size: gbdraw/configurators/legend.py `_linear_legend_local_bounds`,
 //   `_circular_legend_local_bounds`;
@@ -36,8 +36,9 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {ReadonlyMap<number, number>} glyphByCodePoint
  * @property {readonly number[]} glyphs Flat [advance, lsb, xMax, yMax, yMin, ...] by glyph index.
  * @property {readonly number[]} missingGlyph The facts of a character the face lacks: an em box
- *   ([unitsPerEm, 0, unitsPerEm, hhea ascent, hhea descent]), as Python measures it.
+ *   ([unitsPerEm, 0, unitsPerEm, line ascent, -line descent]), as Python measures it.
  * @property {ReadonlyMap<number, number>} kerning Keyed `left * 65536 + right`.
+ * @property {number} lineHeightEm The face's line box (line ascent + line descent) in em.
  */
 
 /**
@@ -86,7 +87,6 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {number} wrapWidth The width Python passed to `measure_legend`.
  * @property {string} fontFile The measured face stem.
  * @property {number} fontSize
- * @property {number} dpi
  * @property {number} colorRectSize
  */
 
@@ -133,8 +133,10 @@ const indexFace = (face) => {
   for (let index = 0; index < face.kerning.length; index += 3) {
     kerning.set(face.kerning[index] * KERNING_KEY_BASE + face.kerning[index + 1], face.kerning[index + 2]);
   }
-  const missingGlyph = Object.freeze([face.unitsPerEm, 0, face.unitsPerEm, face.ascent, face.descent]);
-  return Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning, missingGlyph });
+  const missingGlyph = Object.freeze([face.unitsPerEm, 0, face.unitsPerEm, face.lineAscent, -face.lineDescent]);
+  // Python's `FontVerticalMetrics.ascent + .descent`, each divided by the em first.
+  const lineHeightEm = (face.lineAscent / face.unitsPerEm) + (face.lineDescent / face.unitsPerEm);
+  return Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning, missingGlyph, lineHeightEm });
 };
 
 /**
@@ -253,61 +255,49 @@ export const legendMeasurementFace = (metrics, recordedFontFile, fontFamily) => 
 );
 
 /**
- * Measure text as gbdraw's Python layout does: `calculate_bbox_dimensions(text,
- * family, size, dpi)` in gbdraw/core/text.py, with the face it resolves to.
- * Every Python layout that sizes text this way (the Legend, record labels,
- * definitions) gets the same numbers from here.
+ * The box text is drawn in, as gbdraw's Python layout measures it:
+ * `drawn_text_box(text, family, size)` in gbdraw/core/text.py, with the face it
+ * resolves to. Units are CSS px at `fontSize` px.
  *
- * Units: Python's layout units. The font size is read as points at `dpi`, so a
- * width is the text's extent in font units × fontSize × dpi / (72 × unitsPerEm).
- * gbdraw positions SVG elements in these numbers directly; at dpi 96 they are
- * 4/3 of the extent in CSS px of the same text at `fontSize` px. The width is
- * the ink-tight extent with Python's kerning (not the advance sum); the height
- * is the extent from the lowest glyph bottom to the highest glyph top. White
- * space collapses as an SVG renderer draws it (`collapseSvgWhiteSpace`), and a
- * character the face lacks counts as an em box (OV-165).
+ * The width is the advance sum with Python's kerning
+ * (`calculate_svg_bbox_dimensions`, what a browser's `getComputedTextLength`
+ * reports) or, when a glyph's ink ends past it, the right edge of the ink
+ * (`text_ink`). The height is the face's line box, whatever the characters.
+ * White space collapses as an SVG renderer draws it (`collapseSvgWhiteSpace`),
+ * and a character the face lacks counts as an em box (OV-165).
  * @param {LegendFontMetrics} metrics From `loadLegendFontMetrics()` or `createLegendFontMetrics()`.
- * @param {{ text: string, fontFile: string, fontSize: number, dpi: number }} request
+ * @param {{ text: string, fontFile: string, fontSize: number }} request
  *   `fontFile`: a measurement name in `metrics` (`resolveLegendFontFace` or `legendMeasurementFace`).
  * @returns {{ width: number, height: number }}
  */
-export const measureTextBox = (metrics, { text: value, fontFile, fontSize, dpi }) => {
+export const measureTextBox = (metrics, { text: value, fontFile, fontSize }) => {
   const face = metrics.faces.get(fontFile);
   if (!face) throw new Error(`No font metrics for ${JSON.stringify(fontFile)}.`);
   const characters = Array.from(collapseSvgWhiteSpace(text(value)));
   if (characters.length === 0) return { width: 0.0, height: 0.0 };
-  let totalWidth = 0;
-  let rsbPrevious = 0;
+  let origin = 0;
+  let inkRight = -Infinity;
   /** @type {number | null} */
   let previous = null;
-  let maxY = -Infinity;
-  let minY = Infinity;
-  characters.forEach((character, index) => {
+  characters.forEach((character) => {
     const glyph = face.glyphByCodePoint.get(/** @type {number} */ (character.codePointAt(0)));
     const offset = glyph === undefined ? -1 : glyph * GLYPH_FIELDS;
     const facts = offset < 0 ? face.missingGlyph : face.glyphs.slice(offset, offset + GLYPH_FIELDS);
-    const [advanceWidth, lsb, xmax, ymax, ymin] = facts;
-    maxY = Math.max(maxY, ymax);
-    minY = Math.min(minY, ymin);
+    const [advance, inkLeft, xMax, yMax, yMin] = facts;
     if (previous !== null) {
-      totalWidth += (previous < 0 || glyph === undefined)
+      origin += (previous < 0 || glyph === undefined)
         ? 0
         : (face.kerning.get(previous * KERNING_KEY_BASE + glyph) || 0);
     }
-    let advance = advanceWidth;
-    if (xmax === 0) advance -= rsbPrevious;
-    if (lsb > 0) totalWidth -= lsb;
-    else totalWidth += lsb;
-    const rsb = xmax - advance;
-    totalWidth += advance;
-    if (rsb > 0) totalWidth -= rsb;
-    else totalWidth += rsb;
-    if (index === 0) totalWidth += lsb;
-    rsbPrevious = rsb;
+    // Only a painted glyph has ink (`_face_text_ink`).
+    if (xMax > inkLeft || yMax > yMin) inkRight = Math.max(inkRight, origin + xMax);
+    origin += advance;
     previous = glyph === undefined ? -1 : glyph;
   });
-  const scale = (Number(fontSize) * dpi) / (72 * face.unitsPerEm);
-  return { width: totalWidth * scale, height: (maxY + Math.abs(minY)) * scale };
+  const size = Number(fontSize);
+  const advanceWidth = origin * (size / face.unitsPerEm);
+  const width = inkRight === -Infinity ? advanceWidth : Math.max(advanceWidth, (inkRight / face.unitsPerEm) * size);
+  return { width, height: face.lineHeightEm * size };
 };
 
 // ---- shared ----
@@ -344,8 +334,8 @@ const minGradientLabelText = (value) => {
  * @param {LegendFontMetrics} metrics
  * @param {LegendLayoutOptions} options
  */
-const measurer = (metrics, { fontFile, fontSize, dpi }) => (
-  /** @param {string} caption */ (caption) => measureTextBox(metrics, { text: caption, fontFile, fontSize, dpi })
+const measurer = (metrics, { fontFile, fontSize }) => (
+  /** @param {string} caption */ (caption) => measureTextBox(metrics, { text: caption, fontFile, fontSize })
 );
 
 /** @param {LayoutBox} box */
@@ -446,6 +436,8 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   if (gradients.length === 0) return null;
   const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
   const minLabelText = minGradientLabelText(gradients[0].minValue ?? 0);
+  // The scale labels share one line box, whatever their digits.
+  const scaleLabelHeight = measure('100%').height;
   if (gradients.length > 1) {
     const labelWidth = Math.max(...gradients.map((row) => measure(row.name).width));
     const barX = labelWidth + (GRADIENT_LABEL_GAP_RATIO * rect);
@@ -458,7 +450,6 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
       barY: (rect / 2.0) + (index * lineHeight)
     }));
     const scaleLabelY = rect + ((gradients.length - 1) * lineHeight) + 2.0;
-    const scaleLabelHeight = Math.max(measure(minLabelText).height, measure('100%').height);
     return {
       compact: true, entries, width: barX + barWidth, height: scaleLabelY + scaleLabelHeight, barWidth,
       minLabelText, minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
@@ -469,7 +460,6 @@ const linearGradientLayout = (rows, measure, rect, lineHeight) => {
   const { width, barX } = singleGradientBlockX(barWidth, title.width);
   const barY = title.height + (rect / 2.0);
   const scaleLabelY = barY + (rect / 2.0) + 2.0;
-  const scaleLabelHeight = Math.max(measure(minLabelText).height, measure('100%').height);
   return {
     compact: false,
     entries: [{ key: row.key, row, titleX: width / 2.0, titleY: 0.0, barX, barY }],
@@ -617,20 +607,29 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 // ---- Circular (gbdraw/legend/circular_layout.py) ----
 
 /**
- * @typedef {object} CircularGradientEntryLayout
+ * An entry of a compact block: its label, and its bar at the block's `barX`.
+ * @typedef {object} CircularCompactGradientEntryLayout
  * @property {string} key
  * @property {LegendLayoutRow} row
+ * @property {number} labelX
+ * @property {number} labelY
  * @property {number} barY
- * @property {number} [labelY] Compact entries.
- * @property {number} [titleX] Single entries.
- * @property {number} [titleY]
- * @property {number} [barX]
- * @property {number} [minLabelX]
- * @property {number} [maxLabelX]
- * @property {number} [scaleLabelY]
  */
 
 /**
+ * The entry of a one-gradient block: its centred title and its bar.
+ * @typedef {object} CircularSingleGradientEntryLayout
+ * @property {string} key
+ * @property {LegendLayoutRow} row
+ * @property {number} titleX
+ * @property {number} titleY
+ * @property {number} barX
+ * @property {number} barY
+ */
+
+/**
+ * A gradient block: its entries, and the one scale (minimum and 100% labels)
+ * below the bars that every form draws.
  * @typedef {object} CircularGradientLayout
  * @property {boolean} compact
  * @property {number} width
@@ -638,9 +637,11 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} barWidth
  * @property {number} barX
  * @property {string} minLabelText
- * @property {number} scaleY
- * @property {CircularGradientEntryLayout[]} compactEntries
- * @property {CircularGradientEntryLayout[]} singleEntries
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
+ * @property {CircularCompactGradientEntryLayout[]} compactEntries
+ * @property {CircularSingleGradientEntryLayout[]} singleEntries
  */
 
 /**
@@ -678,19 +679,22 @@ const circularGradientLayout = (gradients, measure, rect) => {
   if (gradients.length > 1) {
     const labelWidth = Math.max(...gradients.map((entry) => entry.textWidth));
     const barX = labelWidth + rect;
-    const scaleY = rect + ((gradients.length - 1) * rowHeight) + 2;
-    const minLabelHeight = measure(firstMinLabel).height;
-    const maxLabelHeight = measure('100%').height;
+    const scaleLabelY = rect + ((gradients.length - 1) * rowHeight) + 2;
+    // The scale labels share one line box, whatever their digits.
+    const labelHeight = measure('100%').height;
     return {
       compact: true,
       width: barX + barWidth,
-      height: scaleY + Math.max(minLabelHeight, maxLabelHeight),
+      height: scaleLabelY + labelHeight,
       barWidth,
       barX,
       minLabelText: firstMinLabel,
-      scaleY,
+      minLabelX: barX,
+      maxLabelX: barX + barWidth,
+      scaleLabelY,
       compactEntries: gradients.map((entry, index) => ({
-        key: entry.key, row: entry.row, labelY: (rect / 2) + (index * rowHeight), barY: (rect / 2) + (index * rowHeight)
+        key: entry.key, row: entry.row, labelX: 0.0,
+        labelY: (rect / 2) + (index * rowHeight), barY: (rect / 2) + (index * rowHeight)
       })),
       singleEntries: []
     };
@@ -709,12 +713,11 @@ const circularGradientLayout = (gradients, measure, rect) => {
     barWidth,
     barX,
     minLabelText: minGradientLabelText(entry.row.minValue ?? 0),
-    scaleY: scaleLabelY,
+    minLabelX: barX,
+    maxLabelX: barX + barWidth,
+    scaleLabelY,
     compactEntries: [],
-    singleEntries: [{
-      key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY,
-      minLabelX: barX, maxLabelX: barX + barWidth, scaleLabelY
-    }]
+    singleEntries: [{ key: entry.key, row: entry.row, titleX: width / 2.0, titleY: 0.0, barX, barY }]
   };
 };
 

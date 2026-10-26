@@ -482,6 +482,19 @@ export const createPreviewItemPopup = ({
     return true;
   };
 
+  // The label fit dialog's "Edit Species / Strain…" (PD-OI-097): the settings
+  // a click on the drawn record definition with this record index would show,
+  // found by that index's drawn definition group (two records may share an ID).
+  /** @param {number} recordIndex */
+  const showRecordTextSettings = (recordIndex) => {
+    if (!Number.isSafeInteger(recordIndex) || recordIndex < 0) return false;
+    const group = state.svgContainer.value?.querySelector(
+      `[data-gbdraw-role="record-definition"][data-gbdraw-record-index="${recordIndex}"][data-gbdraw-record-id]`
+    );
+    if (!group) return false;
+    return showRecordSettings(recordView({ recordIndex, recordId: String(group.getAttribute('data-gbdraw-record-id')) }));
+  };
+
   // A rename may ask a choice first (a name another row has) and may change
   // the row's key. Once the choice is answered, the open popup follows the
   // row by its key: it stays on a row that kept its key (Cancel, a Legend-only
@@ -511,5 +524,5 @@ export const createPreviewItemPopup = ({
   /** @param {Event} event */
   const commitField = (event) => { event.target?.dispatchEvent(new Event('change')); };
 
-  return { view, setRecordField, showRecordSettings, renameLegendRow: renameLegendEntry, commitField };
+  return { view, setRecordField, showRecordSettings, showRecordTextSettings, renameLegendRow: renameLegendEntry, commitField };
 };

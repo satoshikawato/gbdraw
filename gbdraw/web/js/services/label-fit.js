@@ -2,10 +2,11 @@
 // The label fit report Python sends (gbdraw/web_support/label_fit.py): the one
 // JavaScript reader of it. Python owns every value and word of the report:
 // the counts and each record's counts text, the rows' titles, the settings a
-// row changes by config path, the canvas sizes, and the reasons (LP-D43,
-// LP-D48). Nothing here places labels or searches values; a row that was not
+// row changes by config path and by request track option, the canvas sizes,
+// and the reasons (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
 import { diagnosticError } from '../utils/error-normalization.js';
+/** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
 /**
  * @typedef {'found' | 'found_with_notice' | 'not_found' | 'not_computed'} LabelFitRowStatus
@@ -24,11 +25,18 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number | string} value A number, or the control's option label.
  */
 /**
+ * @typedef {Partial<Record<Extract<keyof CanonicalCircularTrackOptions, 'centerReservedRadius'>, number>>} LabelFitTrackOptions
+ * The canonical render request's Circular track options (`diagramOptions.tracks`) a row sets, by their request
+ * names: "narrow the inside tracks" sets `centerReservedRadius` (PD-OI-097).
+ */
+/**
  * @typedef {object} LabelFitRow
  * @property {LabelFitRowKind} kind
  * @property {string} title
  * @property {LabelFitRowStatus} status
- * @property {Readonly<Record<ConfigPath, LabelFitValue>> | null} values The settings to write, by config path; set when offered.
+ * @property {Readonly<Record<ConfigPath, LabelFitValue>> | null} values The config overrides to write, by config path; set when offered.
+ * @property {Readonly<LabelFitTrackOptions>} trackOptions The request track options to write, by request name; empty
+ *   when the row sets none.
  * @property {readonly LabelFitSetting[]} settings
  * @property {{ width: number, height: number } | null} canvasSize
  * @property {string | null} reason
@@ -37,6 +45,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /**
  * @typedef {object} LabelFitRecord
  * @property {string} recordId
+ * @property {number | null} recordIndex The index of the record's drawn groups (`data-gbdraw-record-index`), its
+ *   identity where two records share an ID; null for a Linear record.
  * @property {string} labelKind
  * @property {string} labelKindTitle
  * @property {number} labelCount
@@ -108,6 +118,7 @@ export const normalizeLabelFitRow = (value) => {
   if (!isObject(value) || typeof value.kind !== 'string' || !value.kind
     || typeof value.title !== 'string' || typeof value.status !== 'string'
     || !ROW_STATUSES.has(value.status) || !Array.isArray(value.settings)
+    || !isObject(value.trackOptions) || !Object.values(value.trackOptions).every(isNumber)
     || !isOptionalText(value.reason) || !isOptionalText(value.note)) throw invalid();
   const status = /** @type {LabelFitRowStatus} */ (value.status);
   const offered = labelFitRowOffered(status);
@@ -129,6 +140,7 @@ export const normalizeLabelFitRow = (value) => {
     title: value.title,
     status,
     values: values && Object.freeze(values),
+    trackOptions: Object.freeze(/** @type {LabelFitTrackOptions} */ ({ ...value.trackOptions })),
     settings: Object.freeze(settings),
     canvasSize: offered && isObject(size)
       ? Object.freeze({ width: Number(size.width), height: Number(size.height) }) : null,
@@ -149,7 +161,8 @@ const normalizeLabelFitReport = (parsed) => {
     || !Array.isArray(parsed.notice) || !parsed.notice.every((sentence) => typeof sentence === 'string')
     || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)) throw invalid();
   const records = parsed.records.map((record) => {
-    if (!isObject(record) || typeof record.recordId !== 'string' || typeof record.labelKind !== 'string'
+    if (!isObject(record) || typeof record.recordId !== 'string'
+      || !(record.recordIndex === null || isCount(record.recordIndex)) || typeof record.labelKind !== 'string'
       || typeof record.labelKindTitle !== 'string' || !isCount(record.labelCount)
       || !isNumber(record.fontSize) || !isCount(record.overlapPairs) || !isCount(record.crossingPairs)
       || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean' || typeof record.counts !== 'string') {
@@ -157,6 +170,7 @@ const normalizeLabelFitReport = (parsed) => {
     }
     return Object.freeze({
       recordId: record.recordId,
+      recordIndex: record.recordIndex,
       labelKind: record.labelKind,
       labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,

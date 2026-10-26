@@ -1,9 +1,11 @@
 """Exact S07.6 differential plus independent oracles for local reductions."""
 import math
 from dataclasses import replace
+import random
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 import pytest
 from Bio.Seq import Seq
@@ -39,15 +41,8 @@ def test_fit_points_model_ordinals_and_input(size, fraction, ids):
     frame = fit_frame(size, ids)
     before = frame.copy(deep=True)
     ordinals, points, model = fit_oracle(frame, fraction)
-    adopted = []
-    original_head = pd.DataFrame.head
-    def head(df, n=5):
-        result = original_head(df, n)
-        adopted.extend(result.index.tolist())
-        return result
-    with patch.object(pd.DataFrame, 'head', head):
-        actual = pc._select_normalized_fit_rows(frame, top_fraction=fraction)
-    assert adopted == [frame.index[i] for i in ordinals]
+    assert pc._normalized_fit_row_positions(frame, top_fraction=fraction) == ordinals
+    actual = pc._select_normalized_fit_rows(frame, top_fraction=fraction)
     assert actual == points == frozen._select_normalized_fit_rows(frame, top_fraction=fraction)
     assert pc._fit_expected_bitscore_model(frame, top_fraction=fraction) == model
     assert model == frozen._fit_expected_bitscore_model(frame, top_fraction=fraction)
@@ -75,22 +70,16 @@ def test_fit_degenerate_models(kind):
         frame['bitscore'] = [1.] + [0.] * 15
     else:
         frame['bitscore'] = float('inf')
-    _, expected, model = fit_oracle(frame, .25)
+    ordinals, expected, model = fit_oracle(frame, .25)
     assert model is None
-    selected = []
-    original_head = pd.DataFrame.head
-    def head(df, n=5):
-        result = original_head(df, n)
-        selected.extend(result.index)
-        return result
-    with patch.object(pd.DataFrame, 'head', head):
-        assert pc._select_normalized_fit_rows(frame, top_fraction=.25) == expected
+    assert pc._normalized_fit_row_positions(frame, top_fraction=.25) == ordinals
+    assert pc._select_normalized_fit_rows(frame, top_fraction=.25) == expected
     if kind == 'full_tie':
-        assert selected == frame.index[[0, 4, 8, 12]].tolist()
+        assert ordinals == [0, 4, 8, 12]
     assert pc._fit_expected_bitscore_model(frame, top_fraction=.25) is None
 
 
-def test_fit_sorts_only_four_columns():
+def test_fit_sorts_the_four_fit_columns_in_two_passes():
     frame = fit_frame(65)
     widths = []
     original = pd.DataFrame.sort_values
@@ -99,8 +88,8 @@ def test_fit_sorts_only_four_columns():
         return original(df, *args, **kwargs)
     with patch.object(pd.DataFrame, 'sort_values', sort):
         pc._select_normalized_fit_rows(frame, top_fraction=.05)
-    assert len(widths) == 9
-    assert all(cols == ('length_product', 'query', 'subject', 'bitscore') for cols in widths)
+    fit_columns = ('length_product', 'query', 'subject', 'bitscore')
+    assert widths == [fit_columns, (*fit_columns, '_bin')]
 
 
 @pytest.mark.parametrize('size', [0, 1, 11, 12, 33])
@@ -190,8 +179,12 @@ def test_member_top_best_and_reciprocity_independent_oracle(ids, limit):
     assert_frame_equal(pc.select_reciprocal_best_hit_edges(members, reverse),
                        frozen.select_reciprocal_best_hit_edges(members, reverse), check_exact=True)
     assert_frame_equal(hits, before, check_exact=True)
-    members.iloc[0, members.columns.get_loc('extra')] = 'changed'
-    assert_frame_equal(hits, before, check_exact=True)
+    if limit is None:
+        # Keeping every HSP copies no column data; callers only read the result.
+        assert np.shares_memory(members['extra'].to_numpy(), hits['extra'].to_numpy())
+    else:
+        members.iloc[0, members.columns.get_loc('extra')] = 'changed'
+        assert_frame_equal(hits, before, check_exact=True)
 
 
 @pytest.mark.parametrize('mode', ['rbh', 'one_to_one', 'all'])
@@ -304,55 +297,50 @@ def independent_evidence_rank(row, proteins):
             proteins[row.subject].record_index, row.subject)
 
 
-def test_record_bucket_top_one_and_stable_evidence_rank_oracle():
+def test_stable_evidence_rank_and_first_occurrence_oracle():
     proteins = {pid: benchmark.protein(pc, pid, record)
                 for pid, record in [('b', 1), ('a', 0), ('c', 1), ('d', 0), ('e', 2)]}
     pairs = [('a', 'c'), ('a', 'b'), ('a', 'd'), ('b', 'a'), ('a', 'e'), ('d', 'a')]
     rows = [(pair, SimpleNamespace(**benchmark.hit(*pair), normalized_score=1., min_coverage=1.))
             for pair in pairs]
-    ranked = sorted(rows, key=lambda item: pc._anchor_core_hit_rank(item[1], proteins))
-    assert ranked == sorted(rows, key=lambda item: independent_evidence_rank(item[1], proteins))
-    actual = pc._best_row_by_query_target_record(ranked, proteins)
-    # Brute-force every query/target-record combination independently.
-    for q in proteins:
-        for record in range(3):
-            candidates = [row for (query, s), row in rows
-                          if query == q and proteins[s].record_index == record
-                          and proteins[q].record_index != record]
-            if candidates:
-                winner = min(candidates, key=lambda row: independent_evidence_rank(row, proteins))
-                assert actual[q, record] is winner
-            else:
-                assert (q, record) not in actual
-    # First equal-rank row survives, including when supplied as a stable tie.
-    pair, first = rows[0]
-    second = SimpleNamespace(**vars(first))
-    assert pc._best_row_by_query_target_record([(pair, first), (pair, second)], proteins)[pair[0], 1] is first
+    hits = pc._directed_hits_from_tables(
+        {(0, 1): pd.DataFrame([vars(row) | {'domain_only': False} for _, row in rows])}, proteins)
+    # The table holds the rows in rank order, and each row is its record's rank.
+    ranked = [hits.hit(row) for row in range(len(hits))]
+    assert [(hit.query, hit.subject) for hit in ranked] == [
+        pair for pair, _ in sorted(rows, key=lambda item: independent_evidence_rank(item[1], proteins))]
+    assert [hit.rank for hit in ranked] == list(range(len(pairs)))
+    for hit, reverse in zip(ranked, hits.reverse.tolist()):
+        assert (reverse >= 0) == ((hit.subject, hit.query) in pairs)
+        if reverse >= 0:
+            assert (ranked[reverse].query, ranked[reverse].subject) == (hit.subject, hit.query)
+    # Every per-bucket first pick (best hit into a record, first row of a pair)
+    # is the earliest position of its key; brute-force it with heavy ties.
+    rng = random.Random(20261025)
+    for size in [0, 1, 2, 7, 50, 300]:
+        keys = np.array([rng.choice([-3, 0, 5, 2**40, 7]) for _ in range(size)], dtype=np.int64)
+        codes, first = pc._first_occurrences(keys)
+        expected = sorted({key: position for position, key in reversed(list(enumerate(keys.tolist())))}.values())
+        assert first.tolist() == expected
+        assert keys[first].tolist() == list(dict.fromkeys(keys.tolist()))
+        assert (keys[first][codes] == keys).all()
 
 
 @pytest.mark.parametrize('scenario', ['sparse-2', 'dense-4', 'support-edges'])
-def test_evidence_sorts_and_rank_evaluations_reduced(scenario):
+def test_evidence_is_ranked_once_from_precomputed_ranks(scenario):
     pm, tables = benchmark.synthetic(pc, scenario, 20260916)
-    observed = []
-    for module in (frozen, pc):
-        counts = {'sorts': 0, 'evidence': 0, 'cross': 0}
-        def sort(values, *args, **kwargs):
-            values = list(values)
-            if values and all(isinstance(item, tuple) and len(item) == 2
-                              and isinstance(item[0], tuple) and hasattr(item[1], 'normalized_score') for item in values):
-                counts['sorts'] += 1
-                counts['evidence'] = len(values)
-                counts['cross'] = sum(pm[q].record_index != pm[s].record_index for (q, s), _ in values)
-            return sorted(values, *args, **kwargs)
-        with patch.object(module, 'sorted', sort, create=True), \
-             patch.object(module, '_anchor_core_hit_rank', wraps=module._anchor_core_hit_rank) as rank:
-            result = module.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3)
-        counts['ranks'] = rank.call_count
-        observed.append((counts, benchmark.canonical(result)))
-    before, after = observed[0][0], observed[1][0]
-    assert observed[0][1] == observed[1][1]
-    assert before['sorts'] == 3 and after['sorts'] == 1
-    assert before['ranks'] - after['ranks'] == 2 * after['evidence'] + after['cross']
+    expected = benchmark.canonical(frozen.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3))
+    sorts = []
+    def sort(values, *args, **kwargs):
+        values = list(values)
+        if values and all(isinstance(item, pc._DirectedHit) for item in values):
+            sorts.append(len(values))
+        return sorted(values, *args, **kwargs)
+    with patch.object(pc, 'sorted', sort, create=True):
+        result = pc.select_rbh_orthogroup_edges_from_directional_hits(tables, pm, record_count=3)
+    assert benchmark.canonical(result) == expected
+    # The table is built in rank order once; no membership phase sorts hit records.
+    assert sorts == []
 
 
 @pytest.mark.parametrize('baseline', ['s076', 's077'])

@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from functools import lru_cache
-from typing import Any, Literal, NamedTuple, TypeAlias, cast
+from typing import Any, Literal, NamedTuple, TypeAlias, cast, get_args
 
 from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
@@ -17,11 +17,13 @@ from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
 from .circular_types import CircularLabel, CircularLabelCandidateCache
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
+from .label_style import CIRCULAR_LABEL_GAP_EM
 from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
+from ..diagrams.circular.presets import CircularTrackPreset, circular_feature_lane_direction_for_preset
 from ..auto_sizes import determine_length_parameter
 from ..layout.common import calculate_cds_ratio
 from ..layout.circular import (
@@ -85,20 +87,15 @@ LEADER_LABEL_SHIFT_STEP_DEG = 0.25
 LEADER_LABEL_MAX_SHIFT_DEG = 45.0
 LEADER_LABEL_MAX_PASSES = 6
 LEADER_LABEL_MIN_ORDER_GAP_DEG = 0.05
+# OV-1823: an outer label that no angular shift clears of a leader may step outward, 1 px at a time,
+# by up to twice its own height (enough to clear the elbow of a neighbour's leader one row up).
+LEADER_LABEL_RADIAL_STEP_PX = 1.0
+LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS = 2.0
 
 
 def _normalize_circular_track_preset(raw: object) -> str:
     preset = str(raw or "tuckin").strip().lower()
-    return preset if preset in {"tuckin", "middle", "spreadout"} else "tuckin"
-
-
-def _lane_direction_from_preset(raw: object) -> str:
-    preset = _normalize_circular_track_preset(raw)
-    if preset == "middle":
-        return "split"
-    if preset == "spreadout":
-        return "outside"
-    return "inside"
+    return preset if preset in get_args(CircularTrackPreset) else "tuckin"
 
 
 def _effective_outer_middle_anchor_clearance_px(
@@ -290,6 +287,13 @@ def circular_label_shape(label: CircularLabel, total_length: int) -> LabelShape:
     parts = (tuple(corners),) if corners else (_label_fit_box(label, total_length),)
     kind: LabelKind = "circular_inner" if label.get("is_inner") else "circular_outer"
     return LabelShape(kind, parts, leader_polyline(label))
+
+
+def _circular_label_box(text: str, font_family: str, font_size: float) -> tuple[float, float]:
+    """The box a Circular feature label is laid out in: its drawn box, ``CIRCULAR_LABEL_GAP_EM`` wider."""
+
+    width, height = drawn_text_box(text, font_family, font_size)
+    return width + CIRCULAR_LABEL_GAP_EM * float(font_size), height
 
 
 def circular_label_fits(
@@ -1321,11 +1325,11 @@ def _resolve_label_leader_line_collisions(
             current_min_gap_for_label = _count_local_label_overlaps(
                 labels, total_length, label_idx, label, use_min_gap=True
             )
-            current_score = (
+            current_score: tuple[int, int, int, tuple[int, float], float] = (
                 local_line_intersection_count,
                 local_collision_count,
                 current_min_gap_for_label,
-                0.0,
+                (0, 0.0),
                 _leader_length_px(label, total_length),
             )
             best_score = current_score
@@ -1337,11 +1341,12 @@ def _resolve_label_leader_line_collisions(
             best_plain_total = current_plain_overlaps
             best_min_gap_total = current_min_gap_overlaps
 
-            # Candidate anchors per step, in the search order; their sweep box selects the peers.
-            step_positions: list[list[tuple[float, float, float, float]]] = []
+            # Candidate anchors per step, in the search order; their sweep box selects the peers. Each
+            # carries its move (0, angle offset) or (1, outward shift px): any angular shift ranks first.
+            step_positions: list[list[tuple[tuple[int, float], float, float, float]]] = []
             for step_idx in range(1, max_steps + 1):
                 angle_offset = step_idx * step_deg
-                positions: list[tuple[float, float, float, float]] = []
+                positions: list[tuple[tuple[int, float], float, float, float]] = []
                 for direction in (1.0, -1.0):
                     candidate_angle = current_angle + (direction * angle_offset)
                     if candidate_angle <= (lower_bound + 1e-9) or candidate_angle >= (upper_bound - 1e-9):
@@ -1353,9 +1358,21 @@ def _resolve_label_leader_line_collisions(
                         candidate_x, axis_eps_px=HEMISPHERE_AXIS_EPS_PX
                     ) != current_half:
                         continue
-                    positions.append((angle_offset, candidate_angle, candidate_x, candidate_y))
+                    positions.append(((0, angle_offset), candidate_angle, candidate_x, candidate_y))
                 step_positions.append(positions)
-            sweep_points = [(item[2], item[3]) for positions in step_positions for item in positions]
+            # OV-1823: the same angle, further out (an outer label only). An angular shift cannot clear
+            # a label that sits across a neighbour's radial leader between the neighbour's feature and text.
+            radial_positions: list[tuple[tuple[int, float], float, float, float]] = []
+            if label.get("is_inner", False) is False:
+                max_shift_px = LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS * float(label["height_px"])
+                radial_steps = int(max_shift_px / LEADER_LABEL_RADIAL_STEP_PX)
+                for step_idx in range(1, radial_steps + 1):
+                    shift_px = step_idx * LEADER_LABEL_RADIAL_STEP_PX
+                    scale = (radius + shift_px) / radius
+                    radial_positions.append(((1, shift_px), current_angle, start_x * scale, start_y * scale))
+            sweep_points = [
+                (item[2], item[3]) for positions in (*step_positions, radial_positions) for item in positions
+            ]
             if not sweep_points:
                 continue
             middle_point, feature_anchor_point = _leader_segments(label)[1]
@@ -1375,8 +1392,10 @@ def _resolve_label_leader_line_collisions(
                 skip=label_idx,
             )
 
-            for positions in step_positions:
-                for angle_offset, candidate_angle, candidate_x, candidate_y in positions:
+            for positions in (*step_positions, radial_positions):
+                if positions is radial_positions and best_score[1] == 0:
+                    break  # an angular shift (or none) clears every leader collision of this label
+                for move, candidate_angle, candidate_x, candidate_y in positions:
                     candidate = label.copy()
                     candidate["start_x"] = float(candidate_x)
                     candidate["start_y"] = float(candidate_y)
@@ -1457,7 +1476,7 @@ def _resolve_label_leader_line_collisions(
                         candidate_local_line_intersection_count,
                         candidate_local_collision_count,
                         candidate_min_gap_for_label,
-                        abs(angle_offset),
+                        move,
                         _leader_length_px(candidate, total_length),
                     )
                     if candidate_score < best_score:
@@ -4949,10 +4968,10 @@ def prepare_label_list(
     lane_direction = (
         str(feature_lane_direction).strip().lower()
         if feature_lane_direction is not None
-        else _lane_direction_from_preset(track_type)
+        else circular_feature_lane_direction_for_preset(track_type)
     )
     if lane_direction not in {"inside", "outside", "split"}:
-        lane_direction = _lane_direction_from_preset(track_type)
+        lane_direction = circular_feature_lane_direction_for_preset(track_type)
     strandedness = profile.strandedness
     resolve_overlaps = profile.resolve_overlaps
     displaced_lanes = any(
@@ -4973,7 +4992,6 @@ def prepare_label_list(
         if label_font_size is not None
         else circular_label_font_size(cfg, total_length)
     )
-    interval = cfg.canvas.dpi
     label_spacing_px = float(cfg.labels.spacing.circular)
 
     track_ratio_factor = (
@@ -5013,12 +5031,7 @@ def prepare_label_list(
             label_filtering,
             font_family=font_family,
             font_size=font_size,
-            measure_text=lambda text, family, size: calculate_bbox_dimensions(
-                text,
-                family,
-                size,
-                interval,
-            ),
+            measure_text=_circular_label_box,
             record_transform=record_transform,
             overrides_only=profile.labels_overrides_only,
         )
@@ -5056,6 +5069,8 @@ def prepare_label_list(
                 feature_inner_radius = float(lane.inner_px)
                 feature_center_radius = float(lane.center_px)
                 feature_outer_radius = float(lane.outer_px)
+            # The laid-out box, ``CIRCULAR_LABEL_GAP_EM`` included: the 1.1x embed test reads the same width as
+            # the placer and the fit count, so the gap is part of deciding which labels go inside their feature.
             bbox_width_px = candidate.width_px
             bbox_height_px = candidate.height_px
             label_middle = longeset_segment_middle

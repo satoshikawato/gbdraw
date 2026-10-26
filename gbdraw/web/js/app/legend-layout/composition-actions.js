@@ -35,7 +35,6 @@ import { LENGTH_BAR_ID, PLOT_TITLE_ID } from '../../services/drawn-groups.js';
  * @property {number} colorRectSize
  * @property {number} lineHeight
  * @property {number} textXOffset
- * @property {number} [dpi]
  * @property {string | null} [fontFile]
  * @property {number} [fontSize]
  * @property {LayoutBox} [primaryLocalBounds]
@@ -152,7 +151,6 @@ const LEGACY_COMPOSITION_SPACING_V0 = Object.freeze({
   titleGapPx: 20
 });
 const LEGEND_LAYOUT_INPUT_FIELDS = Object.freeze([
-  'dpi',
   'fontFile',
   'fontSize',
   'primaryLocalBounds',
@@ -450,7 +448,8 @@ const validateLegendReflow = (value, { required }) => {
   };
   // The inputs Python laid the Legend out with. SVGs written before Python
   // emitted them carry none; parsing keeps them so a composition edit writes
-  // them back unchanged.
+  // them back unchanged. A `dpi` key saved by v0.14.x is accepted and dropped:
+  // nothing reads it.
   const present = LEGEND_LAYOUT_INPUT_FIELDS.filter((field) => (
     Object.prototype.hasOwnProperty.call(value, field)
   ));
@@ -458,15 +457,11 @@ const validateLegendReflow = (value, { required }) => {
   if (present.length !== LEGEND_LAYOUT_INPUT_FIELDS.length) {
     fail('composition.legendReflow has an incomplete set of Python layout inputs.');
   }
-  if (!Number.isInteger(value.dpi) || /** @type {number} */ (value.dpi) <= 0) { // an integer, so a number
-    fail('composition.legendReflow.dpi must be a positive integer.');
-  }
   if (value.fontFile !== null && (typeof value.fontFile !== 'string' || !value.fontFile.trim())) {
     fail('composition.legendReflow.fontFile must be a non-empty string or null.');
   }
   return {
     ...reflow,
-    dpi: /** @type {number} */ (value.dpi), // checked just above
     fontFile: value.fontFile,
     fontSize: positiveNumber(value.fontSize, 'composition.legendReflow.fontSize'),
     primaryLocalBounds: validateCornerBounds(

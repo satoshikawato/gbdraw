@@ -552,7 +552,7 @@ test('Vibrio Session saves once within memory, responsiveness, and compatibility
   await freshPage.getByRole('button', { name: 'Search features', exact: true }).click();
   await expect(freshPage.getByRole('button', { name: 'Open active feature' })).toBeEnabled();
   const pairwiseMatch = freshPage.locator(
-    '.shadow-xl.origin-top > svg [data-gbdraw-pairwise-match-id]'
+    '.shadow-xl.origin-top > svg [data-gbdraw-match-id]'
   ).first();
   await expect(pairwiseMatch).toHaveAttribute('role', 'button');
   await pairwiseMatch.click();

@@ -8,7 +8,7 @@ branching on the legacy preset name.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, Sequence, cast
+from typing import Literal, Sequence, TypedDict, cast, get_args
 
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasGeometry
@@ -16,6 +16,7 @@ from ...config.models import GbdrawConfig
 from ...tracks.circular import (
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
+    SUPPORTED_CIRCULAR_TRACK_RENDERERS,
     _internal_circular_track_slot,
     circular_track_slots_with_axis_side,
     tick_label_layout_from_sides,
@@ -30,7 +31,7 @@ from ...svg.circular_ticks import (
 CircularTrackPreset = Literal["tuckin", "middle", "spreadout"]
 CircularFeatureLaneDirection = Literal["inside", "split", "outside"]
 
-_VALID_PRESETS: frozenset[str] = frozenset({"tuckin", "middle", "spreadout"})
+_VALID_PRESETS: frozenset[str] = frozenset(get_args(CircularTrackPreset))
 _NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"depth", "gc_content", "gc_skew"})
 _NON_NUMERIC_PRESET_SLOT_IDS: frozenset[str] = frozenset({"features", "ticks"})
 _RENDERER_ALIASES: dict[str, str] = {
@@ -75,6 +76,20 @@ class CircularPresetRadialPlan:
     preferred_anchor_slot_ids: frozenset[str]
 
 
+class CircularAutoSlotSizes(TypedDict):
+    """The Auto sizes a Circular row asks for, as the Web shows them before Generate draws the row.
+
+    ``widthPx`` is keyed by size class and renderer, ``ticksWidthPx`` by size class, preset and
+    Separate Strands (``separate`` or ``combined``); ``presetNumericRowSides`` gives the side of each
+    preset's depth, GC content and GC skew rows.
+    """
+
+    gapPx: float
+    widthPx: dict[str, dict[str, float]]
+    ticksWidthPx: dict[str, dict[str, dict[str, float]]]
+    presetNumericRowSides: dict[str, dict[str, str]]
+
+
 def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
     preset = str(raw or "tuckin").strip().lower()
     if preset not in _VALID_PRESETS:
@@ -84,15 +99,45 @@ def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
     return cast(CircularTrackPreset, preset)  # membership checked above
 
 
+_FEATURE_LANE_DIRECTION_BY_PRESET: dict[CircularTrackPreset, CircularFeatureLaneDirection] = {
+    "tuckin": "inside",
+    "middle": "split",
+    "spreadout": "outside",
+}
+_PRESET_BY_FEATURE_LANE_DIRECTION: dict[str, CircularTrackPreset] = {
+    direction: preset for preset, direction in _FEATURE_LANE_DIRECTION_BY_PRESET.items()
+}
+
+
+class CircularTrackPresetTable(TypedDict):
+    """The Circular track presets in menu order and the feature lane direction of each, for the Web."""
+
+    presets: list[CircularTrackPreset]
+    featureLaneDirection: dict[CircularTrackPreset, CircularFeatureLaneDirection]
+
+
 def circular_feature_lane_direction_for_preset(
     preset: str | None,
 ) -> CircularFeatureLaneDirection:
-    normalized = normalize_circular_track_preset(preset)
-    if normalized == "middle":
-        return "split"
-    if normalized == "spreadout":
-        return "outside"
-    return "inside"
+    """The feature lane direction of a preset: the one owner of this mapping."""
+
+    return _FEATURE_LANE_DIRECTION_BY_PRESET[normalize_circular_track_preset(preset)]
+
+
+def circular_preset_for_feature_lane_direction(lane_direction: str | None) -> CircularTrackPreset:
+    """The preset whose features take ``lane_direction``; ``tuckin`` for an unknown direction."""
+
+    return _PRESET_BY_FEATURE_LANE_DIRECTION.get(str(lane_direction or "inside").strip().lower(), "tuckin")
+
+
+def circular_track_preset_table() -> CircularTrackPresetTable:
+    presets = list(get_args(CircularTrackPreset))
+    return {
+        "presets": presets,
+        "featureLaneDirection": {
+            preset: circular_feature_lane_direction_for_preset(preset) for preset in presets
+        },
+    }
 
 
 def _scalar_factor(value: float) -> ScalarSpec:
@@ -195,7 +240,6 @@ def _tick_slot_for_preset(
             strandedness=bool(context.strandedness),
             font_size=float(context.cfg.objects.ticks.tick_labels.font_size),
             font_family=str(context.cfg.objects.text.font_family),
-            dpi=int(context.geometry.dpi),
             manual_interval=context.cfg.objects.scale.interval,
             tick_width=float(context.cfg.objects.ticks.tick_width),
             tick_side=tick_side,
@@ -285,17 +329,92 @@ def circular_radial_plan_for_preset(
     preset: str,
     context: CircularPresetContext,
 ) -> CircularPresetRadialPlan:
-    slots = tuple(circular_track_slots_for_preset(preset, context))
+    """The default stack: the preset's rows, its numeric rows on their preset lanes with an Auto width.
+
+    The preset's width of a numeric row on a preset lane is an Auto width (``auto_compress``), as on a blank
+    built-in slot of a user stack (``_overlay_slot_on_preset_lane``), so the layout tells a width the user typed
+    (``compress`` off) from the preset's (OV-1853). The row keeps the lane as its radius, so it never reflows with
+    the Auto rows (GX-19).
+    """
+
+    preset_slots = tuple(circular_track_slots_for_preset(preset, context))
     preferred_ids = frozenset(
         slot.id
-        for slot in slots
+        for slot in preset_slots
         if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
         and slot.side == "inside"
         and slot.radius is not None
     )
+    slots = tuple(
+        _internal_circular_track_slot(slot, auto_compress=True) if slot.id in preferred_ids else slot
+        for slot in preset_slots
+    )
     return CircularPresetRadialPlan(
         slots=slots,
         preferred_anchor_slot_ids=preferred_ids,
+    )
+
+
+def circular_auto_slot_sizes(cfg: GbdrawConfig) -> CircularAutoSlotSizes:
+    """Return the Auto width of each row, the default gaps and the preset rows' sides of ``cfg``.
+
+    These are the sizes the preset slots and the radial layout start from. The layout can still
+    narrow a width when the rows do not fit, and the radius of a row is the layout's own result, so
+    neither is known before Generate (OV-1712).
+    """
+
+    circular = cfg.canvas.circular
+    threshold = int(cfg.labels.length_threshold.circular)
+    width_px: dict[str, dict[str, float]] = {}
+    ticks_width_px: dict[str, dict[str, dict[str, float]]] = {}
+    gaps: set[float] = set()
+    numeric_sides: dict[str, dict[str, str]] = {}
+    # A record length of each size class: short below the threshold (determine_length_parameter).
+    for size, total_length in (("short", threshold - 1), ("long", threshold)):
+        geometry = CircularCanvasGeometry(
+            radius=circular.radius,
+            track_ratio=circular.track_ratio,
+            length_param=size,
+            track_ratio_factors=tuple(circular.track_ratio_factors[size]),
+        )
+        width_px[size] = {
+            renderer: circular_track_width_px(
+                renderer,
+                radius=geometry.radius,
+                track_ratio=geometry.track_ratio,
+                factors=geometry.track_ratio_factors,
+            )
+            for renderer in sorted(SUPPORTED_CIRCULAR_TRACK_RENDERERS - {"ticks"})
+        }
+        ticks_width_px[size] = {}
+        for preset in sorted(_VALID_PRESETS):
+            ticks_width_px[size][preset] = {}
+            for strands, strandedness in (("combined", False), ("separate", True)):
+                context = CircularPresetContext(
+                    cfg=cfg,
+                    geometry=geometry,
+                    total_length=total_length,
+                    strandedness=strandedness,
+                    show_features=True,
+                    show_ticks=True,
+                    show_depth=True,
+                    show_gc=True,
+                    show_skew=True,
+                    track_ids=(),
+                )
+                for slot in circular_track_slots_for_preset(preset, context):
+                    gaps.update({float(slot.inner_gap_px or 0.0), float(slot.outer_gap_px or 0.0)})
+                    if slot.id == "ticks" and slot.width is not None:
+                        ticks_width_px[size][preset][strands] = float(slot.width.value)
+                    if slot.id in _NUMERIC_PRESET_SLOT_IDS:
+                        numeric_sides.setdefault(preset, {})[str(slot.id)] = str(slot.side)
+    if len(gaps) != 1:
+        raise ValueError(f"The preset rows have more than one default gap: {sorted(gaps)}")
+    return CircularAutoSlotSizes(
+        gapPx=gaps.pop(),
+        widthPx=width_px,
+        ticksWidthPx=ticks_width_px,
+        presetNumericRowSides=numeric_sides,
     )
 
 
@@ -527,14 +646,19 @@ def circular_track_slots_from_preset_order(
 
 
 __all__ = [
+    "CircularAutoSlotSizes",
     "CircularFeatureLaneDirection",
     "CircularFeatureSlotDefaults",
     "CircularPresetContext",
     "CircularPresetRadialPlan",
     "CircularTrackPreset",
+    "CircularTrackPresetTable",
+    "circular_auto_slot_sizes",
     "circular_radial_plan_for_preset",
     "circular_feature_lane_direction_for_preset",
     "circular_feature_slot_defaults_for_preset",
+    "circular_preset_for_feature_lane_direction",
+    "circular_track_preset_table",
     "circular_track_slots_from_preset_order",
     "circular_track_slots_for_preset",
     "normalize_circular_track_preset",

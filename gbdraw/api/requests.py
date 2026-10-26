@@ -14,7 +14,7 @@ from typing import Literal, Sequence, TypeAlias, cast
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.source import SourceFeatureIdentity
+from gbdraw.features.source import SourceFeatureCatalog
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.layout.similarity_alignment import (
@@ -121,19 +121,20 @@ class GffFastaInputSource:
 
 @dataclass(frozen=True)
 class InMemoryRecordSource:
-    """One already-parsed sequence record."""
+    """One already-parsed sequence record.
+
+    ``source_features``: the catalog of the record's original source, when the
+    record is a planned (cropped or reversed) record of an earlier plan.
+    """
 
     record: SeqRecord
-    source_feature_catalog: tuple[SourceFeatureIdentity, ...] | None = field(default=None, kw_only=True, repr=False)
+    source_features: SourceFeatureCatalog | None = field(default=None, kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.record, SeqRecord):
             raise ValidationError("In-memory record source must contain a SeqRecord.")
-        if self.source_feature_catalog is not None and (
-            not isinstance(self.source_feature_catalog, tuple)
-            or not all(isinstance(item, SourceFeatureIdentity) for item in self.source_feature_catalog)
-        ):
-            raise ValidationError("source_feature_catalog must be an immutable source identity tuple.")
+        if self.source_features is not None and not isinstance(self.source_features, SourceFeatureCatalog):
+            raise ValidationError("source_features must be a SourceFeatureCatalog.")
 
 
 RecordInputSource: TypeAlias = (

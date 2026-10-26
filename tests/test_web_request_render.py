@@ -702,8 +702,16 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # derived LOSAT entries: the reply does not change when it stops. Updated
     # when the composition metadata recorded the Linear scale bounds: the
     # reply differs from the earlier one only by that key.
-    "similarity_groups": "ab2c349578abd3a2f692a9ef1e701a797ff12563468ec9f41385ebd7f1c787ed",
-    "collinear": "27213005ab0036f968f1d37acbda9f16c9317f3caad56a2431a5149a8f9509de",
+    # Updated again when the Legend took the drawn text width (Owner V-D03,
+    # 2026-10-24): only the Legend group, its composition bounds and the canvas
+    # width moved.
+    # Updated again when every path number took 3 decimals and track paths
+    # were simplified (perf-audit D-13 D2, OV-1230): only path data moved.
+    # Updated again when the duplicate match attribute stopped being written
+    # (perf-audit D-41): only that attribute and the segment byte counts and
+    # revision hashes derived from the segment text moved.
+    "similarity_groups": "36b644c3ec0d30d2d52492cf44b364460c7f91e4e4e1d4dc8bd2b39f54506859",
+    "collinear": "b6565b0e35e87726aa0753638eaaa0aeac7673bc19202e30e45d7dd0eb5e074e",
 }
 
 

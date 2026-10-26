@@ -625,22 +625,18 @@ def test_current_request_artifacts_validate_the_manifest_once_for_many_raw_entri
             }
         )
 
+    # Full checks; the readers of the proof call the validator, which returns it.
     validation_calls = 0
-    real_validate = protein_colinearity_module.validate_protein_identity_manifest
+    real_check = protein_colinearity_module._check_protein_identity_manifest
 
     def count_validation(value):
         nonlocal validation_calls
         validation_calls += 1
-        return real_validate(value)
+        return real_check(value)
 
     monkeypatch.setattr(
         protein_colinearity_module,
-        "validate_protein_identity_manifest",
-        count_validation,
-    )
-    monkeypatch.setattr(
-        request_render_module,
-        "validate_protein_identity_manifest",
+        "_check_protein_identity_manifest",
         count_validation,
     )
 

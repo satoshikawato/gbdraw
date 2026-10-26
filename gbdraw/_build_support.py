@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import sys
 import zipfile
-from datetime import datetime
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from types import ModuleType
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +20,11 @@ BROWSER_WHEEL_BUILD_ENV = "GBDRAW_BUILDING_BROWSER_WHEEL"
 
 _PROJECT_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"\s*$', re.MULTILINE)
 _WHEEL_NAME_RE = re.compile(r'^(export const GBDRAW_WHEEL_NAME\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
-_WHEEL_CACHE_BUST_RE = re.compile(r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*")[^"]+(";\s*)$', re.MULTILINE)
+_WHEEL_CACHE_BUST_RE = re.compile(
+    r'^(export const GBDRAW_WHEEL_CACHE_BUST\s*=\s*)(?:null|"[^"]*")(;\s*)$', re.MULTILINE
+)
+# Hex digits of the wheel's SHA-256 that the hosted bundle puts in the wheel URL.
+_WHEEL_CACHE_BUST_DIGITS = 16
 
 _PYTHON_RUNTIME_PACKAGE_DATA = [
     "data/color_palettes.toml",
@@ -150,11 +156,76 @@ def read_browser_wheel_name_from_config() -> str:
     return value.strip().strip(";").strip().strip('"').strip("'")
 
 
-def generate_cache_bust_token() -> str:
-    return datetime.now().strftime("%Y%m%d-%H%M%S")
+def browser_wheel_cache_bust_token(wheel_path: Path) -> str:
+    """The `?v=` token of the served gbdraw wheel: its content hash.
+
+    A new wheel always gets a new URL, so no HTTP cache serves an older one.
+    """
+    return hashlib.sha256(wheel_path.read_bytes()).hexdigest()[:_WHEEL_CACHE_BUST_DIGITS]
 
 
-def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = None) -> None:
+def write_wheel_cache_bust(config_path: Path, token: str) -> None:
+    """Write `token` as GBDRAW_WHEEL_CACHE_BUST into a bundle's copy of config.js."""
+    config_text = config_path.read_text(encoding="utf-8")
+    updated_text, replacements = _WHEEL_CACHE_BUST_RE.subn(
+        lambda match: f'{match.group(1)}"{token}"{match.group(2)}',
+        config_text,
+        count=1,
+    )
+    if replacements != 1:
+        raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {config_path}")
+    config_path.write_text(updated_text, encoding="utf-8")
+
+
+def _load_web_assets_module() -> ModuleType:
+    # By path, as setup.py loads this module: a build need not import `gbdraw`.
+    path = Path(__file__).resolve().parent / "_web_assets.py"
+    spec = spec_from_file_location("gbdraw_build_web_assets", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load the web asset manifest from {path}")
+    module = module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def pyodide_runtime_dir() -> Path:
+    """The vendored Pyodide directory that gbdraw/_web_assets.py names."""
+    runtime_dir: Path = _load_web_assets_module().PYODIDE_RUNTIME_DIR
+    return runtime_dir
+
+
+def pyodide_asset_config_values() -> dict[str, str | list[str]]:
+    """The config.js values that gbdraw/_web_assets.py owns, by constant name."""
+    web_assets = _load_web_assets_module()
+
+    def url(path: Path) -> str:
+        return f"./{path.as_posix()}"
+
+    return {
+        "PYODIDE_INDEX_URL": f"{url(web_assets.PYODIDE_RUNTIME_DIR.relative_to(web_assets.WEB_ROOT))}/",
+        "PYODIDE_RUNTIME_FILES": list(web_assets.PYODIDE_LOADER_FILES),
+        "PYODIDE_LOCAL_WHEELS": [url(path) for path in web_assets.PYODIDE_LOCAL_WHEELS],
+        "PYODIDE_RUNTIME_WHEELS": [url(path) for path in web_assets.PYODIDE_RUNTIME_WHEELS],
+    }
+
+
+def render_pyodide_asset_config(config_text: str) -> str:
+    """`config_text` with each value of pyodide_asset_config_values written in."""
+    for name, value in pyodide_asset_config_values().items():
+        pattern = re.compile(rf"^(export const {name} = ).*?(;)$", re.MULTILINE | re.DOTALL)
+        config_text, replacements = pattern.subn(
+            lambda match: f"{match.group(1)}{json.dumps(value, indent=2)}{match.group(2)}",
+            config_text,
+            count=1,
+        )
+        if replacements != 1:
+            raise RuntimeError(f"Could not update {name} in {CONFIG_PATH}")
+    return config_text
+
+
+def update_browser_wheel_config(*, wheel_name: str) -> None:
+    """Write GBDRAW_WHEEL_NAME and the values of pyodide_asset_config_values into config.js."""
     config_text = CONFIG_PATH.read_text(encoding="utf-8")
     updated_text, replacements = _WHEEL_NAME_RE.subn(
         lambda match: f'{match.group(1)}{wheel_name}{match.group(2)}',
@@ -163,14 +234,7 @@ def update_browser_wheel_config(*, wheel_name: str, cache_bust: str | None = Non
     )
     if replacements != 1:
         raise RuntimeError(f"Could not update GBDRAW_WHEEL_NAME in {CONFIG_PATH}")
-    if cache_bust is not None:
-        updated_text, cache_bust_replacements = _WHEEL_CACHE_BUST_RE.subn(
-            lambda match: f'{match.group(1)}{cache_bust}{match.group(2)}',
-            updated_text,
-            count=1,
-        )
-        if cache_bust_replacements != 1:
-            raise RuntimeError(f"Could not update GBDRAW_WHEEL_CACHE_BUST in {CONFIG_PATH}")
+    updated_text = render_pyodide_asset_config(updated_text)
     if updated_text != config_text:
         CONFIG_PATH.write_text(updated_text, encoding="utf-8")
 

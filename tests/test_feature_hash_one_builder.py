@@ -253,7 +253,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
     """`hash=` names a feature by its source-record hash on every record."""
     import pandas as pd
 
-    from gbdraw.features.source import build_source_feature_catalog
+    from gbdraw.features.source import capture_source_features
     from gbdraw.features.visibility import (
         compile_feature_visibility_rules,
         should_render_feature,
@@ -262,7 +262,7 @@ def test_source_hash_selector_matches_on_a_transformed_record(
     from gbdraw.io.regions import apply_region_specs, parse_region_specs
 
     source = SeqIO.read(_write_records(tmp_path)[1], "genbank")
-    catalog = build_source_feature_catalog(source)
+    catalog = capture_source_features(source).entries
     record = source
     if transform != "reverse":
         record = apply_region_specs(
@@ -280,10 +280,93 @@ def test_source_hash_selector_matches_on_a_transformed_record(
             feature
             for feature in record.features
             if not should_render_feature(
-                feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id
+                feature, ["CDS"], feature_visibility_rules=rules, record_id=record.id, instance=None
             )
         ]
         # The one feature drawn from the row's source feature (each has its own product).
         assert [feature.qualifiers["product"] for feature in hidden] == [
             source.features[entry.source_feature_index].qualifiers["product"]
         ]
+
+
+@pytest.mark.parametrize("transform", ("plain", "reverse", "crop-reverse"))
+def test_catalog_metadata_and_builder_share_one_source_hash(
+    tmp_path: Path, transform: str
+) -> None:
+    """The catalog row, the Web metadata `selector.hash`, and the builder agree.
+
+    The catalog (`features/source.py`) and the Web metadata
+    (`web_support/feature_metadata.py`) read the hash and the parts from
+    `source_feature_hash_and_parts`; neither repeats the hash formula.
+    """
+
+    from gbdraw.core.record_metadata import _read_coord_map
+    from gbdraw.features.ids import (
+        compute_source_feature_hash,
+        source_feature_hash_and_parts,
+    )
+    from gbdraw.features.source import capture_source_features
+    from gbdraw.io.record_select import reverse_records
+    from gbdraw.io.regions import apply_region_specs, parse_region_specs
+    from gbdraw.web_support.feature_metadata import _biological_selector_values
+
+    source = SeqIO.read(_write_records(tmp_path)[1], "genbank")
+    catalog = capture_source_features(source).entries
+    record = source
+    if transform == "reverse":
+        record = reverse_records([source], True)[0]
+    elif transform == "crop-reverse":
+        record = apply_region_specs(
+            [source], parse_region_specs(["recB:51-1800:rc"])
+        )[0]
+    _, coord_step = _read_coord_map(record)
+    assert len(catalog) == len(source.features)
+    for entry in catalog:
+        product = source.features[entry.source_feature_index].qualifiers["product"]
+        (feature,) = [f for f in record.features if f.qualifiers["product"] == product]
+        source_hash, parts = source_feature_hash_and_parts(feature, record)
+        assert source_hash == entry.stable_feature_id
+        assert parts == entry.location_parts
+        assert compute_source_feature_hash(feature, record) == source_hash
+        selector, stable_id, _ = _biological_selector_values(
+            feature, record=record, coord_step=coord_step
+        )
+        assert stable_id == selector["hash"] == source_hash
+
+
+def test_stable_feature_id_parse_is_typed_and_strict() -> None:
+    """`_feature_stable_id_status` parses once: an ID or None, plus validity."""
+
+    from gbdraw.render.interactive_svg import _feature_stable_id_status
+
+    assert _feature_stable_id_status({"stable_feature_id": "fabc12345_record_2"}) == (
+        "fabc12345",
+        True,
+    )
+    assert _feature_stable_id_status({"svg_id": "fabc12345"}) == ("fabc12345", True)
+    assert _feature_stable_id_status({"stable_feature_id": " "}) == (None, True)
+    assert _feature_stable_id_status({}) == (None, True)
+    # Conflicting aliases are invalid, not a parsed ID.
+    assert _feature_stable_id_status(
+        {"stable_feature_id": "fabc12345", "stableFeatureId": "f00000000"}
+    ) == (None, False)
+
+
+def test_feature_hash_primitive_has_pinned_callers() -> None:
+    """Source and drawn hashes come from `features/ids.py` builders (OV-412).
+
+    Only the comparison and orientation-preview maps still call the primitive
+    directly; any other module that does is a second derivation of the hash.
+    """
+
+    root = Path(__file__).resolve().parents[1] / "gbdraw"
+    callers = sorted(
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if "compute_feature_hash_from_location_parts" in path.read_text(encoding="utf-8")
+    )
+    assert callers == [
+        "analysis/protein_colinearity.py",
+        "api/record_planning.py",
+        "features/ids.py",
+    ]

@@ -14,17 +14,19 @@ the placed groups of a drawing in document order.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import cached_property
 from types import MappingProxyType
-from typing import Callable, Mapping, ParamSpec, Protocol
+from typing import Callable, Mapping, ParamSpec, Protocol, cast
+from xml.etree.ElementTree import Element
 
 from svgwrite import Drawing
 from svgwrite.base import BaseElement
 from svgwrite.container import Group
-from svgwrite.etree import etree
+from svgwrite.etree import CDATA_TAG, etree
 from svgwrite.params import Parameter
 
 from gbdraw.exceptions import ExportError
@@ -75,9 +77,68 @@ class GroupKey:
 
 
 def element_text(element: BaseElement) -> str:
-    """svgwrite's serialization of one element, as ``Drawing.tostring`` writes it."""
+    """svgwrite's serialization of one element, as ``Drawing.tostring`` writes it.
 
-    return etree.tostring(element.get_xml(), encoding="utf-8").decode("utf-8")
+    An empty element (most of a drawing: paths, lines, circles) is written by
+    ``empty_element_markup``; any other through ElementTree.
+    """
+
+    xml = element.get_xml()
+    markup = empty_element_markup(xml)
+    if markup is not None:
+        return markup
+    return etree.tostring(xml, encoding="utf-8").decode("utf-8")
+
+
+def _attribute_value(value: str) -> str:
+    # ElementTree's attribute escaping (``_escape_attrib``), in its order.
+    if "&" in value:
+        value = value.replace("&", "&amp;")
+    if "<" in value:
+        value = value.replace("<", "&lt;")
+    if ">" in value:
+        value = value.replace(">", "&gt;")
+    if '"' in value:
+        value = value.replace('"', "&quot;")
+    if "\r" in value:
+        value = value.replace("\r", "&#13;")
+    if "\n" in value:
+        value = value.replace("\n", "&#10;")
+    if "\t" in value:
+        value = value.replace("\t", "&#09;")
+    return value
+
+
+def empty_element_markup(xml: Element) -> str | None:
+    """``etree.tostring(xml, encoding="utf-8")`` as text, for an element with
+    no children, text or tail, plain string attributes and a plain tag; None
+    for any other element (the caller serializes it with ElementTree).
+
+    ElementTree writes the attributes in their order, escapes the values with
+    ``_escape_attrib`` and, for UTF-8, writes a character UTF-8 cannot encode
+    (a lone surrogate) as a character reference.
+    """
+
+    tag = xml.tag
+    if (
+        len(xml)
+        or xml.text
+        or xml.tail
+        or not isinstance(tag, str)
+        or tag == CDATA_TAG
+        or tag[:1] == "{"
+    ):
+        return None
+    parts = ["<", tag]
+    for name, value in xml.items():
+        if not isinstance(name, str) or not isinstance(value, str) or name[:1] == "{":
+            return None
+        parts.append(f' {name}="{_attribute_value(value)}"')
+    parts.append(" />")
+    markup = "".join(parts)
+    if markup.isascii():
+        return markup
+    return markup.encode("utf-8", "xmlcharrefreplace").decode("utf-8")
 
 
 _NOT_AN_ELEMENT = (
@@ -107,6 +168,53 @@ def start_tag(element: BaseElement) -> str:
     if not text.endswith(" />"):  # pragma: no cover - ElementTree writes empty elements so
         raise ValueError(f"unexpected empty-element text for <{element.elementname}>")
     return text[:-3] + ">"
+
+
+# Values an element keeps that nothing changes in place: shared by a copy.
+_SHARED_VALUES = (str, int, float, bool, bytes, type(None), Parameter)
+
+
+def copy_element_tree(element: BaseElement) -> BaseElement:
+    """A copy of ``element`` and its subtree that shares nothing a later step changes.
+
+    Every element is a new object with a new ``attribs`` dict, a new
+    ``elements`` list and new copies of the other lists, dicts and objects it
+    keeps (``Path.commands``; a ``TextPath``'s ``href`` element). As with
+    ``copy.deepcopy`` of the element, an element referenced twice in the copy
+    (a ``TextPath``'s path that is also a child) is copied once (memo), and an
+    element referenced from outside the subtree is copied apart from it. Lists
+    and dicts are copied per reference, not once per object, so two references
+    to one list become two lists; the copy never aliases the source. Strings,
+    numbers and svgwrite's per-element ``Parameter`` (debug flag and profile,
+    which elements a ``Drawing`` creates share and nothing changes) are
+    shared. A value of any other type is copied with ``copy.deepcopy``.
+    """
+
+    return _copy_element(element, {})
+
+
+def _copy_element(element: BaseElement, memo: dict[int, object]) -> BaseElement:
+    found = memo.get(id(element))
+    if found is not None:
+        return cast(BaseElement, found)
+    duplicate = object.__new__(type(element))
+    memo[id(element)] = duplicate
+    state = duplicate.__dict__
+    for name, value in element.__dict__.items():
+        state[name] = _copy_value(value, memo)
+    return duplicate
+
+
+def _copy_value(value: object, memo: dict[int, object]) -> object:
+    if isinstance(value, _SHARED_VALUES):
+        return value
+    if isinstance(value, BaseElement):
+        return _copy_element(value, memo)
+    if type(value) is list:
+        return [_copy_value(item, memo) for item in value]
+    if type(value) is dict:
+        return {key: _copy_value(item, memo) for key, item in value.items()}
+    return copy.deepcopy(value, memo)
 
 
 def _childless(element: BaseElement) -> BaseElement:
@@ -334,7 +442,9 @@ __all__ = [
     "RenderedGroup",
     "add_content_definitions",
     "build_group_content",
+    "copy_element_tree",
     "element_text",
+    "empty_element_markup",
     "group_manifest",
     "place_content",
     "require_element_markup",

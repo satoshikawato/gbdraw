@@ -7,6 +7,7 @@ OV-1241, OV-1251, OV-1252).
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -223,6 +224,33 @@ def test_python_session_loaders_share_the_unreadable_file_error(tmp_path: Path) 
     with pytest.raises(ValidationError, match="Not a valid JSON session file"):
         load_session(target)
     with pytest.raises(SessionFormatError, match="Not a valid JSON session file"):
+        load_session_document(target)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b'\xef\xbb\xbf{"format": "gbdraw-session"}',
+        '{"format": "gbdraw-session"}'.encode("utf-16"),
+        '{"format": "gbdraw-session"}'.encode("utf-32"),
+        b'{"format": "\xed\xa0\x80"}',
+        b'{"format": ',
+    ],
+    ids=["utf8_bom", "utf16", "utf32", "utf8_lone_surrogate", "malformed_json"],
+)
+def test_python_session_loaders_reject_text_that_is_not_plain_utf8_json(payload: bytes, tmp_path: Path) -> None:
+    """Only UTF-8 JSON without a BOM is a Session file; ``json.loads`` on bytes would accept the first four."""
+
+    from gbdraw.exceptions import ValidationError
+    from gbdraw.session import SessionFormatError, load_session_document
+    from gbdraw.session_io import load_session
+
+    target = tmp_path / "bad.json"
+    target.write_bytes(payload)
+    message = f"Not a valid JSON session file: {target}"
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        load_session(target)
+    with pytest.raises(SessionFormatError, match=re.escape(message)):
         load_session_document(target)
 
 

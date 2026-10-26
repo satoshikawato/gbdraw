@@ -39,7 +39,7 @@ rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md
 ## Main command
 
 ```text
-gbdraw v. 0.14.1: A diagram generator for small genomes
+gbdraw v. 0.14.2: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -117,6 +117,8 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
+              [--no_track_narrowing]
+              [--track_narrowing_min_px TRACK_NARROWING_MIN_PX]
               [--label_font_size LABEL_FONT_SIZE] [-f FORMAT] [--gc | --no-gc]
               [--skew | --no-skew] [--depth_track DEPTH [DEPTH ...]]
               [--depth_track_label LABEL [LABEL ...]]
@@ -287,6 +289,16 @@ options:
   --center_reserved_radius CENTER_RESERVED_RADIUS
                         Override the center-label reserved radius for circular
                         track packing (in px; must be >= 0).
+  --no_track_narrowing  Never narrow the inside tracks for the center
+                        definition: when moving them outward does not clear
+                        it, keep their widths and draw the definition over
+                        them (default: narrow Auto widths down to
+                        --track_narrowing_min_px).
+  --track_narrowing_min_px TRACK_NARROWING_MIN_PX
+                        The narrowest width (px; must be >= 0) an inside track
+                        with an Auto width takes when it is narrowed for the
+                        center definition (default: 30). A narrower track, or
+                        a typed width, is not narrowed.
   --label_font_size LABEL_FONT_SIZE
                         Label font size (optional; default: 14 (pt) for
                         genomes < 75 kb, 8 for genomes >= 75 kb)

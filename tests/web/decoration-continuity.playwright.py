@@ -181,10 +181,10 @@ def main():
                 # Nonzero target removal is atomic and recoverable through Reset.
                 page.evaluate("async () => { window.__GBDRAW_APP__.form.legend='none'; await window.Vue.nextTick(); }")
                 page.wait_for_timeout(350)
-                before=page.evaluate('() => window.__GBDRAW_APP__.results.map(r=>r.content)')
+                before=page.evaluate('() => window.__GBDRAW_APP__.currentResults().map(r=>r.content)')
                 failed=page.evaluate('async () => await window.__GBDRAW_APP__.runAnalysis()')
                 assert failed['status']=='error', failed
-                assert page.evaluate('() => window.__GBDRAW_APP__.results.map(r=>r.content)') == before
+                assert page.evaluate('() => window.__GBDRAW_APP__.currentResults().map(r=>r.content)') == before
                 assert 'Reset' in json.dumps(failed)
                 page.evaluate('async () => await window.__GBDRAW_APP__.resetLayout()')
                 recovered=page.evaluate('async () => await window.__GBDRAW_APP__.runAnalysis()')

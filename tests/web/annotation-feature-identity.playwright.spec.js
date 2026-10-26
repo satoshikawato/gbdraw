@@ -89,7 +89,7 @@ const drawnAnnotations = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { admitFeatureCatalog } = await import('/gbdraw/web/js/services/feature-catalog.js');
   const raw = (value) => window.Vue.toRaw(value);
-  return admitFeatureCatalog(raw(state.featureCatalog.value), raw(state.results.value), {
+  return admitFeatureCatalog(raw(state.featureCatalog.value), raw(window.__GBDRAW_APP__.currentResults()), {
     mode: state.generatedMode.value
   }).annotations.map((item) => ({ id: item.id, recordIndex: item.record_index, segments: item.segments }));
 });
@@ -198,7 +198,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   expect(await annotationTargets(page)).toEqual([target]);
   const drawn = [{ id: 'feature_1', recordIndex: 1, segments: [[300, 600]] }];
   expect(await drawnAnnotations(page)).toEqual(drawn);
-  const webSvg = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
+  const webSvg = await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
   const shapes = await annotationShapes(page, webSvg, 'feature_1');
   expect(shapes).toHaveLength(1);
 
@@ -364,10 +364,10 @@ test('R-7: a Session 44 hash annotation of one untransformed feature moves to it
         ...['x', 'y', 'width', 'height', 'd', 'points', 'transform'].map((name) => element.getAttribute(name))])
     ]).sort(([a], [b]) => a.localeCompare(b));
   }, svg);
-  const saved = await geometry(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  const saved = await geometry(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
   expect(saved.map(([id]) => id)).toEqual(['feature_1', 'feature_2']);
   await generate(page);
-  const generated = await geometry(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  const generated = await geometry(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content));
   expect(generated.filter(([id]) => id !== 'feature_3')).toEqual(saved);
   expect(generated.map(([id]) => id)).toEqual(['feature_1', 'feature_2', 'feature_3']);
   expect(await geometry(replayOnCli(SESSION, testInfo.outputPath('v44-replay')))).toEqual(generated);

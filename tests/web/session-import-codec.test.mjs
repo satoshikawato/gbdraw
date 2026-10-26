@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { importSessionFile } from '../../gbdraw/web/js/services/session-import-client.js';
 import { gzipSync } from 'node:zlib';
 import { readSessionText } from '../../gbdraw/web/js/services/session-file.js';
-import { assertSafeObjectKeys } from '../../gbdraw/web/js/services/safe-object-keys.js';
+import { assertSafeObjectKeys, isUnsafeObjectKey } from '../../gbdraw/web/js/services/safe-object-keys.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 installSessionImportWorker();
@@ -43,17 +44,23 @@ test('malformed JSON/gzip and fatal UTF-8 stay structured failures', async () =>
   }
 });
 
+// The Option Integrity Product Contract cites this title; the production Worker now refuses the key itself.
 test('unsafe own keys remain untrusted after the production whole-object reply', async () => {
   for (const key of ['__proto__', 'constructor', 'prototype']) {
-    const reply = await decode(new Blob([`{"nested":{"${key}":{}}}`]));
-    assert.equal(reply.status, 'ok');
-    assert.equal(Object.hasOwn(reply.data.nested, key), true);
-    // OV-952: the Session-schema diagnostic, never the key.
-    assert.throws(() => assertSafeObjectKeys(reply.data), (error) => (
-      error.code === 'INPUT_INVALID' && error.context.field === 'schema' && error.context.reason === 'FIELDS'
-      && !error.message.includes(key)
-    ));
+    const reply = await decode(new Blob([`{"nested":[{"kept":1},{"${key}":{}}]}`]));
+    assert.equal(reply.status, 'error');
+    // OV-952: the diagnostic the main thread gave before the walk moved into the Worker, never the key.
+    assert.equal(reply.error.message, 'INPUT_INVALID/FIELDS');
+    assert.equal(reply.error.code, 'INPUT_INVALID');
+    assert.equal(reply.error.stage, 'request-validation');
+    assert.deepEqual(reply.error.context, { field: 'schema', reason: 'FIELDS' });
+    assert.ok(!JSON.stringify(normalizeUserFacingError(reply.error)).includes(key));
   }
+  // The same walk still serves the routes that check a value on the main thread.
+  assert.throws(() => assertSafeObjectKeys(JSON.parse('{"a":[{"constructor":1}]}')), (error) => (
+    error.code === 'INPUT_INVALID' && error.context.field === 'schema' && error.context.reason === 'FIELDS'
+  ));
+  assert.doesNotThrow(() => assertSafeObjectKeys({ a: [{ b: 'constructor' }], proto: 1 }));
 });
 
 test('codec rejects exact file and expanded caps before reading/decoding oversize data', async () => {
@@ -71,4 +78,15 @@ test('codec rejects exact file and expanded caps before reading/decoding oversiz
   try {
     await assert.rejects(readSessionText(new Blob([new Uint8Array([0x1f, 0x8b])])), { code: 'SESSION_SIZE_LIMIT', stage: 'read' });
   } finally { globalThis.DecompressionStream = native; }
+});
+
+// services/safe-object-keys.js is the one list of the keys that name an
+// object's prototype or constructor: Load refuses them, and a merge skips them.
+test('the unsafe object keys are listed once, in services/safe-object-keys.js', () => {
+  assert.deepEqual(['__proto__', 'constructor', 'prototype', 'toString', 'proto'].map(isUnsafeObjectKey),
+    [true, true, true, false, false]);
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const lists = readdirSync(root, { recursive: true }).map(String).filter((path) => path.endsWith('.js')
+    && /['"]__proto__['"]\s*,\s*['"]constructor['"]/.test(readFileSync(new URL(path, root), 'utf8')));
+  assert.deepEqual(lists.map((path) => path.replaceAll('\\', '/')), ['services/safe-object-keys.js']);
 });

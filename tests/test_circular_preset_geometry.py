@@ -9,6 +9,8 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Captured on 5dd1b69f; the values that moved when tick labels were laid out in their drawn box were
+# re-captured on 2026-10-25 (OV-165, the fixture's "recaptured" note).
 ORACLE_COMMIT = "5dd1b69fe066bc0b39cff7e072bec003c6e654ae"
 ORACLE_PATH = REPO_ROOT / "tests" / "fixtures" / "circular_preset_oracle" / f"{ORACLE_COMMIT}.json"
 
@@ -39,6 +41,25 @@ def _assert_band_matches(actual: dict[str, Any] | None, expected: dict[str, Any]
     assert actual is not None
     for key in ("inner_px", "outer_px", "width_px", "center_px"):
         assert actual[key] == pytest.approx(expected[key], abs=1e-6)
+
+
+_LANE_ROW_IDS = frozenset({"depth", "gc_content", "gc_skew"})
+
+
+def _shifted(slot: dict[str, Any], shift_px: float) -> dict[str, Any]:
+    """The oracle's slot moved outward by ``shift_px``."""
+
+    moved = dict(slot, anchor_radius_px=slot["anchor_radius_px"] + shift_px, anchor_offset_px=slot["anchor_offset_px"] + shift_px)
+    for name in ("packing_band_px", "draw_band_px", "reserved_band_px"):
+        band = slot[name]
+        if band is not None:
+            moved[name] = {
+                **band,
+                "inner_px": band["inner_px"] + shift_px,
+                "outer_px": band["outer_px"] + shift_px,
+                "center_px": band["center_px"] + shift_px,
+            }
+    return moved
 
 
 def _assert_slot_matches(actual: dict[str, Any], expected: dict[str, Any]) -> None:
@@ -80,5 +101,18 @@ def test_circular_preset_geometry_matches_fixed_oracle() -> None:
             abs=1e-6,
         )
         assert len(actual_case["slots"]) == len(expected_case["slots"])
+        # Rule L (OV-1850): the inside numeric rows on preset lanes move outward together, keeping their spacing,
+        # until the outermost starts right under the tick labels. Every other value is the oracle's.
+        lanes = [slot for slot in expected_case["slots"] if slot["id"] in _LANE_ROW_IDS and slot["side"] == "inside"]
+        shift = 0.0
+        if lanes:
+            outermost = next(slot for slot in actual_case["slots"] if slot["id"] == lanes[0]["id"])
+            shift = float(outermost["anchor_radius_px"]) - float(lanes[0]["anchor_radius_px"])
+            assert shift >= -1e-6, key
+            if shift > 1e-6:
+                ticks = next(slot for slot in actual_case["slots"] if slot["id"] == "ticks")
+                assert outermost["reserved_band_px"]["outer_px"] == pytest.approx(
+                    ticks["reserved_band_px"]["inner_px"], abs=1e-6
+                ), key
         for actual_slot, expected_slot in zip(actual_case["slots"], expected_case["slots"]):
-            _assert_slot_matches(actual_slot, expected_slot)
+            _assert_slot_matches(actual_slot, _shifted(expected_slot, shift) if expected_slot in lanes else expected_slot)

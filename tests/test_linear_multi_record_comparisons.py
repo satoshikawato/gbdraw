@@ -294,8 +294,10 @@ def test_comparison_endpoints_follow_gene_tracks_with_labels(
         subject_y = absolute_y(path, float(endpoints[1 if style == "curve" else 2][1]))
         upper_y, lower_y = sorted((query_y, subject_y))
         upper, lower = sorted((query, subject))
-        assert upper_y == pytest.approx(gene_bands[upper][1] + 4.0)
-        assert lower_y == pytest.approx(gene_bands[lower][0] - 4.0)
+        # Path data is written with three decimals and translations are not,
+        # so each side may be off by half a thousandth.
+        assert upper_y == pytest.approx(gene_bands[upper][1] + 4.0, abs=1e-3)
+        assert lower_y == pytest.approx(gene_bands[lower][0] - 4.0, abs=1e-3)
         assert path.get("data-query-record-index") == str(query)
         assert path.get("data-subject-record-index") == str(subject)
         assert path.get("data-pairwise-match-style") == style

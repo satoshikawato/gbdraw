@@ -56,7 +56,7 @@ const pointOn = async (page, selector) => {
 const remember = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   window.__LAYOUT_PRESS_BEFORE__ = {
-    results: app.results.map((result) => result.content),
+    results: app.currentResults().map((result) => result.content),
     mounted: app.svgContainer.querySelector('svg').outerHTML
   };
   return window.__GBDRAW_HISTORY__.getUndoCount();
@@ -71,7 +71,7 @@ const observe = (page) => page.evaluate(() => {
     while (index < left.length && left[index] === right[index]) index += 1;
     return { index, before: left.slice(Math.max(0, index - 80), index + 80), after: right.slice(Math.max(0, index - 80), index + 80) };
   };
-  const results = app.results.map((result) => result.content);
+  const results = app.currentResults().map((result) => result.content);
   const svg = app.svgContainer.querySelector('svg');
   return {
     undo: window.__GBDRAW_HISTORY__.getUndoCount(),

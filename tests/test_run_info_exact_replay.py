@@ -26,14 +26,24 @@ pytestmark = pytest.mark.browser
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests/fixtures/sessions/HmmtDNA_basic_circular.issue-469.json.gz"
 SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
-OUTPUT_SHA = "e0503332f9a48545417cc75da80e57fd50af7726aa1fb46b6985995a0eb81b90"
+# Owner V-D03 (2026-10-24): the Legend is laid out at the drawn text width, so the
+# replay differs from the dev 71610129f one (e0503332...) only by the Legend box
+# width (156.24 -> 150.39) and the canvas width; both hashes below moved with it.
+# 3-decimal path numbers and simplified track paths (perf-audit D-13 D2, OV-1230):
+# only path d attributes and the ids hashed from them changed (555a3c90... before), and again when Circular arcs
+# were split so that none is near 180 or 360 degrees (OV-1840; 381911f5... before).
+# OV-165 PR-2 (labels, ticks, definition and canvas) moved OUTPUT_SHA again.
+OUTPUT_SHA = "91d361e5d2a24a0f00fea2abce86292c9a9c06d02473fe1fe52eb598f153ddf0"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
 # from 1.5 to 1.0, which shrinks each obstacle box by half that change per
 # side, so the boxes cannot be peeled and are left out of the comparison.
+# Since V-D03 the hash is of that replay with the Legend box at the drawn width,
+# and since D-13 D2 with 3-decimal path numbers (9a34cf0d... before), and since OV-1840 with split Circular arcs
+# (bcdd87d3... before).
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "c42139da6f913db165da9bfaa5de8f42e694b81ab8d7b8296570f647932c425a"
+    "8d5f02078f438bfaca3367c3d7b269a4b51630d9021a8af539a7f4ce79d48e71"
 )
 
 

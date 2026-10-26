@@ -141,7 +141,7 @@ test('diagram Worker startup leaves no main-thread Python runtime', { tag: '@pr-
 
 const inspectSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const content = app.results?.[0]?.content || '';
+  const content = app.currentResults()[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const depthGroups = (slotId) => [
     ...svg.querySelectorAll(
@@ -200,7 +200,7 @@ const inspectSparseDepthResult = async (page) => page.evaluate(() => {
 
 const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const content = app.results?.[0]?.content || '';
+  const content = app.currentResults()[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const depthGroups = (slotId) => [
     ...svg.querySelectorAll(
@@ -390,7 +390,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
       Number(record?.recordIndex ?? 0) === 0
     ));
     const slots = firstRecord?.slots || [];
-    const content = app.results?.[0]?.content || '';
+    const content = app.currentResults()[0]?.content || '';
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml');
     const underlayPaintIndex = content.indexOf(
       'data-gbdraw-slot-id="__gbdraw_auto_feature_underlay_slot__"'
@@ -579,7 +579,7 @@ test('Linear Generate gives Depth series the settings a series edit gives them',
       errorSummary: String(app.errorLog?.summary || ''),
       tracks: app.adv.depth_tracks.map(({ color, height }) => ({ color, height })),
       farHeight: app.adv.linear_track_slots.find((slot) => slot.id === 'depth_far')?.height ?? null,
-      drawsSeries2Color: String(app.results?.[0]?.content || '').toUpperCase().includes('#E45756')
+      drawsSeries2Color: String(app.currentResults()[0]?.content || '').toUpperCase().includes('#E45756')
     };
   }, edit);
   const tracks = [{ color: '#4A90E2', height: null }, { color: '#E45756', height: null }];
@@ -1474,7 +1474,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     await settlePreviewFrames();
 
     const snapshot = () => ({
-      results: app.results.map((entry) => ({
+      results: app.currentResults().map((entry) => ({
         name: entry.name,
         type: entry.type,
         content: entry.content
@@ -1567,7 +1567,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   const successfulRetry = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    const committedContentBefore = app.results[app.selectedResultIndex]?.content || '';
+    const committedContentBefore = app.currentResults()[app.selectedResultIndex]?.content || '';
     const generationKeyBefore = state.resultGenerationKey.value;
     const invalidSlotIndex = app.adv.linear_track_slots.findIndex(
       (slot) => slot.id === 'invalid_annotation'
@@ -1579,7 +1579,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       result,
       resultCount: app.results.length,
       committedContentChanged:
-        app.results[app.selectedResultIndex]?.content !== committedContentBefore,
+        app.currentResults()[app.selectedResultIndex]?.content !== committedContentBefore,
       generationKeyAdvanced: state.resultGenerationKey.value > generationKeyBefore,
       errorLog: app.errorLog,
       failedGeneratePreservedResult: app.failedGeneratePreservedResult
@@ -2733,7 +2733,7 @@ for (const mode of ['circular', 'linear']) {
       const { state } = await import('./js/state.js');
       const record = state.trackSlotResolvedGeometry.value.records[0];
       const slots = Object.fromEntries(record.slots.map((slot) => [slot.slotId, slot]));
-      const svg = new DOMParser().parseFromString(app.results[0].content, 'image/svg+xml');
+      const svg = new DOMParser().parseFromString(app.currentResults()[0].content, 'image/svg+xml');
       const regionGroup = svg.querySelector('[data-gbdraw-slot-id="regions"]');
       if (diagramMode === 'circular') {
         const band = (slot) => {
@@ -3549,7 +3549,7 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
 
     const app = window.__GBDRAW_APP__;
     const liveSvg = document.querySelector('svg');
-    const content = app.results?.[app.selectedResultIndex]?.content || '';
+    const content = app.currentResults()[app.selectedResultIndex]?.content || '';
     const parsedSvg = new DOMParser().parseFromString(content, 'image/svg+xml').querySelector('svg');
     return {
       live: collect(liveSvg),

@@ -11,6 +11,7 @@ from svgwrite.container import Group
 from svgwrite.drawing import Drawing
 
 from gbdraw.layout.composition import (
+    CompositionItem,
     CompositionPlacement,
     CompositionPlan,
     LegendPlacement,
@@ -21,6 +22,7 @@ from gbdraw.layout.composition import (
     TitlePlacement,
 )
 from gbdraw.layout.spatial import Aabb
+from gbdraw.render.group_content import GroupContent
 
 COMPOSITION_SCHEMA_VERSION = 1
 COMPOSITION_SCHEMA_ATTRIBUTE = "data-gbdraw-composition-schema"
@@ -97,6 +99,21 @@ class CompositionMetadataPayload(_CompositionMetadataRequired, total=False):
     """
 
     lengthBar: LengthBarPayload
+
+
+def painted_title_content(content: GroupContent) -> GroupContent | None:
+    """The plot title's content, or None when the title paints nothing.
+
+    The planner leaves a title item with no painted extent out
+    (``CompositionItem.is_empty``), and ``apply_composition_plan`` takes a
+    title target only with a title placement, so both modes place no title
+    target for such a title (OV-1837, OV-1845).
+    """
+
+    bounds = content.local_bounds
+    if bounds is not None and CompositionItem(_TITLE_ROLE, bounds).is_empty:
+        return None
+    return content
 
 
 def _wire_number(value: float) -> float:
@@ -329,8 +346,8 @@ def _validate_legend_reflow_metrics(
 ) -> dict[str, object] | None:
     """Validate the Legend layout inputs written as ``legendReflow``.
 
-    ``fontFile``, ``fontSize`` and ``dpi`` are what the Legend layout measured
-    captions with, and ``wrapWidth`` the exact width it wrapped rows in.
+    ``fontFile`` and ``fontSize`` are what the Legend layout measured captions
+    with, and ``wrapWidth`` the exact width it wrapped rows in.
     """
     if value is None:
         if required:
@@ -338,17 +355,13 @@ def _validate_legend_reflow_metrics(
         return None
     if not required:
         raise ValueError("legend reflow metrics require a legend target")
-    required_keys = {*_LEGEND_REFLOW_POSITIVE_FIELDS, "dpi", "fontFile", "wrapWidth"}
+    required_keys = {*_LEGEND_REFLOW_POSITIVE_FIELDS, "fontFile", "wrapWidth"}
     if set(value) != required_keys:
         raise ValueError("legend reflow metrics have an invalid field set")
     normalized: dict[str, object] = {
         field: _reflow_number(value[field], field, positive=True)
         for field in _LEGEND_REFLOW_POSITIVE_FIELDS
     }
-    dpi = value["dpi"]
-    if isinstance(dpi, bool) or not isinstance(dpi, int) or dpi <= 0:
-        raise ValueError("legend reflow metric dpi must be a positive integer")
-    normalized["dpi"] = dpi
     font_file = value["fontFile"]
     if font_file is not None and (not isinstance(font_file, str) or not font_file.strip()):
         raise ValueError("legend reflow metric fontFile must be a non-empty string or None")
@@ -464,4 +477,5 @@ __all__ = [
     "COMPOSITION_SCHEMA_ATTRIBUTE",
     "COMPOSITION_SCHEMA_VERSION",
     "apply_composition_plan",
+    "painted_title_content",
 ]

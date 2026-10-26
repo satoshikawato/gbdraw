@@ -14,6 +14,76 @@ const deepFreeze = (value) => {
 
 export const MODE_PROFILE_DATA = deepFreeze({
   "autoSizes": {
+    "circularSlots": {
+      "gapPx": 3.9,
+      "presetNumericRowSides": {
+        "middle": {
+          "depth": "inside",
+          "gc_content": "inside",
+          "gc_skew": "inside"
+        },
+        "spreadout": {
+          "depth": "inside",
+          "gc_content": "inside",
+          "gc_skew": "inside"
+        },
+        "tuckin": {
+          "depth": "inside",
+          "gc_content": "inside",
+          "gc_skew": "inside"
+        }
+      },
+      "ticksWidthPx": {
+        "long": {
+          "middle": {
+            "combined": 7.800000000000007,
+            "separate": 7.800000000000007
+          },
+          "spreadout": {
+            "combined": 7.800000000000007,
+            "separate": 7.800000000000007
+          },
+          "tuckin": {
+            "combined": 7.800000000000007,
+            "separate": 7.800000000000007
+          }
+        },
+        "short": {
+          "middle": {
+            "combined": 7.799999999999963,
+            "separate": 7.800000000000007
+          },
+          "spreadout": {
+            "combined": 7.800000000000007,
+            "separate": 7.800000000000007
+          },
+          "tuckin": {
+            "combined": 7.800000000000007,
+            "separate": 7.800000000000007
+          }
+        }
+      },
+      "widthPx": {
+        "long": {
+          "annotations": 74.1,
+          "depth": 37.05,
+          "dinucleotide_content": 74.1,
+          "dinucleotide_skew": 74.1,
+          "features": 18.525,
+          "sequence_conservation": 18.525,
+          "spacer": 74.1
+        },
+        "short": {
+          "annotations": 74.1,
+          "depth": 37.05,
+          "dinucleotide_content": 74.1,
+          "dinucleotide_skew": 74.1,
+          "features": 37.05,
+          "sequence_conservation": 37.05,
+          "spacer": 74.1
+        }
+      }
+    },
     "circularTicks": {
       "above": [
         1000000,
@@ -112,6 +182,18 @@ export const MODE_PROFILE_DATA = deepFreeze({
         ]
       ]
     }
+  },
+  "circularTrackPresets": {
+    "featureLaneDirection": {
+      "middle": "split",
+      "spreadout": "outside",
+      "tuckin": "inside"
+    },
+    "presets": [
+      "tuckin",
+      "middle",
+      "spreadout"
+    ]
   },
   "comparisonDomains": {
     "alignmentLength": {

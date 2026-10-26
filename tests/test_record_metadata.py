@@ -9,11 +9,15 @@ from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import (
+    OrganismLines,
     RecordSourceMetadata,
     format_inferred_definition,
     format_replicon_label,
     infer_record_source_metadata,
+    organism_name_lines,
+    split_organism_lines,
 )
+from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.exceptions import GbdrawError
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 
@@ -28,14 +32,145 @@ _CASES = json.loads(
 
 
 @pytest.mark.parametrize("case", _CASES["definition"], ids=lambda case: case["name"])
-def test_format_inferred_definition_matches_shared_cases(case: dict[str, str]) -> None:
+def test_format_inferred_definition_matches_shared_cases(case: dict) -> None:
     meta = RecordSourceMetadata(
         organism=case["organism"],
         strain=case["strain"],
         replicon=None,
         organelle=None,
+        lineage=tuple(case.get("lineage", ())),
     )
     assert format_inferred_definition(meta) == case["expected"]
+    if "lines" in case:
+        # The Circular centre draws the same rule on two lines.
+        assert split_organism_lines(meta) == OrganismLines(*case["lines"])
+
+
+def _meta(organism: str, strain: str, lineage: tuple[str, ...] = ("Bacteria",)) -> RecordSourceMetadata:
+    return RecordSourceMetadata(organism, strain, None, None, lineage)
+
+
+def test_the_strain_line_draws_the_strain_once() -> None:
+    # OV-1830: the Circular centre drew "K-12" on both lines and "N315" twice.
+    assert split_organism_lines(_meta("Escherichia coli str. K-12 substr. MG1655", "K-12")) == OrganismLines(
+        "<i>Escherichia coli</i>", "str. K-12 substr. MG1655"
+    )
+    assert split_organism_lines(_meta("Staphylococcus aureus subsp. aureus N315", "N315")).strain == "N315"
+    # Letters and digits only: "So ce 56" is the "So ce56" the name holds.
+    assert split_organism_lines(_meta("Sorangium cellulosum So ce56", "So ce 56")).strain == "So ce56"
+    # A strain the name does not hold follows the words after the taxon.
+    assert split_organism_lines(_meta("Escherichia coli O157:H7", "Sakai")).strain == "O157:H7 Sakai"
+
+
+def test_a_placeholder_organism_gives_no_name_line() -> None:
+    # OV-1831: Bakta writes ORGANISM "." when it has no organism; the Linear
+    # Auto definition drew an italic ".".
+    assert split_organism_lines(_meta(".", "X-4", ())) == OrganismLines("", "X-4")
+    assert format_inferred_definition(_meta(".", "X-4", ())) == "X-4"
+
+
+def test_the_lineage_reaches_the_rule_from_a_genbank_record() -> None:
+    record = SeqRecord(
+        Seq("ATGC"), id="v", annotations={"organism": "Beihai barnacle viurs 1", "taxonomy": ["Viruses", "Riboviria"]}
+    )
+    metadata = infer_record_source_metadata(record)
+    assert metadata.lineage == ("Viruses", "Riboviria")
+    assert split_organism_lines(metadata) == OrganismLines("Beihai barnacle viurs 1", "")
+    # Without a lineage (GFF3 input) the misspelt virus name reads as a taxon.
+    assert infer_record_source_metadata(SeqRecord(Seq("ATGC"), id="g")).lineage == ()
+
+
+_K12 = _meta("Escherichia coli str. K-12 substr. MG1655", "K-12")
+_N315 = _meta("Staphylococcus aureus subsp. aureus N315", "N315")
+
+
+@pytest.mark.parametrize(
+    "metadata,typed,expected",
+    [
+        # The typed text is cut where the Auto rule cuts it; its words stay as typed.
+        (_K12, "Escherichia coli str. K-12 substr. MG1655", ("Escherichia coli", "str. K-12 substr. MG1655")),
+        (_K12, "Escherichia coli MG1655", ("Escherichia coli", "MG1655")),
+        (_N315, "Staphylococcus aureus N315", ("Staphylococcus aureus", "N315")),
+        # Its italics stay as typed; a span the cut crosses closes and reopens.
+        (_N315, "<i>Staphylococcus aureus</i> N315", ("<i>Staphylococcus aureus</i>", "N315")),
+        (_N315, "<i>Staphylococcus aureus N315</i>", ("<i>Staphylococcus aureus</i>", "<i>N315</i>")),
+        (_N315, "Candidatus Staphylococcus aureus N315", ("Candidatus Staphylococcus aureus", "N315")),
+        # Only a taxon: the Auto strain line follows, unless the text names the strain.
+        (_K12, "Escherichia coli", ("Escherichia coli", "str. K-12 substr. MG1655")),
+        (_K12, "<i>Escherichia coli</i>", ("<i>Escherichia coli</i>", "str. K-12 substr. MG1655")),
+        # Text the rule cannot read stays whole.
+        (_K12, "Escherichia phage T5", ("Escherichia phage T5", "str. K-12 substr. MG1655")),
+        (_meta("Lachnospiraceae bacterium A4", "A4"), "Lachnospiraceae bacterium A4", ("Lachnospiraceae bacterium A4", "")),
+        # The record's virus name keeps the typed text whole.
+        (_meta("Escherichia phage T5", "", ("Viruses",)), "Escherichia coli phage T5", ("Escherichia coli phage T5", "")),
+    ],
+)
+def test_a_typed_species_without_a_typed_strain_follows_the_auto_rule(
+    metadata: RecordSourceMetadata, typed: str, expected: tuple[str, str]
+) -> None:
+    assert organism_name_lines(metadata, typed_taxon=typed) == OrganismLines(*expected)
+
+
+def test_a_typed_strain_keeps_both_lines_as_typed() -> None:
+    assert organism_name_lines(_K12, typed_taxon="Escherichia coli K-12", typed_strain="MG1655") == OrganismLines(
+        "Escherichia coli K-12", "MG1655"
+    )
+    # No typed line 1: the Auto taxon line, the typed strain line.
+    assert organism_name_lines(_K12, typed_strain="MG1655") == OrganismLines("<i>Escherichia coli</i>", "MG1655")
+    assert organism_name_lines(_K12) == split_organism_lines(_K12)
+
+
+def test_a_typed_record_label_is_line_one_as_typed() -> None:
+    # PD-OI-012: the Record label overrides line 1 as typed and wins over a typed
+    # Species; an empty Subtitle keeps the Auto strain line, a typed one wins.
+    assert organism_name_lines(
+        _K12, typed_taxon="Escherichia coli K-12", record_label="Escherichia coli MG1655"
+    ) == OrganismLines("Escherichia coli MG1655", "K-12")
+    # Dev's rule: line 2 is the record's strain as stored, with no check against the label.
+    assert organism_name_lines(_K12, record_label="E. coli K-12") == OrganismLines("E. coli K-12", "K-12")
+    assert organism_name_lines(_meta("Lachnospiraceae bacterium A4", "A4"), record_label="My isolate") == OrganismLines(
+        "My isolate", "A4"
+    )
+    assert organism_name_lines(_K12, typed_strain="MG1655", record_label="E. coli") == OrganismLines("E. coli", "MG1655")
+
+
+_A4 = _meta("Lachnospiraceae bacterium A4", "A4")
+
+
+@pytest.mark.parametrize(
+    "metadata,typed,expected_strain",
+    [
+        # The /organism names the strain, so the Auto line 2 leaves it out; a
+        # typed line 1 replaces that name, so line 2 keeps the strain.
+        (_A4, "My isolate", "A4"),
+        (_A4, "<i>My</i> isolate", "A4"),
+        # The typed text names it: left out, as the Auto rule does.
+        (_A4, "Lachnospiraceae bacterium A4", ""),
+        # Each strain part is left out only when the typed text names it.
+        (_meta("Lachnospiraceae bacterium A4", "A4; DSM 1"), "My isolate", "A4; DSM 1"),
+        (_meta("Lachnospiraceae bacterium A4", "A4; DSM 1"), "Lachnospiraceae bacterium A4", "DSM 1"),
+        # The words the Auto rule puts after the taxon stay on line 2.
+        (_K12, "My isolate", "str. K-12 substr. MG1655"),
+    ],
+)
+def test_a_typed_line_one_keeps_the_strain_the_organism_named(
+    metadata: RecordSourceMetadata, typed: str, expected_strain: str
+) -> None:
+    # A typed Species that stays whole: the Auto strain line read against the typed text.
+    assert organism_name_lines(metadata, typed_taxon=typed) == OrganismLines(typed, expected_strain)
+    # A typed Record label draws the record's strain as stored; a typed Subtitle or Strain wins.
+    assert organism_name_lines(metadata, record_label=typed) == OrganismLines(typed, metadata.strain)
+    assert organism_name_lines(metadata, typed_strain="X", record_label=typed) == OrganismLines(typed, "X")
+
+
+def test_a_typed_species_draws_the_raw_strain_line_as_literal_text() -> None:
+    # Line 2 is a typed-markup string, so the Auto escape (A&amp;B) must not
+    # reach it: "A&B" is drawn as typed. A change to either side shows here.
+    metadata = _meta("Candidatus Foo & Bar", "A&B")
+    lines = organism_name_lines(metadata, typed_taxon="My isolate")
+    assert lines == OrganismLines("My isolate", "A&B")
+    assert "".join(str(part["text"]) for part in parse_mixed_content_text(lines.strain)) == "A&B"
+    assert split_organism_lines(metadata).strain == "A&amp;B"
 
 
 @pytest.mark.parametrize("qualifiers,expected", [

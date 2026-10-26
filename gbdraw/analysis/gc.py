@@ -12,10 +12,9 @@ from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.skew import (
-    _build_prefix_counts,
-    _window_counts,
     counted_dinucleotide,
     counted_sequence,
+    window_base_counts,
 )
 
 
@@ -25,7 +24,7 @@ def calculate_gc_percent(seq: object) -> float:
     sequence = counted_sequence(seq)
     if not sequence:
         return 0.0
-    gc_count = sequence.count("G") + sequence.count("C")
+    gc_count = sequence.count(b"G") + sequence.count(b"C")
     return round(100.0 * gc_count / len(sequence), 2)
 
 
@@ -86,27 +85,18 @@ def circular_dinucleotide_content_df(
 ) -> DataFrame:
     """Return centered circular dinucleotide-content data for circular tracks."""
 
-    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
-    seq_length = len(seq_str)
+    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
+    seq_length = len(seq_bytes)
     content_legend = f"{nt} content"
 
     if seq_length == 0 or window <= 0 or step <= 0:
         return pd.DataFrame(columns=[content_legend])
 
-    seq_bytes = seq_str.encode("ascii")
     starts = np.arange(0, seq_length, step, dtype=np.int64)
     circular_starts = (starts - int(window) // 2) % seq_length
-    total_counts = _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_1)),
-        seq_length,
-        starts=circular_starts,
-        window=window,
-    ) + _window_counts(
-        _build_prefix_counts(seq_bytes, ord(nt_2)),
-        seq_length,
-        starts=circular_starts,
-        window=window,
-    )
+    total_counts = window_base_counts(
+        seq_bytes, ord(nt_1), starts=circular_starts, window=window
+    ) + window_base_counts(seq_bytes, ord(nt_2), starts=circular_starts, window=window)
     content_values = total_counts / float(window)
 
     return pd.DataFrame({content_legend: content_values}, index=starts)

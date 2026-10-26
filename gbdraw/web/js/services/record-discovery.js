@@ -3,7 +3,8 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from './diagram-generation.js';
-import { genbankHeaderIds, scanGenBankHeader } from './genbank-header.js';
+import { genbankHeaderIds, pythonStrip, scanGenBankHeader } from './genbank-header.js';
+import { ORGANISM_NAME_RULE } from '../contracts/schema.generated.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import {
@@ -110,52 +111,348 @@ const normalizeRecordLength = (value) => {
   return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
 };
 
-const NON_ORGANISM_PATTERN = /^(?:synthetic construct|artificial sequence|unidentified(?: organism)?|unknown(?: organism)?|vector|(?:unidentified )?cloning vector|expression vector)$/i;
-
-// This fast path mirrors gbdraw/core/record_metadata.py, which owns the same
-// inference for the Worker. tests/web/record-metadata-inference.test.mjs and
-// tests/test_record_metadata.py share one fixture table so the two cannot drift.
-/** @param {{ organism?: unknown, strain?: unknown }} [fields] */
-export const formatInferredOrganismStrain = ({ organism = '', strain = '' } = {}) => {
-  const rawOrganism = String(organism || '').trim();
-  const rawStrain = String(strain || '').trim();
-
-  // "Candidatus" or an already abbreviated "Ca.", then any whitespace.
-  const candidatusPrefix = /^(?:candidatus|ca\.)\s+/i;
-  const isCandidatus = candidatusPrefix.test(rawOrganism);
-  const nameWithoutCand = isCandidatus ? rawOrganism.replace(candidatusPrefix, '').trim() : rawOrganism;
-  if (!nameWithoutCand || NON_ORGANISM_PATTERN.test(nameWithoutCand)) {
-    return rawStrain;
-  }
-
-  const words = nameWithoutCand.split(/\s+/).filter(Boolean);
-
-  let speciesPart = '';
-  let rest = '';
-
-  // A Candidatus name is upright after an italic "Ca." (OV-1720).
-  /** @param {string} name */
-  const italic = (name) => (isCandidatus ? name : `<i>${name}</i>`);
-  const prefix = isCandidatus ? '<i>Ca.</i> ' : '';
-  if (words.length >= 2) {
-    speciesPart = `${prefix}${italic(`${words[0]} ${words[1]}`)}`;
-    rest = words.slice(2).join(' ');
-  } else if (words.length === 1) {
-    speciesPart = `${prefix}${italic(words[0])}`;
-  } else {
-    speciesPart = rawOrganism;
-  }
-
-  if (rawStrain && !rest.toLowerCase().includes(rawStrain.toLowerCase())) {
-    rest = rest ? `${rest} ${rawStrain}` : rawStrain;
-  }
-
-  return rest ? `${speciesPart} ${rest}`.trim() : speciesPart.trim();
-};
-
 /** @param {string} subject @returns {never} */
 const declineToPythonReader = (subject) => {
   throw new Error(`${subject} needs the Python reader.`);
+};
+
+// The Auto organism name: this fast path runs the steps of split_organism_lines
+// (gbdraw/core/record_metadata.py) on the word lists and patterns that
+// tools/generate_web_contracts.py writes from it (ORGANISM_NAME_RULE), so the
+// Linear Auto definition needs no Worker. tools/twins.json registers this twin;
+// tests/web/record-metadata-inference.test.mjs and tests/test_record_metadata.py
+// share one vector table so the two cannot drift. The fast path decides no rule
+// of its own: Python's string and pattern rules equal the browser's only for
+// printable ASCII text and the hybrid sign (BROWSER_EQUAL_TEXT), and text with
+// markup characters is left to the Python rule, so both decline to the Worker (R4).
+/** @typedef {{ source: string, flags: string }} NamePattern */
+/** @typedef {keyof typeof ORGANISM_NAME_RULE.aboveGenus} NomenclatureCode A code split_organism_lines reads endings for. */
+/** @param {NamePattern} pattern */
+const searchPattern = ({ source, flags }) => new RegExp(source, flags);
+/** @param {NamePattern} pattern Python's `match`: anchored at the start. */
+const matchPattern = ({ source, flags }) => new RegExp(`^(?:${source})`, flags);
+/** @param {NamePattern} pattern Python's `fullmatch`. */
+const fullPattern = ({ source, flags }) => new RegExp(`^(?:${source})$`, flags);
+const NAME = Object.freeze({
+  nonOrganismNames: new Set(ORGANISM_NAME_RULE.nonOrganismNames),
+  candidatusPrefix: matchPattern(ORGANISM_NAME_RULE.candidatusPrefix),
+  candidatusMark: ORGANISM_NAME_RULE.candidatusMark,
+  hasLetter: searchPattern(ORGANISM_NAME_RULE.hasLetter),
+  nonOrganismStart: matchPattern(ORGANISM_NAME_RULE.nonOrganismStart),
+  sequenceWords: new Set(ORGANISM_NAME_RULE.sequenceWords),
+  virusWord: searchPattern(ORGANISM_NAME_RULE.virusWord),
+  virusAcronym: fullPattern(ORGANISM_NAME_RULE.virusAcronym),
+  ictvGenus: fullPattern(ORGANISM_NAME_RULE.ictvGenus),
+  cellularLineages: new Set(ORGANISM_NAME_RULE.cellularLineages),
+  virusLineage: ORGANISM_NAME_RULE.virusLineage,
+  hybrid: searchPattern(ORGANISM_NAME_RULE.hybrid),
+  genus: fullPattern(ORGANISM_NAME_RULE.genus),
+  bracketedGenus: fullPattern(ORGANISM_NAME_RULE.bracketedGenus),
+  hyphenGenus: fullPattern(ORGANISM_NAME_RULE.hyphenGenus),
+  hyphenGenusCode: ORGANISM_NAME_RULE.hyphenGenusCode,
+  codeLineages: new Map(Object.entries(ORGANISM_NAME_RULE.codeLineages)),
+  anyCode: ORGANISM_NAME_RULE.anyCode,
+  aboveGenus: Object.fromEntries(
+    Object.entries(ORGANISM_NAME_RULE.aboveGenus).map(([code, pattern]) => [code, fullPattern(pattern)])
+  ),
+  italicAboveGenus: new Map(
+    Object.entries(ORGANISM_NAME_RULE.italicAboveGenus).map(([code, pattern]) => [code, fullPattern(pattern)])
+  ),
+  placeholderPrefix: ORGANISM_NAME_RULE.placeholderPrefix,
+  hybridSigns: new Set(ORGANISM_NAME_RULE.hybridSigns),
+  joinedHybridSign: ORGANISM_NAME_RULE.joinedHybridSign,
+  parentStart: matchPattern(ORGANISM_NAME_RULE.parentStart),
+  epithet: fullPattern(ORGANISM_NAME_RULE.epithet),
+  unnamedSpecies: ORGANISM_NAME_RULE.unnamedSpecies,
+  unnamedHostWords: new Set(ORGANISM_NAME_RULE.unnamedHostWords),
+  homonymStart: ORGANISM_NAME_RULE.homonymStart,
+  formaSpecialis: ORGANISM_NAME_RULE.formaSpecialis,
+  wordStrip: ORGANISM_NAME_RULE.wordStrip,
+  latinRankWords: new Set(ORGANISM_NAME_RULE.latinRankWords),
+  strainLineWords: new Set(ORGANISM_NAME_RULE.strainLineWords),
+  notEpithets: new Set(ORGANISM_NAME_RULE.notEpithets),
+  organismNoun: searchPattern(ORGANISM_NAME_RULE.organismNoun),
+  statusSuffix: fullPattern(ORGANISM_NAME_RULE.statusSuffix),
+  designationPart: searchPattern(ORGANISM_NAME_RULE.designationPart),
+  lowercaseWord: fullPattern(ORGANISM_NAME_RULE.lowercaseWord),
+  lowercaseStrain: fullPattern(ORGANISM_NAME_RULE.lowercaseStrain),
+  strainSeparator: searchPattern(ORGANISM_NAME_RULE.strainSeparator)
+});
+const BROWSER_EQUAL_TEXT = /^[\t\n\v\f\r\x20-\x7e×]*$/;
+
+/** @param {string} text Python's `" ".join(text.split())`. */
+const wordsOf = (text) => text.split(/\s+/).filter(Boolean);
+/** @param {string} text */
+const lettersOf = (text) => text.toLowerCase().replace(/[^0-9a-z]+/g, '');
+/** @param {string} word @param {string} chars Python's `str.strip(chars)`. */
+const stripChars = (word, chars) => {
+  let start = 0;
+  let end = word.length;
+  while (start < end && chars.includes(word[start])) start += 1;
+  while (end > start && chars.includes(word[end - 1])) end -= 1;
+  return word.slice(start, end);
+};
+
+/**
+ * The index of the first word where the name spells the strain, or null.
+ * @param {string[]} tokens
+ * @param {string} strain
+ * @returns {number | null}
+ */
+const namesStrain = (tokens, strain) => {
+  const target = lettersOf(strain);
+  if (!target) return null;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const parts = tokens[index].split(NAME.designationPart).filter(Boolean).map(lettersOf);
+    if (parts.includes(target)) return index;
+    let joined = '';
+    for (const later of tokens.slice(index)) {
+      joined += lettersOf(later);
+      if (joined === target) return index;
+      if (!target.startsWith(joined)) break;
+    }
+  }
+  return null;
+};
+
+/**
+ * The words after the taxon, then the strain unless the name holds it (OV-1830).
+ * @param {string[]} rest
+ * @param {string} strain
+ * @param {string[]} nameTokens
+ */
+const strainLineOf = (rest, strain, nameTokens) => {
+  const words = rest.join(' ');
+  if (!lettersOf(strain) || namesStrain(nameTokens, strain) !== null) return words;
+  const missing = strain.split(NAME.strainSeparator).filter(Boolean).filter((part) => namesStrain(nameTokens, part) === null);
+  return `${words} ${missing.join('; ')}`.trim();
+};
+
+/** @param {string} token */
+const isEpithet = (token) => {
+  const last = token.slice(token.lastIndexOf('-') + 1);
+  return NAME.epithet.test(token) && !NAME.notEpithets.has(last) && !NAME.organismNoun.test(last);
+};
+
+/** @param {string[]} tokens @param {number} start */
+const parentheticalEnd = (tokens, start) => {
+  if (start >= tokens.length || !tokens[start].startsWith('(')) return start;
+  let depth = 0;
+  for (let end = start; end < tokens.length; end += 1) {
+    depth += tokens[end].split('(').length - tokens[end].split(')').length;
+    if (depth <= 0) return end + 1;
+  }
+  return start;
+};
+
+/** @param {string[]} words @returns {string | null} */
+const nameSuffix = (words) => {
+  const text = words.join(' ');
+  if (NAME.statusSuffix.test(text)) return text;
+  const inner = text.startsWith('(') && text.endsWith(')') ? wordsOf(text.slice(1, -1)) : [];
+  if (inner.length >= 2 && NAME.genus.test(inner[0])) {
+    if (isEpithet(inner[1])) return `(<i>${inner[0]} ${inner[1]}</i>${inner.slice(2).map((word) => ` ${word}`).join('')})`;
+    if (NAME.unnamedHostWords.has(inner[1])) return `(<i>${inner[0]}</i> ${inner.slice(1).join(' ')})`;
+  }
+  return null;
+};
+
+/**
+ * The nomenclature code the record's lineage names, or the code of every ending.
+ * @param {readonly string[]} lineage
+ * @returns {NomenclatureCode}
+ */
+const nomenclatureCode = (lineage) => {
+  for (const word of lineage) {
+    const code = NAME.codeLineages.get(word);
+    if (code !== undefined) return code;
+  }
+  return NAME.anyCode;
+};
+
+/**
+ * The taxon line's parts and the number of words they take, or null to keep the name whole.
+ * @param {string[]} tokens
+ * @param {number} strainAt
+ * @param {NomenclatureCode} code
+ * @returns {[string[], number] | null}
+ */
+const taxonWords = (tokens, strainAt, code) => {
+  const bracketed = tokens[0].match(NAME.bracketedGenus);
+  const genus = bracketed ? bracketed[1] : tokens[0];
+  const hyphen = code === NAME.hyphenGenusCode ? genus.match(NAME.hyphenGenus) : null;
+  const hyphenGenus = hyphen !== null
+    && !NAME.notEpithets.has(hyphen[1].toLowerCase()) && !NAME.notEpithets.has(hyphen[2]);
+  if (!(bracketed || NAME.genus.test(genus) || hyphenGenus) || NAME.aboveGenus[code].test(genus)) return null;
+  const parts = [bracketed ? `[<i>${genus}</i>]` : `<i>${genus}</i>`];
+  if (tokens.length === 1) return [parts, 1];
+  if (tokens[1] === NAME.unnamedSpecies) {
+    const end = parentheticalEnd(tokens, 2);
+    const homonym = end > 2 && tokens[2] === NAME.homonymStart;
+    return [[...parts, NAME.unnamedSpecies, ...(homonym ? tokens.slice(2, end) : [])], homonym ? end : 2];
+  }
+  if (strainAt <= 1 || !isEpithet(tokens[1])) return null;
+  parts.push(`<i>${tokens[1]}</i>`);
+  let index = 2;
+  while (index < strainAt && NAME.latinRankWords.has(tokens[index])) {
+    const rank = tokens.slice(index, index + 2).join(' ') === NAME.formaSpecialis ? NAME.formaSpecialis : tokens[index];
+    const epithetAt = index + wordsOf(rank).length;
+    if (epithetAt >= strainAt || !isEpithet(tokens[epithetAt])) return null;
+    parts.push(`${rank} <i>${tokens[epithetAt]}</i>`);
+    index = epithetAt + 1;
+  }
+  if (
+    index === 2
+    && index < strainAt
+    && isEpithet(tokens[index])
+    && (index + 1 === tokens.length || index + 1 === strainAt || !NAME.lowercaseWord.test(tokens[index + 1]))
+  ) {
+    parts.push(`<i>${tokens[index]}</i>`);
+    index += 1;
+  }
+  for (;;) {
+    const end = parentheticalEnd(tokens, index);
+    const suffix = end > index ? nameSuffix(tokens.slice(index, end)) : null;
+    if (!suffix) break;
+    parts.push(suffix);
+    index = end;
+  }
+  const rest = tokens.slice(index);
+  if (rest.length > 0 && index < strainAt && /^[a-z]/.test(rest[0]) && !NAME.strainLineWords.has(rest[0])) return null;
+  if (rest.some((word) => NAME.organismNoun.test(stripChars(word.toLowerCase(), NAME.wordStrip).split('-').pop() || ''))) {
+    return null;
+  }
+  return [parts, index];
+};
+
+/**
+ * A hybrid name or formula as text with `<i>`, or null when a part is no taxon
+ * (_hybrid_line): a sign before a capital starts a parent, a sign before an
+ * epithet stays in the nothotaxon, and every sign stays as written and upright.
+ * @param {string[]} tokens
+ * @param {NomenclatureCode} code
+ * @returns {string | null}
+ */
+const hybridLine = (tokens, code) => {
+  /** @type {Array<Array<[string, string]>>} each parent: [sign before the word, word] */
+  const parents = [];
+  let sign = '';
+  for (const token of tokens) {
+    if (NAME.hybridSigns.has(token)) {
+      if (sign) return null;
+      sign = `${token} `;
+      continue;
+    }
+    let word = token;
+    if (token.startsWith(NAME.joinedHybridSign) && token.length > 1) {
+      if (sign) return null;
+      sign = NAME.joinedHybridSign;
+      word = token.slice(NAME.joinedHybridSign.length);
+    }
+    if (sign && NAME.parentStart.test(word)) parents.push([]);
+    else if (sign && !(parents.length > 0 && isEpithet(word))) return null;
+    else if (parents.length === 0) parents.push([]);
+    parents[parents.length - 1].push([sign, word]);
+    sign = '';
+  }
+  if (sign || parents.length === 0) return null;
+  /** @type {string[]} */
+  const words = [];
+  for (const parent of parents) {
+    const plain = parent.map(([, word]) => word);
+    const reading = taxonWords(plain, plain.length, code);
+    if (!reading) return null;
+    const [parts, used] = reading;
+    const marked = parts.join(' ').split(' ');
+    if (marked.length !== used || parent.slice(used).some(([before]) => before)) return null;
+    const texts = [...marked, ...plain.slice(used)];
+    parent.forEach(([before], index) => words.push(before + texts[index]));
+  }
+  return words.join(' ').replaceAll('</i> <i>', ' ');
+};
+
+/**
+ * A name the rule keeps whole, as text with `<i>` (_whole_name_line): a hybrid
+ * read part by part, or a placeholder whose higher-taxon word is italic when
+ * the code sets it so and the lineage holds the word as written.
+ * @param {string} name
+ * @param {string[]} tokens
+ * @param {readonly string[]} lineage
+ * @returns {string}
+ */
+const wholeNameLine = (name, tokens, lineage) => {
+  const code = nomenclatureCode(lineage);
+  if (NAME.hybrid.test(name)) return hybridLine(tokens, code) || name;
+  const higher = NAME.italicAboveGenus.get(code);
+  const at = tokens.length > 1 && tokens[0] === NAME.placeholderPrefix ? 1 : 0;
+  if (higher === undefined || !higher.test(tokens[at]) || !lineage.includes(tokens[at])) return name;
+  return [...tokens.slice(0, at), `<i>${tokens[at]}</i>`, ...tokens.slice(at + 1)].join(' ');
+};
+
+/**
+ * A record's Auto name as a taxon line and a strain line (text with `<i>`),
+ * as split_organism_lines writes them.
+ * @param {string} rawOrganism
+ * @param {string} rawStrain
+ * @param {readonly string[]} lineage The record's lineage, highest taxon first.
+ * @returns {{ taxon: string, strain: string }}
+ */
+const organismNameLines = (rawOrganism, rawStrain, lineage) => {
+  const organism = wordsOf(rawOrganism).join(' ');
+  const strain = wordsOf(rawStrain).join(' ');
+  const prefix = organism.match(NAME.candidatusPrefix);
+  const name = prefix ? organism.slice(prefix[0].length) : organism;
+  const tokens = wordsOf(name);
+  const whole = wordsOf(organism);
+  if (!NAME.hasLetter.test(name) || NAME.nonOrganismNames.has(name.toLowerCase())) return { taxon: '', strain };
+  const strainLine = strainLineOf([], strain, whole);
+  // A Candidatus name kept whole: an italic "Ca.", then the upright name.
+  const kept = { taxon: prefix ? `${NAME.candidatusMark} ${name}` : organism, strain: strainLine };
+  const top = lineage.length > 0 ? lineage[0] : null;
+  if (top === NAME.virusLineage || (
+    !NAME.cellularLineages.has(top || '')
+    && tokens.some((token) => NAME.virusWord.test(token) || NAME.virusAcronym.test(token))
+  )) {
+    if (!prefix && tokens.length === 2 && NAME.ictvGenus.test(tokens[0]) && NAME.epithet.test(tokens[1])) {
+      return { taxon: `<i>${organism}</i>`, strain: strainLine };
+    }
+    return kept;
+  }
+  // A name read as no taxon stays whole (wholeNameLine), a Candidatus name after its "Ca.".
+  const keptWhole = () => (prefix ? kept : { taxon: wholeNameLine(name, tokens, lineage), strain: strainLine });
+  if (
+    NAME.nonOrganismStart.test(name)
+    || NAME.hybrid.test(name)
+    || tokens.some((token) => NAME.sequenceWords.has(stripChars(token.toLowerCase(), NAME.wordStrip)))
+  ) {
+    return keptWhole();
+  }
+  const strainAt = namesStrain(tokens, strain);
+  const noBoundary = strainAt === null || strainAt < 2 || NAME.lowercaseStrain.test(strain);
+  const taxon = taxonWords(tokens, noBoundary ? tokens.length : strainAt, nomenclatureCode(lineage));
+  if (!taxon) return keptWhole();
+  const [parts, used] = taxon;
+  let line = parts.join(' ').replaceAll('</i> <i>', ' ');
+  if (prefix) line = `${NAME.candidatusMark} ${line.replace(/<\/?i>/g, '')}`;
+  return { taxon: line, strain: strainLineOf(tokens.slice(used), strain, whole) };
+};
+
+/**
+ * The record's Auto name on one line, as format_inferred_definition writes it;
+ * text the browser cannot read as Python does, and text with markup
+ * characters (Python keeps it as written), declines to the Worker.
+ * @param {{ organism: unknown, strain: unknown, lineage: readonly string[] }} fields
+ *   `lineage` is the record's lineage (`GenBankHeader.lineage`), highest taxon first.
+ */
+export const formatInferredOrganismStrain = ({ organism, strain, lineage }) => {
+  const rawOrganism = String(organism || '');
+  const rawStrain = String(strain || '');
+  if (![rawOrganism, rawStrain, ...lineage].every((text) => BROWSER_EQUAL_TEXT.test(text))) {
+    declineToPythonReader('This organism name');
+  }
+  if (/[&<>]/.test(rawOrganism + rawStrain)) declineToPythonReader('An organism name with markup characters');
+  const lines = organismNameLines(rawOrganism, rawStrain, lineage);
+  return [lines.taxon, lines.strain].filter(Boolean).join(' ');
 };
 
 /**
@@ -172,12 +469,14 @@ export const extractGenBankMetadata = (chunk, header = undefined) => {
     const regex = new RegExp(`/${key}="([^"]*(?:\\r?\\n {21}[^"]*)*)"`, 'i');
     const match = block.match(regex);
     if (!match) return '';
+    // trim() and \s remove U+FEFF, which Python's str.strip keeps (OV-1833).
+    if (match[1].includes('\uFEFF')) declineToPythonReader('A source qualifier with U+FEFF');
     return match[1].replace(/\r?\n\s+/g, ' ').trim();
   };
 
+  const scanned = header === undefined ? scanGenBankHeader(text) : header;
   // infer_record_source_metadata prefers the source /organism to ORGANISM.
-  const organism = extractQualifier('organism', sourceBlock)
-    || (header === undefined ? scanGenBankHeader(text) : header)?.organism || '';
+  const organism = extractQualifier('organism', sourceBlock) || scanned?.organism || '';
   const strain = extractQualifier('strain', sourceBlock);
   const isolate = extractQualifier('isolate', sourceBlock);
 
@@ -185,7 +484,8 @@ export const extractGenBankMetadata = (chunk, header = undefined) => {
   const effectiveStrain = isolate || strain || '';
   const inferredDefinition = formatInferredOrganismStrain({
     organism,
-    strain: effectiveStrain
+    strain: effectiveStrain,
+    lineage: scanned ? scanned.lineage : []
   });
   return { organism, strain: effectiveStrain, inferredDefinition };
 };
@@ -213,9 +513,10 @@ export const normalizeSequenceRecords = (payload) => {
       recordLength: normalizeRecordLength(entry?.record_length ?? entry?.recordLength),
       detectedTopology: topology === 'circular' || topology === 'linear' ? topology : 'unknown'
     };
-    const organism = String(entry?.organism ?? '').trim();
-    const strain = String(entry?.strain ?? '').trim();
-    const inferredDefinition = String(entry?.inferredDefinition ?? entry?.inferred_definition ?? '').trim();
+    // The loader's names as Python strips them (a U+FEFF stays; OV-1833).
+    const organism = pythonStrip(String(entry?.organism ?? ''));
+    const strain = pythonStrip(String(entry?.strain ?? ''));
+    const inferredDefinition = pythonStrip(String(entry?.inferredDefinition ?? entry?.inferred_definition ?? ''));
     if (organism) record.organism = organism;
     if (strain) record.strain = strain;
     if (inferredDefinition) record.inferredDefinition = inferredDefinition;

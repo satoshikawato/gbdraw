@@ -11,6 +11,7 @@ from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
+from ....svg.path_data import path_number, path_point
 
 
 class LegendGroup:
@@ -43,8 +44,8 @@ class LegendGroup:
         start_y_top, start_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
         end_y_top, end_y_bottom = -0.5 * self.color_rect_size, 0.5 * self.color_rect_size
         rectangle_path: str = (
-            f"M {normalized_start},{start_y_top} L {normalized_end},{end_y_top} "
-            f"L {normalized_end},{end_y_bottom} L {normalized_start},{start_y_bottom} z"
+            f"M {path_point(normalized_start, start_y_top)} L {path_point(normalized_end, end_y_top)} "
+            f"L {path_point(normalized_end, end_y_bottom)} L {path_point(normalized_start, start_y_bottom)} z"
         )
         return rectangle_path
 
@@ -63,8 +64,8 @@ class LegendGroup:
         group.attribs["data-gbdraw-orientation"] = "circular"
         font = self.font_family
         path_desc = (
-            f"M 0,{-self.color_rect_size / 2} L {layout.bar_width},{-self.color_rect_size / 2} "
-            f"L {layout.bar_width},{self.color_rect_size / 2} L 0,{self.color_rect_size / 2} z"
+            f"M 0,{path_number(-self.color_rect_size / 2)} L {path_point(layout.bar_width, -self.color_rect_size / 2)} "
+            f"L {path_point(layout.bar_width, self.color_rect_size / 2)} L 0,{path_number(self.color_rect_size / 2)} z"
         )
 
         if layout.compact:
@@ -90,7 +91,7 @@ class LegendGroup:
                     dominant_baseline="central",
                     text_anchor="start",
                 )
-                label_path.translate(0, compact_entry.label_y)
+                label_path.translate(compact_entry.label_x, compact_entry.label_y)
                 entry_group.add(label_path)
 
                 grad_rect = Path(
@@ -114,7 +115,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="start",
             )
-            min_label.translate(layout.bar_x, layout.scale_y)
+            min_label.translate(layout.min_label_x, layout.scale_label_y)
             group.add(min_label)
 
             max_label = generate_text_path(
@@ -128,7 +129,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="end",
             )
-            max_label.translate(layout.bar_x + layout.bar_width, layout.scale_y)
+            max_label.translate(layout.max_label_x, layout.scale_label_y)
             group.add(max_label)
             return group
 
@@ -177,7 +178,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="start",
             )
-            min_label.translate(entry.min_label_x, entry.scale_label_y)
+            min_label.translate(layout.min_label_x, layout.scale_label_y)
             entry_group.add(min_label)
             max_label = generate_text_path(
                 "100%",
@@ -190,7 +191,7 @@ class LegendGroup:
                 dominant_baseline="hanging",
                 text_anchor="end",
             )
-            max_label.translate(entry.max_label_x, entry.scale_label_y)
+            max_label.translate(layout.max_label_x, layout.scale_label_y)
             entry_group.add(max_label)
             group.add(entry_group)
 
@@ -200,10 +201,10 @@ class LegendGroup:
         layout = self.layout
         assert layout is not None
         path_desc = (
-            f"M {0},{-0.5 * self.color_rect_size} "
-            f"L {layout.width},{-0.5 * self.color_rect_size} "
-            f"L {layout.width},{layout.height -0.5 * self.color_rect_size} "
-            f"L {0},{layout.height -0.5 * self.color_rect_size} z"
+            f"M {path_point(0, -0.5 * self.color_rect_size)} "
+            f"L {path_point(layout.width, -0.5 * self.color_rect_size)} "
+            f"L {path_point(layout.width, layout.height -0.5 * self.color_rect_size)} "
+            f"L {path_point(0, layout.height -0.5 * self.color_rect_size)} z"
         )
         rect_path = Path(d=path_desc, fill="none", stroke="none", stroke_width=0)
         self.legend_group.add(rect_path)

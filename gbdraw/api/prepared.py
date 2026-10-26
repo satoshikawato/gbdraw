@@ -7,6 +7,7 @@ import itertools
 import secrets
 import sys
 
+from array import array
 from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -20,15 +21,15 @@ from pandas import DataFrame
 
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.source import SourceFeatureIdentity
+from gbdraw.features.source import SourceFeatureCatalog
 
 
 @dataclass(frozen=True)
 class ParsedRecordInputs:
-    """One cached source parse and its immutable pre-transform feature catalogs."""
+    """One cached source parse and its pre-transform source feature catalogs."""
 
     records: tuple[SeqRecord, ...]
-    source_feature_catalogs: tuple[tuple[SourceFeatureIdentity, ...], ...]
+    source_features: tuple[SourceFeatureCatalog, ...]
 
 
 @dataclass(frozen=True)
@@ -71,8 +72,9 @@ class PreparedInputRetention:
 class _PreparedCacheEntry:
     value: Any
     resource_identities: frozenset[PreparedResourceIdentity]
-    # The full stamp walks every feature; the structure stamp stops at the
-    # feature list (D-05). Both are taken when the entry is built.
+    # The full stamp walks every feature and keeps one hash per feature field;
+    # the structure stamp stops at the feature list (D-05). Both are taken when
+    # the entry is built.
     owner_stamp: Hashable
     structure_stamp: Hashable
     retained_bytes: int
@@ -328,7 +330,19 @@ def _shallow_value_stamp(value: Any) -> Hashable:
     return (type(value).__name__, id(value))
 
 
-def _feature_stamp(feature: Any) -> Hashable:
+# The fields of a feature stamp, in order; the mutation message names them.
+_FEATURE_STAMP_FIELDS = (
+    "owner",
+    "type",
+    "location owner",
+    "start",
+    "end",
+    "strand",
+    "qualifiers",
+)
+
+
+def _feature_stamp(feature: Any) -> tuple[Hashable, ...]:
     location = getattr(feature, "location", None)
     qualifiers = getattr(feature, "qualifiers", None)
     return (
@@ -342,6 +356,32 @@ def _feature_stamp(feature: Any) -> Hashable:
     )
 
 
+def _feature_field_hashes(features: Any) -> bytes:
+    """Hash each field of each feature stamp, in order; the full stamp keeps these.
+
+    Equal stamps give equal hashes. CPython's tuple hash changes whenever one
+    element's hash changes, so a change of one value in a field always changes
+    that field's hash; any other change is missed only by a hash collision.
+    """
+
+    hashes = array("q")
+    for feature in features:
+        hashes.extend(map(hash, _feature_stamp(feature)))
+    return hashes.tobytes()
+
+
+def _changed_feature_field(before: bytes, after: bytes) -> str:
+    """Name the first feature field whose hash differs between two full stamps."""
+
+    width = len(_FEATURE_STAMP_FIELDS)
+    for slot, (before_hash, after_hash) in enumerate(
+        zip(memoryview(before).cast("q"), memoryview(after).cast("q"))
+    ):
+        if before_hash != after_hash:
+            return f"feature {slot // width} {_FEATURE_STAMP_FIELDS[slot % width]}"
+    return "features"
+
+
 def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
     features = getattr(record, "features", ())
     annotations = getattr(record, "annotations", None)
@@ -353,11 +393,7 @@ def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
         len(record.seq),
         id(features),
         len(features),
-        (
-            tuple(_feature_stamp(feature) for feature in features)
-            if walk_features
-            else None
-        ),
+        _feature_field_hashes(features) if walk_features else None,
         _shallow_value_stamp(annotations),
     )
 
@@ -436,69 +472,13 @@ def _owner_mutation_detail(before: Hashable, after: Hashable) -> str:
             if before_field != after_field:
                 if (
                     field_index == 7
-                    and isinstance(before_field, tuple)
-                    and isinstance(after_field, tuple)
+                    and isinstance(before_field, bytes)
+                    and isinstance(after_field, bytes)
                 ):
-                    feature_fields = (
-                        "owner",
-                        "type",
-                        "location owner",
-                        "start",
-                        "end",
-                        "strand",
-                        "qualifiers",
+                    return (
+                        f"record {record_index} "
+                        f"{_changed_feature_field(before_field, after_field)}"
                     )
-                    for feature_index, (before_feature, after_feature) in enumerate(
-                        zip(before_field, after_field, strict=False)
-                    ):
-                        if before_feature == after_feature:
-                            continue
-                        if isinstance(before_feature, tuple) and isinstance(
-                            after_feature, tuple
-                        ):
-                            for feature_field_index, (
-                                before_feature_field,
-                                after_feature_field,
-                            ) in enumerate(
-                                zip(before_feature, after_feature, strict=False)
-                            ):
-                                if before_feature_field != after_feature_field:
-                                    if (
-                                        feature_field_index == 6
-                                        and isinstance(before_feature_field, tuple)
-                                        and isinstance(after_feature_field, tuple)
-                                        and len(before_feature_field) >= 4
-                                        and len(after_feature_field) >= 4
-                                        and isinstance(before_feature_field[3], tuple)
-                                        and isinstance(after_feature_field[3], tuple)
-                                    ):
-                                        before_qualifiers = dict(before_feature_field[3])
-                                        after_qualifiers = dict(after_feature_field[3])
-                                        changed_keys = sorted(
-                                            key
-                                            for key in (
-                                                set(before_qualifiers)
-                                                | set(after_qualifiers)
-                                            )
-                                            if before_qualifiers.get(key)
-                                            != after_qualifiers.get(key)
-                                        )
-                                        if changed_keys:
-                                            return (
-                                                f"record {record_index} feature "
-                                                f"{feature_index} qualifier owner "
-                                                f"{changed_keys[0]}"
-                                            )
-                                    feature_field = (
-                                        feature_fields[feature_field_index]
-                                        if feature_field_index < len(feature_fields)
-                                        else f"field {feature_field_index}"
-                                    )
-                                    return (
-                                        f"record {record_index} feature "
-                                        f"{feature_index} {feature_field}"
-                                    )
-                        return f"record {record_index} feature {feature_index}"
                 field_name = (
                     record_fields[field_index]
                     if field_index < len(record_fields)
@@ -542,15 +522,13 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
                 len(getattr(feature, "qualifiers", None) or {}) * 64
                 for feature in features
             )
-        catalogs = getattr(value, "source_feature_catalogs", ())
-        if not catalogs:
-            catalogs = tuple(getattr(item, "source_feature_catalog", ()) or ()
-                             for item in getattr(value, "provenance", ()))
+        catalogs: tuple[SourceFeatureCatalog, ...] = (
+            value.source_features if isinstance(value, ParsedRecordInputs)
+            else tuple(item.source_features for item in getattr(value, "provenance", ()))
+        )
+        # A catalog holds its captured features; entries are built on demand.
         for catalog in catalogs:
-            total += sum(256 + len(entry.location_parts) * 96
-                         + sum(len(key) + sum(len(text) for text in values)
-                               for key, values in entry.qualifiers)
-                         for entry in catalog)
+            total += sum(128 + len(item.location_parts) * 96 for item in catalog.captured)
         return total
     return source_bytes
 
@@ -603,9 +581,19 @@ class PreparedBiologicalInputCache:
     decoded resources and parsed sources they built, which the page staged
     under the ids the next Generate names (OV-1595); they prune and evict
     nothing.
+
+    Cancel (D7): the Worker's cache takes the check of its cancel request
+    (``cancel_check``). ``cancel_checkpoint`` calls it before each build that
+    misses, the input layers here and render stages and the long loops of
+    the heaviest stages, so a canceled request stops between builds,
+    never inside one or inside a commit. The stop runs the rollback of a
+    failed transaction, which also evicts, without raising, a reused entry
+    the canceled request changed.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, cancel_check: Callable[[], None] | None = None) -> None:
+        # Raises KeyboardInterrupt while the Worker's requests are canceled.
+        self._cancel_check = cancel_check
         self._layers: dict[str, OrderedDict[Hashable, _PreparedCacheEntry]] = {
             layer: OrderedDict() for layer in _LAYERS
         }
@@ -728,7 +716,9 @@ class PreparedBiologicalInputCache:
                     self._publish_inputs(transaction, verified=True)
             else:
                 self._commit(transaction)
-        except BaseException:
+        except BaseException as error:
+            if isinstance(error, KeyboardInterrupt):
+                self._evict_changed_entries(transaction)
             if not read_only or publish_inputs:
                 self._publish_inputs(transaction)
             self._previous_transaction_failed = True
@@ -793,6 +783,33 @@ class PreparedBiologicalInputCache:
             f"({_owner_mutation_detail(expected, current_stamp)})."
         )
 
+    def check_cancel(self) -> None:
+        """Stop a canceled request here (``cancel_checkpoint``)."""
+
+        if self._cancel_check is not None:
+            self._cancel_check()
+
+    def _evict_changed_entries(self, transaction: _PreparedCacheTransaction) -> None:
+        """After a stop: drop, without raising, each reused entry the request changed.
+
+        Checked in full, as a commit checks; the next request rebuilds it
+        instead of failing on a change the user did not cause.
+        """
+
+        for layer, current in self._layers.items():
+            # A render-stage entry has no owner to check (one constant stamp).
+            if layer == _RENDER_STAGE_LAYER:
+                continue
+            for key in tuple(transaction.used[layer]):
+                entry = current.get(key)
+                if entry is None or key in transaction.pending[layer]:
+                    continue
+                try:
+                    self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                except Exception:
+                    # Evicted and counted by the check.
+                    continue
+
     def get_or_build(
         self,
         layer: str,
@@ -814,6 +831,7 @@ class PreparedBiologicalInputCache:
             transaction.used[layer].add(key)
             transaction.accessed[layer][key] = entry.value
             return entry.value
+        self.check_cancel()
         _record_metric(transaction, miss_metric)
         _record_metric(transaction, build_metric)
         value = builder()
@@ -1071,6 +1089,19 @@ def mark_record_touched(transaction: _PreparedCacheTransaction) -> None:
     """A render stage that may read a record built: the commit checks owners in full (O-2)."""
 
     transaction.record_touched = True
+
+
+def cancel_checkpoint() -> None:
+    """Stop here when the Worker's requests are canceled; outside a transaction, nothing.
+
+    Call it only between builds whose state is local, before any module-level
+    write of the current build: the ``KeyboardInterrupt`` it raises unwinds to
+    the transaction's rollback, which keeps no build it stopped.
+    """
+
+    transaction = _ACTIVE_PREPARED_TRANSACTION.get()
+    if transaction is not None:
+        transaction.cache.check_cancel()
 
 
 def active_render_stage_transaction() -> _PreparedCacheTransaction | None:

@@ -5,12 +5,13 @@
 /** @import { LegendRowName } from '../../services/legend-row-names.js' */
 /** @import { ColorRuleLegendGroup, SpecificColorRule, SpecificRuleBuild } from '../../services/specific-color-rules.js' */
 /** @import { DrawnTrack } from '../../services/track-legend-rows.js' */
+/** @typedef {import('../rule-matching.js').GroupColorEdit['scope']} RuleSynthesisScope */
 import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_EDIT_DOMAINS, namedLegendCaption } from '../candidate-render.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
-import { matchedRuleKeys, ruleKey, ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
+import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
-import { exactRegexValue } from '../../services/feature-selector.js';
+import { exactRegexValue, literalPatternText, namedFeatureInstance } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
   legendRowFeatureIds,
@@ -53,8 +54,9 @@ import { msg } from '../../utils/i18n.js';
  *   The Legend item of a feature, read for a pass over many features.
  * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
- * @property {(feature: Record<string, any>, label: string) => { feat: string | undefined, qual: string, val: string } | null} getLabelSpecificRule
  * @property {(key: PythonLegendKey) => Record<string, any>[]} getLegendRowRules
+ * @property {(features: readonly ColorFeature[], color: string, caption: string, scope: RuleSynthesisScope) => SpecificRuleBuild} groupColorRules
+ *   The next rule table of a color edit: Python's rules for coloring exactly `features` (OV-244).
  * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
  *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
  */
@@ -228,7 +230,6 @@ export const createFeatureColorActions = ({
 }) => {
   const {
     extractedFeatures,
-    biologicalFeatures,
     svgContainer,
     clickedFeature,
     featureStyleScopeDialog,
@@ -248,8 +249,8 @@ export const createFeatureColorActions = ({
     effectiveLegendCaptions,
     getIndividualFeatureLabel,
     getFeatureQualifier,
-    getLabelSpecificRule,
     getLegendRowRules,
+    groupColorRules,
     runWithRuleMatches
   } = ruleActions;
   // This owner's rule writes are part of its caller's History step (a popup,
@@ -298,10 +299,6 @@ export const createFeatureColorActions = ({
     targets.forEach((feature) => {
       const hash = getFeatureQualifier(feature);
       if (hash) candidates.push({ feat: feature.type, ...hash });
-      for (const label of [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]) {
-        const rule = getLabelSpecificRule(feature, label);
-        if (rule) candidates.push(rule);
-      }
     });
     return runWithRuleMatches(candidates, run);
   };
@@ -328,33 +325,42 @@ export const createFeatureColorActions = ({
    */
   const strokeAction = (action) => colorAction(action, { targetRules: false });
 
-  // The `hash` rule values that target a feature exactly.
+  // The `hash` rule values that name a feature by its rendered ID, as rules
+  // older than source hashes did; Python matches none of them.
   /** @param {ColorFeature} feature */
-  const exactHashValues = (feature) => {
+  const renderedIdValues = (feature) => {
     const candidates = getFeatureHashCandidates(feature);
-    const generationHash = getFeatureColorRuleHash(feature);
     const renderedId = candidates[candidates.length - 1] || '';
-    // Python matches only the stable hash, which duplicate records share.
-    return [generationHash, ...(renderedId !== generationHash ? [renderedId] : [])]
-      .filter(Boolean).flatMap((candidate) => [candidate, exactRegexValue(candidate)]);
+    return renderedId && renderedId !== getFeatureColorRuleHash(feature) ? [renderedId, exactRegexValue(renderedId)] : [];
   };
-  /** @param {unknown} type @param {unknown} value */
-  const exactHashKey = (type, value) => JSON.stringify([type, value]);
-  /** @param {ColorRule} rule */
-  const ruleHashKey = (rule) => exactHashKey(rule.feat, String(rule?.val || '').trim());
+  // A `hash` rule targets a feature exactly when its value is one literal
+  // text (as written or as an exact pattern) that names the feature: its
+  // feature instance, which Python composes and matches whole (PD-OI-069
+  // revision 2; the rule's prepared match says whether it is this feature's),
+  // or its stable hash, which older rules name it by and which the other
+  // copies of the feature share.
+  // The rule is read once; the test runs per feature.
+  /** @param {ColorRule} rule @returns {(feature: ColorFeature) => boolean} */
+  const hashRuleExactTarget = (rule) => {
+    if (!isHashSpecificRule(rule)) return () => false;
+    const value = String(rule?.val || '').trim();
+    const literal = literalPatternText(value);
+    const ofType = (/** @type {ColorFeature} */ feature) => rule?.feat === feature?.type;
+    if (namedFeatureInstance(rule)) return (feature) => ofType(feature) && ruleMatchesFeature(feature, rule) === true;
+    return (feature) => {
+      if (!ofType(feature)) return false;
+      const hash = getFeatureColorRuleHash(feature);
+      return (Boolean(hash) && literal === hash) || renderedIdValues(feature).includes(value);
+    };
+  };
   /** @param {ColorRule} rule @param {ColorFeature} feature */
-  const hashRuleTargetsFeatureExactly = (rule, feature) => isHashSpecificRule(rule) && rule?.feat === feature?.type
-    && exactHashValues(feature).includes(String(rule?.val || '').trim());
-  // Whether a rule targets one of `features` exactly, read once per feature.
+  const hashRuleTargetsFeatureExactly = (rule, feature) => hashRuleExactTarget(rule)(feature);
+  // Whether a rule targets one of `features` exactly.
   /**
    * @param {readonly ColorFeature[]} features
    * @returns {(rule: ColorRule) => boolean}
    */
-  const targetsSomeFeatureExactly = (features) => {
-    const keys = new Set(features.flatMap((feature) => exactHashValues(feature)
-      .map((value) => exactHashKey(feature.type, value))));
-    return (rule) => isHashSpecificRule(rule) && keys.has(ruleHashKey(rule));
-  };
+  const targetsSomeFeatureExactly = (features) => (rule) => features.some(hashRuleExactTarget(rule));
 
   /** @param {unknown} value */
   const normalizeStrokeWidthValue = (value) => {
@@ -790,147 +796,6 @@ export const createFeatureColorActions = ({
     return getFeaturesForLegendCaption(sourceKey).every(feature => selected.has(feature.svg_id));
   };
 
-  // Each feature's `hash` rule replaces the first rule that targets it
-  // exactly, else goes before the first `hash` rule of its type that matches
-  // it, else last. The rules are found by index, read once per feature (OV-193).
-  /**
-   * @param {readonly SpecificColorRule[]} current The rule table at the write's turn.
-   * @param {readonly ColorFeature[]} features
-   * @param {string} color
-   * @param {string} caption
-   * @param {{ preferLabelRules?: boolean }} [options]
-   */
-  const featureRuleCandidate = (current, features, color, caption, { preferLabelRules = false } = {}) => {
-    /** @type {Partial<SpecificColorRule>[]} */
-    let rules = [...current];
-    const labelRule = preferLabelRules ? getSafeLabelSpecificRule(current, features, caption) : null;
-    if (labelRule) {
-      const targeted = targetsSomeFeatureExactly(features);
-      rules = rules.filter(rule => !(targeted(rule)
-        || (rule.feat === labelRule.feat && rule.qual === labelRule.qual && rule.val === labelRule.val)));
-      const first = rules.findIndex(rule => rule.feat === labelRule.feat && rule.qual === labelRule.qual);
-      rules.splice(first < 0 ? rules.length : first, 0, { ...labelRule, color, cap: caption });
-      return rules;
-    }
-    /** @type {Map<string, Record<string, any>[]>} */
-    const byExactHash = new Map();
-    /** @type {Map<string, Record<string, any>[]>} */
-    const byKey = new Map();
-    /** @param {Record<string, any>} rule @param {boolean} add */
-    const index = (rule, add) => {
-      /** @param {Map<string, Record<string, any>[]>} map @param {string} key */
-      const update = (map, key) => {
-        const list = map.get(key);
-        if (add) {
-          if (list) list.push(rule);
-          else map.set(key, [rule]);
-        } else if (list) {
-          map.set(key, list.filter(other => other !== rule));
-        }
-      };
-      update(byKey, ruleKey(rule));
-      if (isHashSpecificRule(rule)) update(byExactHash, ruleHashKey(rule));
-    };
-    rules.forEach(rule => index(rule, true));
-    // Rule positions, rebuilt after an insertion moved the rules after it.
-    /** @type {{ at: Map<Record<string, any>, number> | null }} */
-    const order = { at: null };
-    /** @param {ColorRule} rule */
-    const positionOf = (rule) => (order.at ||= new Map(rules.map((other, at) => [other, at]))).get(rule) ?? -1;
-    /** @param {Record<string, any>[]} candidates @returns {Record<string, any> | null} */
-    const firstOf = (candidates) => candidates.reduce((best, rule) => (
-      best === null || positionOf(rule) < positionOf(best) ? rule : best), /** @type {Record<string, any> | null} */ (null));
-    for (const feature of features) {
-      const qualifier = getFeatureQualifier(feature);
-      if (!qualifier) continue;
-      const next = { feat: feature.type, ...qualifier, color, cap: caption };
-      const existing = firstOf(exactHashValues(feature).flatMap(value => byExactHash.get(exactHashKey(feature.type, value)) || []));
-      if (existing) {
-        const at = positionOf(existing);
-        rules[at] = next;
-        order.at?.delete(existing);
-        order.at?.set(next, at);
-        index(existing, false);
-      } else {
-        const conflicting = firstOf([...matchedRuleKeys(feature)].flatMap(key => byKey.get(key) || [])
-          .filter(rule => rule.feat === feature.type && isHashSpecificRule(rule) && ruleMatchesFeature(feature, rule)));
-        if (conflicting) {
-          rules.splice(positionOf(conflicting), 0, next);
-          order.at = null;
-        } else {
-          rules.push(next);
-          order.at?.set(next, rules.length - 1);
-        }
-      }
-      index(next, true);
-    }
-    return rules;
-  };
-
-  /** @param {ColorFeature | null | undefined} feature */
-  const featureIdentityKey = (feature) => String(
-    feature?.id || `${feature?.type || ''}:${feature?.svg_id || ''}`
-  );
-
-  /** @param {readonly SpecificColorRule[]} current @param {readonly ColorFeature[]} features @param {string} label */
-  const getSafeLabelSpecificRule = (current, features, label) => {
-    if (typeof getLabelSpecificRule !== 'function') return null;
-    const candidates = features.map((feature) => getLabelSpecificRule(feature, label));
-    if (candidates.some((rule) => !rule)) return null;
-
-    // The check above returned for a Result without a rule, so every candidate is one.
-    const labelRules = /** @type {Array<NonNullable<typeof candidates[number]>>} */ (candidates);
-    const first = labelRules[0];
-    const sameSelector = labelRules.every(
-      (rule) =>
-        rule.feat === first.feat &&
-        String(rule.qual || '').toLowerCase() === String(first.qual || '').toLowerCase() &&
-        rule.val === first.val
-    );
-    if (!sameSelector) return null;
-
-    const selectedKeys = new Set(features.map(featureIdentityKey));
-    const matchedFeatures = /** @type {ColorFeature[]} */ (extractedFeatures.value).filter((feature) => ruleMatchesFeature(feature, first));
-    if (
-      matchedFeatures.length !== selectedKeys.size ||
-      matchedFeatures.some((feature) => !selectedKeys.has(featureIdentityKey(feature)))
-    ) {
-      return null;
-    }
-
-    /** @type {ColorFeature[]} */
-    const safetyFeatures = Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
-      ? biologicalFeatures.value
-      : extractedFeatures.value;
-    if (safetyFeatures.filter((feature) => ruleMatchesFeature(feature, first)).length !== selectedKeys.size) {
-      return null;
-    }
-
-    // The selected features by the keys of the rules they match, read once each.
-    /** @type {Map<string, Record<string, any>[]>} */
-    const selectedByMatchedKey = new Map();
-    features.forEach((feature) => {
-      for (const key of matchedRuleKeys(feature)) {
-        const selected = selectedByMatchedKey.get(key);
-        if (selected) selected.push(feature);
-        else selectedByMatchedKey.set(key, [feature]);
-      }
-    });
-    const hasPrecedenceConflict = current.some((existing) => {
-      const matchingSelected = (selectedByMatchedKey.get(ruleKey(existing)) || [])
-        .filter((feature) => ruleMatchesFeature(feature, existing));
-      if (matchingSelected.length === 0) return false;
-      if (isHashSpecificRule(existing)) {
-        return matchingSelected.some((feature) => !hashRuleTargetsFeatureExactly(existing, feature));
-      }
-      if (existing.feat !== first.feat) return false;
-      const existingQualifier = String(existing.qual || '').toLowerCase();
-      const candidateQualifier = String(first.qual || '').toLowerCase();
-      return existingQualifier !== candidateQualifier;
-    });
-    return hasPrecedenceConflict ? null : first;
-  };
-
   // The rename of a Legend row without rules or features writes the intent
   // (U3a gap 3): the row keeps its key, under which its styles stay (D-25),
   // and takes the new name; Generate and the port rename a row of Python's
@@ -966,12 +831,12 @@ export const createFeatureColorActions = ({
       /** @type {SpecificRuleBuild} */
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
-        : (current) => featureRuleCandidate(current, features, color, caption);
+        : groupColorRules(features, color, caption, 'group');
       const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
       const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
-        previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: oldEntry.color }] : [],
+        previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
         // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
         // and every record stored under its key; a row that joins another row
         // keeps that row's place.
@@ -1201,9 +1066,9 @@ export const createFeatureColorActions = ({
    * @param {readonly ColorFeature[]} features
    * @param {LegendRowName} caption The name the features' rules are captioned with (never a row key, OV-640).
    * @param {string} color
-   * @param {{ preferLabelRules?: boolean }} [options]
+   * @param {RuleSynthesisScope} [scope] "group" (default), or "features" for an edit of each feature by itself.
    */
-  const applyColorToFeatureGroup = async (drawing, features, caption, color, options = {}) => {
+  const applyColorToFeatureGroup = async (drawing, features, caption, color, scope = 'group') => {
     if (!features?.length || !normalizeCaption(caption)) return false;
     const existingEntry = findLegendRowOfName(drawing, caption, color);
     const contributors = getFeaturesForLegendCaption(caption);
@@ -1212,10 +1077,10 @@ export const createFeatureColorActions = ({
     const replacesExistingGroup = existingEntry && contributors.length > 0
       && features.every(feature => captionsMatch(captionOf(feature), caption))
       && contributors.every(feature => selectedIds.has(feature.svg_id));
-    return commitRuleWrite((current) => featureRuleCandidate(current, features, color, normalizeCaption(caption), options), msg('Change feature color'), {
+    return commitRuleWrite(groupColorRules(features, color, normalizeCaption(caption), scope), msg('Change feature color'), {
       drawing,
       previousLegendIntents: replacesExistingGroup
-        ? [{ caption: legendEntryKey(existingEntry), color: existingEntry.color }] : [],
+        ? [{ caption: legendEntryKey(existingEntry), color: listedRowColor(drawing, existingEntry) }] : [],
       afterCommit: (/** @type {Array<{ caption: string, name?: string, color: string }>} */ intents) => {
         if (replacesExistingGroup) {
           // An intent's `caption` is its row's key; its `name` the rule's caption.
@@ -1508,7 +1373,7 @@ export const createFeatureColorActions = ({
       }
       const displaySiblings = findFeaturesWithSameDisplayedLabel(feat, displayLabel);
       const allFeatures = [feat, ...displaySiblings];
-      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(displayLabel), color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(displayLabel), color);
     } else if (choice === 'single') {
       // The dialog holds the feature's row (a key) or a typed name: the name
       // is compared and written, so a feature that leaves its rule's row is
@@ -1530,7 +1395,7 @@ export const createFeatureColorActions = ({
       }
       const annotationSiblings = findFeaturesWithSameIndividualLabel(feat, annotationLabel);
       const allFeatures = [feat, ...annotationSiblings];
-      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(annotationLabel), color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, legendRowName(annotationLabel), color);
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
@@ -1736,18 +1601,13 @@ export const createFeatureColorActions = ({
     if (choice === 'this_with_legend') return color ? setFeatureColor(drawing, feature, color, legendRowName(caption)) : false;
     // "Reset all" resets the features of the row: the rules that draw it, by its key.
     const rowRules = new Set(getLegendRowRules(caption));
+    // "This feature only" takes back the `hash` rules that name the feature, in
+    // Python: a rule another copy of it shares keeps coloring that copy. A
+    // feature that another rule still colors takes its palette color by itself.
     /** @type {SpecificRuleBuild} */
-    const reset = (current) => {
-      /** @type {Partial<SpecificColorRule>[]} */
-      const rules = current.filter(rule => (choice === 'all'
-        ? !rowRules.has(rule) : !hashRuleTargetsFeatureExactly(rule, feature)));
-      if (choice === 'this' && rules.some(rule => ruleMatchesFeature(feature, rule))) {
-        const qualifier = getFeatureQualifier(feature);
-        if (qualifier && color) rules.push({ feat: feature.type, ...qualifier, color,
-          cap: feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s` });
-      }
-      return rules;
-    };
+    const reset = choice === 'all'
+      ? (current) => current.filter(rule => !rowRules.has(rule))
+      : groupColorRules([feature], color || '', feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s`, 'reset');
     const applied = await commitRuleWrite(reset, msg('Reset feature color'), { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
@@ -1898,7 +1758,7 @@ export const createFeatureColorActions = ({
     if (!feature || !getFeatureQualifier(feature)) return false;
     const caption = legendRowName(normalizeCaption(customCaption || getIndividualFeatureLabel(feature)));
     if (!caption || featureColorAssignmentMatches(drawing, feature, color, caption)) return false;
-    return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color);
+    return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color, 'features');
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature} feature @param {string | null} value @param {LegendRowName | null} [customCaption] */
@@ -1907,10 +1767,10 @@ export const createFeatureColorActions = ({
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return commitRuleWrite((current) => current.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), msg('Reset feature color'), { drawing });
+      return commitRuleWrite(groupColorRules([feature], '', '', 'reset'), msg('Reset feature color'), { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
-      return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none');
+      return applyColorToFeatureGroup(drawing, [feature], legendRowName(normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type)), 'none', 'features');
     }
     return setFeatureColor(drawing, feature, value, customCaption);
   };
@@ -1934,7 +1794,9 @@ export const createFeatureColorActions = ({
     requestFeatureColorChange: colorAction(requestFeatureColorChange, { targetRules: false }),
     joinLegendGroup: colorAction(joinLegendGroup, { targetRules: false }),
     handleResetColorChoice: colorAction(handleResetColorChoice),
-    applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
+    // Its rules are Python's synthesis, which Python verified and the commit
+    // prepares; a hash rule per selected feature would be matched for nothing.
+    applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures, { targetRules: false }),
     applyStrokeToSelectedFeatures: strokeAction(applyStrokeToSelectedFeatures),
     resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor, { targetRules: false }),
     resetClickedFeatureStroke: strokeAction(resetClickedFeatureStroke),

@@ -18,7 +18,7 @@ from svgwrite import Drawing
 
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
 from gbdraw.exceptions import GbdrawError
-from gbdraw.render.document import write_svg_document
+from gbdraw.render.document import write_svg_document, write_text
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
     CAIROSVG_FORMATS,
@@ -159,7 +159,6 @@ def _position_text_runs(element: ET.Element, style: dict[str, Any]) -> bool:
             text,
             run.get("font-family") or style["font_family"],
             _font_size_px(run.get("font-size"), style["font_size"]),
-            96,
             run.get("font-weight") or style["font_weight"],
             run.get("font-style") or style["font_style"],
         )[0]
@@ -324,7 +323,7 @@ def save_figure(
         except Exception as exc:
             raise GbdrawError(f"Interactive SVG export failed: {exc}") from exc
         with open(interactive_filename, "w", encoding="utf-8") as handle:
-            handle.write(interactive_svg)
+            write_text(handle, interactive_svg)
         logger.info(f"Generated interactive SVG: {interactive_filename}")
 
     formats_to_process = list(classification.cairosvg)

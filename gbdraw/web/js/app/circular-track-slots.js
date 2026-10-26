@@ -14,6 +14,7 @@ import {
   reconcileManagedDepthSlots,
   representativeDepthFiles
 } from '../services/depth-track-state.js';
+import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
@@ -171,26 +172,10 @@ const PRESET_LABELS = {
   middle: msg('Middle'),
   spreadout: msg('Spreadout')
 };
-const PREVIEW_RADIUS_PX = 390;
-const PREVIEW_TRACK_RATIO = 0.19;
-/** @type {Record<string, Record<string, Record<number, number>>>} */
-const PREVIEW_TRACK_DICT = {
-  short: {
-    spreadout: { 1: 1.0, 2: 0.85, 3: 0.65, 4: 0.45 },
-    middle: { 1: 1.0, 2: 0.75, 3: 0.55, 4: 0.35 },
-    tuckin: { 1: 1.0, 2: 0.64, 3: 0.44, 4: 0.24 }
-  },
-  long: {
-    spreadout: { 1: 1.0, 2: 0.80, 3: 0.60, 4: 0.40 },
-    middle: { 1: 1.0, 2: 0.75, 3: 0.55, 4: 0.35 },
-    tuckin: { 1: 1.0, 2: 0.70, 3: 0.50, 4: 0.30 }
-  }
-};
-/** @type {Record<string, number[]>} */
-const PREVIEW_TRACK_RATIO_FACTORS = {
-  short: [0.50, 1.0, 1.0],
-  long: [0.25, 1.0, 1.0]
-};
+// The Auto sizes a row asks for before Generate draws it (circular_auto_slot_sizes,
+// gbdraw/diagrams/circular/presets.py): its width and gaps. Its radius is the
+// layout's own result, so a row shows none until it is drawn (OV-1712).
+const AUTO_SLOT_SIZES = MODE_PROFILE_DATA.autoSizes.circularSlots;
 const ANNOTATION_MARK_OPTIONS = Object.freeze([
   'line',
   'bracket',
@@ -209,42 +194,20 @@ const laneDirectionLabel = (laneDirection) => {
   return t('Features inside axis');
 };
 
-/** @param {string} renderer @param {string} lengthParam */
-const previewWidthPxForRenderer = (renderer, lengthParam) => {
-  const base = PREVIEW_RADIUS_PX * PREVIEW_TRACK_RATIO;
-  const factors = PREVIEW_TRACK_RATIO_FACTORS[lengthParam] || PREVIEW_TRACK_RATIO_FACTORS.long;
-  if (renderer === 'features') return base * Number(factors[0]);
-  if (renderer === 'sequence_conservation') return base * Number(factors[0]);
-  if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
-  if (renderer === 'dinucleotide_skew') return base * Number(factors[2]);
-  // An Auto ticks row draws marks of the default length max(6 px, 0.025 R)
-  // (_default_tick_length_px, gbdraw/svg/circular_ticks.py), not 0 px (TK-15).
-  if (renderer === 'ticks') return Math.max(6, 0.025 * PREVIEW_RADIUS_PX);
-  return base * Number(factors[1]);
-};
-
-const previewSpacingPx = () => Math.max(1.0, 0.01 * PREVIEW_RADIUS_PX);
-
-/** @param {DrawingState} drawing */
-const previewFeatureLaneCount = (drawing) => {
-  if (Boolean(drawing?.form?.separate_strands)) return 2;
-  return 1;
-};
-
-/** @param {unknown} preset @param {string} lengthParam @param {DrawingState} drawing */
-const previewFeatureRadiusRatio = (preset, lengthParam, drawing) => {
-  const normalized = normalizeCircularTrackPreset(preset);
-  const laneWidth = previewWidthPxForRenderer('features', lengthParam);
-  const laneCount = previewFeatureLaneCount(drawing);
-  const spacing = previewSpacingPx();
-  const bandWidth = (laneCount * laneWidth) + (Math.max(0, laneCount - 1) * spacing);
-  if (normalized === 'tuckin') {
-    return (PREVIEW_RADIUS_PX - spacing - (bandWidth / 2)) / PREVIEW_RADIUS_PX;
+/**
+ * The Auto width of a row of `renderer`: by size class, and for a ticks row
+ * also by preset and Separate Strands (never 0 px, TK-15); `null` for a
+ * renderer without one.
+ * @param {string} renderer @param {string} lengthParam @param {DrawingState} drawing
+ * @returns {number | null}
+ */
+const autoWidthPx = (renderer, lengthParam, drawing) => {
+  const size = lengthParam === 'short' ? 'short' : 'long';
+  if (renderer === 'ticks') {
+    const byStrands = ownEntry(AUTO_SLOT_SIZES.ticksWidthPx[size], normalizeCircularTrackPreset(drawing.form.track_type));
+    return byStrands ? byStrands[drawing.form.separate_strands ? 'separate' : 'combined'] : null;
   }
-  if (normalized === 'spreadout') {
-    return (PREVIEW_RADIUS_PX + spacing + (bandWidth / 2)) / PREVIEW_RADIUS_PX;
-  }
-  return 1.0;
+  return ownEntry(AUTO_SLOT_SIZES.widthPx[size], renderer) ?? null;
 };
 
 /**
@@ -256,34 +219,6 @@ const previewFeatureRadiusRatio = (preset, lengthParam, drawing) => {
 const getPreviewLengthParam = (drawing, recordLengths) => (
   sizeClassForRecordLengths('circular', recordLengths, drawing) || 'long'
 );
-
-/** @param {{ id?: unknown } | null | undefined} slot @param {string} renderer @param {DrawingState} drawing */
-const getBuiltinTrackId = (slot, renderer, drawing) => {
-  const id = String(slot?.id || '').trim();
-  const showDepth = Boolean(drawing?.form?.show_depth);
-  const showGc = !Boolean(drawing?.form?.suppress_gc);
-  const showSkew = !Boolean(drawing?.form?.suppress_skew);
-
-  if (renderer === 'depth' && id === 'depth' && showDepth) return 2;
-  if (renderer === 'dinucleotide_content' && id === 'gc_content' && showGc) {
-    return showDepth ? 3 : 2;
-  }
-  if (renderer === 'dinucleotide_skew' && id === 'gc_skew' && showSkew) {
-    if (showDepth) return showGc ? 4 : 3;
-    return showGc ? 3 : 2;
-  }
-  return null;
-};
-
-/** @param {{ id?: unknown } | null | undefined} slot @param {string} renderer @param {unknown} preset @param {string} lengthParam @param {DrawingState} drawing */
-const getPresetRadiusRatio = (slot, renderer, preset, lengthParam, drawing) => {
-  if (renderer === 'features' && String(slot?.id || '').trim() === 'features') {
-    return previewFeatureRadiusRatio(preset, lengthParam, drawing);
-  }
-  const trackId = getBuiltinTrackId(slot, renderer, drawing);
-  if (trackId === null) return null;
-  return PREVIEW_TRACK_DICT[lengthParam]?.[normalizeCircularTrackPreset(preset)]?.[trackId] ?? null;
-};
 
 /** @param {CircularTrackSlot | null | undefined} slot */
 const slotHasManualGeometry = (slot) => (
@@ -538,77 +473,6 @@ const conservationEntriesForState = (state, drawing) => {
     conservationSourceFilesForState(state, drawing),
     drawing.circularConservation
   );
-};
-
-/** @param {unknown} value */
-const positiveNumberOrNull = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
-
-/**
- * @param {TrackSlotStateView | null | undefined} state
- * @param {DrawingState} drawing
- * @param {number[]} recordLengths the lengths of the records the estimates describe
- */
-export const estimateCircularConservationLayoutWarning = (state, drawing, recordLengths) => {
-  const currentMode = String(state?.mode?.value ?? state?.mode ?? '').trim().toLowerCase();
-  if (currentMode && currentMode !== 'circular') return '';
-  if (drawing?.circularConservation?.enabled !== true) return '';
-
-  const entries = conservationEntriesForState(state, drawing);
-  if (entries.length <= 0) return '';
-
-  const preset = normalizeCircularTrackPreset(drawing?.form?.track_type);
-  const lengthParam = getPreviewLengthParam(drawing, recordLengths);
-  const axisRadius = PREVIEW_RADIUS_PX;
-  const defaultSpacing = previewSpacingPx();
-  const lane = laneDirectionForPreset(preset);
-  const featureLaneCount = previewFeatureLaneCount(drawing);
-  const featureWidth = previewWidthPxForRenderer('features', lengthParam);
-  const featureBandWidth = (featureLaneCount * featureWidth) + (Math.max(0, featureLaneCount - 1) * defaultSpacing);
-  let availableInsidePx = axisRadius - defaultSpacing;
-  if (lane === 'inside') {
-    const featureCenter = previewFeatureRadiusRatio(preset, lengthParam, drawing) * axisRadius;
-    availableInsidePx = featureCenter - (featureBandWidth / 2) - defaultSpacing;
-  } else if (lane === 'split') {
-    availableInsidePx = axisRadius - (featureBandWidth / 2) - defaultSpacing;
-  }
-  availableInsidePx = Math.max(0, availableInsidePx);
-
-  const ringWidth = positiveNumberOrNull(drawing?.circularConservation?.ring_width)
-    ?? previewWidthPxForRenderer('sequence_conservation', lengthParam);
-  const ringGap = positiveNumberOrNull(drawing?.circularConservation?.ring_gap) ?? defaultSpacing;
-  const showGc = !Boolean(drawing?.form?.suppress_gc);
-  const showSkew = !Boolean(drawing?.form?.suppress_skew);
-  const showDepth = Boolean(drawing?.form?.show_depth);
-  const numericAfterConservationPx =
-    (showDepth ? previewWidthPxForRenderer('depth', lengthParam) + defaultSpacing : 0) +
-    (showGc ? previewWidthPxForRenderer('dinucleotide_content', lengthParam) + defaultSpacing : 0) +
-    (showSkew ? previewWidthPxForRenderer('dinucleotide_skew', lengthParam) + defaultSpacing : 0);
-  const requestedStackPx =
-    (entries.length * ringWidth) +
-    (Math.max(0, entries.length - 1) * ringGap) +
-    numericAfterConservationPx;
-  const compressedStackPx =
-    (entries.length * 4) +
-    (Math.max(0, entries.length - 1) * 1) +
-    (showDepth ? 10 + 1 : 0) +
-    (showGc ? 10 + 1 : 0) +
-    (showSkew ? 12 + 1 : 0);
-
-  if (compressedStackPx > availableInsidePx) {
-    return tn(entries.length,
-      'There is {count} inside pairwise comparison ring plus other circular tracks; even a compressed ring may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.',
-      'There are {count} inside pairwise comparison rings plus other circular tracks; even compressed rings may not fit. Reduce Ring Width/GAP, disable GC/skew/depth tracks, or move tracks outside before generating.');
-  }
-  if (requestedStackPx > availableInsidePx * 0.9 || (entries.length >= 5 && (showGc || showSkew || showDepth))) {
-    return tn(entries.length,
-      'There is {count} inside pairwise comparison ring; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.',
-      'There are {count} inside pairwise comparison rings; gbdraw will auto-compress ring width/gap when needed. If generation still fails, reduce Ring Width/GAP or disable GC/skew/depth tracks.');
-  }
-  return '';
 };
 
 /**
@@ -1835,56 +1699,36 @@ export const createCircularTrackSlotEditor = ({
     slotId
   }));
 
-  /** @param {DrawingState} drawing @param {CircularTrackSlot | null | undefined} slot @param {number} slotIndex */
-  const estimateCircularSlotGeometry = (drawing, slot, slotIndex) => {
-    const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(drawing, estimateRecordLengths());
-    const renderer = String(slot?.renderer || '').trim();
-    const widthPx = previewWidthPxForRenderer(renderer, lengthParam);
-    const spacingPx = previewSpacingPx();
-    let radiusFactor = getPresetRadiusRatio(slot, renderer, preset, lengthParam, drawing);
-    if (radiusFactor === null) {
-      const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
-      const axis = clampCircularTrackAxisIndex(drawing.adv.circular_track_slots_axis_index, slots.length)
-        ?? inferLegacyAxisIndexFromFeature(slots, drawing.form.track_type);
-      const placement = effectiveSlotPlacement(slot, preset);
-      const distance = Math.max(1, Math.abs(Number(slotIndex) - Number(axis)) + 1);
-      const step = (widthPx + spacingPx) / Math.max(1, PREVIEW_RADIUS_PX);
-      if (placement === 'outside') radiusFactor = 1 + (distance * step);
-      else if (placement === 'overlay') radiusFactor = 1.0;
-      else radiusFactor = Math.max(0.05, 1 - (distance * step));
-    }
-    return {
-      widthPx,
-      radiusFactor,
-      innerGapPx: spacingPx,
-      outerGapPx: spacingPx
-    };
-  };
-
   // Only a rendered row has resolved geometry. Any other row, and every row
-  // before the first Generate, shows an estimate marked as one (TK-15).
-  /** @param {CircularTrackSlot | null | undefined} slot @param {number} slotIndex @param {string} field */
-  const circularTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
+  // before the first Generate, shows the Auto width and gaps it asks for as an
+  // estimate (TK-15) and no radius: the layout places it (OV-1712).
+  /** @param {CircularTrackSlot | null | undefined} slot @param {number} _slotIndex @param {string} field */
+  const circularTrackSlotGeometryAutoText = (slot, _slotIndex, field) => {
     if (isManualSlotValue(circularSlotManualValue(slot, field))) return '';
     const lookup = circularSlotGeometryLookup(slot?.id);
     const resolved = circularTrackSlotEffectiveEnabled(slot) ? findTrackSlotGeometry(lookup) : null;
-    const estimate = !resolved;
-    const follows = estimate && (field === 'width' || field === 'radius') ? overlayFollowsNote(slot) : '';
-    if (follows) return follows;
-    const geometry = resolved || estimateCircularSlotGeometry(state.drawingOfMode('circular'), slot, slotIndex);
-    if (field === 'width') return formatPxAuto(geometry.widthPx, { estimate });
+    if (!resolved) {
+      const follows = field === 'width' || field === 'radius' ? overlayFollowsNote(slot) : '';
+      if (follows) return follows;
+      if (field === 'radius') return t('Auto');
+      if (field === 'inner_gap_px' || field === 'outer_gap_px') return formatPxAuto(AUTO_SLOT_SIZES.gapPx, { estimate: true });
+      if (field !== 'width') return '';
+      const drawing = state.drawingOfMode('circular');
+      const widthPx = autoWidthPx(String(slot?.renderer || '').trim(), getPreviewLengthParam(drawing, estimateRecordLengths()), drawing);
+      return widthPx === null ? '' : formatPxAuto(widthPx, { estimate: true });
+    }
+    if (field === 'width') return formatPxAuto(resolved.widthPx);
     if (field === 'radius') {
       // `r` pins a ticks row's anchor, not the band centre the payload holds (GX-18).
-      const tickAnchor = resolved && slot?.renderer === 'ticks'
+      const tickAnchor = slot?.renderer === 'ticks'
         ? tickAnchorRadiusFactor(resolved, findTrackSlotGeometryRecord(lookup)?.axisRadiusPx, slot.params?.tick_label_layout)
         : null;
       return tickAnchor === null
-        ? formatRadiusFactorAuto(geometry.radiusFactor, { estimate })
+        ? formatRadiusFactorAuto(resolved.radiusFactor)
         : formatRadiusFactorAuto(tickAnchor, { awayFromAxis: true });
     }
-    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx, { estimate });
-    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx, { estimate });
+    if (field === 'inner_gap_px') return formatPxAuto(resolved.innerGapPx);
+    if (field === 'outer_gap_px') return formatPxAuto(resolved.outerGapPx);
     return '';
   };
 
@@ -1906,28 +1750,22 @@ export const createCircularTrackSlotEditor = ({
   const circularTrackPresetSummary = () => {
     const drawing = state.drawingOfMode('circular');
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
-    const lengthParam = getPreviewLengthParam(drawing, estimateRecordLengths());
     const lane = laneDirectionForPreset(preset);
     const nt = circularDrawingDinucleotide();
-    /** @param {string} id @param {string} renderer */
-    const slotLike = (id, renderer) => ({ id, renderer });
+    const sides = ownEntry(AUTO_SLOT_SIZES.presetNumericRowSides, preset);
     /** @type {string[]} */
     const inside = [];
     /** @type {string[]} */
     const outside = [];
-    /** @param {string} name @param {number | null} ratio */
-    const place = (name, ratio) => {
-      if (ratio !== null) (ratio < 1 ? inside : outside).push(name);
+    /** @param {string} name @param {string} rowId */
+    const place = (name, rowId) => {
+      const side = ownEntry(sides, rowId);
+      if (side === 'inside') inside.push(name);
+      else if (side === 'outside') outside.push(name);
     };
-    if (Boolean(drawing.form.show_depth)) {
-      place(tm(RENDERER_LABELS.depth), getPresetRadiusRatio(slotLike('depth', 'depth'), 'depth', preset, lengthParam, drawing));
-    }
-    if (!Boolean(drawing.form.suppress_gc)) {
-      place(t('{nt} content', { nt }), getPresetRadiusRatio(slotLike('gc_content', 'dinucleotide_content'), 'dinucleotide_content', preset, lengthParam, drawing));
-    }
-    if (!Boolean(drawing.form.suppress_skew)) {
-      place(t('{nt} skew', { nt }), getPresetRadiusRatio(slotLike('gc_skew', 'dinucleotide_skew'), 'dinucleotide_skew', preset, lengthParam, drawing));
-    }
+    if (Boolean(drawing.form.show_depth)) place(tm(RENDERER_LABELS.depth), 'depth');
+    if (!Boolean(drawing.form.suppress_gc)) place(t('{nt} content', { nt }), 'gc_content');
+    if (!Boolean(drawing.form.suppress_skew)) place(t('{nt} skew', { nt }), 'gc_skew');
     return {
       label: formatPresetName(preset),
       detail: [laneDirectionLabel(lane), inside.length ? t('{tracks} inside', { tracks: listText(inside) }) : '', outside.length ? t('{tracks} outside', { tracks: listText(outside) }) : '']

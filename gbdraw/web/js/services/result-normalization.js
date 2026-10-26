@@ -80,3 +80,12 @@ export const keepResultNames = (response, names) => {
   });
 };
 
+/**
+ * The name and text of each Result as Save and a History checkpoint write
+ * them; a Result without a name is named by its place.
+ * @param {readonly Record<string, unknown>[]} results
+ */
+export const logicalResultsOf = (results) => normalizeLogicalResults(results.map((result, index) => ({
+  name: result.name || `Result ${index + 1}`,
+  content: result.content
+})));

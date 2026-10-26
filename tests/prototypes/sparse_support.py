@@ -1,20 +1,99 @@
-"""S04 test-only scans frozen from d7695a62 (tree equal to a66237f4)."""
+"""S04 test-only scans frozen from d7695a62 (tree equal to a66237f4).
+
+The row readers and the evidence and candidate records they fill are frozen
+here too; the live inference reads precomputed directed-hit records instead.
+"""
 from __future__ import annotations
+from dataclasses import dataclass
+import math
 from typing import Mapping, Sequence
 from gbdraw.analysis.protein_colinearity import (
-    CdsProtein, OrthogroupResult, _BestCoreEvidence, _CoreSupportCandidate,
-    _LocalThreshold, OrthologEdgeKind, _normalized_score_from_row,
-    _anchor_core_hit_rank, _row_supports_membership, _row_min_coverage,
-    _row_domain_only, _protein_sort_key, _RECORD_LOCAL_CORE_COMPETITION_RATIO,
-    _MIN_MEMBERSHIP_MIN_COVERAGE,
+    CdsProtein, OrthogroupResult, OrthologEdgeKind,
+    _protein_sort_key, _RECORD_LOCAL_CORE_COMPETITION_RATIO,
+    _MIN_MEMBERSHIP_MIN_COVERAGE, _DOMAIN_ONLY_MAX_MIN_COVERAGE,
 )
+
+
+@dataclass(frozen=True)
+class _CoreSupportCandidate:
+    group_id: str
+    support: float
+    diagnostic_score: float
+    same_record_score: float
+    cross_record_score: float
+    evidence_row: object
+    evidence_query_id: str
+    evidence_subject_id: str
+    relation_kind: OrthologEdgeKind
+    min_coverage: float
+    domain_only: bool
+    high_confidence_pass: bool
+    low_confidence_pass: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class _BestCoreEvidence:
+    support_score: float
+    support_row: object | None
+    support_query_id: str
+    support_subject_id: str
+    diagnostic_score: float
+    diagnostic_row: object | None
+    diagnostic_query_id: str
+    diagnostic_subject_id: str
+
+
+def _row_float(row: object, column: str, default: float = 0.0) -> float:
+    try:
+        return float(getattr(row, column))
+    except (TypeError, ValueError, AttributeError):
+        return float(default)
+
+
+def _normalized_score_from_row(row: object) -> float:
+    score = _row_float(row, "normalized_score", 0.0)
+    return score if math.isfinite(score) and score > 0.0 else 0.0
+
+
+def _anchor_core_hit_rank(
+    row: object,
+    protein_map: Mapping[str, CdsProtein],
+) -> tuple[float, float, float, float, int, int, str, int, str]:
+    query_id = str(getattr(row, "query", ""))
+    subject_id = str(getattr(row, "subject", ""))
+    query_record_index = int(protein_map[query_id].record_index) if query_id in protein_map else 0
+    subject_record_index = int(protein_map[subject_id].record_index) if subject_id in protein_map else 0
+    return (
+        -_normalized_score_from_row(row),
+        _row_float(row, "evalue", float("inf")),
+        -_row_float(row, "min_coverage", 0.0),
+        -_row_float(row, "identity", 0.0),
+        -int(_row_float(row, "alignment_length", 0.0)),
+        query_record_index,
+        query_id,
+        subject_record_index,
+        subject_id,
+    )
+
+
+def _row_min_coverage(row: object) -> float:
+    return _row_float(row, "min_coverage", 0.0)
+
+
+def _row_domain_only(row: object) -> bool:
+    return bool(getattr(row, "domain_only", False)) or _row_min_coverage(row) <= _DOMAIN_ONLY_MAX_MIN_COVERAGE
+
+
+def _row_supports_membership(row: object) -> bool:
+    return _row_min_coverage(row) >= _MIN_MEMBERSHIP_MIN_COVERAGE and not _row_domain_only(row)
 
 
 def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
     group_member_ids: Mapping[str, set[str]],
     best_by_direction: Mapping[tuple[str, str], object],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     protein_map: Mapping[str, CdsProtein],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
@@ -145,7 +224,7 @@ def _build_core_support_candidate(
     group_id: str,
     member_ids: Sequence[str],
     best_by_direction: Mapping[tuple[str, str], object],
-    thresholds: Mapping[str, _LocalThreshold],
+    thresholds: Mapping[str, float],
     protein_map: Mapping[str, CdsProtein],
 ) -> _CoreSupportCandidate | None:
     same_evidence = _best_evidence_between_protein_and_members(
@@ -187,18 +266,18 @@ def _build_core_support_candidate(
         and (
             (
                 candidate_threshold is not None
-                and same_score >= float(candidate_threshold.score)
+                and same_score >= candidate_threshold
             )
             or (
                 same_member_threshold is not None
-                and same_score >= float(same_member_threshold.score)
+                and same_score >= same_member_threshold
             )
         )
     )
     cross_pass = (
         cross_evidence.support_row is not None
         and candidate_threshold is not None
-        and cross_score >= float(candidate_threshold.score)
+        and cross_score >= candidate_threshold
     )
 
     if same_pass:

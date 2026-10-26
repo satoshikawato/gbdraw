@@ -50,8 +50,15 @@ const galleryV30Session = (edit = () => {}) => {
   };
 };
 
-const loadBaselineSession = async (page) => {
+// `whileLoading` runs while the Load is held before its import work.
+const loadBaselineSession = async (page, whileLoading) => {
+  if (whileLoading) await installImportReadGate(page, baselineSession.name);
   await page.locator(sessionInputSelector).setInputFiles(baselineSession);
+  if (whileLoading) {
+    await page.waitForFunction(() => window.__GBDRAW_SESSION_IMPORT_GATE__?.streamInvocations === 1);
+    await whileLoading();
+    await page.evaluate(() => window.__GBDRAW_SESSION_IMPORT_GATE__.release());
+  }
   await expectSessionLoadedWithoutWarnings(page);
   await page.waitForFunction(() => (
     window.__GBDRAW_APP__?.sessionTitle === 'HmmtDNA_basic_circular'
@@ -74,7 +81,7 @@ const installLifecycleProbe = async (page) => {
 
 const importSnapshot = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  const selected = app.results?.[Number(app.selectedResultIndex) || 0] || null;
+  const selected = app.currentResults()[Number(app.selectedResultIndex) || 0] || null;
   const preview = document.querySelector('.shadow-xl.origin-top > svg');
   return {
     title: String(app.sessionTitle || ''),
@@ -102,7 +109,15 @@ test('session loading is painted before import work and prevents duplicate adopt
 }) => {
   test.setTimeout(180_000);
   await openApp(page);
-  await loadBaselineSession(page);
+  // The Worker's boot files download after the Load finishes, not at the file
+  // choice or while the Load runs.
+  const bootUrls = new Set(await page.evaluate(async () => (
+    await import('./js/services/pyodide-assets.js')).resolvePyodideBootAssetUrls()));
+  /** @type {string[]} */
+  const bootRequests = [];
+  page.on('request', (request) => { if (bootUrls.has(request.url())) bootRequests.push(request.url()); });
+  await loadBaselineSession(page, async () => expect(bootRequests).toEqual([]));
+  await expect.poll(() => bootRequests.length).toBeGreaterThan(0);
   const before = await importSnapshot(page);
   expect(before.previewHtml).toContain('<svg');
 

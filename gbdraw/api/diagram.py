@@ -175,6 +175,7 @@ from gbdraw.labels.fit import (
     LabelFitRowKind,
     LabelFitValue,
     LabelFitVerification,
+    split_row_option_values,
 )
 from gbdraw.labels.linear import (
     LINEAR_LABEL_FIT_ATTR,
@@ -215,6 +216,7 @@ from gbdraw.mode_profiles import (
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
+    painted_title_content,
 )
 from gbdraw.render.group_content import (
     CANVAS_SCOPE,
@@ -223,6 +225,7 @@ from gbdraw.render.group_content import (
     GroupKey,
     GroupKind,
     build_group_content,
+    copy_element_tree,
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
@@ -1231,13 +1234,14 @@ def merge_circular_record(
     The copies drop the single-record composition roles, suffix the fixed
     top-level ids, and rename ids that an earlier record (``previous``) or this
     one already uses, with the references to them. The stored contents are not
-    changed: their children are deep copies (perf-0140 D-07 keeps the copy).
+    changed: their children are copies (``copy_element_tree``; perf-0140 D-07
+    keeps the copy).
     """
 
     used_ids = set(previous.used_ids) if previous is not None else set()
     used_ids.add(f"record_{record_index}")
     copied_definitions: list[BaseElement] = [
-        copy.deepcopy(placed[content_index][0].definitions[definition_index])
+        copy_element_tree(placed[content_index][0].definitions[definition_index])
         for content_index, definition_index in definition_positions
     ]
     copied_elements: list[Group] = []
@@ -1247,7 +1251,7 @@ def merge_circular_record(
             group._parameter = content.parameter
         group.attribs = dict(attributes)
         group.elements = list(content.children)
-        copied = copy.deepcopy(group)
+        copied = cast(Group, copy_element_tree(group))
         _strip_nested_composition_roles(copied)
         _suffix_fixed_top_level_group_id(copied, record_index)
         copied_elements.append(copied)
@@ -1377,8 +1381,12 @@ def _circular_plot_title_content(
     strain: str | None,
     plot_title: str | None,
     record_presentation: RecordPresentation | None,
-) -> GroupContent:
-    """The plot title content, keyed by the record's facts (not the record) and the title geometry."""
+) -> GroupContent | None:
+    """The plot title content, keyed by the record's facts (not the record) and the title geometry.
+
+    None when the title paints nothing (``painted_title_content``): a record
+    with no name to draw and no typed title (OV-1837).
+    """
 
     plot_title_canvas_config = CircularCanvasConfigurator(
         output_prefix=output_prefix,
@@ -1386,7 +1394,7 @@ def _circular_plot_title_content(
         legend="none",
         gb_record=gb_record,
     )
-    return render_stage(
+    return painted_title_content(render_stage(
         "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
@@ -1398,7 +1406,7 @@ def _circular_plot_title_content(
         plot_title=plot_title,
         definition_group_id="plot_title",
         record_presentation=record_presentation,
-    )
+    ))
 
 
 def _validate_multi_record_min_radius_ratio(value: float) -> float:
@@ -2828,7 +2836,8 @@ def assemble_circular_diagram_from_record(
             plot_title=normalized_plot_title or None,
             record_presentation=_record_presentation,
         )
-        title_placement = TitlePlacement(normalized_plot_title_position)
+        if title_content is not None:
+            title_placement = TitlePlacement(normalized_plot_title_position)
 
     result = _assemble_circular_diagram_result(
         record_transform=_record_transform,
@@ -2861,7 +2870,7 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
-        # The radial layout reserves the definition drawn without the plot title (OV-1710).
+        # The tracks are placed around the definition drawn without the plot title (OV-1710).
         layout_definition_profile=(
             _definition_profile if _layout_definition_profile is None else _layout_definition_profile
         ),
@@ -3736,9 +3745,10 @@ def build_circular_diagram(
     )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_record(
             gb_record,
-            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
             selected_features_set=options.selected_features_set,
             feature_shapes=options.feature_shapes,
             output_prefix="out",
@@ -3771,7 +3781,12 @@ def build_circular_diagram(
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            # The "narrow the inside tracks" row sets the radius (PD-OI-097).
+            center_reserved_radius=(
+                row_center_reserved_radius
+                if row_center_reserved_radius is not None
+                else tracks.center_reserved_radius if tracks else None
+            ),
             circular_track_slots=tracks.circular_track_slots if tracks else None,
             circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
             annotation_options=annotations,
@@ -4081,9 +4096,10 @@ def build_circular_multi_diagram(
     )
 
     def assemble(overrides: Mapping[str, LabelFitValue]) -> Drawing:
+        config_overrides, row_center_reserved_radius = split_row_option_values(overrides)
         return assemble_circular_diagram_from_records(
             records,
-            cfg=with_fit_row_overrides(cfg, overrides, set_paths=_set_config_paths(options)),
+            cfg=with_fit_row_overrides(cfg, config_overrides, set_paths=_set_config_paths(options)),
             conservation_blast_files=conservation_inputs,
             conservation_dataframes=options.conservation_dataframes,
             conservation_reference=options.conservation_reference,
@@ -4111,7 +4127,12 @@ def build_circular_multi_diagram(
             ),
             plot_title_font_size=options.plot_title_font_size,
             keep_full_definition_with_plot_title=options.keep_full_definition_with_plot_title,
-            center_reserved_radius=tracks.center_reserved_radius if tracks else None,
+            # The "narrow the inside tracks" row sets the radius (PD-OI-097).
+            center_reserved_radius=(
+                row_center_reserved_radius
+                if row_center_reserved_radius is not None
+                else tracks.center_reserved_radius if tracks else None
+            ),
             multi_record_size_mode=layout.multi_record_size_mode,
             multi_record_min_radius_ratio=layout.multi_record_min_radius_ratio,
             multi_record_column_gap_ratio=layout.multi_record_column_gap_ratio,

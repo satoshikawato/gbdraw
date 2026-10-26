@@ -14,7 +14,7 @@ const capture = async (page, testInfo, name) => {
   const pending = page.waitForEvent('download');
   const state = await page.evaluate(async () => {
     const { state: s } = await import('./js/state.js');
-    const cap = () => ({ selected: s.results.value[s.selectedResultIndex.value]?.content || '',
+    const cap = () => ({ selected: window.__GBDRAW_APP__.currentResults()[s.selectedResultIndex.value]?.content || '',
       mounted: s.svgContainer.value?.querySelector('svg')?.outerHTML || '',
       catalogIds: s.featureCatalog.value?.items?.find(item => item.resultIndex === s.selectedResultIndex.value)
         ?.features?.map(feature => feature.svgId) || [] });

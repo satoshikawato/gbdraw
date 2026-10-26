@@ -88,7 +88,11 @@ def _arguments(drawn: dict[str, object], path: str, case: tuple[object, ...]) ->
 
 
 def _parsed_records(cache: PreparedBiologicalInputCache) -> bytes:
-    return pickle.dumps([entry.value for entry in cache._layers["parsed"].values()])
+    """The cached records and what each catalog captured; catalog entries are built on first read."""
+    return pickle.dumps([
+        (entry.value.records, tuple(catalog.captured for catalog in entry.value.source_features))
+        for entry in cache._layers["parsed"].values()
+    ])
 
 
 @pytest.mark.parametrize("case", CASES)

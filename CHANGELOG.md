@@ -12,6 +12,321 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
+
+- Patch release of 0.14.1. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.2.md).
+- Fixed: a "This feature only" color in the Web app colors only the clicked
+  feature of the clicked File card and record, live and after Generate. Before,
+  the same feature in another record with the same ID (the same file in two
+  Linear File cards, or two records that share an ID) took the color as well.
+  The rule's `hash` value now names the feature instance
+  (`<feature id>@<record key>`), which a `hash` value must match whole; the Run
+  Info Source recipe writes it with the CLI record key `record-<n>` and leaves
+  out a row whose record is not drawn. Resetting one copy leaves the others as
+  they are, and **Delete settings** of a record removes its rows. Other `hash`
+  values keep their meaning (PD-OI-069 revision 2). Like the other
+  per-feature edits, the color belongs to the record key, so it does not apply
+  while the record is drawn under another key.
+- Fixed: two identical `source` features of a record, one shown by its own
+  Feature visibility, now have the same feature IDs in the Web feature list as
+  in the drawing and in a feature identity table.
+- Changed: the aminoglycoside BGC Gallery tutorial (BGC0000708-BGC0000713)
+  shows the antiSMASH `gene_kind` qualifier in a step of its own before the
+  color step, and says that its colors follow the scheme of the MIBiG website
+  (core red, additional pink, transport blue, regulatory green). Step 2 notes
+  that MIBiG ships each cluster already cut out of its genome; the "Find
+  shared proteins across five aminoglycoside gene clusters" tutorial has the
+  same note (#1385).
+- Changed: the Auto organism name has one rule for the Circular centre, the
+  Circular plot title and the Web Linear Auto definition. Line 1 is the
+  scientific name (genus and epithets italic, rank words such as `subsp.`,
+  `sp.` and `pv.` upright, `[Genus]` brackets upright); line 2 is the strain, drawn once even when the
+  /organism already holds it (OV-1830). Virus names, names above the genus
+  with a placeholder (`Lachnospiraceae bacterium A4`), hybrids, cloning
+  vectors and names the rule cannot read stay whole on line 1; an ICTV
+  binomial species (`Lambdavirus lambda`) is italic. A Candidatus name is
+  drawn upright after an italic `Ca.`, also when the rule keeps it whole
+  (*Ca.* Saccharibacteria bacterium GW2011_GWC2_44_17) and when the name holds
+  the characters `&`, `<` or `>` (*Ca.* Foo & Bar); any other name with those
+  characters stays as written. In a hybrid, each
+  parent's genus and epithets are italic and the sign stays as written and
+  upright (*Citrus* x *limon*, *Mentha* ×*piperita*); a hybrid with a part the
+  rule cannot read stays upright. In a placeholder, the name above the genus
+  is italic (*Lachnospiraceae* bacterium A4, uncultured *Lachnospiraceae*
+  bacterium, *Dothideomycetes* sp. 11042) only for Bacteria, Archaea and the
+  botanical lineages, when it has an ending of that code (for Bacteria and
+  Archaea also the phylum ending `-ota`) and the record's lineage holds it as
+  written; other placeholders stay upright. The endings that
+  mark a name above the genus follow the nomenclature code of the record's
+  GenBank lineage: `-idae`, `-inae` for Metazoa; `-aceae`, `-ineae`, `-inae`,
+  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota`, `-ales` for
+  Viridiplantae, Fungi, Rhodophyta and Ochrophyta, so
+  `Helotiales sp. EF0021` stays whole (OV-1834); `-aceae`, `-ales`, `-ineae`,
+  `-idae` for Bacteria and Archaea; all of them for other lineages and
+  records without one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the
+  botanical code only, and a letter-hyphen epithet (`Aedes w-albus`) is
+  italic. A Bakta ORGANISM
+  `.` gives no name line instead of an italic "." (OV-1831), and a Circular
+  record with no organism and no typed title draws no plot title, where it
+  drew "." (OV-1837); a typed plot title with nothing to draw (`<i></i>`) now
+  draws no title in either mode instead of failing (OV-1845). A typed Species
+  without a typed Strain is cut into two lines by the same rule, keeping its
+  words and italics as typed; a typed Record label is drawn as typed. Under a
+  typed Record label, line 2 is the Subtitle, the typed Strain or the record's
+  strain, as before; under a typed Species, that strain line is the record's
+  Auto strain line, so a strain the /organism named is kept (`My isolate` over
+  `Lachnospiraceae bacterium A4` draws `A4`), and it is left out when the typed
+  text names the record's strain. Saved Linear Auto
+  definitions keep their text until the file is read again.
+- SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
+  `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
+  `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app from 2026-06-18 to
+  2026-07-19 (Sessions 27 to 32), and the SVG files of those versions, carry only the old name. They still load in the web app, and
+  `enrich_svg` still takes those SVG files: the old name is renamed once when such a file is read. `enrich_svg` no
+  longer refuses an SVG file whose element carries both names with different values; it keeps
+  `data-gbdraw-match-id` and drops the old name.
+- Fixed (web app): a Result saved or exported with the UI in a language other than English kept the preview's
+  `role`, `tabindex` and `aria-label` ("Pairwise match N", translated) on every comparison band. The preview now
+  marks the bands it makes buttons and saving and export remove them by that mark, in every language. Circular
+  conservation bands, which kept these attributes in every language, now lose them too.
+- Changed: the Circular centre definition's lines are never wrapped: the
+  wrap of the organism name line when the tracks did not fit is gone. The GC
+  content, GC skew and Depth rows of the default stack now start right under
+  the tick labels. When the definition reaches the inside tracks, they first
+  move outward at their widths; if that does not clear it, the tracks with an
+  Auto width narrow, each to no less than 30 px
+  (`canvas.circular.track_narrowing_min_px`, `--track_narrowing_min_px`), only
+  when that clears the definition; otherwise they keep their widths.
+  `--no_track_narrowing` (`canvas.circular.track_narrowing = false`) turns the
+  narrowing off. A width you set (`--gc_content_width`, `w=`, a Web **Width**)
+  is never narrowed for the definition (OV-1853), and the preset rows' widths
+  are Auto widths. A line that still reaches the tracks is drawn on one line
+  over them; when its ink touches a drawn track, the warning offers a smaller definition font (the size at which every line fits
+  on one line), narrower inside tracks (`--center_reserved_radius`, when the
+  tracks were not narrowed already; the row says when text still overlaps) and
+  a shorter Species or Strain, such as `MjeNMV` for "Marsupenaeus japonicus
+  endogenous nimavirus". The `DEFINITION_RESERVED` track failure is gone; an
+  explicit `--center_reserved_radius` still narrows the tracks as before, a set
+  width included. In the Web app's **Labels do not fit** dialog, **Edit
+  Species / Strain…** shows that record's name field, and Cancel reads **Keep
+  as drawn** over a drawn figure. A label-fit warning for one record now names
+  that record, so records drawn to separate files can be told apart (OV-1836).
+- Changed (CLI, Python, web app): feature labels, tick labels, the Linear
+  ruler and scale bar, and the Circular centre definition are laid out at the
+  box their text is drawn in, as the Legend already is. A Circular label keeps
+  0.30 em of room beside its text and a Linear label 0.126 em above it, so the
+  same labels sit outside and inside their features as before and Linear label
+  rows keep their spacing; stacked Circular labels sit slightly closer, tick
+  labels and the inside tracks under them move about 2 px outward, and
+  canvases change by a few pixels. The room kept for the Circular definition,
+  its warning and the smaller-font remedy all measure the letters as painted,
+  in each line's weight and at its place, so tracks narrowed for the
+  definition no longer leave a line touching them (OV-1854): of the 175
+  figures measured, only MERS-CoV, whose name the 30 px floor cannot clear,
+  still warns. The room is a little wider than the line boxes gave, so more
+  figures narrow their GC rows (MjeNMV at the Web defaults: 46.5 to 35.5 px),
+  and definitions that were drawn over the innermost track now clear it
+  (OV-1820, OV-1824, OV-1826). An embedded label sits at the same depth
+  whether or not its letters have descenders (OV-1743). Saved Results are not
+  migrated: they keep their drawing until Generate redraws them (OV-165).
+- SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
+  `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
+  within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a
+  near-full circle bowed up to 0.8 px once rounded). Depth, GC content and GC skew paths keep a sample
+  only where dropping it would move the outline by more than 0.02 SVG px, and a Circular Depth or GC percent area
+  closes on its baseline with two arcs (one for a span of 20 degrees or less). The drawing looks the same (largest grey-level change 9 of 255 at 1x and 16
+  at 4x outside text set on a path), and files get smaller: Circular AP027078 with Depth 5.6 MB -> 0.48 MB, Linear
+  2.5 MB -> 0.21 MB, NC_010162 4.3 MB -> 3.2 MB, the hepatoplasmataceae collinear Gallery figure 6.3 MB -> 3.8 MB;
+  25 test figures together 86.1 MB -> 64.8 MB (-25%). Tools that compare SVG bytes or parse path numbers with a fixed
+  precision see new values.
+- Performance (web app): on a cross-origin-isolated page such as gbdraw.app,
+  Cancel now stops Python in the diagram Worker and keeps the Worker, so the
+  next Generate does not boot Pyodide again and reuses what the Worker had
+  prepared (tobacco chloroplast Gallery Session, unchanged settings: 0.5 s instead of 12 s,
+  best of 3).
+  When the Worker does not stop within 3 s, the page is not cross-origin
+  isolated, or Pyodide is still booting, Cancel ends the Worker as before. The
+  drawing and the saved Session do not change.
+- Fixed: a registered font with a corrupt table failed its first text
+  measurement and then measured without that table, with no error. Every
+  measurement now fails the same way (OV-1756).
+- Performance (CLI, Python): replaying a Session (`gbdraw render --session`,
+  `gbdraw circular|linear --session`, the Python Session render functions)
+  checks its protein identity manifest once, when the Session loads, instead of
+  two times (five with `--session_output`); the render and the Session writer
+  no longer copy it. On the Vibrio collinearity Gallery Session this removes
+  0.54 s of manifest work per replay (1.85 s with `--session_output`); the
+  whole replay took 5.46 s instead of 5.69 s of CPU time (9.71 s instead of
+  10.28 s with `--session_output`, best of 8). The SVG and the saved Session
+  are unchanged.
+- Python API: a protein identity manifest that gbdraw has checked is now a
+  read-only mapping: `ProteinIdentityManifest`, and the
+  `protein_identity_manifest` of `CurrentRequestArtifacts`,
+  `PreparedDiagramRequest`, `RequestRenderResult`,
+  `PreparedCircularBatchRequest` and `CircularBatchRenderResult` when it holds
+  plain JSON data (a manifest given with tuples, sets, NaN, infinities or
+  other Python values stays a copy, as before). For JSON data it equals the
+  plain manifest and `json.dumps` writes the same text; in a
+  `ProteinIdentityManifest` made from other Python values, every sequence
+  that is not a list becomes a tuple and every set a frozenset. Changing it
+  in place raises `TypeError`.
+  `ProteinIdentityManifest(...)` and `validate_protein_identity_manifest`
+  check their argument and keep its key order and extra keys (the validator
+  used to sort `runtimeIds` and `featureMetadata` and drop extra keys);
+  `ProteinIdentityManifest.to_dict()` returns a mutable copy, and
+  `SessionDocument.to_dict()` still returns plain data.
+- Performance (CLI, Python, web app): the protein extraction no longer
+  validates the protein identity manifest it has just built; it keeps the one
+  check its input can fail (rendered-view field names in record keys,
+  selectors and regions). The extraction for the Vibrio collinearity Gallery
+  Session took 0.53 s instead of 0.67 s; the SVG and the saved Session are
+  unchanged (#1370).
+- Performance (CLI): the installed `gbdraw` command now starts through a private `_gbdraw_console.py` module that sets
+  `OPENBLAS_NUM_THREADS=1` before NumPy loads, only when you have not set the variable yourself. A one-shot render no
+  longer starts an OpenBLAS thread pool it does not use (NC_010162 circular: user CPU 5.2 s -> 1.9 s, wall 1.87 s ->
+  1.78 s, output identical). Calls of `gbdraw.cli.main` and the Python API (`import gbdraw`) are unchanged. A conda
+  recipe that lists `entry_points: gbdraw = gbdraw.cli:main` keeps the old start until that line names
+  `_gbdraw_console:main`.
+- Performance (web app): the first Generate of a page starts faster. The diagram
+  Worker downloads its wheels while Pyodide loads and installs them in one
+  micropip call, without its 10 HEAD checks, and the gbdraw browser wheel ships
+  with Pyodide bytecode, which halves the Worker's Python import time. Choosing
+  a file, or loading a Session once the Load finishes, now downloads the
+  Worker's boot files (about 32 MB) into the HTTP cache at low priority, two at
+  a time, unless the browser asks to save data (Save-Data) or a Worker has
+  already started. At 10 Mbit/s a first Generate after that download took 15 s
+  instead of 34 s. The browser wheel grows from 3.7 MB to 6.5 MB, so the PyPI
+  wheel and the sdist, which embed it, each grow by about 2.8 MB. The drawing
+  and the saved Session do not change (#1364).
+- Web app: a dependency wheel that fails to download on the network now names
+  the wheel in the error. The Pyodide file lists in `config.js` are written
+  from `gbdraw/_web_assets.py` by `tools/prepare_browser_wheel.py`.
+- Performance (CLI, Python, web app): each source feature's hash is computed
+  once, when its source loads, and read back by the drawing, the shared-hash
+  count, the interactive context and the protein extraction; the source feature
+  catalog builds its entries only when a selector, an identity table or a
+  similarity alignment reads them. NC_010162 circular computed 19,515 feature
+  hashes instead of 48,787 and normalized no qualifiers instead of 120,771, and
+  took 1.41 s instead of 1.67 s. Output bytes are unchanged. The stored hash is
+  used only while the feature keeps the type and the location object it was
+  computed for (an in-place change of a location object, such as setting its
+  strand, is not detected), and a plan built from bare records writes nothing
+  on your records. Typed API:
+  `InMemoryRecordSource.source_feature_catalog` is now `source_features` and
+  takes a `SourceFeatureCatalog` (from `capture_source_features`), which
+  replaces `build_source_feature_catalog`;
+  `ResolvedRecordProvenance.source_feature_catalog` still returns the entries.
+- Performance (CLI, Python, web app): Generates and CLI renders hold less
+  memory: the prepared-input cache keeps one hash per feature field as its owner
+  stamp, SVG text is written to its file in chunks, and `gbdraw render --session`
+  without a re-save drops the embedded resource data once its files are written
+  (vibrio Gallery Session max RSS 696 -> 563 MiB). Outputs do not change (#1360).
+- Performance (hosted web app): a returning visitor reloads gbdraw.app without
+  downloading the Pyodide runtime, wheels, fonts, icons or LOSAT wasm again. The
+  vendored files are cached for a year (one `_headers` rule per file, pinned by
+  SHA-256 in `tools/immutable-web-assets.json`), the gbdraw wheel's URL carries
+  its content hash, the LOSAT wasm is revalidated instead of re-downloaded, and
+  the page preloads its whole module graph. A reload made 0 body bytes instead of
+  1.6 MB and 243 requests instead of 251. Results, exports and LOSAT output do not
+  change (#1358).
+- Performance (web app): Loading a large Session is faster and keeps less in
+  memory: the import Worker passes the Session as UTF-8 text, the feature
+  catalog builds each sequence once, the Load's unsafe-key check runs in the
+  import Worker, and the Similarity group rows exist only while the drawer shows
+  their tab. The Vibrio Gallery Session loaded in 4.4 s instead of 8.3 s, with
+  211 MB of JavaScript heap instead of 307 MB. The drawing and the saved Session
+  do not change (#1355).
+- Web app: the Editor's "N features ready" shows the feature count of the mode on
+  screen. After a Generate in Circular and another in Linear, switching modes
+  used to leave the other mode's count in the Editor header (OV-1762).
+- Performance (CLI, Python, web app): the Python render path reads a font's
+  kerning only when it is used, writes empty SVG elements directly, builds
+  comparison match paths with per-comparison constants, copies merged Circular
+  records without a generic deep copy, counts GC content and skew windows at the
+  window bounds only, and skips the font-embedding pass when no custom face can
+  be drawn. The MJNV linear comparison of ten genomes took 1.7 s instead of
+  3.0 s and peaked at 280 MiB instead of 420 MiB, and NC_010162 circular peaked
+  at 204 MiB instead of 368 MiB. Replacing or removing a registered font no
+  longer keeps the old font in memory (OV-1749). SVG bytes are unchanged
+  (#1356).
+- Web app: before Generate draws a Circular track row, its **Radius** field says
+  "Auto" instead of an estimate that often differed from the drawn radius (for
+  example 0.75 R shown and 0.79 R drawn for GC content of E. coli MG1655 after
+  an AT skew row is added to a Middle stack). Its **Width** and gap estimates
+  are now the Auto sizes the Python layout starts from, so an Auto ticks row
+  shows 7.8 px, as drawn, instead of 9.8 px; the layout can still narrow a
+  width when the rows do not fit (OV-1712).
+- Web app: the Circular pairwise comparison ring warning above **Generate** and
+  in the **Pairwise Comparisons** card is gone. It was a browser estimate of
+  whether the rings fit, which did not follow the Python layout. A ring stack
+  that does not fit is still reported by Generate, and a ring width the layout
+  narrows shows in the drawn row's **Width** (OV-1712).
+- Legend: its box is laid out at the width of the painted captions, measured in
+  the face that draws them, plus the existing offsets, in the CLI, the Python
+  API, and the Web app alike. A Legend whose captions are in a monospace or
+  other wide face no longer cuts off their last characters at the canvas edge
+  (OV-1740); most Legends, and the canvases they set, become a few pixels
+  narrower (about 40 px with the Japanese captions we measured). A corner
+  Legend that now fits beside the records no longer grows the canvas above or
+  below them. Saved Results are not migrated: a Result saved by an earlier version keeps its Legend until its
+  first Legend edit, which lays it out again, gradient scales included
+  (OV-1741), and Generate redraws it (OV-165).
+- Web app: a group color edit (Selected features, the same Legend item, a label
+  scope, or the Legend rename of a row with features) writes rules that match
+  the edited features by feature type and their product, gene, or label text,
+  exactly, and hash rules only for the features no such rule fits. Before, it
+  wrote one hash rule per feature: coloring the 2761 "hypothetical protein" CDS
+  of NC_010162 now writes 1 rule instead of 2761. The colors drawn for the
+  loaded features do not change, but an exact rule also colors matching
+  features of files or records added later. On a large genome the first such
+  edit can take longer, by the time Python takes to write the rules (OV-244).
+- Web app: after a palette switch that is not generated yet, **Restore** brings
+  a deleted palette row back in the color the Legend shows, and a rule named
+  like such a row in that color is accepted instead of refused as a Legend row
+  conflict (OV-282).
+- Performance (CLI, Python): `gbdraw <mode> --session` and the Python Session
+  render functions key their render cache by the Session's resources instead
+  of by the decoded comparison, as the web app does. Replaying the Vibrio
+  collinearity Gallery Session took 13.4 s and 704 MiB instead of 20.4 s and
+  1,083 MiB; SVG bytes are unchanged (#1354).
+- Performance (CLI, Python): replaying a Session with protein LOSAT results
+  checks each saved LOSATP blastp table against its record pair once instead
+  of once in each of five validation steps. For the Hepatoplasmataceae
+  Similarity group Gallery Session these checks took 0.54 s instead of 0.88 s;
+  the SVG and the saved Session are unchanged (#1357).
+- Performance (CLI, Python): replaying a Session decodes its stored
+  orthogroups and ortholog paths with a decoder built once per type, scans
+  its protein tables for legacy protein IDs once instead of three times, and
+  with `--session_output` copies each drawing's state once instead of three
+  times. Replaying the Vibrio collinearity Gallery Session used 12.7 s of CPU
+  time instead of 16.8 s (21.3 s instead of 26.4 s with `--session_output`);
+  the SVG and the saved Session are unchanged (#1359).
+- Performance (CLI, Python, web app): GC content and GC skew count bases
+  without an array of every base position, and the counted sequence is one
+  bytes copy instead of three or four string copies. A 52 Mb Circular diagram
+  with defaults drops its Python allocation peak from 521.7 MiB to 363.3 MiB
+  and its process RSS from 750 MiB to 576 MiB; the drawing is byte-identical
+  (#1393).
+- Performance (CLI, Python, web app): Similarity group inference for LOSATP
+  protein comparisons runs about 2.5 times faster and needs about a third less
+  memory on the Vibrio Gallery input. LOSATP output is parsed without a regex
+  attempt at every character, HSP aggregation and the bitscore fit work on
+  whole columns, directional hits stay numpy columns over integer protein
+  codes, and the per-protein score thresholds are plain floats freed before the
+  memory peak. Similarity groups, edges and names are identical (#1347, #1350,
+  #1351, #1353).
+- Performance (web app): a live edit (for example a Legend color) no longer
+  serializes the whole SVG into the displayed Result. The Result's text is
+  written once, when Save, a History checkpoint, Generate, a Load rollback, or a
+  Result or drawing switch reads it. On the Vibrio Gallery Session one Legend
+  color edit took 25 ms instead of 71 ms. Saved Sessions, exports, History and
+  the drawn SVG do not change (#1374).
+- Fixed (web app): installing a drawing's layout preferences no longer merges a
+  `__proto__` key into `Object.prototype` (CodeQL alert 61, OV-1915). No saved
+  file reached the merge, because Session Load already rejects such keys
+  (#1390, #1391).
+
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 
 - Patch release of 0.14.0. Session files are unchanged (Session version 48).

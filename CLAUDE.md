@@ -12,7 +12,7 @@ browser checks.
 
 **gbdraw** is a Python bioinformatics tool for creating publication-quality genome diagrams from microbial genomes and organelles. It generates circular and linear visualizations of genomic features (CDS, tRNA, regulatory elements, etc.) with optional GC content/skew plots and BLAST comparison tracks.
 
-- **Version:** 0.14.1
+- **Version:** 0.14.2
 - **Python:** ≥3.10
 - **Output formats:** SVG, PNG, PDF, EPS, PS
 
@@ -57,8 +57,8 @@ pip install -e ".[dev]"
 # Prepare the generated browser wheel for offline web packaging/tests
 python tools/prepare_browser_wheel.py
 
-# Refresh the cache-bust token when preparing a deployable web bundle
-python tools/prepare_browser_wheel.py --refresh-cache-bust
+# Prepare the hosted bundle (wheel URL carries the wheel's content hash)
+python tools/prepare_cloudflare_pages.py
 
 # Build distribution
 python -m build

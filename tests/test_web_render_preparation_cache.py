@@ -1619,6 +1619,62 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     assert len(walked) == cached_features
 
 
+def test_the_full_owner_stamp_keeps_a_fixed_size_per_feature() -> None:
+    """The full stamp keeps one hash per feature field, not a tuple per feature (L2-03)."""
+
+    import tracemalloc
+
+    record = _record("stamp-size")
+    record.features = [
+        SeqFeature(
+            FeatureLocation(index, index + 30, strand=1),
+            type="CDS",
+            qualifiers={
+                "locus_tag": [f"tag_{index}"],
+                "product": ["hypothetical protein"],
+                "note": ["a note"],
+                "translation": ["M" * 9],
+            },
+        )
+        for index in range(2000)
+    ]
+    records = (record,)
+    tracemalloc.start()
+    try:
+        before = tracemalloc.get_traced_memory()[0]
+        stamp = prepared_module._owner_stamp(records, walk_features=True)
+        held = tracemalloc.get_traced_memory()[0] - before
+    finally:
+        tracemalloc.stop()
+    assert stamp == prepared_module._owner_stamp(records, walk_features=True)
+    assert held / len(record.features) < 100
+
+
+@pytest.mark.parametrize(
+    ("mutate", "detail"),
+    [
+        (lambda feature: setattr(feature, "type", "gene"), "feature 1 type"),
+        (lambda feature: setattr(feature, "location", FeatureLocation(240, 330, strand=-1)), "feature 1 location owner"),
+        (lambda feature: setattr(feature, "location", FeatureLocation(240, 331, strand=-1)), "feature 1 location owner"),
+        (lambda feature: feature.qualifiers.__setitem__("locus_tag", ["changed"]), "feature 1 qualifiers"),
+        (lambda feature: feature.qualifiers.__setitem__("note", ["added"]), "feature 1 qualifiers"),
+    ],
+)
+def test_a_full_check_names_the_changed_feature_and_field(
+    tmp_path: Path, mutate: object, detail: str,
+) -> None:
+    records = (_record("named"),)
+    cache, path, identity = _parsed_source_cache(tmp_path, {"source": records})
+    assert callable(mutate)
+    mutate(records[0].features[1])
+    with pytest.raises(ValidationError, match=f"ownership was mutated \\(record 0 {detail}\\)"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(
+                ("source", identity), frozenset({identity}), lambda: pytest.fail("the entry check is structural"),
+            )
+            _read_in_a_record_stage(records[0], "named")
+
+
 # Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data
 # flow). A held revision equal to this render's gives featureCatalog None; the
 # page then keeps the catalog it admitted for that revision.
@@ -2005,3 +2061,54 @@ def test_a_single_record_title_change_reuses_the_gc_percent(
     assert calls == []
     assert metrics["renderStageHit:record_gc_percent"] >= 1
     assert metrics.get("renderStageUncacheableCount", 0) == 0
+
+
+def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
+    feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
+    assert len(prepared_module._feature_stamp(feature)) == len(prepared_module._FEATURE_STAMP_FIELDS)
+
+
+def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_never(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Source hashes are computed when the source loads and read back after (L1-03).
+
+    The interactive context also hashes each feature once in its drawn frame;
+    no render builds a source catalog entry, and a warm Generate hashes nothing.
+    """
+    import types
+
+    import gbdraw.features.ids as ids_module
+    from gbdraw.features.source import SourceFeatureIdentity
+
+    counts = {"md5": 0, "entries": 0}
+
+    def md5(data: bytes) -> object:
+        counts["md5"] += 1
+        return hashlib.md5(data)
+
+    monkeypatch.setattr(ids_module, "hashlib", types.SimpleNamespace(md5=md5))
+    init = SourceFeatureIdentity.__init__
+
+    def counted_init(self: SourceFeatureIdentity, *args: object, **kwargs: object) -> None:
+        counts["entries"] += 1
+        init(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(SourceFeatureIdentity, "__init__", counted_init)
+    record = _record("hash-once")
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (record,))
+    cache = PreparedBiologicalInputCache()
+    document = _document(source)  # Writing the Session plans the request once.
+    counts["md5"] = 0
+    _cold, cold_diagnostics = _render(tmp_path, cache, document, request_id=1)
+    assert 0 < counts["md5"] <= 2 * len(record.features)
+    assert counts["entries"] == 0
+    counts["md5"] = 0
+    _warm, warm_diagnostics = _render(tmp_path, cache, document, request_id=2)
+    assert counts == {"md5": 0, "entries": 0}
+    for diagnostics in (cold_diagnostics, warm_diagnostics):
+        metrics = _metrics(diagnostics)
+        assert metrics["preparedInputCacheMutationViolationCount"] == 0
+        assert metrics.get("renderStageUncacheableCount", 0) == 0
+        assert metrics.get("renderStageUndeclaredReadCount", 0) == 0

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
+import { displayedLegendRowColors } from '../../gbdraw/web/js/app/candidate-render.js';
 import { DiagramGenerationCanceledError } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
@@ -42,7 +43,9 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     if (before !== JSON.stringify(state.manualSpecificRules)) history.push(label);
     await finalize();
   };
-  const actions = createFeatureRuleActions({ state: withDrawings(state), ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
+  const view = withDrawings(state);
+  const actions = createFeatureRuleActions({ state: view, ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
+    readLegendRowColors: (drawing) => displayedLegendRowColors(view, drawing, []),
     rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
     ports: { requestAutomaticRerender: () => true, isRedrawOwed: () => false },
     runUndoableCheckpoint: transact, runUndoable: transact,

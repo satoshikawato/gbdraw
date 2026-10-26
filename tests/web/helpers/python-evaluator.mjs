@@ -3,6 +3,7 @@
 // per evaluation made the Web JavaScript tests spend minutes on start-up.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { synthesizedRuleTable } from '../../../gbdraw/web/js/app/rule-matching.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const STDERR_TAIL_BYTES = 16 * 1024;
@@ -117,3 +118,24 @@ from gbdraw.web_support.config_overrides import validate_web_config_overrides_js
 result = validate_web_config_overrides_json(payload['mode'], json.dumps(payload['config']),
     json.dumps(payload['configOverrides']), json.dumps(payload['managedPaths']), payload['source'])
 `, payload));
+
+/**
+ * The Worker's `synthesizeColorRules` helper (OV-244), for a rule preparation's `synthesize`.
+ * @param {unknown} request
+ */
+export const synthesizePythonColorRules = async (request) => JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.rule_matching import synthesize_color_rules_json
+result = synthesize_color_rules_json(json.dumps(payload))
+`, request));
+
+/**
+ * The rule owner's `groupColorRules` (app/feature-editor/rule-actions.js) over
+ * `preparation`, for a test that stands in for the rule owner.
+ * @param {{ synthesizeGroup: Function }} preparation
+ * @param {(feature: any) => string[]} [labelsOf]
+ */
+export const groupColorRulesOver = (preparation, labelsOf = () => []) => (features, color, caption, scope) => async (current) => {
+  const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption }, current);
+  return synthesizedRuleTable(table, current);
+};

@@ -62,6 +62,7 @@ from gbdraw.analysis.protein_colinearity import (
     ProteinExtractionResult,
     ProteinIdentityManifest,
     extract_web_stable_cds_proteins,
+    is_json_exact_protein_identity_manifest,
     is_protein_losat_cache_entry,
     validate_protein_identity_manifest,
     validate_protein_raw_entry_references,
@@ -91,7 +92,7 @@ from gbdraw.features.source import (
     FeatureIdentity,
     IdentityBinding,
     SourceFeatureIdentity,
-    build_source_feature_catalog,
+    capture_source_features,
 )
 from gbdraw.features.visibility import (
     read_feature_visibility_file,
@@ -556,12 +557,19 @@ class CurrentRequestArtifacts:
                 label="losat_derived_cache_entries",
             )
             manifest = self.protein_identity_manifest
+            # A proof was checked when it was made and is read-only: it is
+            # kept as it is. Raw data is detached here and checked below.
+            authority = manifest if isinstance(manifest, ProteinIdentityManifest) else None
+            stored_manifest: Mapping[str, object] | None = authority
             detached_manifest: Mapping[str, Any] | None = None
-            if manifest is not None:
+            if manifest is not None and authority is None:
                 if not isinstance(manifest, Mapping):
                     raise ValidationError("protein_identity_manifest must be an object.")
                 detached_manifest = copy.deepcopy(dict(manifest))
-            if raw_entries or derived_entries or detached_manifest is not None:
+            if (
+                _REQUEST_RENDER_DIAGNOSTICS.get() is not None
+                and (raw_entries or derived_entries or detached_manifest is not None)
+            ):
                 _record_request_render_diagnostic_metric("artifactBundleCopyCount")
                 _record_request_render_diagnostic_metric(
                     "artifactEntryCount",
@@ -606,13 +614,19 @@ class CurrentRequestArtifacts:
                     )
                 derived_keys.add(key)
 
-            authority: ProteinIdentityManifest | None = None
             if detached_manifest is not None:
                 _record_request_render_diagnostic_metric(
                     "proteinManifestFullValidationCount"
                 )
                 authority = validate_protein_identity_manifest(detached_manifest)
-            if protein_entries and detached_manifest is None:
+                # The proof checks the entries either way; it is kept in place
+                # of the detached copy only when it holds plain JSON data.
+                stored_manifest = (
+                    authority
+                    if is_json_exact_protein_identity_manifest(authority)
+                    else detached_manifest
+                )
+            if protein_entries and authority is None:
                 raise ValidationError(
                     "Current protein LOSATP artifacts require protein_identity_manifest."
                 )
@@ -650,7 +664,7 @@ class CurrentRequestArtifacts:
 
         object.__setattr__(self, "losat_cache_entries", raw_entries)
         object.__setattr__(self, "losat_derived_cache_entries", derived_entries)
-        object.__setattr__(self, "protein_identity_manifest", detached_manifest)
+        object.__setattr__(self, "protein_identity_manifest", stored_manifest)
 
 
 @dataclass(frozen=True)
@@ -989,7 +1003,7 @@ class CircularBatchRequestPlan:
             item_request = CircularDiagramRequest(
                 records=(
                     RecordInput(
-                        source=InMemoryRecordSource(record, source_feature_catalog=self.provenance[index].source_feature_catalog),
+                        source=InMemoryRecordSource(record, source_features=self.provenance[index].source_features),
                         record_key=self.request.records[index].record_key,
                         display=self.request.records[index].display,
                     ),
@@ -1321,7 +1335,7 @@ def _gff_types_named_by_visibility_rows(
         entry.feature_type
         for item in collection.provenance
         if item.source_kind == "gff_fasta" and item.record_key in shown
-        for entry in item.source_feature_catalog or ()
+        for entry in item.source_feature_catalog
         if entry.biological_feature_id in shown[item.record_key]
     } if shown else set()
 
@@ -1329,11 +1343,7 @@ def _gff_types_named_by_visibility_rows(
 def _source_catalogs(
     collection: ResolvedRecordCollection,
 ) -> tuple[tuple[SourceFeatureIdentity, ...], ...]:
-    return tuple(
-        item.source_feature_catalog if item.source_feature_catalog is not None
-        else build_source_feature_catalog(record)
-        for item, record in zip(collection.provenance, collection.records, strict=True)
-    )
+    return tuple(item.source_feature_catalog for item in collection.provenance)
 
 
 class _IdentityTableContext(TypedDict):
@@ -1525,10 +1535,9 @@ def _normalize_request_records(
             else (RECORD_IDENTITY_TAG, key, provenance.resolved_index)
         )
         register_prepared_value_identity(record, record_identity)
-        if provenance.source_feature_catalog:
-            register_prepared_value_identity(
-                provenance.source_feature_catalog, ("source-feature-catalog", record_identity)
-            )
+        register_prepared_value_identity(
+            provenance.source_features, ("source-feature-catalog", record_identity)
+        )
     return collection
 
 
@@ -1641,7 +1650,8 @@ def _coerce_resolved_collection(
                 display=record_input.display,
                 source_length=record.annotations.get("gbdraw_source_length"),
                 detected_topology=_detected_topology(record, source_kind),
-                source_feature_catalog=build_source_feature_catalog(record),
+                # The records are the caller's: capture without stamping them.
+                source_features=capture_source_features(record, stamp=False),
             )
         )
     return ResolvedRecordCollection(records, tuple(provenance))
@@ -1674,7 +1684,7 @@ def _materialized_record_inputs(
         source_presentation = provenance.presentation
         materialized.append(
             RecordInput(
-                source=InMemoryRecordSource(record, source_feature_catalog=provenance.source_feature_catalog),
+                source=InMemoryRecordSource(record, source_features=provenance.source_features),
                 presentation=RecordPresentation(
                     label=source_presentation.label,
                     subtitle=source_presentation.subtitle,
@@ -2981,7 +2991,7 @@ def _build_request_plan_diagram(
                 losat_cache_entries,
             )
             protein_identity_manifest = (
-                linear_artifacts.extraction.identity_manifest.to_dict()
+                linear_artifacts.extraction.identity_manifest
                 if linear_artifacts.extraction is not None
                 and linear_artifacts.extraction.identity_manifest is not None
                 else current_artifacts.protein_identity_manifest

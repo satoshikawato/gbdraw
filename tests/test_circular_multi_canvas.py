@@ -25,7 +25,7 @@ from gbdraw.api.options import CircularDiagramOptions, CircularOutputOptions
 from gbdraw.api.requests import CircularBatchRequest, CircularDiagramRequest
 from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.configurators.legend import LegendMeasurement
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.diagrams.circular.assemble import CircularAssemblyResult
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
@@ -38,6 +38,7 @@ from gbdraw.layout.spatial import Aabb
 from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind, place_content
 from gbdraw.svg.circular_ticks import get_circular_tick_path_ratio_bounds
 from gbdraw.tracks import CircularTrackSlot
+from tests.utils.svg_compare import PATH_ROUNDING
 
 
 def _build_record(record_id: str, feature_start: int, length: int = 1200) -> SeqRecord:
@@ -334,7 +335,6 @@ def _with_mock_circular_result(
             font_weight="normal",
             font_size=0.0,
             color_rect_size=0.0,
-            dpi=96,
             legend_width=0.0,
             legend_height=0.0,
             total_feature_legend_width=0.0,
@@ -541,7 +541,7 @@ def _extract_horizontal_legend_row_centers(root: ET.Element) -> list[tuple[float
         caption = "".join(text.itertext()).strip()
         font_size = float(text.attrib.get("font-size", "0").replace("px", ""))
         font_family = text.attrib.get("font-family", "")
-        text_width, _ = calculate_bbox_dimensions(caption, font_family, font_size, 72)
+        text_width, _ = drawn_text_box(caption, font_family, font_size)
 
         entry_left = legend_x + rect_x
         entry_right = entry_left + float(text_width) + 2.0 * float(x_margin)
@@ -1063,7 +1063,6 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = determine_length_parameter(
@@ -1123,7 +1122,6 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size
@@ -3842,9 +3840,10 @@ def test_single_record_side_legend_matches_upper_corner_edge_margin(
     corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
 
     side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
-    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
-    assert legend_left >= -1e-6
-    assert legend_right <= viewbox_width + 1e-6
+    # The legend bounds are read from path data (PATH_ROUNDING).
+    assert side_edge_margin == pytest.approx(corner_top, abs=PATH_ROUNDING)
+    assert legend_left >= -PATH_ROUNDING
+    assert legend_right <= viewbox_width + PATH_ROUNDING
 
 
 @pytest.mark.circular
@@ -3893,9 +3892,10 @@ def test_multi_record_side_legend_matches_upper_corner_edge_margin(
     corner_top, _corner_bottom = _extract_legend_vertical_bounds(corner_root)
 
     side_edge_margin = legend_left if side_position == "left" else viewbox_width - legend_right
-    assert side_edge_margin == pytest.approx(corner_top, abs=1e-6)
-    assert legend_left >= -1e-6
-    assert legend_right <= viewbox_width + 1e-6
+    # The legend bounds are read from path data (PATH_ROUNDING).
+    assert side_edge_margin == pytest.approx(corner_top, abs=PATH_ROUNDING)
+    assert legend_left >= -PATH_ROUNDING
+    assert legend_right <= viewbox_width + PATH_ROUNDING
 
 
 def _axis_circle_squares(root: ET.Element) -> list[tuple[float, float, float, float]]:
@@ -4012,8 +4012,10 @@ def test_title_clears_a_corner_legend_grown_onto_its_side(
     """A corner Legend that the planner moved above or below the records keeps the title outside it (OV-1605)."""
     names = ("NC_001416.gb", "NC_005856.1.gb", "NC_005859.1.gb") if grid else ("NC_001416.gb",)
     records = [next(SeqIO.parse(Path("tests/test_inputs") / name, "genbank")) for name in names]
+    # A 20 px Legend is too large for the records' corner, so the planner grows the canvas for it.
+    legend_font_size = {"objects.legends.font_size.long": 20.0, "objects.legends.font_size.short": 20.0}
     options: dict[str, Any] = {
-        "cfg": apply_config_overrides(None, {}),
+        "cfg": apply_config_overrides(None, legend_font_size),
         "legend": corner,
         "plot_title": _LONG_PLOT_TITLE,
         "plot_title_position": title_position,
@@ -4543,3 +4545,131 @@ def test_the_record_merge_renames_ids_of_earlier_records_without_changing_the_co
         (path,) = stored.children
         assert path.attribs["id"] == "shared"
         assert stored.definitions[0].attribs["id"] == "hatch"
+
+
+def _captured_record_merges(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any, dict[str, Any]]]:
+    """The ``record_merge`` inputs of two records with one id, radial labels on
+    (text on paths, clip paths, record identity binding)."""
+
+    calls: list[tuple[Any, Any, dict[str, Any]]] = []
+    real = diagram_api_module.merge_circular_record
+
+    def capture(placed: Any, positions: Any, **kwargs: Any) -> Any:
+        calls.append((placed, positions, kwargs))
+        return real(placed, positions, **kwargs)
+
+    monkeypatch.setattr(diagram_api_module, "merge_circular_record", capture)
+    record = next(SeqIO.parse(Path("tests/test_inputs") / "NC_001416.gb", "genbank"))
+    assemble_circular_diagram_from_records(
+        [record, record],
+        cfg=apply_config_overrides(
+            None, {"labels.circular.scope": "both", "labels.circular.placement": "radial"}
+        ),
+    )
+    monkeypatch.setattr(diagram_api_module, "merge_circular_record", real)
+    assert len(calls) == 2 and all(kwargs["bind_record_identity"] for _p, _d, kwargs in calls)
+    return calls
+
+
+def _element_pairs(original: Any, copied: Any):
+    yield original, copied
+    assert len(original.elements) == len(copied.elements)
+    for child, copied_child in zip(original.elements, copied.elements):
+        yield from _element_pairs(child, copied_child)
+
+
+def test_an_element_tree_copy_shares_no_state_with_its_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``copy_element_tree`` (the record merge's copy, perf-0140 D-07): new
+    elements, attribute dicts, child lists and kept state; a text path
+    refers to the copy of its path; changing either tree leaves the other."""
+
+    from gbdraw.render.group_content import copy_element_tree, element_text
+    from gbdraw.svg.elements import Group
+
+    sources = [
+        child
+        for placed, _positions, _kwargs in _captured_record_merges(monkeypatch)
+        for content, _attributes in placed
+        for child in (*content.children, *content.definitions)
+    ]
+    root = Group(id="sources")
+    root.elements = list(sources)
+    before = element_text(root)
+    copied_root = copy_element_tree(root)
+    copies = {id(source): copied for source, copied in _element_pairs(root, copied_root)}
+    kinds: set[str] = set()
+    for source, copied in _element_pairs(root, copied_root):
+        kinds.add(type(source).__name__)
+        assert copied is not source and type(copied) is type(source)
+        assert copied.attribs == source.attribs and copied.attribs is not source.attribs
+        assert copied.elements is not source.elements
+        for name, value in source.__dict__.items():
+            if isinstance(value, (list, dict)) and name != "elements":
+                assert copied.__dict__[name] == value and copied.__dict__[name] is not value, name
+        if hasattr(source, "href") and not isinstance(source.href, str):
+            assert copied.href is copies.get(id(source.href), copied.href)
+            assert copied.href is not source.href
+    assert {"Path", "Text", "TextPath", "Line", "ClipPath"} <= kinds
+    assert element_text(copied_root) == before
+
+    # Change the copy everywhere a merge step changes it, and more.
+    for _source, copied in _element_pairs(root, copied_root):
+        copied.attribs["id"] = f"{copied.attribs.get('id', '')}__copy"
+        copied.attribs.pop("data-gbdraw-composition-role", None)
+        if hasattr(copied, "commands"):
+            copied.commands.append("M 0 0")
+    copied_root.elements[0].elements.append(Group(id="added"))
+    assert element_text(root) == before
+
+    # And the source: the copy keeps what it had.
+    copied_text = element_text(copied_root)
+    try:
+        for source in sources:
+            for element in diagram_api_module._walk_svgwrite_elements(source):
+                element.attribs["data-changed"] = "1"
+        assert element_text(copied_root) == copied_text
+    finally:
+        for source in sources:
+            for element in diagram_api_module._walk_svgwrite_elements(source):
+                element.attribs.pop("data-changed", None)
+    assert element_text(root) == before
+
+
+def test_the_record_merge_copy_gives_what_a_deep_copy_gives(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The merged records (ids renamed against the earlier record, text path
+    references, bound record identity) are those ``copy.deepcopy`` gave, and
+    the stored contents are unchanged."""
+
+    import copy
+
+    from gbdraw.render.group_content import element_text
+
+    calls = _captured_record_merges(monkeypatch)
+    stored_before = [
+        element_text(child) for placed, _p, _k in calls for content, _a in placed for child in content.children
+    ]
+
+    def merged(copier: Any) -> list[tuple[str, tuple[str, ...], frozenset[str]]]:
+        monkeypatch.setattr(diagram_api_module, "copy_element_tree", copier)
+        previous = None
+        results = []
+        for placed, positions, kwargs in calls:
+            previous = diagram_api_module.merge_circular_record(placed, positions, **{**kwargs, "previous": previous})
+            results.append(
+                (
+                    previous.content.text,
+                    tuple(element_text(definition) for definition in previous.content.definitions),
+                    previous.used_ids,
+                )
+            )
+        return results
+
+    real = diagram_api_module.copy_element_tree
+    deep_copied = merged(copy.deepcopy)
+    copied = merged(real)
+
+    assert copied == deep_copied
+    assert "__record_2" in copied[1][0]
+    assert [
+        element_text(child) for placed, _p, _k in calls for content, _a in placed for child in content.children
+    ] == stored_before

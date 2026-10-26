@@ -46,7 +46,7 @@ def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
     generator = _generator()
     targets = {
         generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET, generator.REQUEST_SHAPE_TARGET,
-        generator.SESSION_SHAPE_TARGET,
+        generator.SESSION_SHAPE_TARGET, generator.RULE_SYNTHESIS_TARGET,
     }
 
     assert set(generator.TARGET.parent.rglob("*")) == targets

@@ -73,7 +73,7 @@ gbdraw gui
 ## 3. PyPI installation
 
 Check the [PyPI project](https://pypi.org/project/gbdraw/) for available versions.
-The source version is `0.14.1`; a version is installable from PyPI only after it
+The source version is `0.14.2`; a version is installable from PyPI only after it
 appears there. If the project or desired version is unavailable, use a source
 install below.
 
@@ -98,7 +98,7 @@ Alternatively, place `losat` on `PATH` or pass an explicit executable path.
 Use an isolated virtual environment rather than modifying the system Python installation.
 An unpinned command selects the version available on PyPI, not an unpublished
 candidate. For the release's notes, see the
-[0.14.1 release notes](./RELEASE_NOTES_0.14.1.md), and for migration from 0.13
+[0.14.2 release notes](./RELEASE_NOTES_0.14.2.md), and for migration from 0.13
 the [0.14.0 release notes](./RELEASE_NOTES_0.14.0.md).
 
 ## 4. Source installation for development

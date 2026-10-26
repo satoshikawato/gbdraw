@@ -16,6 +16,10 @@ import { countGenBankRecords } from '../services/genbank-header.js';
 import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
+import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
+import { exactRegexValue, namedFeatureInstance } from '../services/feature-selector.js';
+import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
+import { CLI_RECORD_KEY_PREFIX, FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -29,6 +33,7 @@ import { base64ToBytes } from '../services/byte-utils.js';
  * @typedef {(path: string) => string} FinalNameForPath The visible name allocated to a generated file's path.
  * @typedef {{ path: string, name: string, slot: string, data?: string | Uint8Array, buildData?: (finalNameForPath: FinalNameForPath) => string | Uint8Array }} RecipeGeneratedFile
  * @typedef {(resourceId: string, kind: 'genbank' | 'fasta') => number | Promise<number>} ResourceRecordCounter
+ * @typedef {(resourceId: string) => string | Promise<string>} ResourceTextReader
  * @typedef {{ source?: boolean, fallback?: string, slot?: string, nameHintSlot?: string }} RecipeResourcePathOptions
  * @typedef {object} RecipeFiles The files a recipe names, by visible name and resource.
  * @property {(resourceId: unknown, options?: RecipeResourcePathOptions) => string} resourcePath
@@ -274,6 +279,28 @@ const tsv = (columns, rows) => `${[
 /** @param {string} text a clause marked with `msg` */
 const identityTableUnavailable = (text) => Object.assign(new SourceRecipeUnavailable({ text }), { tableReason: { text } });
 
+/**
+ * The request records a record key names, as the CLI numbers its record
+ * inputs: the position n (an identity table's `#n`, the CLI record key
+ * `CLI_RECORD_KEY_PREFIX` n) and the `:<k>` of a record that an ALL input
+ * expands to (empty otherwise; `recordKeyBelongsToRequest`).
+ * @typedef {{ position: number, expansion: string }} RequestRecordPosition
+ */
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {string} recordKey
+ * @param {boolean} [anyCase] Compare the keys without letter case, as a color rule's pattern does.
+ * @returns {RequestRecordPosition[]}
+ */
+const requestRecordsOf = (renderRequest, recordKey, anyCase = false) => {
+  const fold = (/** @type {string} */ key) => (anyCase ? key.toLowerCase() : key);
+  return renderRequest.records.flatMap((record, index) => (
+    recordKeyBelongsToRequest(fold(recordKey), [{ ...record, recordKey: fold(record.recordKey) }])
+      ? [{ position: index + 1, expansion: recordKey.slice(record.recordKey.length) }]
+      : []
+  ));
+};
+
 // R12: identity-table rows must read back as the same rows through the CLI's one
 // reader (gbdraw/features/source.py::read_identity_table trims every cell except
 // label_text). hash=<biologicalFeatureId> names exactly one source feature; a bare
@@ -284,14 +311,53 @@ const identityTableUnavailable = (text) => Object.assign(new SourceRecipeUnavail
  * @param {'placement' | 'feature edit'} kind
  */
 const identityTableCells = (renderRequest, row, kind) => {
-  const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
+  const [record] = requestRecordsOf(renderRequest, row.recordKey);
   const id = row.biologicalFeatureId;
-  if (index < 0 || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
+  if (!record || record.expansion || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
     throw identityTableUnavailable(kind === 'placement'
       ? msg('a placement names a feature identity that no table row can carry.')
       : msg('a feature edit names a feature identity that no table row can carry.'));
   }
-  return { record: `#${index + 1}`, feature_selector: `hash=${id}` };
+  return { record: `#${record.position}`, feature_selector: `hash=${id}` };
+};
+
+// PD-OI-069 revision 2: a "This feature only" `hash` row names one feature
+// instance, `<feature id>` and `<record key>` joined by
+// FEATURE_INSTANCE_SEPARATOR, which Python matches whole whether the row is
+// written bare or as an exact pattern (`namedFeatureInstance`). The CLI keys
+// its n-th record input CLI_RECORD_KEY_PREFIX n (gbdraw/api/record_planning.py),
+// so the recipe's table names that key. A row whose record this render does
+// not draw colors nothing and stays out of the table. The order of the parts
+// copies Python's (a twin: feature_instance, resolve_record_inputs); the CLI
+// runs in tests/web/run-info.test.mjs pin it. Another `hash` pattern
+// with the separator matches instances by the Web's record keys, which the CLI
+// does not have (R12).
+/**
+ * @param {CanonicalRenderRequest} renderRequest
+ * @param {string} text The Web's specific color table (`serializeSpecificRules`).
+ * @returns {string | null} The table to write ('' for no row), or null when no row changes.
+ */
+const cliSpecificColorTable = (renderRequest, text) => {
+  let changed = false;
+  const rules = parseSpecificRules(text).rules.flatMap((rule) => {
+    const named = namedFeatureInstance(rule);
+    if (!named) {
+      if (rule.qual.toLowerCase() === 'hash' && rule.val.includes(FEATURE_INSTANCE_SEPARATOR)) {
+        throw recipeUnavailable(msg('a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.'));
+      }
+      return [rule];
+    }
+    const records = requestRecordsOf(renderRequest, named.recordKey, true);
+    if (records.length > 1) {
+      throw recipeUnavailable(msg('a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.'));
+    }
+    changed = true;
+    return records.map(({ position, expansion }) => ({
+      ...rule,
+      val: exactRegexValue(`${named.featureId}${FEATURE_INSTANCE_SEPARATOR}${CLI_RECORD_KEY_PREFIX}${position}${expansion}`)
+    }));
+  });
+  return changed ? serializeSpecificRules(rules) : null;
 };
 
 // gbdraw/features/overrides.py::FEATURE_OVERRIDE_TABLE_COLUMNS
@@ -368,6 +434,16 @@ const resourceBytes = (descriptor) => {
     return new TextEncoder().encode(descriptor.data);
   }
   return null;
+};
+
+/**
+ * The text of the bytes a resource descriptor holds ('' when it holds none).
+ * @param {Record<string, unknown> | null | undefined} resources
+ * @param {string} resourceId
+ */
+const descriptorText = (resources, resourceId) => {
+  const bytes = resourceBytes(isPlainObject(resources) ? resources[resourceId] : null);
+  return bytes ? new TextDecoder().decode(bytes) : '';
 };
 
 /**
@@ -497,8 +573,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
     if (typeof readResourceRecordCount === 'function') {
       count = await readResourceRecordCount(resourceId, kind);
     } else {
-      const bytes = resourceBytes(descriptors[resourceId]);
-      const text = bytes ? new TextDecoder().decode(bytes) : '';
+      const text = descriptorText(descriptors, resourceId);
       count = kind === 'genbank'
         ? countGenBankRecords(text)
         : (text.match(/^>/gm) || []).length;
@@ -1073,6 +1148,7 @@ const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.axis.circular.stroke_color': '--axis_stroke_color',
   'objects.definition.circular.font_size': '--definition_font_size',
   'canvas.circular.track_type': '--track_type',
+  'canvas.circular.track_narrowing_min_px': '--track_narrowing_min_px',
   'labels.spacing.circular': '--circular_label_spacing',
   'labels.circular.placement': '--label_placement',
   'labels.circular.line': '--label_line',
@@ -1226,6 +1302,7 @@ const appendConfigOverrides = (args, request) => {
   });
 
   if (request.mode === 'circular') {
+    appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
     const definitionInterval = take('objects.definition.circular.interval');
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];
@@ -1274,14 +1351,17 @@ const referencedResourceId = (value) => String(value?.resourceId || '').trim();
  * @param {string[]} args
  * @param {CanonicalRenderRequest['diagramOptions']} options
  * @param {RecipeFiles} files
+ * @param {string | null | undefined} colorTablePath The `-t` path of the recipe's own specific color table
+ *   (`cliSpecificColorTable`), null when that table has no row, or undefined to name the request's table.
  */
-const appendResourceOptions = (args, options, files) => {
+const appendResourceOptions = (args, options, files, colorTablePath) => {
   /** @type {Partial<CanonicalColorOptions>} */
   const colors = isPlainObject(options.colors) ? options.colors : {};
   appendOption(args, '-p', colors.defaultColorsPalette);
+  appendOption(args, '-t', colorTablePath);
   /** @type {[string, { resourceId?: unknown } | null | undefined, string][]} */
   const resourceOptions = [
-    ['-t', colors.colorTable || colors.colorTableFile, 'specific-colors.tsv'],
+    ['-t', colorTablePath === undefined ? colors.colorTable || colors.colorTableFile : null, 'specific-colors.tsv'],
     ['-d', colors.defaultColors || colors.defaultColorsFile, 'default-colors.tsv'],
     ['--feature_visibility_table', options.featureVisibilityTableFile, 'feature-visibility.tsv'],
     ['--label_whitelist', options.labelWhitelistFile, 'label-whitelist.tsv'],
@@ -1687,8 +1767,9 @@ const appendComparisonOptions = (args, request, files) => {
  * @param {string[]} args
  * @param {CanonicalRenderRequest} request
  * @param {RecipeFiles} files
+ * @param {string | null | undefined} colorTablePath See `appendResourceOptions`.
  */
-const appendDiagramOptions = (args, request, files) => {
+const appendDiagramOptions = (args, request, files, colorTablePath) => {
   const options = request.diagramOptions || {};
   if (Array.isArray(request.output) && request.output.length !== 1) {
     throw recipeUnavailable(msg('per-record batch output names have no single current CLI projection.'));
@@ -1742,7 +1823,7 @@ const appendDiagramOptions = (args, request, files) => {
       throw recipeUnavailable(msg('conflicting pairwise comparison styles cannot be expressed by the current CLI.'));
     }
   }
-  appendResourceOptions(args, options, files);
+  appendResourceOptions(args, options, files, colorTablePath);
   appendDepthOptions(args, { ...options, mode: request.mode }, files);
   appendTrackOptions(args, request);
   appendComparisonOptions(args, request, files);
@@ -1812,6 +1893,8 @@ export const buildFeatureOverrideTable = async ({
  * @property {Record<string, unknown>} [webFiles]
  * @property {Map<string, string>} [generatedFileNameHints]
  * @property {ResourceRecordCounter | null} [readResourceRecordCount]
+ * @property {ResourceTextReader | null} [readResourceText] The text of a resource whose
+ *   bytes a File holds; without it, the text of the bytes its descriptor holds.
  */
 
 /**
@@ -1823,7 +1906,8 @@ export const buildSourceRecipe = async ({
   resources,
   webFiles,
   generatedFileNameHints,
-  readResourceRecordCount = null
+  readResourceRecordCount = null,
+  readResourceText = null
 } = {}) => {
   const mode = String(renderRequest?.mode || '').trim();
   /**
@@ -1865,7 +1949,13 @@ export const buildSourceRecipe = async ({
       args.push('--feature_override_table', files.generatedTextPath('feature-overrides.tsv',
         featureOverrideTable(renderRequest, featureOverrides), 'generatedFiles.source_recipe.feature_overrides'));
     }
-    appendDiagramOptions(args, renderRequest, files);
+    const colors = renderRequest.diagramOptions?.colors;
+    const colorTableId = referencedResourceId(colors?.colorTable || colors?.colorTableFile);
+    const cliColorTable = colorTableId ? cliSpecificColorTable(renderRequest, typeof readResourceText === 'function'
+      ? await readResourceText(colorTableId)
+      : descriptorText(resources, colorTableId)) : null;
+    appendDiagramOptions(args, renderRequest, files, cliColorTable === null ? undefined : cliColorTable && files.generatedTextPath(
+      'specific-colors.tsv', cliColorTable, 'generatedFiles.source_recipe.specific_colors') || null);
     appendConfigOverrides(args, renderRequest);
     appendLayoutOptions(args, renderRequest, recordsTableUsed);
     return {

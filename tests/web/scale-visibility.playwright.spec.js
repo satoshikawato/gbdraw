@@ -18,7 +18,7 @@ const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () =>
 });
 
 const inspectResultSvg = async (page) => page.evaluate(() => {
-  const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+  const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
   const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
   const recordGroups = [...svg.querySelectorAll('g[data-gbdraw-record-index]')]
     .filter((group) => String(group.id || '').startsWith('record_group_'));
@@ -234,7 +234,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     errorDetails: []
   });
   expect(await page.evaluate(() => {
-    const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+    const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
     return svg.querySelectorAll('path[data-gbdraw-feature-part="block"]').length;
   })).toBeGreaterThan(0);
@@ -277,7 +277,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   });
 
   const linearGeometry = await page.evaluate(() => {
-    const content = window.__GBDRAW_APP__.results?.[0]?.content || '';
+    const content = window.__GBDRAW_APP__.currentResults()[0]?.content || '';
     const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
     const numberPattern = '[+-]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?';
     const vertexPattern = new RegExp(`[ML]\\s*(${numberPattern})\\s*,\\s*(${numberPattern})`, 'gi');
@@ -324,7 +324,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
     head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
     shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio,
-    content: window.__GBDRAW_APP__.results?.[0]?.content || ''
+    content: window.__GBDRAW_APP__.currentResults()[0]?.content || ''
   }))).toMatchObject({
     mode: 'linear',
     shape: 'arrow',
@@ -332,7 +332,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     shaft: 0.25
   });
   expect(await page.evaluate((expectedPath) => (
-    String(window.__GBDRAW_APP__.results?.[0]?.content || '').includes(expectedPath)
+    String(window.__GBDRAW_APP__.currentResults()[0]?.content || '').includes(expectedPath)
   ), linearGeometry.d)).toBe(true);
   await page.evaluate(async () => {
     window.__GBDRAW_APP__.selectDrawing('circular');

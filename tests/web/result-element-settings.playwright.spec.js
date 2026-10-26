@@ -148,7 +148,7 @@ const expectOpened = async (page, key, title, label = title) => {
 };
 const appState = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  return JSON.stringify([window.__GBDRAW_HISTORY__.getUndoCount(), app.form, app.adv, app.results.map((result) => result.content)]);
+  return JSON.stringify([window.__GBDRAW_HISTORY__.getUndoCount(), app.form, app.adv, app.currentResults().map((result) => result.content)]);
 });
 const exported = (page) => page.evaluate(async () => {
   const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');

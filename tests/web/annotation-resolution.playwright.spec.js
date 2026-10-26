@@ -8,7 +8,7 @@ const panel = (page) => page.locator('details').filter({ has: page.locator('summ
 const artifact = (page) => page.evaluate(async () => {
   const { state } = await import("./js/state.js");
   return JSON.parse(JSON.stringify({
-  results: window.__GBDRAW_APP__.results,
+  results: window.__GBDRAW_APP__.currentResults(),
   warnings: window.__GBDRAW_APP__.annotationWarnings,
   geometry: state.trackSlotResolvedGeometry.value
 }));

@@ -56,7 +56,7 @@ from ...configurators import (
 )
 from ...configurators.gc import _slot_skew_config
 from ...configurators.legend import measure_legend
-from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
+from ...core.text import calculate_svg_bbox_dimensions, drawn_text_box
 from ...render.group_content import (
     CANVAS_SCOPE,
     GroupContent,
@@ -197,7 +197,7 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.composition import apply_composition_plan
+from ...render.composition import apply_composition_plan, painted_title_content
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
@@ -774,12 +774,7 @@ def _axis_ruler_extents(
 
     cfg = render_context.profile.config
     font_size = cfg.objects.scale.ruler_label_font_size.for_length_param(canvas_config.length_param)
-    label_height = calculate_bbox_dimensions(
-        "0",
-        cfg.objects.text.font_family,
-        font_size,
-        cfg.canvas.dpi,
-    )[1]
+    label_height = drawn_text_box("0", cfg.objects.text.font_family, font_size, cfg.objects.scale.font_weight)[1]
     protrusion = max(
         0.5 * float(cfg.objects.scale.stroke_width),
         float(RULER_TICK_LENGTH),
@@ -1530,12 +1525,7 @@ def _linear_axis_ruler_bounds(
             context_length=max(1, int(canvas_config.longest_genome)),
             tick_interval=tick_interval,
         )
-        width, _height = calculate_bbox_dimensions(
-            label,
-            cfg.objects.text.font_family,
-            font_size,
-            cfg.canvas.dpi,
-        )
+        width, _height = drawn_text_box(label, cfg.objects.text.font_family, font_size, cfg.objects.scale.font_weight)
         bounds.append(
             Aabb(
                 placement.x + x - (0.5 * width),
@@ -1612,7 +1602,6 @@ def _linear_scalar_axis_left_room(
                 label,
                 cfg.objects.text.font_family,
                 font_size,
-                cfg.canvas.dpi,
             )
             tick_labels_px = max(
                 tick_labels_px, LINEAR_SCALAR_AXIS_TICK_PX + LINEAR_SCALAR_AXIS_LABEL_GAP_PX + float(width)
@@ -2191,16 +2180,16 @@ def assemble_linear_diagram(
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
+    # A typed title that paints nothing ("<i></i>") gets no title (OV-1845).
     title_content: GroupContent | None = None
     if normalized_plot_title:
-        title_content = render_stage(
+        title_content = painted_title_content(render_stage(
             "plot_title_content",
             plot_title_content,
             normalized_plot_title,
             font_family=cfg.objects.text.font_family,
             font_size=float(plot_title_font_size),
-            dpi=int(cfg.canvas.dpi),
-        )
+        ))
 
     comparison_thresholds = ComparisonThresholds(
         evalue=blast_config.evalue,
@@ -2829,7 +2818,6 @@ def assemble_linear_diagram(
             canvas_config.length_param,
             scale=cfg.objects.scale,
             font_family=cfg.objects.text.font_family,
-            dpi=cfg.canvas.dpi,
             ruler_width=max_record_x - min_record_x,
         )
         length_bar_bottom = length_bar_offset_y + float(

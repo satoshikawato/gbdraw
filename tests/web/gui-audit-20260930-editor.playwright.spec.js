@@ -166,7 +166,7 @@ test('Selected features annotations generate for a Circular multi-record batch',
   });
   await generateAndWaitForResult(page);
   // Python binds each explicit target to its own record's output only.
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => (
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => (
     new DOMParser().parseFromString(result.content || '', 'image/svg+xml')
       .querySelectorAll('[data-gbdraw-annotation-id]').length > 0
   )))).toEqual([true, false]);
@@ -330,7 +330,7 @@ test('a Linear legend side change applies on Generate with the note, or at once 
       const mounted = app.svgContainer.querySelector('svg');
       const toRoot = mounted.getScreenCTM().inverse();
       return {
-        result: app.results[app.selectedResultIndex].content,
+        result: app.currentResults()[app.selectedResultIndex].content,
         mountedSide: JSON.parse(mounted.getAttribute('data-gbdraw-composition')).legendSide,
         viewBox: mounted.getAttribute('viewBox'),
         legendRows: [...mounted.querySelectorAll('g[data-legend-key]')].map((row) => {
@@ -416,7 +416,7 @@ test('a horizontal legend keeps a sort and a featureless rename through Generate
 test('canvas padding reaches every batch Result through Generate and applies once', async ({ page }) => {
   test.setTimeout(600_000);
   await openBatch(page);
-  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => {
+  const canvases = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => {
     const svg = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
     return svg.getAttribute('viewBox').trim().split(/[\s,]+/).map(Number);
   }));
@@ -490,7 +490,7 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
     const { state } = await import('./js/state.js');
     const ingestion = await import('./js/services/svg-result-ingestion.js');
     const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-    const result = state.results.value[state.selectedResultIndex.value];
+    const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
     const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
     return {
       identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
@@ -542,7 +542,7 @@ test('a successful Generate clears the note of a failed live edit, and a failed 
   test.setTimeout(300_000);
   await openBatch(page);
   const note = page.locator('[data-live-application-feedback]');
-  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => result.content));
+  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults().map((result) => result.content));
   const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -575,7 +575,7 @@ test('a successful Generate clears the note of a failed live edit, and a failed 
 const labelEditorState = (page, scopePath) => page.evaluate(async (path) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const result = state.results.value[state.selectedResultIndex.value];
+  const result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
   const root = new DOMParser().parseFromString(result.content, 'image/svg+xml').documentElement;
   return {
     processing: state.labelReflowProcessing.value || state.processing.value,
@@ -688,10 +688,49 @@ test('Label visibility On and Off apply under First Record Only, live and after 
   }
 });
 
-// FINDINGS OV-05 (color), PD-OI-069: Python matches a `hash` rule by the hash
-// without the `__instance_` suffix, so a This feature only fill on a duplicated
-// record uses that hash and survives Generate on every copy of the record.
-test('a This feature only fill on a duplicated record survives Generate', async ({ page }) => {
+// The fill each feature of `ids` shows in the displayed Result (null when not drawn).
+const drawnFills = (page, ids) => page.evaluate((ids) => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const hidden = (element) => {
+    for (let node = element; node && node.nodeType === 1; node = node.parentNode) {
+      const style = node.getAttribute('style') || '';
+      if (node.getAttribute('display') === 'none' || /display\s*:\s*none/.test(style)) return true;
+    }
+    return false;
+  };
+  return ids.map((id) => [...root.querySelectorAll(
+    `path[data-gbdraw-feature-id="${CSS.escape(id)}"], path[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`
+  )].filter((element) => !hidden(element))
+    .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null);
+}, ids);
+
+// Fills the feature `id` with "This feature only" from its popup and returns
+// the specific color rules and the feature instance Python composes from the
+// feature's catalog identity.
+const fillThisFeatureOnly = async (page, id, color) => {
+  await evaluateWithRetainedPromise(page, async ({ id, color }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    await app.updateClickedFeatureColor(color);
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    app.clickedFeature = null;
+  }, { id, color });
+  await settle(page);
+  return page.evaluate((id) => {
+    const app = window.__GBDRAW_APP__;
+    return {
+      error: app.errorLog,
+      rules: app.manualSpecificRules.map((rule) => rule.val),
+      instance: (({ biological_feature_id: featureId, record_key: recordKey }) => `${featureId}@${recordKey}`)(
+        app.extractedFeatures.find((item) => item.svg_id === id))
+    };
+  }, id);
+};
+
+// PD-OI-069 revision 2 (OV-1947): a This feature only fill names the feature
+// instance, so on a multi-record canvas whose two records share an ID it
+// colors the clicked copy only, live and after Generate.
+test('a This feature only fill on a duplicated record colors that copy only', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, `${__dirname}/../fixtures/b_dup_ids.gb`, () => {
     Object.assign(window.__GBDRAW_APP__.form, { labels_mode: 'out', multi_record_canvas: true });
@@ -703,35 +742,93 @@ test('a This feature only fill on a duplicated record survives Generate', async 
     .map((feature) => feature.svg_id).sort());
   expect(copies).toHaveLength(2);
   expect(copies[0]).toContain('__instance_');
-  const fills = () => page.evaluate((ids) => {
-    const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
-    const hidden = (element) => {
-      for (let node = element; node && node.nodeType === 1; node = node.parentNode) {
-        const style = node.getAttribute('style') || '';
-        if (node.getAttribute('display') === 'none' || /display\s*:\s*none/.test(style)) return true;
-      }
-      return false;
-    };
-    return ids.map((id) => [...root.querySelectorAll(
-      `path[data-gbdraw-feature-id="${CSS.escape(id)}"], path[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`
-    )].filter((element) => !hidden(element))
-      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null);
-  }, copies);
+  const { error, rules, instance } = await fillThisFeatureOnly(page, copies[0], '#c83366');
+  expect(error).toBeNull();
+  expect(instance).toMatch(/^f[0-9a-f]{8}(~\d+)?@/);
+  expect(rules).toEqual([`^${instance}$`]);
+  const [live, twin] = await drawnFills(page, copies);
+  expect(live).toBe('#c83366');
+  expect(twin).not.toBeNull();
+  expect(twin).not.toBe('#c83366');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await drawnFills(page, copies)).toEqual([live, twin]);
+
+  // A rule of an older Session names the stable hash both copies share.
+  // Resetting This feature only on the first copy takes back its own row and
+  // leaves the second copy colored by the shared row.
+  const stable = await page.evaluate((id) => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => item.svg_id === id).selector.hash, copies[0]);
+  await evaluateWithRetainedPromise(page, async (stable) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, { feat: 'CDS', qual: 'hash', val: stable, color: '#2255aa', cap: 'Shared' });
+    await app.addSpecificRule();
+  }, stable);
+  await settle(page);
+  expect(await drawnFills(page, copies)).toEqual([live, '#2255aa']);
   await evaluateWithRetainedPromise(page, async (id) => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
-    await app.updateClickedFeatureColor('#c83366');
-    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    await app.resetClickedFeatureFillColor();
+    if (app.resetColorDialog.show) await app.handleResetColorChoice('this');
     app.clickedFeature = null;
   }, copies[0]);
   await settle(page);
-  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map((rule) => rule.val));
-  expect(rules).toEqual([copies[0].replace(/__instance_.*$/, '')]);
-  const live = await fills();
-  expect(live[0]).toBe('#c83366');
+  const [reset, kept] = await drawnFills(page, copies);
+  expect(reset).not.toBe('#2255aa');
+  expect(kept).toBe('#2255aa');
   await generateAndWaitForResult(page);
   await settle(page);
-  expect((await fills())[0]).toBe('#c83366');
+  expect(await drawnFills(page, copies)).toEqual([reset, kept]);
+});
+
+// PD-OI-069 revision 2 (OV-1947): the same file in two Linear File cards draws
+// the same record ID twice. A This feature only fill colors the copy of the
+// clicked card only, live and after Generate, and stays with that card when
+// the cards move.
+test('a This feature only fill colors one of two Linear cards of the same file, also after the cards move', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openFresh(page);
+  const genbank = await fs.readFile('tests/fixtures/forced_label_underlay.gb', 'utf8');
+  await evaluateWithRetainedPromise(page, async (text) => {
+    const app = window.__GBDRAW_APP__;
+    app.selectDrawing('linear');
+    app.lInputType = 'gb';
+    for (const index of [0, 1]) {
+      if (index) app.addLinearSeq();
+      app.setLinearSeqPrimaryFile(index, 'gb', new File([text], 'forced.gb', { type: 'text/plain', lastModified: 1 }));
+      await app.refreshLinearRecordSelectors();
+    }
+  }, genbank);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const cards = await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid));
+  // The FL1 copy of each card, in the order of `cards`.
+  const copies = () => page.evaluate((cards) => {
+    const byCard = Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
+      .filter((feature) => feature.locus_tag === 'FL1').map((feature) => [feature.record_key, feature.svg_id]));
+    return cards.map((card) => byCard[card]);
+  }, cards);
+  const before = await copies();
+  expect(before.every(Boolean)).toBe(true);
+  const { error, rules, instance } = await fillThisFeatureOnly(page, before[0], '#c83366');
+  expect(error).toBeNull();
+  expect(instance.endsWith(`@${cards[0]}`)).toBe(true);
+  expect(rules).toEqual([`^${instance}$`]);
+  const [live, twin] = await drawnFills(page, before);
+  expect(live).toBe('#c83366');
+  expect(twin).not.toBeNull();
+  expect(twin).not.toBe('#c83366');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await drawnFills(page, await copies())).toEqual([live, twin]);
+
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.moveLinearSource(1, -1));
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid))).toEqual([cards[1], cards[0]]);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await drawnFills(page, await copies())).toEqual([live, twin]);
 });
 
 const FORCED_LABEL_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';

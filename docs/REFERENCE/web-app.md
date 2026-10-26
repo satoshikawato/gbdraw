@@ -210,8 +210,7 @@ back at the same place. Every setting keeps its value through these switches;
 they are not Undo steps and are not saved in a Session. A link that leads to a
 setting, such as **Show in Comparison** or **Show in settings**, shows the
 section of that setting first. Beside the column alone the Generate button
-reads **Generate**, and a layout warning becomes a mark above it that opens
-the warning text. A column taller than the window scrolls. At phone width the
+reads **Generate**. A column taller than the window scrolls. At phone width the
 settings always show in full.
 
 ### Save and Load Sessions
@@ -445,8 +444,10 @@ that use the **Dinucleotide** setting, whether or not the custom stack is in
 use, and turning the option off enables those rows again. A row with another
 dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
-rows it drew; any other row, and every row before the first Generate, shows an
-estimate written as "≈ … (estimate)". An **Overlay anchor** annotation row
+rows it drew. Any other row, and every row before the first Generate, shows the
+Auto **Width** and gaps it asks for as an estimate written as "≈ … (estimate)",
+and its **Radius** as "Auto": the layout places the row, and may narrow its
+width when the rows do not fit, only when Generate draws it. An **Overlay anchor** annotation row
 that no diagram has drawn yet names the rows it follows instead, such as
 "follows features → gc_content" (Circular **Width** and **Radius**, Linear
 height). A ticks row's **Radius** note is the tick
@@ -1236,13 +1237,21 @@ under **All features with the same**, the matching **Color rule**, **Legend item
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
-features. Otherwise the editor keeps one exact `hash` rule per biological
-feature, also when two records share a record ID. The hash is the feature's
-hash in its source record, so the rule keeps matching the feature when the
-region or orientation of its Linear record changes. Identical duplicate records can
-share the same hash, so a regenerated diagram cannot preserve a one-instance-only
-rule for indistinguishable duplicates: a **This feature only** color then
-applies to both copies. A one-feature rule uses a qualifier value only when no other
+features. Otherwise the editor keeps one exact `hash` rule per feature
+instance: the feature's biological feature ID in its record, written
+`^<feature id>@<record key>$`. It colors that feature of that File card and
+record only, also when two records share a record ID or the same file is drawn
+twice, live and after Generate. The feature ID comes from the feature's hash in
+its source record, so the rule keeps matching the feature when the region or
+orientation of its Linear record changes. Like the other per-feature edits,
+the rule belongs to the record key: it does not apply while the record is
+drawn under another key (a Circular record drawn alone or on the
+**Multi-record canvas**, a Linear File card that draws all of its records or
+one of them), and it applies again when that key returns. Resetting **This feature only** on
+one copy leaves the other copies as they are: a rule that names the shared
+hash is narrowed to the copies it still colors. **Delete settings** of a record
+that is turned off removes the `hash` rules that name its feature instances;
+turning the record off keeps them. A one-feature rule uses a qualifier value only when no other
 feature of that record and type has the same value ignoring case, because the
 Python matcher ignores case; `orfA` and `ORFA` are one value.
 

@@ -27,6 +27,7 @@ import gbdraw.cli_utils.session  # noqa: F401
 import gbdraw.linear  # noqa: F401
 import gbdraw.session  # noqa: F401
 from gbdraw import cli
+import gbdraw.analysis.protein_colinearity as protein_colinearity_module
 from gbdraw.api.request_render import _extract_linear_request_proteins
 from gbdraw.api import (
     CircularDiagramRequest,
@@ -151,12 +152,9 @@ def test_cli_session_render_validates_and_copies_the_session_once(
     # The Session is validated once, when it is loaded, and the loaded document
     # is not copied: the render reads it in place.
     assert len(validations) == 1
+    # CurrentRequestArtifacts keeps the Session's read-only identity manifest.
     assert copies == Counter(
-        {
-            "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
-            # CurrentRequestArtifacts detaches the Session's identity manifest.
-            "gbdraw.api.request_render.__post_init__": 1,
-        }
+        {"gbdraw.api.session_compat.canonical_payload_for_session_decode": 1}
     )
 
     # Writing the Session again validates the loaded and the written document.
@@ -177,10 +175,7 @@ def test_cli_session_render_validates_and_copies_the_session_once(
     assert copies == Counter(
         {
             "gbdraw.api.session_compat.canonical_payload_for_session_decode": 1,
-            "gbdraw.api.request_render.__post_init__": 1,
-            # The sidecar's source state, its adjunct, and the written document.
-            "gbdraw.cli_utils.session._rendered_drawing_build": 1,
-            "gbdraw.session._build_session_document_from_drawings": 1,
+            # Only the written document copies the drawing state, once.
             "gbdraw.session.__post_init__": 1,
         }
     )
@@ -244,3 +239,79 @@ def test_cli_linear_session_extracts_its_proteins_once(
     # The Session adapter extracts the proteins to check the saved LOSATP
     # entries; the build of the same plan reuses that extraction.
     assert len(extractions) == 1
+
+
+def _count_manifest_checks(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, ...]]:
+    """Count full checks of a protein identity manifest (not trusted proofs)."""
+
+    return _count_calls(monkeypatch, protein_colinearity_module._check_protein_identity_manifest)
+
+
+def _resave_args(tmp_path: Path, save: bool) -> list[str]:
+    return ["--session_output", str(tmp_path / "resaved.gbdraw-session.json")] if save else []
+
+
+@pytest.mark.parametrize("save", [False, True], ids=["no-save", "save"])
+def test_cli_linear_session_checks_the_identity_manifest_once(
+    save: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    checks = _count_manifest_checks(monkeypatch)
+    _run_cli(
+        "linear", "--session", str(PROTEIN_SESSION), "-o", str(tmp_path / "replayed"), "-f", "svg",
+        *_resave_args(tmp_path, save),
+    )
+    # The Session load checks the saved manifest. The protein extraction seals
+    # the manifest it builds, and the render and the writer trust both proofs.
+    assert len(checks) == 1
+    assert (tmp_path / "replayed.svg").is_file()
+    assert (tmp_path / "resaved.gbdraw-session.json").is_file() is save
+
+
+@pytest.mark.parametrize("save", [False, True], ids=["no-save", "save"])
+def test_cli_circular_session_checks_its_identity_manifest_once(
+    save: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # A Circular drawing extracts no proteins: the render and the writer carry
+    # the loaded Session's own manifest.
+    session = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
+    manifest = json.loads(PROTEIN_SESSION.read_text(encoding="utf-8"))["proteinIdentityManifest"]
+    assert manifest["recordInstances"]
+    session["proteinIdentityManifest"] = manifest
+    path = tmp_path / "manifest.gbdraw-session.json"
+    path.write_text(json.dumps(session), encoding="utf-8")
+    checks = _count_manifest_checks(monkeypatch)
+    _run_cli(
+        "circular", "--session", str(path), "-o", str(tmp_path / "replayed"), "-f", "svg",
+        *_resave_args(tmp_path, save),
+    )
+    assert len(checks) == 1
+    if save:
+        resaved = json.loads((tmp_path / "resaved.gbdraw-session.json").read_text(encoding="utf-8"))
+        assert resaved["proteinIdentityManifest"] == manifest
+
+
+def test_cli_fresh_linear_render_trusts_its_own_extraction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from tests.test_render_stage_protein_analysis import _fake_losatp, _request
+
+    monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _fake_losatp)
+    request, _identities = _request("similarity_groups", tmp_path)
+    checks = _count_manifest_checks(monkeypatch)
+    sidecar = tmp_path / "fresh.gbdraw-session.json"
+    _run_cli(
+        "linear", "--gbk", *(str(record.source.path) for record in request.records),
+        "--losat", "losatp", "--losatp_mode", "similarity_groups",
+        "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar),
+    )
+    # The extraction made the manifest; nothing checks it again on the way to
+    # the sidecar. (The canonical document inside the sidecar has no proteins:
+    # the writer checks its own empty manifest, as before.)
+    assert [args for args in checks if args[0]["recordInstances"]] == []
+    assert len(checks) == 2
+    assert json.loads(sidecar.read_text(encoding="utf-8"))["proteinIdentityManifest"]["recordInstances"]

@@ -91,7 +91,7 @@ const snapshot = page => page.evaluate(async () => {
       };
     })),
     selectedIndex: state.selectedResultIndex.value,
-    selected: state.results.value[state.selectedResultIndex.value]?.content || '',
+    selected: window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value]?.content || '',
     mounted: state.svgContainer.value?.querySelector('svg')?.outerHTML || '',
     error: state.errorLog.value
   };

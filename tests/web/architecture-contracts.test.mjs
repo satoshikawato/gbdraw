@@ -322,6 +322,19 @@ const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
   'app/run-analysis.js': 2,
   'services/config.js': 4
 });
+// D6 (perf audit PR-9): the Save and History copies of the mounted root's
+// serialization retire into the preview runtime's write on demand. Their
+// counts may shrink or disappear without editing this guard; they may not grow.
+const SERIALIZATION_RETIRING_CEILINGS = Object.freeze({
+  'services/config.js': 1,
+  'services/history-snapshot.js': 1
+});
+const retiringSerializationOperators = (detected, path) => {
+  const ceiling = SERIALIZATION_RETIRING_CEILINGS[path];
+  assert.ok(operatorCount(detected, path, 'SVG serialization') <= ceiling,
+    `${path}: SVG serialization may only contract (ceiling ${ceiling})`);
+  return operatorEntries(detected, path, 'SVG serialization');
+};
 const keeperCommitOperators = (detected, path) => {
   const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
   assert.ok(operatorCount(detected, path, 'Result content commit') <= ceiling,
@@ -846,8 +859,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     'SVG serialization': [
       ...retiringOperatorsBefore(detected, 'services/config.js', 'SVG serialization'),
-      { path: 'services/config.js', count: 1 },
-      { path: 'services/history-snapshot.js', count: 1 },
+      ...retiringSerializationOperators(detected, 'services/config.js'),
+      ...retiringSerializationOperators(detected, 'services/history-snapshot.js'),
       { path: 'services/svg-result-ingestion.js', count: 1 }
     ],
     'Python helper': [
@@ -1915,7 +1928,7 @@ test('every workflow reads its Node version from the root .node-version', () => 
     const source = WORKFLOW_SOURCES[index];
     assert.doesNotMatch(source, /^\s*node-version:/m, name);
     assert.equal(
-      (source.match(/uses: actions\/setup-node@v\d+\n\s+with:\n\s+node-version-file: (?:\.ci-node-version\/)?\.node-version\n/g) || []).length,
+      (source.match(/uses: actions\/setup-node@(?:v\d+|[0-9a-f]{40} # v\d+\.\d+\.\d+)\n\s+with:\n\s+node-version-file: (?:\.ci-node-version\/)?\.node-version\n/g) || []).length,
       (source.match(/uses: actions\/setup-node@/g) || []).length,
       name
     );
@@ -4451,6 +4464,57 @@ test('a listed vendored runtime change fails on a hash or kind mismatch', () => 
     (write) => write(VENDOR_LIBRARY_PATH, null)
   );
   assertVendorGateFailure(kind, /library\.js: listed as replace, but the change is remove/, 'kind');
+});
+
+const IMMUTABLE_ASSETS_MANIFEST_PATH = 'tools/immutable-web-assets.json';
+const immutableManifestIn = (files) => (write) => write(
+  IMMUTABLE_ASSETS_MANIFEST_PATH,
+  typeof files === 'string' ? files : `${JSON.stringify({ prefixes: ['vendor/'], files }, null, 2)}\n`
+);
+
+test('a listed replace of a file the base pins as immutable fails, other listed changes pass', () => {
+  const pinned = immutableManifestIn({ 'vendor/library.js': sha256Hex(BUDGET_FIXTURE[VENDOR_LIBRARY_PATH]) });
+  const replaced = runListedVendorChangeCase(
+    [vendorChangeEntry()],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    pinned
+  );
+  assertVendorGateFailure(replaced, UNLISTED_VENDOR_CHANGE, 'pinned replace');
+  assert.match(
+    replaced.output,
+    /library\.js: pinned in tools\/immutable-web-assets\.json and served as immutable; publish the new bytes under a new path/
+  );
+
+  const unpinned = runListedVendorChangeCase(
+    [vendorChangeEntry()],
+    (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+    immutableManifestIn({ 'vendor/other.js': sha256Hex('other') })
+  );
+  assert.equal(unpinned.status, 0, unpinned.output);
+  assert.match(unpinned.output, /Gate: \*\*PASS\*\*/);
+
+  const added = runListedVendorChangeCase(
+    [vendorChangeEntry({ path: 'gbdraw/web/vendor/library.v2.js', change: 'add' })],
+    (write) => write('gbdraw/web/vendor/library.v2.js', VENDOR_LIBRARY_UPDATE),
+    pinned
+  );
+  assert.equal(added.status, 0, added.output);
+  assert.match(added.output, /Gate: \*\*PASS\*\*/);
+});
+
+test('a malformed immutable-asset manifest in the base fails a vendored replace closed', () => {
+  ['{not json', '{"files": []}'].forEach((manifest) => {
+    const result = runListedVendorChangeCase(
+      [vendorChangeEntry()],
+      (write) => write(VENDOR_LIBRARY_PATH, VENDOR_LIBRARY_UPDATE),
+      immutableManifestIn(manifest)
+    );
+    assertVendorGateFailure(
+      result,
+      /tools\/immutable-web-assets\.json in the base is malformed/,
+      manifest
+    );
+  });
 });
 
 test('an added binary vendored file passes only when the trusted base lists it as add with its bytes', () => {

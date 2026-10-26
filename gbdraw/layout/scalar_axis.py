@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
+
+import numpy as np
+from numpy.typing import ArrayLike, NDArray
 
 from gbdraw.auto_sizes import scalar_axis_tick_font_size
 
@@ -33,6 +36,31 @@ def project_scalar_samples(
     # Every caller reaches this point only when ``transform.start_coordinate`` is set,
     # where project_local_series returns DisplaySeries (it returns the input points when unset).
     return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
+
+
+class ProjectedScalarLine(NamedTuple):
+    """Projected samples of a continuous track in display order, its drawn segments joined.
+
+    ``segment_starts`` holds the index of the first sample of each drawn segment after the first; a track
+    path keeps the ends of every segment."""
+
+    positions: NDArray[np.float64]
+    values: NDArray[np.float64]
+    segment_starts: tuple[int, ...]
+
+
+def project_scalar_line(
+    positions: ArrayLike, values: ArrayLike, transform: RecordDisplayTransform
+) -> ProjectedScalarLine:
+    """:func:`project_scalar_samples` as one line: positions, values and where each drawn segment starts."""
+
+    segments = project_scalar_samples(positions, values, transform)
+    lengths = [len(segment.points) for segment in segments]
+    return ProjectedScalarLine(
+        np.array([point.position for segment in segments for point in segment.points], dtype=float),
+        np.array([point.value for segment in segments for point in segment.points], dtype=float),
+        tuple(int(start) for start in np.cumsum(lengths)[:-1]),
+    )
 
 
 def has_tick_value(values: list[float], candidate: float) -> bool:
@@ -200,10 +228,12 @@ __all__ = [
     "LINEAR_SCALAR_AXIS_LABEL_GAP_PX",
     "LINEAR_SCALAR_AXIS_STROKE_PX",
     "LINEAR_SCALAR_AXIS_TICK_PX",
+    "ProjectedScalarLine",
     "ScalarTickFormatter",
     "format_percent_tick",
     "has_tick_value",
     "linear_scalar_axis_tick_font_size_px",
+    "project_scalar_line",
     "scalar_axis_small_tick_values",
     "scalar_axis_tick_values",
     "scaled_scalar_fraction",

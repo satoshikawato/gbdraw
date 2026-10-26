@@ -62,7 +62,7 @@ from gbdraw.configurators import (
 from gbdraw.configurators.legend import measure_legend
 from gbdraw.configurators.blast import BlastMatchConfigurator
 from gbdraw.core.color import interpolate_color
-from gbdraw.core.text import calculate_bbox_dimensions
+from gbdraw.core.text import drawn_text_box
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.legend.table import (
     PairwiseIdentityGradient,
@@ -2884,7 +2884,8 @@ def test_collinearity_match_path_with_metadata_serializes() -> None:
     drawing.add(group.generate_linear_match_path(row))
 
     svg_text = drawing.tostring()
-    assert 'data-gbdraw-pairwise-match-id="comparison1_match1"' in svg_text
+    assert 'data-gbdraw-match-id="comparison1_match1"' in svg_text
+    assert "data-gbdraw-pairwise-match-id" not in svg_text
     assert 'data-match-kind="collinear"' in svg_text
     assert 'data-query-record-index="0"' in svg_text
     assert 'data-subject-record-index="1"' in svg_text
@@ -2937,7 +2938,7 @@ def test_pairwise_match_path_emits_plain_required_metadata() -> None:
     drawing.add(group.generate_linear_match_path(row, match_index=7))
     svg_text = drawing.tostring()
 
-    assert 'data-gbdraw-pairwise-match-id="comparison1_match7"' in svg_text
+    assert 'data-gbdraw-match-id="comparison1_match7"' in svg_text
     assert 'data-match-kind="pairwise"' in svg_text
     # Record identity comes from the endpoint records, never from table IDs (CO-06).
     assert 'data-query-record-id="record_a"' in svg_text
@@ -3233,11 +3234,10 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
         if str(path.get("fill", "")).startswith("url(")
     )
     bar_x, _ = _translate_xy(collinear_bar.get("transform"))
-    label_width, _ = calculate_bbox_dimensions(
+    label_width, _ = drawn_text_box(
         "Collinear",
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     assert bar_x == pytest.approx(
         label_width + 0.2 * legend_measurement.color_rect_size
@@ -3246,7 +3246,7 @@ def test_orientation_identity_pairwise_legend_renders_collinear_above_inverted()
 
 @pytest.mark.linear
 def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> None:
-    feature_key = "tyrosine recombinase"
+    feature_key = "tyrosine recombinase family protein"
     gradient_key = "Pairwise match identity"
     legend_table = {
         feature_key: {
@@ -3306,11 +3306,10 @@ def test_vertical_linear_pairwise_legend_aligns_to_feature_color_left_edge() -> 
     assert title is not None
     title_x, _ = _translate_xy(title.get("transform"))
 
-    text_width, _ = calculate_bbox_dimensions(
+    text_width, _ = drawn_text_box(
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3376,11 +3375,10 @@ def test_vertical_linear_pairwise_legend_centers_when_wider_than_features() -> N
     feature_group_x, _ = _translate_xy_or_zero(feature_legend.get("transform"))
     pairwise_group_x, _ = _translate_xy_or_zero(pairwise_legend.get("transform"))
 
-    text_width, _ = calculate_bbox_dimensions(
+    text_width, _ = drawn_text_box(
         feature_key,
         legend_measurement.font_family,
         legend_measurement.font_size,
-        legend_measurement.dpi,
     )
     text_x_offset = (22 / 14) * legend_measurement.color_rect_size
     feature_width = text_x_offset + text_width
@@ -3853,3 +3851,36 @@ def test_protein_float_reductions_do_not_depend_on_the_python_version(monkeypatc
     assert identity == row_identity == 0.1
     # CPython 3.12+ sum() values; left-to-right addition gives (0.2345015637431571, 0.645579356667975).
     assert model == (0.23450156374315714, 0.6455793566679746)
+
+
+@pytest.mark.linear
+def test_a_comparison_interpolates_each_gradient_color_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The match colors of one comparison are interpolated once per distinct
+    identity; every match still gets its own color."""
+    import gbdraw.render.groups.linear.pairwise_match as pairwise_match
+
+    calls: list[float] = []
+    real = pairwise_match.interpolate_default_colors
+
+    def counting(min_color: tuple[str, str], max_color: tuple[str, str], factor: float) -> str:
+        calls.append(factor)
+        return real(min_color, max_color, factor)
+
+    monkeypatch.setattr(pairwise_match, "interpolate_default_colors", counting)
+    identities = [90.0, 95.0, 90.0, 100.0, 95.0, 90.0]
+    comparison = pd.DataFrame(
+        {
+            "identity": identities,
+            "qstart": [10 * i + 1 for i in range(6)],
+            "qend": [10 * i + 9 for i in range(6)],
+            "sstart": [10 * i + 1 for i in range(6)],
+            "send": [10 * i + 9 for i in range(6)],
+        }
+    )
+
+    group = ribbon_group([_record("record_a", []), _record("record_b", [])], comparison)
+
+    paths = group.get_group().elements
+    assert len(paths) == 6 and len(calls) == 3
+    fills = {path.attribs["data-identity"]: path.attribs["fill"] for path in paths}
+    assert len(set(fills.values())) == 3

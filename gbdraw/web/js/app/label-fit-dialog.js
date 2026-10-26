@@ -9,11 +9,20 @@
 // Worker (OD-F14, the font scan bound), each for at most Python's row bound
 // (LP-D60). Apply and Cancel first let the row being computed finish, which
 // starts no further row. Apply writes the row's settings as one History step
-// (PD-OI-088) and runs Generate; Cancel writes nothing.
+// (PD-OI-088) and runs Generate; Cancel ("Keep as drawn" over a drawn figure)
+// writes nothing. A Circular centre definition over a track of a drawn figure
+// also offers "Edit Species / Strain…" (PD-OI-097): it closes the dialog as
+// Cancel does and shows the field that writes that record's name lines, found
+// by the record's drawn index; it applies nothing.
 import { labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
-/** @import { LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitValue } from '../services/label-fit.js' */
+/**
+ * @import {
+ *   LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitTrackOptions,
+ *   LabelFitValue
+ * } from '../services/label-fit.js'
+ */
 
 /**
  * @typedef {object} LabelFitDialogRow What a row of the dialog shows.
@@ -30,11 +39,23 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {object} LabelFitDialogState
  * @property {boolean} show
  * @property {boolean} drawn True over a drawn figure (crossing leaders or labels over the definition text).
- * @property {{ recordId: string, labelKindTitle: string, labelCount: number, fontSize: number,
- *   counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
+ * @property {{ recordId: string, recordIndex: number | null, labelKindTitle: string, labelCount: number,
+ *   fontSize: number, counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  * @property {boolean} finishing Apply or Cancel waits for the row being computed.
+ * @property {LabelFitDefinitionRecord[]} definitionRecords The drawn records whose centre definition text overlaps
+ *   a track; none when nothing was drawn.
+ */
+/**
+ * @typedef {object} LabelFitDefinitionRecord A drawn record whose name lines "Edit Species / Strain…" shows.
+ * @property {number} recordIndex The index of its drawn definition group (`data-gbdraw-record-index`), its identity.
+ * @property {string} recordId Shown on the button when several records have one.
+ */
+/**
+ * @typedef {object} LabelFitRowSettings What Apply writes of an offered row.
+ * @property {Readonly<Record<ConfigPath, LabelFitValue>>} values The config overrides, by config path.
+ * @property {Readonly<LabelFitTrackOptions>} trackOptions The request track options, by request name.
  */
 /** @typedef {'circular' | 'linear'} LabelFitMode */
 /**
@@ -42,7 +63,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {(value: LabelFitDialogState) => LabelFitDialogState} reactive Vue `reactive`.
  * @property {(rowToken: LabelFitRowToken, kind: LabelFitRowKind) => Promise<unknown>} computeRow
  *   The Worker's `computeLabelFitRow` reply for one row.
- * @property {(values: Readonly<Record<ConfigPath, LabelFitValue>>, mode: LabelFitMode) => void} writeRowSettings
+ * @property {(settings: LabelFitRowSettings, mode: LabelFitMode) => void} writeRowSettings
  *   Writes a row's settings into the drawing of `mode` (the request mapping's draft fields).
  * @property {(label: () => string, handler: (choice: string) => unknown, cancel: () => unknown) =>
  *   (choice: string) => unknown} withHistory The modal choice's one History step (`createDialogChoice`).
@@ -50,6 +71,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {() => boolean} choicePending
  * @property {() => Promise<unknown>} runAnalysis Generate.
  * @property {(error: unknown) => string} errorSummary The user-facing summary of a failure.
+ * @property {(recordIndex: number) => boolean} showRecordText Shows and focuses the field that writes the name
+ *   lines of the drawn record with this index (the record-definition popup's owner); false when no field does.
  */
 
 /**
@@ -69,10 +92,11 @@ const displayRow = (row) => ({
 
 /** @param {LabelFitDialogPorts} ports */
 export const createLabelFitDialog = ({
-  reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary
+  reactive, computeRow, writeRowSettings, withHistory, closeAfterChoice, choicePending, runAnalysis, errorSummary,
+  showRecordText
 }) => {
   const dialog = reactive({
-    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false
+    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false, definitionRecords: []
   });
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
@@ -141,11 +165,24 @@ export const createLabelFitDialog = ({
     dialog.drawn = report.drawn;
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
+      recordIndex: record.recordIndex,
       labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,
       fontSize: record.fontSize,
       counts: record.counts
     }));
+    // Only a drawn figure has the definition to edit: after a Generate that drew nothing the preview may show an
+    // older figure. One button per drawn record, by its index (two records may share an ID).
+    /** @type {Map<number, LabelFitDefinitionRecord>} */
+    const definitionRecords = new Map();
+    if (report.drawn) {
+      for (const { labelKind, recordIndex, recordId } of report.records) {
+        if (labelKind === 'circular_definition' && recordIndex !== null && !definitionRecords.has(recordIndex)) {
+          definitionRecords.set(recordIndex, { recordIndex, recordId });
+        }
+      }
+    }
+    dialog.definitionRecords = [...definitionRecords.values()];
     dialog.rows = report.rows.map(displayRow);
     dialog.selectedKind = '';
     dialog.finishing = false;
@@ -159,7 +196,7 @@ export const createLabelFitDialog = ({
     () => {
       const row = rowsByKind.get(/** @type {LabelFitRowKind} */ (dialog.selectedKind));
       if (!row || !labelFitRowOffered(row.status) || !row.values) return false;
-      writeRowSettings(row.values, dialogMode);
+      writeRowSettings({ values: row.values, trackOptions: row.trackOptions }, dialogMode);
       closeAfterChoice(close);
       return true;
     },
@@ -187,5 +224,15 @@ export const createLabelFitDialog = ({
     return choice === 'apply' && chosen === true ? runAnalysis() : undefined;
   };
 
-  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice };
+  /**
+   * "Edit Species / Strain…": closes the dialog as Cancel does, then shows the
+   * record's name field (no Apply, no Generate).
+   * @param {number} recordIndex The record's drawn index (`LabelFitDefinitionRecord`).
+   */
+  const editLabelFitRecordText = async (recordIndex) => {
+    await resolveLabelFitChoice('cancel');
+    return dialog.show ? false : showRecordText(recordIndex);
+  };
+
+  return { labelFitDialog: dialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText };
 };

@@ -1009,7 +1009,7 @@ def _validate_tracks_annotations_howto(
             "H-PY-03 uses product descriptions instead of selected gene labels."
         )
     required_text = {
-        "Candidatus Hepatoplasma scabrum",
+        "Ca. Hepatoplasma scabrum",
         "Nicotiana tabacum",
         "Homo sapiens",
         "LSC",

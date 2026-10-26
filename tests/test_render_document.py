@@ -16,6 +16,8 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 from svgwrite.container import Style
+from svgwrite.etree import CDATA as svgwrite_CDATA
+from svgwrite.etree import etree as svgwrite_etree
 
 import gbdraw.api.render as api_render
 from gbdraw.annotations import (
@@ -29,6 +31,7 @@ from gbdraw.annotations import (
 from gbdraw.api import LinearDiagramOptions, LinearTrackOptions
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import (
+    _walk_svgwrite_elements,
     assemble_circular_diagram_from_records,
     build_linear_diagram,
 )
@@ -48,6 +51,8 @@ from gbdraw.render.group_content import (
     GroupContent,
     GroupKey,
     GroupKind,
+    element_text,
+    empty_element_markup,
     group_manifest,
     place_content,
 )
@@ -544,3 +549,114 @@ def test_markup_that_is_not_an_element_makes_document_parts_raise(markup: Any) -
     placed.add(place_content(placed, GroupContent.of(inside), GroupKey("canvas", GroupKind.FEATURES)))
     with pytest.raises(ExportError, match="not an element"):
         document_parts(placed)
+
+
+def _etree_text(xml: ET.Element) -> str:
+    return svgwrite_etree.tostring(xml, encoding="utf-8").decode("utf-8")
+
+
+_ATTRIBUTE_VALUES = (
+    'a & b < c > d " e',
+    "one\ntwo\tthree\rfour\r\nfive",
+    "it's",
+    "β-ラクタマーゼ ✓",
+    "lone \ud800 surrogate",
+    "&amp; already escaped",
+    "  spaced  ",
+)
+
+
+def test_element_text_is_elementtree_text_for_every_element_of_real_drawings() -> None:
+    """``element_text`` writes empty elements itself (attribute order,
+    escaping and number formatting as ElementTree and svgwrite give them)
+    and the rest through ElementTree; both give ElementTree's text."""
+
+    import gbdraw
+
+    drawings = [
+        gbdraw.draw_circular(gbdraw.read_genbank(INPUTS / "HmmtDNA.gbk"))._drawing,
+        _linear_with_clip_and_hatch(),
+        _multi_record_circular_with_clip_and_hatch(),
+    ]
+    direct = fallback = 0
+    for drawing in drawings:
+        for top in drawing.elements:
+            for element in _walk_svgwrite_elements(top):
+                xml = element.get_xml()
+                assert element_text(element) == _etree_text(xml)
+                if empty_element_markup(xml) is None:
+                    fallback += 1
+                else:
+                    direct += 1
+    assert direct > 100 and fallback > 10
+
+
+@pytest.mark.parametrize("value", _ATTRIBUTE_VALUES)
+def test_element_text_escapes_attribute_values_as_elementtree(value: str) -> None:
+    rect = Rect(insert=(0.1 + 0.2, 1e-7), size=(3, 2.5))
+    rect.attribs["data-value"] = value
+    rect.attribs["data-number"] = 1 / 3
+    xml = rect.get_xml()
+
+    assert empty_element_markup(xml) is not None
+    assert element_text(rect) == _etree_text(xml)
+
+
+def test_empty_element_markup_writes_empty_values_and_declines_other_elements() -> None:
+    empty = ET.Element("path", {"d": "", "id": "x"})
+    assert empty_element_markup(empty) == _etree_text(empty) == '<path d="" id="x" />'
+
+    with_text = ET.Element("text")
+    with_text.text = "label"
+    with_child = ET.Element("g")
+    with_child.append(ET.Element("path"))
+    with_tail = ET.Element("path")
+    with_tail.tail = "after"
+    namespaced = ET.Element("{http://www.w3.org/2000/svg}path")
+    for element in (with_text, with_child, with_tail, namespaced, svgwrite_CDATA("x < y")):
+        assert empty_element_markup(element) is None
+    style = Style("a > b { fill: red }")
+    assert element_text(style) == _etree_text(style.get_xml())
+
+
+def test_a_written_svg_is_handed_to_the_file_a_chunk_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The file's encoder never holds the whole document (L2-09); the bytes are svgwrite's."""
+
+    import gbdraw.render.document as document_module
+
+    monkeypatch.setattr(document_module, "_WRITE_CHUNK", 4096, raising=False)
+    drawing = Drawing(size=("200px", "200px"))
+    for index in range(400):
+        drawing.add(Rect(insert=(index % 20, index // 20), size=(1, 1), fill="#123456", id=f"r{index}"))
+    expected = io.StringIO()
+    drawing.write(expected)
+    assert len(expected.getvalue()) > 4 * 4096
+
+    written: list[int] = []
+    builtin_open = open
+
+    def recording_open(*args: Any, **kwargs: Any) -> Any:
+        handle = builtin_open(*args, **kwargs)
+        write = handle.write
+
+        def record(text: Any) -> int:
+            written.append(len(text))
+            return write(text)
+
+        handle.write = record
+        return handle
+
+    monkeypatch.setattr(api_render, "open", recording_open, raising=False)
+    (svg,) = api_render.save_figure_to(drawing, "svg", output_prefix=str(tmp_path / "chunks"))
+    assert Path(svg).read_text(encoding="utf-8") == expected.getvalue()
+    assert written and max(written) <= 4096
+
+    stream = io.StringIO()
+    stream_writes: list[int] = []
+    stream_write = stream.write
+    stream.write = lambda text: (stream_writes.append(len(text)), stream_write(text))[1]  # type: ignore[method-assign]
+    write_svg_document(drawing).write(stream)
+    assert stream.getvalue() == expected.getvalue()
+    assert max(stream_writes) <= 4096

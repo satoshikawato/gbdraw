@@ -1,4 +1,4 @@
-import { concatUint8Arrays } from '../services/losat-runtime.js';
+import { compileLosatWasm, concatUint8Arrays } from '../services/losat-runtime.js';
 
 const markWorkerStart = (control, state) => {
   const view = new Int32Array(control);
@@ -64,7 +64,7 @@ const instantiateThreadContext = async ({
   const stdin = new OpenFile(new File(new Uint8Array(), { readonly: true }));
   const preopen = new PreopenDirectory('.', new Map());
   const wasi = new WASI(args || [], env || [], [stdin, stdout, stderr, preopen]);
-  const compiledModule = module || await WebAssembly.compileStreaming(fetch(wasmUrl, { cache: 'no-store' }));
+  const compiledModule = module || await compileLosatWasm(wasmUrl, 'threaded LOSAT wasm');
   const instance = await WebAssembly.instantiate(compiledModule, {
     env: { memory },
     wasi: { 'thread-spawn': () => -1 },

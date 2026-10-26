@@ -3,19 +3,32 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Callable
 
+from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 from gbdraw.core.record_metadata import (
     _iter_source_features,
     _mapped_feature_location_parts,
     _read_coord_map,
+    _source_feature_index,
     _source_feature_location_parts,
+    _stamped_source_feature_hash,
 )
 from gbdraw.exceptions import ValidationError
 
 import hashlib
 import re
-from typing import Any, Iterable
+from typing import Any, Iterable, NewType
+
+# Frame-tagged feature hashes. Both are plain strings at run time; the types
+# keep the two frames from being mixed (OV-412). A SOURCE hash is the hash of
+# the feature in its source record: the SVG ID base, the catalog's stable
+# feature ID, and what a `hash` selector matches. A DRAWN hash is the hash of
+# the processed (cropped, reversed) location, which only comparison rows
+# (`*_view_feature_svg_id`) and Session <= 44 readers name a feature by.
+SourceFeatureHash = NewType("SourceFeatureHash", str)
+DrawnFeatureHash = NewType("DrawnFeatureHash", str)
 
 _SAFE_SVG_ID_FRAGMENT_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
@@ -132,14 +145,25 @@ def _feature_object_coordinate_parts(feature_object: Any) -> list[tuple[int, int
     return parts
 
 
-def compute_feature_hash(feature: Any, record_id: str | None = None) -> str:
+def parse_source_feature_hash(raw: str) -> SourceFeatureHash | None:
+    """Tag a stable feature ID read from an SVG attribute or a JSON payload.
+
+    ``raw`` is already normalized by the reader; an empty string is no ID.
+    """
+
+    return SourceFeatureHash(raw) if raw else None
+
+
+def compute_feature_hash(feature: Any, record_id: str | None = None) -> DrawnFeatureHash:
     """Compute the stable data-gbdraw-feature-id for a BioPython feature."""
 
     parts = _location_parts(feature.location)
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record_id,
+    return DrawnFeatureHash(
+        compute_feature_hash_from_location_parts(
+            str(getattr(feature, "type", "") or ""),
+            parts,
+            record_id=record_id,
+        )
     )
 
 
@@ -162,30 +186,81 @@ def source_feature_location_parts(
     )
 
 
+def computed_source_feature_hash_and_parts(
+    feature: SeqFeature,
+    record: SeqRecord | None = None,
+    *,
+    record_id: str | None = None,
+) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
+    """Compute the feature hash and the source location parts it hashes.
+
+    Only loading a source (``capture_source_features``) computes; readers use
+    ``source_feature_hash_and_parts``, which returns the hash computed then.
+    The hash is None when the feature has no source parts. ``record_id``
+    defaults to the record's ID.
+    """
+
+    parts = source_feature_location_parts(feature, record)
+    if not parts:
+        return None, parts
+    return (
+        SourceFeatureHash(
+            compute_feature_hash_from_location_parts(
+                str(getattr(feature, "type", "") or ""),
+                parts,
+                record_id=_hash_record_id(record, record_id),
+            )
+        ),
+        parts,
+    )
+
+
+def _hash_record_id(record: object, record_id: str | None) -> str | None:
+    return record_id if record_id is not None else getattr(record, "id", None)
+
+
+def source_feature_hash_and_parts(
+    feature: SeqFeature,
+    record: SeqRecord | None = None,
+    *,
+    record_id: str | None = None,
+) -> tuple[SourceFeatureHash | None, tuple[tuple[int, int, int | None], ...]]:
+    """The feature hash and the source location parts it hashes.
+
+    The hash computed when the feature's source was loaded, carried by every
+    crop, reverse complement or type filter copy, is returned for the record ID
+    it was computed for; any other record ID computes. The hash is None when the
+    feature has no source parts. ``record_id`` defaults to the record's ID.
+    """
+
+    stamped = _stamped_source_feature_hash(feature, _hash_record_id(record, record_id))
+    if stamped is None:
+        return computed_source_feature_hash_and_parts(feature, record, record_id=record_id)
+    return SourceFeatureHash(stamped), source_feature_location_parts(feature, record)
+
+
 def compute_source_feature_hash(
     feature: Any,
     record: Any = None,
     *,
     record_id: str | None = None,
-) -> str | None:
+) -> SourceFeatureHash | None:
     """The feature hash: the catalog's stable feature ID, the base of every
     SVG ID drawn for the feature, and the value a `hash` selector matches,
     whatever crop or reverse complement its record has (OV-401, OV-412).
 
-    ``record_id`` defaults to the record's ID.
+    ``record_id`` defaults to the record's ID. Like
+    ``source_feature_hash_and_parts``, it returns the hash computed when the
+    source was loaded.
     """
 
-    parts = source_feature_location_parts(feature, record)
-    if not parts:
-        return None
-    return compute_feature_hash_from_location_parts(
-        str(getattr(feature, "type", "") or ""),
-        parts,
-        record_id=record_id if record_id is not None else getattr(record, "id", None),
-    )
+    stamped = _stamped_source_feature_hash(feature, _hash_record_id(record, record_id))
+    if stamped is not None:
+        return SourceFeatureHash(stamped)
+    return computed_source_feature_hash_and_parts(feature, record, record_id=record_id)[0]
 
 
-def shared_source_feature_hashes(record: SeqRecord) -> frozenset[str]:
+def shared_source_feature_hashes(record: SeqRecord) -> frozenset[SourceFeatureHash]:
     """The source hashes that more than one feature of ``record`` has.
 
     Identical features (the same type and location) share their hash; the
@@ -207,7 +282,7 @@ def shared_source_feature_hashes(record: SeqRecord) -> frozenset[str]:
 def compute_feature_object_hash(
     feature_object: Any,
     record_id: str | None = None,
-) -> str | None:
+) -> DrawnFeatureHash | None:
     """The hash of a FeatureObject's drawn location.
 
     Only comparison rows name a drawn feature by it (`*_view_feature_svg_id`,
@@ -223,10 +298,12 @@ def compute_feature_object_hash(
         or getattr(feature_object, "type", "")
         or ""
     )
-    return compute_feature_hash_from_location_parts(
-        feature_type,
-        parts,
-        record_id=record_id if record_id is not None else getattr(feature_object, "record_id", None),
+    return DrawnFeatureHash(
+        compute_feature_hash_from_location_parts(
+            feature_type,
+            parts,
+            record_id=record_id if record_id is not None else getattr(feature_object, "record_id", None),
+        )
     )
 
 
@@ -260,6 +337,85 @@ def compute_feature_hash_from_location_parts(
     return _hash_feature_parts_key(feature_type, parts, record_id=record_id)
 
 
+def _indexed_feature_id(base: str, index: int | None) -> str:
+    """The biological feature ID of one of identical features: the shared
+    hash with its source feature index."""
+    return f"{base}~{index}"
+
+
+# Between the biological feature ID and the record key of a feature instance;
+# the Web reads it from gbdraw/web/js/contracts/schema.generated.js.
+FEATURE_INSTANCE_SEPARATOR = "@"
+
+
+def feature_instance(biological_feature_id: str, record_key: str) -> str:
+    """The feature instance: one biological feature in one request record.
+
+    A `hash` color rule whose pattern matches it colors that feature only,
+    while its stable hash names every feature with the same record ID, type,
+    and location (the same file drawn twice, identical features of one
+    record). The renderer's rule matcher (``feature_instances``) and the Web's
+    rule matching and synthesis (``gbdraw.web_support.rule_matching``, from the
+    catalog's ``biologicalFeatureId`` and ``recordKey``) compose it here, and no
+    other code does.
+    """
+    return f"{biological_feature_id}{FEATURE_INSTANCE_SEPARATOR}{record_key}"
+
+
+_FEATURE_INSTANCES_ATTR = "_gbdraw_feature_instances"
+
+
+def feature_instances(record: SeqRecord) -> Callable[[SeqFeature], str | None]:
+    """The feature instance of each feature of ``record``.
+
+    The record key is the one request planning gives the record
+    (``gbdraw_record_key``); the biological feature ID is the one
+    ``disambiguate_feature_ids`` gives the record's source features, as the
+    source feature catalog (``SourceFeatureCatalog.entries``) and the feature
+    identity table name it. A record without a record key, a feature without a
+    source hash, and a feature outside the record's features have no instance.
+
+    The instances of a record are computed once, in one pass over its source
+    features, and kept on the record while its record key and features are the
+    same: several render stages read them.
+    """
+
+    record_key = (getattr(record, "annotations", None) or {}).get("gbdraw_record_key")
+    if not record_key:
+        return lambda feature: None
+    key, features = str(record_key), record.features
+    identity = tuple(map(id, features))
+    cached = getattr(record, _FEATURE_INSTANCES_ATTR, None)
+    # Valid for the same record key and the same feature objects: a copy of the
+    # record (its features are new objects) computes its own.
+    if cached is None or cached[0] != key or cached[1] != identity:
+        # The source features and indexes ``capture_source_features`` reads.
+        hashed = [
+            (feature, feature_hash, position if index is None else index)
+            for position, feature in enumerate(_iter_source_features(features))
+            if (feature_hash := compute_source_feature_hash(feature, record))
+            for index in (_source_feature_index(feature),)
+        ]
+        biological_ids = disambiguate_feature_ids(
+            ((key, feature_hash, index) for _, feature_hash, index in hashed),
+            description="Feature instances",
+        )
+        # Each entry holds its feature, so no other object can take its id.
+        by_feature: dict[int, tuple[SeqFeature, str | None]] = {
+            id(feature): (feature, feature_instance(biological_id, key))
+            for (feature, _, _), biological_id in zip(hashed, biological_ids, strict=True)
+        }
+        cached = (key, identity, by_feature)
+        setattr(record, _FEATURE_INSTANCES_ATTR, cached)
+    by_feature = cached[2]
+
+    def instance_of(feature: SeqFeature) -> str | None:
+        entry = by_feature.get(id(feature))
+        return entry[1] if entry is not None and entry[0] is feature else None
+
+    return instance_of
+
+
 def disambiguate_feature_ids(
     identities: Iterable[tuple[str, str, int | None]],
     *,
@@ -277,7 +433,7 @@ def disambiguate_feature_ids(
                 f"{description} contains duplicate biological source identity {identity!r}."
             )
     resolved = tuple(
-        f"{base}~{index}" if counts[(record_key, base)] > 1 else base
+        _indexed_feature_id(base, index) if counts[(record_key, base)] > 1 else base
         for record_key, base, index in rows
     )
     if len({(row[0], value) for row, value in zip(rows, resolved)}) != len(rows):
@@ -336,6 +492,8 @@ __all__ = [
     "compute_feature_hash_from_location_parts",
     "compute_feature_object_hash",
     "compute_source_feature_hash",
+    "feature_instance",
+    "feature_instances",
     "source_feature_location_parts",
     "make_linear_dom_id",
     "make_linear_rendered_feature_id",

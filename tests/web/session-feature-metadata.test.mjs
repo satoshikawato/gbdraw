@@ -87,6 +87,7 @@ await copyModule('gbdraw/web/js/services/drawn-groups.js', 'services/drawn-group
 await copyModule('gbdraw/web/js/services/svg-result-normalization.js', 'services/svg-result-normalization.js');
 await copyModule('gbdraw/web/js/services/svg-sanitization.js', 'services/svg-sanitization.js');
 await copyModule('gbdraw/web/js/services/svg-serialization.js', 'services/svg-serialization.js');
+await copyModule('gbdraw/web/js/services/preview-affordances.js', 'services/preview-affordances.js');
 await copyModule('gbdraw/web/js/config.js', 'config.js');
 // The Legend naming rule and the key mirror of the color rules, which the Legend reader and the admission import.
 for (const name of ['services/legend-row-names.js', 'services/specific-color-rules.js', 'services/file-imports.js', 'services/card-row-marks.js',

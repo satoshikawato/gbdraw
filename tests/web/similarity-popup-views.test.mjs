@@ -42,7 +42,7 @@ const featureAttributes = {
 
 test('OV-420: a pairwise match with no similarity group shows no similarity group', () => {
   const payload = buildMatchPopupPayload(elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+    'data-gbdraw-match-id': 'comparison1_match1',
     'data-match-kind': 'pairwise',
     'data-query-record-id': 'record_a',
     'data-subject-record-id': 'record_b',
@@ -76,7 +76,7 @@ test('UX-B02: the group view names the group, counts members, and keeps computed
     members
   }];
   const element = elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match2',
+    'data-gbdraw-match-id': 'comparison1_match2',
     'data-match-kind': 'orthogroup',
     'data-orthogroup-id': 'og_7'
   });
@@ -118,7 +118,7 @@ test('UX-B01: a collinear block leads with one summary and lists gene pairs by g
     ] }
   ];
   const payload = buildMatchPopupPayload(elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match3',
+    'data-gbdraw-match-id': 'comparison1_match3',
     'data-match-kind': 'collinear',
     'data-collinearity-block-id': 'block_0386',
     'data-collinearity-block-kind': 'cluster',
@@ -170,7 +170,7 @@ test('UX-B01: a collinear block leads with one summary and lists gene pairs by g
 // text table (`constructor`, `__proto__`), which is not an orientation.
 test('OV-322: a collinear block shows an orientation other than plus or minus as its own text', () => {
   const factsFor = (orientation) => buildMatchPopupPayload(elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match3',
+    'data-gbdraw-match-id': 'comparison1_match3',
     'data-match-kind': 'collinear',
     'data-collinearity-block-id': 'block_0386',
     'data-collinearity-orientation': orientation,
@@ -211,7 +211,7 @@ test('OV-526: a similarity group ID that names an inherited member has no overri
 
 test('a popup built before a language switch keeps its hover rows: sections and rows are found by identity', async () => {
   const element = elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+    'data-gbdraw-match-id': 'comparison1_match1',
     'data-match-kind': 'pairwise',
     'data-query-record-id': 'record_a',
     'data-subject-record-id': 'record_b',
@@ -260,12 +260,12 @@ test('OV-1390: member roles and confidence levels show in the UI language; an un
   ];
   const orthogroups = [{ id: 'og_7', displayName: 'enzyme', member_count: 3, record_coverage_count: 2, members }];
   const groupElement = elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match2',
+    'data-gbdraw-match-id': 'comparison1_match2',
     'data-match-kind': 'orthogroup',
     'data-orthogroup-id': 'og_7'
   });
   const matchElement = elementFrom({
-    'data-gbdraw-pairwise-match-id': 'comparison1_match1',
+    'data-gbdraw-match-id': 'comparison1_match1',
     'data-match-kind': 'pairwise',
     'data-qstart': '100',
     'data-qend': '400',

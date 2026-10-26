@@ -25,7 +25,7 @@
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
 import { createResultPaintRecord, editorPaintState, paintRuleTable, sameColors } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, displayedLegendRowContext, featureDrawnContext, removeUnresolvedFeatureEdits,
@@ -35,6 +35,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
 import { PNG_DPI_CHOICES, createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -43,6 +44,7 @@ import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
+import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -81,7 +83,6 @@ import {
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
-  serializeResults,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
@@ -174,10 +175,7 @@ import {
   resolveUniqueOrthogroupMemberForFeature
 } from './orthogroups.js';
 import { createRightDrawerController } from './right-drawer.js';
-import {
-  createCircularTrackSlotEditor,
-  estimateCircularConservationLayoutWarning
-} from './circular-track-slots.js';
+import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
 import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
@@ -1589,8 +1587,13 @@ export const createAppSetup = () => {
     storeCircularMultiRecordDefaults(state.activeDrawing());
     rebindAnnotationRecords();
   };
-  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
-  setPreviewRuntime(previewRuntime);
+  // Bumped by each edit of the displayed Result's root (R1).
+  const resultEditRevision = shallowRef(0);
+  const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg, editRevision: resultEditRevision });
+  setPreviewRuntime({
+    clearActiveRuntime: previewRuntime.clearActiveRuntime,
+    currentResults: previewRuntime.currentResults
+  });
 
   const historyFileStore = createHistoryFileStore();
   // Before the History snapshot service, which clears its copy feedback (D-37).
@@ -1611,7 +1614,7 @@ export const createAppSetup = () => {
     applyEditorStateData,
     buildOrthogroupStateData,
     applyOrthogroupStateData,
-    serializeResults,
+    currentResults: previewRuntime.currentResults,
     applyResultsData,
     buildRunStateData,
     applyRunStateData,
@@ -1845,6 +1848,7 @@ export const createAppSetup = () => {
     pending: ruleMatchingPending,
     blocking: ruleMatchingBlocking,
     evaluate: evaluateRules,
+    synthesize: async (request) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.SYNTHESIZE_COLOR_RULES, { request })).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.activeDrawing().featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
@@ -1860,7 +1864,7 @@ export const createAppSetup = () => {
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
-    readShownLegendColor: (entry) => legendEntryColor(entry),
+    readLegendRowColors: (drawing) => readLegendRowColors(drawing),
     readHiddenTrackRows: (drawing) => hiddenTrackLegendRows(drawing),
     legendRowNames: shallowRef(new Map()),
     showLegendStructure: () => showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendStructure })
@@ -1900,8 +1904,12 @@ export const createAppSetup = () => {
   // OV-276, OV-282 (D-26): a Legend panel row shows the color the palette
   // gives its swatch on the displayed Result (the live compile's, by Python's
   // rows), derived and never written into the rows. A new Result brings new
-  // Python rows.
+  // Python rows. The Legend and rule owners read the same cached colors
+  // through `readLegendRowColors`; a drawing that is not shown has no
+  // displayed Result, and its rows show the colors they record.
   const legendRowColors = computed(() => displayedLegendRowColors(state, state.activeDrawing(), readDrawnTracks()));
+  /** @type {import('./candidate-render.js').ReadLegendRowColorsPort} */
+  const readLegendRowColors = (drawing) => (drawing === state.activeDrawing() ? legendRowColors.value : RECORDED_LEGEND_ROW_COLORS);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
   const legendEntryColor = (entry) => legendRowColors.value.listed(entry);
   /** @param {Parameters<LegendRowColorOf>[0]} entry */
@@ -1991,8 +1999,11 @@ export const createAppSetup = () => {
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
     moveLegendRecords: legendActions.moveLegendRecords,
+    readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    currentResults: previewRuntime.currentResults,
+    getResultIdentity: previewRuntime.getResultIdentity,
     showEditorIntent: (options) => showEditorIntent(options),
     selectResult,
     previewTransformInteraction,
@@ -2206,9 +2217,6 @@ export const createAppSetup = () => {
       else drawing.form.show_depth = shown;
     });
   };
-  const circularConservationLayoutWarning = computed(() => estimateCircularConservationLayoutWarning(
-    state, state.drawingOfMode('circular'), circularEstimateRecordLengths.value
-  ));
   const losatSettings = createLosatSettings({ state });
   /**
    * The record a Linear entry draws, once its records are read: the one its
@@ -3701,6 +3709,9 @@ export const createAppSetup = () => {
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
+    // A loaded Session makes a Generate likely: download the Worker's boot
+    // files now, after the Load, so they never slow its own requests.
+    if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
     return result;
   };
   /** @param {SessionFileInput} event */
@@ -4999,32 +5010,6 @@ export const createAppSetup = () => {
         fileName: found?.draft?.fileActive ? String(found.draft.file?.name || '') : '', missing: missing.has(pair.edgeKey) };
     });
   });
-  // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
-  // drew nothing, or over crossing leaders from the notice bar.
-  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice } = createLabelFitDialog({
-    reactive,
-    computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
-      DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
-    )).result,
-    writeRowSettings: (values, rowMode) => applyLabelFitValues(state.drawingOfMode(rowMode), values, rowMode),
-    withHistory: dialogChoice.withHistory,
-    closeAfterChoice: dialogChoice.closeAfterChoice,
-    choicePending: () => dialogChoice.pending.value,
-    runAnalysis: () => runAnalysis(),
-    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts)
-  });
-  // The notice bar over the shown Result drawn with crossing leaders or labels
-  // over the definition text (WARN-NOTICE, DEF-WARN).
-  const labelFitNotice = computed(() => {
-    const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
-      && item.resultName === results.value[selectedResultIndex.value]?.name);
-    return entry && entry.report.drawn ? entry : null;
-  });
-  const openLabelFitNotice = () => {
-    const entry = labelFitNotice.value;
-    if (!entry) return undefined;
-    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
-  };
   /** @param {'generate' | 'none' | 'cancel'} choice */
   const resolveMissingBlastTsv = async (choice) => {
     if (choice === 'generate') {
@@ -5099,6 +5084,9 @@ export const createAppSetup = () => {
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   // The preview is shown again after this flush's watchers have run: measure on the next tick.
   watch(resultPanelTab, () => nextTick(similarityAlignmentPorts.refreshCanvas));
+  // An edit of the shown root (a drag, Reset Layout, an Undo of a record move)
+  // leaves the Result object in place (R1), so the review measures again on it.
+  watch(resultEditRevision, similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   const similarityAlignmentReview = computed(() => {
     const draft = similarityAlignmentActions.draft.value;
     const directions = similarityAlignmentActions.directionPreview.value?.records;
@@ -6135,6 +6123,35 @@ export const createAppSetup = () => {
     }) : Promise.resolve())
   });
 
+  // Labels that do not fit (LP-D43, LP-D48): the dialog over a Generate that
+  // drew nothing, or over crossing leaders from the notice bar.
+  const { labelFitDialog, openLabelFitDialog, resolveLabelFitChoice, editLabelFitRecordText } = createLabelFitDialog({
+    reactive,
+    computeRow: async (rowToken, kind) => (await runDiagramHelperOperation(
+      DIAGRAM_HELPER_OPERATIONS.COMPUTE_LABEL_FIT_ROW, { rowToken, kind }
+    )).result,
+    writeRowSettings: ({ values, trackOptions }, rowMode) => applyLabelFitValues(state.drawingOfMode(rowMode), values, rowMode, trackOptions),
+    withHistory: dialogChoice.withHistory,
+    closeAfterChoice: dialogChoice.closeAfterChoice,
+    choicePending: () => dialogChoice.pending.value,
+    runAnalysis: () => runAnalysis(),
+    errorSummary: (error) => errorText(normalizeCaughtError(error, { operation: 'computeLabelFitRow', stage: 'helper' }).summaryParts),
+    // The record-definition popup (created above) owns which field writes a record's name lines.
+    showRecordText: (recordIndex) => previewItemPopup.showRecordTextSettings(recordIndex)
+  });
+  // The notice bar over the shown Result drawn with crossing leaders or labels
+  // over the definition text (WARN-NOTICE, DEF-WARN).
+  const labelFitNotice = computed(() => {
+    const entry = /** @type {readonly ResultLabelFit[]} */ (labelFitReports.value).find((item) => item.resultIndex === selectedResultIndex.value
+      && item.resultName === results.value[selectedResultIndex.value]?.name);
+    return entry && entry.report.drawn ? entry : null;
+  });
+  const openLabelFitNotice = () => {
+    const entry = labelFitNotice.value;
+    if (!entry) return undefined;
+    return openLabelFitDialog(entry.report, { rowToken: entry.rowToken, mode: mode.value === 'linear' ? 'linear' : 'circular' });
+  };
+
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
@@ -6595,6 +6612,13 @@ export const createAppSetup = () => {
     paint: drawing.slices.paint,
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
+    colorRuleEdits: drawing.manualSpecificRules.flatMap((row) => {
+      const instance = namedFeatureInstance(row);
+      return instance ? [{
+        recordKey: instance.recordKey,
+        remove: () => featureActions.takeBackRuleRows(drawing, (rules) => rules.filter((rule) => rule !== row))
+      }] : [];
+    }),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
     comparisonEdges: drawing === state.drawingOfMode('linear') ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
@@ -6646,7 +6670,10 @@ export const createAppSetup = () => {
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners().filter((owner) => deleted.has(owner.key))
       : linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
+    const ruleCount = drawing.manualSpecificRules.length;
     retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
+    // The color rows it took back color nothing drawn; the rule matches follow the table.
+    if (drawing.manualSpecificRules.length !== ruleCount && drawing === state.activeDrawing()) void projectPaletteAndRules();
     if (listMode === 'linear') {
       applyLinearSeqMutation(drawing, linearSeqs.map((seq) => (
         deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
@@ -6894,6 +6921,7 @@ export const createAppSetup = () => {
     labelFitNotice,
     openLabelFitNotice,
     resolveLabelFitChoice,
+    editLabelFitRecordText,
     sessionSaveAvailable,
     sessionLoadAvailable,
     sessionBusyReason,
@@ -6917,6 +6945,8 @@ export const createAppSetup = () => {
     sessionTitle,
     sessionTitleLabel,
     results,
+    // The Results with the displayed Result's edits written (R1); the test hooks read them.
+    currentResults: previewRuntime.currentResults,
     selectedResultIndex,
     failedGeneratePreservedResult,
     generationFailureRecovery,
@@ -6996,7 +7026,6 @@ export const createAppSetup = () => {
     annotationRecordMissingMessage: annotationEditor.recordMissingMessage,
     annotationRecordShowsSelect: annotationEditor.recordShowsSelect,
     annotationRecordCaption: annotationEditor.recordCaptionFor,
-    circularConservationLayoutWarning,
     circularConservationFastaInput,
     circularConservationSeriesRows,
     setCircularConservationUploadFiles,

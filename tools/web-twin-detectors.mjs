@@ -9,7 +9,7 @@
 // `twin.unregistered.v1` observes two kinds of twin in source text; nothing is
 // executed:
 // - vector: a JavaScript test and a Python test under tests/ both name the same
-//   tests/fixtures/*.json file;
+//   tests/fixtures/**/*.json file;
 // - function: a function whose name is on the watch list (migrate*, split*,
 //   normalize*, resolve*Color*, read*Table*) is defined both in gbdraw/**/*.py
 //   (outside gbdraw/web/) and in gbdraw/web/js/services/**/*.js. Names are
@@ -34,7 +34,7 @@ export const TWIN_REGISTRY_PATH = 'tools/twins.json';
  * @property {ReadonlyMap<string, string>} tests JavaScript and Python files under tests/, by path.
  * @property {ReadonlyMap<string, string>} python Python files under gbdraw/ outside gbdraw/web/, by path.
  * @property {ReadonlyMap<string, string>} services JavaScript files under gbdraw/web/js/services/, by path.
- * @property {readonly string[]} fixtures The JSON files directly under tests/fixtures/.
+ * @property {readonly string[]} fixtures The JSON files under tests/fixtures/, in any subfolder.
  */
 /**
  * @typedef {object} DetectedTwin
@@ -165,7 +165,7 @@ export const readTwinSources = (root) => {
     tests: read((path) => path.startsWith('tests/') && /\.(?:mjs|cjs|js|py)$/.test(path)),
     python: read((path) => path.startsWith('gbdraw/') && !path.startsWith('gbdraw/web/') && path.endsWith('.py')),
     services: read((path) => path.startsWith('gbdraw/web/js/services/') && /\.m?js$/.test(path)),
-    fixtures: tracked.filter((path) => /^tests\/fixtures\/[^/]+\.json$/.test(path)).sort()
+    fixtures: tracked.filter((path) => /^tests\/fixtures\/(?:[^/]+\/)*[^/]+\.json$/.test(path)).sort()
   };
 };
 
@@ -211,8 +211,8 @@ export const checkTwinRegistry = (registry, detected) => {
     for (const field of /** @type {const} */ (['pythonOwner', 'jsOwner'])) {
       if (!isPathList(row[field])) errors.push(`${location}.${field}: expected a non-empty list of paths`);
     }
-    if (row.vector !== null && !(typeof row.vector === 'string' && /^tests\/fixtures\/[^/]+\.json$/.test(row.vector))) {
-      errors.push(`${location}.vector: expected tests/fixtures/<name>.json or null`);
+    if (row.vector !== null && !(typeof row.vector === 'string' && /^tests\/fixtures\/(?:[^/]+\/)*[^/]+\.json$/.test(row.vector))) {
+      errors.push(`${location}.vector: expected tests/fixtures/<path>.json or null`);
     }
     if (row.pending === undefined) return;
     if (row.pending === true && typeof row.id === 'string' && DETECTED_ROW_ID.test(row.id)) pendingIds.add(row.id);

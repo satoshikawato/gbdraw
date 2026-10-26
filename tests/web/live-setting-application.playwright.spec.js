@@ -45,7 +45,7 @@ const facts = (page) => page.evaluate(async () => {
     overrides: request?.diagramOptions?.configOverrides ?? null,
     plotTitle: request?.diagramOptions?.plotTitle ?? null,
     diagramOptions: JSON.stringify(request?.diagramOptions ?? null),
-    content: app.results?.[app.selectedResultIndex]?.content ?? null,
+    content: app.currentResults()[app.selectedResultIndex]?.content ?? null,
     resultCount: Array.isArray(app.results) ? app.results.length : 0,
     draftLegendFont: app.adv.legend_font_size ?? null,
     reflowError: app.labelReflowLastError ? JSON.stringify(app.labelReflowLastError) : null,

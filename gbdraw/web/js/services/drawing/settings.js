@@ -63,7 +63,8 @@ const memberOf = (member, value) => {
  * @param {ObjectMember} source
  */
 const assignNested = (target, source) => Object.entries(source).forEach(([key, value]) => {
-  const current = target[key];
+  // Only an own object is merged into: `__proto__` reads `Object.prototype`.
+  const current = Object.hasOwn(target, key) ? target[key] : undefined;
   if (value && typeof value === 'object' && !Array.isArray(value) && current && typeof current === 'object') {
     assignNested(/** @type {ObjectMember} */ (current), /** @type {ObjectMember} */ (value));
   } else {

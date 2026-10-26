@@ -6,23 +6,26 @@
 from __future__ import annotations
 
 import copy
+from collections import namedtuple
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 import base64
 import hashlib
 from io import StringIO
+import itertools
 import json
 import logging
 import math
 import re
-import sys
 import unicodedata
 from typing import (
+    AbstractSet,
     Callable,
+    Iterable,
     Literal,
     Mapping,
     NamedTuple,
-    Protocol,
+    NoReturn,
     Sequence,
     SupportsFloat,
     TypedDict,
@@ -30,6 +33,7 @@ from typing import (
     cast,
 )
 
+import numpy as np
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature
@@ -57,15 +61,10 @@ from gbdraw.comparisons.losat_runtime import (
     run_losat_search,
 )
 from gbdraw.core.numeric import compensated_sum
-from gbdraw.core.record_metadata import (
-    _absolute_display_interval,
-    _read_coord_map as _read_record_coord_map,
-    _source_feature_index,
-    _source_feature_location_parts,
-)
+from gbdraw.core.record_metadata import _source_feature_index
 from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
-from gbdraw.features.ids import compute_feature_hash_from_location_parts
+from gbdraw.features.ids import compute_feature_hash_from_location_parts, source_feature_hash_and_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
 from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_table
 
@@ -106,9 +105,25 @@ _INTEGER_COMPARISON_COLUMNS = frozenset(
         "send",
     }
 )
-_STRICT_DECIMAL_INTEGER_RE = re.compile(r"^[+-]?[0-9]+$")
-_STRICT_DECIMAL_NUMBER_RE = re.compile(
-    r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$"
+_STRICT_DECIMAL_INTEGER = r"[+-]?[0-9]+"
+# Digits with an optional point, or a point and digits; then an optional exponent.
+# "[0-9]+\.?[0-9]*" spells "[0-9]+(?:\.[0-9]*)?" without a group, which re matches faster.
+_STRICT_DECIMAL_NUMBER = r"[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+_STRICT_DECIMAL_INTEGER_RE = re.compile(rf"^{_STRICT_DECIMAL_INTEGER}$")
+_STRICT_DECIMAL_NUMBER_RE = re.compile(rf"^{_STRICT_DECIMAL_NUMBER}$")
+# The start of a data line that is not 12 tab-separated fields of the strict
+# grammar above, searched in "\n" + data: a literal "\n" lets re skip to each line
+# start, where "^" with re.MULTILINE would try every character.
+_NON_STRICT_OUTFMT6_LINE_RE = re.compile(
+    "\n(?!"
+    + "\t".join(
+        [r"[^\t\n]*", r"[^\t\n]*"]
+        + [
+            _STRICT_DECIMAL_INTEGER if column in _INTEGER_COMPARISON_COLUMNS else _STRICT_DECIMAL_NUMBER
+            for column in COMPARISON_COLUMNS[2:]
+        ]
+    )
+    + "(?:\n|\\Z))"
 )
 LOSATP_METADATA_COLUMNS = (
     "query_protein_id",
@@ -247,34 +262,255 @@ class CdsProtein:
     view_feature_svg_id: str | None = None
 
 
-@dataclass(frozen=True)
-class ProteinIdentityManifest:
-    """Schema-2 authority for protein sets, analyses, and runtime bindings."""
+def _refuse_change(self: object, *_args: object, **_kwargs: object) -> NoReturn:
+    raise TypeError(
+        f"{type(self).__name__} is read-only: a validated protein identity manifest "
+        "cannot change. Change a copy from ProteinIdentityManifest.to_dict()."
+    )
 
-    protein_sets: dict[str, dict[str, object]]
-    record_analyses: dict[str, dict[str, object]]
-    record_instances: dict[str, dict[str, object]]
-    schema: int = PROTEIN_IDENTITY_MANIFEST_SCHEMA
+
+class _FrozenDict(dict[str, object]):
+    """A read-only dict inside a protein identity manifest proof.
+
+    It stays a ``dict``, so equality with a plain manifest and ``json.dumps``
+    bytes are those of the same plain data. It is built from a mapping or
+    from key-value pairs (as ``dataclasses.asdict`` rebuilds one) and freezes
+    what it holds as the seal does; calling ``__init__`` again does not
+    change it.
+    """
+
+    __slots__ = ()
+
+    def __new__(
+        cls,
+        items: Mapping[str, object] | Iterable[tuple[str, object]] = (),
+    ) -> _FrozenDict:
+        flag = [False]
+        frozen = dict.__new__(cls)
+        dict.update(frozen, {key: _frozen(item, flag) for key, item in dict(items).items()})
+        return frozen
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        # dict.__init__ would fill the dict again; __new__ already did.
+        pass
+
+    __setitem__ = __delitem__ = __ior__ = _refuse_change
+    clear = pop = popitem = setdefault = update = _refuse_change
+
+    def __copy__(self) -> _FrozenDict:
+        return self
+
+    def __deepcopy__(self, _memo: object) -> _FrozenDict:
+        return self
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (_FrozenDict, (dict(self),))
+
+
+class _FrozenList(list[object]):
+    """A read-only list inside a protein identity manifest proof.
+
+    Like :class:`_FrozenDict`, it freezes what it holds.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, items: Iterable[object] = ()) -> _FrozenList:
+        flag = [False]
+        frozen = list.__new__(cls)
+        list.extend(frozen, [_frozen(item, flag) for item in items])
+        return frozen
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        # list.__init__ would empty the list; __new__ already filled it.
+        pass
+
+    __setitem__ = __delitem__ = __iadd__ = __imul__ = _refuse_change
+    append = extend = insert = pop = remove = clear = sort = reverse = _refuse_change
+
+    def __copy__(self) -> _FrozenList:
+        return self
+
+    def __deepcopy__(self, _memo: object) -> _FrozenList:
+        return self
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (_FrozenList, (list(self),))
+
+
+class ProteinIdentityManifest(_FrozenDict):
+    """Schema-2 authority for protein sets, analyses, and runtime bindings.
+
+    A proof: a read-only mapping whose items are the manifest. Calling the
+    class checks its argument like :func:`validate_protein_identity_manifest`
+    (which returns a proof unchanged); only that check and
+    :func:`extract_protein_identity_manifest` seal one. It equals, and
+    ``json.dumps`` writes, the same plain manifest; every mapping, sequence
+    and set inside it is read-only, and ``copy.copy`` and ``copy.deepcopy``
+    return it. Set items, dict keys and other objects, such as custom
+    objects, are kept as given.
+    """
+
+    __slots__ = ("_json_exact",)
+    _json_exact: bool
+
+    schema = PROTEIN_IDENTITY_MANIFEST_SCHEMA
+
+    def __new__(
+        cls,
+        items: Mapping[str, object] | Iterable[tuple[str, object]] = (),
+        **fields: object,
+    ) -> ProteinIdentityManifest:
+        return validate_protein_identity_manifest({**dict(items), **fields})
+
+    __setattr__ = __delattr__ = _refuse_change
+
+    def __reduce__(self) -> tuple[object, ...]:
+        return (validate_protein_identity_manifest, (self.to_dict(),))
+
+    @property
+    def protein_sets(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["proteinSets"])
+
+    @property
+    def record_analyses(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["recordAnalyses"])
+
+    @property
+    def record_instances(self) -> Mapping[str, Mapping[str, object]]:
+        return cast("Mapping[str, Mapping[str, object]]", self["recordInstances"])
 
     def to_dict(self) -> dict[str, object]:
-        return {
-            "schema": self.schema,
-            "proteinSets": self.protein_sets,
-            "recordAnalyses": self.record_analyses,
-            "recordInstances": self.record_instances,
-        }
+        """A detached, mutable plain copy of the manifest."""
+
+        return cast("dict[str, object]", _thawed(self))
 
     @classmethod
-    def from_dict(cls, value: Mapping[str, object]) -> "ProteinIdentityManifest":
+    def from_dict(cls, value: Mapping[str, object]) -> ProteinIdentityManifest:
         return validate_protein_identity_manifest(value)
 
-    def binding_for(self, record_instance_key: str) -> dict[str, object]:
+    def binding_for(self, record_instance_key: str) -> Mapping[str, object]:
         try:
             return self.record_instances[str(record_instance_key)]
         except KeyError as exc:
             raise ValidationError(
                 f"Protein manifest has no record instance {record_instance_key!r}."
             ) from exc
+
+
+def is_json_exact_protein_identity_manifest(
+    value: object,
+) -> TypeGuard[ProteinIdentityManifest]:
+    """Whether ``value`` is a proof that holds only plain JSON data.
+
+    Plain JSON data is data that equals its JSON clone: dicts with ``str``
+    keys, lists, and exactly ``str``, ``int``, finite ``float``, ``bool`` or
+    ``None``. Such a proof can stand where a deep copy or a JSON clone of its
+    input stood; a proof of other Python values (tuples, sets, other
+    mappings, other keys or scalars, NaN or infinities) is used only as the
+    checked authority.
+    """
+
+    return isinstance(value, ProteinIdentityManifest) and value._json_exact
+
+
+def _new_frozen_dict(items: Mapping[object, object]) -> _FrozenDict:
+    """A read-only dict of ``items``, which ``_frozen`` has already frozen."""
+
+    frozen = dict.__new__(_FrozenDict)
+    dict.update(frozen, cast("Mapping[str, object]", items))
+    return frozen
+
+
+def _new_frozen_list(items: list[object]) -> _FrozenList:
+    """A read-only list of ``items``, which ``_frozen`` has already frozen."""
+
+    frozen = list.__new__(_FrozenList)
+    list.extend(frozen, items)
+    return frozen
+
+
+def _frozen(value: object, inexact: list[bool]) -> object:
+    """``value`` with every mapping and sequence in it read-only.
+
+    A mapping becomes a read-only dict, a list a read-only list, any other
+    sequence but ``str`` and ``bytes`` a tuple of frozen items, and a set a
+    frozenset. Set items, dict keys and other objects, such as custom
+    objects, are kept as they are.
+    Sets ``inexact[0]`` when ``value`` holds anything but plain JSON data. A
+    read-only container's constructor froze what it holds, so it is kept,
+    and walked only to tell whether it is plain JSON data.
+    """
+
+    kind = type(value)
+    if kind in _MANIFEST_SCALAR_TYPES:
+        if kind is float and not math.isfinite(cast("float", value)):
+            # A JSON clone of NaN or an infinity is a new float that does
+            # not equal it, so it cannot stand for the input.
+            inexact[0] = True
+        return value
+    if kind is _FrozenDict or kind is _FrozenList:
+        if not inexact[0]:
+            container = cast("_FrozenDict | _FrozenList", value)
+            if kind is _FrozenDict and any(type(key) is not str for key in container):
+                inexact[0] = True
+            for item in container.values() if isinstance(container, dict) else container:
+                if inexact[0]:
+                    break
+                _frozen(item, inexact)
+        return value
+    if kind is dict:
+        mapping = cast("dict[object, object]", value)
+        if not inexact[0] and any(type(key) is not str for key in mapping):
+            inexact[0] = True
+        return _new_frozen_dict({key: _frozen(item, inexact) for key, item in mapping.items()})
+    if kind is list:
+        return _new_frozen_list([_frozen(item, inexact) for item in cast("list[object]", value)])
+    inexact[0] = True
+    if isinstance(value, Mapping):
+        return _new_frozen_dict({key: _frozen(item, inexact) for key, item in value.items()})
+    if isinstance(value, list):
+        return _new_frozen_list([_frozen(item, inexact) for item in value])
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        return tuple(_frozen(item, inexact) for item in value)
+    if isinstance(value, AbstractSet):
+        # Set items are hashable, and are kept as given, like dict keys.
+        return frozenset(value)
+    return value
+
+
+def _thawed(value: object) -> object:
+    """A detached copy of ``value`` with plain, mutable dicts and lists."""
+
+    if type(value) in _MANIFEST_SCALAR_TYPES:
+        return value
+    if isinstance(value, dict):
+        return {key: _thawed(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_thawed(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_thawed(item) for item in value)
+    return copy.deepcopy(value)
+
+
+def _seal_protein_identity_manifest(
+    items: Iterable[tuple[object, object]],
+    *,
+    inexact: bool = False,
+) -> ProteinIdentityManifest:
+    """The unchecked proof maker: only the check and the extraction call it."""
+
+    flag = [inexact]
+    frozen: dict[object, object] = {}
+    for key, item in items:
+        if type(key) is not str:
+            flag[0] = True
+        frozen[key] = _frozen(item, flag)
+    proof = dict.__new__(ProteinIdentityManifest)
+    # Keys that are not str make the proof inexact; they are kept as given.
+    dict.update(proof, cast("dict[str, object]", frozen))
+    object.__setattr__(proof, "_json_exact", not flag[0])
+    return proof
 
 
 @dataclass(frozen=True)
@@ -501,20 +737,120 @@ class OrthogroupEdgeSelectionResult:
     adjacent_display_edges_by_pair: dict[tuple[int, int], DataFrame]
 
 
-@dataclass(frozen=True)
-class _LocalThreshold:
-    protein_id: str
+class _ComparisonColumns:
+    """One normalized table's values that only output edges read, row by row.
+
+    The comparison columns are copies, so the table itself can be freed once
+    the hits are built; a column view would keep its whole block alive.
+    """
+
+    __slots__ = ("arrays", "identity", "bitscore", "alignment_length")
+
+    def __init__(self, table: DataFrame, identity: np.ndarray, bitscore: np.ndarray, alignment_length: np.ndarray) -> None:
+        self.arrays = tuple(table[column].to_numpy().copy() for column in COMPARISON_COLUMNS[2:])
+        self.identity = identity
+        self.bitscore = bitscore
+        self.alignment_length = alignment_length
+
+    def values(self, row: int) -> tuple[object, ...]:
+        # ndarray.item gives the Python scalar that itertuples gives.
+        return tuple(array.item(row) for array in self.arrays)
+
+
+class _DirectedHit(NamedTuple):
+    """The best hit from one protein to another, with every value inference reads.
+
+    ``rank`` is the hit's position in the anchor-core order: higher normalized
+    score, lower e-value, higher minimum coverage, higher identity, longer
+    alignment, then query record, query ID, subject record and subject ID.
+    ``comparison_row`` is the hit's row in ``comparison_source``, which also
+    holds the values only output edges read.
+    """
+
+    query: str
+    subject: str
+    query_record_index: int
+    subject_record_index: int
     score: float
-    source: str
-    rbnh_count: int
-    accepted_edge_count: int
+    evalue: float
+    min_coverage: float
+    domain_only: bool
+    supports_membership: bool
+    rank: int
+    comparison_source: _ComparisonColumns
+    comparison_row: int
+
+    @property
+    def identity(self) -> float:
+        return float(self.comparison_source.identity.item(self.comparison_row))
+
+    @property
+    def bitscore(self) -> float:
+        return float(self.comparison_source.bitscore.item(self.comparison_row))
+
+    @property
+    def alignment_length(self) -> float:
+        return float(self.comparison_source.alignment_length.item(self.comparison_row))
+
+
+@dataclass(frozen=True, eq=False)
+class _DirectedHitTable:
+    """The best normalized hit per (query, subject) direction, one row per direction.
+
+    Rows are in rank order (the row is the hit's ``rank``). Proteins are integer
+    codes in (record index, ID) order, so the lower code of a pair is its
+    canonical query: the earlier record, then the smaller ID. ``reverse`` is the
+    row of the opposite direction, or -1; ``source`` and ``source_row`` locate the
+    row in ``sources``. ``hit`` builds the record of one row, for the few hits
+    that later steps keep.
+    """
+
+    protein_ids: list[str]
+    protein_index: pd.Index
+    protein_record: np.ndarray
+    query: np.ndarray
+    subject: np.ndarray
+    score: np.ndarray
+    evalue: np.ndarray
+    min_coverage: np.ndarray
+    domain_only: np.ndarray
+    supports_membership: np.ndarray
+    reverse: np.ndarray
+    sources: list[_ComparisonColumns]
+    source: np.ndarray
+    source_row: np.ndarray
+
+    def __len__(self) -> int:
+        return len(self.query)
+
+    def codes(self, protein_ids: Iterable[str]) -> np.ndarray:
+        """Codes of the given IDs; -1 for an ID outside the protein map."""
+        return np.asarray(self.protein_index.get_indexer(list(protein_ids)), dtype=np.int64)
+
+    def hit(self, row: int) -> _DirectedHit:
+        # ndarray.item gives the Python scalar that tolist gives.
+        query, subject = self.query.item(row), self.subject.item(row)
+        return _DirectedHit(
+            self.protein_ids[query],
+            self.protein_ids[subject],
+            self.protein_record.item(query),
+            self.protein_record.item(subject),
+            self.score.item(row),
+            self.evalue.item(row),
+            self.min_coverage.item(row),
+            self.domain_only.item(row),
+            self.supports_membership.item(row),
+            row,
+            self.sources[self.source.item(row)],
+            self.source_row.item(row),
+        )
 
 
 @dataclass(frozen=True)
 class _AnchorCoreEvidenceEdge:
     query_id: str
     subject_id: str
-    row: object
+    hit: _DirectedHit
     score: float
     reverse_score: float
     edge_kind: Literal["rbh", "coortholog", "record_local_paralog"]
@@ -527,9 +863,7 @@ class _CoreSupportCandidate:
     diagnostic_score: float
     same_record_score: float
     cross_record_score: float
-    evidence_row: object
-    evidence_query_id: str
-    evidence_subject_id: str
+    evidence: _DirectedHit
     relation_kind: OrthologEdgeKind
     min_coverage: float
     domain_only: bool
@@ -540,14 +874,10 @@ class _CoreSupportCandidate:
 
 @dataclass(frozen=True)
 class _BestCoreEvidence:
-    support_score: float
-    support_row: object | None
-    support_query_id: str
-    support_subject_id: str
-    diagnostic_score: float
-    diagnostic_row: object | None
-    diagnostic_query_id: str
-    diagnostic_subject_id: str
+    """The best membership-supporting hit and the best hit of any coverage."""
+
+    support: _DirectedHit | None
+    diagnostic: _DirectedHit | None
 
 
 @dataclass(frozen=True)
@@ -753,7 +1083,7 @@ def _validate_protein_sets_and_record_analyses(
         raw_proteins = raw_set.get("proteins")
         if raw_set.get("schema") != 1 or not isinstance(raw_proteins, list):
             raise ValidationError(f"Protein set {set_key!r} is invalid.")
-        identity_pairs: list[dict[str, str]] = []
+        identity_pairs: list[tuple[str, str]] = []
         feature_ids: set[str] = set()
         for protein in raw_proteins:
             if not isinstance(protein, Mapping):
@@ -777,14 +1107,14 @@ def _validate_protein_sets_and_record_analyses(
             if expected_feature_id != feature_id:
                 raise ValidationError(f"Protein set {set_key!r} feature ID does not match its content.")
             feature_ids.add(feature_id)
-            identity_pairs.append({"featureAnalysisId": feature_id, "aaSha256": aa_sha256})
-        identity_pairs.sort(key=lambda protein: protein["featureAnalysisId"])
+            identity_pairs.append((feature_id, aa_sha256))
+        identity_pairs.sort(key=lambda pair: pair[0])
         if [
             str(protein.get("featureAnalysisId"))
             for protein in raw_proteins
-        ] != [protein["featureAnalysisId"] for protein in identity_pairs]:
+        ] != [feature_id for feature_id, _aa_sha256 in identity_pairs]:
             raise ValidationError(f"Protein set {set_key!r} is not in canonical feature order.")
-        if _identity_sha256({"proteins": identity_pairs}) != set_key:
+        if _identity_sha256(_protein_set_hash_payload(identity_pairs)) != set_key:
             raise ValidationError(f"Protein set {set_key!r} hash does not match its content.")
         protein_sets[set_key] = dict(raw_set)
 
@@ -802,17 +1132,43 @@ def _validate_protein_sets_and_record_analyses(
             or not record_source_id
         ):
             raise ValidationError(f"Record analysis {analysis_key!r} has an invalid protein set reference.")
-        analysis_hash_payload = {
-            "proteinSetHash": protein_set_hash,
-            "recordSourceId": raw_analysis.get("recordSourceId"),
-            "region": raw_analysis.get("region"),
-            "selector": raw_analysis.get("selector"),
-        }
+        analysis_hash_payload = _record_analysis_hash_payload(
+            protein_set_hash=protein_set_hash,
+            record_source_id=raw_analysis.get("recordSourceId"),
+            region=raw_analysis.get("region"),
+            selector=raw_analysis.get("selector"),
+        )
         if _identity_sha256(analysis_hash_payload) != analysis_key:
             raise ValidationError(f"Record analysis {analysis_key!r} hash does not match its content.")
         record_analyses[analysis_key] = dict(raw_analysis)
 
     return protein_sets, record_analyses
+
+
+def _protein_set_hash_payload(
+    identity_pairs: Sequence[tuple[str, str]],
+) -> dict[str, object]:
+    return {
+        "proteins": [
+            {"featureAnalysisId": feature_id, "aaSha256": aa_sha256}
+            for feature_id, aa_sha256 in identity_pairs
+        ]
+    }
+
+
+def _record_analysis_hash_payload(
+    *,
+    protein_set_hash: str,
+    record_source_id: object,
+    region: object,
+    selector: object,
+) -> dict[str, object]:
+    return {
+        "proteinSetHash": protein_set_hash,
+        "recordSourceId": record_source_id,
+        "region": region,
+        "selector": selector,
+    }
 
 
 def _runtime_binding_payload(
@@ -845,11 +1201,11 @@ def _display_binding_payload(
 
 
 def _expected_export_ordinals(
-    feature_metadata: Mapping[str, Mapping[str, object]],
+    display_aliases: Mapping[str, object],
 ) -> dict[str, int | None]:
     feature_ids_by_alias: dict[str, list[str]] = {}
-    for feature_id, metadata in feature_metadata.items():
-        alias = _normalize_identity_text(metadata.get("displayAlias")).strip()
+    for feature_id, display_alias in display_aliases.items():
+        alias = _normalize_identity_text(display_alias).strip()
         if not alias:
             raise ValidationError("Protein feature metadata requires a display alias.")
         feature_ids_by_alias.setdefault(alias, []).append(str(feature_id))
@@ -903,7 +1259,42 @@ def _reject_manifest_presentation_identity(value: Mapping[str, object]) -> None:
 def validate_protein_identity_manifest(
     value: Mapping[str, object],
 ) -> ProteinIdentityManifest:
-    """Validate and materialize a schema-2 compact protein manifest."""
+    """Check a schema-2 compact protein manifest and return its proof.
+
+    A :class:`ProteinIdentityManifest` is returned unchanged: it passed this
+    check when it was made and cannot change. Any other value gets the full
+    check, and its proof keeps the value's items in their order, with the
+    keys and runtime handles the check reads as text made ``str``. For JSON
+    data the proof equals the value and ``json.dumps`` writes the same bytes.
+    """
+
+    if isinstance(value, ProteinIdentityManifest):
+        return value
+    checked = dict(
+        zip(
+            ("proteinSets", "recordAnalyses", "recordInstances"),
+            _check_protein_identity_manifest(value),
+        )
+    )
+    # Plain JSON data is sealed as it is: the check's maps hold the same
+    # content then. Other Python values get the check's str() coercions.
+    proof = _seal_protein_identity_manifest(value.items(), inexact=type(value) is not dict)
+    if proof._json_exact:
+        return proof
+    return _seal_protein_identity_manifest(
+        ((key, checked[key] if key in checked else item) for key, item in value.items()),
+        inexact=True,
+    )
+
+
+def _check_protein_identity_manifest(
+    value: Mapping[str, object],
+) -> tuple[
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+    dict[str, dict[str, object]],
+]:
+    """The full check: the protein sets, analyses and bindings it read, in input order."""
 
     if not isinstance(value, Mapping) or value.get("schema") != PROTEIN_IDENTITY_MANIFEST_SCHEMA:
         raise ValidationError("Protein identity manifest must use schema 2.")
@@ -995,7 +1386,12 @@ def validate_protein_identity_manifest(
             raise ValidationError(
                 f"Record instance {instance_key!r} metadata does not match its protein set."
             )
-        expected_ordinals = _expected_export_ordinals(normalized_metadata)
+        expected_ordinals = _expected_export_ordinals(
+            {
+                feature_id: metadata.get("displayAlias")
+                for feature_id, metadata in normalized_metadata.items()
+            }
+        )
         for feature_id, expected_ordinal in expected_ordinals.items():
             actual = normalized_metadata[feature_id].get("exportOrdinal")
             if actual != expected_ordinal:
@@ -1024,15 +1420,11 @@ def validate_protein_identity_manifest(
             )
 
         normalized_binding = dict(raw_binding)
-        normalized_binding["runtimeIds"] = dict(sorted(normalized_runtime_ids.items()))
-        normalized_binding["featureMetadata"] = dict(sorted(normalized_metadata.items()))
+        normalized_binding["runtimeIds"] = normalized_runtime_ids
+        normalized_binding["featureMetadata"] = normalized_metadata
         record_instances[instance_key] = normalized_binding
 
-    return ProteinIdentityManifest(
-        protein_sets=protein_sets,
-        record_analyses=record_analyses,
-        record_instances=record_instances,
-    )
+    return protein_sets, record_analyses, record_instances
 
 
 def _safe_web_protein_id_token(value: object) -> str:
@@ -1270,14 +1662,14 @@ def extract_protein_identity_manifest(
             (_protein_identity_core(protein) for protein in identified),
             key=lambda entry: str(entry["featureAnalysisId"]),
         )
-        hash_proteins = [
-            {
-                "featureAnalysisId": entry["featureAnalysisId"],
-                "aaSha256": entry["aaSha256"],
-            }
-            for entry in sorted_core
-        ]
-        protein_set_hash = _identity_sha256({"proteins": hash_proteins})
+        protein_set_hash = _identity_sha256(
+            _protein_set_hash_payload(
+                [
+                    (str(entry["featureAnalysisId"]), str(entry["aaSha256"]))
+                    for entry in sorted_core
+                ]
+            )
+        )
         protein_set = {"schema": 1, "proteins": sorted_core}
         existing_set = protein_sets.get(protein_set_hash)
         if (
@@ -1293,13 +1685,14 @@ def extract_protein_identity_manifest(
             raise ValidationError("record_source_ids must be non-empty.")
         selector = _canonical_identity_context_value(selector_values[record_index])
         region = _canonical_identity_context_value(region_values[record_index])
-        analysis_hash_payload = {
-            "proteinSetHash": protein_set_hash,
-            "recordSourceId": record_source_id,
-            "region": region,
-            "selector": selector,
-        }
-        record_analysis_id = _identity_sha256(analysis_hash_payload)
+        record_analysis_id = _identity_sha256(
+            _record_analysis_hash_payload(
+                protein_set_hash=protein_set_hash,
+                record_source_id=record_source_id,
+                region=region,
+                selector=selector,
+            )
+        )
         record_analysis = {
             "schema": 1,
             "recordSourceId": record_source_id,
@@ -1328,20 +1721,9 @@ def extract_protein_identity_manifest(
                 record_instance_key=instance_key,
             )
 
-        feature_ids_by_alias: dict[str, list[str]] = {}
-        for protein in identified:
-            feature_ids_by_alias.setdefault(
-                _normalize_identity_text(protein.display_alias).strip(),
-                [],
-            ).append(str(protein.feature_analysis_id))
-        export_ordinals: dict[str, int | None] = {}
-        for feature_ids in feature_ids_by_alias.values():
-            ordered_feature_ids = sorted(feature_ids)
-            for ordinal, feature_id in enumerate(ordered_feature_ids, start=1):
-                export_ordinals[feature_id] = (
-                    ordinal if len(ordered_feature_ids) > 1 else None
-                )
-
+        export_ordinals = _expected_export_ordinals(
+            {str(protein.feature_analysis_id): protein.display_alias for protein in identified}
+        )
         feature_metadata = {
             str(protein.feature_analysis_id): _protein_binding_metadata(
                 protein,
@@ -1402,18 +1784,19 @@ def extract_protein_identity_manifest(
         runtime_binding_hashes.append(runtime_binding_hash)
         display_binding_hashes.append(display_binding_hash)
 
-    manifest = validate_protein_identity_manifest(
-        {
-            "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
-            "proteinSets": protein_sets,
-            "recordAnalyses": record_analyses,
-            "recordInstances": record_instances,
-        }
-    )
+    manifest = {
+        "schema": PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+        "proteinSets": protein_sets,
+        "recordAnalyses": record_analyses,
+        "recordInstances": record_instances,
+    }
+    # The validator's other checks re-derive what this loop computed with the same helpers;
+    # only the key walk can fail on caller input (record keys, selectors, regions).
+    _reject_manifest_presentation_identity(manifest)
     return ProteinExtractionResult(
         proteins_by_record=proteins_by_record,
         protein_map=protein_map,
-        identity_manifest=manifest,
+        identity_manifest=_seal_protein_identity_manifest(manifest.items()),
         record_instance_keys=tuple(instance_keys),
         protein_set_hashes=tuple(protein_set_hashes),
         record_analysis_ids=tuple(record_analysis_ids),
@@ -1459,11 +1842,7 @@ def build_protein_losat_pair_identity(
 ) -> ProteinLosatPairIdentity:
     """Resolve one directional pair from a validated identity manifest."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
 
     def resolve(instance_key: str) -> tuple[str, str]:
         binding = authority.binding_for(instance_key)
@@ -1595,36 +1974,17 @@ def _fasta_record_instance_key(
     return matches[0]
 
 
-# The parse verdict depends only on the text. Key by digest so the memo does not
-# keep the (possibly multi-megabyte) texts alive, and bound it.
-_OUTFMT6_PARSE_VERDICTS: dict[bytes, bool] = {}
-_OUTFMT6_PARSE_VERDICTS_MAX = 1024
+# The verdict depends only on the text and the runtime handles of the two
+# bindings, which a validated manifest's runtime binding hash digests. Key by the
+# text's digest and both hashes, so the memo does not keep the (possibly
+# multi-megabyte) texts alive and an entry that several layers check reads its
+# rows once; bound it.
+_RAW_TSV_VERDICTS: dict[tuple[bytes, str, str], bool] = {}
+_RAW_TSV_VERDICTS_MAX = 1024
 
 
-def _is_parseable_losatp_outfmt6(text: str) -> bool:
-    key = hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
-    verdict = _OUTFMT6_PARSE_VERDICTS.get(key)
-    if verdict is None:
-        try:
-            parse_losatp_outfmt6(text)
-            verdict = True
-        except ParseError:
-            verdict = False
-        if len(_OUTFMT6_PARSE_VERDICTS) >= _OUTFMT6_PARSE_VERDICTS_MAX:
-            _OUTFMT6_PARSE_VERDICTS.clear()
-        _OUTFMT6_PARSE_VERDICTS[key] = verdict
-    return verdict
-
-
-def raw_protein_tsv_matches_bindings(
-    text: str,
-    *,
-    query_ids: set[str],
-    subject_ids: set[str],
-) -> bool:
-    """Return whether every non-comment TSV row belongs to the directional pair."""
-
-    for raw_line in str(text).splitlines():
+def _raw_tsv_verdict(text: str, query_ids: set[str], subject_ids: set[str]) -> bool:
+    for raw_line in text.splitlines():
         if not raw_line.strip() or raw_line.lstrip().startswith("#"):
             continue
         columns = raw_line.split("\t")
@@ -1634,7 +1994,39 @@ def raw_protein_tsv_matches_bindings(
             or columns[1] not in subject_ids
         ):
             return False
-    return _is_parseable_losatp_outfmt6(str(text))
+    try:
+        parse_losatp_outfmt6(text)
+    except ParseError:
+        return False
+    return True
+
+
+def raw_protein_tsv_matches_bindings(
+    text: str,
+    manifest: ProteinIdentityManifest,
+    *,
+    query_record_instance_key: str,
+    subject_record_instance_key: str,
+) -> bool:
+    """Return whether the TSV parses and every non-comment row belongs to the directional pair."""
+
+    text = str(text)
+    key = (
+        hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest(),
+        str(manifest.binding_for(query_record_instance_key)["runtimeBindingHash"]),
+        str(manifest.binding_for(subject_record_instance_key)["runtimeBindingHash"]),
+    )
+    verdict = _RAW_TSV_VERDICTS.get(key)
+    if verdict is None:
+        verdict = _raw_tsv_verdict(
+            text,
+            _binding_runtime_ids(manifest, query_record_instance_key),
+            _binding_runtime_ids(manifest, subject_record_instance_key),
+        )
+        if len(_RAW_TSV_VERDICTS) >= _RAW_TSV_VERDICTS_MAX:
+            _RAW_TSV_VERDICTS.clear()
+        _RAW_TSV_VERDICTS[key] = verdict
+    return verdict
 
 
 def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> TypeGuard[Mapping[str, object]]:
@@ -1686,11 +2078,7 @@ def validate_protein_raw_entry_references(
     if not is_protein_losat_cache_entry(entry):
         return False
     try:
-        authority = (
-            manifest
-            if isinstance(manifest, ProteinIdentityManifest)
-            else validate_protein_identity_manifest(manifest)
-        )
+        authority = validate_protein_identity_manifest(manifest)
         pair_identity = build_protein_losat_pair_identity(
             authority,
             query_record_instance_key=str(entry["queryRecordInstanceKey"]),
@@ -1720,14 +2108,9 @@ def validate_protein_raw_entry_references(
             return False
         return raw_protein_tsv_matches_bindings(
             str(entry.get("text") or ""),
-            query_ids=_binding_runtime_ids(
-                authority,
-                pair_identity.query_record_instance_key,
-            ),
-            subject_ids=_binding_runtime_ids(
-                authority,
-                pair_identity.subject_record_instance_key,
-            ),
+            authority,
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         )
     except (KeyError, TypeError, ValueError, ValidationError):
         return False
@@ -1739,11 +2122,7 @@ def build_protein_export_id_map(
 ) -> dict[str, str]:
     """Resolve runtime handles to deterministic user-visible export IDs."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
     binding = authority.binding_for(str(record_instance_key))
     runtime_ids = binding.get("runtimeIds")
     feature_metadata = binding.get("featureMetadata")
@@ -1779,11 +2158,7 @@ def hydrate_protein_losat_tsv(
 ) -> str:
     """Replace only QUERY/SUBJECT runtime handles for a raw TSV download."""
 
-    authority = (
-        manifest
-        if isinstance(manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(manifest)
-    )
+    authority = validate_protein_identity_manifest(manifest)
     if not validate_protein_raw_entry_references(entry, authority):
         raise ValidationError(
             "Protein raw LOSAT entry does not resolve through the current manifest."
@@ -2157,11 +2532,7 @@ def promote_legacy_protein_raw_cache_entries(
     rejection diagnostic and never enters the current cache.
     """
 
-    manifest = (
-        identity_manifest
-        if isinstance(identity_manifest, ProteinIdentityManifest)
-        else validate_protein_identity_manifest(identity_manifest)
-    )
+    manifest = validate_protein_identity_manifest(identity_manifest)
     if proteins_to_fasta(query_proteins) != str(query_fasta):
         raise ValidationError("query_fasta does not match the current query extraction.")
     if proteins_to_fasta(subject_proteins) != str(subject_fasta):
@@ -2230,12 +2601,11 @@ def promote_legacy_protein_raw_cache_entries(
                 query_id_map,
                 subject_id_map,
             )
-            query_ids = _binding_runtime_ids(manifest, query_instance_key)
-            subject_ids = _binding_runtime_ids(manifest, subject_instance_key)
             if not raw_protein_tsv_matches_bindings(
                 rewritten_tsv,
-                query_ids=query_ids,
-                subject_ids=subject_ids,
+                manifest,
+                query_record_instance_key=query_instance_key,
+                subject_record_instance_key=subject_instance_key,
             ):
                 raise ValidationError("Rewritten TSV does not match the current bindings.")
 
@@ -2318,13 +2688,9 @@ class LosatpCacheManager(LosatRawCache):
         self.threads_per_job = threads_per_job
         self.runtime_compatibility = runtime_compatibility
         self.identity_manifest = (
-            identity_manifest
-            if isinstance(identity_manifest, ProteinIdentityManifest)
-            else (
-                validate_protein_identity_manifest(identity_manifest)
-                if identity_manifest is not None
-                else None
-            )
+            validate_protein_identity_manifest(identity_manifest)
+            if identity_manifest is not None
+            else None
         )
         self._legacy_entries: list[dict[str, object]] = []
         self._proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
@@ -2413,11 +2779,7 @@ class LosatpCacheManager(LosatRawCache):
         self,
         manifest: ProteinIdentityManifest | Mapping[str, object],
     ) -> None:
-        self.identity_manifest = (
-            manifest
-            if isinstance(manifest, ProteinIdentityManifest)
-            else validate_protein_identity_manifest(manifest)
-        )
+        self.identity_manifest = validate_protein_identity_manifest(manifest)
         authority = self.identity_manifest
         self._retain_entries(
             lambda entry: validate_protein_raw_entry_references(entry, authority)
@@ -2526,18 +2888,11 @@ class LosatpCacheManager(LosatRawCache):
             return None
         if tuple(str(arg) for arg in cast("Sequence[object]", cached.get("args") or ())) != tuple(str(arg) for arg in args):
             return None
-        query_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.query_record_instance_key,
-        )
-        subject_ids = _binding_runtime_ids(
-            self.identity_manifest,
-            pair_identity.subject_record_instance_key,
-        )
         if not raw_protein_tsv_matches_bindings(
             str(cached.get("text") or ""),
-            query_ids=query_ids,
-            subject_ids=subject_ids,
+            self.identity_manifest,
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         ):
             return None
         return cached
@@ -2649,14 +3004,9 @@ class LosatpCacheManager(LosatRawCache):
         }
         if not raw_protein_tsv_matches_bindings(
             str(entry["text"]),
-            query_ids=_binding_runtime_ids(
-                cast(ProteinIdentityManifest, self.identity_manifest),
-                pair_identity.query_record_instance_key,
-            ),
-            subject_ids=_binding_runtime_ids(
-                cast(ProteinIdentityManifest, self.identity_manifest),
-                pair_identity.subject_record_instance_key,
-            ),
+            cast(ProteinIdentityManifest, self.identity_manifest),
+            query_record_instance_key=pair_identity.query_record_instance_key,
+            subject_record_instance_key=pair_identity.subject_record_instance_key,
         ):
             raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
         self._add_search_entry(
@@ -2851,41 +3201,6 @@ def _cds_span(feature: SeqFeature) -> tuple[int, int, int | None] | None:
     return start, end, strand
 
 
-def _feature_hash_parts(
-    feature: SeqFeature,
-    coord_base: int = 1,
-    coord_step: int = 1,
-) -> tuple[tuple[int, int, int | None], ...]:
-    """Return hash parts in the source-record biological coordinate system."""
-
-    source_parts = _source_feature_location_parts(feature)
-    if source_parts is not None:
-        return source_parts
-    location = feature.location
-    if location is None:
-        return ()
-    if hasattr(location, "parts") and location.parts:
-        raw_parts = location.parts
-    else:
-        raw_parts = [location]
-    parts: list[tuple[int, int, int | None]] = []
-    for part in raw_parts:
-        strand = part.strand if part.strand in {-1, 1} else None
-        start, end = _absolute_display_interval(
-            int(part.start),
-            int(part.end),
-            coord_base,
-            coord_step,
-        )
-        biological_strand = (
-            int(strand) * (1 if int(coord_step) >= 0 else -1)
-            if strand is not None
-            else None
-        )
-        parts.append((start, end, biological_strand))
-    return tuple(parts)
-
-
 def _view_feature_hash_parts(
     feature: SeqFeature,
 ) -> tuple[tuple[int, int, int | None], ...]:
@@ -2929,7 +3244,6 @@ def extract_cds_proteins(
 
     for record_index, record in enumerate(records):
         global_record_index = record_index + record_index_offset
-        coord_base, coord_step = _read_record_coord_map(record)
         record_candidates: list[_CdsProteinCandidate] = []
         cds_count = 0
         feature_items = _iter_record_features(record)
@@ -2960,7 +3274,7 @@ def extract_cds_proteins(
                 continue
 
             cds_count += 1
-            hash_parts = _feature_hash_parts(feature, coord_base, coord_step)
+            feature_svg_id, hash_parts = source_feature_hash_and_parts(feature, record)
             view_hash_parts = _view_feature_hash_parts(feature)
             view_feature_svg_id = (
                 compute_feature_hash_from_location_parts(
@@ -3010,11 +3324,7 @@ def extract_cds_proteins(
                     label=label,
                     protein_length=len(protein_sequence),
                     sequence=protein_sequence,
-                    feature_svg_id=compute_feature_hash_from_location_parts(
-                        str(feature.type or ""),
-                        hash_parts,
-                        record_id=record.id,
-                    ),
+                    feature_svg_id=feature_svg_id,
                     view_feature_svg_id=view_feature_svg_id,
                     gene=gene,
                     product=product,
@@ -3107,18 +3417,21 @@ def proteins_to_fasta(proteins: Sequence[CdsProtein]) -> str:
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def _finite_numeric_values(df: DataFrame) -> np.ndarray | None:
+    """The numeric comparison columns as one float matrix, or None unless every value is finite."""
+
+    try:
+        values = df[list(_NUMERIC_COMPARISON_COLUMNS)].to_numpy(dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return values if bool(np.isfinite(values).all()) else None
+
+
 def _coerce_outfmt6_numeric_columns(df: DataFrame) -> DataFrame:
     coerced = df.copy()
     for column in _NUMERIC_COMPARISON_COLUMNS:
         coerced[column] = pd.to_numeric(coerced[column], errors="coerce")
-    numeric = coerced[list(_NUMERIC_COMPARISON_COLUMNS)]
-    try:
-        all_finite = all(
-            math.isfinite(float(value)) for value in numeric.to_numpy().flat
-        )
-    except (TypeError, ValueError, OverflowError):
-        all_finite = False
-    if numeric.isna().any(axis=None) or not all_finite:
+    if _finite_numeric_values(coerced) is None:
         raise ParseError("LOSATP blastp output contains non-numeric outfmt 6 fields.")
     return coerced
 
@@ -3137,16 +3450,7 @@ def _is_strict_outfmt6_numeric_field(column: str, value: str) -> bool:
         return False
 
 
-def parse_losatp_outfmt6(text: str) -> DataFrame:
-    """Parse LOSATP blastp outfmt 6 text into the standard comparison columns."""
-
-    data_lines = [
-        line
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    if not data_lines:
-        return pd.DataFrame(columns=COMPARISON_COLUMNS)
+def _validate_losatp_outfmt6_lines(data_lines: Sequence[str]) -> None:
     for line in data_lines:
         columns = line.split("\t")
         if len(columns) != len(COMPARISON_COLUMNS):
@@ -3158,12 +3462,31 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
             raise ParseError(
                 "LOSATP blastp output contains non-numeric outfmt 6 fields."
             )
+
+
+def parse_losatp_outfmt6(text: str) -> DataFrame:
+    """Parse LOSATP blastp outfmt 6 text into the standard comparison columns."""
+
+    data_lines = [
+        line
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not data_lines:
+        return pd.DataFrame(columns=COMPARISON_COLUMNS)
+    data = "\n".join(data_lines)
+    # One regex pass accepts the strict grammar. The line-by-line check runs
+    # only to choose the error that the first failing line raises, and to
+    # settle a value whose float is not finite, for which read_comparison_table
+    # raises.
+    if _NON_STRICT_OUTFMT6_LINE_RE.search("\n" + data) is not None:
+        _validate_losatp_outfmt6_lines(data_lines)
     try:
-        return read_comparison_table(
-            StringIO("\n".join(data_lines)), label="LOSATP blastp output"
-        )
+        table = read_comparison_table(StringIO(data), label="LOSATP blastp output")
     except ValidationError as exc:
+        _validate_losatp_outfmt6_lines(data_lines)
         raise ParseError(f"Failed to parse LOSATP blastp output: {exc}") from exc
+    return table
 
 
 def _validate_max_hits(max_hits: int, *, option_name: str = "protein_blastp_max_hits") -> None:
@@ -3294,11 +3617,17 @@ def _select_member_candidate_hits_per_query(
     *,
     max_hits: int | None,
 ) -> DataFrame:
-    """Keep every HSP for the strongest distinct member candidates."""
+    """Keep every HSP for the strongest distinct member candidates.
+
+    Without a limit every HSP is kept, and the result shares the columns of
+    ``hits`` instead of copying them; callers only read it.
+    """
 
     if max_hits is None:
         _validate_comparison_columns(hits)
-        return hits.reset_index(drop=True)
+        shared = hits.copy(deep=False)
+        shared.index = pd.RangeIndex(len(shared))
+        return shared
     selected_pairs = select_top_hits_per_query(hits, max_hits=max_hits)
     if selected_pairs.empty:
         return hits.iloc[0:0].copy()
@@ -3376,9 +3705,41 @@ def select_reciprocal_best_hit_edges(
     return forward_best.loc[keep_mask].reset_index(drop=True)
 
 
-def _normalized_score_from_row(row: object) -> float:
-    score = _row_float(row, "normalized_score", 0.0)
-    return score if math.isfinite(score) and score > 0.0 else 0.0
+def _normalized_fit_row_positions(
+    normalized_hits: DataFrame,
+    *,
+    top_fraction: float,
+) -> list[int]:
+    """Positions of the fit rows, in fit order.
+
+    The length-sorted table is cut into at most eight bins; each bin keeps the
+    top fraction of its rows by bitscore. One stable sort with the bin as its
+    first key orders every bin as a separate sort of that bin would.
+    """
+
+    projection = normalized_hits[["length_product", "query", "subject", "bitscore"]].reset_index(drop=True)
+    sorted_hits = projection.sort_values(
+        ["length_product", "query", "subject"],
+        ascending=[True, True, True],
+        kind="mergesort",
+    )
+    row_count = len(sorted_hits)
+    bin_size = max(4, int(math.ceil(row_count / 8)))
+    ranked = sorted_hits.assign(_bin=np.arange(row_count) // bin_size).sort_values(
+        ["_bin", "bitscore", "query", "subject"],
+        ascending=[True, False, True, True],
+        kind="mergesort",
+    )
+    top_counts = np.array(
+        [
+            max(1, int(math.ceil(min(bin_size, row_count - start) * float(top_fraction))))
+            for start in range(0, row_count, bin_size)
+        ],
+        dtype=np.int64,
+    )
+    ranked_bins = ranked["_bin"].to_numpy()
+    top = (np.arange(row_count) - ranked_bins * bin_size) < top_counts[ranked_bins]
+    return [int(position) for position in ranked.index[top]]
 
 
 def _select_normalized_fit_rows(
@@ -3388,27 +3749,15 @@ def _select_normalized_fit_rows(
 ) -> list[tuple[float, float]]:
     if normalized_hits.empty:
         return []
-    sorted_hits = normalized_hits[["length_product", "query", "subject", "bitscore"]].sort_values(
-        ["length_product", "query", "subject"],
-        ascending=[True, True, True],
-        kind="mergesort",
-    )
-    bin_size = max(4, int(math.ceil(len(sorted_hits) / 8)))
+    positions = _normalized_fit_row_positions(normalized_hits, top_fraction=top_fraction)
     fit_points: list[tuple[float, float]] = []
-    for start_index in range(0, len(sorted_hits), bin_size):
-        bin_hits = sorted_hits.iloc[start_index : start_index + bin_size]
-        top_count = max(1, int(math.ceil(len(bin_hits) * float(top_fraction))))
-        top_hits = bin_hits.sort_values(
-            ["bitscore", "query", "subject"],
-            ascending=[False, True, True],
-            kind="mergesort",
-        ).head(top_count)
-        for row in top_hits.itertuples(index=False):
-            length_product = _row_float(row, "length_product", 0.0)
-            bitscore = _row_float(row, "bitscore", 0.0)
-            if length_product <= 0.0 or bitscore <= 0.0:
-                continue
-            fit_points.append((math.log10(length_product), math.log10(bitscore)))
+    for length_product, bitscore in zip(
+        normalized_hits["length_product"].to_numpy(dtype=float)[positions].tolist(),
+        normalized_hits["bitscore"].to_numpy(dtype=float)[positions].tolist(),
+    ):
+        if length_product <= 0.0 or bitscore <= 0.0:
+            continue
+        fit_points.append((math.log10(length_product), math.log10(bitscore)))
     return fit_points
 
 
@@ -3467,193 +3816,192 @@ def _empty_normalized_hit_table(columns: Sequence[str]) -> DataFrame:
     return pd.DataFrame(columns=tuple(dict.fromkeys([*columns, *extra_columns])))
 
 
-def _coverage_coordinate(value: object) -> int | None:
-    try:
-        coordinate = float(cast(SupportsFloat, value))
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(coordinate):
-        return None
-    return int(coordinate)
+def _python_scalar_columns(rows: DataFrame) -> dict[str, object]:
+    """The columns ``DataFrame.from_records`` builds from these rows' ``itertuples``.
+
+    Names follow the namedtuple renaming of ``itertuples``. Numpy numeric
+    columns become int64, float64 or bool, as their Python scalars would;
+    every other column is rebuilt from its Python values.
+    """
+
+    names = cast(type[NamedTuple], namedtuple("Pandas", list(rows.columns), rename=True))._fields
+    numeric: dict[str, np.ndarray] = {}
+    other_names: list[str] = []
+    other_values: list[list[object]] = []
+    for position, name in enumerate(names):
+        column = rows.iloc[:, position]
+        dtype = column.dtype
+        if isinstance(dtype, np.dtype) and dtype.kind == "f":
+            numeric[name] = column.to_numpy(dtype=np.float64)
+        elif isinstance(dtype, np.dtype) and dtype.kind == "b":
+            numeric[name] = column.to_numpy(dtype=bool)
+        elif isinstance(dtype, np.dtype) and (dtype.kind == "i" or (dtype.kind == "u" and dtype.itemsize < 8)):
+            numeric[name] = column.to_numpy(dtype=np.int64)
+        else:
+            other_names.append(name)
+            other_values.append(column.tolist())
+    # Row tuples take the same per-column type inference as the records of itertuples.
+    other = pd.DataFrame.from_records(list(zip(*other_values)), columns=other_names)
+    return {name: numeric[name] if name in numeric else other[name] for name in names}
 
 
-def _coverage_interval_from_hsp(start: object, end: object, length: int) -> tuple[int, int] | None:
-    if int(length) <= 0:
-        return None
-    start_coordinate = _coverage_coordinate(start)
-    end_coordinate = _coverage_coordinate(end)
-    if start_coordinate is None or end_coordinate is None:
-        return None
-    low = min(start_coordinate, end_coordinate)
-    high = max(start_coordinate, end_coordinate)
-    clamped_low = max(1, low)
-    clamped_high = min(int(length), high)
-    if clamped_low > clamped_high:
-        return None
-    return clamped_low, clamped_high
+def _first_minimum_per_group(
+    groups: np.ndarray,
+    keys: Sequence[np.ndarray],
+    group_count: int,
+) -> np.ndarray:
+    """Position of each group's smallest row, comparing keys in order; the earliest row wins a tie.
+
+    Groups come in ascending order, and a group without rows is left out.
+    Only rows that share their group are sorted.
+    """
+
+    best = np.full(group_count, -1, dtype=np.int64)
+    shared = np.bincount(groups, minlength=group_count)[groups] > 1
+    single = np.flatnonzero(~shared)
+    best[groups[single]] = single
+    tied = np.flatnonzero(shared)
+    if len(tied):
+        # lexsort is stable, so rows with equal keys keep their order.
+        order = tied[np.lexsort((*(key[tied] for key in reversed(keys)), groups[tied]))]
+        ordered_groups = groups[order]
+        first = order[np.r_[True, ordered_groups[1:] != ordered_groups[:-1]]]
+        best[groups[first]] = first
+    return best[best >= 0]
 
 
-def _merge_coverage_intervals(intervals: Sequence[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
-    cleaned = sorted(
-        (int(start), int(end))
-        for start, end in intervals
-        if int(start) <= int(end)
+def _first_occurrences(keys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Each key's code, numbered in order of first appearance, and each code's first position.
+
+    The positions ascend, since the codes follow first appearance.
+    """
+
+    codes = pd.factorize(keys)[0]
+    return codes, _first_minimum_per_group(codes, (), int(codes.max(initial=-1)) + 1)
+
+
+def _covered_lengths(
+    groups: np.ndarray,
+    start: np.ndarray,
+    end: np.ndarray,
+    lengths: np.ndarray,
+    group_count: int,
+) -> np.ndarray:
+    """Length of the union of each group's HSP intervals, clamped to 1..length.
+
+    Intervals that touch (end + 1 == next start) merge. Within each group,
+    sorted by start, a running maximum of the ends marks where a new run begins.
+    """
+
+    low = np.maximum(1.0, np.minimum(start, end))
+    high = np.minimum(lengths[groups].astype(float), np.maximum(start, end))
+    inside = low <= high
+    covered = np.zeros(group_count, dtype=np.int64)
+    if not inside.any():
+        return covered
+    group = groups[inside]
+    low_int = low[inside].astype(np.int64)
+    high_int = high[inside].astype(np.int64)
+    order = np.lexsort((high_int, low_int, group))
+    group, low_int, high_int = group[order], low_int[order], high_int[order]
+    # Offsetting each group by more than any end keeps one running maximum per group.
+    offset = group.astype(np.int64) * (int(high_int.max()) + 2)
+    low_int, high_int = low_int + offset, high_int + offset
+    running_end = np.maximum.accumulate(high_int)
+    run_starts = np.flatnonzero(
+        np.r_[True, (group[1:] != group[:-1]) | (low_int[1:] > running_end[:-1] + 1)]
     )
-    if not cleaned:
-        return ()
-    merged: list[tuple[int, int]] = []
-    current_start, current_end = cleaned[0]
-    for start, end in cleaned[1:]:
-        if start <= current_end + 1:
-            current_end = max(current_end, end)
-            continue
-        merged.append((current_start, current_end))
-        current_start, current_end = start, end
-    merged.append((current_start, current_end))
-    return tuple(merged)
-
-
-def _covered_length(intervals: Sequence[tuple[int, int]]) -> int:
-    return sum(
-        max(0, int(end) - int(start) + 1)
-        for start, end in _merge_coverage_intervals(intervals)
-    )
-
-
-def _raw_hsp_coordinate_rank(row: object, column: str) -> int:
-    coordinate = _coverage_coordinate(getattr(row, column, None))
-    return coordinate if coordinate is not None else sys.maxsize
-
-
-def _raw_hsp_representative_rank(row: object, row_index: int) -> tuple[float, float, float, int, int, int, int, int, int]:
-    return (
-        -_row_float(row, "bitscore", 0.0),
-        _row_float(row, "evalue", float("inf")),
-        -_row_float(row, "identity", 0.0),
-        -int(_row_float(row, "alignment_length", 0.0)),
-        _raw_hsp_coordinate_rank(row, "qstart"),
-        _raw_hsp_coordinate_rank(row, "qend"),
-        _raw_hsp_coordinate_rank(row, "sstart"),
-        _raw_hsp_coordinate_rank(row, "send"),
-        int(row_index),
-    )
-
-
-@dataclass(slots=True)
-class _HspPairAccumulator:
-    query_length: int
-    subject_length: int
-    representative_row: object = None
-    representative_rank: tuple[float | int, ...] = ()
-    rank_error: ValueError | OverflowError | None = None
-    query_intervals: list[tuple[int, int]] = field(default_factory=list)
-    subject_intervals: list[tuple[int, int]] = field(default_factory=list)
-    hsp_count: int = 0
-    total_alignment_length: int = 0
+    run_ends = np.r_[run_starts[1:] - 1, len(group) - 1]
+    np.add.at(covered, group[run_starts], running_end[run_ends] - low_int[run_starts] + 1)
+    return covered
 
 
 def _aggregate_hsps_by_protein_pair(
     hits: DataFrame,
     protein_map: Mapping[str, CdsProtein],
 ) -> DataFrame:
+    """One row per protein pair: its best HSP plus the union coverage of all its HSPs.
+
+    The numeric columns must be finite numbers, as ``_coerce_outfmt6_numeric_columns``
+    leaves them. Pairs keep their order of first appearance; the best HSP is the
+    smallest (-bitscore, evalue, -identity, -alignment length, qstart, qend,
+    sstart, send, row position), with coordinates truncated to integers.
+    """
+
     if hits is None or hits.empty:
         columns = tuple(hits.columns) if hits is not None else tuple(COMPARISON_COLUMNS)
         return _empty_normalized_hit_table(columns)
+    values = _finite_numeric_values(hits)
+    if values is None:
+        raise ParseError("LOSATP blastp output contains non-numeric outfmt 6 fields.")
 
-    # Table-level grouping retains pandas' ID coercion, missing-ID handling
-    # and pair order. It does not construct a DataFrame for each pair.
-    pairs: dict[tuple[object, object], _HspPairAccumulator] = {}
-    for (query_id, subject_id), hsp_count in hits.groupby(
-        ["query", "subject"], sort=False, observed=True,
-    ).size().items():
-        query_protein = protein_map.get(str(query_id))
-        subject_protein = protein_map.get(str(subject_id))
-        if query_protein is None or subject_protein is None:
-            continue
-        query_length = int(query_protein.protein_length)
-        subject_length = int(subject_protein.protein_length)
-        if query_length <= 0 or subject_length <= 0:
-            continue
-        pairs[(query_id, subject_id)] = _HspPairAccumulator(
-            query_length, subject_length, hsp_count=int(hsp_count),
-        )
+    # Pandas groups the ID pairs (its key coercion and missing-ID handling) in
+    # order of appearance; every later step works on whole columns.
+    grouped = hits.groupby(["query", "subject"], sort=False, observed=True)
+    group_count = int(grouped.ngroups)
+    pair_keys = cast(pd.MultiIndex, grouped.size().index)
 
-    for row_index, hsp_row in enumerate(hits.itertuples(index=False)):
-        accumulator = pairs.get((hsp_row.query, hsp_row.subject))
-        if accumulator is None or accumulator.rank_error is not None:
-            continue
-        try:
-            rank = _raw_hsp_representative_rank(hsp_row, row_index)
-        except (ValueError, OverflowError) as error:
-            # Direct private callers can bypass numeric validation. Preserve
-            # the old first-pair error order even when HSPs are interleaved.
-            accumulator.rank_error = error
-            continue
-        if accumulator.representative_row is None or rank < accumulator.representative_rank:
-            accumulator.representative_row = hsp_row
-            accumulator.representative_rank = rank
+    def protein_lengths(level: int) -> np.ndarray:
+        # One lookup per distinct ID; an unknown protein has length 0.
+        lengths = [
+            max(0, int(protein.protein_length)) if (protein := protein_map.get(str(value))) is not None else 0
+            for value in pair_keys.levels[level]
+        ]
+        return np.asarray(lengths, dtype=np.int64)[pair_keys.codes[level]]
 
-        alignment_length = _row_float(hsp_row, "alignment_length", 0.0)
-        if math.isfinite(alignment_length) and alignment_length > 0:
-            accumulator.total_alignment_length += int(alignment_length)
-        query_interval = _coverage_interval_from_hsp(
-            getattr(hsp_row, "qstart", None),
-            getattr(hsp_row, "qend", None),
-            accumulator.query_length,
-        )
-        if query_interval is not None:
-            accumulator.query_intervals.append(query_interval)
-        subject_interval = _coverage_interval_from_hsp(
-            getattr(hsp_row, "sstart", None),
-            getattr(hsp_row, "send", None),
-            accumulator.subject_length,
-        )
-        if subject_interval is not None:
-            accumulator.subject_intervals.append(subject_interval)
-
-    rows: list[dict[str, object]] = []
-    # Dict insertion order retains pair appearance; global row ranks retain
-    # pair-local order on complete ties. Interval sorting remains in the helper.
-    for accumulator in pairs.values():
-        if accumulator.rank_error is not None:
-            raise accumulator.rank_error
-        query_length = accumulator.query_length
-        subject_length = accumulator.subject_length
-        representative_row = accumulator.representative_row
-        bitscore = _row_float(representative_row, "bitscore", 0.0)
-        representative_alignment_length = int(_row_float(representative_row, "alignment_length", 0.0))
-        if bitscore <= 0.0 or representative_alignment_length <= 0:
-            continue
-
-        query_covered_length = _covered_length(accumulator.query_intervals)
-        subject_covered_length = _covered_length(accumulator.subject_intervals)
-        query_coverage = min(1.0, float(query_covered_length) / float(query_length))
-        subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
-        min_hit_coverage = min(query_coverage, subject_coverage)
-
-        record = cast(NamedTuple, representative_row)._asdict()
-        record.update(
-            {
-                "query_length": query_length,
-                "subject_length": subject_length,
-                "length_product": float(query_length * subject_length),
-                "hsp_count": int(accumulator.hsp_count),
-                "query_covered_length": int(query_covered_length),
-                "subject_covered_length": int(subject_covered_length),
-                "query_coverage": query_coverage,
-                "subject_coverage": subject_coverage,
-                "min_coverage": min_hit_coverage,
-                "representative_alignment_length": int(representative_alignment_length),
-                "total_hsp_alignment_length": int(accumulator.total_alignment_length),
-                "coverage_source": "hsp_union",
-            }
-        )
-        rows.append(record)
-
-    pairs.clear()
-    if not rows:
+    query_lengths, subject_lengths = protein_lengths(0), protein_lengths(1)
+    row_groups = np.asarray(grouped.ngroup(), dtype=float)
+    rows = np.flatnonzero(np.isfinite(row_groups) & (row_groups >= 0))
+    groups = row_groups[rows].astype(np.int64)
+    in_pair = (query_lengths[groups] > 0) & (subject_lengths[groups] > 0)
+    rows, groups = rows[in_pair], groups[in_pair]
+    if not len(rows):
         return _empty_normalized_hit_table(tuple(hits.columns))
-    return pd.DataFrame.from_records(rows)
+
+    column = {name: values[rows, index] for index, name in enumerate(_NUMERIC_COMPARISON_COLUMNS)}
+    bitscore = column["bitscore"]
+    alignment_length = np.trunc(column["alignment_length"])
+    qstart, qend, sstart, send = (np.trunc(column[name]) for name in ("qstart", "qend", "sstart", "send"))
+    representative = _first_minimum_per_group(
+        groups,
+        (-bitscore, column["evalue"], -column["identity"], -alignment_length, qstart, qend, sstart, send),
+        group_count,
+    )
+    pair_groups = groups[representative]
+    keep = (bitscore[representative] > 0.0) & (alignment_length[representative] > 0)
+    if not keep.any():
+        return _empty_normalized_hit_table(tuple(hits.columns))
+    pair_groups, representative = pair_groups[keep], representative[keep]
+
+    query_length = query_lengths[pair_groups]
+    subject_length = subject_lengths[pair_groups]
+    query_covered = _covered_lengths(groups, qstart, qend, query_lengths, group_count)[pair_groups]
+    subject_covered = _covered_lengths(groups, sstart, send, subject_lengths, group_count)[pair_groups]
+    query_coverage = np.minimum(1.0, query_covered / query_length)
+    subject_coverage = np.minimum(1.0, subject_covered / subject_length)
+    total_alignment = np.bincount(
+        groups, weights=np.where(alignment_length > 0, alignment_length, 0.0), minlength=group_count
+    )[pair_groups]
+
+    table = _python_scalar_columns(hits.iloc[rows[representative]])
+    # A summary column that the hits already have keeps its position.
+    table.update(
+        {
+            "query_length": query_length,
+            "subject_length": subject_length,
+            "length_product": (query_length * subject_length).astype(float),
+            "hsp_count": np.bincount(groups, minlength=group_count)[pair_groups].astype(np.int64),
+            "query_covered_length": query_covered,
+            "subject_covered_length": subject_covered,
+            "query_coverage": query_coverage,
+            "subject_coverage": subject_coverage,
+            "min_coverage": np.minimum(query_coverage, subject_coverage),
+            "representative_alignment_length": alignment_length[representative].astype(np.int64),
+            "total_hsp_alignment_length": total_alignment.astype(np.int64),
+            "coverage_source": "hsp_union",
+        }
+    )
+    return pd.DataFrame(table)
 
 
 def _normalize_directional_hit_table(
@@ -3684,9 +4032,11 @@ def _normalize_directional_hit_table(
     )
     fallback = model is None
     normalized_scores: list[float] = []
-    for row in normalized_hits.itertuples(index=False):
-        bitscore = _row_float(row, "bitscore", 0.0)
-        length_product = _row_float(row, "length_product", 0.0)
+    # Scalar math keeps math.log10 and ** exactly as before; numpy's can differ in the last bit.
+    for bitscore, length_product in zip(
+        normalized_hits["bitscore"].to_numpy(dtype=float).tolist(),
+        normalized_hits["length_product"].to_numpy(dtype=float).tolist(),
+    ):
         if model is None:
             denominator = math.sqrt(max(length_product, _ORTHOGROUP_SPLIT_EPSILON))
             normalized_scores.append(bitscore / denominator)
@@ -3755,22 +4105,6 @@ class _UnionFind:
         self._parent[right_root] = left_root
 
 
-def _row_float(row: object, column: str, default: float = 0.0) -> float:
-    try:
-        return float(getattr(row, column))
-    except (TypeError, ValueError, AttributeError):
-        return float(default)
-
-
-def _member_rank_from_row(row: object) -> tuple[float, float, float, float]:
-    return (
-        _row_float(row, "bitscore", 0.0),
-        _row_float(row, "evalue", float("inf")),
-        _row_float(row, "identity", 0.0),
-        _row_float(row, "alignment_length", 0.0),
-    )
-
-
 def _is_better_member_rank(
     candidate: tuple[float, float, float, float],
     current: tuple[float, float, float, float] | None,
@@ -3835,6 +4169,8 @@ _WEAK_ORTHOGROUP_NAME_CANDIDATES = {
 }
 
 
+# Annotation texts repeat across members and groups; both checks are pure.
+@lru_cache(maxsize=8192)
 def _normalize_orthogroup_name_text(
     text: str | None,
     source: str,
@@ -3857,6 +4193,7 @@ def _normalize_orthogroup_name_text(
     return key, normalized
 
 
+@lru_cache(maxsize=8192)
 def _is_weak_orthogroup_name_candidate(text: str, source: str) -> bool:
     normalized = re.sub(r"\s+", " ", str(text)).strip().casefold()
     if source == "label":
@@ -3909,9 +4246,10 @@ def _iter_orthogroup_name_candidates(
             key, display_text = normalized
             source_weight = _ORTHOGROUP_NAME_SOURCE_WEIGHTS[source]
             source_rank = _ORTHOGROUP_NAME_SOURCE_RANK[source]
-            accumulator = accumulators.setdefault(
-                key,
-                {
+            weak = _is_weak_orthogroup_name_candidate(display_text, source)
+            accumulator = accumulators.get(key)
+            if accumulator is None:
+                accumulator = accumulators[key] = {
                     "text": display_text,
                     "source": source,
                     "source_weight": source_weight,
@@ -3919,9 +4257,8 @@ def _iter_orthogroup_name_candidates(
                     "members": set(),
                     "records": set(),
                     "representatives": set(),
-                    "weak": _is_weak_orthogroup_name_candidate(display_text, source),
-                },
-            )
+                    "weak": weak,
+                }
             if (
                 source_weight > int(accumulator["source_weight"])
                 or (
@@ -3933,7 +4270,7 @@ def _iter_orthogroup_name_candidates(
                 accumulator["source"] = source
                 accumulator["source_weight"] = source_weight
                 accumulator["source_rank"] = source_rank
-            if not _is_weak_orthogroup_name_candidate(display_text, source):
+            if not weak:
                 accumulator["weak"] = False
             members_set = accumulator["members"]
             records_set = accumulator["records"]
@@ -4199,20 +4536,6 @@ def _orthogroup_result_from_member_ids(
     )
 
 
-def _canonical_edge_endpoint_ids(
-    query_id: str,
-    subject_id: str,
-    protein_map: Mapping[str, CdsProtein],
-) -> tuple[str, str]:
-    query_protein = protein_map[query_id]
-    subject_protein = protein_map[subject_id]
-    if int(query_protein.record_index) < int(subject_protein.record_index):
-        return query_id, subject_id
-    if int(query_protein.record_index) > int(subject_protein.record_index):
-        return subject_id, query_id
-    return cast(tuple[str, str], tuple(sorted((query_id, subject_id))))
-
-
 def _make_ortholog_edge(
     *,
     orthogroup_id: str,
@@ -4220,7 +4543,7 @@ def _make_ortholog_edge(
     target_rbh_orthogroup_id: str | None,
     query_id: str,
     subject_id: str,
-    row: object,
+    hit: _DirectedHit,
     protein_map: Mapping[str, CdsProtein],
     edge_kind: OrthologEdgeKind,
     render_role: OrthologRenderRole,
@@ -4239,10 +4562,10 @@ def _make_ortholog_edge(
         edge_kind=edge_kind,
         render_role=render_role,
         path_id=path_id,
-        identity=_row_float(row, "identity", 0.0),
-        evalue=_row_float(row, "evalue", 1.0),
-        bitscore=_row_float(row, "bitscore", 0.0),
-        alignment_length=int(_row_float(row, "alignment_length", 0.0)),
+        identity=hit.identity,
+        evalue=hit.evalue,
+        bitscore=hit.bitscore,
+        alignment_length=int(hit.alignment_length),
     )
 
 
@@ -4255,84 +4578,104 @@ def _build_ortholog_path_indexes(edges_by_group, protein_map):
     return updated, indexes
 
 
-def _anchor_core_hit_rank(
-    row: object,
+_DIRECTED_HIT_FLOAT_COLUMNS = ("normalized_score", "evalue", "min_coverage", "identity", "bitscore", "alignment_length")
+
+
+def _directed_hits_from_tables(
+    normalized_tables: Mapping[tuple[int, int], DataFrame],
     protein_map: Mapping[str, CdsProtein],
-) -> tuple[float, float, float, float, int, int, str, int, str]:
-    query_id = str(getattr(row, "query", ""))
-    subject_id = str(getattr(row, "subject", ""))
-    query_record_index = int(protein_map[query_id].record_index) if query_id in protein_map else 0
-    subject_record_index = int(protein_map[subject_id].record_index) if subject_id in protein_map else 0
-    return (
-        -_normalized_score_from_row(row),
-        _row_float(row, "evalue", float("inf")),
-        -_row_float(row, "min_coverage", 0.0),
-        -_row_float(row, "identity", 0.0),
-        -int(_row_float(row, "alignment_length", 0.0)),
-        query_record_index,
-        query_id,
-        subject_record_index,
-        subject_id,
+) -> _DirectedHitTable:
+    """The best normalized hit per (query, subject) direction, in rank order.
+
+    Self hits, hits to a protein outside ``protein_map`` and hits without a
+    positive finite normalized score are left out. Of the hits in one direction
+    the highest score wins, then the lowest e-value, highest minimum coverage,
+    highest identity and longest alignment; the earliest wins a complete tie.
+    """
+
+    record_index_by_id = {protein_id: int(protein.record_index) for protein_id, protein in protein_map.items()}
+    protein_ids = sorted(record_index_by_id, key=lambda protein_id: (record_index_by_id[protein_id], protein_id))
+    protein_index = pd.Index(protein_ids, dtype=object)
+    tables = [table for table in normalized_tables.values() if table is not None and not table.empty]
+    query_codes = protein_index.get_indexer([str(value) for table in tables for value in table["query"].tolist()])
+    subject_codes = protein_index.get_indexer([str(value) for table in tables for value in table["subject"].tolist()])
+    # The empty first array gives the dtype when there are no tables.
+    columns = {
+        column: np.concatenate([np.empty(0), *(table[column].to_numpy(dtype=float) for table in tables)])
+        for column in _DIRECTED_HIT_FLOAT_COLUMNS
+    }
+    domain_only_column = np.concatenate(
+        [np.empty(0, dtype=bool), *(table["domain_only"].to_numpy(dtype=bool) for table in tables)]
+    )
+    offsets = np.cumsum([0, *(len(table) for table in tables)])
+    sources = [
+        _ComparisonColumns(table, *(columns[column][start:end] for column in ("identity", "bitscore", "alignment_length")))
+        for table, start, end in zip(tables, offsets[:-1].tolist(), offsets[1:].tolist())
+    ]
+    # Only the arrays above are read from here on. On CPython 3.11 and later this
+    # frame holds the only reference to a temporary argument, so dropping it frees
+    # the tables before the rows are selected; older interpreters free them on return.
+    del normalized_tables, tables
+    raw_score = columns["normalized_score"]
+    columns["normalized_score"] = np.where(np.isfinite(raw_score) & (raw_score > 0.0), raw_score, 0.0)
+    known = (query_codes >= 0) & (subject_codes >= 0) & (query_codes != subject_codes)
+    rows = np.flatnonzero(known & (columns["normalized_score"] > 0.0))
+
+    count = len(protein_ids)
+    query, subject = query_codes[rows].astype(np.int64), subject_codes[rows].astype(np.int64)
+    # One group per direction, numbered in order of first appearance.
+    directions = pd.factorize(query * count + subject)[0]
+    score, evalue, min_coverage, identity, alignment_length = (
+        columns[column][rows] for column in ("normalized_score", "evalue", "min_coverage", "identity", "alignment_length")
+    )
+    truncated_length = np.trunc(alignment_length)
+    best = _first_minimum_per_group(
+        directions,
+        (-score, evalue, -min_coverage, -identity, -truncated_length),
+        int(directions.max(initial=-1)) + 1,
+    )
+    # Record index then ID orders the endpoints; the codes keep that order.
+    ranked = best[np.lexsort((
+        query[best] * count + subject[best],
+        -truncated_length[best],
+        -identity[best],
+        -min_coverage[best],
+        evalue[best],
+        -score[best],
+    ))]
+    ranked_rows = rows[ranked]
+    query, subject, min_coverage = query[ranked], subject[ranked], min_coverage[ranked]
+    domain_only = domain_only_column[ranked_rows] | (min_coverage <= _DOMAIN_ONLY_MAX_MIN_COVERAGE)
+    table_of_row = np.searchsorted(offsets, ranked_rows, side="right") - 1
+    return _DirectedHitTable(
+        protein_ids=protein_ids,
+        protein_index=protein_index,
+        protein_record=np.asarray([record_index_by_id[protein_id] for protein_id in protein_ids], dtype=np.int64),
+        query=query,
+        subject=subject,
+        score=score[ranked],
+        evalue=evalue[ranked],
+        min_coverage=min_coverage,
+        domain_only=domain_only,
+        supports_membership=(min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE) & ~domain_only,
+        reverse=np.asarray(pd.Index(query * count + subject).get_indexer(subject * count + query), dtype=np.int64),
+        sources=sources,
+        source=table_of_row.astype(np.int64),
+        source_row=(ranked_rows - offsets[table_of_row]).astype(np.int64),
     )
 
 
-def _row_min_coverage(row: object) -> float:
-    return _row_float(row, "min_coverage", 0.0)
+def _comparison_values(hit: _DirectedHit) -> tuple[object, ...]:
+    """The hit's comparison column values, in COMPARISON_COLUMNS order with the IDs as strings."""
+
+    return (hit.query, hit.subject, *hit.comparison_source.values(hit.comparison_row))
 
 
-def _row_domain_only(row: object) -> bool:
-    return bool(getattr(row, "domain_only", False)) or _row_min_coverage(row) <= _DOMAIN_ONLY_MAX_MIN_COVERAGE
+def _comparison_record_for_ids(values: Sequence[object], query_id: str, subject_id: str) -> dict[str, object]:
+    """A comparison row for query_id -> subject_id from values in COMPARISON_COLUMNS order."""
 
-
-def _row_supports_membership(row: object) -> bool:
-    return _row_min_coverage(row) >= _MIN_MEMBERSHIP_MIN_COVERAGE and not _row_domain_only(row)
-
-
-def _dedupe_anchor_core_directional_rows(
-    normalized_tables: Mapping[tuple[int, int], DataFrame],
-    protein_map: Mapping[str, CdsProtein],
-) -> dict[tuple[str, str], object]:
-    best_by_direction: dict[tuple[str, str], object] = {}
-    for hits in normalized_tables.values():
-        if hits is None or hits.empty:
-            continue
-        for row in hits.itertuples(index=False):
-            query_id = str(row.query)
-            subject_id = str(row.subject)
-            if query_id == subject_id:
-                continue
-            if query_id not in protein_map or subject_id not in protein_map:
-                continue
-            if _normalized_score_from_row(row) <= 0.0:
-                continue
-            key = (query_id, subject_id)
-            current = best_by_direction.get(key)
-            if current is None or _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current, protein_map):
-                best_by_direction[key] = row
-    return best_by_direction
-
-
-def _best_row_by_query_target_record(
-    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
-    protein_map: Mapping[str, CdsProtein],
-) -> dict[tuple[str, int], object]:
-    best_by_query_record: dict[tuple[str, int], object] = {}
-    for (query_id, subject_id), row in ranked_direction_rows:
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        if int(query_protein.record_index) == int(subject_protein.record_index):
-            continue
-        best_by_query_record.setdefault((query_id, int(subject_protein.record_index)), row)
-    return best_by_query_record
-
-
-def _comparison_record_for_ids(row: object, query_id: str, subject_id: str) -> dict[str, object]:
-    record = {column: getattr(row, column) for column in COMPARISON_COLUMNS}
-    original_query = str(getattr(row, "query", ""))
-    original_subject = str(getattr(row, "subject", ""))
-    if original_query == subject_id and original_subject == query_id:
+    record = dict(zip(COMPARISON_COLUMNS, values))
+    if str(values[0]) == subject_id and str(values[1]) == query_id:
         record["qstart"], record["sstart"] = record["sstart"], record["qstart"]
         record["qend"], record["send"] = record["send"], record["qend"]
     record["query"] = query_id
@@ -4349,218 +4692,135 @@ def _anchor_core_edge_sort_key(
         _protein_sort_key(protein_map[edge.subject_id]),
         0 if edge.edge_kind == "rbh" else 1,
         -max(float(edge.score), float(edge.reverse_score)),
-        _row_float(edge.row, "evalue", float("inf")),
+        edge.hit.evalue,
         edge.query_id,
         edge.subject_id,
     )
 
 
-class _SubjectRow(Protocol):
-    @property
-    def subject(self) -> object: ...
+def _group_codes(hits: _DirectedHitTable, group_by_protein: Mapping[str, str]) -> tuple[list[str], np.ndarray]:
+    """Group IDs in order of first appearance, and each protein code's group index (-1 if none)."""
+
+    group_ids = list(dict.fromkeys(group_by_protein.values()))
+    index_by_group = {group_id: index for index, group_id in enumerate(group_ids)}
+    codes = hits.codes(group_by_protein)
+    groups = np.asarray([index_by_group[group_id] for group_id in group_by_protein.values()], dtype=np.int64)
+    group_of = np.full(len(hits.protein_ids), -1, dtype=np.int64)
+    group_of[codes[codes >= 0]] = groups[codes >= 0]
+    return group_ids, group_of
+
+
+def _first_row_per_pair(hits: _DirectedHitTable, rows: np.ndarray) -> np.ndarray:
+    """Of the given ascending rows, the first of each unordered protein pair."""
+
+    count = len(hits.protein_ids)
+    low = np.minimum(hits.query[rows], hits.subject[rows])
+    high = np.maximum(hits.query[rows], hits.subject[rows])
+    return rows[_first_occurrences(low * count + high)[1]]
+
+
+def _evidence_edges(
+    hits: _DirectedHitTable,
+    protein_map: Mapping[str, CdsProtein],
+    rows: np.ndarray,
+    kinds: Iterable[Literal["rbh", "coortholog", "record_local_paralog"]],
+) -> tuple[_AnchorCoreEvidenceEdge, ...]:
+    """Edges for the rows' pairs between canonical endpoints (the lower code first), in protein order."""
+
+    reverse = hits.reverse[rows]
+    forward = hits.query[rows] < hits.subject[rows]
+    edge_rows = np.where(forward, rows, reverse)
+    reverse_rows = np.where(forward, reverse, rows)
+    edges = [
+        _AnchorCoreEvidenceEdge(
+            query_id=hits.protein_ids[query],
+            subject_id=hits.protein_ids[subject],
+            hit=hits.hit(row),
+            score=score,
+            reverse_score=reverse_score,
+            edge_kind=kind,
+        )
+        for query, subject, row, score, reverse_score, kind in zip(
+            hits.query[edge_rows].tolist(),
+            hits.subject[edge_rows].tolist(),
+            edge_rows.tolist(),
+            hits.score[edge_rows].tolist(),
+            hits.score[reverse_rows].tolist(),
+            kinds,
+        )
+    ]
+    return tuple(sorted(edges, key=lambda edge: _anchor_core_edge_sort_key(edge, protein_map)))
 
 
 def _select_anchor_core_edges(
-    best_by_direction: Mapping[tuple[str, str], object],
+    hits: _DirectedHitTable,
     protein_map: Mapping[str, CdsProtein],
-    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
-    best_by_query_record = _best_row_by_query_target_record(ranked_direction_rows, protein_map)
-    best_subject_by_query_record = {
-        key: str(cast(_SubjectRow, row).subject)
-        for key, row in best_by_query_record.items()
-    }
-    best_score_by_query_record = {
-        key: _normalized_score_from_row(row)
-        for key, row in best_by_query_record.items()
-    }
-    selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in ranked_direction_rows:
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        query_record_index = int(query_protein.record_index)
-        subject_record_index = int(subject_protein.record_index)
-        if query_record_index == subject_record_index:
-            continue
-        if not _row_supports_membership(row):
-            continue
-        reverse_row = best_by_direction.get((subject_id, query_id))
-        if reverse_row is None or not _row_supports_membership(reverse_row):
-            continue
-        score = _normalized_score_from_row(row)
-        reverse_score = _normalized_score_from_row(reverse_row)
-        query_best = best_score_by_query_record.get((query_id, subject_record_index), 0.0)
-        subject_best = best_score_by_query_record.get((subject_id, query_record_index), 0.0)
-        if query_best <= 0.0 or subject_best <= 0.0:
-            continue
-        if score < _NEAR_RECIPROCAL_MIN_RATIO * query_best:
-            continue
-        if reverse_score < _NEAR_RECIPROCAL_MIN_RATIO * subject_best:
-            continue
-        strict_rbh = (
-            best_subject_by_query_record.get((query_id, subject_record_index)) == subject_id
-            and best_subject_by_query_record.get((subject_id, query_record_index)) == query_id
-        )
-        canonical_query_id, canonical_subject_id = _canonical_edge_endpoint_ids(
-            query_id,
-            subject_id,
-            protein_map,
-        )
-        canonical_row = row if canonical_query_id == query_id else reverse_row
-        canonical_score = score if canonical_query_id == query_id else reverse_score
-        canonical_reverse_score = reverse_score if canonical_query_id == query_id else score
-        candidate = _AnchorCoreEvidenceEdge(
-            query_id=canonical_query_id,
-            subject_id=canonical_subject_id,
-            row=canonical_row,
-            score=float(canonical_score),
-            reverse_score=float(canonical_reverse_score),
-            edge_kind="rbh" if strict_rbh else "coortholog",
-        )
-        key = (canonical_query_id, canonical_subject_id)
-        current = selected_by_pair.get(key)
-        if current is None:
-            selected_by_pair[key] = candidate
-            continue
-        current_rank = _anchor_core_edge_sort_key(current, protein_map)
-        candidate_rank = _anchor_core_edge_sort_key(candidate, protein_map)
-        if candidate_rank < current_rank:
-            selected_by_pair[key] = candidate
-    return tuple(
-        sorted(
-            selected_by_pair.values(),
-            key=lambda edge: _anchor_core_edge_sort_key(edge, protein_map),
-        )
+    query, subject, score = hits.query, hits.subject, hits.score
+    query_record, subject_record = hits.protein_record[query], hits.protein_record[subject]
+    cross = np.flatnonzero(query_record != subject_record)
+    # A query's best hit into another record is its first there in rank order.
+    # Dense record codes keep the key distinct for any record index.
+    record_code = pd.factorize(hits.protein_record)[0]
+    record_count = int(record_code.max(initial=-1)) + 1
+    target, first = _first_occurrences(query[cross] * record_count + record_code[subject[cross]])
+    best_in_target = np.full(len(hits), -1, dtype=np.int64)
+    best_in_target[cross] = cross[first][target]
+    # Every test below is symmetric in the two directions, and both give the
+    # same candidate, so the earlier direction decides the pair.
+    rows = _first_row_per_pair(hits, cross)
+    rows = rows[hits.supports_membership[rows] & (hits.reverse[rows] >= 0)]
+    reverse = hits.reverse[rows]
+    rows, reverse = rows[hits.supports_membership[reverse]], reverse[hits.supports_membership[reverse]]
+    # Both directions are cross-record hits, so each direction has a best hit.
+    query_best, subject_best = best_in_target[rows], best_in_target[reverse]
+    keep = ~(score[rows] < _NEAR_RECIPROCAL_MIN_RATIO * score[query_best]) & ~(
+        score[reverse] < _NEAR_RECIPROCAL_MIN_RATIO * score[subject_best]
     )
-
-
-def _best_same_record_unassigned_score_by_query(
-    best_by_direction: Mapping[tuple[str, str], object],
-    protein_map: Mapping[str, CdsProtein],
-    group_by_protein: Mapping[str, str],
-) -> dict[str, float]:
-    best_score_by_query: dict[str, float] = {}
-    for (query_id, subject_id), row in best_by_direction.items():
-        if query_id == subject_id:
-            continue
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        if query_id in group_by_protein or subject_id in group_by_protein:
-            continue
-        if int(query_protein.record_index) != int(subject_protein.record_index):
-            continue
-        score = _normalized_score_from_row(row)
-        if score <= 0.0:
-            continue
-        best_score_by_query[query_id] = max(best_score_by_query.get(query_id, 0.0), float(score))
-    return best_score_by_query
-
-
-def _record_local_direction_passes_score_floor(
-    *,
-    query_id: str,
-    row: object,
-    thresholds: Mapping[str, _LocalThreshold],
-    best_same_record_score_by_query: Mapping[str, float],
-) -> bool:
-    score = _normalized_score_from_row(row)
-    threshold = thresholds.get(query_id)
-    if threshold is not None:
-        return score >= float(threshold.score)
-    best_same_record_score = float(best_same_record_score_by_query.get(query_id, 0.0))
-    if best_same_record_score <= 0.0:
-        return False
-    return score >= _RECORD_LOCAL_NEAR_RECIPROCAL_MIN_RATIO * best_same_record_score
+    rows, query_best, subject_best = rows[keep], query_best[keep], subject_best[keep]
+    strict_rbh = (subject[query_best] == subject[rows]) & (subject[subject_best] == query[rows])
+    return _evidence_edges(
+        hits, protein_map, rows, ("rbh" if strict else "coortholog" for strict in strict_rbh.tolist())
+    )
 
 
 def _select_record_local_paralog_edges(
-    best_by_direction: Mapping[tuple[str, str], object],
+    hits: _DirectedHitTable,
     protein_map: Mapping[str, CdsProtein],
-    thresholds: Mapping[str, _LocalThreshold],
-    group_member_ids: Mapping[str, set[str]],
+    thresholds: Mapping[str, float],
     group_by_protein: Mapping[str, str],
-    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
-    _ = group_member_ids
-    best_same_record_score_by_query = _best_same_record_unassigned_score_by_query(
-        best_by_direction,
-        protein_map,
-        group_by_protein,
-    )
-    selected_by_pair: dict[tuple[str, str], _AnchorCoreEvidenceEdge] = {}
-    for (query_id, subject_id), row in ranked_direction_rows:
-        if query_id == subject_id:
-            continue
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        if int(query_protein.record_index) != int(subject_protein.record_index):
-            continue
-        if query_id in group_by_protein or subject_id in group_by_protein:
-            continue
-        if not _row_supports_membership(row):
-            continue
-        if _row_min_coverage(row) < _RECORD_LOCAL_MIN_MEMBERSHIP_MIN_COVERAGE:
-            continue
-        if _row_domain_only(row):
-            continue
-        reverse_row = best_by_direction.get((subject_id, query_id))
-        if reverse_row is None:
-            continue
-        if not _row_supports_membership(reverse_row):
-            continue
-        if _row_min_coverage(reverse_row) < _RECORD_LOCAL_MIN_MEMBERSHIP_MIN_COVERAGE:
-            continue
-        if _row_domain_only(reverse_row):
-            continue
-        if not _record_local_direction_passes_score_floor(
-            query_id=query_id,
-            row=row,
-            thresholds=thresholds,
-            best_same_record_score_by_query=best_same_record_score_by_query,
-        ):
-            continue
-        if not _record_local_direction_passes_score_floor(
-            query_id=subject_id,
-            row=reverse_row,
-            thresholds=thresholds,
-            best_same_record_score_by_query=best_same_record_score_by_query,
-        ):
-            continue
+    query, subject, score = hits.query, hits.subject, hits.score
+    same = np.flatnonzero(hits.protein_record[query] == hits.protein_record[subject])
+    _, group_of = _group_codes(hits, group_by_protein)
+    unassigned = (group_of[query] < 0) & (group_of[subject] < 0)
+    # Each query's best same-record score among hits between unassigned proteins.
+    best_same_score = np.zeros(len(hits.protein_ids))
+    free = same[unassigned[same]]
+    np.maximum.at(best_same_score, query[free], score[free])
+    threshold_score = np.zeros(len(hits.protein_ids))
+    has_threshold = np.zeros(len(hits.protein_ids), dtype=bool)
+    threshold_codes = hits.codes(thresholds)
+    mapped = threshold_codes >= 0
+    threshold_score[threshold_codes[mapped]] = np.fromiter(thresholds.values(), dtype=float, count=len(thresholds))[mapped]
+    has_threshold[threshold_codes[mapped]] = True
 
-        score = _normalized_score_from_row(row)
-        reverse_score = _normalized_score_from_row(reverse_row)
-        canonical_query_id, canonical_subject_id = _canonical_edge_endpoint_ids(
-            query_id,
-            subject_id,
-            protein_map,
-        )
-        canonical_row = row if canonical_query_id == query_id else reverse_row
-        canonical_score = score if canonical_query_id == query_id else reverse_score
-        canonical_reverse_score = reverse_score if canonical_query_id == query_id else score
-        candidate = _AnchorCoreEvidenceEdge(
-            query_id=canonical_query_id,
-            subject_id=canonical_subject_id,
-            row=canonical_row,
-            score=float(canonical_score),
-            reverse_score=float(canonical_reverse_score),
-            edge_kind="record_local_paralog",
-        )
-        key = cast(tuple[str, str], tuple(sorted((canonical_query_id, canonical_subject_id))))
-        current = selected_by_pair.get(key)
-        if current is None or _anchor_core_edge_sort_key(candidate, protein_map) < _anchor_core_edge_sort_key(current, protein_map):
-            selected_by_pair[key] = candidate
-    return tuple(
-        sorted(
-            selected_by_pair.values(),
-            key=lambda edge: _anchor_core_edge_sort_key(edge, protein_map),
-        )
+    def passes_score_floor(protein: np.ndarray, value: np.ndarray) -> np.ndarray:
+        best = best_same_score[protein]
+        fallback = (best > 0.0) & (value >= _RECORD_LOCAL_NEAR_RECIPROCAL_MIN_RATIO * best)
+        return np.where(has_threshold[protein], value >= threshold_score[protein], fallback)
+
+    supports_local = hits.supports_membership & (hits.min_coverage >= _RECORD_LOCAL_MIN_MEMBERSHIP_MIN_COVERAGE)
+    # As for anchors: symmetric tests and one candidate per pair.
+    rows = _first_row_per_pair(hits, same)
+    rows = rows[unassigned[rows] & supports_local[rows] & (hits.reverse[rows] >= 0)]
+    reverse = hits.reverse[rows]
+    keep = (
+        supports_local[reverse]
+        & passes_score_floor(query[rows], score[rows])
+        & passes_score_floor(subject[rows], score[reverse])
     )
+    return _evidence_edges(hits, protein_map, rows[keep], itertools.repeat("record_local_paralog"))
 
 
 def _record_local_components_from_edges(
@@ -4620,9 +4880,8 @@ def _record_local_support_by_member(
 def _record_local_component_has_competing_core_support(
     member_ids: Sequence[str],
     has_core_groups: bool,
-    evidence_by_protein: Mapping[str, Mapping[str, Sequence[tuple[str, str, object]]]],
-    thresholds: Mapping[str, _LocalThreshold],
-    protein_map: Mapping[str, CdsProtein],
+    evidence_by_protein: Mapping[str, Mapping[str, Sequence[_DirectedHit]]],
+    thresholds: Mapping[str, float],
     local_support_by_member: Mapping[str, float],
 ) -> bool:
     if not has_core_groups:
@@ -4641,7 +4900,6 @@ def _record_local_component_has_competing_core_support(
                     group_id,
                     evidence,
                     thresholds,
-                    protein_map,
                 )
             )
             is not None
@@ -4771,7 +5029,7 @@ def _append_record_local_orthogroups(
                     target_rbh_orthogroup_id=group_id,
                     query_id=edge.query_id,
                     subject_id=edge.subject_id,
-                    row=edge.row,
+                    hit=edge.hit,
                     protein_map=protein_map,
                     edge_kind="record_local_paralog",
                     render_role="display_edge",
@@ -4780,142 +5038,76 @@ def _append_record_local_orthogroups(
 
 
 def _derive_anchor_core_thresholds(
-    best_by_direction: Mapping[tuple[str, str], object],
+    hits: _DirectedHitTable,
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
-    protein_map: Mapping[str, CdsProtein],
-) -> dict[str, _LocalThreshold]:
-    cross_scores_by_protein: dict[str, list[float]] = {}
-    for (query_id, subject_id), row in best_by_direction.items():
-        query_protein = protein_map.get(query_id)
-        subject_protein = protein_map.get(subject_id)
-        if query_protein is None or subject_protein is None:
-            continue
-        if int(query_protein.record_index) == int(subject_protein.record_index):
-            continue
-        score = _normalized_score_from_row(row)
-        if score > 0.0 and math.isfinite(score):
-            cross_scores_by_protein.setdefault(query_id, []).append(score)
+) -> dict[str, float]:
+    """Each protein's same-record score threshold, by protein ID.
 
-    anchor_scores_by_protein: dict[str, list[float]] = {}
-    for edge in anchor_edges:
-        if edge.score > 0.0:
-            anchor_scores_by_protein.setdefault(edge.query_id, []).append(float(edge.score))
-        if edge.reverse_score > 0.0:
-            anchor_scores_by_protein.setdefault(edge.subject_id, []).append(float(edge.reverse_score))
+    A fixed share of the protein's lowest positive, finite anchor score, or of
+    its best cross-record score when it has none; absent without either.
+    """
+    cross = hits.protein_record[hits.query] != hits.protein_record[hits.subject]
+    cross_best = np.full(len(hits.protein_ids), -np.inf)
+    np.maximum.at(cross_best, hits.query[cross], hits.score[cross])
+    has_cross = np.bincount(hits.query[cross], minlength=len(hits.protein_ids)) > 0
 
-    thresholds: dict[str, _LocalThreshold] = {}
-    for protein_id in sorted(set(cross_scores_by_protein).union(anchor_scores_by_protein)):
-        anchor_scores = [
-            score
-            for score in anchor_scores_by_protein.get(protein_id, [])
-            if score > 0.0 and math.isfinite(score)
-        ]
-        if anchor_scores:
-            anchor_floor = min(anchor_scores)
-            thresholds[protein_id] = _LocalThreshold(
-                protein_id=protein_id,
-                score=float(anchor_floor * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR),
-                source="anchor",
-                rbnh_count=len(anchor_scores),
-                accepted_edge_count=len(anchor_scores),
-            )
-            continue
-        cross_scores = [
-            score
-            for score in cross_scores_by_protein.get(protein_id, [])
-            if score > 0.0 and math.isfinite(score)
-        ]
-        if not cross_scores:
-            continue
-        fallback_floor = max(cross_scores)
-        thresholds[protein_id] = _LocalThreshold(
-            protein_id=protein_id,
-            score=float(fallback_floor * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR),
-            source="fallback",
-            rbnh_count=0,
-            accepted_edge_count=0,
-        )
-    return thresholds
+    endpoint = hits.codes([*(edge.query_id for edge in anchor_edges), *(edge.subject_id for edge in anchor_edges)])
+    endpoint_score = np.asarray(
+        [*(edge.score for edge in anchor_edges), *(edge.reverse_score for edge in anchor_edges)], dtype=float
+    )
+    usable = (endpoint >= 0) & (endpoint_score > 0.0) & np.isfinite(endpoint_score)
+    anchor_floor = np.full(len(hits.protein_ids), np.inf)
+    np.minimum.at(anchor_floor, endpoint[usable], endpoint_score[usable])
+    has_anchor = anchor_floor < np.inf
+    floor = np.where(has_anchor, anchor_floor, cross_best) * _INPARALOG_MIN_SAME_RECORD_RATIO_TO_LOCAL_ANCHOR
+    codes = np.flatnonzero(has_anchor | has_cross)
+    return dict(zip((hits.protein_ids[code] for code in codes.tolist()), floor[codes].tolist()))
 
 
 def _index_core_support_evidence(
-    best_by_direction: Mapping[tuple[str, str], object],
+    hits: _DirectedHitTable,
     group_by_protein: Mapping[str, str],
-) -> dict[str, dict[str, list[tuple[str, str, object]]]]:
+) -> dict[str, dict[str, list[_DirectedHit]]]:
     """Snapshot incoming/outgoing evidence from unassigned proteins to members.
 
-    Rows are immutable normalized tuples. Buckets own only references and never
+    Only hits with exactly one assigned endpoint become records. Buckets never
     alias the mutable membership map; rebuild after membership expansion.
     """
-    evidence_by_protein: dict[str, dict[str, list[tuple[str, str, object]]]] = {}
-    for (query_id, subject_id), row in best_by_direction.items():
-        query_group = group_by_protein.get(query_id)
-        subject_group = group_by_protein.get(subject_id)
-        if query_group is None and subject_group is not None:
-            evidence_by_protein.setdefault(query_id, {}).setdefault(subject_group, []).append(
-                (query_id, subject_id, row)
-            )
-        elif subject_group is None and query_group is not None:
-            evidence_by_protein.setdefault(subject_id, {}).setdefault(query_group, []).append(
-                (query_id, subject_id, row)
-            )
+    group_ids, group_of = _group_codes(hits, group_by_protein)
+    query_group, subject_group = group_of[hits.query], group_of[hits.subject]
+    rows = np.flatnonzero((query_group < 0) != (subject_group < 0))
+    evidence_by_protein: dict[str, dict[str, list[_DirectedHit]]] = {}
+    for row, query_index, subject_index in zip(rows.tolist(), query_group[rows].tolist(), subject_group[rows].tolist()):
+        hit = hits.hit(row)
+        if query_index < 0:
+            evidence_by_protein.setdefault(hit.query, {}).setdefault(group_ids[subject_index], []).append(hit)
+        else:
+            evidence_by_protein.setdefault(hit.subject, {}).setdefault(group_ids[query_index], []).append(hit)
     return evidence_by_protein
 
 
 def _best_evidence_between_protein_and_members(
-    protein_id: str,
-    evidence: Sequence[tuple[str, str, object]],
-    protein_map: Mapping[str, CdsProtein],
+    evidence: Sequence[_DirectedHit],
 ) -> tuple[_BestCoreEvidence, _BestCoreEvidence]:
-    """Reduce connected evidence once, returning same-record then cross-record."""
-    protein = protein_map[protein_id]
-    supports: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
-    diagnostics: list[tuple[float, object | None, str, str]] = [(0.0, None, "", "")] * 2
-    for query_id, subject_id, row in evidence:
-        member_id = subject_id if query_id == protein_id else query_id
-        if member_id == protein_id or member_id not in protein_map or row is None:
+    """Reduce connected evidence once, returning same-record then cross-record.
+
+    The higher score wins, and the earlier hit in rank order on equal scores.
+    """
+    supports: list[_DirectedHit | None] = [None, None]
+    diagnostics: list[_DirectedHit | None] = [None, None]
+    for hit in evidence:
+        record_kind = int(hit.query_record_index != hit.subject_record_index)
+        diagnostic = diagnostics[record_kind]
+        if diagnostic is None or hit.score > diagnostic.score or (hit.score == diagnostic.score and hit.rank < diagnostic.rank):
+            diagnostics[record_kind] = hit
+        if not hit.supports_membership:
             continue
-        record_kind = int(int(protein.record_index) != int(protein_map[member_id].record_index))
-        score = _normalized_score_from_row(row)
-        if score <= 0.0:
-            continue
-        current_diagnostic_row = diagnostics[record_kind][1]
-        if (
-            current_diagnostic_row is None
-            or score > diagnostics[record_kind][0]
-            or (
-                score == diagnostics[record_kind][0]
-                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_diagnostic_row, protein_map)
-            )
-        ):
-            diagnostics[record_kind] = (float(score), row, query_id, subject_id)
-        if not _row_supports_membership(row):
-            continue
-        current_support_row = supports[record_kind][1]
-        if (
-            current_support_row is None
-            or score > supports[record_kind][0]
-            or (
-                score == supports[record_kind][0]
-                and _anchor_core_hit_rank(row, protein_map) < _anchor_core_hit_rank(current_support_row, protein_map)
-            )
-        ):
-            supports[record_kind] = (float(score), row, query_id, subject_id)
-    return cast(
-        tuple[_BestCoreEvidence, _BestCoreEvidence],
-        tuple(
-            _BestCoreEvidence(
-                support_score=float(support[0]),
-                support_row=support[1],
-                support_query_id=support[2],
-                support_subject_id=support[3],
-                diagnostic_score=float(diagnostic[0]),
-                diagnostic_row=diagnostic[1],
-                diagnostic_query_id=diagnostic[2],
-                diagnostic_subject_id=diagnostic[3],
-            )
-            for support, diagnostic in zip(supports, diagnostics)
-        ),
+        support = supports[record_kind]
+        if support is None or hit.score > support.score or (hit.score == support.score and hit.rank < support.rank):
+            supports[record_kind] = hit
+    return (
+        _BestCoreEvidence(support=supports[0], diagnostic=diagnostics[0]),
+        _BestCoreEvidence(support=supports[1], diagnostic=diagnostics[1]),
     )
 
 
@@ -4927,96 +5119,80 @@ def _support_gap_ratio(best_support: float, second_support: float) -> float:
     return float(best_support) / max(float(second_support), _ORTHOGROUP_SPLIT_EPSILON)
 
 
+def _hit_score(hit: _DirectedHit | None) -> float:
+    return hit.score if hit is not None else 0.0
+
+
 def _build_core_support_candidate(
     protein_id: str,
     group_id: str,
-    evidence: Sequence[tuple[str, str, object]],
-    thresholds: Mapping[str, _LocalThreshold],
-    protein_map: Mapping[str, CdsProtein],
+    evidence: Sequence[_DirectedHit],
+    thresholds: Mapping[str, float],
 ) -> _CoreSupportCandidate | None:
-    same_evidence, cross_evidence = _best_evidence_between_protein_and_members(
-        protein_id, evidence, protein_map,
-    )
-    if same_evidence.diagnostic_row is None and cross_evidence.diagnostic_row is None:
+    same_evidence, cross_evidence = _best_evidence_between_protein_and_members(evidence)
+    if same_evidence.diagnostic is None and cross_evidence.diagnostic is None:
         return None
 
-    same_score = float(same_evidence.support_score)
-    cross_score = float(cross_evidence.support_score)
+    same_score = _hit_score(same_evidence.support)
+    cross_score = _hit_score(cross_evidence.support)
     support = float(cross_score) + 0.5 * float(same_score)
-    diagnostic_score = max(
-        float(same_evidence.diagnostic_score),
-        float(cross_evidence.diagnostic_score),
-    )
+    same_diagnostic_score = _hit_score(same_evidence.diagnostic)
+    cross_diagnostic_score = _hit_score(cross_evidence.diagnostic)
+    diagnostic_score = max(same_diagnostic_score, cross_diagnostic_score)
 
     candidate_threshold = thresholds.get(protein_id)
     same_member_id = ""
-    if same_evidence.support_row is not None:
+    if same_evidence.support is not None:
         same_member_id = (
-            same_evidence.support_subject_id
-            if same_evidence.support_query_id == protein_id
-            else same_evidence.support_query_id
+            same_evidence.support.subject
+            if same_evidence.support.query == protein_id
+            else same_evidence.support.query
         )
     same_member_threshold = thresholds.get(same_member_id)
     same_pass = (
-        same_evidence.support_row is not None
+        same_evidence.support is not None
         and (
             (
                 candidate_threshold is not None
-                and same_score >= float(candidate_threshold.score)
+                and same_score >= candidate_threshold
             )
             or (
                 same_member_threshold is not None
-                and same_score >= float(same_member_threshold.score)
+                and same_score >= same_member_threshold
             )
         )
     )
     cross_pass = (
-        cross_evidence.support_row is not None
+        cross_evidence.support is not None
         and candidate_threshold is not None
-        and cross_score >= float(candidate_threshold.score)
+        and cross_score >= candidate_threshold
     )
 
+    evidence_hit: _DirectedHit | None
+    relation_kind: OrthologEdgeKind
     if same_pass:
-        evidence_row = same_evidence.support_row
-        evidence_query_id = same_evidence.support_query_id
-        evidence_subject_id = same_evidence.support_subject_id
-        relation_kind: OrthologEdgeKind = "same_record_inparalog"
+        evidence_hit, relation_kind = same_evidence.support, "same_record_inparalog"
     elif cross_pass:
-        evidence_row = cross_evidence.support_row
-        evidence_query_id = cross_evidence.support_query_id
-        evidence_subject_id = cross_evidence.support_subject_id
-        relation_kind = "coortholog"
-    elif same_evidence.support_row is not None and (
-        cross_evidence.support_row is None or same_score >= cross_score
+        evidence_hit, relation_kind = cross_evidence.support, "coortholog"
+    elif same_evidence.support is not None and (
+        cross_evidence.support is None or same_score >= cross_score
     ):
-        evidence_row = same_evidence.support_row
-        evidence_query_id = same_evidence.support_query_id
-        evidence_subject_id = same_evidence.support_subject_id
-        relation_kind = "same_record_inparalog"
-    elif cross_evidence.support_row is not None:
-        evidence_row = cross_evidence.support_row
-        evidence_query_id = cross_evidence.support_query_id
-        evidence_subject_id = cross_evidence.support_subject_id
-        relation_kind = "coortholog"
-    elif same_evidence.diagnostic_row is not None and (
-        cross_evidence.diagnostic_row is None
-        or same_evidence.diagnostic_score >= cross_evidence.diagnostic_score
+        evidence_hit, relation_kind = same_evidence.support, "same_record_inparalog"
+    elif cross_evidence.support is not None:
+        evidence_hit, relation_kind = cross_evidence.support, "coortholog"
+    elif same_evidence.diagnostic is not None and (
+        cross_evidence.diagnostic is None
+        or same_diagnostic_score >= cross_diagnostic_score
     ):
-        evidence_row = same_evidence.diagnostic_row
-        evidence_query_id = same_evidence.diagnostic_query_id
-        evidence_subject_id = same_evidence.diagnostic_subject_id
-        relation_kind = "same_record_inparalog"
+        evidence_hit, relation_kind = same_evidence.diagnostic, "same_record_inparalog"
     else:
-        evidence_row = cross_evidence.diagnostic_row
-        evidence_query_id = cross_evidence.diagnostic_query_id
-        evidence_subject_id = cross_evidence.diagnostic_subject_id
-        relation_kind = "coortholog"
-    if evidence_row is None:
+        evidence_hit, relation_kind = cross_evidence.diagnostic, "coortholog"
+    if evidence_hit is None:
         return None
 
-    min_coverage = _row_min_coverage(evidence_row)
-    domain_only = _row_domain_only(evidence_row)
-    has_support_row = same_evidence.support_row is not None or cross_evidence.support_row is not None
+    min_coverage = evidence_hit.min_coverage
+    domain_only = evidence_hit.domain_only
+    has_support_row = same_evidence.support is not None or cross_evidence.support is not None
     high_confidence_pass = bool(has_support_row and (same_pass or cross_pass)) and min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
     low_confidence_pass = bool(has_support_row) and min_coverage >= _MIN_MEMBERSHIP_MIN_COVERAGE and not domain_only
     if same_pass:
@@ -5035,9 +5211,7 @@ def _build_core_support_candidate(
         diagnostic_score=diagnostic_score,
         same_record_score=float(same_score),
         cross_record_score=float(cross_score),
-        evidence_row=evidence_row,
-        evidence_query_id=evidence_query_id,
-        evidence_subject_id=evidence_subject_id,
+        evidence=evidence_hit,
         relation_kind=relation_kind,
         min_coverage=float(min_coverage),
         domain_only=bool(domain_only),
@@ -5049,27 +5223,6 @@ def _build_core_support_candidate(
 
 def _core_support_sort_key(candidate: _CoreSupportCandidate) -> tuple[float, float, str]:
     return (-float(candidate.support), -float(candidate.diagnostic_score), candidate.group_id)
-
-
-def _append_limited_related_edge(
-    related_edges_by_group: dict[str, list[OrthologEdge]],
-    *,
-    group_id: str,
-    max_related_edges_per_orthogroup: int,
-    edge: OrthologEdge,
-) -> None:
-    edges = related_edges_by_group.setdefault(group_id, [])
-    if len(edges) >= int(max_related_edges_per_orthogroup):
-        return
-    existing = {
-        (item.query_protein_id, item.subject_protein_id, item.edge_kind)
-        for item in edges
-    }
-    key = (edge.query_protein_id, edge.subject_protein_id, edge.edge_kind)
-    reverse_key = (edge.subject_protein_id, edge.query_protein_id, edge.edge_kind)
-    if key in existing or reverse_key in existing:
-        return
-    edges.append(edge)
 
 
 def _anchor_core_edge_tables(
@@ -5086,23 +5239,112 @@ def _anchor_core_edge_tables(
         query_id, subject_id = edge.query_id, edge.subject_id
         if query_record_index > subject_record_index:
             query_id, subject_id = subject_id, query_id
-        rows_by_pair.setdefault(pair, []).append(_comparison_record_for_ids(edge.row, query_id, subject_id))
+        rows_by_pair.setdefault(pair, []).append(_comparison_record_for_ids(_comparison_values(edge.hit), query_id, subject_id))
     return {
         pair: pd.DataFrame.from_records(rows, columns=COMPARISON_COLUMNS)
         for pair, rows in rows_by_pair.items()
     }
 
 
+_RELATED_EDGE_KINDS: tuple[OrthologEdgeKind, ...] = ("related_homolog", "same_record_inparalog", "weak_bridge", "domain_only")
+
+
+def _append_related_edges(
+    hits: _DirectedHitTable,
+    protein_map: Mapping[str, CdsProtein],
+    *,
+    group_by_protein: Mapping[str, str],
+    member_roles: Mapping[str, OrthogroupMemberRole],
+    ortholog_edges_by_group: Mapping[str, Sequence[OrthologEdge]],
+    related_edges_by_group: dict[str, list[OrthologEdge]],
+    max_related_edges_per_orthogroup: int,
+) -> None:
+    """Fill each group's related edges from hits in rank order, up to the cap.
+
+    The first hit of a protein pair and relation kind counts, unless a membership
+    edge joins the pair. The group of the canonical query, then the subject's,
+    takes its edge unless the group holds an equal edge (in either direction) or
+    is full. Groups never share room, so each takes its first fresh edges. Every
+    group in ``related_edges_by_group`` has members in ``group_by_protein``.
+    """
+
+    count, kinds = len(hits.protein_ids), len(_RELATED_EDGE_KINDS)
+    group_ids, group_of = _group_codes(hits, group_by_protein)
+    low, high = np.minimum(hits.query, hits.subject), np.maximum(hits.query, hits.subject)
+    low_group, high_group = group_of[low], group_of[high]
+    inparalog = np.zeros(count, dtype=bool)
+    inparalog_codes = hits.codes(protein_id for protein_id, role in member_roles.items() if role == "inparalog")
+    inparalog[inparalog_codes[inparalog_codes >= 0]] = True
+    # Positions in _RELATED_EDGE_KINDS; the first condition that holds decides.
+    kind = np.select(
+        [
+            hits.domain_only,
+            (low_group >= 0) & (high_group >= 0) & (low_group != high_group),
+            (low_group == high_group) & (inparalog[low] | inparalog[high]),
+        ],
+        [3, 2, 1],
+        0,
+    )
+    pair = low * count + high
+    membership_query = hits.codes(edge.query_protein_id for edges in ortholog_edges_by_group.values() for edge in edges)
+    membership_subject = hits.codes(edge.subject_protein_id for edges in ortholog_edges_by_group.values() for edge in edges)
+    membership_pairs = np.minimum(membership_query, membership_subject) * count + np.maximum(membership_query, membership_subject)
+    _, rows = _first_occurrences(pair * kinds + kind)
+    rows = rows[~np.isin(pair[rows], membership_pairs)]
+    # One incidence per row and group, keyed by the row's position in rows.
+    row_low_group, row_high_group = low_group[rows], high_group[rows]
+    on_low = row_low_group >= 0
+    on_high = (row_high_group >= 0) & (row_high_group != row_low_group)
+    position = np.concatenate([np.flatnonzero(on_low), np.flatnonzero(on_high)])
+    group = np.concatenate([row_low_group[on_low], row_high_group[on_high]])
+    # The stable sort keeps the query's group before the subject's.
+    order = np.argsort(position, kind="stable")
+    position, group = position[order], group[order]
+    # An edge a group holds uses its room; an equal incidence is not fresh.
+    index_by_group = {group_id: index for index, group_id in enumerate(group_ids)}
+    room = np.full(len(group_ids), max_related_edges_per_orthogroup, dtype=np.int64)
+    held_group: list[int] = []
+    held_key: list[int] = []
+    for group_id, edges in related_edges_by_group.items():
+        room[index_by_group[group_id]] -= len(edges)
+        for edge in edges:
+            if edge.edge_kind in _RELATED_EDGE_KINDS:
+                low_code, high_code = sorted(hits.codes((edge.query_protein_id, edge.subject_protein_id)).tolist())
+                held_group.append(index_by_group[group_id])
+                held_key.append((low_code * count + high_code) * kinds + _RELATED_EDGE_KINDS.index(edge.edge_kind))
+    held_position = pd.Index(pair[rows] * kinds + kind[rows]).get_indexer(held_key)
+    found = held_position >= 0
+    held = np.asarray(held_group, dtype=np.int64)[found] * len(rows) + held_position[found]
+    fresh = ~np.isin(group * len(rows) + position, held)
+    position, group = position[fresh], group[fresh]
+    accepted = pd.Series(group).groupby(group).cumcount().to_numpy() < room[group]
+    for row, group_index in zip(rows[position[accepted]].tolist(), group[accepted].tolist()):
+        query_group, subject_group = low_group.item(row), high_group.item(row)
+        group_id = group_ids[group_index]
+        related_edges_by_group.setdefault(group_id, []).append(
+            _make_ortholog_edge(
+                orthogroup_id=group_id,
+                source_rbh_orthogroup_id=group_ids[query_group] if query_group >= 0 else None,
+                target_rbh_orthogroup_id=group_ids[subject_group] if subject_group >= 0 else None,
+                query_id=hits.protein_ids[low.item(row)],
+                subject_id=hits.protein_ids[high.item(row)],
+                hit=hits.hit(row),
+                protein_map=protein_map,
+                edge_kind=_RELATED_EDGE_KINDS[kind.item(row)],
+                render_role="display_edge",
+            )
+        )
+
+
 def _build_anchor_core_orthogroups(
-    best_by_direction: Mapping[tuple[str, str], object],
+    hits: _DirectedHitTable,
     anchor_edges: Sequence[_AnchorCoreEvidenceEdge],
     protein_map: Mapping[str, CdsProtein],
     *,
-    ranked_direction_rows: Sequence[tuple[tuple[str, str], object]],
     include_singletons: bool,
     max_related_edges_per_orthogroup: int,
 ) -> OrthogroupGraphResult:
-    thresholds = _derive_anchor_core_thresholds(best_by_direction, anchor_edges, protein_map)
+    thresholds = _derive_anchor_core_thresholds(hits, anchor_edges)
     union_find = _UnionFind()
     member_ranks: dict[str, tuple[float, float, float, float]] = {}
     member_roles: dict[str, OrthogroupMemberRole] = {}
@@ -5117,7 +5359,7 @@ def _build_anchor_core_orthogroups(
 
     for edge in anchor_edges:
         union_find.union(edge.query_id, edge.subject_id)
-        rank = _member_rank_from_row(edge.row)
+        rank = (edge.hit.bitscore, edge.hit.evalue, edge.hit.identity, edge.hit.alignment_length)
         if _is_better_member_rank(rank, member_ranks.get(edge.query_id)):
             member_ranks[edge.query_id] = rank
         if _is_better_member_rank(rank, member_ranks.get(edge.subject_id)):
@@ -5187,7 +5429,7 @@ def _build_anchor_core_orthogroups(
                 target_rbh_orthogroup_id=edge_group_id,
                 query_id=edge.query_id,
                 subject_id=edge.subject_id,
-                row=edge.row,
+                hit=edge.hit,
                 protein_map=protein_map,
                 edge_kind=edge.edge_kind,
                 render_role="block_anchor",
@@ -5196,7 +5438,7 @@ def _build_anchor_core_orthogroups(
 
     # Freeze core membership before any additions; evidence cannot chain through
     # proteins assigned later in this loop.
-    core_member_snapshot = _index_core_support_evidence(best_by_direction, group_by_protein)
+    core_member_snapshot = _index_core_support_evidence(hits, group_by_protein)
     related_edges_by_group: dict[str, list[OrthologEdge]] = {}
     for protein_id in sorted(protein_map, key=lambda item: _protein_sort_key(protein_map[item])):
         if protein_id in group_by_protein:
@@ -5210,7 +5452,6 @@ def _build_anchor_core_orthogroups(
                     group_id,
                     evidence,
                     thresholds,
-                    protein_map,
                 )
             )
             is not None
@@ -5241,22 +5482,23 @@ def _build_anchor_core_orthogroups(
             else:
                 unassigned_relation_kind = best.relation_kind
             if unassigned_relation_kind in {"ambiguous_paralog", "domain_only"}:
-                _append_limited_related_edge(
-                    related_edges_by_group,
-                    group_id=best.group_id,
-                    max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
-                    edge=_make_ortholog_edge(
-                        orthogroup_id=best.group_id,
-                        source_rbh_orthogroup_id=best.group_id,
-                        target_rbh_orthogroup_id=None,
-                        query_id=best.evidence_query_id,
-                        subject_id=best.evidence_subject_id,
-                        row=best.evidence_row,
-                        protein_map=protein_map,
-                        edge_kind=unassigned_relation_kind,
-                        render_role="display_edge",
-                    ),
-                )
+                related_edges = related_edges_by_group.setdefault(best.group_id, [])
+                # Each unassigned protein adds at most one edge, to a core member,
+                # so no edge here repeats another.
+                if len(related_edges) < max_related_edges_per_orthogroup:
+                    related_edges.append(
+                        _make_ortholog_edge(
+                            orthogroup_id=best.group_id,
+                            source_rbh_orthogroup_id=best.group_id,
+                            target_rbh_orthogroup_id=None,
+                            query_id=best.evidence.query,
+                            subject_id=best.evidence.subject,
+                            hit=best.evidence,
+                            protein_map=protein_map,
+                            edge_kind=unassigned_relation_kind,
+                            render_role="display_edge",
+                        )
+                    )
             continue
 
         group_member_ids.setdefault(best.group_id, set()).add(protein_id)
@@ -5266,16 +5508,16 @@ def _build_anchor_core_orthogroups(
         assignment_reasons[protein_id] = assigned_reason
         best_core_support[protein_id] = float(best.support)
         second_core_support[protein_id] = float(second_support)
-        support_edge_id = f"{best.evidence_query_id}->{best.evidence_subject_id}:{best.relation_kind}"
+        support_edge_id = f"{best.evidence.query}->{best.evidence.subject}:{best.relation_kind}"
         supporting_edges[protein_id] = (support_edge_id,)
         ortholog_edges_by_group.setdefault(best.group_id, []).append(
             _make_ortholog_edge(
                 orthogroup_id=best.group_id,
                 source_rbh_orthogroup_id=best.group_id,
                 target_rbh_orthogroup_id=best.group_id,
-                query_id=best.evidence_query_id,
-                subject_id=best.evidence_subject_id,
-                row=best.evidence_row,
+                query_id=best.evidence.query,
+                subject_id=best.evidence.subject,
+                hit=best.evidence,
                 protein_map=protein_map,
                 edge_kind=best.relation_kind,
                 render_role="display_edge",
@@ -5283,20 +5525,13 @@ def _build_anchor_core_orthogroups(
         )
 
     del core_member_snapshot
-    record_local_edges = _select_record_local_paralog_edges(
-        best_by_direction,
-        protein_map,
-        thresholds,
-        group_member_ids,
-        group_by_protein,
-        ranked_direction_rows,
-    )
+    record_local_edges = _select_record_local_paralog_edges(hits, protein_map, thresholds, group_by_protein)
     record_local_components = _record_local_components_from_edges(record_local_edges, protein_map)
     local_support_by_member = _record_local_support_by_member(record_local_edges)
     # Expanded cross-record membership is stable throughout component screening.
     # All components are screened before any record-local groups are appended.
     expanded_core_evidence = (
-        _index_core_support_evidence(best_by_direction, group_by_protein)
+        _index_core_support_evidence(hits, group_by_protein)
         if record_local_components and group_member_ids else {}
     )
     accepted_record_local_components = tuple(
@@ -5307,11 +5542,10 @@ def _build_anchor_core_orthogroups(
             bool(group_member_ids),
             expanded_core_evidence,
             thresholds,
-            protein_map,
             local_support_by_member,
         )
     )
-    del expanded_core_evidence
+    del expanded_core_evidence, thresholds
     _append_record_local_orthogroups(
         group_member_ids=group_member_ids,
         group_by_protein=group_by_protein,
@@ -5332,56 +5566,15 @@ def _build_anchor_core_orthogroups(
         protein_map=protein_map,
     )
 
-    membership_pairs = {
-        tuple(sorted((edge.query_protein_id, edge.subject_protein_id)))
-        for edges in ortholog_edges_by_group.values()
-        for edge in edges
-    }
-    seen_related_pairs: set[tuple[str, str, OrthologEdgeKind]] = set()
-    for (query_id, subject_id), row in ranked_direction_rows:
-        if query_id not in protein_map or subject_id not in protein_map or query_id == subject_id:
-            continue
-        canonical_query_id, canonical_subject_id = _canonical_edge_endpoint_ids(query_id, subject_id, protein_map)
-        query_group = group_by_protein.get(canonical_query_id)
-        subject_group = group_by_protein.get(canonical_subject_id)
-        if query_group is None and subject_group is None:
-            continue
-        relation_kind: OrthologEdgeKind
-        if _row_domain_only(row):
-            relation_kind = "domain_only"
-        elif query_group is not None and subject_group is not None and query_group != subject_group:
-            relation_kind = "weak_bridge"
-        elif query_group == subject_group:
-            query_role = member_roles.get(canonical_query_id)
-            subject_role = member_roles.get(canonical_subject_id)
-            if "inparalog" in {query_role, subject_role}:
-                relation_kind = "same_record_inparalog"
-            else:
-                relation_kind = "related_homolog"
-        else:
-            relation_kind = "related_homolog"
-        edge_pair = cast(tuple[str, str], tuple(sorted((canonical_query_id, canonical_subject_id))))
-        edge_key = edge_pair + (relation_kind,)
-        if edge_pair in membership_pairs or edge_key in seen_related_pairs:
-            continue
-        seen_related_pairs.add(edge_key)
-        for group_id in dict.fromkeys(group for group in (query_group, subject_group) if group is not None):
-            _append_limited_related_edge(
-                related_edges_by_group,
-                group_id=group_id,
-                max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
-                edge=_make_ortholog_edge(
-                    orthogroup_id=group_id,
-                    source_rbh_orthogroup_id=query_group,
-                    target_rbh_orthogroup_id=subject_group,
-                    query_id=canonical_query_id,
-                    subject_id=canonical_subject_id,
-                    row=row,
-                    protein_map=protein_map,
-                    edge_kind=relation_kind,
-                    render_role="display_edge",
-                ),
-            )
+    _append_related_edges(
+        hits,
+        protein_map,
+        group_by_protein=group_by_protein,
+        member_roles=member_roles,
+        ortholog_edges_by_group=ortholog_edges_by_group,
+        related_edges_by_group=related_edges_by_group,
+        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+    )
 
     updated_edges_by_group, paths_by_group = _build_ortholog_path_indexes(
         {
@@ -5455,21 +5648,15 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
     max_related_edges_per_orthogroup: int,
     comparison_pairs: Sequence[tuple[int, int]] | None,
 ) -> OrthogroupEdgeSelectionResult:
-    if int(max_related_edges_per_orthogroup) <= 0:
+    max_related_edges_per_orthogroup = int(max_related_edges_per_orthogroup)
+    if max_related_edges_per_orthogroup <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    normalized_tables = _normalize_directional_hit_tables(
-        directional_hits_by_pair,
+    # The normalized tables are freed once the hits are built.
+    hits = _directed_hits_from_tables(
+        _normalize_directional_hit_tables(directional_hits_by_pair, protein_map, min_coverage=0.0),
         protein_map,
-        min_coverage=0.0,
     )
-    best_by_direction = _dedupe_anchor_core_directional_rows(normalized_tables, protein_map)
-    # Rank fields are immutable across the three membership phases. Keep the
-    # original mapping order for support accumulation; share only this traversal.
-    ranked_direction_rows = sorted(
-        best_by_direction.items(),
-        key=lambda item: _anchor_core_hit_rank(item[1], protein_map),
-    )
-    anchor_edges = _select_anchor_core_edges(best_by_direction, protein_map, ranked_direction_rows)
+    anchor_edges = _select_anchor_core_edges(hits, protein_map)
     anchor_edge_tables = _anchor_core_edge_tables(anchor_edges, protein_map)
     if record_count is None:
         record_count = 0
@@ -5501,23 +5688,22 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
                 columns=COMPARISON_COLUMNS,
             )
         adjacent_anchor_edges_by_pair[(query, subject)] = _comparison_columns_only(table)
+
+    orthogroups = _build_anchor_core_orthogroups(
+        hits,
+        anchor_edges,
+        protein_map,
+        include_singletons=include_singletons,
+        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
+    )
     adjacent_candidate_edges_by_pair = {
         pair: _comparison_columns_only(directional_hits_by_pair.get(pair, _empty_comparison_hits()))
         for pair in display_pairs
     }
-
-    orthogroups = _build_anchor_core_orthogroups(
-        best_by_direction,
-        anchor_edges,
-        protein_map,
-        ranked_direction_rows=ranked_direction_rows,
-        include_singletons=include_singletons,
-        max_related_edges_per_orthogroup=max_related_edges_per_orthogroup,
-    )
     adjacent_display_edges_by_pair = _build_adjacent_display_edges_by_pair(
         adjacent_anchor_edges_by_pair,
         orthogroups,
-        max_display_edges_per_orthogroup=int(max_related_edges_per_orthogroup),
+        max_display_edges_per_orthogroup=max_related_edges_per_orthogroup,
         adjacent_candidate_edges_by_pair=adjacent_candidate_edges_by_pair,
     )
     return OrthogroupEdgeSelectionResult(
@@ -6665,5 +6851,6 @@ __all__ = [
     "make_legacy_protein_raw_candidate",
     "validate_legacy_protein_raw_candidate_envelope",
     "validate_protein_identity_manifest",
+    "is_json_exact_protein_identity_manifest",
     "validate_protein_raw_entry_references",
 ]

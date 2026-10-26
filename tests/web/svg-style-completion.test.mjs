@@ -4,11 +4,11 @@ import { fixture } from './helpers/svg-style-fixture.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 
 test('depth OFF and ON publish parent visibility at the style owner', () => {
-  const { actions, state } = fixture({ default: '#d3d3d3' }, []);
+  const { actions, state, currentResults } = fixture({ default: '#d3d3d3' }, []);
   for (const enabled of [false, true]) {
     state.form.show_depth = enabled;
     actions.applyTrackVisibility();
-    assert.equal(JSON.parse(state.results.value[0].content).depth.display, enabled ? undefined : 'none');
+    assert.equal(JSON.parse(currentResults()[0].content).depth.display, enabled ? undefined : 'none');
   }
 });
 // OV-108 (PD-OI-086), OV-488: the palette styles a Result with the skew slot

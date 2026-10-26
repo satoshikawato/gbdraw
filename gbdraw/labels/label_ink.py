@@ -161,7 +161,7 @@ def feature_label_ink(
     size = float(font_size)
     offsets = text_ink_offsets(text, font_family, size, dominant_baseline=dominant_baseline, text_anchor=anchor)
     if offsets is None:
-        # The fallback width of calculate_bbox_dimensions.
+        # The no-font estimate: 0.6 em per character.
         width = 0.6 * len(text) * size
         origin = -{"start": 0.0, "middle": 0.5, "end": 1.0}[anchor] * width
         offsets = (origin, origin + width, -0.5 * size, 0.5 * size)

@@ -260,7 +260,7 @@ test('Label Line and Label Protection draw in their mode and survive Save and Lo
   await editStep(page, 'Labels', { 'form.show_labels_linear': 'all' });
   await generate(page);
   const drawn = () => page.evaluate(() => {
-    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.results[0].content), 'image/svg+xml');
+    const svg = new DOMParser().parseFromString(String(window.__GBDRAW_APP__.currentResults()[0].content), 'image/svg+xml');
     const labelIds = new Set([...svg.querySelectorAll('text[data-label-feature-id]')].map((text) => `#${text.id}`));
     return {
       halos: [...svg.querySelectorAll('use')].filter((use) => labelIds.has(use.getAttribute('href') || use.getAttribute('xlink:href'))).length,
@@ -600,7 +600,7 @@ test('OV-84 source replacement: the stroke of a feature the new Circular file la
     const { getFeatureElements } = await import('/gbdraw/web/js/services/feature-dom.js');
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((item) => item.stable_override_key === key);
-    const svg = new DOMParser().parseFromString(String(app.results[app.selectedResultIndex]?.content || ''), 'image/svg+xml').documentElement;
+    const svg = new DOMParser().parseFromString(String(app.currentResults()[app.selectedResultIndex]?.content || ''), 'image/svg+xml').documentElement;
     const elements = feature ? getFeatureElements(svg, feature.svg_id) : [];
     return elements.length > 0 && elements.every((element) => element.getAttribute('stroke') === strokeColor
       && element.getAttribute('stroke-width') === String(strokeWidth));
@@ -729,6 +729,30 @@ test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch
     await historyStep(page, step);
     expect(await read(), `Circular ${step} to ${JSON.stringify(expected)}`).toEqual(expected);
   }
+});
+
+// OV-1762: the Editor's feature count is the shown mode's, across a Generate in the other mode and a switch.
+test('OV-1762: the Editor feature count follows the shown mode after a Generate in the other one', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openCircular(page);
+  await switchMode(page, 'linear');
+  await setLinearFile(page, 'tests/fixtures/regex_rules.gb');
+  await switchMode(page, 'circular');
+  const editorCount = () => page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return { text: app.featureEditorStatusText, features: app.extractedFeatures.length };
+  });
+  await generate(page);
+  const circular = await editorCount();
+  expect(circular.text).toBe(`${circular.features} features ready`);
+  await switchMode(page, 'linear');
+  expect(await editorCount(), 'Linear before its Generate').toEqual({ text: 'No features ready', features: 0 });
+  await generate(page);
+  const linear = await editorCount();
+  expect(linear.text).toBe(`${linear.features} features ready`);
+  expect(linear.features, 'the two files have different feature counts').not.toBe(circular.features);
+  await switchMode(page, 'circular');
+  expect(await editorCount(), 'Circular shown again').toEqual(circular);
 });
 
 // OV-1249: Reset resets settings, not the loaded records.

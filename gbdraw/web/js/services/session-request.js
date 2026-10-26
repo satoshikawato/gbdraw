@@ -206,6 +206,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
+/** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
  *   WebFileBindings } from './session-resource-backing.js'
@@ -838,19 +839,30 @@ const DEFINITION_FONT_FLAT_CONFIG_KEY = Object.freeze({
   linear: 'linear_definition_font_size'
 });
 
+// The draft field that each request track option a label fit row may set
+// (by its request name) is projected from, in each mode: the reverse of the
+// request's track options. "Narrow the inside tracks" sets the Circular
+// Center Reserved Radius (`tracks.centerReservedRadius`, PD-OI-097).
+/** @type {Readonly<Record<keyof LabelFitTrackOptions, Readonly<Partial<Record<ModeProfileName, string>>>>>} */
+const DRAFT_FIELD_OF_TRACK_OPTION = Object.freeze({
+  centerReservedRadius: Object.freeze({ circular: 'center_reserved_radius' })
+});
+
 /**
  * The draft fields that the request mapping projects to `values` (config
  * paths and their values), as a label fit row writes them: the reverse of the
- * request's config overrides. The label scope goes to the form's label mode;
- * the rest to the drawing's `adv`. A path the mode does not manage, or one
- * whose draft field the drawing does not hold, is an `UNKNOWN_CONFIG_PATH`
- * error.
+ * request's config overrides, and of its track options for `trackOptions`
+ * (by request name). The label scope goes to the form's label mode; the rest
+ * to the drawing's `adv`. A path or track option the mode does not manage,
+ * or one whose draft field the drawing does not hold, is an
+ * `UNKNOWN_CONFIG_PATH` error.
  * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {ModeProfileName} mode
  * @param {Readonly<Record<string, unknown>>} adv The drawing's draft, whose fields the result names.
+ * @param {Readonly<LabelFitTrackOptions>} [trackOptions] The row's request track options; none by default.
  * @returns {{ form: Record<string, string>, adv: Record<string, number | string | boolean> }}
  */
-export const draftFieldsForConfigValues = (values, mode, adv) => {
+export const draftFieldsForConfigValues = (values, mode, adv, trackOptions = {}) => {
   const managed = new Set(managedConfigOverridePathsForMode(mode));
   const unknown = () => diagnosticError('INPUT_INVALID', { field: 'configOverrides', reason: 'UNKNOWN_CONFIG_PATH' });
   if (Object.keys(values).some((path) => !managed.has(path))) throw unknown();
@@ -859,6 +871,12 @@ export const draftFieldsForConfigValues = (values, mode, adv) => {
   const formFields = {};
   /** @type {Record<string, number | string | boolean>} */
   const advFields = {};
+  for (const [option, value] of Object.entries(trackOptions)) {
+    const field = Object.hasOwn(DRAFT_FIELD_OF_TRACK_OPTION, option)
+      ? DRAFT_FIELD_OF_TRACK_OPTION[/** @type {keyof LabelFitTrackOptions} */ (option)][mode] : undefined;
+    if (field === undefined || !Object.hasOwn(adv, field) || typeof value !== 'number' || !Number.isFinite(value)) throw unknown();
+    advFields[field] = value;
+  }
   for (const [key, value] of Object.entries(projectCanonicalConfigOverrides(values, mode))) {
     if (key === 'label_scope') {
       if (typeof value !== 'string') throw unknown();
@@ -4244,20 +4262,37 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
 const sourceRecordCounts = new WeakMap();
 
 /**
+ * The File that holds a resource's bytes, or null when its descriptor holds them.
+ * @param {unknown} descriptor
+ * @returns {WeakKey | null}
+ */
+const resourceFileOwner = (descriptor) => {
+  const owner = getResourcePayloadOwner(descriptor);
+  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
+  return owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+};
+
+/**
+ * The text of a committed Session resource, read from its File or its encoded payload.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<string>}
+ */
+export const readCanonicalResourceText = async (resources, resourceId) => {
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
+  return fileOwner ? readFileText(fileOwner) : decodeCanonicalResourceText(resources, resourceId);
+};
+
+/**
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @param {'genbank' | 'fasta'} kind
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
-  const descriptor = resources?.[resourceId];
-  const owner = getResourcePayloadOwner(descriptor);
-  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
-  const fileOwner = owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
   let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
   if (!counts) {
-    const text = fileOwner
-      ? await readFileText(fileOwner)
-      : decodeCanonicalResourceText(resources, resourceId);
+    const text = await readCanonicalResourceText(resources, resourceId);
     counts = {
       genbank: countGenBankRecords(text),
       fasta: (text.match(/^>/gm) || []).length

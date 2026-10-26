@@ -10,6 +10,7 @@ import {
 /** @import { FeatureLike } from '../services/feature-utils.js' */
 /** @import { ColorRule, RuleFeature, VisibilityRule } from '../services/rule-matchers.js' */
 /** @import { SpecificColorRule } from '../services/specific-color-rules.js' */
+/** @import { RuleFeaturePayload, SynthesizeColorRulesRequest, SynthesizedColorRules } from '../contracts/rule-synthesis.generated.js' */
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -58,17 +59,13 @@ const declinesVisibilityMatch = (feature, rule) => {
 // coordinates than its source. The catalog gives those drawn values
 // (`drawnSelector`, feature catalog 5, OV-02); a feature of an older catalog
 // sends its source values only where they are the drawn ones. A `hash` rule
-// matches the feature's source-record hash on every record (OV-401).
-// The payload of a feature without a label is built once per feature object.
-/**
- * A feature as Python's rule evaluation reads it (R7).
- * @typedef {object} RuleFeaturePayload
- * @property {string} type
- * @property {string} record
- * @property {Record<string, string[]>} qualifiers
- * @property {{ hash: string | null, location: string | null, record_location: string | null }} selector
- * @property {string} label
- */
+// matches the feature's source-record hash on every record (OV-401), and its
+// feature instance, which names one feature of one record (PD-OI-069 revision
+// 2): Python composes it from the catalog identity every catalog feature
+// carries (`record_key`, `biological_feature_id`), so a catalog saved before
+// rules named instances matches the same way; the payload composes none.
+// The payload of a feature without a label is built once per feature object;
+// its type is Python's (gbdraw/web_support/rule_matching.py, R7).
 /** @type {WeakMap<object, RuleFeaturePayload>} */
 const payloads = new WeakMap();
 /**
@@ -84,6 +81,8 @@ export const ruleFeaturePayload = (feature, label = '') => {
   if (label === '') payloads.set(source, payload);
   return payload;
 };
+/** @param {unknown} value @returns {string | null} A catalog identity field, null where the feature has none. */
+const identityText = (value) => (typeof value === 'string' && value ? value : null);
 /**
  * @param {RuleMatchedFeature} feature
  * @param {string} label
@@ -94,17 +93,35 @@ const buildRuleFeaturePayload = (feature, label) => {
   const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
     .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)]));
   const drawn = feature?.drawnSelector;
+  const identity = {
+    record_key: identityText(feature.record_key),
+    feature_id: identityText(feature.biological_feature_id)
+  };
   const selector = drawn
-    ? { hash: getFeatureColorRuleHash(feature) || null, location: drawn.location, record_location: drawn.recordLocation }
+    ? { hash: getFeatureColorRuleHash(feature) || null, ...identity, location: drawn.location, record_location: drawn.recordLocation }
     : drawnSelectorUnknown(feature)
-      ? { hash: getFeatureColorRuleHash(feature) || null, location: null, record_location: null }
+      ? { hash: getFeatureColorRuleHash(feature) || null, ...identity, location: null, record_location: null }
       : {
           hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
+          ...identity,
           location: metadata.location,
           record_location: metadata.recordLocation || `${metadata.record}:${metadata.position}`
         };
   return { type: metadata.featureType, record: metadata.record, qualifiers, selector, label };
 };
+
+/**
+ * The rule table a synthesis answer gives over the table `current` it was
+ * asked about: a number keeps that row, a row with `row` copies that row under
+ * the pattern `val` (a reset keeps a shared rule for the other copies), any
+ * other row is new.
+ * @param {SynthesizedColorRules['table']} table
+ * @param {readonly Partial<SpecificColorRule>[]} current
+ * @returns {Partial<SpecificColorRule>[]}
+ */
+export const synthesizedRuleTable = (table, current) => table.map((row) => (
+  typeof row === 'number' ? current[row] : 'row' in row ? { ...current[row.row], val: row.val } : row
+));
 
 // A run (`runWhenPrepared`) that fails, in its preparation or its commit,
 // shows its error as the caller's `operation`, unless another error replaced
@@ -157,6 +174,8 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
  *   The diagram helper that matches rules against feature payloads (R7).
+ * @property {(request: SynthesizeColorRulesRequest) => Promise<SynthesizedColorRules>} synthesize
+ *   The diagram helper that writes the rules of a group color edit (OV-244, Owner R-07).
  * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
  * @property {{ value: boolean }} [blocking] Receives whether an edit's preparation is running: one
  *   that is not a `view` preparation (OV-377). Save and Load wait for it.
@@ -194,9 +213,24 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @property {(rules?: readonly Partial<SpecificColorRule>[]) => boolean} isPrepared
  * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
+ * @property {(group: GroupColorEdit, rules: readonly Partial<SpecificColorRule>[]) => Promise<SynthesizedColorRules>} synthesizeGroup
+ *   Python's rules for coloring `group.features` as one group over the rule table `rules` and the whole catalog.
  * @property {() => RuleInputsSnapshot} snapshot The inputs the matches depend on.
  * @property {(before: RuleInputsSnapshot) => boolean} isCurrent Whether `before` is still the current inputs.
  * @property {{ value: boolean }} pending
+ */
+
+/**
+ * One group color edit: the selected features, found in the catalog by their
+ * rendered id (`svg_id`; a feature without one is not drawn and takes no rule),
+ * the label texts each shows (aligned with `features`), and the color and
+ * caption they take; `scope` "features" colors each feature by itself.
+ * @typedef {object} GroupColorEdit
+ * @property {SynthesizeColorRulesRequest['scope']} scope
+ * @property {readonly (RuleMatchedFeature & { svg_id?: string | null })[]} features
+ * @property {readonly string[][]} labels
+ * @property {string} color
+ * @property {string} caption
  */
 
 /**
@@ -204,7 +238,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @returns {RulePreparation}
  */
 export const createRulePreparation = ({
-  state, evaluate, pending = { value: false }, blocking = { value: false }, visibilityRules = () => []
+  state, evaluate, synthesize, pending = { value: false }, blocking = { value: false }, visibilityRules = () => []
 }) => {
   // The rule keys Python accepted: a key's syntax is a fact of its content.
   /** @type {Set<string>} */
@@ -385,8 +419,30 @@ export const createRulePreparation = ({
     const candidate = asGiven ? rules : rules.map(rule => normalizeSpecificRule(rule));
     return await prepare(candidate, options) && isCurrent(before) ? { rules: candidate, snapshot: before } : null;
   };
+  // Every catalog feature goes to Python, which refuses a condition that
+  // matches an unselected one.
+  /** @type {RulePreparation['synthesizeGroup']} */
+  const synthesizeGroup = ({ scope, features: selected, labels, color, caption }, rules) => {
+    const targets = features();
+    /** @type {Map<string, string[]>} */
+    const labelsById = new Map();
+    selected.forEach((feature, index) => { if (feature.svg_id) labelsById.set(feature.svg_id, [...labels[index]]); });
+    const picked = targets.flatMap((feature, index) => {
+      const id = /** @type {{ svg_id?: unknown }} */ (feature).svg_id;
+      return typeof id === 'string' && labelsById.has(id) ? [index] : [];
+    });
+    return synthesize({
+      scope,
+      features: targets.map((feature) => ruleFeaturePayload(feature)),
+      selected: picked,
+      labels: picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []),
+      rules: rules.map((rule) => ({ feat: String(rule.feat ?? ''), qual: String(rule.qual ?? ''), val: String(rule.val ?? '') })),
+      color,
+      caption
+    });
+  };
   return {
-    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, snapshot,
+    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, synthesizeGroup, snapshot,
     isCurrent, pending
   };
 };

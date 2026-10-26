@@ -122,7 +122,7 @@ const journey = (id, title, minutes, body) => test(`${id} ${title}`, async ({ pa
 
 const displayedSvg = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
-  return String(app.results?.[app.selectedResultIndex]?.content || '');
+  return String(app.currentResults()[app.selectedResultIndex]?.content || '');
 });
 
 // The loaded preview, then Generate from the loaded draft.
@@ -300,9 +300,9 @@ const showMode = async (page, mode) => {
   await settleLive(page);
 };
 
-const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length;
+const pairwiseMatches = (svg) => (svg.match(/data-gbdraw-match-id=/g) || []).length;
 // The data-identity of each drawn comparison match.
-const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-pairwise-match-id=[^>]*>/g) || [])
+const matchIdentities = (svg) => (svg.match(/<[^>]*data-gbdraw-match-id=[^>]*>/g) || [])
   .map((tag) => Number(tag.match(/data-identity="([^"]*)"/)?.[1]))
   .filter(Number.isFinite);
 
@@ -329,7 +329,7 @@ const inputGenerateExport = async (page, steps, dir, { phone = false } = {}) => 
     await button.click();
     await page.waitForFunction(() => {
       const app = window.__GBDRAW_APP__;
-      return !app.processing && String(app.results?.[0]?.content || '').includes('<svg');
+      return !app.processing && String(app.currentResults()[0]?.content || '').includes('<svg');
     }, null, { timeout: 300_000 });
     await settleLive(page);
     await assertOperationHealth(page, { operation: 'Generate (button)' });
@@ -448,7 +448,7 @@ const J3_SESSIONS = [
     draftMarks: ['Core biosynthetic genes', 'Additional biosynthetic genes', 'Transport-related genes', 'Regulatory genes']
       .map((caption) => `data-legend-key="${caption}"`).concat('Aminoglycoside biosynthetic gene clusters from') },
   { key: 'v44-two-mode', name: 'main-written Session 44 (two-mode project)', file: FIXTURE('two-mode-project.v44.gbdraw-session.json.gz'),
-    draftMarks: ['d="M 1350.5,-48.0 L 1450.5,-48.0 L 1450.5,-7.999999999999998 L 1350.5,-7.999999999999998 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
+    draftMarks: ['d="M 1350.5,-48 L 1450.5,-48 L 1450.5,-8 L 1350.5,-8 z" data-gbdraw-feature-id="fd6a65bce_record_2"'] },
   { key: 'gallery-hmmt', name: 'Gallery HmmtDNA_basic_circular (Circular)', file: GALLERY('HmmtDNA_basic_circular.gbdraw-session.json') },
   { key: 'gallery-bgc', name: 'Gallery BGC0000708-BGC0000713 (Linear, LOSATP comparisons)', file: GALLERY('BGC0000708-BGC0000713.gbdraw-session.json') }
 ];

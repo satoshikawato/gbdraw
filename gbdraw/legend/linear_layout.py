@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from .circular_layout import min_gradient_label_text
 from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
 from .table import LegendRowKey, as_legend_table
@@ -97,7 +97,6 @@ def _measure_solid_entries(
     *,
     font_family: str,
     font_size: float,
-    dpi: int,
 ) -> tuple[_MeasuredSolidEntry, ...]:
     table = as_legend_table(legend_table)
     drawn_names = table.names()
@@ -105,11 +104,10 @@ def _measure_solid_entries(
         _MeasuredSolidEntry(
             key=key,
             properties=properties,
-            text_width=calculate_bbox_dimensions(
+            text_width=drawn_text_box(
                 drawn_names[key].drawn,
                 font_family,
                 font_size,
-                dpi,
             )[0],
         )
         for key, properties in table.items()
@@ -122,7 +120,6 @@ def _build_gradient_layout(
     *,
     font_family: str,
     font_size: float,
-    dpi: int,
     color_rect_size: float,
     line_height: float,
 ) -> LinearGradientLegendLayout | None:
@@ -140,13 +137,14 @@ def _build_gradient_layout(
     min_label_text = min_gradient_label_text(
         gradient_entries[0][1].get("min_value", 0)
     )
+    # The scale labels share one line box, whatever their digits.
+    scale_label_height = drawn_text_box("100%", font_family, font_size)[1]
     if len(gradient_entries) > 1:
         label_width = max(
-            calculate_bbox_dimensions(
+            drawn_text_box(
                 drawn_names[key].drawn,
                 font_family,
                 font_size,
-                dpi,
             )[0]
             for key, _ in gradient_entries
         )
@@ -167,20 +165,6 @@ def _build_gradient_layout(
             + ((len(gradient_entries) - 1) * line_height)
             + 2.0
         )
-        scale_label_height = max(
-            calculate_bbox_dimensions(
-                min_label_text,
-                font_family,
-                font_size,
-                dpi,
-            )[1],
-            calculate_bbox_dimensions(
-                "100%",
-                font_family,
-                font_size,
-                dpi,
-            )[1],
-        )
         return LinearGradientLegendLayout(
             compact=True,
             entries=entries,
@@ -194,29 +178,14 @@ def _build_gradient_layout(
         )
 
     key, properties = gradient_entries[0]
-    title_width, title_height = calculate_bbox_dimensions(
+    title_width, title_height = drawn_text_box(
         drawn_names[key].drawn,
         font_family,
         font_size,
-        dpi,
     )
     width, bar_x = single_gradient_block_x(bar_width, title_width)
     bar_y = title_height + (color_rect_size / 2.0)
     scale_label_y = bar_y + (color_rect_size / 2.0) + 2.0
-    scale_label_height = max(
-        calculate_bbox_dimensions(
-            min_label_text,
-            font_family,
-            font_size,
-            dpi,
-        )[1],
-        calculate_bbox_dimensions(
-            "100%",
-            font_family,
-            font_size,
-            dpi,
-        )[1],
-    )
     entry = LinearGradientEntryLayout(
         key=key,
         properties=properties,
@@ -335,7 +304,6 @@ def build_linear_legend_layout(
     canvas_width: float,
     font_family: str,
     font_size: float,
-    dpi: int,
     color_rect_size: float,
 ) -> LinearLegendLayout:
     active_orientation: Literal["horizontal", "vertical"] = (
@@ -372,13 +340,11 @@ def build_linear_legend_layout(
         legend_table,
         font_family=font_family,
         font_size=font_size,
-        dpi=dpi,
     )
     gradient = _build_gradient_layout(
         legend_table,
         font_family=font_family,
         font_size=font_size,
-        dpi=dpi,
         color_rect_size=color_rect_size,
         line_height=line_height,
     )

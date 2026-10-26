@@ -667,7 +667,8 @@ class _DrawnLabel(NamedTuple):
     y: float
 
 
-_ARC_PATH = re.compile(r"M (\S+),(\S+) A (\S+),(\S+) 0 ([01]) ([01]) (\S+),(\S+)")
+_ARC_START = re.compile(r"M (\S+),(\S+)")
+_ARC_PIECE = re.compile(r" A (\S+),(\S+) 0 ([01]) ([01]) (\S+),(\S+)")
 
 
 def _drawn_label(text, root) -> _DrawnLabel:
@@ -683,14 +684,23 @@ def _drawn_label(text, root) -> _DrawnLabel:
         return _DrawnLabel([corners], _nearest_distance(corners), max(math.hypot(px, py) for px, py in corners), x, y)
     href = text_path.attrib.get("{http://www.w3.org/1999/xlink}href") or text_path.attrib["href"]
     (path,) = [element for element in root.iter() if element.attrib.get("id") == href.removeprefix("#")]
-    match = _ARC_PATH.fullmatch(path.attrib["d"])
-    assert match is not None, path.attrib["d"]
-    x1, y1, radius, radius_y, large, sweep, x2, y2 = (float(value) for value in match.groups())
-    assert radius == radius_y and math.hypot(x1, y1) == pytest.approx(radius, rel=1e-5)
-    flipped = sweep == 0.0
-    start, end = math.atan2(y1, x1), math.atan2(y2, x2)
-    span = ((start - end) if flipped else (end - start)) % (2.0 * math.pi)
-    assert (span > math.pi) == (large == 1.0)
+    d = path.attrib["d"]
+    head = _ARC_START.match(d)
+    assert head is not None, d
+    pieces = [tuple(float(value) for value in piece.groups()) for piece in _ARC_PIECE.finditer(d, head.end())]
+    # The text path is one circle arc, drawn in pieces by gbdraw.svg.circular_arcs (each with its own flags).
+    assert pieces and "".join(piece.group(0) for piece in _ARC_PIECE.finditer(d, head.end())) == d[head.end():], d
+    x1, y1 = float(head.group(1)), float(head.group(2))
+    radius = pieces[0][0]
+    assert all(piece[0] == piece[1] == radius for piece in pieces) and math.hypot(x1, y1) == pytest.approx(radius, rel=1e-5)
+    flipped = pieces[0][3] == 0.0
+    assert all((piece[3] == 0.0) == flipped for piece in pieces)
+    start, span, previous = math.atan2(y1, x1), 0.0, math.atan2(y1, x1)
+    for _rx, _ry, large, _sweep, x2, y2 in pieces:
+        angle = math.atan2(y2, x2)
+        step = ((previous - angle) if flipped else (angle - previous)) % (2.0 * math.pi)
+        assert (step > math.pi) == (large == 1.0)
+        span, previous = span + step, angle
     middle = start - 0.5 * span if flipped else start + 0.5 * span
     assert text_path.attrib["startOffset"] == "50%"
     ink = text_ink(text_path.text or "", family)
@@ -862,7 +872,7 @@ def test_circular_annotation_labels_curve_along_the_circle_and_stay_upright(orie
         # Text in the lower half reads anticlockwise so that it stays upright, as embedded feature labels do.
         href = text_path.attrib["{http://www.w3.org/1999/xlink}href"].removeprefix("#")
         (path,) = [element for element in root.iter() if element.attrib.get("id") == href]
-        sweep = _ARC_PATH.fullmatch(path.attrib["d"]).group(6)
+        sweep = _ARC_PIECE.search(path.attrib["d"]).group(4)
         assert (sweep == "0") == (0.0 < angle % 360.0 < 180.0), (region.label, angle)
     gaps = _circular_label_gaps(drawing)
     assert all(drawn_side == side and gap == pytest.approx(4.0, abs=1e-3) for drawn_side, gap in gaps.values()), gaps
@@ -1259,7 +1269,13 @@ def test_circular_annotation_label_without_a_clear_place_takes_the_fewest_confli
     assert any(convex_polygons_intersect(grown_convex_polygon(part, 4.0), on_midpoint) for part in moved.parts)
 
 
-def _draw_span_regions(slots: tuple[str, ...], style: RegionAnnotationStyle, *, mark: str = "bracket"):
+def _draw_span_regions(
+    slots: tuple[str, ...],
+    style: RegionAnnotationStyle,
+    *,
+    mark: str = "bracket",
+    center_reserved_radius: float | None = None,
+):
     """Two labelled regions over a record whose GC plots reach their band edges (REVIEW-1192 F1): GC 10 % on the
     first half and 90 % on the second."""
 
@@ -1282,7 +1298,9 @@ def _draw_span_regions(slots: tuple[str, ...], style: RegionAnnotationStyle, *, 
         options=CircularDiagramOptions(
             annotations=AnnotationOptions(sets=(AnnotationSet("regions", regions),)),
             config_overrides={"labels.circular.scope": "none"},
-            tracks=CircularRequestTrackOptions(circular_track_slots=slots),
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=slots, center_reserved_radius=center_reserved_radius
+            ),
         ),
     )
 
@@ -1312,12 +1330,18 @@ def _annotation_letter_radii(drawing) -> list[tuple[float, float]]:
 
 
 @pytest.mark.parametrize(
-    "style",
-    [RegionAnnotationStyle(label_offset=4.0), RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial")],
+    ("style", "center_reserved_radius"),
+    [
+        (RegionAnnotationStyle(label_offset=4.0), None),
+        # The 40 pt letters need more room than the rings leave above the centre; a center reservation (which the
+        # definition text no longer makes, DF-D02) keeps the GC ring off the centre, so the rings pack against it.
+        (RegionAnnotationStyle(label_offset=4.0, label_font_size=40, label_orientation="radial"), 76.5),
+    ],
     ids=["14px", "40px-radial"],
 )
 def test_circular_span_label_room_moves_its_ring_by_the_room_and_keeps_the_features_on_the_axis(
     style: RegionAnnotationStyle,
+    center_reserved_radius: float | None,
 ) -> None:
     # A span on an automatic inside ring, with an automatic ring between it and the features (REVIEW-1192 delta D1).
     def draw(cover_anchor: str):
@@ -1329,6 +1353,7 @@ def test_circular_span_label_room_moves_its_ring_by_the_room_and_keeps_the_featu
                 f"regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,cover_anchor={cover_anchor},z=5",
             ),
             style,
+            center_reserved_radius=center_reserved_radius,
         )
 
     plain, span = _slot_bands(draw("false")), draw("true")
@@ -1494,20 +1519,20 @@ def test_circular_overlay_labels_keep_their_room_from_the_automatic_ring_outside
             ("o1:dinucleotide_content@side=outside", "features:features",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,w=60px,show_labels=false,z=5",
              "gc:dinucleotide_content@side=inside"),
-            1144.23,
+            1136.876,
             {"o1": (393.9, 468.0), "features": (349.05, 386.1), "regions": (337.575, 397.575), "gc": (271.05, 345.15)},
         ),
         (
             ("features:features",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=features,w=80px,show_labels=false,z=5"),
-            929.102,
+            921.941,
             {"features": (349.05, 386.1), "regions": (327.575, 407.575)},
         ),
         (
             ("o1:dinucleotide_content@side=outside", "features:features", "gc:dinucleotide_content@side=inside",
              "regions:annotations@side=overlay,set_id=regions,anchor_slot=gc,w=120px,show_labels=false,z=5",
              "sk:dinucleotide_skew@side=inside"),
-            1153.24,
+            1147.394,
             {"o1": (393.9, 468.0), "features": (349.05, 386.1), "gc": (271.05, 345.15), "regions": (248.1, 368.1),
              "sk": (193.05, 267.15)},
         ),
@@ -1519,6 +1544,7 @@ def test_circular_label_less_overlay_wider_than_its_anchor_keeps_every_band(
 ) -> None:
     # OV-1359: an overlay that spans nothing and has no labels needs no room, so a tint wider than its anchor leaves
     # every band and the canvas where they were before the labels' room (dev dc1fae14a).
+    # The canvas widths include the Legend, laid out at the drawn text width since Owner V-D03 (2026-10-24).
     drawing = _draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0))
     bands = _slot_bands(drawing)
     assert {slot: (round(inner, 3), round(outer, 3)) for slot, (inner, outer) in bands.items()} == dev_bands

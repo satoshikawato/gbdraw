@@ -1254,7 +1254,6 @@
         }
         .gbdraw-preview-surface :is(
             path[data-gbdraw-match-id],
-            path[data-gbdraw-pairwise-match-id],
             path[data-match-kind],
             path[data-pairwise-match-style]
         ) {
@@ -1262,7 +1261,6 @@
         }
         .gbdraw-preview-surface :is(
             path[data-gbdraw-match-id],
-            path[data-gbdraw-pairwise-match-id],
             path[data-match-kind],
             path[data-pairwise-match-style]
         ):focus-visible {
@@ -2019,14 +2017,11 @@
         }
         /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and ends at the footer's top,
            0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
-           seam. A layout warning above the button (up to two lines) makes the bar about 63 px taller. Beside
-           the rail alone the bar is a 60 px button that ends where the stacked button ends (64 px over the
-           pane's end, 8 px seam), under a 28 px mark when there is a warning. */
+           seam. Beside the rail alone the bar is a 60 px button that ends where the stacked button ends
+           (64 px over the pane's end, 8 px seam). */
         .settings-pane { --generate-room: 5.875rem; }
-        .settings-pane:has(.generate-bar > div) { --generate-room: 9.875rem; }
         .generate-bar-short { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) { --generate-room: 4.5rem; }
-        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]):has(.generate-bar > div) { --generate-room: 6.5rem; }
         .settings-scroll, .settings-pane[data-settings-display="rail"] > .settings-index { margin-bottom: var(--generate-room); }
 
         /* The settings pane has two displays (js/app/settings-pane.js): the stacked settings at the dragged
@@ -2100,20 +2095,13 @@
             .settings-pane[data-settings-display="rail"] > .settings-index > nav { scrollbar-width: thin; padding-right: 0; }
             .settings-pane[data-settings-display="rail"] > .settings-index > nav > button { max-width: 50px; }
         }
-        /* Beside the rail alone, Generate is a 60 px button: the icon over the first word, the loader alone
-           while it runs, and a layout warning as the mark of its help tip in place of the note. */
-        .settings-pane > .generate-bar > .help-tip { display: none; }
+        /* Beside the rail alone, Generate is a 60 px button: the icon over the first word, and the loader alone
+           while it runs. */
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar { padding: 0 0 calc(1rem + 1px); border: 0; background: none; backdrop-filter: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn { height: 60px; padding: 0; border-radius: 10px; font-size: 10px; line-height: 1.1; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .btn > span { flex-direction: column; gap: 2px; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-long { display: none; }
         .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar .generate-bar-short { display: inline; }
-        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > div { display: none; }
-        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .help-tip { display: block; margin: 0 0 4px; }
-        .settings-pane[data-settings-display="rail"]:not([data-settings-docked]) > .generate-bar > .help-tip > .help-tip-trigger {
-            width: 100%; justify-content: center; padding: 5px 0; border: 1px solid #fde68a; border-radius: 0.25rem;
-            background-color: #fffbeb; color: #92400e; font-size: 16px;
-        }
 
         /* While the Review alignment panel is docked, the pane scrolls it into reach. */
         .result-pane:has(.alignment-review-panel) {
@@ -3712,10 +3700,6 @@
                                             <input type="number" min="0.01" step="0.5" v-model.number="circularConservation.ring_gap" :aria-label="t('Circular comparison ring gap')" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
-                                </div>
-                                <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
-                                    <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
-                                    <span>{{ circularConservationLayoutWarning }}</span>
                                 </div>
                             </div>
                             <div v-if="circularConservation.source === 'losat' || circularConservationSeriesRows.length > 0" class="space-y-1">
@@ -5834,20 +5818,10 @@
 
             </div>
 
-            <!-- UI-12 (Owner decision 2026-10-07): last in Tab order; CSS keeps the bar fixed at the bottom. A layout
-                 warning is a note above the button and the button's description (the tip holds the text). Beside the
-                 rail alone the bar is the button's width: the second word folds away, and the note gives way to the
-                 tip's mark, which opens the text on hover, focus, click, or tap. -->
+            <!-- UI-12 (Owner decision 2026-10-07): last in Tab order; CSS keeps the bar fixed at the bottom. Beside the
+                 rail alone the bar is the button's width: the second word folds away. -->
             <div class="generate-bar shrink-0 py-4 px-1 bg-white/95 backdrop-blur-sm border-y border-slate-100 z-30">
-            <template v-if="circularConservationLayoutWarning">
-                <div class="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                    <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
-                    <span>{{ circularConservationLayoutWarning }}</span>
-                </div>
-                <help-tip id="generate-layout-warning" :label="t('Layout warning')" :text="circularConservationLayoutWarning"><i class="ph ph-warning-circle" aria-hidden="true"></i></help-tip>
-            </template>
             <button data-history-managed type="button" :aria-label="t('Generate Diagram')" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
-                :aria-describedby="circularConservationLayoutWarning ? 'generate-layout-warning' : null"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
                 <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> <span class="generate-bar-short">{{ t('Generate') }}</span><span class="generate-bar-long">{{ t('Generate Diagram') }}</span></span>
                 <span v-else class="flex items-center justify-center gap-2"><gbdraw-loader class="gbdraw-loader-on-fill text-xl"></gbdraw-loader> <span class="generate-bar-long">{{ generationCancelRequested ? t('Canceling...') : t('Processing...') }}</span></span>
@@ -8214,9 +8188,11 @@
                         </div>
                         <!-- The list and the selected group's detail share the free height; each scrolls on its own. -->
                         <div data-similarity-group-list class="flex-[2_1_0%] min-h-[6rem] overflow-y-auto border-b border-slate-200 custom-scrollbar">
+                            <!-- The rows (thousands on a large Session) exist only while the drawer shows their tab. No v-memo:
+                                 its cached rows would keep the unmounted buttons alive while the tab is hidden. -->
+                            <template v-if="showRightDrawer && rightDrawerTab === 'orthogroups'">
                             <button v-for="row in orthogroupRows"
                                     :key="row.id"
-                                    v-memo="[row, selectedOrthogroup && selectedOrthogroup.id === row.id, uiLocale.value]"
                                     :data-similarity-group-row="row.id"
                                     :aria-current="selectedOrthogroup && selectedOrthogroup.id === row.id ? 'true' : null"
                                     @click="selectOrthogroup(row.group.id)"
@@ -8231,6 +8207,7 @@
                                 </div>
                                 <div class="truncate text-[11px] text-slate-500">{{ row.countsLabel }}<template v-if="row.scopeLabel"> · {{ row.scopeLabel }}</template></div>
                             </button>
+                            </template>
                             <div v-if="filteredOrthogroups.length === 0" class="p-4 text-center text-slate-500 text-xs">{{ t('No similarity groups found') }}</div>
                         </div>
 
@@ -8607,10 +8584,10 @@
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ t('Labels do not fit') }}</h2>
             <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
-                ? t('The figure is drawn. Choose a fix to Generate again, or Cancel to keep it.')
+                ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
-                <li v-for="record in labelFitDialog.records" :key="`${record.recordId}:${record.labelKindTitle}`">
+                <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
                     <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
                 </li>
             </ul>
@@ -8638,8 +8615,13 @@
                     </li>
                 </ul>
             </fieldset>
+            <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
+            <div v-if="labelFitDialog.definitionRecords.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
+                <button v-for="record in labelFitDialog.definitionRecords" :key="record.recordIndex" type="button" data-history-ignore
+                        :data-label-fit-edit-record="record.recordIndex" @click="editLabelFitRecordText(record.recordIndex)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecords.length > 1"> ({{ record.recordId }}, #{{ record.recordIndex + 1 }})</template></button>
+            </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ t('Cancel') }}</button>
+                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
                 <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>

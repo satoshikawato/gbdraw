@@ -221,6 +221,7 @@ def test_should_render_feature_matches_supported_qualifiers(
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -252,6 +253,7 @@ def test_should_render_feature_first_match_wins() -> None:
             selected_features_set=["CDS"],
             feature_visibility_rules=rules_off_first,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -261,6 +263,7 @@ def test_should_render_feature_first_match_wins() -> None:
             selected_features_set=["CDS"],
             feature_visibility_rules=rules_show_first,
             record_id=record.id,
+            instance=None,
         )
         is True
     )
@@ -279,6 +282,7 @@ def test_should_render_feature_exclude_matching_preserves_base_drawing_decision(
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is True
     )
@@ -288,6 +292,7 @@ def test_should_render_feature_exclude_matching_preserves_base_drawing_decision(
             selected_features_set=["tRNA"],
             feature_visibility_rules=rules,
             record_id=record.id,
+            instance=None,
         )
         is False
     )
@@ -370,6 +375,7 @@ def test_should_render_feature_feature_object_origin_spanning_hash_rule_matches(
             selected_features_set=["D-loop"],
             feature_visibility_rules=rules,
             record_id="rec1",
+            instance=None,
         )
         is False
     )
@@ -387,6 +393,7 @@ def test_should_render_feature_feature_object_origin_spanning_record_location_ru
             selected_features_set=["CDS"],
             feature_visibility_rules=rules,
             record_id="rec1",
+            instance=None,
         )
         is True
     )
@@ -899,10 +906,10 @@ def _capture_gff_candidate_features(
     """Serve ``record`` as the parsed GFF3 and note the types the request keeps from it."""
 
     def fake_parse_gff_fasta(*args, **kwargs):
-        from gbdraw.features.source import build_source_feature_catalog
+        from gbdraw.features.source import capture_source_features
         for feature in record.features:
             feature.sub_features = []  # as BCBio leaves a feature without children
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
+        kwargs["source_feature_catalogs"].append(capture_source_features(record))
         return [record]
 
     def spy_resolve_record_inputs(*args, **kwargs):

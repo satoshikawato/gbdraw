@@ -17,7 +17,6 @@ import {
 } from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
-import { serializeCleanSvg } from './svg-serialization.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
@@ -133,7 +132,7 @@ import {
   createSessionResourceFileView,
   isSessionResourceFileView
 } from './session-resource-backing.js';
-import { normalizeLogicalResults } from './result-normalization.js';
+import { logicalResultsOf, normalizeLogicalResults } from './result-normalization.js';
 import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
@@ -178,6 +177,7 @@ import { rekeyLegendRecords } from './legend-svg.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, clearSessionPaint, legendEntryKey } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { SettingsSlice } from './drawing/settings.js' */
+/** @import { LabelFitTrackOptions } from './label-fit.js' */
 /** @import { FeatureFill } from './drawing/paint.js' */
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
@@ -219,7 +219,7 @@ import {
   settingsOnlySessionCandidate,
   validateSessionAuthorityInventory
 } from './session-authority.js';
-import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
+import { isUnsafeObjectKey } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -310,7 +310,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
-/** @import { LegacyResultNormalization, SavedResultEdits, SvgResultEntry } from './svg-result-ingestion.js' */
+/** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
@@ -1843,7 +1843,7 @@ const overlayCanonicalObject = (stored, canonical) => {
   const merged = isPlainObject(stored) ? cloneJsonData(stored) : {};
   if (!isPlainObject(canonical)) return merged;
   Object.entries(canonical).forEach(([key, value]) => {
-    if (['__proto__', 'constructor', 'prototype'].includes(key)) return;
+    if (isUnsafeObjectKey(key)) return;
     merged[key] = isPlainObject(value)
       ? overlayCanonicalObject(merged[key], value)
       : cloneJsonData(value);
@@ -2766,8 +2766,9 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
 
 // The draft fields a label fit row may write: the fields of the config paths
 // `gbdraw/labels/fit.py` names for the rows (the label settings, the feature
-// overlap switch of "separate overlapping features", LP-D52, and the Circular
-// definition font of "smaller definition font", D-12), never a feature-slot
+// overlap switch of "separate overlapping features", LP-D52, the Circular
+// definition font of "smaller definition font", D-12, and the Center Reserved
+// Radius of "narrow the inside tracks", PD-OI-097), never a feature-slot
 // input (R10).
 /** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string | boolean) => void>>} */
 const LABEL_FIT_ADV_WRITERS = Object.freeze({
@@ -2777,24 +2778,27 @@ const LABEL_FIT_ADV_WRITERS = Object.freeze({
   circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
   circular_label_placement: (adv, value) => { adv.circular_label_placement = value; },
   resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; },
-  def_font_size: (adv, value) => { adv.def_font_size = value; }
+  def_font_size: (adv, value) => { adv.def_font_size = value; },
+  center_reserved_radius: (adv, value) => { adv.center_reserved_radius = value; }
 });
 /** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
 const LABEL_FIT_FORM_WRITERS = Object.freeze({
   labels_mode: (form, value) => { form.labels_mode = value; }
 });
 
-// Settings a label fit row gives by config path (LP-D43) go into the drawing's
-// draft through the request mapping, so the next Generate sends exactly them.
-// A path the mode does not manage, or one that is not a label setting, is an
-// UNKNOWN_CONFIG_PATH error and writes nothing.
+// Settings a label fit row gives by config path (LP-D43) and by request track
+// option go into the drawing's draft through the request mapping, so the next
+// Generate sends exactly them. A path or option the mode does not manage, or
+// one that is not a label fit setting, is an UNKNOWN_CONFIG_PATH error and
+// writes nothing.
 /**
  * @param {DrawingState} drawing
  * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {'circular' | 'linear'} mode
+ * @param {Readonly<LabelFitTrackOptions>} [trackOptions] The row's request track options; none by default.
  */
-export const applyLabelFitValues = (drawing, values, mode) => {
-  const fields = draftFieldsForConfigValues(values, mode, drawing.adv);
+export const applyLabelFitValues = (drawing, values, mode, trackOptions = {}) => {
+  const fields = draftFieldsForConfigValues(values, mode, drawing.adv, trackOptions);
   const form = Object.entries(fields.form);
   const adv = Object.entries(fields.adv);
   if (!form.every(([field]) => Object.hasOwn(LABEL_FIT_FORM_WRITERS, field))
@@ -3107,33 +3111,20 @@ const deserializeFile = (value) => {
   return file;
 };
 
-/** @type {{ clearActiveRuntime?: () => void } | null} */
-let activePreviewRuntime = null;
+/**
+ * The preview owner's ports that Save and a Session reset use (R1, R13).
+ * @typedef {object} PreviewRuntimePorts
+ * @property {() => void} clearActiveRuntime Releases the displayed Result.
+ * @property {CurrentResultsPort} currentResults
+ */
+// Until the composition root registers the preview owner nothing is mounted,
+// so the Results are current as they are.
+/** @type {PreviewRuntimePorts} */
+let previewRuntimePorts = { clearActiveRuntime: () => {}, currentResults: () => state.results.value };
 
-/** @param {{ clearActiveRuntime?: () => void } | null | undefined} runtime */
-export const setPreviewRuntime = (runtime) => {
-  activePreviewRuntime = runtime || null;
-};
-
-export const serializeResults = () => {
-  if (activePreviewRuntime) {
-    return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
-      name: res.name || `Result ${idx + 1}`,
-      content: res.content
-    })));
-  }
-
-  const currentSvg = (() => {
-    if (!state.svgContainer.value) return null;
-    const svg = state.svgContainer.value.querySelector('svg');
-    if (!svg) return null;
-    return serializeCleanSvg(svg);
-  })();
-
-  return normalizeLogicalResults(state.results.value.map((/** @type {SvgResultEntry} */ res, /** @type {number} */ idx) => ({
-    name: res.name || `Result ${idx + 1}`,
-    content: idx === state.selectedResultIndex.value && currentSvg ? currentSvg : res.content
-  })));
+/** @param {PreviewRuntimePorts} ports */
+export const setPreviewRuntime = (ports) => {
+  previewRuntimePorts = ports;
 };
 
 /**
@@ -4595,7 +4586,8 @@ const captureSessionImportSnapshot = () => ({
   shownDrawingId: state.activeDrawingId.value,
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
   files: cloneLiveFileState(state.drawingOfMode('linear')),
-  results: state.results.value,
+  // A holder restored later reads the Results with the shown Result's edits (R1).
+  results: previewRuntimePorts.currentResults(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,
@@ -4696,7 +4688,7 @@ export const installShownDrawing = (id) => {
 
 // Both drawings return to their defaults before a Session installs its own.
 const resetSessionBaseline = () => {
-  activePreviewRuntime?.clearActiveRuntime?.();
+  previewRuntimePorts.clearActiveRuntime();
   preservedCliOptions = null;
   setCommittedCanonicalSession(null);
   loadedTrackSettings = null;
@@ -5025,8 +5017,7 @@ export const applyRunStateData = (runState = {}) => {
 };
 
 /**
- * @param {{ status?: string, generationId?: string, error?: string | null, summaryCount?: number,
- *   detailsCacheSize?: number }} [updates]
+ * @param {{ status?: string, generationId?: string, error?: string | null, detailsCacheSize?: number }} [updates]
  */
 const setFeatureEditorStatusData = (updates = {}) => {
   if (!state.featureEditorStatus || typeof state.featureEditorStatus !== 'object') return;
@@ -5034,23 +5025,18 @@ const setFeatureEditorStatusData = (updates = {}) => {
     status: updates.status ?? state.featureEditorStatus.status,
     generationId: updates.generationId ?? state.featureEditorStatus.generationId,
     error: updates.error === undefined ? state.featureEditorStatus.error : updates.error,
-    summaryCount: updates.summaryCount ?? state.featureEditorStatus.summaryCount,
     detailsCacheSize: updates.detailsCacheSize ?? state.featureEditorStatus.detailsCacheSize
   });
 };
 
 const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load' } = {}) => {
-  const summaryCount = Array.isArray(state.extractedFeatures.value)
-    ? state.extractedFeatures.value.length
-    : 0;
-  if (summaryCount === 0) return false;
+  if (state.extractedFeatures.value.length === 0) return false;
   state.featureExtractionPending.value = false;
   state.featureExtractionError.value = null;
   setFeatureEditorStatusData({
     status: 'summary-ready',
     generationId,
-    error: null,
-    summaryCount
+    error: null
   });
   return true;
 };
@@ -5076,11 +5062,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'summary-ready',
       generationId,
-      error: shownWarning,
-      // The cast: `Array.isArray` on the line above; the elements stay unvalidated.
-      summaryCount: Array.isArray(plan.recoveredFeatureState?.extractedFeatures)
-        ? /** @type {unknown[]} */ (plan.recoveredFeatureState.extractedFeatures).length
-        : state.extractedFeatures.value.length
+      error: shownWarning
     });
     return;
   }
@@ -5091,8 +5073,7 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
     setFeatureEditorStatusData({
       status: 'failed',
       generationId,
-      error: warning,
-      summaryCount: 0
+      error: warning
     });
     return;
   }
@@ -5113,6 +5094,8 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
 /** @returns {SessionArtifactView} */
 const displayedArtifactView = () => Object.freeze({
   ...Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
+  // The displayed Result's edits are written into its text when Save reads it (R1).
+  results: previewRuntimePorts.currentResults(),
   originalLegendOrder: state.originalLegendOrder.value,
   mode: state.generatedMode.value === 'linear' ? 'linear' : 'circular',
   committedCanonicalSession,
@@ -5144,15 +5127,11 @@ const chooseSessionArtifacts = (keptSlots) => {
   if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
   return { artifact: displayed, otherArtifact: other };
 };
-// Live edits are committed into a Result's content at once, so its content is
-// what Save writes, also for the displayed Result.
+// A Result's content is what Save writes: the displayed view reads its
+// Results with their edits written, and a kept artifact's were written when
+// it was kept.
 /** @param {SessionArtifactView} view */
-const serializeArtifactResults = (view) => normalizeLogicalResults(view.results.map(
-  (/** @type {Record<string, any>} */ res, /** @type {number} */ idx) => ({
-    name: res.name || `Result ${idx + 1}`,
-    content: res.content
-  })
-));
+const serializeArtifactResults = (view) => logicalResultsOf(view.results);
 // The artifact's own catalog, generated Legend inventory and colors, stroke
 // defaults and alignment Reset receipt; the Legend and stroke edits are its
 // mode's drawing's (Session 46 `modes.<m>.editorState`).
@@ -5540,8 +5519,8 @@ const importSessionDocument = async (e, options = {}) => {
     const candidate = await importSessionFile(file, { signal: options.signal });
     if (!options.isCurrent()) return { status: 'canceled' };
     recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+    // The import Worker refused a document with an unsafe own key (OV-952).
     const parsed = candidate.data;
-    await assertSafeObjectKeysForImport(parsed);
     if (isLegacyConfigPayload(parsed)) {
       // A legacy configuration names no mode: it is the shown mode's settings.
       // It is read, confirmed and then applied as one step that a failure

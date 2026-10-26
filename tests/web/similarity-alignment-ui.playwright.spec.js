@@ -37,7 +37,7 @@ const artifactSnapshot = (page) => page.evaluate(async () => {
     plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
     receipt: JSON.parse(JSON.stringify(state.similarityAlignmentResetReceipt.value)),
     request: structuredClone(state.lastCommittedRequest?.value || null),
-    results: state.results.value.map(({ name, content }) => ({ name, content })),
+    results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content })),
     history: [history.getUndoCount(), history.getRedoCount(), history.revision.value]
   };
 });
@@ -324,7 +324,7 @@ test('alignment rings and the reference line stay transient and share the panel 
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     const { canonicalRenderArtifactOwner } = await import('./js/services/config.js');
-    window.__S03Result = state.results.value[state.selectedResultIndex.value];
+    window.__S03Result = window.__GBDRAW_APP__.currentResults()[state.selectedResultIndex.value];
     const canonical = window.__S03Canonical = canonicalRenderArtifactOwner.capture();
     const committed = canonical.committedCanonicalSession;
     if (!committed?.resources) throw new Error('The fixture has no committed resources.');
@@ -690,7 +690,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
       orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
-      results: state.results.value.map(({ name, content }) => ({ name, content }))
+      results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content }))
     };
   });
   expect(Object.keys(savedState.plan.records.find(({ status }) => status === 'aligned')).sort())
@@ -724,7 +724,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
       orientations: state.linearSeqs.map(({ uid, region_reverse: reverse }) => ({
         recordKey: uid, reverse: Boolean(reverse)
       })),
-      results: state.results.value.map(({ name, content }) => ({ name, content })),
+      results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content })),
       workers: structuredClone(window.__GBDRAW_DIAGRAM_WORKER_ACTIVITY__ || {
         constructions: 0, instances: []
       })
@@ -765,7 +765,7 @@ test('Similarity alignment UI completes exact-reference, ambiguity, focus, summa
     return {
       plan: JSON.parse(JSON.stringify(state.similarityAlignmentPlan.value)),
       translations: JSON.parse(JSON.stringify(state.linearRecordTranslations.value)),
-      results: state.results.value.map(({ name, content }) => ({ name, content }))
+      results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content }))
     };
   })).toEqual({
     plan: savedState.plan,
@@ -1338,7 +1338,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
       orientations: state.linearSeqs.map(({ uid, region_reverse }) => ({
         recordKey: uid, reverseComplement: Boolean(region_reverse)
       })),
-      results: state.results.value.map(({ name, content }) => ({ name, content })),
+      results: window.__GBDRAW_APP__.currentResults().map(({ name, content }) => ({ name, content })),
       positions: Array.from(document.querySelectorAll(
         '.gbdraw-preview-surface svg [data-gbdraw-composition-role="primary"][data-gbdraw-record-id]'
       )).filter((element) => !element.hasAttribute('data-gbdraw-definition-part'))
@@ -1381,7 +1381,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     const offsets = plan.records.filter(({ status }) => status === 'aligned').map(({ recordKey, anchor }) => ({
       recordKey, offset: center(anchor) - reference
     }));
-    const ribbons = Array.from(svg.querySelectorAll('[data-gbdraw-pairwise-match-id]'));
+    const ribbons = Array.from(svg.querySelectorAll('[data-gbdraw-match-id]'));
     return { offsets, ribbons: ribbons.length,
       targetRibbons: ribbons.filter((element) => element.getAttribute('data-query-record-index') === '1'
         || element.getAttribute('data-subject-record-index') === '1').length };
@@ -2967,7 +2967,7 @@ const recolorCds = async (page, color) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, color);
-  await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.results
+  await expect.poll(() => page.evaluate((value) => window.__GBDRAW_APP__.currentResults()
     .some(({ content }) => String(content).toLowerCase().includes(value)), color), { timeout: 60000 }).toBe(true);
   await roomSettled(page);
 };
@@ -2978,7 +2978,7 @@ const recordOrientations = (page) => page.evaluate(async () => (await import('./
 const expectCdsColorDrawn = async (page, color) => {
   await expect(cdsColor(page)).toHaveValue(color);
   expect(await page.evaluate((value) => ({
-    results: window.__GBDRAW_APP__.results.every(({ content }) => String(content).toLowerCase().includes(value)),
+    results: window.__GBDRAW_APP__.currentResults().every(({ content }) => String(content).toLowerCase().includes(value)),
     figure: document.querySelector('.gbdraw-preview-surface svg').outerHTML.toLowerCase().includes(value)
   }), color)).toEqual({ results: true, figure: true });
 };

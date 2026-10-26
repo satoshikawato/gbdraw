@@ -59,8 +59,8 @@ def test_indexed_lookup_yields_what_testing_every_rule_yields():
         feature = SimpleNamespace(type=rng.choice(["CDS", "tRNA", "rRNA"]),
                                   qualifiers={"product": [_value(rng) for _ in range(rng.randint(0, 3))]})
         selector = {key: _value(rng) for key in ["hash", "location", "record_location"]}
-        assert list(iter_specific_color_rules(feature, color_map, "rec", selector=selector)) == list(
-            iter_specific_color_rules(feature, plain, "rec", selector=selector))
+        assert list(iter_specific_color_rules(feature, color_map, "rec", selector=selector, instance=None)) == list(
+            iter_specific_color_rules(feature, plain, "rec", selector=selector, instance=None))
 
 
 class _CountingPattern:
@@ -85,7 +85,7 @@ def test_hash_rules_test_only_the_rules_a_feature_can_match():
         for value in hashes:
             feature = SimpleNamespace(type="CDS", qualifiers={})
             colors = [color for color, _, _ in iter_specific_color_rules(
-                feature, color_map, selector={"hash": value.upper()})]
+                feature, color_map, selector={"hash": value.upper()}, instance=None)]
             assert colors == [str(hashes.index(value)), str(count + hashes.index(value))]
         assert searches[0] == 2 * count
 
@@ -97,5 +97,5 @@ def test_a_short_list_and_a_non_ascii_value_test_every_rule():
                            for letter in string.ascii_letters[:40]])
     feature = SimpleNamespace(type="CDS", qualifiers={})
     assert [color for color, _, _ in iter_specific_color_rules(
-        feature, {"CDS": {"hash": rules}}, selector={"hash": "K"})] == ["k", "K"]
+        feature, {"CDS": {"hash": rules}}, selector={"hash": "K"}, instance=None)] == ["k", "K"]
     assert searches[0] == 40

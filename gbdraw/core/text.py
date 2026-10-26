@@ -5,9 +5,10 @@ import functools
 import logging
 import math
 import re
+import weakref
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Dict, List, Mapping, Optional, TypedDict, Union
 
 from fontTools.pens.boundsPen import BoundsPen
@@ -87,7 +88,11 @@ class _FontPairKerning:
         return total
 
 
-_pair_kerning_cache: Dict[int, tuple[TTFont, _FontPairKerning]] = {}
+# Keyed by the font object and held weakly: an entry lives as long as its
+# font, so a face ``gbdraw.core.fonts`` forgets (unregistered or replaced)
+# takes its kerning with it, and a new font is a new key even at the address
+# of a freed one. The kerning holds no reference back to its font.
+_pair_kerning_cache: "weakref.WeakKeyDictionary[TTFont, _FontPairKerning]" = weakref.WeakKeyDictionary()
 
 
 def _x_advance(value_record) -> int:
@@ -165,9 +170,9 @@ def _legacy_kern_pairs(font) -> Dict[tuple[str, str], int]:
 
 
 def _font_pair_kerning(font) -> _FontPairKerning:
-    cached = _pair_kerning_cache.get(id(font))
-    if cached is not None and cached[0] is font:
-        return cached[1]
+    cached = _pair_kerning_cache.get(font)
+    if cached is not None:
+        return cached
     try:
         gpos_lookups = _gpos_kern_lookups(font)
     except Exception as e:
@@ -180,7 +185,7 @@ def _font_pair_kerning(font) -> _FontPairKerning:
         except Exception as e:
             logger.debug(f"Error reading kern table: {e}")
     kerning = _FontPairKerning(gpos_lookups=gpos_lookups, legacy_pairs=legacy_pairs)
-    _pair_kerning_cache[id(font)] = (font, kerning)
+    _pair_kerning_cache[font] = kerning
     return kerning
 
 
@@ -216,7 +221,7 @@ def _class_pair_candidates(subtable: _ClassPairSubtable, glyph_order) -> set[tup
 
 
 def font_pair_kerning_table(font) -> Dict[tuple[str, str], int]:
-    """Return every glyph pair that ``get_text_bbox_size_pixels`` kerns in ``font``.
+    """Return every glyph pair that ``_face_text_box`` kerns in ``font``.
 
     Keys are glyph-name pairs in string order; values are the non-zero
     adjustments in font design units, sorted by key.
@@ -255,34 +260,6 @@ def collapse_svg_white_space(text: str) -> str:
     return _SVG_SPACE_RUN.sub(" ", spaced)
 
 
-def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: bool = False):
-    """
-    Directly parses the font file using fontTools to calculate text dimensions.
-    This logic was originally in find_font_files.py. See ``_face_text_box``.
-
-    The width calculation accounts for pair kerning: the GPOS ``kern`` feature
-    when the font has one, else the legacy ``kern`` table (see
-    ``_get_kerning_value``), as browsers shaping with HarfBuzz apply it.
-
-    White space is collapsed as renderers draw it
-    (``collapse_svg_white_space``). A character the face lacks counts as an
-    em box (advance and ink one em wide, ``hhea`` ascent to descent high), as
-    a fallback font draws it.
-
-    Args:
-        font_path (str): Path to the font file (e.g., .ttf, .otf).
-        text (str): The text string for which to calculate the size.
-        font_size (int or float): The font size (in points).
-        dpi (int): Dots Per Inch (DPI). Used to convert font units into pixels.
-    Returns:
-        tuple[float, float]:
-            text_width_pixels (float): The calculated width of the text in pixels,
-                including kerning adjustments.
-            text_height_pixels (float): The calculated height of the text in pixels.
-    """
-    return _face_text_box(FontFace(str(font_path)), text, font_size, dpi, svg_units)
-
-
 def _glyph_bounds(font: TTFont, glyph_name: str) -> tuple[float, float, float]:
     """``(yMax, yMin, xMax)`` of a glyph; from the outline for CFF fonts."""
     if "glyf" in font:
@@ -315,12 +292,13 @@ class FontMetricsTable(TypedDict):
     code points, ``glyphs`` is [advance, lsb, xMax, yMax, yMin, ...] by glyph
     index, ``kerning`` is [left glyph, right glyph, value, ...] for the pairs
     ``font_pair_kerning_table`` applies between glyphs a character reaches, and
-    ``ascent``/``descent`` (hhea) bound a character the face lacks.
+    ``lineAscent``/``lineDescent`` are the line box ``drawn_text_box`` measures
+    heights with (``_line_box_units``).
     """
 
     unitsPerEm: int
-    ascent: int
-    descent: int
+    lineAscent: int
+    lineDescent: int
     cmap: list[int]
     glyphs: list[float]
     kerning: list[int]
@@ -361,10 +339,11 @@ def font_metrics_table(face: FontFace) -> FontMetricsTable:
     for (left, right), value in font_pair_kerning_table(font).items():
         if value and left in mapped and right in mapped:
             kerning.extend([index[left], index[right], int(value)])
+    line_ascent, line_descent = _line_box_units(font)
     return {
         "unitsPerEm": int(font["head"].unitsPerEm),
-        "ascent": int(font["hhea"].ascent),
-        "descent": int(font["hhea"].descent),
+        "lineAscent": int(line_ascent),
+        "lineDescent": int(line_descent),
         "cmap": [value for code_point in sorted(cmap) for value in (code_point, index[cmap[code_point]])],
         "glyphs": [value for glyph in order for value in _glyph_facts(font, glyph)],
         "kerning": kerning,
@@ -372,8 +351,17 @@ def font_metrics_table(face: FontFace) -> FontMetricsTable:
 
 
 @functools.lru_cache(maxsize=8192)
-def _face_text_box(face: FontFace, text, font_size, dpi, svg_units: bool):
-    """The text box of ``text`` in one face (``get_text_bbox_size_pixels``)."""
+def _face_text_box(face: FontFace, text, font_size):
+    """The text box of ``text`` in one face, in SVG user units (px at ``font_size``).
+
+    The width is the advance with pair kerning (the GPOS ``kern`` feature when
+    the font has one, else the legacy ``kern`` table; see
+    ``_get_kerning_value``), as browsers shaping with HarfBuzz apply it. White
+    space is collapsed as renderers draw it (``collapse_svg_white_space``). A
+    character the face lacks counts as an em box (advance and ink one em wide,
+    ``hhea`` ascent to descent high), as a fallback font draws it. The height
+    is the tallest glyph's top to the lowest glyph's bottom.
+    """
     font = load_font(face)
     if font is None:
         # Fallback approximation
@@ -385,7 +373,6 @@ def _face_text_box(face: FontFace, text, font_size, dpi, svg_units: bool):
 
     t = _measured_cmap(font)
 
-    total_width = 0
     total_advance_width = 0
     ymaxes = []
     ymins = []
@@ -394,22 +381,21 @@ def _face_text_box(face: FontFace, text, font_size, dpi, svg_units: bool):
     if not text_str:
         return 0.0, 0.0
 
-    rsb_previous = 0
     previous_glyph_name: Optional[str] = None
 
-    for i, char in enumerate(text_str):
+    for char in text_str:
         # None for a character the face lacks.
         glyph_name = t.get(ord(char))
 
         if glyph_name is None:
             # The face lacks the character, so a renderer draws it from a
             # fallback font, typically one em wide (CJK): an em box.
-            ymax, ymin, xmax = font["hhea"].ascent, font["hhea"].descent, units_per_em
+            ymax, ymin = font["hhea"].ascent, font["hhea"].descent
         else:
             try:
-                ymax, ymin, xmax = _glyph_bounds(font, glyph_name)
+                ymax, ymin, _ = _glyph_bounds(font, glyph_name)
             except Exception:
-                ymax, ymin, xmax = 0, 0, 0
+                ymax, ymin = 0, 0
 
         ymaxes.append(ymax)
         ymins.append(ymin)
@@ -417,88 +403,27 @@ def _face_text_box(face: FontFace, text, font_size, dpi, svg_units: bool):
         # Apply kerning adjustment between consecutive glyphs
         if previous_glyph_name is not None:
             kerning_value = _get_kerning_value(font, previous_glyph_name, glyph_name)
-            total_width += kerning_value
             total_advance_width += kerning_value
 
         # Calculate horizontal advance
         if glyph_name is None:
-            advance_width, lsb = units_per_em, 0
+            advance_width = units_per_em
         else:
             try:
-                advance_width, lsb = hmtx[glyph_name]
+                advance_width = hmtx[glyph_name][0]
             except KeyError:
-                advance_width, lsb = units_per_em, 0
+                advance_width = units_per_em
 
         total_advance_width += advance_width
 
-        if xmax == 0:
-            advance_width -= rsb_previous
-
-        if lsb > 0:
-            total_width -= lsb
-        else:
-            total_width += lsb
-
-        rsb = xmax - advance_width
-        total_width += advance_width
-
-        if rsb > 0:
-            total_width -= rsb
-        else:
-            total_width += rsb
-
-        if i == 0:
-            total_width += lsb
-
-        rsb_previous = rsb
         previous_glyph_name = glyph_name
 
-    if svg_units:
-        # SVG font-size values are user units (CSS px in the generated SVG),
-        # not typographic points.
-        scale_factor = float(font_size) / units_per_em
-    else:
-        # Legacy layout calculations treat configured font sizes as points.
-        scale_factor = (float(font_size) * dpi) / (72 * units_per_em)
-
-    text_width_pixels = (total_advance_width if svg_units else total_width) * scale_factor
-
-    if ymaxes and ymins:
-        max_y = max(ymaxes)
-        min_y = min(ymins)
-        text_height_pixels = (max_y + abs(min_y)) * scale_factor
-    else:
-        text_height_pixels = float(font_size)
+    # SVG font-size values are user units (CSS px in the generated SVG).
+    scale_factor = float(font_size) / units_per_em
+    text_width_pixels = total_advance_width * scale_factor
+    text_height_pixels = (max(ymaxes) + abs(min(ymins))) * scale_factor
 
     return text_width_pixels, text_height_pixels
-
-
-# ------------------------------------------------------------------
-#  Main BBox Calculation Function
-# ------------------------------------------------------------------
-def calculate_bbox_dimensions(
-    text,
-    font_family,
-    font_size,
-    dpi,
-    font_weight: FontWeight = "normal",
-    font_style: str | None = "normal",
-):
-    """
-    Calculates bounding box dimensions with the font ``font_family`` resolves
-    to (``gbdraw.core.fonts.resolve_font_face``): a bundled Liberation face, a
-    registered font file, or the file fontconfig finds for the family.
-    """
-    face = resolve_font_face(font_family, font_weight, font_style)
-    if face is not None:
-        return _face_text_box(face, text, font_size, dpi, False)
-
-    # Fallback Approximation
-    try:
-        f_size = float(font_size)
-    except Exception:
-        f_size = 12.0
-    return len(str(text)) * f_size * 0.6, f_size
 
 
 def measurement_font_file(
@@ -506,7 +431,7 @@ def measurement_font_file(
     font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ) -> Optional[str]:
-    """Return the name of the face ``calculate_bbox_dimensions`` measures with.
+    """Return the name of the face ``calculate_svg_bbox_dimensions`` measures with.
 
     For example ``"LiberationSans-Regular"``, or ``user-<hash>-<style>`` for a
     registered font (``FontFace.measurement_name``); None when no bundled font
@@ -520,21 +445,21 @@ def calculate_svg_bbox_dimensions(
     text,
     font_family,
     font_size,
-    dpi,
     font_weight: FontWeight = "normal",
     font_style: str | None = "normal",
 ):
     """
-    Calculates text dimensions in SVG user units for width-sensitive layout.
+    Calculates text dimensions in SVG user units: the advance width and the
+    glyph-extent height, with the font ``font_family`` resolves to
+    (``gbdraw.core.fonts.resolve_font_face``): a bundled Liberation face, a
+    registered font file, or the file fontconfig finds for the family.
 
-    This is separate from ``calculate_bbox_dimensions`` because older layout
-    reserves rely on its point-style sizing. Linear definition columns need the
-    actual rendered SVG width so their right edge can sit close to the record
-    axis. Both resolve the font the same way.
+    Without a readable font the width is a per-character estimate and the
+    height is ``font_size``.
     """
     face = resolve_font_face(font_family, font_weight, font_style)
     if face is not None:
-        return _face_text_box(face, text, font_size, dpi, True)
+        return _face_text_box(face, text, font_size)
 
     try:
         f_size = float(font_size)
@@ -562,30 +487,22 @@ def measure_mixed_text_line(
     parts: Iterable[tuple[str, str]],
     font_family: str,
     font_size: float,
-    dpi: int,
     *,
     font_weight: FontWeight = "normal",
-    layout_height: bool = False,
 ) -> tuple[float, float]:
     """Width and height of one text line drawn as styled tspans.
 
     ``parts`` are ``(text, font_style)`` pairs in drawing order. The width is
     the painted SVG width of the parts added up
     (``calculate_svg_bbox_dimensions``, italic parts measured italic). The
-    height is the tallest part's painted height or, with ``layout_height``,
-    its ``calculate_bbox_dimensions`` height, which the Linear definition
-    column's line pitch is built on. No parts measure ``(0.0, 0.0)``.
+    height is the tallest part's height. No parts measure ``(0.0, 0.0)``.
     """
     widths: list[float] = []
     heights: list[float] = []
     for text, font_style in parts:
         width, height = calculate_svg_bbox_dimensions(
-            text, font_family, font_size, dpi, font_weight=font_weight, font_style=font_style
+            text, font_family, font_size, font_weight=font_weight, font_style=font_style
         )
-        if layout_height:
-            _, height = calculate_bbox_dimensions(
-                text, font_family, font_size, dpi, font_weight=font_weight, font_style=font_style
-            )
         widths.append(float(width))
         heights.append(float(height))
     return compensated_sum(widths), max(heights, default=0.0)
@@ -615,7 +532,7 @@ def text_ink(
 ) -> Optional[TextInk]:
     """The painted extent of ``text`` in the font ``font_family`` resolves to (the ink box, LP-D25).
 
-    Kerning and missing characters are measured as in ``get_text_bbox_size_pixels``;
+    Kerning and missing characters are measured as in ``calculate_svg_bbox_dimensions``;
     None when the font cannot be read or nothing is painted.
     """
     face = resolve_font_face(font_family, font_weight, font_style)
@@ -672,25 +589,70 @@ def text_ink_offsets(
     *,
     dominant_baseline: str,
     text_anchor: str,
+    font_weight: FontWeight = "normal",
+    font_style: str | None = "normal",
 ) -> Optional[tuple[float, float, float, float]]:
     """The box ``text`` paints at ``font_size``, in px from the point it is drawn at.
 
     Returns (left, right, top, bottom), y down, for ``dominant_baseline`` and
-    ``text_anchor``; None when the font cannot be measured.
+    ``text_anchor``, in the face of ``font_weight`` and ``font_style``; None
+    when the font cannot be measured.
     """
 
-    ink = text_ink(text, font_family)
-    metrics = get_font_vertical_metrics(font_family)
+    return text_runs_ink_offsets(
+        ((text, font_style),),
+        font_family,
+        font_size,
+        dominant_baseline=dominant_baseline,
+        text_anchor=text_anchor,
+        font_weight=font_weight,
+    )
+
+
+def text_runs_ink_offsets(
+    runs: Sequence[tuple[str, str | None]],
+    font_family: str,
+    font_size: float,
+    *,
+    dominant_baseline: str,
+    text_anchor: str,
+    font_weight: FontWeight = "normal",
+) -> Optional[tuple[float, float, float, float]]:
+    """``text_ink_offsets`` of one text drawn as styled runs (``tspan``), ``runs`` being ``(text, font_style)``.
+
+    Each run is measured in its own face and starts at the end of the previous
+    run's advance; ``text_anchor`` aligns the runs' total advance. A run that
+    paints nothing only advances.
+    """
+
+    metrics = get_font_vertical_metrics(font_family, font_weight)
     shift = None if metrics is None else dominant_baseline_shift_em(dominant_baseline, metrics)
-    if ink is None or shift is None:
+    if shift is None:
         return None
     size = float(font_size)
-    origin = -TEXT_ANCHOR_SHARE[text_anchor] * ink.advance * size
+    advance = 0.0
+    left = right = top = bottom = math.nan
+    for text, font_style in runs:
+        ink = text_ink(text, font_family, font_weight, font_style)
+        if ink is None:
+            if resolve_font_face(font_family, font_weight, font_style) is None:
+                return None
+            advance += float(calculate_svg_bbox_dimensions(text, font_family, size, font_weight, font_style)[0]) / size
+            continue
+        run_left, run_right = advance + ink.left, advance + ink.right
+        left = run_left if math.isnan(left) else min(left, run_left)
+        right = run_right if math.isnan(right) else max(right, run_right)
+        top = ink.top if math.isnan(top) else max(top, ink.top)
+        bottom = ink.bottom if math.isnan(bottom) else min(bottom, ink.bottom)
+        advance += ink.advance
+    if math.isnan(left):
+        return None
+    origin = -TEXT_ANCHOR_SHARE[text_anchor] * advance * size
     return (
-        origin + ink.left * size,
-        origin + ink.right * size,
-        (shift - ink.top) * size,
-        (shift - ink.bottom) * size,
+        origin + left * size,
+        origin + right * size,
+        (shift - top) * size,
+        (shift - bottom) * size,
     )
 
 
@@ -710,12 +672,25 @@ def get_font_vertical_metrics(
 ) -> Optional[FontVerticalMetrics]:
     """Return the ascent, descent, and x-height of the font used for layout.
 
-    The font is resolved like :func:`calculate_bbox_dimensions`. Ascent and
+    The font is resolved like :func:`calculate_svg_bbox_dimensions`. Ascent and
     descent follow FreeType, which browsers on Linux use: the OS/2 typo
     metrics when USE_TYPO_METRICS is set, otherwise the hhea metrics.
     """
     face = resolve_font_face(font_family, font_weight, font_style)
     return _face_vertical_metrics(face) if face is not None else None
+
+
+def _line_box_units(font: TTFont) -> tuple[float, float]:
+    """The ascent and descent (both positive, font units) FreeType gives a line of the face."""
+    os2 = font["OS/2"] if "OS/2" in font else None
+    hhea = font["hhea"] if "hhea" in font else None
+    if os2 is not None and os2.fsSelection & (1 << 7):
+        return os2.sTypoAscender, -os2.sTypoDescender
+    if hhea is not None and (hhea.ascent or hhea.descent):
+        return hhea.ascent, -hhea.descent
+    if os2 is not None:
+        return os2.sTypoAscender, -os2.sTypoDescender
+    return font["head"].yMax, -font["head"].yMin
 
 
 @functools.lru_cache(maxsize=64)
@@ -725,15 +700,7 @@ def _face_vertical_metrics(face: FontFace) -> Optional[FontVerticalMetrics]:
         return None
     units_per_em = float(font["head"].unitsPerEm)
     os2 = font["OS/2"] if "OS/2" in font else None
-    hhea = font["hhea"] if "hhea" in font else None
-    if os2 is not None and os2.fsSelection & (1 << 7):
-        ascent, descent = os2.sTypoAscender, -os2.sTypoDescender
-    elif hhea is not None and (hhea.ascent or hhea.descent):
-        ascent, descent = hhea.ascent, -hhea.descent
-    elif os2 is not None:
-        ascent, descent = os2.sTypoAscender, -os2.sTypoDescender
-    else:
-        ascent, descent = font["head"].yMax, -font["head"].yMin
+    ascent, descent = _line_box_units(font)
     x_height = float(getattr(os2, "sxHeight", 0) or 0)
     if x_height <= 0:
         glyph_name = (font.getBestCmap() or {}).get(ord("x"))
@@ -746,6 +713,37 @@ def _face_vertical_metrics(face: FontFace) -> Optional[FontVerticalMetrics]:
         descent=descent / units_per_em,
         x_height=x_height / units_per_em,
     )
+
+
+def drawn_text_box(
+    text: str,
+    font_family: str,
+    font_size: float,
+    font_weight: FontWeight = "normal",
+    font_style: str | None = "normal",
+) -> tuple[float, float]:
+    """The box ``text`` is drawn in at ``font_size`` px: (width, height) in px.
+
+    The width is the text's advance (``calculate_svg_bbox_dimensions``, what a
+    browser's ``getComputedTextLength`` reports) or, when a last glyph paints
+    past its advance, the right edge of its ink (``text_ink``), so the box
+    contains what is painted. The height is the face's line box (ascent plus
+    descent, ``get_font_vertical_metrics``), the box a browser reports for a
+    text element, whatever characters the text has. Text that collapses to
+    nothing measures ``(0.0, 0.0)``; without a readable font both values are
+    ``calculate_svg_bbox_dimensions``' estimate. Layout reserves exactly this
+    box and adds its own named margins (OV-165).
+    """
+
+    width, height = calculate_svg_bbox_dimensions(text, font_family, font_size, font_weight, font_style)
+    metrics = get_font_vertical_metrics(font_family, font_weight, font_style)
+    if metrics is None or not collapse_svg_white_space(str(text)):
+        return float(width), float(height)
+    size = float(font_size)
+    ink = text_ink(text, font_family, font_weight, font_style)
+    if ink is not None:
+        width = max(width, ink.right * size)
+    return float(width), (metrics.ascent + metrics.descent) * size
 
 
 def dominant_baseline_shift_em(dominant_baseline: str, metrics: FontVerticalMetrics) -> Optional[float]:
@@ -829,19 +827,20 @@ __all__ = [
     "FontMetricsTable",
     "FontVerticalMetrics",
     "TextInk",
-    "calculate_bbox_dimensions",
     "calculate_svg_bbox_dimensions",
     "collapse_svg_white_space",
     "create_text_element",
     "dominant_baseline_shift_em",
+    "drawn_text_box",
     "font_metrics_table",
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
-    "get_text_bbox_size_pixels",
     "measure_mixed_text_line",
     "measurement_font_file",
     "parse_mixed_content_text",
     "text_ink",
+    "text_ink_offsets",
+    "text_runs_ink_offsets",
 ]
 
 

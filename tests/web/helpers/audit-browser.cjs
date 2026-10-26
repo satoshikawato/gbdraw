@@ -91,7 +91,7 @@ const switchMode = async (page, mode) => {
 const featurePresentation = (page, locusTags) => page.evaluate((tags) => {
   const app = window.__GBDRAW_APP__;
   const mounted = app.svgContainer.querySelector('svg');
-  const documents = app.results.map((result) => new DOMParser().parseFromString(result.content || '', 'image/svg+xml'));
+  const documents = app.currentResults().map((result) => new DOMParser().parseFromString(result.content || '', 'image/svg+xml'));
   const describe = (root, id) => {
     const elements = [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)];
     if (!elements.length) return null;
@@ -112,7 +112,7 @@ const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(asyn
   const app = window.__GBDRAW_APP__;
   const root = from === 'mounted'
     ? app.svgContainer.querySelector('svg')
-    : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+    : new DOMParser().parseFromString(app.currentResults()[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
   const group = getVisibleFeatureLegendGroup(root);
   // D-15-6 (2): a deleted row stays hidden in the stored Result; list the rows a user sees.
   const entries = [...(group?.querySelectorAll('g[data-legend-key]') || [])].filter(legendRowShown).map((entry) => {

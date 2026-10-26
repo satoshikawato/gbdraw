@@ -21,7 +21,18 @@ import zlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, TypedDict, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Mapping,
+    MutableMapping,
+    NoReturn,
+    Sequence,
+    TextIO,
+    TypedDict,
+    cast,
+)
 
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
@@ -31,6 +42,7 @@ from .analysis.protein_artifacts import (
 from .analysis.protein_colinearity import (
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
+    is_json_exact_protein_identity_manifest,
 )
 from .comparisons.losat_jobs import (
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -4263,10 +4275,17 @@ def normalize_current_session_artifacts(
     )
     if source_manifest is None:
         current_manifest = empty_protein_identity_manifest()
-    elif _is_valid_protein_identity_manifest(source_manifest):
-        current_manifest = _json_clone(source_manifest)
     else:
-        raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
+        proof = _validated_protein_identity_manifest(source_manifest)
+        if proof is None:
+            raise ValidationError("Cannot write an invalid proteinIdentityManifest.")
+        # The validator returns a proof unchanged. A read-only proof of plain
+        # JSON data is written as it is; anything else as a JSON clone.
+        current_manifest = (
+            proof
+            if proof is source_manifest and is_json_exact_protein_identity_manifest(proof)
+            else _json_clone(source_manifest)
+        )
 
     source_raw_entries = (
         list(losat_cache_entries)
@@ -4414,8 +4433,37 @@ def _validated_protein_identity_manifest(
         return None
 
 
-def _is_valid_protein_identity_manifest(manifest: object) -> bool:
-    return _validated_protein_identity_manifest(manifest) is not None
+def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
+    """Replace the payload's ``proteinIdentityManifest`` by its checked proof.
+
+    The caller owns ``session``. Every later check of the payload trusts the
+    proof. Only a proof of plain JSON data replaces the value: a manifest that
+    fails, or one that holds other Python values, stays as it is, so
+    ``validate_session`` checks and reports it as it does for a raw payload.
+    """
+
+    manifest = session.get("proteinIdentityManifest")
+    if not isinstance(manifest, Mapping):
+        return
+    from .analysis.protein_colinearity import validate_protein_identity_manifest
+
+    try:
+        proof = validate_protein_identity_manifest(manifest)
+    except Exception:
+        # validate_session reports the failure itself.
+        return
+    if is_json_exact_protein_identity_manifest(proof):
+        session["proteinIdentityManifest"] = proof
+
+
+def thaw_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
+    """Replace a proof in the payload by a plain, mutable copy."""
+
+    from .analysis.protein_colinearity import ProteinIdentityManifest
+
+    manifest = session.get("proteinIdentityManifest")
+    if isinstance(manifest, ProteinIdentityManifest):
+        session["proteinIdentityManifest"] = manifest.to_dict()
 
 
 def _protein_raw_entry_matches_manifest(

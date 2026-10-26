@@ -187,7 +187,7 @@ def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
     <rect id="fallback_record_2" data-gbdraw-feature-id="fallback_record_2" data-gbdraw-record-index="1" data-label="Fallback DOM" fill="#cc7733" />
   </g>
   <path id="pairwise-dom" data-gbdraw-match-id="pair-1" data-match-kind="pairwise" data-query-record-index="0" data-subject-record-index="1" data-query-feature-svg-id="multi_record_1" data-subject-feature-svg-id="suffix_record_2" data-identity="97.5" fill="#8899aa" />
-  <path id="orthogroup-dom" data-gbdraw-pairwise-match-id="group-1" data-match-kind="orthogroup" data-orthogroup-id="og-1" data-group-scope="cross_record" data-group-kind="orthogroup" data-query-record-index="0" data-subject-record-index="1" data-query-feature-svg-id="multi_record_1" data-subject-feature-svg-id="fallback_record_2" fill="#778899" />
+  <path id="orthogroup-dom" data-gbdraw-match-id="group-1" data-match-kind="orthogroup" data-orthogroup-id="og-1" data-group-scope="cross_record" data-group-kind="orthogroup" data-query-record-index="0" data-subject-record-index="1" data-query-feature-svg-id="multi_record_1" data-subject-feature-svg-id="fallback_record_2" fill="#778899" />
   <g id="annotation-dom" data-gbdraw-annotation-id="ann-1" data-gbdraw-annotation-set-id="set-1" data-gbdraw-annotation-track-id="track-1" data-gbdraw-record-index="1" data-gbdraw-record-id="record-b" data-gbdraw-annotation-mark="highlight" data-gbdraw-annotation-label="DOM label" />
 </svg>
 """

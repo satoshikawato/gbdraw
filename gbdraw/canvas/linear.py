@@ -178,7 +178,6 @@ class LinearCanvasConfigurator:
         self.default_gc_height: float = cfg.canvas.linear.default_gc_height
         self.default_depth_height: float = cfg.canvas.linear.depth_height
         self.configured_depth_padding: float = cfg.canvas.linear.depth_padding
-        self.dpi: int = cfg.canvas.dpi
         self.depth_track_count: int = max(1, int(depth_track_count))
         self.configured_depth_track_heights = self._normalize_depth_track_heights(depth_track_heights)
         self.track_axis_gap: float | None = cfg.canvas.linear.track_axis_gap

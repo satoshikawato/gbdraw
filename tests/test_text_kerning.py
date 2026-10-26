@@ -15,10 +15,11 @@ import pytest
 from fontTools.feaLib.builder import addOpenTypeFeaturesFromString
 from fontTools.ttLib import TTFont
 
+from gbdraw.core.fonts import FontFace, load_font
 from gbdraw.core.text import (
+    _face_text_box,
     _get_kerning_value,
     font_pair_kerning_table,
-    get_text_bbox_size_pixels,
 )
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
@@ -103,21 +104,11 @@ def test_pair_width_applies_the_kerning(face: str, pair: str) -> None:
     left, right = _glyphs(font, pair)
     kerning = HARFBUZZ_PAIR_KERNING[face][pair]
     units_per_em = font["head"].unitsPerEm
-    (left_advance, left_lsb), (right_advance, right_lsb) = font["hmtx"][left], font["hmtx"][right]
-    left_xmax, right_xmax = font["glyf"][left].xMax, font["glyf"][right].xMax
+    left_advance, right_advance = font["hmtx"][left][0], font["hmtx"][right][0]
 
-    # SVG units: advances plus the pair adjustment, scaled by size / em.
-    svg_width, _ = get_text_bbox_size_pixels(path, pair, 14, 96, svg_units=True)
-    assert svg_width == pytest.approx((left_advance + right_advance + kerning) * 14 / units_per_em)
-
-    # Point units: the tight ink width of the two glyphs plus the adjustment.
-    tight_units = (
-        left_lsb - abs(left_lsb) + left_advance - abs(left_xmax - left_advance)
-        + kerning
-        - abs(right_lsb) + right_advance - abs(right_xmax - right_advance)
-    )
-    width, _ = get_text_bbox_size_pixels(path, pair, 14, 96)
-    assert width == pytest.approx(tight_units * 14 * 96 / (72 * units_per_em))
+    # Advances plus the pair adjustment, scaled by size / em.
+    width, _ = _face_text_box(FontFace(path), pair, 14)
+    assert width == pytest.approx((left_advance + right_advance + kerning) * 14 / units_per_em)
 
 
 @pytest.mark.parametrize("face", FACES)
@@ -132,6 +123,18 @@ def test_kerning_table_is_the_gpos_kern_feature(face: str) -> None:
     assert {pair: gpos_pairs[pair] for pair in legacy_pairs} == legacy_pairs
     extra = set(gpos_pairs) - set(legacy_pairs)
     assert len(extra) == (1107 if face.startswith("LiberationSans") else 0)
+
+
+@pytest.mark.parametrize("face", FACES)
+def test_a_loaded_face_kerns_as_the_whole_font_read_at_once(face: str) -> None:
+    """``load_font`` reads a face lazily (only the lookups kerning uses are
+    decompiled), from the bytes read once; its kerning is that of the font
+    read eagerly."""
+    loaded = load_font(FontFace(str(DATA_DIR / f"{face}.ttf")))
+
+    assert loaded is not None and loaded.lazy is True
+    assert isinstance(loaded.reader.file, io.BytesIO)
+    assert font_pair_kerning_table(loaded) == font_pair_kerning_table(TTFont(str(DATA_DIR / f"{face}.ttf"), lazy=False))
 
 
 def _reloaded(font: TTFont, tmp_path: Path, name: str) -> str:
@@ -186,7 +189,7 @@ def test_class_pair_kerning_applies_format_2(tmp_path: Path) -> None:
         ("T", "o"): -80,
     }
     advance = kerned["hmtx"]["A"][0]
-    width, _ = get_text_bbox_size_pixels(path, "TAVo", 10, 96, svg_units=True)
+    width, _ = _face_text_box(FontFace(path), "TAVo", 10)
     assert width == pytest.approx((4 * advance - 80) * 10 / kerned["head"].unitsPerEm)
 
 

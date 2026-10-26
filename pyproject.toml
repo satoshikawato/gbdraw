@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gbdraw"
-version = "0.14.1"
+version = "0.14.2"
 description = "A genome diagram generator for microbes and organelles"
 readme = "README.md"
 license = "MIT"
@@ -58,7 +58,10 @@ Repository = "https://github.com/satoshikawato/gbdraw/"
 "Web App" = "https://gbdraw.app/"
 
 [project.scripts]
-gbdraw = "gbdraw.cli:main"
+gbdraw = "_gbdraw_console:main"
+
+[tool.setuptools]
+py-modules = ["_gbdraw_console"]
 
 [tool.setuptools.packages.find]
 include = ["gbdraw*"]

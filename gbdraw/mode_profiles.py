@@ -229,6 +229,7 @@ def mode_profiles_payload() -> dict[str, object]:
     # gbdraw.auto_sizes takes DiagramMode from this module.
     from gbdraw.auto_sizes import linear_label_size_records, tick_and_window_tiers
     from gbdraw.config.models import GbdrawConfig
+    from gbdraw.diagrams.circular.presets import circular_auto_slot_sizes, circular_track_preset_table
     from gbdraw.labels.label_style import (
         DEFAULT_LABEL_LINE,
         DEFAULT_LABEL_PROTECTION,
@@ -237,21 +238,26 @@ def mode_profiles_payload() -> dict[str, object]:
     )
 
     packaged = load_config_toml("gbdraw.data", "config.toml")
+    packaged_cfg = GbdrawConfig.from_dict(packaged)
     length_threshold = packaged["labels"]["length_threshold"]
     return {
         "version": MODE_PROFILE_VERSION,
         # The packaged text font list: a resolved config that holds it names no font.
         "defaultFontFamily": str(packaged["objects"]["text"]["font_family"]),
-        # The packaged short/long boundary of each mode, and the records that set
+        # The packaged short/long boundary of each mode, the records that set
         # the Auto Linear label font for each label display scope (rules:
-        # gbdraw/auto_sizes.py).
+        # gbdraw/auto_sizes.py), and the Auto sizes of a Circular row
+        # (gbdraw/diagrams/circular/presets.py).
         "autoSizes": {
+            "circularSlots": circular_auto_slot_sizes(packaged_cfg),
             "linearLabelSizeRecords": {
                 scope: linear_label_size_records(scope) for scope in get_args(LinearLabelScope)
             },
             "sizeClassThresholdBp": {mode: int(length_threshold[mode]) for mode in MODE_PROFILES},
-            **tick_and_window_tiers(GbdrawConfig.from_dict(packaged)),
+            **tick_and_window_tiers(packaged_cfg),
         },
+        # The Circular track presets in menu order and their feature lane directions.
+        "circularTrackPresets": circular_track_preset_table(),
         "comparisonDomains": {
             _camel_threshold_name(name): {
                 "minimum": domain.minimum,

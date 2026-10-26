@@ -11,11 +11,13 @@ fonts of the machine.
 from __future__ import annotations
 
 import base64
+import gc
 import json
 import logging
 import os
 import re
 import subprocess
+import weakref
 from pathlib import Path
 
 import pytest
@@ -27,16 +29,23 @@ from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 from gbdraw.core import fonts
 from gbdraw.core.text import (
-    calculate_bbox_dimensions,
+    _face_text_box,
     calculate_svg_bbox_dimensions,
     font_metrics_table,
-    get_text_bbox_size_pixels,
+    font_pair_kerning_table,
     measurement_font_file,
 )
 from gbdraw.render.font_embedding import remove_embedded_font_css
 from gbdraw.session_io import session_to_cli_args
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "gbdraw" / "data"
+
+
+def _file_box(font_file: str, text: str, size: float) -> tuple[float, float]:
+    """The measured (width, height) of ``text`` in one font file at ``size`` px."""
+    return _face_text_box(fonts.FontFace(font_file), text, size)
+
+
 DEFAULT_FAMILY = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
 TEXT = "Hypothetical protein"
 
@@ -111,11 +120,32 @@ def test_a_registered_font_is_measured_with_its_own_file(tmp_path: Path) -> None
     assert (registered.family, registered.weight, registered.italic) == ("Gbdraw Test Serif", 400, False)
     assert registered.generic == "serif"
     family = "'Gbdraw Test Serif', sans-serif"
-    assert calculate_bbox_dimensions(TEXT, family, 14, 72) == get_text_bbox_size_pixels(path, TEXT, 14, 72)
-    assert calculate_svg_bbox_dimensions(TEXT, family, 14, 96) == get_text_bbox_size_pixels(
-        path, TEXT, 14, 96, svg_units=True
-    )
-    assert calculate_bbox_dimensions(TEXT, family, 14, 72) != calculate_bbox_dimensions(TEXT, "sans-serif", 14, 72)
+    assert calculate_svg_bbox_dimensions(TEXT, family, 14) == _file_box(path, TEXT, 14)
+    assert calculate_svg_bbox_dimensions(TEXT, family, 14) != calculate_svg_bbox_dimensions(TEXT, "sans-serif", 14)
+
+
+def test_a_corrupt_table_fails_the_same_way_on_every_measurement(tmp_path: Path) -> None:
+    # fontTools stores a table before it decompiles it; the cached font must
+    # not keep the half-read table and measure with an empty cmap next time.
+    from fontTools.ttLib.tables.DefaultTable import DefaultTable
+
+    font = _renamed("LiberationSans-Regular", "Gbdraw Corrupt Cmap")
+    cmap = DefaultTable("cmap")
+    cmap.data = font.reader["cmap"][: len(font.reader["cmap"]) // 3]
+    font["cmap"] = cmap
+    path = tmp_path / "corrupt.ttf"
+    font.save(str(path))
+    fonts.register_font_file(path)
+
+    family = "'Gbdraw Corrupt Cmap', sans-serif"
+    # fontTools versions differ in the error (AssertionError, TTLibError).
+    errors = []
+    for _ in range(2):
+        with pytest.raises(Exception) as raised:
+            calculate_svg_bbox_dimensions(TEXT, family, 14)
+        errors.append((type(raised.value), str(raised.value)))
+    assert "cmap" in errors[0][1]
+    assert errors[1] == errors[0]
 
 
 def test_custom_font_families_among_counts_a_registered_alias_name() -> None:
@@ -136,9 +166,7 @@ def test_a_registered_font_wins_over_the_bundled_alias_of_its_name(tmp_path: Pat
     registered = fonts.register_font_file(path)
 
     assert fonts.resolve_font_face("'Times New Roman', serif") == registered.face
-    assert calculate_bbox_dimensions(TEXT, "'Times New Roman', serif", 14, 72) == get_text_bbox_size_pixels(
-        path, TEXT, 14, 72
-    )
+    assert calculate_svg_bbox_dimensions(TEXT, "'Times New Roman', serif", 14) == _file_box(path, TEXT, 14)
     # Generic keywords keep their Liberation face, and other aliases keep today's mapping.
     assert fonts.resolve_font_face("serif").measurement_name == "LiberationSerif-Regular"
     assert fonts.resolve_font_face("Arial").measurement_name == "LiberationSans-Regular"
@@ -154,16 +182,16 @@ def test_replacing_the_bytes_of_a_family_changes_its_measurement(tmp_path: Path)
     path = tmp_path / "user-font.ttf"
     _renamed_font("LiberationSerif-Regular", "Gbdraw Test Fam", path)
     fonts.register_font_file(path)
-    serif_width = calculate_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14, 72)
+    serif_width = calculate_svg_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14)
     serif_name = measurement_font_file("'Gbdraw Test Fam'")
 
     _renamed_font("LiberationMono-Regular", "Gbdraw Test Fam", path)
     fonts.register_font_file(path)
 
-    assert calculate_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14, 72) == get_text_bbox_size_pixels(
-        _bundled("LiberationMono-Regular"), TEXT, 14, 72
+    assert calculate_svg_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14) == _file_box(
+        _bundled("LiberationMono-Regular"), TEXT, 14
     )
-    assert calculate_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14, 72) != serif_width
+    assert calculate_svg_bbox_dimensions(TEXT, "'Gbdraw Test Fam'", 14) != serif_width
     assert measurement_font_file("'Gbdraw Test Fam'") != serif_name
 
 
@@ -175,9 +203,7 @@ def test_unregistering_returns_the_family_to_substitution(tmp_path: Path) -> Non
     removed = fonts.unregister_font_file(path)
 
     assert [font.family for font in removed] == ["Gbdraw Test Serif"]
-    assert calculate_bbox_dimensions(TEXT, "'Gbdraw Test Serif'", 14, 72) == get_text_bbox_size_pixels(
-        _bundled("LiberationSans-Regular"), TEXT, 14, 72
-    )
+    assert calculate_svg_bbox_dimensions(TEXT, "'Gbdraw Test Serif'", 14) == _file_box(_bundled("LiberationSans-Regular"), TEXT, 14)
     assert fonts.resolve_font_family("'Gbdraw Test Serif', serif").substituted
 
 
@@ -204,9 +230,7 @@ def test_registered_faces_are_chosen_by_css_weight_matching(tmp_path: Path, orde
         "normal": "w400.ttf", "bold": "w700.ttf", 200: "w300.ttf", 300: "w300.ttf",
         500: "w400.ttf", 600: "w700.ttf", 800: "w900.ttf", 900: "w900.ttf",
     }
-    assert calculate_bbox_dimensions(TEXT, "'Gbdraw Weights'", 14, 72) == get_text_bbox_size_pixels(
-        faces[400], TEXT, 14, 72
-    )
+    assert calculate_svg_bbox_dimensions(TEXT, "'Gbdraw Weights'", 14) == _file_box(faces[400], TEXT, 14)
 
 
 def test_a_registered_family_uses_its_regular_face_for_a_missing_variant(tmp_path: Path) -> None:
@@ -242,6 +266,46 @@ def test_an_unregistered_face_is_not_read_again_from_its_path(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="no longer registered"):
         fonts.load_font(face)
+
+
+@pytest.mark.parametrize("forget", ["unregister", "replace"])
+def test_a_forgotten_face_keeps_no_kerning_or_font(tmp_path: Path, forget: str) -> None:
+    """Unregistering a face, or registering another face of its family,
+    weight and style, lets its font go: its kerning is not kept for it."""
+    path = _renamed_font("LiberationSans-Regular", "Gbdraw Test Sans", tmp_path / "a.ttf")
+    face = fonts.register_font_file(path).face
+    font = fonts.load_font(face)
+    assert font_pair_kerning_table(font)
+    forgotten = weakref.ref(font)
+    del font
+
+    if forget == "unregister":
+        fonts.unregister_font_file(path)
+    else:
+        fonts.register_font_file(_renamed_font("LiberationSans-Bold", "Gbdraw Test Sans", tmp_path / "b.ttf"))
+    gc.collect()
+
+    assert forgotten() is None
+
+
+def test_the_kerning_entry_goes_away_with_its_font_and_a_new_font_gets_its_own() -> None:
+    """The kerning cache holds no strong reference to a font: its entry is
+    released with the font, and a font made afterwards is measured afresh."""
+    from gbdraw.core import text
+
+    data_dir = Path(fonts.__file__).resolve().parents[1] / "data"
+    gc.collect()
+    before = len(text._pair_kerning_cache)
+    sans = TTFont(str(data_dir / "LiberationSans-Regular.ttf"))
+    assert font_pair_kerning_table(sans)
+    assert len(text._pair_kerning_cache) == before + 1
+    del sans
+    gc.collect()
+    assert len(text._pair_kerning_cache) == before
+
+    mono = TTFont(str(data_dir / "LiberationMono-Regular.ttf"))
+    assert font_pair_kerning_table(mono) == {}
+    assert len(text._pair_kerning_cache) == before + 1
 
 
 def test_a_registered_font_has_the_metrics_table_of_its_bytes(tmp_path: Path) -> None:
@@ -590,8 +654,8 @@ def test_a_fontconfig_named_instance_is_measured_as_that_instance(tmp_path: Path
     face = fonts.resolve_font_face("'Gbdraw Variable'")
 
     assert (face.index, face.instance) == (0, 1)
-    assert calculate_svg_bbox_dimensions("A", "'Gbdraw Variable'", 1000, 96)[0] == 700
-    assert get_text_bbox_size_pixels(path, "A", 1000, 96, svg_units=True)[0] == 500
+    assert calculate_svg_bbox_dimensions("A", "'Gbdraw Variable'", 1000)[0] == 700
+    assert _file_box(path, "A", 1000)[0] == 500
 
 
 # ---- platform font folders without fontconfig (review F7) ----

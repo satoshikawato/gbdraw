@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 from types import SimpleNamespace
+from typing import cast
 
 import pandas as pd
 import pytest
@@ -28,6 +29,7 @@ from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
     PROTEIN_LOSAT_CACHE_SCHEMA,
     LosatpCacheManager,
+    ProteinIdentityManifest,
     build_legacy_protein_reference_map,
     build_protein_export_id_map,
     build_protein_losat_cache_key,
@@ -42,6 +44,7 @@ from gbdraw.analysis.protein_colinearity import (
     extract_protein_identity_manifest,
     extract_web_stable_cds_proteins,
     filter_protein_hits_by_thresholds,
+    is_json_exact_protein_identity_manifest,
     hydrate_protein_losat_tsv,
     parse_losatp_outfmt6,
     percent_encode_losat_transport_field,
@@ -538,6 +541,336 @@ def test_identical_record_instances_share_content_but_not_runtime_bindings() -> 
         subject_record_instance_key="row-1",
     )
     assert build_protein_losat_cache_key(forward, args=[]) != build_protein_losat_cache_key(reverse, args=[])
+
+
+@pytest.mark.linear
+def test_extracted_identity_manifest_is_its_own_validation() -> None:
+    # The extraction does not validate the manifest it builds, so it must build
+    # what the validator returns: the same content, key order and value types.
+    same_location = [
+        _cds(0, 9, qualifiers={"translation": ["MKT*"], "locus_tag": ["dup"]}),
+        _cds(0, 9, qualifiers={"translation": ["MK*"], "locus_tag": ["dup"]}),
+    ]
+    joined = SeqFeature(
+        CompoundLocation(
+            [FeatureLocation(30, 36, strand=-1), FeatureLocation(12, 18, strand=-1)],
+            operator="join",
+        ),
+        type="CDS",
+        qualifiers={"translation": ["MKV*"], "protein_id": [" "]},
+    )
+    unstranded = [
+        _cds(0, 9, strand=0, qualifiers={"translation": ["MK*"]}),
+        SeqFeature(FeatureLocation(12, 21, strand=None), type="CDS", qualifiers={"translation": ["MT*"]}),
+    ]
+    keyed = _record("keyed", features=unstranded)
+    keyed.annotations["gbdraw_record_key"] = " kéy "
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("left", features=[*same_location, joined]),
+            _record("left", features=[*same_location, joined]),
+            _record("right", features=[_cds(3, 12, qualifiers={"translation": ["MK*"]})]),
+            _record("odd", features=unstranded),
+        ],
+        record_instance_keys=("row-1", "row-2", "row-3", " réc "),
+        record_source_ids=("left", "left", "right", " ś "),
+        record_selectors=(
+            {"record": 1, "ids": ["a", 2.5]},
+            {"record": 1, "ids": ["a", 2.5]},
+            None,
+            ("a", {"é": 1, "é": 2}),
+        ),
+        regions=(None, None, {"start": 1, "end": 90}, None),
+    )
+    manifest = extraction.identity_manifest
+    ordinals = {
+        metadata["exportOrdinal"]
+        for binding in manifest.record_instances.values()
+        for metadata in binding["featureMetadata"].values()
+    }
+
+    assert ordinals == {None, 1, 2}
+    assert len(manifest.protein_sets) == 3
+    assert len(manifest.record_analyses) == 3
+    for built in (manifest, extract_protein_identity_manifest([keyed]).identity_manifest):
+        assert repr(validate_protein_identity_manifest(built.to_dict())) == repr(built)
+
+
+def _all_containers(value: object) -> list[object]:
+    pending, found = [value], []
+    while pending:
+        current = pending.pop()
+        if isinstance(current, (dict, list)):
+            found.append(current)
+            pending.extend(current.values() if isinstance(current, dict) else current)
+    return found
+
+
+_DICT_CHANGES = (
+    ("__setitem__", ("extra", 1)),
+    ("__delitem__", ("schema",)),
+    ("__ior__", ({"extra": 1},)),
+    ("clear", ()),
+    ("pop", ("schema",)),
+    ("popitem", ()),
+    ("setdefault", ("extra", 1)),
+    ("update", ({"extra": 1},)),
+)
+_LIST_CHANGES = (
+    ("__setitem__", (0, 1)),
+    ("__delitem__", (0,)),
+    ("__iadd__", ([1],)),
+    ("__imul__", (2,)),
+    ("append", (1,)),
+    ("extend", ([1],)),
+    ("insert", (0, 1)),
+    ("pop", ()),
+    ("remove", (None,)),
+    ("clear", ()),
+    ("sort", ()),
+    ("reverse", ()),
+)
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_proof_is_read_only_throughout() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+    containers = _all_containers(proof)
+    assert {type(container).__name__ for container in containers} == {
+        "ProteinIdentityManifest",
+        "_FrozenDict",
+        "_FrozenList",
+    }
+
+    for container in containers:
+        changes = _DICT_CHANGES if isinstance(container, dict) else _LIST_CHANGES
+        for name, args in changes:
+            with pytest.raises(TypeError, match="read-only"):
+                getattr(container, name)(*args)
+        # Calling __init__ again does not refill it.
+        container.__init__({"extra": 1} if isinstance(container, dict) else [1])
+        assert copy.copy(container) is container
+        assert copy.deepcopy(container) is container
+    with pytest.raises(TypeError, match="read-only"):
+        proof["extra"] = 1
+    with pytest.raises(TypeError, match="read-only"):
+        proof["proteinSets"] |= {}
+    assert proof == payload
+    assert json.dumps(proof) == json.dumps(payload)
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_pickles_through_the_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pickle
+
+    proof = validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
+    checks: list[object] = []
+    check = protein_colinearity_module._check_protein_identity_manifest
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_check_protein_identity_manifest",
+        lambda value: checks.append(value) or check(value),
+    )
+
+    restored = pickle.loads(pickle.dumps(proof))
+
+    assert type(restored) is ProteinIdentityManifest
+    assert restored is not proof and restored == proof
+    assert len(checks) == 1
+    nested = proof["recordInstances"]
+    assert pickle.loads(pickle.dumps(nested)) == nested
+
+
+@pytest.mark.linear
+def test_protein_identity_manifest_to_dict_is_a_plain_mutable_copy() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+
+    plain = proof.to_dict()
+
+    assert plain == proof
+    assert {type(container) for container in _all_containers(plain)} == {dict, list}
+    plain["proteinSets"].clear()
+    assert proof == payload
+
+
+@pytest.mark.linear
+def test_validator_trusts_a_proof_and_keeps_raw_input_as_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    binding = next(iter(payload["recordInstances"].values()))
+    # Input order and an extra top-level key stay; the validator used to sort
+    # these maps and drop the extra key.
+    binding["runtimeIds"] = dict(reversed(binding["runtimeIds"].items()))
+    binding["featureMetadata"] = dict(reversed(binding["featureMetadata"].items()))
+    payload = {"extra": {"note": ["kept"]}, **payload}
+    checks: list[object] = []
+    check = protein_colinearity_module._check_protein_identity_manifest
+    monkeypatch.setattr(
+        protein_colinearity_module,
+        "_check_protein_identity_manifest",
+        lambda value: checks.append(value) or check(value),
+    )
+
+    proof = validate_protein_identity_manifest(payload)
+
+    assert len(checks) == 1
+    assert proof == payload
+    assert json.dumps(proof) == json.dumps(payload)
+    assert json.dumps(proof, sort_keys=True, indent=2) == json.dumps(payload, sort_keys=True, indent=2)
+    assert validate_protein_identity_manifest(proof) is proof
+    assert proof.from_dict(proof) is proof
+    assert len(checks) == 1
+    assert proof.schema == 2
+    assert proof.binding_for(next(iter(payload["recordInstances"]))) == binding
+    with pytest.raises(ValidationError, match="no record instance"):
+        proof.binding_for("missing")
+
+
+@pytest.mark.linear
+def test_a_proof_shares_no_container_with_its_python_input() -> None:
+    from collections import UserDict
+
+    payload = _current_protein_manifest_payload_for_validation()
+    protein = next(iter(payload["proteinSets"].values()))["proteins"][0]
+    protein["locationParts"] = tuple(list(part) for part in protein["locationParts"])
+    binding = next(iter(payload["recordInstances"].values()))
+    feature_id = next(iter(binding["featureMetadata"]))
+    binding["featureMetadata"][feature_id] = UserDict(binding["featureMetadata"][feature_id])
+    proof = validate_protein_identity_manifest(payload)
+    before = proof.to_dict()
+
+    protein["locationParts"][0][0] = 999_999
+    binding["featureMetadata"][feature_id]["product"] = "changed"
+
+    assert proof.to_dict() == before
+    assert before != payload
+    assert not is_json_exact_protein_identity_manifest(proof)
+    assert is_json_exact_protein_identity_manifest(
+        validate_protein_identity_manifest(_current_protein_manifest_payload_for_validation())
+    )
+
+
+@pytest.mark.linear
+def test_a_read_only_container_built_by_hand_holds_only_read_only_data() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+    proof = validate_protein_identity_manifest(payload)
+    read_only_dict = type(proof["recordInstances"])
+    read_only_list = type(next(iter(proof["proteinSets"].values()))["proteins"])
+    shell = read_only_dict(
+        {key: dict(binding) for key, binding in payload["recordInstances"].items()}
+    )
+    forged = validate_protein_identity_manifest({**payload, "recordInstances": shell})
+    instance_key = next(iter(payload["recordInstances"]))
+
+    bindings = cast("dict[str, dict[str, object]]", forged["recordInstances"])
+    with pytest.raises(TypeError):
+        bindings[instance_key]["featureMetadata"] = {}
+    with pytest.raises(TypeError):
+        cast("list[object]", read_only_list([[1, 2]])[0]).append(3)
+    assert is_json_exact_protein_identity_manifest(forged)
+    assert forged == payload
+
+
+@pytest.mark.linear
+def test_a_proof_holds_no_mutable_sequence_or_set_of_its_python_input() -> None:
+    from collections import deque
+
+    payload = _current_protein_manifest_payload_for_validation()
+    protein = next(iter(payload["proteinSets"].values()))["proteins"][0]
+    parts = deque(list(part) for part in protein["locationParts"])
+    protein["locationParts"] = parts
+    tags = {("tag", 1)}
+    payload["note"] = tags
+    proof = validate_protein_identity_manifest(payload)
+    before = proof.to_dict()
+
+    parts[0][0] = 999_999
+    parts.append([1, 2, 3])
+    tags.add(("tag", 2))
+
+    assert proof.to_dict() == before
+    assert proof["note"] == {("tag", 1)}
+    assert not is_json_exact_protein_identity_manifest(proof)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_a_non_finite_float_is_not_plain_json_data(value: float) -> None:
+    from gbdraw.api.request_render import CurrentRequestArtifacts
+
+    payload = {**_current_protein_manifest_payload_for_validation(), "note": value}
+
+    assert not is_json_exact_protein_identity_manifest(validate_protein_identity_manifest(payload))
+    stored = CurrentRequestArtifacts(protein_identity_manifest=payload).protein_identity_manifest
+    assert type(stored) is dict
+
+
+@pytest.mark.linear
+def test_public_construction_of_a_manifest_validates_it() -> None:
+    payload = _current_protein_manifest_payload_for_validation()
+
+    built = ProteinIdentityManifest(payload)
+
+    assert type(built) is ProteinIdentityManifest and built == payload
+    assert ProteinIdentityManifest(payload.items()) == payload
+    with pytest.raises(ValidationError, match="schema 2"):
+        ProteinIdentityManifest({**payload, "schema": 1})
+    with pytest.raises(ValidationError, match="schema 2"):
+        ProteinIdentityManifest()
+
+
+@pytest.mark.linear
+def test_dataclass_asdict_of_results_that_hold_a_proof_matches_plain_data() -> None:
+    import dataclasses
+
+    from gbdraw.api.request_render import (
+        CurrentRequestArtifacts,
+        PreparedDiagramRequest,
+        RequestRenderResult,
+    )
+
+    extraction = extract_protein_identity_manifest(
+        [_record("left", features=[_cds(0, 9, qualifiers={"translation": ["MKT*"]})])],
+        record_instance_keys=("row-1",),
+    )
+    proof = extraction.identity_manifest
+    plain = proof.to_dict()
+    holders = (
+        CurrentRequestArtifacts(protein_identity_manifest=proof),
+        PreparedDiagramRequest(
+            mode="linear", request=None, records=(), drawing=None, protein_identity_manifest=proof,
+        ),
+        RequestRenderResult(
+            mode="linear", request=None, records=(), drawing=None, output_paths=(),
+            protein_identity_manifest=proof,
+        ),
+    )
+    for holder in holders:
+        assert dataclasses.asdict(holder)["protein_identity_manifest"] == plain
+    assert dataclasses.asdict(extraction)["identity_manifest"] == plain
+
+
+@pytest.mark.linear
+def test_extracted_identity_manifest_is_a_proof_of_its_plain_form() -> None:
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("left", features=[_cds(0, 9, qualifiers={"translation": ["MKT*"]})]),
+            _record("right", features=[_cds(3, 12, qualifiers={"translation": ["MK*"]})]),
+        ],
+        record_instance_keys=("row-1", "row-2"),
+    )
+    manifest = extraction.identity_manifest
+
+    assert type(manifest) is ProteinIdentityManifest
+    validated = validate_protein_identity_manifest(manifest.to_dict())
+    assert validated == manifest
+    assert json.dumps(validated) == json.dumps(manifest)
+    assert list(manifest) == ["schema", "proteinSets", "recordAnalyses", "recordInstances"]
 
 
 @pytest.mark.linear
@@ -1394,6 +1727,38 @@ def test_parse_losatp_outfmt6_returns_standard_columns() -> None:
     assert parsed.iloc[0]["bitscore"] == pytest.approx(150)
 
 
+@pytest.mark.parametrize("position", [0, 1, 2])
+@pytest.mark.parametrize(
+    ("column", "value", "error"),
+    [
+        ("identity", "1.", None),
+        ("identity", ".5", None),
+        ("evalue", "+1.5E-3", None),
+        ("qstart", "+1", None),
+        ("identity", ".", "non-numeric"),
+        ("evalue", "1e", "non-numeric"),
+        ("evalue", "e5", "non-numeric"),
+        ("bitscore", "1..2", "non-numeric"),
+        ("bitscore", " 150", "non-numeric"),
+        ("qstart", "1.0", "non-numeric"),
+        ("qstart", "1e3", "non-numeric"),
+        ("send", "43\t1", "does not match outfmt 6 columns"),
+    ],
+)
+def test_parse_losatp_outfmt6_accepts_only_the_strict_grammar_on_every_line(position, column, value, error) -> None:
+    from gbdraw.exceptions import ParseError
+
+    fields = "q1\ts1\t91.5\t42\t1\t0\t1\t42\t2\t43\t1e-20\t150".split("\t")
+    lines = ["\t".join(fields)] * 2
+    fields[COMPARISON_COLUMNS.index(column)] = value
+    lines.insert(position, "\t".join(fields))
+    if error is None:
+        assert len(parse_losatp_outfmt6("\n".join(lines) + "\n")) == 3
+    else:
+        with pytest.raises(ParseError, match=error):
+            parse_losatp_outfmt6("\n".join(lines) + "\n")
+
+
 def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colinearity_module.CdsProtein]:
     return {
         protein_id: protein_colinearity_module.CdsProtein(
@@ -1412,17 +1777,17 @@ def _protein_map_for_lengths(lengths: dict[str, int]) -> dict[str, protein_colin
     }
 
 
-def _assert_hsp_baseline(hits, protein_map):
+def _assert_hsp_baseline(hits, protein_map, *, rejected=False):
+    from gbdraw.exceptions import ParseError
     from tests.prototypes.hsp_aggregation import aggregate_hsps_baseline
 
     before = None if hits is None else hits.copy(deep=True)
-    try:
-        expected = aggregate_hsps_baseline(hits, protein_map)
-    except (ValueError, TypeError, OverflowError, KeyError) as exc:
-        with pytest.raises(type(exc)) as caught:
+    if rejected:
+        # The aggregator takes finite numerics only, as the coercion step leaves them.
+        with pytest.raises(ParseError, match="non-numeric outfmt 6"):
             protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
-        assert str(caught.value) == str(exc)
     else:
+        expected = aggregate_hsps_baseline(hits, protein_map)
         actual = protein_colinearity_module._aggregate_hsps_by_protein_pair(hits, protein_map)
         pd.testing.assert_frame_equal(actual, expected, check_exact=True)
     if hits is not None:
@@ -1456,7 +1821,7 @@ def test_hsp_private_boundary_and_public_numeric_rejection(column, value):
 
     pm = _protein_map_for_lengths({"q": 100, "s": 100})
     hits = pd.DataFrame([_hit_row("q", "s"), _hit_row("q", "s") | {column: value}])
-    _assert_hsp_baseline(hits, pm)
+    _assert_hsp_baseline(hits, pm, rejected=True)
     for limit in (None, 1):
         with pytest.raises(ParseError, match="non-numeric outfmt 6"):
             select_rbh_orthogroup_edges_from_directional_hits(
@@ -1527,12 +1892,12 @@ def test_hsp_adjacent_reverse_clamped_union_and_all_selected_hsps(monkeypatch):
 
 
 @pytest.mark.parametrize("first_error,later_error", [(float("nan"), float("inf")), (float("inf"), float("nan"))])
-def test_hsp_errors_follow_pair_appearance_not_interleaved_error_row(first_error, later_error):
+def test_hsp_rejects_a_nonfinite_value_in_any_pair(first_error, later_error):
     pm = _protein_map_for_lengths({"q": 100, "s": 100, "t": 100})
     hits = pd.DataFrame([_hit_row("q", "s"),
         _hit_row("q", "t", alignment_length=later_error),
         _hit_row("q", "s", alignment_length=first_error)])
-    _assert_hsp_baseline(hits, pm)
+    _assert_hsp_baseline(hits, pm, rejected=True)
 
 
 @pytest.mark.parametrize("identifiers", [[1, 2.0], [1, 1.0], [True, 1], ["", "nan"], [None, pd.NaT]])
@@ -1543,7 +1908,7 @@ def test_hsp_group_key_coercion_matches_pandas(identifiers):
     _assert_hsp_baseline(hits, pm)
 
 
-def test_hsp_aggregation_iterates_table_once_without_pair_dataframes(monkeypatch):
+def test_hsp_aggregation_reads_columns_without_row_or_pair_iteration(monkeypatch):
     from tools.benchmark_protein_comparison import synthetic, SEED
 
     pc = protein_colinearity_module
@@ -1560,7 +1925,7 @@ def test_hsp_aggregation_iterates_table_once_without_pair_dataframes(monkeypatch
     monkeypatch.setattr(pd.DataFrame, "itertuples", iterate)
     monkeypatch.setattr(FrameSplitter, "_chop", grouped)
     result = pc._aggregate_hsps_by_protein_pair(hits, pm)
-    assert seen == [3000]
+    assert seen == []
     assert result["hsp_count"].tolist() == [3] * 1000
 
 
@@ -1620,7 +1985,7 @@ def test_overlapping_hsps_do_not_double_count_coverage() -> None:
 
 
 @pytest.mark.linear
-def test_invalid_hsp_coordinates_do_not_inflate_aggregate_coverage() -> None:
+def test_invalid_hsp_coordinates_are_rejected_before_coverage() -> None:
     protein_map = _protein_map_for_lengths({"q": 1000, "s": 1000})
     hits = pd.DataFrame.from_records(
         [
@@ -1630,17 +1995,7 @@ def test_invalid_hsp_coordinates_do_not_inflate_aggregate_coverage() -> None:
         columns=COMPARISON_COLUMNS,
     )
 
-    aggregated = protein_colinearity_module._aggregate_hsps_by_protein_pair(
-        hits,
-        protein_map,
-    )
-
-    row = aggregated.iloc[0]
-    assert row["hsp_count"] == 2
-    assert row["bitscore"] == 500
-    assert row["query_covered_length"] == 200
-    assert row["subject_covered_length"] == 200
-    assert row["min_coverage"] == pytest.approx(0.2)
+    _assert_hsp_baseline(hits, protein_map, rejected=True)
 
 
 @pytest.mark.linear
@@ -3612,12 +3967,14 @@ def test_web_protein_cache_keys_validate_once_and_preserve_direction_and_options
         ) for pair in pairs
     ]
     validation_calls = []
+    check = protein_colinearity_module._check_protein_identity_manifest
 
     def validate_once(value):
         validation_calls.append(1)
-        return validate_protein_identity_manifest(value)
+        return check(value)
 
-    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", validate_once)
+    # Full checks: each reader of the proof calls the validator, which returns it.
+    monkeypatch.setattr(protein_colinearity_module, "_check_protein_identity_manifest", validate_once)
     result = json.loads(namespace["build_protein_losat_cache_keys_json"](
         json.dumps(manifest), json.dumps(pairs),
     ))
@@ -4043,13 +4400,14 @@ def test_web_protein_manifest_is_validated_once_for_keys_and_downloads(monkeypat
     )
     manifest_text = json.dumps(extraction.identity_manifest.to_dict())
     validation_calls = []
-    validate = protein_colinearity_module.validate_protein_identity_manifest
+    check = protein_colinearity_module._check_protein_identity_manifest
 
     def counted_validate(value):
         validation_calls.append(1)
-        return validate(value)
+        return check(value)
 
-    monkeypatch.setattr(protein_colinearity_module, "validate_protein_identity_manifest", counted_validate)
+    # Full checks: each reader of the proof calls the validator, which returns it.
+    monkeypatch.setattr(protein_colinearity_module, "_check_protein_identity_manifest", counted_validate)
     pairs = json.dumps([{"queryRecordInstanceKey": "row-a", "subjectRecordInstanceKey": "row-a",
                          "expectedOptions": {"program": "blastp", "outfmt": "6", "args": []}}])
     first = json.loads(namespace["build_protein_losat_cache_keys_json"](manifest_text, pairs))
@@ -4274,7 +4632,7 @@ def test_pairwise_match_group_places_each_end_through_its_record_placement() -> 
     ).get_group()
 
     path = group.elements[0]
-    assert 'd="M 100.0,0.0L200.0,0.0 L200.0,100.0L100.0,100.0 z"' in path.tostring()
+    assert 'd="M 100,0L200,0 L200,100L100,100 z"' in path.tostring()
 
 
 @pytest.mark.linear
@@ -4689,14 +5047,24 @@ def test_manifest_presentation_identity_check_still_rejects_view_fields(key: str
             )
 
 
-def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
+def test_raw_protein_tsv_validation_checks_each_text_and_pair_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from uuid import uuid4
 
-    token = uuid4().hex  # The verdict memo is process-wide; use texts no other test has.
-    query_id, subject_id = f"q_{token}", f"s_{token}"
-    valid = f"{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+    extraction = extract_protein_identity_manifest(
+        [
+            _record("record_a", features=[_cds(0, 9, qualifiers={"translation": ["MKT"]})]),
+            _record("record_b", features=[_cds(0, 9, qualifiers={"translation": ["MGG"]})]),
+        ],
+        record_instance_keys=("row-1", "row-2"),
+    )
+    manifest = extraction.identity_manifest
+    query_id = extraction.proteins_by_record[0][0].protein_id
+    subject_id = extraction.proteins_by_record[1][0].protein_id
+    # The verdict memo is process-wide; the comment makes texts no other test has.
+    comment = f"# {uuid4().hex}\n"
+    valid = f"{comment}{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
     bad_number = valid.replace("\t100\t", "\tnan\t")
     parse_calls = 0
     real_parse = protein_colinearity_module.parse_losatp_outfmt6
@@ -4707,15 +5075,34 @@ def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
         return real_parse(text)
 
     monkeypatch.setattr(protein_colinearity_module, "parse_losatp_outfmt6", count_parse)
+    id_set_builds = 0
+    real_ids = protein_colinearity_module._binding_runtime_ids
 
-    def matches(text: str) -> bool:
+    def count_ids(authority, record_instance_key):
+        nonlocal id_set_builds
+        id_set_builds += 1
+        return real_ids(authority, record_instance_key)
+
+    monkeypatch.setattr(protein_colinearity_module, "_binding_runtime_ids", count_ids)
+
+    def matches(text: str, authority=manifest, query="row-1", subject="row-2") -> bool:
         return protein_colinearity_module.raw_protein_tsv_matches_bindings(
-            text, query_ids={query_id}, subject_ids={subject_id}
+            text,
+            authority,
+            query_record_instance_key=query,
+            subject_record_instance_key=subject,
         )
 
     assert [matches(valid) for _ in range(4)] == [True] * 4
+    assert (parse_calls, id_set_builds) == (1, 2)  # The rows are read once.
+    # Another manifest object with the same bindings is served from the memo.
+    assert matches(valid, validate_protein_identity_manifest(manifest.to_dict()))
+    assert (parse_calls, id_set_builds) == (1, 2)
+    # The reversed pair is another key; its rows name the wrong bindings, so it
+    # fails before parsing.
+    assert [matches(valid, query="row-2", subject="row-1") for _ in range(2)] == [False] * 2
     assert parse_calls == 1
     assert [matches(bad_number) for _ in range(4)] == [False] * 4
     assert parse_calls == 2
-    assert matches(f"# comment {token}\n")
+    assert matches(comment)
     assert parse_calls == 3  # A distinct text parses once, even without rows.

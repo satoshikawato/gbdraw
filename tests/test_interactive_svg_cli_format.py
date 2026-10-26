@@ -293,46 +293,57 @@ def test_enrich_svg_binds_external_catalog_matches_by_unique_id() -> None:
     }
 
     assert by_element_id["path-1"].get("data-gbdraw-match-id") == "M1"
-    assert by_element_id["path-1"].get("data-gbdraw-pairwise-match-id") == "M1"
     assert by_element_id["path-2"].get("data-gbdraw-match-id") == "M2"
-    assert by_element_id["path-2"].get("data-gbdraw-pairwise-match-id") == "M2"
+    assert "data-gbdraw-pairwise-match-id" not in enriched
 
 
-def test_enrich_svg_rejects_conflicting_dom_match_id_aliases() -> None:
-    item = {
-        "resultIndex": 0,
-        "resultName": "matches.svg",
-        "recordKeys": [],
-        "features": [],
-        "biologicalFeatures": [],
-        "orthogroups": [],
-        "annotations": [],
-        "comparisonMatches": [{"id": "M1", "match_kind": "pairwise"}],
-    }
+def test_enrich_svg_renames_the_match_id_of_a_legacy_svg_once() -> None:
+    """gbdraw 0.12.0-0.13.0 (Sessions 29, 30) named a match only by the
+    legacy attribute; an element that has the current one keeps it."""
+
     svg = """<svg xmlns="http://www.w3.org/2000/svg">
-      <path data-gbdraw-match-id="M1" data-gbdraw-pairwise-match-id="M2"
+      <path id="legacy" data-gbdraw-pairwise-match-id="comparison1_match1"
         data-match-kind="pairwise" />
+      <path id="both" data-gbdraw-match-id="comparison1_match2"
+        data-gbdraw-pairwise-match-id="stale" data-match-kind="pairwise" />
     </svg>"""
 
-    with pytest.raises(GbdrawError, match="invalid or duplicate match IDs"):
-        enrich_svg(
-            svg,
-            result_index=0,
-            result_name="matches.svg",
-            feature_catalog={"schema": 3, "items": [item]},
-        )
+    enriched = enrich_svg(svg)
+    root = ET.fromstring(enriched)
+    by_id = {element.get("id"): element for element in root.iter() if element.get("id") in {"legacy", "both"}}
+
+    assert by_id["legacy"].get("data-gbdraw-match-id") == "comparison1_match1"
+    assert by_id["both"].get("data-gbdraw-match-id") == "comparison1_match2"
+    assert "data-gbdraw-pairwise-match-id" not in enriched.split("<script", 1)[0]
+    assert [match["id"] for match in _catalog_item(enriched)["comparisonMatches"]] == [
+        "comparison1_match1",
+        "comparison1_match2",
+    ]
+
+
+def test_only_the_rename_table_names_the_legacy_match_attribute() -> None:
+    """Every reader reads `data-gbdraw-match-id`; the legacy name lives only in
+    the Python table and its generated Web copy."""
+
+    legacy = "data-gbdraw-pairwise-match-id"
+    package = Path(__file__).resolve().parents[1] / "gbdraw"
+    sources = [
+        *package.rglob("*.py"),
+        *(package / "web" / "js").rglob("*.js"),
+        package / "web" / "index.html",
+    ]
+    holders = sorted(
+        str(path.relative_to(package)) for path in sources if legacy in path.read_text(encoding="utf-8")
+    )
+    assert holders == ["render/interactive_svg.py", "web/js/contracts/schema.generated.js"]
+    from gbdraw.render.interactive_svg import LEGACY_SVG_ATTRIBUTE_RENAMES
+
+    assert dict(LEGACY_SVG_ATTRIBUTE_RENAMES) == {legacy: "data-gbdraw-match-id"}
 
 
 @pytest.mark.parametrize(
     ("svg", "message"),
     [
-        (
-            """<svg xmlns="http://www.w3.org/2000/svg">
-              <path data-gbdraw-match-id="M1"
-                data-gbdraw-pairwise-match-id="M2" data-match-kind="pairwise" />
-            </svg>""",
-            "conflicting match ID aliases",
-        ),
         (
             """<svg xmlns="http://www.w3.org/2000/svg">
               <path data-gbdraw-match-id="M1" data-match-kind="pairwise" />
@@ -759,7 +770,7 @@ def test_enrich_svg_marks_features_matches_and_embeds_assets() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px" viewBox="0 0 100 80">
       <defs />
       <path id="fabc12345" data-gbdraw-feature-id="fabc12345" fill="#54bcf8" d="M 1 1 L 2 2" />
-      <path data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise" data-identity="98.7" d="M 1 3 L 2 4" />
+      <path data-gbdraw-match-id="m1" data-match-kind="pairwise" data-identity="98.7" d="M 1 3 L 2 4" />
     </svg>"""
 
     enriched = enrich_svg(
@@ -801,8 +812,7 @@ def test_enrich_svg_embeds_valid_regexp_escape_runtime() -> None:
 
 def test_enrich_svg_embeds_match_sequence_sources_once() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
-      <path data-gbdraw-match-id="comparison1_match1"
-        data-gbdraw-pairwise-match-id="comparison1_match1" data-match-kind="pairwise"
+      <path data-gbdraw-match-id="comparison1_match1" data-match-kind="pairwise"
         data-query-record-index="0" data-subject-record-index="1"
         data-query-record-id="query" data-subject-record-id="subject"
         data-qstart="2" data-qend="4" data-sstart="5" data-send="3"
@@ -1142,7 +1152,7 @@ def test_linear_cli_interactive_context_orthogroup_members_use_absolute_region_c
 def test_enrich_svg_uses_orthogroup_payload_for_feature_and_match_metadata() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px" viewBox="0 0 100 80">
       <path id="fquery" data-gbdraw-feature-id="fquery" fill="#54bcf8" d="M 1 1 L 2 2" />
-      <path data-gbdraw-pairwise-match-id="m1" data-match-kind="orthogroup"
+      <path data-gbdraw-match-id="m1" data-match-kind="orthogroup"
         data-orthogroup-id="og_1" data-query-feature-svg-id="fquery"
         data-subject-feature-svg-id="fquery" d="M 1 3 L 2 4" />
     </svg>"""
@@ -1397,7 +1407,7 @@ def test_enrich_svg_match_metadata_matches_standalone_pairwise_sections() -> Non
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px" viewBox="0 0 100 80">
       <path id="fquery" data-gbdraw-feature-id="fquery" fill="#54bcf8" d="M 1 1 L 2 2" />
       <path id="fsubject" data-gbdraw-feature-id="fsubject" fill="#54bcf8" d="M 3 1 L 4 2" />
-      <path data-gbdraw-pairwise-match-id="m1" data-match-kind="pairwise"
+      <path data-gbdraw-match-id="m1" data-match-kind="pairwise"
         data-orthogroup-id="og_1" data-query-record-id="rec1"
         data-subject-record-id="rec2" data-qstart="1" data-qend="9"
         data-sstart="10" data-send="18" data-query-feature-svg-id="fquery"
@@ -1512,7 +1522,7 @@ def test_enrich_svg_match_metadata_matches_standalone_collinear_sections() -> No
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px" viewBox="0 0 100 80">
       <path id="fquery" data-gbdraw-feature-id="fquery" fill="#54bcf8" d="M 1 1 L 2 2" />
       <path id="fsubject" data-gbdraw-feature-id="fsubject" fill="#54bcf8" d="M 3 1 L 4 2" />
-      <path data-gbdraw-pairwise-match-id="m1" data-match-kind="collinear"
+      <path data-gbdraw-match-id="m1" data-match-kind="collinear"
         data-orthogroup-id="og_1" data-collinearity-block-id="block_1"
         data-collinearity-block-kind="syntenic" data-collinearity-orientation="+"
         data-collinearity-color-mode="orthogroup" data-collinearity-block-score="42"

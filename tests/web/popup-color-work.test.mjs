@@ -13,11 +13,14 @@ import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
+import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 
 const ref = (value) => ({ value });
 
+// Catalog features, each with its catalog identity (`record_key`, `biological_feature_id`).
 const featuresOf = (products) => products.map((product, index) => ({
-  id: `feature-${index}`, svg_id: `f${index}`, type: 'CDS', product, qualifiers: { product: [`p${index}`] }
+  id: `feature-${index}`, svg_id: `f${index}`, record_key: 'record-1', biological_feature_id: `f${index}`,
+  type: 'CDS', product, qualifiers: { product: [`p${index}`] }
 }));
 const savedRule = { feat: 'CDS', qual: 'product', val: '^p3$', color: '#111111', cap: 'p3' };
 
@@ -79,6 +82,7 @@ const setup = ({
   });
   const preparation = createRulePreparation({
     state,
+    synthesize: synthesizePythonColorRules,
     evaluate: (payload) => {
       stages.push(`worker:evaluateRules:${payload.kind}:${payload.rules.map((rule) => rule.qual).join('+')}`);
       return evaluateRules(payload);
@@ -111,9 +115,9 @@ const setup = ({
       runWithRuleMatches: (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit),
       commitSpecificRules: async (build) => {
         stages.push('commitSpecificRules');
-        const rules = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
+        const built = build(manualSpecificRules, (row, patch) => ({ ...row, ...patch }));
         if (!await commit()) return false;
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...rules);
+        manualSpecificRules.splice(0, manualSpecificRules.length, ...await built);
         return true;
       },
       countFeaturesMatchingRule: () => 0, findExistingColorForCaption: () => null,
@@ -123,7 +127,7 @@ const setup = ({
       getIndividualFeatureLabel: (feature) => feature.qualifiers.product[0],
       effectiveLegendCaptions: () => () => 'CDS',
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
-      getLabelSpecificRule: (feature, label) => (label ? { feat: feature.type, qual: 'product', val: `^${label}$` } : null),
+      groupColorRules: groupColorRulesOver(preparation, (feature) => [feature.qualifiers.product[0]]),
       getLegendRowRules: () => []
     }
   });
@@ -159,6 +163,29 @@ test('a popup color pick opens the scope dialog after the History capture alone'
   assert.deepEqual(dialogStages(), ['history:buildIntent', 'history:signature']);
 });
 
+// OV-282 (D-26), guard: after a palette switch that no Generate drew yet, the
+// scope dialog's "Use existing color" offers the color the CDS row shows (the
+// new palette's, `displayedLegendRowColors`), not the swatch it recorded.
+test('Use existing color offers the palette color a palette row shows after a palette switch', async () => {
+  const setup_ = setup({ siblings: true, savedRules: [], appliedColors: {} });
+  const legendRow = { getAttribute: (name) => ({ 'data-legend-key': 'CDS' })[name] ?? null, hasAttribute: (name) => name === 'data-legend-key',
+    localName: 'g', querySelector: () => null, querySelectorAll: () => [swatch], children: [] };
+  const swatch = { getAttribute: (name) => (name === 'fill' ? '#cccccc' : null), hasAttribute: (name) => name === 'fill',
+    localName: 'path', querySelector: () => null, querySelectorAll: () => [], children: [] };
+  legendRow.children.push(swatch);
+  const legend = { localName: 'g', getAttribute: () => null, hasAttribute: () => false, querySelector: () => null,
+    querySelectorAll: () => [legendRow], children: [legendRow] };
+  const svg = { getElementById: (id) => (id === 'legend' ? legend : null) };
+  Object.assign(setup_.state, { svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? svg : null) }), originalLegendOrder: ref(['CDS']),
+    dormantLegendEntries: ref([]) });
+  setup_.state.appliedPaletteName.value = 'forest';
+  assert.equal(await setup_.preparation.prepare([]), true);
+  await setup_.pick('#123456');
+  assert.equal(setup_.featureStyleScopeDialog.show, true);
+  assert.equal(setup_.featureStyleScopeDialog.existingCaptionColor, '#228b22');
+  assert.deepEqual(setup_.state.legendEntries.value, [{ caption: 'CDS', color: '#cccccc' }], 'the row keeps its record');
+});
+
 test('a popup color pick without a dialog prepares the rules it commits', async () => {
   const { stages, preparation, pick, dialogStages } = setup({ siblings: false });
   assert.equal(await preparation.prepare([savedRule]), true);
@@ -166,7 +193,7 @@ test('a popup color pick without a dialog prepares the rules it commits', async 
   await pick('#123456');
   assert.equal(dialogStages(), null);
   assert.deepEqual(stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash+product', 'commitSpecificRules',
+    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash', 'commitSpecificRules',
     'history:buildIntent', 'history:signature'
   ]);
 });
@@ -277,7 +304,7 @@ for (const queued of [false, true]) test(`Apply to all on a palette row sets the
   setup_.stages.length = 0;
   await setup_.choices.scope('caption');
   assert.deepEqual(setup_.stages, [
-    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash+product', 'setDefaultColor',
+    'history:buildIntent', 'history:signature', 'worker:evaluateRules:color:hash', 'setDefaultColor',
     'history:buildIntent', 'history:signature'
   ]);
   assert.equal(setup_.state.currentColors.value.CDS, '#123456');
@@ -362,6 +389,6 @@ test('the popup Reset fill color after Auto resets to the applied palette color'
   setup_.stages.length = 0;
   await setup_.choices.reset('this_with_legend');
   assert.equal(setup_.stages.includes('commitSpecificRules'), true);
-  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'f0' && rule.color === '#cccccc'),
+  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === '^f0@record-1$' && rule.color === '#cccccc'),
     JSON.stringify(setup_.manualSpecificRules));
 });

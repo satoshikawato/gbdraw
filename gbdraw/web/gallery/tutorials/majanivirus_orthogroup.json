@@ -531,7 +531,7 @@
               },
               {
                 "type": "click",
-                "selector": "path[data-gbdraw-pairwise-match-id='comparison1_match1']"
+                "selector": "path[data-gbdraw-match-id='comparison1_match1']"
               },
               {
                 "type": "waitForSelector",
@@ -539,7 +539,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison1_match1']\"); const text = popup?.textContent || ''; const rect = target?.getBoundingClientRect(); if (!text.includes('og_31') || !text.includes('wsv360-like protein') || !rect) throw new Error('Expected og_31 popup content was not restored.'); const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 720 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 744); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
+                "script": "const popup = document.querySelector('.pairwise-match-popup'); const target = document.querySelector(\"path[data-gbdraw-match-id='comparison1_match1']\"); const text = popup?.textContent || ''; const rect = target?.getBoundingClientRect(); if (!text.includes('og_31') || !text.includes('wsv360-like protein') || !rect) throw new Error('Expected og_31 popup content was not restored.'); const app = window.__GBDRAW_APP__; if (app?.clickedPairwiseMatchPos) { const rightX = rect.right + 24; app.clickedPairwiseMatchPos.x = rightX + 720 <= window.innerWidth - 12 ? rightX : Math.max(12, rect.left - 744); app.clickedPairwiseMatchPos.y = Math.max(24, Math.min(window.innerHeight - 500, rect.top - 80)); }"
               },
               {
                 "type": "wait",
@@ -547,15 +547,15 @@
               },
               {
                 "type": "waitForFunction",
-                "script": "() => { const target = document.querySelector(\"path[data-gbdraw-pairwise-match-id='comparison1_match1']\")?.getBoundingClientRect(); const popup = document.querySelector('.pairwise-match-popup')?.getBoundingClientRect(); return Boolean(target && popup && (popup.right <= target.left || popup.left >= target.right || popup.bottom <= target.top || popup.top >= target.bottom)); }"
+                "script": "() => { const target = document.querySelector(\"path[data-gbdraw-match-id='comparison1_match1']\")?.getBoundingClientRect(); const popup = document.querySelector('.pairwise-match-popup')?.getBoundingClientRect(); return Boolean(target && popup && (popup.right <= target.left || popup.left >= target.right || popup.bottom <= target.top || popup.top >= target.bottom)); }"
               },
               {
                 "type": "evaluate",
                 "script": "const popup = document.querySelector('.pairwise-match-popup'); const count = popup?.querySelector('[data-match-group-count]'); const rows = Array.from(popup?.querySelectorAll('[data-match-group] tbody tr') || []); const lastShown = rows[Math.min(rows.length, 4) - 1]?.querySelector('td'); if (!popup || !count || !lastShown) throw new Error('Compact og_31 member table not found.'); popup.children[0]?.setAttribute('data-capture', 'og31-popup-header'); count.setAttribute('data-capture', 'og31-popup-count'); lastShown.setAttribute('data-capture', 'og31-popup-member-row'); document.activeElement?.blur();"
               }
             ],
-            "clipSelectors": ["path[data-gbdraw-pairwise-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-count']", "[data-capture='og31-popup-member-row']"],
-            "highlightSelector": "path[data-gbdraw-pairwise-match-id='comparison1_match1']",
+            "clipSelectors": ["path[data-gbdraw-match-id='comparison1_match1']", "[data-capture='og31-popup-header']", "[data-capture='og31-popup-count']", "[data-capture='og31-popup-member-row']"],
+            "highlightSelector": "path[data-gbdraw-match-id='comparison1_match1']",
             "cropPadding": {
               "top": 24,
               "right": 24,

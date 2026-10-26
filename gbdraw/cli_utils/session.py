@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -687,8 +686,10 @@ def _rendered_drawing_build(
 
     require_search_frame_protein_results(rendered.migration_report)
 
+    # These steps replace values and never change one in place; the document
+    # built from the drawing copies its data once (SessionDocument).
     state, web_file_inventory = project_session_adjunct_for_current_write(
-        copy.deepcopy(dict(plan.drawing.artifacts.fields)),
+        plan.drawing.artifacts.fields,
         source_version=source_version,
     )
     state = with_current_artifacts(
@@ -774,7 +775,10 @@ def render_session_drawings_cli(
     prefix; several drawings get ``<prefix>_<ID>``. With a re-save, the
     document is brought to the current version and validated before any
     render; every diagram path and the sidecar are checked together before the
-    first write; and the re-save replaces only the rendered drawings.
+    first write; and the re-save replaces only the rendered drawings. Without
+    a re-save, the resources' embedded data is dropped from ``document`` once
+    its files are written: afterwards ``document`` and the drawing artifacts
+    that share its resources are not valid for saving or reuse.
     """
 
     from gbdraw.api.request_render import (
@@ -786,7 +790,9 @@ def render_session_drawings_cli(
     from gbdraw.session import (
         _build_session_document_from_drawings,
         _plan_session_drawings,
+        _release_materialized_resource_data,
         _render_session_drawing_plans,
+        _session_parse_cache,
         _write_session_document,
         materialize_session,
         upgrade_session_document,
@@ -802,39 +808,46 @@ def render_session_drawings_cli(
         output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
     )
     with materialize_session(base, output_directory=output_directory) as materialized:
-        plans = _plan_session_drawings(
-            materialized,
-            drawings,
-            output_prefix=output_path.name if output_path is not None else None,
-            formats=format_override,
-            overwrite=overwrite,
-            embed_fonts=embed_fonts,
-        )
-        sidecar: tuple[Path, str] | None = None
-        if save:
-            sidecar = _session_sidecar_path(
-                plans,
-                session_output=session_output,
-                output_path=output_path,
-                output_directory=output_directory,
-            )
-            preflight_session_sidecar_if_requested(
-                save_session=True,
-                session_output=str(sidecar[0]),
-                output_prefix=None,
-                diagram_output_paths=tuple(
-                    path
-                    for plan in plans
-                    for path in diagram_request_output_paths(plan.request)
-                ),
+        if not save:
+            # Nothing reads the embedded data again: the files hold the bytes.
+            _release_materialized_resource_data(materialized)
+        # The drawings are decoded and rendered in one cache transaction, so a
+        # decoded resource is keyed by its resource; the logs and the re-save
+        # follow it.
+        with _session_parse_cache(materialized):
+            plans = _plan_session_drawings(
+                materialized,
+                drawings,
+                output_prefix=output_path.name if output_path is not None else None,
+                formats=format_override,
                 overwrite=overwrite,
+                embed_fonts=embed_fonts,
             )
-        preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
-        rendered = _render_session_drawing_plans(
-            materialized,
-            plans,
-            include_feature_catalog=save,
-        )
+            sidecar: tuple[Path, str] | None = None
+            if save:
+                sidecar = _session_sidecar_path(
+                    plans,
+                    session_output=session_output,
+                    output_path=output_path,
+                    output_directory=output_directory,
+                )
+                preflight_session_sidecar_if_requested(
+                    save_session=True,
+                    session_output=str(sidecar[0]),
+                    output_prefix=None,
+                    diagram_output_paths=tuple(
+                        path
+                        for plan in plans
+                        for path in diagram_request_output_paths(plan.request)
+                    ),
+                    overwrite=overwrite,
+                )
+            preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
+            rendered = _render_session_drawing_plans(
+                materialized,
+                plans,
+                include_feature_catalog=save,
+            )
         for result in rendered.values():
             items = (
                 result.items

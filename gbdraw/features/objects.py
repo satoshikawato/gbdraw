@@ -23,6 +23,7 @@ from ..layout.record_coordinates import DisplayFragment
 
 
 if TYPE_CHECKING:
+    from .ids import SourceFeatureHash
     from .overrides import ResolvedFeatureOverride
     from .placement import FeaturePlacementAssignment
 
@@ -130,7 +131,7 @@ class FeatureObject:
         self.source_feature_index: int | None = None
         # The source-record feature hash that every SVG ID drawn for this
         # feature starts with (`ids.compute_source_feature_hash`).
-        self.feature_hash: str | None = None
+        self.feature_hash: SourceFeatureHash | None = None
         # The source index that tells this feature from identical features of
         # its record in every rendered ID (`ids.shared_source_feature_hashes`);
         # None when no other feature of the record has its hash.

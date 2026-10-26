@@ -23,11 +23,22 @@ row not reached is computed later with :meth:`CircularLabelFitSearch.row`.
 When nothing is drawn and a lever has no value that fits, its mildest value
 that leaves no overlapping labels is offered with what it leaves (LP-D57).
 
-A record's centre definition text that reaches into a track's band is drawn
-and warns too (D-12). A drawn figure with it gets one more row, a smaller
-definition font, scanned down with the full assembly like the inner labels'
-font. Each row is checked for what it fixes: the label rows for the labels,
-the definition row for the definition text (neither may stop the figure).
+A record's centre definition text whose painted lines meet a track's ink is
+drawn and warns too (D-12). A drawn figure with it gets two more rows: a
+smaller definition font, scanned down with the full assembly like the inner
+labels' font, and narrowing the inside tracks, offered when the definition's
+band enters a track's band and no ``center_reserved_radius`` is set. That row
+sets ``center_reserved_radius`` to the band the definition takes on one line
+(PD-OI-097). The tracks narrow for the definition on their own, each Auto
+width down to ``canvas.circular.track_narrowing_min_px`` (PD-OI-078, rule L);
+the narrow row is offered when that did not clear the definition, and its
+radius narrows them below that floor. "Over a track" is read two ways: the notice and the rows'
+verification read the lines against the ink, the narrow row reads the band
+against the tracks' bands. The band is a square extent, not the line boxes'
+corners, so the narrowed figure may still have letters on a track and then
+draws with the notice. Each row is checked for what it
+fixes: the label rows for the labels, the definition rows for the definition
+text (neither may stop the figure).
 """
 
 from __future__ import annotations
@@ -40,7 +51,9 @@ from typing import Literal, TypeAlias
 
 from .fit import (
     ALL_OUTSIDE_SCOPE,
+    CENTER_RESERVED_RADIUS_PATH,
     DEFINITION_FONT_PATH,
+    DEFINITION_ROW_KINDS,
     FITS,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
@@ -85,6 +98,7 @@ ROW_KINDS: tuple[LabelFitRowKind, ...] = (
     "radial",
     "separate_features",
     "smaller_definition_font",
+    "narrow_tracks",
 )
 _OUTER_ROWS: frozenset[LabelFitRowKind] = frozenset(ROW_KINDS[:6])
 _INNER_ROWS: frozenset[LabelFitRowKind] = frozenset({"smaller_font", "labels_out", "radial"})
@@ -99,6 +113,7 @@ _SEARCH_ORDER: tuple[LabelFitRowKind, ...] = (
     "tighter_rows",
     "combination",
     "smaller_definition_font",
+    "narrow_tracks",
 )
 # With inner, embedded or radial labels failing, the switches come first
 # (SWITCHES-FIRST); separating features applies only to overlapping embedded labels.
@@ -108,7 +123,7 @@ _SWITCHES_FIRST_ORDER: tuple[LabelFitRowKind, ...] = (
     "radial",
     *_SEARCH_ORDER,
 )
-# The kinds no label row moves: region labels only warn (LP-D86, LP-D87); the definition text has its own row.
+# The kinds no label row moves: region labels only warn (LP-D86, LP-D87); the definition text has its own rows.
 _UNMOVED_LABEL_KINDS: frozenset[LabelKind] = frozenset({"circular_region", "circular_definition"})
 _SWITCH_VALUES: Mapping[LabelFitRowKind, Mapping[str, LabelFitValue]] = {
     "labels_out": {SCOPE_PATH: ALL_OUTSIDE_SCOPE},
@@ -137,6 +152,8 @@ class CircularLabelLayout:
     """
 
     record_id: str
+    # The index of the record's drawn groups (``data-gbdraw-record-index``): the record's identity on the figure.
+    record_index: int
     placement: CircularLabelPlacement
     font_size: float
     label_counts: Mapping[LabelKind, int]
@@ -149,9 +166,13 @@ class CircularLabelLayout:
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
     # The largest font of the record's region labels, when some are cut or lie on another track (``circular_region``).
     region_font_size: float = 0.0
-    # The centre definition's font, when its text reaches into a track's band (``circular_definition``).
+    # The centre definition's font, when its painted lines meet a track's ink (``circular_definition``).
     definition_font_size: float = 0.0
     definition_probe: CircularDefinitionFitProbe | None = field(default=None, compare=False, repr=False)
+    # The ``center_reserved_radius`` that keeps the inside tracks out of the definition's one-line band, when that
+    # band enters a track's band (not the ink the notice reads) and no radius is set (``circular_definition``); 0
+    # otherwise.
+    definition_narrow_radius_px: float = 0.0
 
     @property
     def fit(self) -> LabelFit:
@@ -321,6 +342,12 @@ def _mildest_fitting_index(
     return _bisect(fits, grid, low, high)
 
 
+def _radius_rounded_up(radius_px: float) -> float:
+    """A radius the "narrow the inside tracks" row writes: up to the next 0.01 px, so the band stays clear."""
+
+    return math.ceil(round(float(radius_px) * 100.0, 6)) / 100.0
+
+
 def _settings_key(values: Mapping[str, LabelFitValue]) -> tuple[tuple[str, LabelFitValue], ...]:
     return tuple(sorted(values.items()))
 
@@ -342,14 +369,18 @@ def _applicable_rows(
 
     Overlapping embedded labels add the switch that separates overlapping
     features, unless they are separated already. A drawn figure whose
-    definition text reaches into a track's band adds the smaller definition
-    font (when nothing was drawn, the labels come first).
+    definition lines meet a track's ink adds the smaller definition font, and
+    narrowing the inside tracks when the definition's band also enters a
+    track's band and no ``center_reserved_radius`` is set (when nothing was
+    drawn, the labels come first).
     """
 
     kinds: set[LabelFitRowKind] = set()
     for layout in layouts:
         if drawn and "circular_definition" in layout.failing_kinds:
             kinds.add("smaller_definition_font")
+            if layout.definition_narrow_radius_px > 0.0:
+                kinds.add("narrow_tracks")
         embedded = layout.kind_fits.get("circular_embedded", FITS)
         if embedded.overlap_pairs and not layout.features_separated:
             kinds.add("separate_features")
@@ -495,6 +526,8 @@ class CircularLabelFitSearch:
             return self._switch(kind), None
         if kind == "smaller_definition_font":
             return self._definition_font_scan(), None
+        if kind == "narrow_tracks":
+            return self._narrow_tracks(), None
         if self._outer_only:
             return self._search(kind, self._lever(kind))
         if kind == "smaller_font":
@@ -568,6 +601,20 @@ class CircularLabelFitSearch:
         return LabelFitRow(
             "smaller_definition_font", "not_found", reason=f"Does not fit down to {FONT_LIMIT_PT:g} pt"
         )
+
+    def _narrow_tracks(self) -> LabelFitRow:
+        """The inside tracks kept out of the definition's one-line band (``center_reserved_radius``, PD-OI-097).
+
+        One radius serves every record (a Multi-Record Canvas shares it), the largest band. The letters may still
+        meet a track, as they did when the tracks narrowed on their own: the row then draws with the notice.
+        """
+
+        radius = max(
+            (layout.definition_narrow_radius_px for layout in self.layouts if "circular_definition" in layout.failing_kinds),
+            default=0.0,
+        )
+        values: dict[str, LabelFitValue] = {CENTER_RESERVED_RADIUS_PATH: _radius_rounded_up(radius)}
+        return switch_row("narrow_tracks", values, self._verify("narrow_tracks", values), offer_notice=True)
 
     def _lever(self, kind: LabelFitRowKind) -> _Lever:
         y_offset = self._y_offset
@@ -681,13 +728,13 @@ class CircularLabelFitSearch:
 
 
 def _row_verification(kind: LabelFitRowKind, verification: LabelFitVerification) -> LabelFitVerification:
-    """A full assembly as one row reads it: the label rows answer for the labels, the definition row for the
+    """A full assembly as one row reads it: the label rows answer for the labels, the definition rows for the
     definition text over a track (D-12); an assembly that stops is read as it is."""
 
     fit = verification.fit
     if verification.outcome == "stop" or fit is None:
         return verification
-    if kind == "smaller_definition_font":
+    if kind in DEFINITION_ROW_KINDS:
         outcome: LabelFitOutcome = "fits" if fit.definition_track_overlaps == 0 else "warn"
     else:
         outcome = label_fit_outcome([replace(fit, definition_track_overlaps=0)])
@@ -711,6 +758,7 @@ def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord
             font_size=_kind_font_size(layout, kind),
             fit=layout.kind_fits.get(kind, FITS),
             refused=layout.refused and kind not in _UNMOVED_LABEL_KINDS,
+            record_index=layout.record_index,
         )
         for layout in layouts
         for kind in layout.failing_kinds

@@ -17,6 +17,16 @@ const GENBANK_LINEAGE_ROOTS = new Set([
 ]);
 const GENBANK_LOCUS_PATTERN = /^LOCUS {7} *(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/;
 
+// Python's str.strip and str.rstrip for the ORGANISM lines and the names the
+// loader reports: String.trim also removes U+FEFF, which Python keeps. The
+// U+FEFF stays in the organism and lineage, as Biopython reads them, so the
+// name fast path declines on it (BROWSER_EQUAL_TEXT in record-discovery.js;
+// OV-1833).
+/** @param {string} text */
+export const pythonStrip = (text) => text.replace(/^[^\S\uFEFF]+|[^\S\uFEFF]+$/g, '');
+/** @param {string} text */
+const pythonStripEnd = (text) => text.replace(/[^\S\uFEFF]+$/, '');
+
 // One scan of a GenBank record header with the record ID and organism rules of
 // Biopython's _FeatureConsumer, which gbdraw.io.genome uses. Returns null for a
 // chunk without a LOCUS line and throws for a layout it cannot decide, so the
@@ -28,6 +38,7 @@ const GENBANK_LOCUS_PATTERN = /^LOCUS {7} *(\S+)(?:\s+(\d+)\s+(?:bp|aa)\b)?/;
  *   version: string,
  *   recordId: string,
  *   organism: string,
+ *   lineage: string[],
  *   recordLength: number | null,
  *   topology: string
  * }} GenBankHeader
@@ -50,7 +61,7 @@ export const scanGenBankHeader = (chunk) => {
   /** @type {string[]} */
   const header = [];
   for (const rawLine of lines.slice(locusIndex + 1)) {
-    const line = rawLine.trimEnd();
+    const line = pythonStripEnd(rawLine);
     if (line === '//' || GENBANK_HEADER_ENDS.has(line.slice(0, GENBANK_INDENT).trimEnd())) break;
     if (line) header.push(line);
   }
@@ -61,6 +72,7 @@ export const scanGenBankHeader = (chunk) => {
   /** @type {number | null} */
   let versionSuffix = null;
   let organism = '';
+  let lineage = '';
   /** @param {string} text */
   const addAccessions = (text) => {
     const tokens = text.replace(/;/g, ' ').split(/\s+/).filter(Boolean);
@@ -85,11 +97,11 @@ export const scanGenBankHeader = (chunk) => {
         recordId = version;
       }
     } else if (keyword === 'ORGANISM') {
-      organism = data;
-      let lineage = '';
+      organism = pythonStrip(header[index].slice(GENBANK_INDENT));
+      lineage = '';
       while (continuation(index)) {
         const line = header[++index];
-        const value = line.slice(GENBANK_INDENT).trim();
+        const value = pythonStrip(line.slice(GENBANK_INDENT));
         if (lineage || line.includes(';') || GENBANK_LINEAGE_ROOTS.has(value)) lineage += ` ${value}`;
         else if (value !== '.') organism += ` ${value}`;
       }
@@ -103,10 +115,21 @@ export const scanGenBankHeader = (chunk) => {
     accession: accessions[0] || '',
     version,
     recordId,
-    organism: organism.trim(),
+    organism: pythonStrip(organism),
+    lineage: lineageWordsOf(lineage),
     recordLength: locusMatch[2] ? Number(locusMatch[2]) : null,
     topology: locusLine.match(/^LOCUS\s+\S+\s+\d+\s+(?:bp|aa)\b.*\s(circular|linear)(?:\s|$)/)?.[1] || 'unknown'
   };
+};
+
+// The taxa of the ORGANISM lineage, highest first, as Biopython's
+// _split_taxonomy gives annotations["taxonomy"] and
+// infer_record_source_metadata reads it (stripped, empty taxa left out).
+/** @param {string} lineage @returns {string[]} */
+const lineageWordsOf = (lineage) => {
+  const text = pythonStrip(lineage);
+  if (!text || text === '.') return [];
+  return (text.endsWith('.') ? text.slice(0, -1) : text).split(';').map(pythonStrip).filter(Boolean);
 };
 
 // The record ID the loader gives one GenBank record chunk, with the header

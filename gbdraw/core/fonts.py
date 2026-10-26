@@ -272,6 +272,22 @@ def face_weight_and_italic(font: TTFont) -> tuple[int, bool]:
 # ------------------------------------------------------------------
 #  Font files
 # ------------------------------------------------------------------
+class _CachedFont(TTFont):
+    """A lazily read font kept across renders.
+
+    fontTools stores a table before decompiling it, so after a failed read
+    the next access would return the half-read table without an error. A
+    failed table is dropped here, and every later access fails the same way.
+    """
+
+    def __getitem__(self, tag: str) -> object:
+        try:
+            return super().__getitem__(tag)
+        except Exception:
+            self.tables.pop(tag, None)
+            raise
+
+
 _font_cache: Dict[FontFace, TTFont] = {}
 
 
@@ -294,7 +310,10 @@ def load_font(face: FontFace) -> Optional[TTFont]:
     if face.content_id:
         raise ValueError(f"Font {face.measurement_name} ({face.path}) is no longer registered.")
     try:
-        font = TTFont(face.path, fontNumber=face.index)
+        # From the bytes read once (no open file, no later read of a file that
+        # changed), lazily: a table, and each GPOS lookup, is decompiled when
+        # first used, so kerning reads only the ``kern`` lookups.
+        font = _CachedFont(io.BytesIO(face_source_bytes(face)), fontNumber=face.index, lazy=True)
         if face.instance:
             font = named_instance(font, face.instance)
     except Exception as exc:
@@ -402,7 +421,7 @@ def _generic_of_font(font: TTFont) -> str:
 
 def _read_font(source: Union[str, io.BytesIO], index: int, path: str) -> TTFont:
     try:
-        return TTFont(source, fontNumber=index)
+        return _CachedFont(source, fontNumber=index, lazy=True)
     except Exception as exc:
         raise ValidationError(
             f"Cannot read font file {path}: {exc}",
@@ -842,6 +861,23 @@ def resolve_font_face(
     return face
 
 
+def font_family_may_use_custom_face(font_family: str) -> bool:
+    """Whether text in ``font_family`` is drawn, at some weight or style, with
+    a face gbdraw does not bundle (a registered, fontconfig or platform face).
+
+    Resolution tells weights apart only by bold (600 and up): a registered
+    family gives one of its own faces at every weight, and the bundled
+    aliases, fontconfig and the platform folders are asked for bold or not.
+    So the normal and bold faces, upright and italic, decide it.
+    """
+    for weight in ("normal", "bold"):
+        for style in ("normal", "italic"):
+            family, face = resolve_named_font_face(font_family, weight, style)
+            if family is not None and face is not None and not is_bundled_face(face):
+                return True
+    return False
+
+
 def _nearest_generic(generics: list[str], missing: tuple[str, ...]) -> str:
     for generic in generics:
         if generic.lower() in _LIBERATION_FAMILY_BY_GENERIC:
@@ -1028,6 +1064,7 @@ __all__ = [
     "font_family_rules",
     "font_generic_family",
     "is_bundled_face",
+    "font_family_may_use_custom_face",
     "load_font",
     "named_instance",
     "parse_font_family_list",

@@ -371,7 +371,7 @@ def _keeps_feature(by_key: Mapping[str, _Region], record_key: str, feature_id: s
     region = by_key.get(record_key)
     if region is None:
         return False
-    for feature in region.item.source_feature_catalog or ():
+    for feature in region.item.source_feature_catalog:
         if feature.biological_feature_id == feature_id:
             return region.contains(feature.location_parts)
     # Without a catalog entry the edit is kept and reports itself as absent.

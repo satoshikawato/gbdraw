@@ -73,7 +73,7 @@ documented track renderers use their renderer name.
 |---|---|---|
 | Drawn feature part | `data-gbdraw-feature-id`, `data-gbdraw-stable-feature-id`, `data-gbdraw-feature-part`, record ID/index | This drawn element, the biological feature, the kind of part, and the record it belongs to |
 | Interactive feature | `data-gbdraw-interactive-feature="true"` | The element has feature metadata in an interactive SVG |
-| Comparison match | `data-gbdraw-match-id`; Linear files may also carry `data-gbdraw-pairwise-match-id` | Match ID, unique within the file |
+| Comparison match | `data-gbdraw-match-id` | Match ID, unique within the file. Files from gbdraw 0.12.0 to 0.13.0, and from the web app from 2026-06-18 to 2026-07-19, carry it as `data-gbdraw-pairwise-match-id`, which gbdraw no longer writes; the web app and `enrich_svg` rename it when they read such a file |
 | Interactive match | `data-gbdraw-interactive-match="true"` | The element has match metadata in an interactive SVG |
 | Annotation mark | `data-gbdraw-annotation-id`, `data-gbdraw-annotation-set-id`, `data-gbdraw-annotation-track-id`, record index | Annotation, annotation set, track slot, and the record it belongs to |
 
