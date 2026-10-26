@@ -648,7 +648,7 @@ const readWarmFacts = async (page) => ({
       choicePrompt: Boolean(document.querySelector('[data-choice-prompt]')),
       zoom: app.zoom,
       pan: { ...app.canvasPan },
-      inputs: describe({ ...state.cardFiles, ...state.drawingOfMode('circular').files }),
+      inputs: describe(state.drawingOfMode('circular').files),
       linearSources: state.drawingOfMode('linear').linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
       openSections: [...document.querySelectorAll('details[open] > summary')].map((summary) => summary.textContent.trim()),
       globals: Object.fromEntries(Object.keys(window).sort().map((key) => [key, typeof window[key]])),

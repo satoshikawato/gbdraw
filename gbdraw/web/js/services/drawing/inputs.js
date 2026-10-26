@@ -132,12 +132,9 @@ export const collapseEmptyLinearSeqList = (items) => {
  * @property {readonly Readonly<Record<string, unknown>>[]} linearSeqs
  */
 /**
- * The bindings that name stored files: the project's card files and every
- * drawing's bindings.
+ * The bindings that name stored files: every drawing's bindings, its five
+ * card files among its input fields.
  * @typedef {object} InputBindings
- * @property {Readonly<CardInputFiles> | null} cardFiles null: the bindings of
- *   the drawings alone (a deleted drawing's, which the step that holds it keeps
- *   stored, R11).
  * @property {() => readonly BoundDrawingInputs[]} drawingList
  */
 
@@ -165,34 +162,19 @@ export const collapseEmptyLinearSeqList = (items) => {
  * @property {(InputFileRef | null)[]} c_conservation_fastas
  * @property {(InputFileRef | null)[]} c_conservation_sequence_sources
  * @property {BoundCanonicalComparison[]} linearCanonicalComparisons
+ * @property {InputFileRef | null} d_color the Default colors card's file
+ * @property {InputFileRef | null} t_color the Specific rules card's file
+ * @property {InputFileRef | null} blacklist the Blacklist card's file
+ * @property {InputFileRef | null} whitelist the Whitelist card's file
+ * @property {InputFileRef | null} qualifier_priority the Priority card's file
  */
 /**
- * The five card files (Default colors, Specific rules, Blacklist, Whitelist,
- * Priority): project fields until the card steps move them into the drawing
- * (D-15-91 S-2 A).
- * @typedef {object} CardInputFiles
- * @property {InputFileRef | null} d_color
- * @property {InputFileRef | null} t_color
- * @property {InputFileRef | null} blacklist
- * @property {InputFileRef | null} whitelist
- * @property {InputFileRef | null} qualifier_priority
+ * The five card files' fields (Default colors, Specific rules, Blacklist,
+ * Whitelist, Priority): each drawing binds its own (R16-4).
+ * @typedef {'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority'} CardFileSlot
  */
-/** The card files' fields (`state.files`). @typedef {keyof CardInputFiles} CardFileSlot */
-
-/**
- * Bind a file to one card file field of the project: the store registers it
- * and the field holds its ref. This is the one writer of a card file field.
- * @param {Pick<InputFileStore, 'registerFile'>} store
- * @param {CardInputFiles} files
- * @param {CardFileSlot} slot
- * @param {InputFileCandidate} file
- * @returns {InputFileRef | null}
- */
-export const bindInputFile = (store, files, slot, file) => {
-  const ref = store.registerFile(file);
-  files[slot] = ref;
-  return ref;
-};
+/** @type {readonly CardFileSlot[]} */
+const CARD_FILE_SLOTS = Object.freeze(['d_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
 
 /** The `DrawingInputFiles` fields that hold a list of refs. @typedef {'c_conservation_blasts' | 'c_conservation_fastas'} InputFileListSlot */
 
@@ -240,7 +222,6 @@ export const boundInputFileIds = (bindings) => {
       .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
     linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
   };
-  if (bindings.cardFiles) addInputs(bindings.cardFiles, []);
   bindings.drawingList().forEach((drawing) => {
     addInputs(drawing.files, drawing.linearSeqs);
     (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));
@@ -359,8 +340,8 @@ export const bindLoadedInputs = (store, loaded) => {
   };
 };
 
-// The inputs slice of a drawing (DESIGN §2): its input fields (`files`, the
-// five card files excepted, D-15-91 S-2 A), its Linear record rows
+// The inputs slice of a drawing (DESIGN §2): its input fields (`files`, its
+// five card files among them, R16-4), its Linear record rows
 // (`linearSeqs`), its input type, and its Circular record catalog. A drawing
 // shows them under their member names; its file fields and rows are written
 // only through the writers below, which take the slice's handle
@@ -394,7 +375,8 @@ export const bindLoadedInputs = (store, loaded) => {
 const emptyDrawingInputFiles = () => ({
   c_gb: null, c_gff: null, c_fasta: null, c_depth: null,
   c_conservation_blasts: [], c_conservation_blasts_source: null, c_conservation_fastas: [],
-  c_conservation_sequence_sources: [], linearCanonicalComparisons: []
+  c_conservation_sequence_sources: [], linearCanonicalComparisons: [],
+  d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null
 });
 const DRAWING_FILE_KEYS = /** @type {(keyof DrawingInputFiles)[]} */ (Object.keys(emptyDrawingInputFiles()));
 
@@ -523,11 +505,29 @@ const install = (slice, data) => {
 };
 
 // Reset keeps every input binding, the chosen records, and the Depth
-// assignment (PD-OI-070). The card files it removes (D-15-78) are project
-// fields until the card steps bring them here (D-15-91 S-2 A), so a reset
-// changes nothing in this slice yet.
-/** @param {InputsSlice} _slice */
-const reset = (_slice) => {};
+// assignment (PD-OI-070), but removes the drawing's five card files with the
+// settings they loaded (D-15-78).
+/** @param {InputsSlice} slice */
+const reset = (slice) => {
+  const { files } = membersOf(slice);
+  CARD_FILE_SLOTS.forEach((slot) => { files[slot] = null; });
+};
+
+/**
+ * Bind a file to one of the drawing's five card fields: the store registers
+ * it and the field holds its ref (null unbinds the card). This is the one
+ * writer of a card file field.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {CardFileSlot} slot
+ * @param {InputFileCandidate} file
+ * @returns {InputFileRef | null}
+ */
+export const bindInputFile = (store, slice, slot, file) => {
+  const ref = store.registerFile(file);
+  membersOf(slice).files[slot] = ref;
+  return ref;
+};
 
 /**
  * Bind a file to one of the drawing's single-file fields.

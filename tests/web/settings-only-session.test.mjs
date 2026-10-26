@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { bindingDrawings } from './helpers/input-files.mjs';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
@@ -34,8 +35,8 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   });
   // The card names its file by ref of the input file store.
   const inputFiles = createInputFileStore();
-  const resources = await buildSessionResources(
-    { inputFiles, cardFiles: { qualifier_priority: inputFiles.registerFile(file) } }, null);
+  const resources = await buildSessionResources({ inputFiles }, null,
+    bindingDrawings({ files: { qualifier_priority: inputFiles.registerFile(file) } }));
   const document = { ...structuredClone(settings), ...resources };
   assert.equal(adoptCurrentSessionDocument(document, 42).canonical, null);
   const projected = projectSettingsOnlySession(document, adoptCurrentSessionResources(document.resources));
@@ -45,8 +46,8 @@ test('auxiliary file bytes and metadata round trip through the existing resource
   assert.equal(restored.type, file.type);
   assert.equal(restored.lastModified, file.lastModified);
   // Load binds the loaded file to the card by ref.
-  const again = await buildSessionResources(
-    { inputFiles, cardFiles: { qualifier_priority: inputFiles.registerFile(restored) } }, null);
+  const again = await buildSessionResources({ inputFiles }, null,
+    bindingDrawings({ files: { qualifier_priority: inputFiles.registerFile(restored) } }));
   assert.deepEqual(again, resources);
 });
 

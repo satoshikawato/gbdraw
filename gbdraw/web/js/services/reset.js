@@ -20,6 +20,7 @@ import { LABEL_TABLES_SLICE } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
 import { resetPaintEdits } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
+import { INPUTS_SLICE } from './drawing/inputs.js';
 import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 
@@ -127,30 +128,14 @@ const resetEditorUiState = (state) => {
 };
 
 /**
- * The uploaded tables whose rows become settings (Default colors, Specific
- * color rules, Blacklist, Whitelist, Priority File). Reset Settings, which a
- * Session replace also runs, clears those settings, so the cards go with them
- * (OV-1267); a card that stayed would name a table its rules no longer hold.
- * @param {Record<'d_color' | 't_color' | 'blacklist' | 'whitelist' | 'qualifier_priority', unknown>} files
- */
-const clearSettingTableFiles = (files) => {
-  files.d_color = null;
-  files.t_color = null;
-  files.blacklist = null;
-  files.whitelist = null;
-  files.qualifier_priority = null;
-};
-
-/**
  * The project part of Reset all drawings: the one-per-Session values (LOSAT
  * execution, Rich Feature Popup, Auto Reflow, PNG DPI, palette Instant
  * Preview) return to their defaults, as 0.14.0 Reset Settings did, and so do
- * the page-level editor drafts and the setting-table cards. Reset this drawing
- * keeps them (R17-5); it writes no drawing.
+ * the page-level editor drafts. Reset this drawing keeps them (R17-5); it
+ * writes no drawing.
  * @param {typeof AppState} state
  */
 export const resetProject = (state) => {
-  clearSettingTableFiles(state.cardFiles);
   Object.assign(state.losatExecution, createDefaultLosatExecution());
   state.richFeaturePopup.value = true;
   state.autoLabelReflowEnabled.value = false;
@@ -180,6 +165,11 @@ export const resetSettings = (state, drawing) => {
   LABEL_TABLES_SLICE.reset(drawing.slices.labelTables);
   GROUP_NAMES_SLICE.reset(drawing.slices.groupNames);
   COLOR_RULES_SLICE.reset(drawing.slices.colorRules);
+  // The uploaded tables whose rows become settings (Default colors, Specific
+  // rules, Blacklist, Whitelist, Priority) go with the settings they loaded
+  // (OV-1267, D-15-78): a card that stayed would name a table its rules no
+  // longer hold. The drawing's other input bindings stay.
+  INPUTS_SLICE.reset(drawing.slices.inputs);
   resetEditorDraftState(drawing);
   return resetPaletteState(state, drawing);
 };

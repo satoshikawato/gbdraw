@@ -482,7 +482,7 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
     rules: stored.rules, priority: stored.qualifierPriorityRules, whitelist: stored.whitelist,
     blacklist: stored.blacklistText, fileImports: stored.fileImports
   });
-  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.cardFiles[key])),
+  assert.deepEqual(['d_color', 't_color', 'qualifier_priority', 'whitelist', 'blacklist'].map((key) => Boolean(state.drawingOfMode('circular').files[key])),
     [true, true, true, true, true]);
   // Save writes them back as they were loaded.
   const saved = await save('file cards');

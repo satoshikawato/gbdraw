@@ -22,6 +22,7 @@ import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js
 import {
   replacePriorityRules, replaceWhitelistRules, setBlacklistText
 } from '../services/drawing/label-tables.js';
+import { bindInputFile } from '../services/drawing/inputs.js';
 /** @import { FileImportCard } from '../services/file-imports.js' */
 /** @import { InputFileCandidate, InputFileRef, InputFileStore } from '../services/history-files.js' */
 
@@ -145,7 +146,6 @@ export const setupWatchers = ({
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
-    cardFiles,
     semanticFileWatchersSuppressed,
     linearReorderNotice,
     autoLabelReflowEnabled,
@@ -256,15 +256,38 @@ export const setupWatchers = ({
     linearReorderNotice.value = '';
   };
 
-  const auxiliaryImportFailure = ref(null);
-  const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
-    && errorLog.value === auxiliaryImportFailure.value.error
-    && cardFiles[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
-    && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
+  // A card's failed import, with Retry: it belongs to the drawing whose card
+  // it was chosen in, and Retry is that drawing's step, so it is offered
+  // while that drawing is shown (R16-4).
+  /**
+   * @typedef {object} AuxiliaryImportFailure
+   * @property {unknown} error the error the failure showed
+   * @property {FileImportCard} key
+   * @property {string} drawingId the drawing whose card failed
+   * @property {InputFileRef | null} selection the card's file when it failed
+   * @property {ReturnType<RulePreparation['snapshot']> | null} snapshot the rule inputs a Specific rules failure was found on
+   * @property {() => Promise<boolean> | false} retry
+   */
+  const auxiliaryImportFailure = /** @type {{ value: AuxiliaryImportFailure | null }} */ (ref(null));
+  const canRetryAuxiliaryImportFailure = computed(() => {
+    const failure = auxiliaryImportFailure.value;
+    return Boolean(failure
+      && errorLog.value === failure.error
+      && failure.drawingId === state.activeDrawingId.value
+      && state.activeDrawing().files[failure.key] === failure.selection
+      && (!failure.snapshot || rulePreparation.isCurrent(failure.snapshot)));
+  });
   const retryAuxiliaryImportFailure = () => {
     const busy = state.sessionOperationAvailability?.();
-    return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
+    return busy || (canRetryAuxiliaryImportFailure.value ? /** @type {AuxiliaryImportFailure} */ (auxiliaryImportFailure.value).retry() : false);
   };
+  /**
+   * The one writer of a card's binding: the drawing's inputs slice (R16-4).
+   * @param {DrawingState} drawing
+   * @param {FileImportCard} key
+   * @param {InputFileCandidate} file
+   */
+  const bindCard = (drawing, key, file) => bindInputFile(state.inputFiles, drawing.slices.inputs, key, file);
   /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
   /**
@@ -291,9 +314,9 @@ export const setupWatchers = ({
       return false;
     }
   };
-  // OV-1280 (D-19): Remove on a card, and a file that replaces the card's
-  // file, take back what the card's file put into each drawing, through that
-  // drawing's slices; `fileImports` is a setting its owners write.
+  // OV-1280 (D-19), R16-4: Remove on a card, and a file that replaces the
+  // card's file, take back what the card's file put into its drawing, through
+  // that drawing's slices; `fileImports` is a setting its owners write.
   /** @type {Record<Exclude<FileImportCard, 't_color'>, (drawing: DrawingState) => void>} */
   const removeImport = {
     d_color: (drawing) => resultsManager.removeImportedDefaultColors(drawing),
@@ -314,88 +337,70 @@ export const setupWatchers = ({
       replacePriorityRules(drawing.slices.labelTables, rows);
     }
   };
-  /** @type {Record<string, FileImportApply>} */
+  // Each import replaces the rows the drawing's earlier file of the card
+  // added (the Specific rules owner replaces its own).
+  /** @type {Record<FileImportCard, FileImportApply>} */
   const AUXILIARY_TABLE_IMPORTS = {
     d_color: tableImport(parseColorTable, (drawing, { colors }) => {
-      state.drawingList().forEach(removeImport.d_color);
+      removeImport.d_color(drawing);
       resultsManager.importDefaultColors(drawing, colors);
     }),
     t_color: async (drawing, text, isCurrent) => {
       try {
         const importedCount = await featureActions.importSpecificRules(text, { drawing, isCurrent });
         if (importedCount === false) return false;
-        // The import replaced the rows the earlier file added to its drawing.
-        if (!await removeFileImport('t_color', state.drawingList().filter((/** @type {DrawingState} */ other) => other !== drawing))) return false;
       } catch (e) {
         if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
         return false;
       }
     },
     qualifier_priority: tableImport(parsePriorityRules, (drawing, { rules }) => {
-      state.drawingList().forEach(removeImport.qualifier_priority);
+      removeImport.qualifier_priority(drawing);
       const rows = cloneJsonData([...drawing.manualPriorityRules]);
       importPriorityRows(rows, rules);
       replacePriorityRules(drawing.slices.labelTables, rows);
     }),
     whitelist: tableImport(parseWhitelistRules, (drawing, { rules }) => {
-      state.drawingList().forEach(removeImport.whitelist);
+      removeImport.whitelist(drawing);
       replaceWhitelistRules(drawing.slices.labelTables, [...drawing.manualWhitelist, ...markedRows(rules, 'whitelist')]);
     }),
     blacklist: tableImport(parseBlacklistWords, (drawing, { words }) => {
-      state.drawingList().forEach(removeImport.blacklist);
+      removeImport.blacklist(drawing);
       const { text, imported } = withImportedBlacklistWords(drawing.manualBlacklist.value, words);
       setBlacklistText(drawing.slices.labelTables, text);
       if (imported) drawing.fileImports.blacklist = imported;
     })
   };
   /**
-   * Reads `file` and applies it to the drawing shown now; a rejected file
-   * gives the input its previous file back.
-   * @param {string} key The `cardFiles` member of the auxiliary table.
-   * @param {InputFileRef | null} file
-   * @param {InputFileRef | null} previousFile
-   * @returns {Promise<boolean> | undefined}
-   */
-  const applyFileImport = (key, file, previousFile) => {
-    if (semanticFileWatchersSuppressed.value) return;
-    if (!file) return previousFile ? startFileRemoval(/** @type {FileImportCard} */ (key), previousFile) : undefined;
-    return startFileImport(key, file, previousFile);
-  };
-  /**
+   * Takes back what the card's file put into the drawing; false when the
+   * drawing refuses (the Specific rules owner's matching failed).
    * @param {FileImportCard} key
-   * @param {DrawingState[]} drawings
+   * @param {DrawingState} drawing
    * @returns {Promise<boolean>}
    */
-  const removeFileImport = async (key, drawings) => {
-    if (key !== 't_color') {
-      drawings.forEach(removeImport[key]);
-      return true;
-    }
-    // The shown drawing first: a removal it refuses leaves every drawing as it
-    // was (REVIEW-2 N2); one not shown cannot refuse.
-    const shown = state.activeDrawing();
-    for (const drawing of [...drawings.filter((one) => one === shown), ...drawings.filter((one) => one !== shown)]) {
-      if (await featureActions.removeImportedSpecificRules(drawing) !== true) return false;
-    }
+  const removeFileImport = async (key, drawing) => {
+    if (key === 't_color') return await featureActions.removeImportedSpecificRules(drawing) === true;
+    removeImport[key](drawing);
     return true;
   };
   /**
    * The removal waits for the imports still applying, as they wait for each
    * other; a removal that cannot apply brings the card back.
+   * @param {DrawingState} drawing The drawing whose card was cleared.
    * @param {FileImportCard} key
    * @param {InputFileRef} file The removed file.
    * @returns {Promise<boolean>}
    */
-  const startFileRemoval = (key, file) => {
+  const startFileRemoval = (drawing, key, file) => {
     const pending = fileImportApplications.then(async () => {
       try {
-        if (await removeFileImport(key, [...state.drawingList()])) return true;
+        if (await removeFileImport(key, drawing)) return true;
       } catch (e) {
         // A refused removal (the rule matching failed, a Legend row conflict)
         // is reported as the import's would be (REVIEW-1 N1).
         errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       }
-      if (cardFiles[key] === null) cardFiles[key] = file;
+      if (drawing.files[key] === null) bindCard(drawing, key, file);
       return false;
     });
     fileImportApplications = pending.catch(() => {});
@@ -403,19 +408,19 @@ export const setupWatchers = ({
     return pending;
   };
   /**
-   * @param {string} key
+   * @param {DrawingState} drawing The drawing whose card holds the file.
+   * @param {FileImportCard} key
    * @param {InputFileRef} file
    * @param {InputFileRef | null} previousFile
    * @returns {Promise<boolean>}
    */
-  const startFileImport = (key, file, previousFile) => {
-    const drawing = state.activeDrawing();
+  const startFileImport = (drawing, key, file, previousFile) => {
     const apply = AUXILIARY_TABLE_IMPORTS[key];
     // OV-1205, OV-1206: the import is current while its file stays selected.
     // The Specific rules owner (`runSpecificRuleWrite`) prepares and retries
     // the rules on the inputs current when it runs; one it gives up on comes
     // back as false with no error, and is reported here with Retry.
-    const isCurrent = () => cardFiles[key] === file && !semanticFileWatchersSuppressed.value
+    const isCurrent = () => drawing.files[key] === file && !semanticFileWatchersSuppressed.value
       && !state.sessionOperationAvailability?.();
     const previousError = errorLog.value;
     // The card names its file by ref; the bytes are the store's. A failure
@@ -426,13 +431,15 @@ export const setupWatchers = ({
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
-      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: cardFiles[key], snapshot: inputsBound ? rulePreparation.snapshot() : null,
+      auxiliaryImportFailure.value = {
+        error: errorLog.value, key, drawingId: drawing.id, selection: drawing.files[key],
+        snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
-          const retried = state.inputFiles.registerFile(source);
+          const retried = bindCard(drawing, key, source);
           if (!retried) return false;
-          cardFiles[key] = retried;
-          return startFileImport(key, retried, previousFile);
-        } };
+          return startFileImport(drawing, key, retried, previousFile);
+        }
+      };
     };
     const pending = readFileText(source).then((text) => {
       // Reads may finish out of order; serialize only their live application.
@@ -444,10 +451,10 @@ export const setupWatchers = ({
             errorLog.value = normalizeUserFacingError(diagnosticError('RULE_INPUTS_CHANGED', {},
               { operation: 'evaluateRules', stage: 'rule-validation' }));
           }
-          cardFiles[key] = previousFile;
+          bindCard(drawing, key, previousFile);
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
-        } else if (cardFiles[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+        } else if (drawing.files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
           errorLog.value = null;
           auxiliaryImportFailure.value = null;
         }
@@ -458,7 +465,7 @@ export const setupWatchers = ({
     }).catch((error) => {
       if (isCurrent() && errorLog.value === previousError) {
         errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
-        cardFiles[key] = previousFile;
+        bindCard(drawing, key, previousFile);
         retainFailure();
       }
       return false;
@@ -467,19 +474,23 @@ export const setupWatchers = ({
     return pending;
   };
   // The file input of an auxiliary table (Default colors, Specific rules,
-  // Priority, Whitelist, Blacklist): it stores the file and imports it into
-  // the shown drawing. The `file-uploader` owns its History step and waits
-  // for the import (`waitForAuxiliaryFileImport`, R11). A Load or a History
-  // restore sets `cardFiles` without importing. The card holds the file's ref.
+  // Priority, Whitelist, Blacklist): it binds the file in the shown drawing's
+  // card and imports it into that drawing (R16-4). The `file-uploader` owns
+  // the drawing's History step and waits for the import
+  // (`waitForAuxiliaryFileImport`, R11). A Load or a History restore binds
+  // the card without importing. The card holds the file's ref.
   /**
-   * @param {string} key
+   * @param {FileImportCard} key
    * @param {InputFileCandidate} file
+   * @returns {Promise<boolean> | undefined}
    */
   const importAuxiliaryTable = (key, file) => {
-    const previousFile = cardFiles[key];
-    const ref = state.inputFiles.registerFile(file);
-    cardFiles[key] = ref;
-    return applyFileImport(key, ref, previousFile);
+    const drawing = state.activeDrawing();
+    const previousFile = drawing.files[key];
+    const ref = bindCard(drawing, key, file);
+    if (semanticFileWatchersSuppressed.value) return undefined;
+    if (!ref) return previousFile ? startFileRemoval(drawing, key, previousFile) : undefined;
+    return startFileImport(drawing, key, ref, previousFile);
   };
 
   watch(

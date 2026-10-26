@@ -5,7 +5,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
 import {
-  INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, boundInputFileIds,
+  INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, bindInputFile, boundInputFileIds,
   normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs, setConservationBlastsSource
 } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
@@ -715,8 +715,7 @@ const applyFallbackResultsData = (state, results = []) => {
 // (PD-OI-090): Circular's `c_*` inputs, including the BLAST rows and comparison
 // sequences of a LOSAT-cache replay (its ring rows and managed track slots name
 // those rows, so Undo restores them together, B23), or Linear's records and
-// comparison files. The five table files stay shared until each drawing binds
-// its own; every drawing's intent holds them.
+// comparison files, and its five card files (R16-4).
 /**
  * A binding's refs as a step holds them: each list copied, each ref as is.
  * @param {unknown} value
@@ -727,12 +726,11 @@ const refsOf = (value) => (
 );
 
 /**
- * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @returns {FilesData}
  */
-const buildIntentFilesData = (state, drawing) => {
-  const shared = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(state.cardFiles[key])]));
+const buildIntentFilesData = (drawing) => {
+  const cards = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(drawing.files[key])]));
   if (drawing.mode !== 'linear') {
     const { files } = drawing;
     return {
@@ -747,11 +745,11 @@ const buildIntentFilesData = (state, drawing) => {
       c_conservation_fastas: refsOf(files.c_conservation_fastas),
       c_conservation_sequence_sources: refsOf(files.c_conservation_sequence_sources),
       inputType: drawing.inputType.value,
-      ...shared
+      ...cards
     };
   }
   return {
-    ...shared,
+    ...cards,
     inputType: drawing.inputType.value,
     linearSeqs: drawing.linearSeqs.map((seq) => ({
       uid: seq.uid,
@@ -779,12 +777,11 @@ const buildIntentFilesData = (state, drawing) => {
 
 // A Linear drawing's artifact checkpoint adds its generated comparisons.
 /**
- * @param {Record<string, any>} state
  * @param {DrawingView} drawing
  * @returns {FilesData}
  */
-const buildFilesData = (state, drawing) => {
-  const files = buildIntentFilesData(state, drawing);
+const buildFilesData = (drawing) => {
+  const files = buildIntentFilesData(drawing);
   if (drawing.mode !== 'linear') return files;
   return {
     ...files,
@@ -804,7 +801,7 @@ const buildFilesData = (state, drawing) => {
  * @param {HistorySnapshotState} state
  * @returns {InputBindings}
  */
-const inputBindingsOf = (state) => ({ cardFiles: state.cardFiles, drawingList: state.drawingList });
+const inputBindingsOf = (state) => ({ drawingList: state.drawingList });
 
 /**
  * @param {Record<string, any>} state
@@ -820,12 +817,12 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
   const restore = (value) => registerInputFileTree(fileStore, /** @type {LoadedFileValue} */ (value));
   /** @param {unknown} value */
   const restoreOne = (value) => fileStore.registerFile(isInputFileRef(value) ? value : null);
-  FILE_IMPORT_CARDS.forEach((key) => {
-    state.cardFiles[key] = restoreOne(filesData?.[/** @type {keyof FilesData} */ (key)]);
-  });
   // The drawing's own fields go through its inputs slice's writers, its
   // input type first (it names the fields its files fill; OIC-030).
   const slice = drawing.slices.inputs;
+  FILE_IMPORT_CARDS.forEach((key) => {
+    bindInputFile(fileStore, slice, key, restoreOne(filesData?.[/** @type {keyof FilesData} */ (key)]));
+  });
   if (filesData?.inputType) INPUTS_SLICE.install(slice, { inputType: filesData.inputType });
   /** @param {unknown} value @returns {LoadedFileValue[]} */
   const listOf = (value) => (Array.isArray(value) ? value : []);
@@ -1814,7 +1811,7 @@ export const createHistorySnapshotService = ({
       }),
       editorState: editorIntentOf(captureLegendPaint(drawing.slices.paint)),
       groupNames: buildGroupNameIntentData(drawing),
-      files: buildIntentFilesData(state, drawing),
+      files: buildIntentFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       orthogroupState: buildOrthogroupIntentData({
         selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
@@ -1944,7 +1941,7 @@ export const createHistorySnapshotService = ({
     const { featureCatalog = null, ...editorState } = generated.editorState || {};
     const checkpoint = cloneJsonData({
       config: buildDrawingConfig(drawing),
-      files: buildFilesData(state, drawing),
+      files: buildFilesData(drawing),
       ...(drawing.mode === 'linear' ? { alignmentState: captureAlignmentState(drawingId) } : {}),
       ...generated,
       ...(generated.ui ? { ui: withoutSessionUi(generated.ui) } : {}),

@@ -57,7 +57,7 @@ const history = async (page, name) => {
 };
 const colorFile = page => page.evaluate(async () => {
   // The card holds the file's ref; its bytes are the input file store's.
-  const file = window.__GBDRAW_APP__.cardFiles.t_color;
+  const file = window.__GBDRAW_APP__.files.t_color;
   const { readFileText } = await import('./js/services/file-content-cache.js');
   const { state } = await import('./js/state.js');
   return { name: file?.name || null, text: file ? await readFileText(state.inputFiles.fileOf(file)) : null };
@@ -128,7 +128,7 @@ for (const width of [1440, 390]) {
         const beforeImport = await inspect(page, mode);
         const originalColorFile = await colorFile(page);
         await colorInput.setInputFiles({ name: 'integration-colors.tsv', mimeType: 'text/plain', buffer: Buffer.from(input.colors) });
-        await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.cardFiles.t_color); });
+        await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
         await rerendered(page);
         const imported = await inspect(page, mode);
         expect(imported.undoCount).toBe(beforeImport.undoCount + 1);
@@ -260,7 +260,7 @@ for (const width of [1440, 390]) {
         await generate(restored);
         const regenerated = await inspect(restored, mode);
         expect(artifact(regenerated)).toEqual(artifact(final));
-        expect(await restored.evaluate(async () => { const { readFileText } = await import('./js/services/file-content-cache.js'); const { state } = await import('./js/state.js'); return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.cardFiles.t_color)); })).toBe(input.colors);
+        expect(await restored.evaluate(async () => { const { readFileText } = await import('./js/services/file-content-cache.js'); const { state } = await import('./js/state.js'); return readFileText(state.inputFiles.fileOf(window.__GBDRAW_APP__.files.t_color)); })).toBe(input.colors);
         const activePath = testInfo.outputPath('combined.gbdraw-session.json.gz');
         const active = JSON.parse(gunzipSync(await download(restored, 'Save Session', activePath)));
         expect(active.resources).toEqual(saved.resources);

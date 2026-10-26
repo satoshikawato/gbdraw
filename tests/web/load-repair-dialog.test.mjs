@@ -67,7 +67,7 @@ const loadedState = () => JSON.stringify({
   mode: state.mode.value,
   title: state.sessionTitle.value,
   results: state.results.value.map((result) => result.content),
-  files: [...Object.keys(state.cardFiles), ...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
+  files: [...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
   drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
     const drawing = modeDrawing(state, mode);
     return [mode, {

@@ -13,7 +13,7 @@ import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-util
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
+  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -93,22 +93,10 @@ import {
  */
 
 /**
- * The Legend owner's move of a drawing's Legend records to the re-keyed keys
- * (`moveLegendRecords` in app/legend/entry-actions.js); with `hidden`, for a
- * drawing not shown, it also drops the records of the `removed` rows (with
- * the Legend colors that copy them, `legendColorCopies`) and writes the
- * drawing's Legend list.
- * @typedef {(drawing: DrawingState, entries: readonly LegendRow[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
- *   hidden?: { removed: readonly RuleRowColor[] } | null) => unknown} MoveLegendRecordsPort
- */
-
-/**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
- * @property {MoveLegendRecordsPort} moveLegendRecords
- *   The Legend owner's move of a drawing's Legend records; this owner calls it only for a drawing not shown.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282): a commit owns a listed row in that color.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
@@ -132,7 +120,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -854,41 +842,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       msg('Import specific color rules'), { drawing, isCurrent });
     return applied === true ? importedCount : false;
   };
-  // OV-1280 (D-19): Remove on the Specific rules card takes back the rows its
-  // file added (`fromFile`, D-ORIGIN-1); true when there were none. The shown
-  // drawing commits as any rule write does. A drawing that is not shown is
-  // written at once, inside the card's History step, as History restores it
-  // (`history-snapshot.js`, the other mode's config and Legend records), from
-  // nothing the shown figure holds (REVIEW-1 B1): its rows, and the Legend
-  // records of the rows only the file's rules drew, found by the keys the
-  // drawing stores for them (`listedRuleRowRemoval`); a kept rule's row whose
-  // key changes moves to it (REVIEW-3 R3-B1). The Legend owner writes the
-  // Legend records, with the Legend color copies of the removed rows
-  // (`moveLegendRecords`). So a Save, an Undo or a Redo
-  // finds the whole change. When it is shown, the display draws its figure
-  // again if its Legend cannot show the rules (app-setup.js, the rule table
-  // its Result was last shown with).
-  /** @param {DrawingState} drawing Not shown. */
-  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
-    /** @type {SpecificColorRule[]} */
-    const before = [...drawing.manualSpecificRules];
-    const kept = withoutImportedRows(before, 't_color');
-    const entries = drawing.legendEntries.value;
-    const listedKeys = [...entries, ...drawing.deletedLegendEntries.value, ...drawing.dormantLegendEntries.value].map(legendEntryKey);
-    const { gone, rekeyed } = listedRuleRowRemoval(before, kept, listedKeys);
-    replaceColorRules(drawing.slices.colorRules, kept);
-    moveLegendRecords(drawing, entries, rekeyed, { removed: gone });
-  };
-  /** @param {DrawingState} drawing */
+  // OV-1280 (D-19), R16-4: Remove on the Specific rules card takes back the
+  // rows its file added to the shown drawing (`fromFile`, D-ORIGIN-1), which
+  // commits as any rule write does; true when there were none.
+  /** @param {DrawingState} drawing The shown drawing, whose card was cleared. */
   const removeImportedSpecificRules = (drawing) => {
     if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
-    if (drawing === state.activeDrawing()) {
-      return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
-    }
-    return queueRuleWrite(async () => {
-      takeBackFileRulesOfHiddenDrawing(drawing);
-      return true;
-    });
+    return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
   };
 
   const applySpecificRulePreset = async () => {
