@@ -5602,6 +5602,16 @@ const stashedArtifactView = (slot) => Object.freeze({
 });
 /** @param {SessionArtifactView | null} view */
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
+// The artifact Save writes of a drawing: one with a Result or a committed
+// request, as Load keeps one (a slot per drawing with a request). The empty
+// slot a drawing switch keeps for a drawing without either, and the shown
+// view of one, are none, so a Save after Load writes the drawing as the first
+// Save did (PD-OI-090 〔Save と Load〕, OV-1902).
+/**
+ * @param {SessionArtifactView | null} view
+ * @returns {SessionArtifactView | null}
+ */
+const savedArtifactOf = (view) => (artifactHasResult(view) || view?.committedCanonicalSession ? view : null);
 // Save writes every Result (Owner, 2026-10-07): each drawing's artifact, by
 // drawing ID, the shown drawing's from `state` and any other's from its kept
 // slot; a drawing without either has none.
@@ -7431,12 +7441,9 @@ export const exportSession = (titleOverride = null, options) => {
     // A drawing is written when it has an input file, a setting or an edit
     // that differs from its mode's default, or a Result (R16-8, DESIGN §4.4).
     /** @param {DrawingState} saved */
-    const isUsed = (saved) => {
-      const artifact = artifacts.get(saved.id) ?? null;
-      return artifactHasResult(artifact) || Boolean(artifact?.committedCanonicalSession)
-        || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })
-        || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
-    };
+    const isUsed = (saved) => Boolean(savedArtifactOf(artifacts.get(saved.id) ?? null))
+      || hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })
+      || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
     const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
     const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));
     if (!shownArtifact.committedCanonicalSession
@@ -7459,7 +7466,7 @@ export const exportSession = (titleOverride = null, options) => {
     artifacts = readArtifacts();
     /** @type {SavedSessionDrawing[]} */
     const written = writtenDrawings.map((saved) => {
-      const artifact = artifacts.get(saved.id) ?? null;
+      const artifact = savedArtifactOf(artifacts.get(saved.id) ?? null);
       return {
         drawing: saved,
         slice: /** @type {SavedSessionDrawing['slice']} */ (slices.get(saved.id)),
