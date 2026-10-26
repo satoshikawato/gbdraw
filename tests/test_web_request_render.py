@@ -710,8 +710,11 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the duplicate match attribute stopped being written
     # (perf-audit D-41): only that attribute and the segment byte counts and
     # revision hashes derived from the segment text moved.
-    "similarity_groups": "36b644c3ec0d30d2d52492cf44b364460c7f91e4e4e1d4dc8bd2b39f54506859",
-    "collinear": "b6565b0e35e87726aa0753638eaaa0aeac7673bc19202e30e45d7dd0eb5e074e",
+    # Updated again when each biological row of the feature catalog took its
+    # feature instance (PD-OI-069 revision 2): without the `instance` keys the
+    # reply digests as before.
+    "similarity_groups": "32bb98ece8c377fd738baf761a1457421fab4bc1b4712caacc1e07b59fd1768b",
+    "collinear": "052729a2cbbcb54358a6f478e0d8fd189797f5da749766bc628118dfc18e7b9e",
 }
 
 

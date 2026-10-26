@@ -22,7 +22,8 @@ const { LIVE_EDIT_DOMAINS } = await import(pathToFileURL(join(tempDir, 'app', 'c
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
-const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'services', 'feature-utils.js')));
+const { getFeatureColorRuleHash, getFeatureInstance } = await import(pathToFileURL(join(tempDir, 'services', 'feature-utils.js')));
+const { exactRegexValue } = await import(pathToFileURL(join(tempDir, 'services', 'feature-selector.js')));
 const { buildLegendIntents, colorRuleLegendGroups, legendRowRules } = await import(pathToFileURL(join(tempDir, 'services', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
@@ -120,7 +121,7 @@ const applyRulePreviewFill = (featureId, color) => {
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
-const { createRulePreparation, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { createRulePreparation, ruleFeaturePayload, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'rule-matchers.js')));
 const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
@@ -205,8 +206,12 @@ const actions = createFeatureColorActions({ readDrawnTracks: () => [], writeLege
     // allocation, which gives one caption in several colors a row per color, has its own fixture).
     getLegendRowRules: (caption) => manualSpecificRules.filter((rule) => rule.cap === caption),
     getIndividualFeatureLabel: (feature) => feature.product || '',
-    // FE-09 (D-14): "This feature only" always writes the stable hash.
-    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
+    // FE-09, PD-OI-069 revision 2 (rule-actions.js): "This feature only" names the
+    // feature instance exactly; a feature without one, its stable hash.
+    getFeatureQualifier: (feature) => ({
+      qual: 'hash',
+      val: getFeatureInstance(feature) ? exactRegexValue(getFeatureInstance(feature)) : getFeatureColorRuleHash(feature)
+    }),
     groupColorRules: groupColorRulesOver(actionsPreparation, (feature) => [feature.displayLabel || feature.product || '', feature.product || ''])
   },
   getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
@@ -567,13 +572,14 @@ const duplicateFeatureA = {
   rendered_feature_svg_id: 'f44444444_record_1',
   product: '',
   qualifiers: {},
-  selector: { hash: 'f44444444', qualifiers: {} }
+  selector: { hash: 'f44444444', instance: 'f44444444@linear-seq-a', qualifiers: {} }
 };
 const duplicateFeatureB = {
   ...duplicateFeatureA,
   id: 'duplicate-b',
   svg_id: 'f44444444_record_2',
-  rendered_feature_svg_id: 'f44444444_record_2'
+  rendered_feature_svg_id: 'f44444444_record_2',
+  selector: { hash: 'f44444444', instance: 'f44444444@linear-seq-b', qualifiers: {} }
 };
 manualSpecificRules.splice(0, manualSpecificRules.length, {
   feat: 'CDS',
@@ -585,14 +591,22 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
 extractedFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 biologicalFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 await actions.setFeatureColor(duplicateFeatureA, '#112233', 'one duplicate');
-// Duplicate records share the stable hash Python matches, so the edit replaces
-// the shared rule and colors both copies (D-14 accepted residual risk).
+// The same file drawn twice: "This feature only" names the clicked copy's
+// instance, before the stable-hash rule both copies share, so the other copy
+// keeps that rule's color (PD-OI-069 revision 2).
+const ownDuplicateRule = { feat: 'CDS', qual: 'hash', val: '^f44444444@linear-seq-a$', color: '#112233', cap: 'one duplicate' };
 assert.deepEqual(
   manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
-  [{ feat: 'CDS', qual: 'hash', val: 'f44444444', color: '#112233', cap: 'one duplicate' }]
+  [ownDuplicateRule, { feat: 'CDS', qual: 'hash', val: 'f44444444', color: '#999999', cap: 'shared duplicate rule' }]
 );
+assert.deepEqual((await evaluatePythonRules({
+  features: [duplicateFeatureA, duplicateFeatureB].map((feature) => ruleFeaturePayload(feature)),
+  rules: manualSpecificRules,
+  kind: 'color'
+})).winners, [0, 1]);
+// The other copy's reset removes the rule that names it, not the clicked copy's.
 await actions.setFeatureColorValue(duplicateFeatureB, null);
-assert.deepEqual(manualSpecificRules, []);
+assert.deepEqual(manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })), [ownDuplicateRule]);
 
 const sharedHashCds = {
   ...labelFeatureA,

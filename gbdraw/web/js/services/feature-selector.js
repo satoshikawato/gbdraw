@@ -19,6 +19,16 @@ export const SPECIFIC_COLOR_QUALIFIER_PRESETS = Object.freeze([
 export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** @param {unknown} value */
 export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
+/**
+ * The text an exact pattern matches (`exactRegexValue` of it), or null for any
+ * other pattern.
+ * @param {string} pattern
+ * @returns {string | null}
+ */
+export const exactRegexLiteral = (pattern) => {
+  const literal = /^\^([\s\S]*)\$$/.exec(pattern)?.[1].replace(/\\([\s\S])/g, '$1') ?? null;
+  return literal !== null && exactRegexValue(literal) === pattern ? literal : null;
+};
 
 /** @param {unknown} value */
 export const normalizeSelectorText = (value) => String(value ?? '').trim();

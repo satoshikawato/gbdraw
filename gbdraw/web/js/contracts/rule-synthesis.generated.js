@@ -24,6 +24,7 @@
 /**
  * @typedef {object} RuleFeatureSelector
  * @property {string | null} hash
+ * @property {string | null} instance
  * @property {string | null} location
  * @property {string | null} record_location
  */

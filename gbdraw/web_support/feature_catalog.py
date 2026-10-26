@@ -18,7 +18,7 @@ from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_no
 from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
-from gbdraw.features.ids import disambiguate_feature_ids
+from gbdraw.features.ids import disambiguate_feature_ids, feature_instance
 from gbdraw.render.interactive_svg import (
     InteractiveSvgContext,
     _RenderedFeatureEntry,
@@ -1009,6 +1009,9 @@ def _normalized_biological_features(
         }
         payload["biologicalFeatureId"] = biological_feature_id
         payload["recordKey"] = record_key
+        if stable_id:
+            # The value a "This feature only" `hash` rule names this feature by.
+            payload["instance"] = feature_instance(biological_feature_id, record_key)
         if feature_index is not None:
             payload["sourceFeatureIndex"] = feature_index
         if stable_id and stable_id != biological_feature_id:

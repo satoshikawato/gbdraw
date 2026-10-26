@@ -10,7 +10,9 @@ import { displayedLegendRowColors, draftLegendRowColors, draftLegendRows, LIVE_E
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, appliedFeatureColors, resolveColorToHex } from '../../utils/color-utils.js';
-import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
+import {
+  getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates, getFeatureInstance
+} from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   drawnLegendRowStroke,
@@ -325,14 +327,15 @@ export const createFeatureColorActions = ({
    */
   const strokeAction = (action) => colorAction(action, { targetRules: false });
 
-  // The `hash` rule values that target a feature exactly.
+  // The `hash` rule values that target a feature exactly: its feature
+  // instance, which names it alone, and the stable hash and rendered ID that
+  // older rules name it by.
   /** @param {ColorFeature} feature */
   const exactHashValues = (feature) => {
     const candidates = getFeatureHashCandidates(feature);
     const generationHash = getFeatureColorRuleHash(feature);
     const renderedId = candidates[candidates.length - 1] || '';
-    // Python matches only the stable hash, which duplicate records share.
-    return [generationHash, ...(renderedId !== generationHash ? [renderedId] : [])]
+    return [getFeatureInstance(feature), generationHash, ...(renderedId !== generationHash ? [renderedId] : [])]
       .filter(Boolean).flatMap((candidate) => [candidate, exactRegexValue(candidate)]);
   };
   /** @param {unknown} type @param {unknown} value */

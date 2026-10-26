@@ -4262,20 +4262,37 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
 const sourceRecordCounts = new WeakMap();
 
 /**
+ * The File that holds a resource's bytes, or null when its descriptor holds them.
+ * @param {unknown} descriptor
+ * @returns {WeakKey | null}
+ */
+const resourceFileOwner = (descriptor) => {
+  const owner = getResourcePayloadOwner(descriptor);
+  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
+  return owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+};
+
+/**
+ * The text of a committed Session resource, read from its File or its encoded payload.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<string>}
+ */
+export const readCanonicalResourceText = async (resources, resourceId) => {
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
+  return fileOwner ? readFileText(fileOwner) : decodeCanonicalResourceText(resources, resourceId);
+};
+
+/**
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @param {'genbank' | 'fasta'} kind
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
-  const descriptor = resources?.[resourceId];
-  const owner = getResourcePayloadOwner(descriptor);
-  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
-  const fileOwner = owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
   let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
   if (!counts) {
-    const text = fileOwner
-      ? await readFileText(fileOwner)
-      : decodeCanonicalResourceText(resources, resourceId);
+    const text = await readCanonicalResourceText(resources, resourceId);
     counts = {
       genbank: countGenBankRecords(text),
       fasta: (text.match(/^>/gm) || []).length

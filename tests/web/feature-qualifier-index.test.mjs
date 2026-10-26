@@ -27,20 +27,22 @@ const create = (features) => {
   return { actions, extractedFeatures };
 };
 
-// FE-09 (D-14, PD-OI-069): Python matches a color rule only by the stable hash
-// (gbdraw/features/selector_values.py), so "This feature only" writes the
-// stable hash even when duplicate record IDs give several rendered instances
-// one hash. Those duplicates then share the rule.
-test('This feature only writes the stable hash Python matches, including for duplicate record IDs', () => {
-  const first = feature('CDS', 'same_record_1');
-  const second = feature('CDS', 'same_record_2');
-  const otherType = feature('tRNA', 'same_record_3');
-  const s = create([first, second, otherType]);
-  assert.deepEqual(s.actions.getFeatureQualifier(first), { qual: 'hash', val: 'same' });
-  assert.deepEqual(s.actions.getFeatureQualifier(second), { qual: 'hash', val: 'same' });
-  assert.deepEqual(s.actions.getFeatureQualifier(otherType), { qual: 'hash', val: 'same' });
-  s.extractedFeatures.value = [first];
-  assert.deepEqual(s.actions.getFeatureQualifier(first), { qual: 'hash', val: 'same' });
+// FE-09, PD-OI-069 revision 2: "This feature only" names the feature instance
+// the catalog carries (Python's gbdraw/features/ids.py `feature_instance`)
+// exactly, so a copy of the same record ID with the same stable hash keeps its
+// color. A feature without an instance (one of a catalog written before
+// catalogs carried it) is named by the stable hash those copies share.
+test('This feature only names the feature instance, also for duplicate record IDs', () => {
+  const instanceOf = (id, instance) => ({ ...feature('CDS', id), selector: { hash: 'same', instance } });
+  const first = instanceOf('same_record_1', 'same@linear-seq-a');
+  const second = instanceOf('same_record_2', 'same@linear-seq-b');
+  const identical = instanceOf('same_record_3', 'same~1.5@record-1');
+  const s = create([first, second, identical]);
+  assert.deepEqual(s.actions.getFeatureQualifier(first), { qual: 'hash', val: '^same@linear-seq-a$' });
+  assert.deepEqual(s.actions.getFeatureQualifier(second), { qual: 'hash', val: '^same@linear-seq-b$' });
+  // The value is the exact pattern Python writes (`exact_value_pattern`).
+  assert.deepEqual(s.actions.getFeatureQualifier(identical), { qual: 'hash', val: '^same~1\\.5@record-1$' });
+  assert.deepEqual(s.actions.getFeatureQualifier(feature('CDS', 'same_record_1')), { qual: 'hash', val: 'same' });
 });
 
 test('a feature without a generation hash has no single-feature qualifier', () => {

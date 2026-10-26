@@ -11,10 +11,13 @@ import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
  * }} FeatureLike
  */
 /**
- * The selector a Python feature row carries beside its fields.
+ * The selector a Python feature row carries beside its fields. A catalog
+ * feature's selector (`services/feature-catalog.js`) also carries its feature
+ * instance (`instance`).
  * @typedef {{
  *   [field: string]: unknown,
  *   hash?: unknown,
+ *   instance?: string | null,
  *   location?: unknown,
  *   record_location?: unknown,
  *   qualifiers?: unknown
@@ -208,13 +211,23 @@ export const getRenderedFeatureHash = (feature) => (
 );
 
 // The hash Python's `hash` rule qualifier matches (`get_feature_hash`): the
-// feature's source-record hash, which duplicates of one record share
-// (PD-OI-069), whatever crop or orientation its record is drawn with.
+// feature's source-record hash, which duplicates of one record share,
+// whatever crop or orientation its record is drawn with.
 /** @param {FeatureLike | null | undefined} feature */
 export const getFeatureColorRuleHash = (feature) => (
   !feature || typeof feature !== 'object'
     ? ''
     : firstFeatureText(feature.selector?.hash) || getRenderedFeatureHash(feature)
+);
+
+// The feature instance Python's `hash` rule qualifier also matches: one
+// feature of one record (PD-OI-069 revision 2). Python composes it
+// (gbdraw/features/ids.py `feature_instance`) and the catalog carries it; a
+// feature that is not a catalog feature, or one of a catalog written before
+// catalogs carried it, has none ('').
+/** @param {FeatureLike | null | undefined} feature */
+export const getFeatureInstance = (feature) => (
+  !feature || typeof feature !== 'object' ? '' : firstFeatureText(feature.selector?.instance)
 );
 
 /**

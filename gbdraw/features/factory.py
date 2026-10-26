@@ -14,7 +14,7 @@ from ..core.record_metadata import (
     _feature_source_index_map,
     _source_feature_index,
 )
-from .ids import compute_source_feature_hash, shared_source_feature_hashes
+from .ids import compute_source_feature_hash, feature_instances, shared_source_feature_hashes
 from .objects import GeneObject, RepeatObject, FeatureObject
 from .overrides import feature_override_lookup
 from .visibility import should_render_feature
@@ -48,6 +48,7 @@ def create_repeat_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
+    instance: Optional[str] = None,
 ) -> RepeatObject:
     """
     Creates a RepeatObject representing a repeat region in a genome.
@@ -57,7 +58,7 @@ def create_repeat_object(
     rpt_type: str = feature.qualifiers.get("rpt_type", ["undefined"])[0]
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -95,6 +96,7 @@ def create_feature_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
+    instance: Optional[str] = None,
 ) -> FeatureObject:
     """
     Creates a FeatureObject representing a generic genomic feature.
@@ -102,7 +104,7 @@ def create_feature_object(
     coordinates = feature.location.parts
     note: str = feature.qualifiers.get("note", [""])[0]
     location = get_exon_and_intron_coordinates(coordinates, genome_length)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     feature_type = feature.type
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
@@ -138,6 +140,7 @@ def create_gene_object(
     compute_label_text: bool = True,
     glyph_kind: FeatureGlyph | None = None,
     feature_override: ResolvedFeatureOverride | None = None,
+    instance: Optional[str] = None,
 ) -> GeneObject:
     """
     Creates a GeneObject representing a gene in a genome.
@@ -149,7 +152,7 @@ def create_gene_object(
     is_trans_spliced = "trans_splicing" in feature.qualifiers
     feature_type = feature.type
     location = get_exon_and_intron_coordinates(coordinates, genome_length, is_trans_spliced)
-    color: str = get_color(feature, color_table, default_colors, record_id=record_id)
+    color: str = get_color(feature, color_table, default_colors, record_id=record_id, instance=instance)
     label_text = (
         get_label_text(feature, label_filtering, record_id=record_id, feature_override=feature_override)
         if compute_label_text else ""
@@ -210,6 +213,7 @@ def _build_feature_layers(
     genome_length: int = len(gb_record.seq)
     source_indexes = _feature_source_index_map(gb_record.features)
     shared_hashes = shared_source_feature_hashes(gb_record)
+    instance_of = feature_instances(gb_record)
     override_of = feature_override_lookup(
         gb_record, record_features.overrides if record_features is not None else None
     )
@@ -219,6 +223,7 @@ def _build_feature_layers(
     for feature in gb_record.features:
         cancel_checkpoint()
         override = override_of(feature)
+        instance = instance_of(feature)
         if not should_render_feature(
             feature,
             selected_features_set,
@@ -226,11 +231,14 @@ def _build_feature_layers(
             record_id=gb_record.id,
             specific_color_rules=color_table,
             feature_override=override,
+            instance=instance,
         ):
             continue
 
         # Track which color rules are actually used
-        color, caption = get_color_with_info(feature, color_table, default_colors, record_id=gb_record.id)
+        color, caption = get_color_with_info(
+            feature, color_table, default_colors, record_id=gb_record.id, instance=instance
+        )
         if caption:
             used_color_rules.add((caption, color))
         rendering = rendering_resolver(str(feature.type))
@@ -256,6 +264,7 @@ def _build_feature_layers(
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
+                instance=instance,
             )
             feature_id, feature_object = locus_id, gene_object
         elif feature.type == "repeat_region":
@@ -273,6 +282,7 @@ def _build_feature_layers(
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
+                instance=instance,
             )
             feature_id, feature_object = repeat_id, repeat_object
         else:
@@ -290,6 +300,7 @@ def _build_feature_layers(
                 compute_label_text=include_label,
                 glyph_kind=glyph_kind,
                 feature_override=override,
+                instance=instance,
             )
         source_feature_index = _source_feature_index(feature)
         feature_object.source_feature_index = (

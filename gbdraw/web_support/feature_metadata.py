@@ -19,6 +19,7 @@ from gbdraw.features.overrides import feature_override_lookup
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.features.ids import (
     compute_feature_hash,
+    feature_instances,
     make_linear_rendered_feature_id,
     shared_source_feature_hashes,
     source_feature_hash_and_parts,
@@ -320,6 +321,7 @@ def extract_features_from_records_payload(
         override_of = feature_override_lookup(
             record, record_features[rec_idx].overrides if record_features else None
         )
+        instance_of = feature_instances(record)
         for feature_index, feat in enumerate(_iter_features(record.features)):
             cancel_checkpoint()
             source_feature_index = _source_feature_index(feat)
@@ -331,6 +333,7 @@ def extract_features_from_records_payload(
                 record_id=hash_record_id,
                 specific_color_rules=specific_color_rules,
                 feature_override=feature_override,
+                instance=instance_of(feat),
             )
             if not is_rendered_feature and not include_biological_features:
                 continue

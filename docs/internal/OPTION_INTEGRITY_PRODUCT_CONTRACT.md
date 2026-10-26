@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `91`
+- Contract revision: `92`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -3310,6 +3310,41 @@ Status: active Product authority
     scenario revision `19` keeps every outcome and field of scenario revision
     `18` and replaces the sentences of its Accepted residual risk on the
     definition notice.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 92 changes: `PD-OI-069` gains scenario revision `2` (concern
+  `web.feature-color.duplicate-record-instance`; the outcome
+  `A / PER-INSTANCE-FILL`). A "This feature only" color names one feature
+  instance, so it colors the clicked feature of the clicked file and record
+  only, also when another file has the same record ID or is the same file,
+  live and after Generate. The replies come from the Product Decision Owner
+  `satoshikawato` of `2026-10-26` in the Claude Code session of the campaign
+  `feature-color-leak-20261026` (decisions D-01 and D-05), given to a report
+  and questions the session relayed because the choices are the Product
+  Decision Owner's. Each reply is quoted as written.
+  - D-01 (`2026-10-26`). The Owner had reported that a "This feature only"
+    fill also changed another feature. The session found that the same file
+    in two Linear File cards (one record ID drawn twice) shares the color, as
+    the accepted residual risk of scenario revision `1` allows. The Owner
+    wrote:
+    「それはダメ。重複するレコードであっても、このフィーチャーだけの場合はコノフィーチャーだけ。Hashにはスロットか何か（かそれ以外の情報も入れる？）も入れて。」
+    Shown the choices A / PER-INSTANCE-FILL and B / SHARED-AND-SAID, the
+    Owner replied: 「A / PER-INSTANCE-FILL（推奨）」
+  - D-05 (`2026-10-26`). The session showed the receipt below with its
+    realization (the `hash` rule value names the feature instance, and the
+    Session version does not change). Reply: 「承認」
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms. The scenario revision `1` receipt and JSON are kept as
+    they were approved.
+  - New receipt SHA-256: `PD-OI-069` scenario revision `2`
+    `581dd3722e5ae9d03a23ceb7a94939ecf09c7e1f51e503877eeca3b6ead77fed`.
+  - `PD-OI-069` scenario revision `2` supersedes scenario revision `1`; its
+    May retire names the part of scenario revision `1` that is retired. Every
+    term of scenario revision `1` that its May retire does not name stays in
+    force. The record title keeps its wording (no link targets its anchor
+    text).
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -6843,20 +6878,36 @@ Decision date: 2026-09-30
 ### PD-OI-069: Stable-hash single-feature colors with duplicate record IDs
 
 - Concern key: `web.feature-color.duplicate-record-instance`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-069`, scenario revision `1`. Scenario revision `2`
+  retires the accepted residual risk of scenario revision `1` (identical
+  duplicates with the same record ID share the "This feature only" color); the
+  Owner replies of `2026-10-26` quoted in the Revision 92 entry above approve
+  it. Every term of scenario revision `1` that its May retire does not name
+  stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `A / STABLE-HASH-ONLY`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the complete `D-14` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
+- Selected outcome: `A / STABLE-HASH-ONLY` (scenario revision `1`) and
+  `A / PER-INSTANCE-FILL` (scenario revision `2`)
+- Normative outcome: exactly the approved scenario revision `1` and `2`
+  `PRODUCT_DECISION` receipts and their nine-field JSON representations
+  below, scenario revision `2` replacing the term its May retire names.
+- Decision source (scenario revision `1`): the complete `D-14` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
   `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
   Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
   JSON below reproduce all nine supplied fields without translation or
   additional terms. This record does not supersede another decision.
   Dependent runtime requires this authority merged into its base; this
   amendment supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `8d0e04078648f77ebe017d95a929eb66616e78aea8d736d42575b418977e6f9d`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-26`
+  quoted in the Revision 92 entry above (D-01 and D-05). The second receipt and
+  JSON below reproduce all nine fields of the approved receipt without
+  translation or additional terms. The runtime, tests, and documentation that
+  implement it merge with it (static Product Contract co-change); this record
+  supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `581dd3722e5ae9d03a23ceb7a94939ecf09c7e1f51e503877eeca3b6ead77fed`.
 - Acceptance contracts: `OIC-005`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -6885,6 +6936,36 @@ Decision date: 2026-09-30
   "acceptedResidualRisk": "同じ record ID を持つ同一の複製がある場合、「This feature only」の色は両方の複製に適用される。",
   "owner": "satoshikawato",
   "decisionDate": "2026-09-30"
+}
+```
+
+Scenario revision `2` receipt (approved by `satoshikawato` on `2026-10-26`;
+D-05 of the Revision 92 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.feature-color.duplicate-record-instance
+Scenario revision: 2
+Choice: A / PER-INSTANCE-FILL
+Rationale: Owner 2026-10-26: 「それはダメ。重複するレコードであっても、このフィーチャーだけの場合はコノフィーチャーだけ。Hashにはスロットか何か（かそれ以外の情報も入れる？）も入れて。」
+Must preserve: "This feature only" colors exactly the clicked feature of the clicked file and record, live and after Generate, also when another file has the same record ID or is the same file; the feature keeps its own Legend row named by its label; group-scope hash fallbacks leave a twin outside the selection unchanged; hash rules from older Sessions or typed by the user keep their meaning.
+May retire: revision 1's accepted residual risk (identical duplicates with the same record ID share the "This feature only" color).
+Accepted residual risk: none stated.
+Owner: satoshikawato
+Decision date: 2026-10-26
+```
+
+```json
+{
+  "concern": "web.feature-color.duplicate-record-instance",
+  "scenarioRevision": 2,
+  "choice": "A / PER-INSTANCE-FILL",
+  "rationale": "Owner 2026-10-26: 「それはダメ。重複するレコードであっても、このフィーチャーだけの場合はコノフィーチャーだけ。Hashにはスロットか何か（かそれ以外の情報も入れる？）も入れて。」",
+  "mustPreserve": "\"This feature only\" colors exactly the clicked feature of the clicked file and record, live and after Generate, also when another file has the same record ID or is the same file; the feature keeps its own Legend row named by its label; group-scope hash fallbacks leave a twin outside the selection unchanged; hash rules from older Sessions or typed by the user keep their meaning.",
+  "mayRetire": "revision 1's accepted residual risk (identical duplicates with the same record ID share the \"This feature only\" color).",
+  "acceptedResidualRisk": "none stated.",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-26"
 }
 ```
 

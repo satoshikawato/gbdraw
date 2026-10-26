@@ -1346,6 +1346,42 @@ const edit = (biologicalFeatureId, values) => ({
   ...values
 });
 
+// Asserts that the Web renderer on the session's request draws `cliSvg`, and
+// that with `diagramOptions[field]` set to `plainValue` it draws something else.
+// The CLI keys its records `record-<n>`, so the record key attribute differs.
+const webRenderMatches = async (session, cliSvg, field, plainValue) => {
+  const path = join(tempDir, `web-oracle-${session.renderRequest.mode}-${field}.json`);
+  await writeFile(path, JSON.stringify({ session, field, plainValue }), 'utf8');
+  const compared = spawnSync(process.env.PYTHON || 'python', ['-c', [
+    'import copy, json, sys, tempfile',
+    'from pathlib import Path',
+    'from gbdraw.web_support.request_render import render_embedded_canonical_web_request',
+    'from tests.utils.svg_compare import compare_svgs',
+    'data = json.loads(Path(sys.argv[1]).read_text())',
+    'session = data["session"]',
+    'plain = copy.deepcopy(session["renderRequest"])',
+    'plain["diagramOptions"][data["field"]] = data["plainValue"]',
+    'outcome = {}',
+    'with tempfile.TemporaryDirectory() as directory:',
+    '    for name, request in (("edited", session["renderRequest"]), ("plain", plain)):',
+    '        result = render_embedded_canonical_web_request(',
+    '            request, resources=session["resources"], workspace=Path(directory) / name)',
+    '        web = Path(directory) / f"{name}.svg"',
+    '        web.write_text(result["results"][0]["content"], encoding="utf-8")',
+    '        compared = compare_svgs(web, Path(sys.argv[2]), ignored_attributes={"data-record-key"})',
+    '        outcome[name] = bool(compared.equal)',
+    '        if name == "edited": differences = compared.differences',
+    'print(json.dumps({"outcome": outcome, "differences": differences}))'
+  ].join('\n'), path, cliSvg], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    env: { ...process.env, PYTHONPATH: [repoRoot, process.env.PYTHONPATH].filter(Boolean).join(delimiter) }
+  });
+  assert.equal(compared.status, 0, compared.stderr);
+  const { outcome, differences } = JSON.parse(compared.stdout.trim().split('\n').at(-1));
+  assert.deepEqual(outcome, { edited: true, plain: false }, `${field}: ${differences.join('\n')}`);
+};
+
 test('feature edit recipe writes --feature_override_table and the CLI draws the Web Result', async () => {
   const [first, second, third] = await sourceFeatureIds(IDENTITY_GENBANK);
   assert.equal(first.replace(/~0$/, '~1'), second);
@@ -1375,36 +1411,90 @@ test('feature edit recipe writes --feature_override_table and the CLI draws the 
     );
     // The oracle is the Web renderer on the same request and resources; without
     // the edits it must differ, so the comparison sees edits that reach the drawing.
-    const compared = spawnSync(process.env.PYTHON || 'python', ['-c', [
-      'import copy, json, sys, tempfile',
-      'from pathlib import Path',
-      'from gbdraw.web_support.request_render import render_embedded_canonical_web_request',
-      'from tests.utils.svg_compare import compare_svgs',
-      'session = json.loads(Path(sys.argv[1]).read_text())',
-      'plain = copy.deepcopy(session["renderRequest"])',
-      'plain["diagramOptions"]["featureOverrides"] = []',
-      'outcome = {}',
-      'with tempfile.TemporaryDirectory() as directory:',
-      '    for name, request in (("edited", session["renderRequest"]), ("plain", plain)):',
-      '        result = render_embedded_canonical_web_request(',
-      '            request, resources=session["resources"], workspace=Path(directory) / name)',
-      '        web = Path(directory) / f"{name}.svg"',
-      '        web.write_text(result["results"][0]["content"], encoding="utf-8")',
-      '        outcome[name] = bool(compare_svgs(web, Path(sys.argv[2])).equal)',
-      'print(json.dumps(outcome))'
-    ].join('\n'), await (async () => {
-      const path = join(tempDir, `${mode}-identity-session.json`);
-      await writeFile(path, JSON.stringify(session), 'utf8');
-      return path;
-    })(), cliSvg], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      env: { ...process.env, PYTHONPATH: [repoRoot, process.env.PYTHONPATH].filter(Boolean).join(delimiter) }
-    });
-    assert.equal(compared.status, 0, compared.stderr);
-    const outcome = JSON.parse(compared.stdout.trim().split('\n').at(-1));
-    assert.deepEqual(outcome, { edited: true, plain: false }, mode);
+    await webRenderMatches(session, cliSvg, 'featureOverrides', []);
   }
+});
+
+// PD-OI-069 revision 2: a "This feature only" fill is a `hash` row naming the
+// feature instance `<feature id>@<record key>`. The recipe names the record by
+// its CLI record key `record-<n>`, so the CLI colors the same one copy.
+const twoCardColorSession = (rows) => {
+  const card = (recordKey) => ({
+    recordKey,
+    cardinality: 'exactly_one',
+    source: { kind: 'genbank', resourceId: 'source' },
+    selector: null,
+    region: null,
+    presentation: presentation(),
+    display: { isCircular: null, startCoordinate: null }
+  });
+  const session = canonical({
+    mode: 'linear',
+    records: [card('linear-seq-a'), card('linear-seq-b')],
+    resources: {
+      source: resource('genbank', 'source-dup.gbk', IDENTITY_GENBANK),
+      colors: resource('colors-color-table-file', 'specific-colors.tsv', rows.map((row) => `${row.join('\t')}\n`).join(''))
+    },
+    webFiles: { resourceOriginalNames: { source: 'dup.gbk' } }
+  });
+  session.renderRequest.diagramOptions.selectedFeaturesSet = ['CDS'];
+  session.renderRequest.diagramOptions.colors.colorTableFile = { resourceId: 'colors', representation: 'file' };
+  return session;
+};
+
+test('a feature instance color row names its record by the CLI record key and the CLI draws the Web Result', async () => {
+  const [, , third] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const session = twoCardColorSession([
+    ['CDS', 'hash', `^${third}@linear-seq-b$`, '#ff0000', 'Third of B'],
+    ['CDS', 'product', 'kept', '#00ff00', 'Kept']
+  ]);
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  assert.ok(table, JSON.stringify(recipe.generatedFiles.map(({ slot }) => slot)));
+  assert.equal(recipe.args[recipe.args.indexOf('-t') + 1], table.path);
+  assert.equal(recipe.args.filter((token) => token === '-t').length, 1);
+  assert.equal(table.data, [
+    `CDS\thash\t^${third}@record-2$\t#ff0000\tThird of B`,
+    'CDS\tproduct\tkept\t#00ff00\tKept',
+    ''
+  ].join('\n'));
+  const cliSvg = await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: 'linear', sourceRecipe: recipe }), 'feature instance color'
+  );
+  const svg = await readFile(cliSvg, 'utf8');
+  assert.equal((svg.match(/#ff0000/gi) || []).length > 0, true, 'the CLI draws the instance color');
+  const colors = session.renderRequest.diagramOptions.colors;
+  await webRenderMatches(session, cliSvg, 'colors', { ...colors, colorTableFile: null });
+});
+
+test('a feature instance color row of a table whose bytes a File holds is read through readResourceText', async () => {
+  const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const text = `CDS\thash\t^${first}@linear-seq-a$\t#ff0000\tFirst of A\n`;
+  const session = twoCardColorSession([]);
+  // The descriptor holds no bytes, as for a file the user chose (its File holds them).
+  delete session.resources.colors.data;
+  const recipe = await buildSourceRecipe({
+    ...session, readResourceText: (resourceId) => (resourceId === 'colors' ? text : '')
+  });
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors');
+  assert.equal(table?.data, `CDS\thash\t^${first}@record-1$\t#ff0000\tFirst of A\n`);
+});
+
+test('a table without feature instance rows is passed as it is', async () => {
+  const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const recipe = await buildSourceRecipe(twoCardColorSession([['CDS', 'hash', first, '#ff0000', 'Shared']]));
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  assert.equal(recipe.generatedFiles.some(({ slot }) => slot === 'generatedFiles.source_recipe.specific_colors'), false);
+  assert.notEqual(recipe.args.indexOf('-t'), -1);
+});
+
+test('a feature instance color row naming a record this render does not draw makes the Source recipe unavailable', async () => {
+  const [first] = await sourceFeatureIds(IDENTITY_GENBANK);
+  const recipe = await buildSourceRecipe(twoCardColorSession([['CDS', 'hash', `^${first}@linear-seq-gone$`, '#ff0000', 'Gone']]));
+  assert.equal(recipe.available, false);
+  assert.match(recipe.unavailableReason, /feature color rule names a record/);
 });
 
 test('feature edit rows that the table cannot read back make the Source recipe unavailable', async () => {

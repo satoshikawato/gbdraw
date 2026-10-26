@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: a "This feature only" color in the Web app colors only the clicked
+  feature of the clicked File card and record, live and after Generate. Before,
+  the same feature in another record with the same ID (the same file in two
+  Linear File cards, or two records that share an ID) took the color as well.
+  The rule's `hash` value now names the feature instance
+  (`<feature id>@<record key>`), and the Run Info Source recipe writes it with
+  the CLI record key `record-<n>`; plain `hash` rules keep their meaning
+  (PD-OI-069 revision 2).
 - Changed: the aminoglycoside BGC Gallery tutorial (BGC0000708-BGC0000713)
   shows the antiSMASH `gene_kind` qualifier in a step of its own before the
   color step, and says that its colors follow the scheme of the MIBiG website

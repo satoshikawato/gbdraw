@@ -57,6 +57,7 @@ def get_color_with_info(
     color_map: Mapping[str, Any],
     default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
+    instance: Optional[str] = None,
 ) -> Tuple[str, Optional[str]]:
     """
     Determines the color for a given feature based on its type and qualifiers.
@@ -69,8 +70,10 @@ def get_color_with_info(
     Returns:
         Tuple of (color, caption). Caption is None if default color was used.
         If record_id is provided, hash matching includes the record id.
+        ``instance`` is the feature's instance (``ids.feature_instances``),
+        which a `hash` rule may name.
     """
-    matched_rule = find_specific_color_rule(feature, color_map, record_id=record_id)
+    matched_rule = find_specific_color_rule(feature, color_map, record_id=record_id, instance=instance)
     if matched_rule is not None:
         return matched_rule
 
@@ -83,6 +86,7 @@ def get_color(
     color_map: Mapping[str, Any],
     default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
+    instance: Optional[str] = None,
 ) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.
@@ -91,7 +95,7 @@ def get_color(
     Use get_color_with_info() if you also need the matched caption.
     If record_id is provided, hash matching includes the record id.
     """
-    color, _ = get_color_with_info(feature, color_map, default_color_map, record_id=record_id)
+    color, _ = get_color_with_info(feature, color_map, default_color_map, record_id=record_id, instance=instance)
     return color
 
 
@@ -123,6 +127,7 @@ def precompute_used_color_rules(
         default_used_features: Set of feature types that fell back to default color
     """
     from Bio.SeqRecord import SeqRecord
+    from .ids import feature_instances
     from .overrides import feature_override_lookup
     from .visibility import should_render_feature
     if isinstance(records, SeqRecord):
@@ -134,7 +139,9 @@ def precompute_used_color_rules(
         override_of = feature_override_lookup(
             record, record_features[index].overrides if record_features else None
         )
+        instance_of = feature_instances(record)
         for feature in record.features:
+            instance = instance_of(feature)
             if not include_hidden and not should_render_feature(
                 feature,
                 selected_features_set,
@@ -142,9 +149,12 @@ def precompute_used_color_rules(
                 record_id=record.id,
                 specific_color_rules=color_map,
                 feature_override=override_of(feature),
+                instance=instance,
             ):
                 continue
-            color, caption = get_color_with_info(feature, color_map, default_color_map, record_id=record.id)
+            color, caption = get_color_with_info(
+                feature, color_map, default_color_map, record_id=record.id, instance=instance
+            )
             if caption is None:
                 default_used_features.add(feature.type)
             elif caption:

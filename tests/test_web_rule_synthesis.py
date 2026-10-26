@@ -12,6 +12,7 @@ import pytest
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 
+from gbdraw.features.ids import feature_instance
 from gbdraw.features.selector_values import build_feature_selector_values
 from gbdraw.web_support.rule_matching import evaluate_rules_json, exact_value_pattern, synthesize_color_rules_json
 
@@ -19,16 +20,24 @@ REPO = Path(__file__).resolve().parents[1]
 COLOR = "#ff0000"
 
 
-def _payload(feature: SeqFeature, record: str, label: str = "") -> dict:
+def _payload(feature: SeqFeature, record: str, label: str = "", instance: str | None = None) -> dict:
+    """A feature as the Web sends it; `instance` is None for a catalog written
+    before the catalog carried feature instances."""
     selector = build_feature_selector_values(feature, record)
     return dict(
         type=feature.type,
         record=record,
         qualifiers=selector["qualifiers"],
-        selector=dict(hash=selector.get("hash"), location=selector.get("location"),
+        selector=dict(hash=selector.get("hash"), instance=instance, location=selector.get("location"),
                       record_location=selector.get("record_location")),
         label=label,
     )
+
+
+def _instances(feature: SeqFeature, *record_keys: str, record: str = "rec") -> list[dict]:
+    """The payloads of one feature drawn in each of `record_keys` (the same record twice)."""
+    feature_hash = build_feature_selector_values(feature, record)["hash"]
+    return [_payload(feature, record, instance=feature_instance(str(feature_hash), key)) for key in record_keys]
 
 
 def _cds(index: int, **qualifiers: str) -> SeqFeature:
@@ -143,15 +152,61 @@ def test_a_rule_of_the_same_condition_gives_way_to_the_new_one_before_its_family
     assert answer["table"] == [{"feat": "CDS", "qual": "product", "val": "^kinase$", "color": COLOR, "cap": "Group"}, 0]
 
 
-def test_duplicate_record_instances_share_their_hash_and_are_one_target():
-    feature = _cds(0, product="unique thing")
-    other = _cds(1, product="unique thing")
-    first, duplicate = _payload(feature, "rec"), _payload(feature, "rec")
-    features = [first, duplicate, _payload(other, "rec")]
-    answer = _synthesize(features, [0])
+@pytest.mark.parametrize("scope", ["features", "group"])
+def test_one_of_two_record_instances_with_the_same_hash_is_the_only_target(scope):
+    # PD-OI-069 revision 2: the same file drawn twice; its twin keeps its color.
+    first, twin = _instances(_cds(0, product="unique thing"), "linear-seq-a", "linear-seq-b")
+    features = [first, twin, _payload(_cds(1, product="other"), "rec")]
+    answer = _synthesize(features, [0], labels=[["unique thing"]], scope=scope)
     table = _next_table(answer, [])
-    assert [row["qual"] for row in table] == ["hash"]
-    assert _colors(features, table) == [COLOR, COLOR, None]
+    assert table == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(first["selector"]["instance"]),
+                      "color": COLOR, "cap": "Group"}]
+    assert _colors(features, table) == [COLOR, None, None]
+
+
+def test_one_of_identical_features_of_a_record_is_the_only_target():
+    feature = _cds(0)
+    feature_hash = build_feature_selector_values(feature, "rec")["hash"]
+    features = [_payload(feature, "rec", instance=feature_instance(f"{feature_hash}~{n}", "k")) for n in (1, 2)]
+    table = _next_table(_synthesize(features, [1], scope="features"), [])
+    assert _colors(features, table) == [None, COLOR]
+
+
+def test_a_hash_rule_a_twin_shares_stays_and_the_new_instance_row_wins_before_it():
+    first, twin = _instances(_cds(0), "k1", "k2")
+    features = [first, twin]
+    current = [dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#0000ff", cap="both")]
+    answer = _synthesize(features, [0], rules=current, scope="features")
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(first["selector"]["instance"]),
+                                "color": COLOR, "cap": "Group"}, 0]
+    assert _colors(features, _next_table(answer, current)) == [COLOR, "#0000ff"]
+
+
+def test_a_hash_rule_of_a_feature_without_a_twin_gives_way_to_its_instance_row():
+    (only,) = _instances(_cds(0), "k1")
+    current = [dict(feat="CDS", qual="hash", val=only["selector"]["hash"], color="#0000ff", cap="old")]
+    answer = _synthesize([only], [0], rules=current, scope="features")
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(only["selector"]["instance"]),
+                                "color": COLOR, "cap": "Group"}]
+
+
+def test_a_feature_listed_as_drawn_and_from_its_source_is_one_target():
+    # The Web lists each feature once as drawn and once from its source; both
+    # entries are the same instance, and the twin of the other record keeps its color.
+    first, twin = _instances(_cds(0, product="unique thing"), "k1", "k2")
+    features = [first, twin, dict(first), dict(twin)]
+    table = _next_table(_synthesize(features, [0], scope="features"), [])
+    assert _colors(features, table) == [COLOR, None, COLOR, None]
+
+
+def test_a_feature_of_an_older_catalog_is_named_by_its_stable_hash():
+    # A catalog written before catalogs carried instances names a feature by its
+    # stable hash, as the Session that holds it was drawn: every copy takes the color.
+    feature = _cds(0, product="unique thing")
+    features = [_payload(feature, "rec"), _payload(feature, "rec")]
+    table = _next_table(_synthesize(features, [0], scope="features"), [])
+    assert table == [{"feat": "CDS", "qual": "hash", "val": features[0]["selector"]["hash"], "color": COLOR, "cap": "Group"}]
+    assert _colors(features, table) == [COLOR, COLOR]
 
 
 def test_a_feature_without_hash_or_condition_is_declined():

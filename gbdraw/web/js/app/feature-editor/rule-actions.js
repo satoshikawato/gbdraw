@@ -11,7 +11,8 @@ import { runWhenPrepared } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
-import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
+import { formatFeatureRange, getFeatureColorRuleHash, getFeatureInstance } from '../../services/feature-utils.js';
+import { exactRegexValue } from '../../services/feature-selector.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
@@ -1007,10 +1008,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       : override;
   };
 
-  // Python matches a single-feature color rule only by the stable generation
-  // hash, so duplicate record instances that share one hash share the rule.
+  // A single-feature color rule names the feature instance exactly (PD-OI-069
+  // revision 2): another feature with the same stable hash, of the same file
+  // drawn twice or identical in its record, keeps its color. A feature of a
+  // catalog written before catalogs carried instances is named by its stable
+  // hash, which those features share.
   /** @param {ColorFeature} feat */
   const getFeatureQualifier = (feat) => {
+    const instance = getFeatureInstance(feat);
+    if (instance) return { qual: 'hash', val: exactRegexValue(instance) };
     const colorRuleHash = getFeatureColorRuleHash(feat);
     return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };

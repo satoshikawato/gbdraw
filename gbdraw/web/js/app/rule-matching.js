@@ -1,7 +1,7 @@
 // @ts-check
 import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
-import { getFeatureColorRuleHash, getRenderedFeatureHash } from '../services/feature-utils.js';
+import { getFeatureColorRuleHash, getFeatureInstance, getRenderedFeatureHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { toRaw } from '../utils/vue-raw.js';
 import {
@@ -59,7 +59,8 @@ const declinesVisibilityMatch = (feature, rule) => {
 // coordinates than its source. The catalog gives those drawn values
 // (`drawnSelector`, feature catalog 5, OV-02); a feature of an older catalog
 // sends its source values only where they are the drawn ones. A `hash` rule
-// matches the feature's source-record hash on every record (OV-401).
+// matches the feature's source-record hash on every record (OV-401), and its
+// feature instance (`instance`), which names one feature of one record.
 // The payload of a feature without a label is built once per feature object;
 // its type is Python's (gbdraw/web_support/rule_matching.py, R7).
 /** @type {WeakMap<object, RuleFeaturePayload>} */
@@ -87,12 +88,14 @@ const buildRuleFeaturePayload = (feature, label) => {
   const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
     .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)]));
   const drawn = feature?.drawnSelector;
+  const instance = getFeatureInstance(feature) || null;
   const selector = drawn
-    ? { hash: getFeatureColorRuleHash(feature) || null, location: drawn.location, record_location: drawn.recordLocation }
+    ? { hash: getFeatureColorRuleHash(feature) || null, instance, location: drawn.location, record_location: drawn.recordLocation }
     : drawnSelectorUnknown(feature)
-      ? { hash: getFeatureColorRuleHash(feature) || null, location: null, record_location: null }
+      ? { hash: getFeatureColorRuleHash(feature) || null, instance, location: null, record_location: null }
       : {
           hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
+          instance,
           location: metadata.location,
           record_location: metadata.recordLocation || `${metadata.record}:${metadata.position}`
         };

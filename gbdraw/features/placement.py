@@ -21,6 +21,7 @@ from .overrides import (
     bind_feature_overrides,
     normalize_feature_overrides,
 )
+from .ids import feature_instances
 from .shapes import resolve_feature_rendering
 from .source import (
     FeatureIdentity,
@@ -279,6 +280,7 @@ def resolve_record_feature_inputs(
         index: {id(feature) for feature in records[index].features}
         for index in {bindings[item.identity].record_index for item in exact}
     }
+    instances = {index: feature_instances(records[index]) for index in top_level}
     for placement_index, item in enumerate(exact):
         binding = bindings[item.identity]
         if binding.status == "unresolved":
@@ -300,6 +302,7 @@ def resolve_record_feature_inputs(
                 record_id=record.id,
                 specific_color_rules=specific_color_rules,
                 feature_override=overrides[binding.record_index].get(source_index),
+                instance=instances[binding.record_index](feature),
             ):
                 status = "hidden"
             elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":

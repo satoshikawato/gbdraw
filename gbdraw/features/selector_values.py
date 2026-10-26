@@ -392,8 +392,14 @@ class ColorRuleList(list):
         return [self[position] for position in sorted(positions)]
 
 
-def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=None):
-    """Yield matching rules and their stable renderer precedence rank."""
+def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=None, instance=None):
+    """Yield matching rules and their stable renderer precedence rank.
+
+    A `hash` rule reads the feature's stable hash and its feature instance
+    (``ids.feature_instance``; ``instance``, or the selector's): a rule naming
+    the instance colors that feature only, one naming the hash every feature
+    that shares it.
+    """
     feature_type = get_feature_type(feature)
     qualifiers = get_feature_qualifiers(feature)
     keys = ["hash", "record_location", *qualifiers, "location"]
@@ -403,8 +409,10 @@ def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=No
             if key not in rules:
                 continue
             if index == 0:
-                value = selector.get("hash") if selector is not None else get_feature_hash(feature, record_id)
-                values = [value] if value else []
+                values = [value for value in (
+                    (selector.get("hash"), selector.get("instance")) if selector is not None
+                    else (get_feature_hash(feature, record_id), instance)
+                ) if value]
             elif index == 1:
                 value = selector.get("record_location") if selector is not None else get_feature_record_location_str(feature, record_id)
                 values = [value] if value else []
@@ -421,9 +429,11 @@ def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=No
                     yield color, caption, offset + index
 
 
-def find_specific_color_rule(feature, color_map, record_id=None, *, selector=None):
+def find_specific_color_rule(feature, color_map, record_id=None, *, selector=None, instance=None):
     """Return the first matching specific color rule, if any."""
-    matched = next(iter_specific_color_rules(feature, color_map, record_id, selector=selector), None)
+    matched = next(
+        iter_specific_color_rules(feature, color_map, record_id, selector=selector, instance=instance), None
+    )
     return matched[:2] if matched is not None else None
 
 
@@ -431,8 +441,9 @@ def feature_matches_specific_color_rule(
     feature: SeqFeature,
     color_map: Mapping,
     record_id: Optional[str] = None,
+    instance: Optional[str] = None,
 ) -> bool:
-    return find_specific_color_rule(feature, color_map, record_id=record_id) is not None
+    return find_specific_color_rule(feature, color_map, record_id=record_id, instance=instance) is not None
 
 
 def build_feature_selector_values(

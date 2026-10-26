@@ -303,8 +303,12 @@ def should_render_feature(
     record_id: Optional[str] = None,
     specific_color_rules: Optional[Mapping] = None,
     feature_override: Any = None,
+    instance: Optional[str] = None,
 ) -> bool:
     """Decide whether a feature is drawn.
+
+    ``instance`` is the feature's instance (``ids.feature_instances``), which a
+    `hash` color rule that keeps an unselected feature type drawn may name.
 
     A ``feature_override`` (identity row) decides before the table rules: ``on``
     draws, ``off`` hides, and ``exclude_matching`` skips the rules and keeps the
@@ -326,6 +330,7 @@ def should_render_feature(
                 feature,
                 specific_color_rules,
                 record_id=record_id,
+                instance=instance,
             )
 
     rule = None if mode == "exclude_matching" else _first_matching_visibility_rule(

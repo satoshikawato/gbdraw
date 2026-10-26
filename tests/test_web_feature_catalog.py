@@ -324,18 +324,21 @@ def test_feature_catalog_uses_one_read_only_svg_index(
                 "type": "CDS",
                 "biologicalFeatureId": "multi",
                 "recordKey": "record-a",
+                "instance": "multi@record-a",
                 "sourceFeatureIndex": 0,
             },
             {
                 "type": "gene",
                 "biologicalFeatureId": "suffix",
                 "recordKey": "record-b",
+                "instance": "suffix@record-b",
                 "sourceFeatureIndex": 1,
             },
             {
                 "type": "misc_feature",
                 "biologicalFeatureId": "fallback",
                 "recordKey": "record-b",
+                "instance": "fallback@record-b",
                 "sourceFeatureIndex": 2,
             },
         ],
@@ -1141,6 +1144,25 @@ def test_feature_catalog_disambiguates_identical_biological_feature_ids() -> Non
         feature["sourceFeatureIndex"]
         for feature in item["biologicalFeatures"]
     ] == [4, 7]
+
+
+def test_feature_catalog_writes_the_feature_instance_of_each_hashed_feature() -> None:
+    # PD-OI-069 revision 2: "This feature only" names this value; the Web reads it.
+    context = InteractiveSvgContext(
+        record_keys=("linear-seq-a", "linear-seq-b"),
+        biological_features=(
+            {"stable_feature_id": "fsame", "record_idx": 0, "feature_index": 4, "type": "CDS"},
+            {"stable_feature_id": "fsame", "record_idx": 1, "feature_index": 4, "type": "CDS"},
+            {"stable_feature_id": "fsame", "record_idx": 1, "feature_index": 7, "type": "CDS"},
+            {"record_idx": 1, "feature_index": 9, "type": "CDS"},
+        ),
+    )
+    item = build_feature_catalog_item(
+        '<svg xmlns="http://www.w3.org/2000/svg" />', context, result_index=0, result_name="empty.svg"
+    )
+    assert [feature.get("instance") for feature in item["biologicalFeatures"]] == [
+        "fsame@linear-seq-a", "fsame~4@linear-seq-b", "fsame~7@linear-seq-b", None
+    ]
 
 
 def test_feature_catalog_preserves_duplicate_location_source_identity() -> None:
