@@ -47,6 +47,10 @@
  * @typedef {{ readonly minVersion: number, readonly versions: readonly number[], readonly root: string }} ContractBand
  * @typedef {{ readonly bands: readonly ContractBand[], readonly types: Readonly<Record<string, ContractShape>> }} BandedContractDescription
  */
+/**
+ * A description with one root per key: a value of `key` is checked against `types[roots[key]]`.
+ * @typedef {{ readonly roots: Readonly<Record<string, string>>, readonly types: Readonly<Record<string, ContractShape>> }} RootedContractDescription
+ */
 
 /** Why a value leaves its shape: the codes of Python's `ViolationReason`. */
 export const SHAPE_VIOLATION_REASONS = Object.freeze(/** @type {const} */ ([
