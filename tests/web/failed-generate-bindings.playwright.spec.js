@@ -3,12 +3,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
-const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const { answerChoicePrompt, answerSessionTitle, openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
-const loadedAnnotationCount = JSON.parse(require('node:fs').readFileSync(fixture, 'utf8'))
-  .modes.circular.config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
+const loadedAnnotationCount = shownSavedDrawing(JSON.parse(require('node:fs').readFileSync(fixture, 'utf8')))
+  .config.annotationSets.reduce((total, set) => total + set.annotations.length, 0);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const input = 'input[accept^=".json,"]';
 
