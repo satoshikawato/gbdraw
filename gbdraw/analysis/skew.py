@@ -8,6 +8,7 @@ from typing import Any, Generator
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
+from Bio.Seq import MutableSeq, Seq
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.mode_profiles import validate_dinucleotide
@@ -45,14 +46,41 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
         yield start, out_seq
 
 
+# A gap between positions at most this long is counted by ``bytes.count``
+# (no call overhead per gap); a longer gap by a numpy pass over chunks of at
+# most ``_COUNT_CHUNK`` bases, so the mask never exceeds the chunk.
+_COUNT_BYTES_GAP = 4096
+_COUNT_CHUNK = 1 << 20
+
+
 def _prefix_counts_at(seq_bytes: bytes, base: int, positions: np.ndarray) -> np.ndarray:
     """``seq_bytes[:p].count(base)`` for each position ``p`` (0 to n).
 
-    The base's positions are found once and the counts read at the given
-    positions only, so no count array as long as the sequence is built.
+    The positions are visited in order and the bases between neighbouring
+    positions counted, so the extra memory is one entry per position plus at
+    most ``_COUNT_CHUNK`` mask bytes, never a list of the base's occurrences or
+    a mask as long as the sequence. Counts are Python ints and int64, so a
+    32-bit ``intp`` (Pyodide) cannot overflow.
     """
-    occurrences = np.flatnonzero(np.frombuffer(seq_bytes, dtype=np.uint8) == base)
-    return np.searchsorted(occurrences, positions, side="left").astype(np.int64)
+    sequence = np.frombuffer(seq_bytes, dtype=np.uint8)
+    base_byte = bytes((base,))
+    order = np.argsort(positions, kind="stable")
+    running = 0
+    previous = 0
+    visited: list[int] = []
+    for position in positions[order].tolist():
+        while position > previous:
+            if position - previous <= _COUNT_BYTES_GAP:
+                running += seq_bytes.count(base_byte, previous, position)
+                previous = position
+            else:
+                stop = min(position, previous + _COUNT_CHUNK)
+                running += int(np.count_nonzero(sequence[previous:stop] == base))
+                previous = stop
+        visited.append(running)
+    prefix = np.empty(len(positions), dtype=np.int64)
+    prefix[order] = visited
+    return prefix
 
 
 def window_base_counts(
@@ -83,17 +111,22 @@ def window_base_counts(
     return counts
 
 
-def counted_sequence(seq: object) -> str:
-    """The bases as every GC and skew count reads them.
+_COUNTED_BASES = bytes.maketrans(b"abcdefghijklmnopqrstuvwxyzUu", b"ABCDEFGHIJKLMNOPQRSTUVWXYZTT")
+
+
+def counted_sequence(seq: object) -> bytes:
+    """The bases as every GC and skew count reads them, as one bytes copy.
 
     Case is ignored, so soft-masked FASTA bases count, and U is counted as T
-    (D-26).
+    (D-26). The copy is made once by ``bytes.translate``; callers count it
+    directly and do not encode a str of it.
     """
 
-    return str(seq).upper().replace("U", "T")
+    raw = bytes(seq) if isinstance(seq, (Seq, MutableSeq, bytes, bytearray)) else str(seq).encode("ascii")
+    return raw.translate(_COUNTED_BASES)
 
 
-def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, str]:
+def counted_dinucleotide(record: SeqRecord, nt: str) -> tuple[str, str, str, bytes]:
     """Return the display pair, the two counted bases, and the counted sequence.
 
     U is the same base as T (D-26): it is counted as T in both the pair and the
@@ -109,8 +142,8 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
     """
     Calculates dinucleotide skew and content in a DNA sequence, returning a DataFrame.
     """
-    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
-    seq_length = len(seq_str)
+    nt, nt_1, nt_2, seq_bytes = counted_dinucleotide(record, nt)
+    seq_length = len(seq_bytes)
     content_legend = f"{nt} content"
     skew_legend = f"{nt} skew"
     cumulative_skew_legend = f"Cumulative {nt} skew, normalized"
@@ -120,7 +153,6 @@ def skew_df(record: SeqRecord, window: int, step: int, nt: str) -> DataFrame:
             columns=[content_legend, skew_legend, cumulative_skew_legend],
         )
 
-    seq_bytes = seq_str.encode("ascii")
     starts = np.arange(0, seq_length, step, dtype=np.int64)
     base1_counts = window_base_counts(seq_bytes, ord(nt_1), starts=starts, window=window)
     base2_counts = window_base_counts(seq_bytes, ord(nt_2), starts=starts, window=window)
