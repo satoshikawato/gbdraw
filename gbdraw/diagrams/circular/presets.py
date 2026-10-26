@@ -330,13 +330,25 @@ def circular_radial_plan_for_preset(
     preset: str,
     context: CircularPresetContext,
 ) -> CircularPresetRadialPlan:
-    slots = tuple(circular_track_slots_for_preset(preset, context))
+    """The default stack: the preset's rows, its numeric rows on their preset lanes with an Auto width.
+
+    The preset's width of a numeric row on a preset lane is an Auto width (``auto_compress``), as on a blank
+    built-in slot of a user stack (``_overlay_slot_on_preset_lane``), so the layout tells a width the user typed
+    (``compress`` off) from the preset's (OV-1853). The row keeps the lane as its radius, so it never reflows with
+    the Auto rows (GX-19).
+    """
+
+    preset_slots = tuple(circular_track_slots_for_preset(preset, context))
     preferred_ids = frozenset(
         slot.id
-        for slot in slots
+        for slot in preset_slots
         if slot.renderer in {"depth", "dinucleotide_content", "dinucleotide_skew"}
         and slot.side == "inside"
         and slot.radius is not None
+    )
+    slots = tuple(
+        _internal_circular_track_slot(slot, auto_compress=True) if slot.id in preferred_ids else slot
+        for slot in preset_slots
     )
     return CircularPresetRadialPlan(
         slots=slots,

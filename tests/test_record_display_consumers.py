@@ -159,7 +159,9 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                           "position": range(1, 10001),
                           "depth": [10.] * 2500 + [30.] * 2500 + [80.] * 2500 + [60.] * 2500})
     depth_before = depth.copy(deep=True)
-    request = _request(mode, _record(), start, reverse, {"canvas.show_gc": True, "canvas.show_skew": True})
+    # A 12 pt definition stays clear of the tracks, so no fit row draws the figure again with other radii.
+    request = _request(mode, _record(), start, reverse, {"canvas.show_gc": True, "canvas.show_skew": True,
+                                                         "objects.definition.circular.font_size": 12})
     request = replace(request, options=replace(request.options, depth_table=depth, depth_window=2500, depth_step=2500))
     _, root = _svg(request)
     # Three series (GC content, GC skew, depth); the Circular definition check reads the GC content and skew

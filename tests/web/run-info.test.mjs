@@ -1188,6 +1188,23 @@ test('a Linear slot without a dinucleotide takes the request\'s in the source re
   assert.match(tokens.find((token) => token.startsWith('skew:')) || '', /[@,]nt=AT(,|$)/, tokens.join(' | '));
 });
 
+// PD-OI-078 (rule L): a request that carries the track narrowing settings (a Python
+// `config_overrides` Session) writes them as the CLI flags that set them.
+test('the Circular track narrowing settings have their CLI flags in the Source recipe', async () => {
+  for (const [narrowing, minPx] of [[false, 44], [true, 30]]) {
+    const session = structuredClone(circularGallerySession);
+    Object.assign(session.renderRequest.diagramOptions.configOverrides, {
+      'canvas.circular.track_narrowing': narrowing,
+      'canvas.circular.track_narrowing_min_px': minPx
+    });
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    assert.equal(recipe.args[recipe.args.indexOf('--track_narrowing_min_px') + 1], String(minPx), JSON.stringify(recipe.args));
+    assert.equal(recipe.args.includes('--no_track_narrowing'), !narrowing);
+    await assertCliParserAccepts(recipe);
+  }
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {

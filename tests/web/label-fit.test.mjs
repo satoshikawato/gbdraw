@@ -27,8 +27,8 @@ const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit
 const drawing = modeDrawing(state, 'circular');
 const Y_OFFSET = 'labels.unified_adjustment.outer_labels.y_radius_offset';
 const row = (kind, status, extra = {}) => ({
-  kind, title: kind.replace(/_/g, ' '), status, values: null, settings: [], canvasSize: null, reason: null, note: null,
-  ...extra
+  kind, title: kind.replace(/_/g, ' '), status, values: null, trackOptions: {}, settings: [], canvasSize: null,
+  reason: null, note: null, ...extra
 });
 const foundRow = (kind, value) => row(kind, 'found', {
   values: { [Y_OFFSET]: value }, settings: [{ name: 'Outer Y Offset', unit: '', value }],
@@ -37,7 +37,7 @@ const foundRow = (kind, value) => row(kind, 'found', {
 const report = (rows, { drawn = false } = {}) => ({
   schema: 1, drawn, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0, regionOverlaps: 0,
   notice: drawn ? ['Leader lines cross (5 pairs).'] : [],
-  records: [{ recordId: 'NC_1', labelKind: 'circular_outer', labelKindTitle: 'outer labels',
+  records: [{ recordId: 'NC_1', recordIndex: 0, labelKind: 'circular_outer', labelKindTitle: 'outer labels',
     labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
     regionOverlaps: 0, refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
   rows
@@ -120,7 +120,7 @@ test('a malformed report or row is RESULT_INVALID', () => {
 const regionReport = () => ({
   ...report([], { drawn: true }), crossingPairs: 0, regionOverlaps: 1,
   notice: ['Region labels overlap other labels or lines (1).'],
-  records: [{ recordId: 'adjacent', labelKind: 'linear_region', labelKindTitle: 'region label', labelCount: 1,
+  records: [{ recordId: 'adjacent', recordIndex: null, labelKind: 'linear_region', labelKindTitle: 'region label', labelCount: 1,
     fontSize: 10, overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 1, refused: false,
     counts: '1 region label overlap' }]
 });
@@ -164,7 +164,18 @@ test('a row\'s config paths become the draft fields the request mapping projects
   assert.deepEqual(draft({ 'objects.definition.circular.font_size': 16.5 }), { form: {}, adv: { def_font_size: 16.5 } });
   assert.deepEqual(draftFieldsForConfigValues({ 'canvas.resolve_overlaps': true }, 'linear', modeDrawing(state, 'linear').adv),
     { form: {}, adv: { resolve_overlaps: true } });
+  // "Narrow the inside tracks" (PD-OI-097, N-a) sets the Circular Center Reserved Radius, a track option of the
+  // request (by its request name, not a config path) that the request reads from the same draft field; no new
+  // Session field.
+  assert.deepEqual(draftFieldsForConfigValues({}, 'circular', adv, { centerReservedRadius: 231.99 }),
+    { form: {}, adv: { center_reserved_radius: 231.99 } });
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
+  assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv, { centerReservedRadius: '231.99' }), unknown);
+  assert.throws(() => draftFieldsForConfigValues({}, 'linear', modeDrawing(state, 'linear').adv,
+    { centerReservedRadius: 231.99 }), unknown);
+  assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv, { circularTrackAxisIndex: 1 }), unknown);
+  // The old config-path spelling is no row value.
+  assert.throws(() => draft({ 'tracks.center_reserved_radius': 231.99 }), unknown);
   assert.throws(() => draftFieldsForConfigValues({ 'labels.unknown': 1 }, 'circular', adv), unknown);
   assert.throws(() => draftFieldsForConfigValues({}, 'circular', adv), unknown);
 });
@@ -175,10 +186,14 @@ test('a row may write exactly the config paths Python\'s rows send, in the mode 
   const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
   const constants = new Map([...fit.matchAll(/^([A-Z_]+_PATHS?) = (.+)$/gm)]
     .map(([, name, value]) => [name, [...value.matchAll(/"([^"]+)"/g)].map(([, path]) => path)]));
-  const { SEPARATE_FEATURES_PATH: [separate], FONT_SIZE_PATHS: fontSizes, ...single } = Object.fromEntries(constants);
+  const {
+    SEPARATE_FEATURES_PATH: [separate], FONT_SIZE_PATHS: fontSizes, CENTER_RESERVED_RADIUS_PATH: [trackOption], ...single
+  } = Object.fromEntries(constants);
   assert.equal(fontSizes.length, 2);
   const sample = { [separate]: true, 'labels.circular.scope': 'outer', 'labels.circular.placement': 'radial' };
   const unknown = (error) => error.code === 'INPUT_INVALID' && error.context.reason === 'UNKNOWN_CONFIG_PATH';
+  // Python's row keeps the track option's own key; the Web payload sends it as a request track option instead.
+  assert.throws(() => applyLabelFitValues(modeDrawing(state, 'circular'), { [trackOption]: 1.1 }, 'circular'), unknown);
   // Circular rows: every path Python names; Linear rows: separate overlapping features only.
   applyLabelFitValues(modeDrawing(state, 'circular'), Object.fromEntries(fontSizes.map((path) => [path, 12])), 'circular');
   for (const [path] of Object.values(single)) {
@@ -200,12 +215,14 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
   const steps = [];
   const writes = [];
   const generates = [];
+  const shown = [];
   const pending = { value: false };
   const closes = [];
   const dialog = createLabelFitDialog({
+    showRecordText: (recordId) => { shown.push(recordId); return true; },
     reactive: (value) => value,
     computeRow,
-    writeRowSettings: (values, written) => { writes.push({ values, drawing: written }); onWrite(); },
+    writeRowSettings: (settings, written) => { writes.push({ ...settings, drawing: written }); onWrite(); },
     withHistory: (label, handler, cancel) => async (choice) => {
       if (choice === 'cancel') return cancel();
       steps.push(label());
@@ -217,8 +234,58 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
     runAnalysis: async () => { generates.push(true); },
     errorSummary: () => 'The row could not be computed.'
   });
-  return { dialog, steps, writes, generates, pending };
+  return { dialog, steps, writes, generates, shown, pending };
 };
+
+const definitionRecord = (recordId, recordIndex) => ({
+  recordId, recordIndex, labelKind: 'circular_definition', labelKindTitle: 'definition lines', labelCount: 1, fontSize: 18,
+  overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false,
+  counts: '1 line overlaps a track'
+});
+
+test('Edit Species / Strain closes the dialog, applies nothing, and shows that record\'s field by its index (E-b)', async () => {
+  const { dialog, steps, writes, generates, shown } = dialogHarness();
+  const drawn = report([foundRow('smaller_definition_font', 16.5)], { drawn: true });
+  // Two records of a Multi-Record Canvas may share a record ID: each has its own button, by its drawn index.
+  drawn.records = [...drawn.records, definitionRecord('NC_2', 1), definitionRecord('NC_2', 2)];
+  await dialog.openLabelFitDialog(normalizeReport(drawn), { mode: 'circular' });
+  // One button per record whose definition is over a track (not the outer-label record).
+  assert.deepEqual(dialog.labelFitDialog.definitionRecords, [{ recordIndex: 1, recordId: 'NC_2' }, { recordIndex: 2, recordId: 'NC_2' }]);
+  assert.equal(await dialog.editLabelFitRecordText(2), true);
+  assert.deepEqual(shown, [2]);
+  assert.equal(dialog.labelFitDialog.show, false);
+  assert.deepEqual([steps, writes, generates], [[], [], []]);
+  // A report without a definition record offers no such button.
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
+  assert.deepEqual(dialog.labelFitDialog.definitionRecords, []);
+  // Nor does a Generate that drew nothing: no drawn definition to edit (the preview may show an older figure).
+  const failed = report([foundRow('smaller_font', 1.2)]);
+  failed.records = [...failed.records, definitionRecord('NC_2', 1)];
+  await dialog.openLabelFitDialog(normalizeReport(failed), { mode: 'circular' });
+  assert.deepEqual(dialog.labelFitDialog.definitionRecords, []);
+});
+
+test('a report record\'s index is a drawn record index or null, never missing', () => {
+  for (const recordIndex of [undefined, -1, 1.5, '0']) {
+    const value = report([], { drawn: true });
+    value.records = [{ ...value.records[0], recordIndex }];
+    assert.throws(() => normalizeReport(value), (error) => error.code === 'RESULT_INVALID', String(recordIndex));
+  }
+  const linear = report([], { drawn: true });
+  linear.records = [{ ...linear.records[0], recordIndex: null }];
+  assert.equal(normalizeReport(linear).records[0].recordIndex, null);
+});
+
+test('over a drawn figure the dialog\'s Cancel reads Keep as drawn (K-a), and Edit Species / Strain is a button per record', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
+  const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
+  assert.match(markup, /data-label-fit-keep @click="resolveLabelFitChoice\('cancel'\)"[^>]*>\{\{ labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
+  assert.match(markup, /v-for="record in labelFitDialog\.definitionRecords" :key="record\.recordIndex"[^>]*:data-label-fit-edit-record="record\.recordIndex" @click="editLabelFitRecordText\(record\.recordIndex\)"/);
+  const setup = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
+  assert.match(setup, /showRecordText: \(recordIndex\) => previewItemPopup\.showRecordTextSettings\(recordIndex\)/);
+});
 
 test('while Apply writes, the dialog is busy and Escape (its Cancel) does nothing (PD-OI-088)', async () => {
   const { readFile } = await import('node:fs/promises');
@@ -287,7 +354,7 @@ test('Apply writes the chosen row as one History step, closes, and Generates; Ca
   assert.equal(dialog.labelFitDialog.selectedKind, 'smaller_font');
   await dialog.resolveLabelFitChoice('apply');
   assert.deepEqual(steps, ['Fit labels: smaller font']);
-  assert.deepEqual(writes, [{ values: { [Y_OFFSET]: 1.2 }, drawing }]);
+  assert.deepEqual(writes, [{ values: { [Y_OFFSET]: 1.2 }, trackOptions: {}, drawing }]);
   assert.equal(generates.length, 1);
   assert.equal(dialog.labelFitDialog.show, false);
 
@@ -310,7 +377,7 @@ test('a row that leaves crossing leaders is offered after the rows that fit, and
   assert.equal(dialog.labelFitDialog.selectedKind, 'separate_features');
   await dialog.resolveLabelFitChoice('apply');
   assert.deepEqual(steps, ['Fit labels: separate features']);
-  assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, drawing }]);
+  assert.deepEqual(writes, [{ values: { 'canvas.resolve_overlaps': true }, trackOptions: {}, drawing }]);
   assert.equal(generates.length, 1);
 
   // A row that fits comes first in Python's order and is preselected.

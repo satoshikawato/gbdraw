@@ -71,6 +71,28 @@ write-up of a release.
   `role`, `tabindex` and `aria-label` ("Pairwise match N", translated) on every comparison band. The preview now
   marks the bands it makes buttons and saving and export remove them by that mark, in every language. Circular
   conservation bands, which kept these attributes in every language, now lose them too.
+- Changed: the Circular centre definition's lines are never wrapped: the
+  wrap of the organism name line when the tracks did not fit is gone. The GC
+  content, GC skew and Depth rows of the default stack now start right under
+  the tick labels. When the definition reaches the inside tracks, they first
+  move outward at their widths; if that does not clear it, the tracks with an
+  Auto width narrow, each to no less than 30 px
+  (`canvas.circular.track_narrowing_min_px`, `--track_narrowing_min_px`), only
+  when that clears the definition; otherwise they keep their widths.
+  `--no_track_narrowing` (`canvas.circular.track_narrowing = false`) turns the
+  narrowing off. A width you set (`--gc_content_width`, `w=`, a Web **Width**)
+  is never narrowed for the definition (OV-1853), and the preset rows' widths
+  are Auto widths. A line that still reaches the tracks is drawn on one line
+  over them; when its ink touches a drawn track, the warning offers a smaller definition font (the size at which every line fits
+  on one line), narrower inside tracks (`--center_reserved_radius`, when the
+  tracks were not narrowed already; the row says when text still overlaps) and
+  a shorter Species or Strain, such as `MjeNMV` for "Marsupenaeus japonicus
+  endogenous nimavirus". The `DEFINITION_RESERVED` track failure is gone; an
+  explicit `--center_reserved_radius` still narrows the tracks as before, a set
+  width included. In the Web app's **Labels do not fit** dialog, **Edit
+  Species / Strain…** shows that record's name field, and Cancel reads **Keep
+  as drawn** over a drawn figure. A label-fit warning for one record now names
+  that record, so records drawn to separate files can be told apart (OV-1836).
 - SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
   `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
   within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a

@@ -122,7 +122,6 @@ const REASONS = Object.freeze({
   NONE_DRAWN: 'Turn on at least one record to draw.',
   REGION_FORMAT: 'Use record_id:start-end[:rc] or #<number>:start-end[:rc].',
   CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it on the other side of the Axis.',
-  DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
   OVERLAY_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use Track Layout Features on axis with Separate Strands off.',

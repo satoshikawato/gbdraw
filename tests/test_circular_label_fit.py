@@ -87,6 +87,7 @@ def _layout(
 
     return CircularLabelLayout(
         record_id=record_id,
+        record_index=0,
         placement="horizontal",
         font_size=14.0,
         label_counts={"circular_outer": 111},
@@ -246,7 +247,7 @@ def test_crossing_leaders_alone_warn_and_return_the_report() -> None:
     ]
     assert caught[0].message.report is report
     assert str(caught[0].message).startswith(
-        "111 outer labels do not fit at 14 pt (0 label pairs overlap, 4 leader pairs cross). Drawn anyway.\n"
+        "lambda: 111 outer labels do not fit at 14 pt (0 label pairs overlap, 4 leader pairs cross). Drawn anyway.\n"
     )
 
 
@@ -270,7 +271,7 @@ def test_wording_lists_fitting_rows_and_names_the_others() -> None:
     )
 
     assert format_label_fit_report(report) == (
-        "111 outer labels do not fit at 14 pt (20 label pairs overlap, 21 leader pairs cross). "
+        "P1: 111 outer labels do not fit at 14 pt (20 label pairs overlap, 21 leader pairs cross). "
         "Nothing was drawn.\n"
         "Run again with one of:\n"
         "  --outer_label_x_radius_offset 1.15 --outer_label_y_radius_offset 1.15   (outward, both directions)\n"
@@ -346,6 +347,7 @@ def _inner_layout(*, placement: CircularLabelPlacement = "horizontal", refused: 
     kind = "circular_inner" if inner else "circular_outer"
     return CircularLabelLayout(
         record_id="P1",
+        record_index=0,
         placement=placement,
         font_size=14.0,
         label_counts=counts,
@@ -395,7 +397,7 @@ def test_inner_rows_verify_the_switches_first_then_scan_the_font_down() -> None:
     assert [row.status for row in rows] == ["found", "not_found", "not_found"]
     assert rows[1].reason == "Labels still do not fit (1 label pair overlaps, 0 leader pairs cross)"
     assert str(raised.value) == (
-        "54 inner labels do not fit at 14 pt (3 label pairs overlap, 2 leader pairs cross, "
+        "P1: 54 inner labels do not fit at 14 pt (3 label pairs overlap, 2 leader pairs cross, "
         "1 label covers the definition text). Nothing was drawn.\n"
         "Run again with one of:\n"
         "  --label_font_size 12   (smaller font)\n"
@@ -416,7 +418,7 @@ def test_outer_levers_do_not_move_inner_labels() -> None:
     rows = {row.kind: row for row in raised.value.report.rows}
     # Nothing was drawn, so the definition row is not offered (D-12).
     assert list(rows) == [
-        kind for kind in circular_fit_module.ROW_KINDS if kind not in {"separate_features", "smaller_definition_font"}
+        kind for kind in circular_fit_module.ROW_KINDS if kind not in {"separate_features", "smaller_definition_font", "narrow_tracks"}
     ]
     assert rows["labels_out"].status == "found"
     # The outer levers do not move embedded labels either (OV-725).
@@ -437,7 +439,7 @@ def test_radial_labels_without_room_stop_and_offer_the_font_row_only_without_inn
     assert record.refused and record.label_kind == "circular_outer"
     assert [row.kind for row in report.rows] == ["smaller_font"]
     assert str(raised.value).startswith(
-        "80 radial outer labels do not fit at 14 pt (they need more room than the circular tracks leave). "
+        "P1: 80 radial outer labels do not fit at 14 pt (they need more room than the circular tracks leave). "
         "Nothing was drawn.\n"
     )
 
@@ -517,7 +519,8 @@ def test_overlapping_embedded_labels_offer_to_separate_the_features() -> None:
 @pytest.mark.circular
 def test_separated_features_that_leave_no_track_room_are_a_row_not_found(tmp_path: Path) -> None:
     """OV-1266: lambda at 12 pt with gene names first overprints two embedded labels; separating the features
-    needs six lanes the inside tracks cannot hold, so that row is not found and the labels ask (E-ROW)."""
+    needs six lanes the inside tracks cannot hold, so that row is not found and the labels ask (E-ROW). The
+    definition no longer reserves the centre on its own (DF-D02), so the run reserves it with center_reserved_radius."""
 
     priority = tmp_path / "priority.tsv"
     priority.write_text("CDS\tgene,product,locus_tag\n", encoding="utf-8")
@@ -525,6 +528,7 @@ def test_separated_features_that_leave_no_track_room_are_a_row_not_found(tmp_pat
         "--gbk", str(TEST_INPUTS / "NC_001416.gb"),
         "--separate_strands", "--track_type", "tuckin", "-l", "left",
         "--labels", "out", "--qualifier_priority", str(priority), "--label_font_size", "12",
+        "--center_reserved_radius", "150",
         "-o", str(tmp_path / "out"), "-f", "svg",
     ]
 
@@ -692,7 +696,7 @@ def test_linear_labels_on_stacked_features_stop_with_the_separate_features_row()
     with pytest.raises(LabelsDoNotFitError) as raised:
         check_linear_label_fit(label_fit, verify, features_separated=False)
 
-    assert str(raised.value).startswith("3 Linear labels do not fit at 8 pt (1 label pair overlaps")
+    assert str(raised.value).startswith("rec: 3 Linear labels do not fit at 8 pt (1 label pair overlaps")
     (row,) = raised.value.report.rows
     assert (row.kind, row.status, row.values) == ("separate_features", "found", {SEPARATE_FEATURES_PATH: True})
     assert calls == [{SEPARATE_FEATURES_PATH: True}]
@@ -740,7 +744,7 @@ def test_region_labels_over_other_labels_warn_with_no_fix_and_never_stop() -> No
         report = check_linear_label_fit(label_fit, _no_values, features_separated=False)
     assert report is not None and report.drawn and report.region_overlaps == 7 and report.rows == ()
     assert label_fit_notice(report) == ("Region labels overlap other labels or lines (7).",)
-    assert str(caught[0].message) == "3 region labels do not fit at 14 pt (7 region label overlaps). Drawn anyway."
+    assert str(caught[0].message) == "rec: 3 region labels do not fit at 14 pt (7 region label overlaps). Drawn anyway."
 
 
 def test_feature_label_rows_are_kept_only_when_the_region_label_that_asked_for_them_clears() -> None:
@@ -804,7 +808,7 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     assert output.with_suffix(".svg").is_file()
     stderr = capsys.readouterr().err
     assert stderr.startswith(
-        "WARNING: 71 outer labels do not fit at 14 pt (0 label pairs overlap, 2 leader pairs cross). "
+        "WARNING: NC_001416.1: 71 outer labels do not fit at 14 pt (0 label pairs overlap, 2 leader pairs cross). "
         "Drawn anyway.\nRun again with one of:\n"
     )
     assert "--outer_label_y_radius_offset 1.025" in stderr

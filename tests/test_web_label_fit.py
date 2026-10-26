@@ -14,6 +14,7 @@ from tests.utils.web_markup import read_english_index
 from gbdraw.api import (
     CircularDiagramOptions,
     CircularDiagramRequest,
+    CircularRequestTrackOptions,
     InMemoryRecordSource,
     RecordInput,
     RenderOutputRequest,
@@ -21,6 +22,7 @@ from gbdraw.api import (
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.circular_fit import ROW_KINDS
 from gbdraw.labels.fit import (
+    DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
     SCOPE_PATH,
@@ -65,7 +67,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["schema"] == 1 and payload["drawn"] is False
     assert (payload["overlapPairs"], payload["crossingPairs"]) == (20, 21)
     assert payload["records"] == [{
-        "recordId": "rec-1", "labelKind": "circular_outer", "labelKindTitle": "outer labels",
+        "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
         "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
@@ -73,7 +75,7 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     vertical, font, tighter, combination = payload["rows"]
     assert vertical == {
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
-        "values": {Y_OFFSET_PATH: 1.15},
+        "values": {Y_OFFSET_PATH: 1.15}, "trackOptions": {},
         "settings": [{"name": "Outer Y Offset", "unit": "", "value": 1.15}],
         "canvasSize": {"width": 1708.0, "height": 1130.0}, "reason": None, "note": None,
     }
@@ -268,7 +270,9 @@ def test_overprinted_embedded_labels_offer_only_the_resolve_overlaps_control(tmp
     assert found[0]["settings"] == [{"name": "Resolve Overlaps", "unit": "", "value": "On"}]
 
     fitted = _web_render(_sars_request({SEPARATE_FEATURES_PATH: True}), tmp_path / "fitted")
-    assert fitted["metadata"]["labelFitReports"] == []
+    # The labels fit. The definition, never wrapped, is drawn over the tracks with its notice (DF-D02, DF-D25).
+    (entry,) = fitted["metadata"]["labelFitReports"]
+    assert {record["labelKind"] for record in entry["report"]["records"]} == {"circular_definition"}
 
 
 def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_draws_with_the_notice(tmp_path) -> None:
@@ -294,6 +298,67 @@ def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_dra
     (entry,) = drawn["metadata"]["labelFitReports"]
     assert entry["report"]["drawn"] is True
     assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 15)
+
+
+def _mers_request(center_reserved_radius: float | None = None, *, track_narrowing: bool = True) -> dict:
+    record = SeqIO.read(str(TEST_INPUTS / "MERS-CoV.gbk"), "genbank")
+    return drawing_view(build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(
+                tracks=CircularRequestTrackOptions(center_reserved_radius=center_reserved_radius),
+                config_overrides=None if track_narrowing else {"canvas.circular.track_narrowing": False},
+            ),
+            output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
+        )
+    ).to_dict())
+
+
+def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_narrows_them(tmp_path) -> None:
+    """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. By default the inside tracks are
+    narrowed around it already (DF-D36), so only the font row is offered. With track narrowing off, the font row
+    offers the size at which that line clears the tracks; the narrow row writes the radius the definition reserves
+    as Center Reserved Radius and says the text still overlaps; drawn with it, the figure still has the notice."""
+
+    (narrowed_by_default,) = _web_render(_mers_request(), tmp_path / "default")["metadata"]["labelFitReports"]
+    assert narrowed_by_default["report"]["drawn"] is True
+    assert [row["kind"] for row in narrowed_by_default["report"]["rows"]] == ["smaller_definition_font"]
+
+    searches = LabelFitRowSearches()
+    (entry,) = _web_render(_mers_request(track_narrowing=False), tmp_path, searches)["metadata"]["labelFitReports"]
+    assert entry["report"]["drawn"] is True
+    # The record is named by its drawn index too: "Edit Species / Strain…" finds its definition by it.
+    assert [(record["recordId"], record["recordIndex"], record["labelKind"]) for record in entry["report"]["records"]] == [
+        ("NC_019843.3", 0, "circular_definition")
+    ]
+    assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
+    font = searches.row(entry["rowToken"], "smaller_definition_font")
+    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 12.5})
+    narrow = searches.row(entry["rowToken"], "narrow_tracks")
+    # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
+    assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (
+        "found_with_notice", {}, {"centerReservedRadius": 231.99}
+    )
+    assert font["trackOptions"] == {}
+    assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 231.99}]
+    assert narrow["note"] == "1 definition line still overlaps a track"
+
+    (narrowed,) = _web_render(_mers_request(231.99, track_narrowing=False), tmp_path / "narrowed")["metadata"][
+        "labelFitReports"
+    ]
+    assert narrowed["report"]["notice"] == ["The definition text overlaps a track (1 line)."]
+    # An explicit Center Reserved Radius is never offered again: only the font row is left.
+    assert [row["kind"] for row in narrowed["report"]["rows"]] == ["smaller_definition_font"]
+
+
+@pytest.mark.parametrize("radius", [231.99, 100.0])
+def test_an_explicit_center_reserved_radius_leaves_out_the_narrow_row(tmp_path, radius: float) -> None:
+    """PD-OI-097 (N-a): the narrow row writes ``center_reserved_radius`` only when none is set; with one set (the
+    row's own value or a smaller one), the definition over a track offers the smaller font alone."""
+
+    (entry,) = _web_render(_mers_request(radius), tmp_path)["metadata"]["labelFitReports"]
+    assert entry["report"]["drawn"] is True
+    assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font"]
 
 
 def test_web_render_draws_crossing_leaders_with_counts_only_and_computes_rows_later(tmp_path) -> None:
@@ -395,12 +460,14 @@ def _write_input_files(directory: Path, record) -> dict[str, Path]:
     return paths
 
 
-def _crossing_options_with_files(paths: dict[str, Path]) -> CircularDiagramOptions:
+def _crossing_options_with_files(
+    paths: dict[str, Path], *, extra_overrides: dict[str, object] | None = None
+) -> CircularDiagramOptions:
     from gbdraw.annotations.models import AnnotationOptions
     from gbdraw.api.options import ColorOptions
 
     return CircularDiagramOptions(
-        config_overrides={**CROSSING_OVERRIDES, "canvas.show_depth": True},
+        config_overrides={**CROSSING_OVERRIDES, "canvas.show_depth": True, **(extra_overrides or {})},
         colors=ColorOptions(
             color_table_file=str(paths["colors"]), default_colors_file=str(paths["default_colors"])
         ),
@@ -464,6 +531,11 @@ def test_web_rows_computed_after_the_staged_depth_file_is_gone_match_the_rows_wi
         assert gone["status"] != "not_computed"
 
 
+# Two lambda records drawn together: a 12 pt definition stays clear of their tracks, so the rows are the label rows
+# only (the definition rows redraw both records per font step and would triple the run, DF-D02).
+TWO_RECORD_OVERRIDES: dict[str, object] = {"objects.definition.circular.font_size": 12}
+
+
 def _two_records_with_files(directory: Path) -> tuple[list[Any], dict[str, Path]]:
     import copy
 
@@ -497,13 +569,16 @@ def test_rows_of_two_circular_records_computed_after_every_input_file_is_gone(tm
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             drawings[name] = build_circular_multi_diagram(
-                records, options=_crossing_options_with_files(paths), _label_fit_warn_search_seconds=0.0
+                records,
+                options=_crossing_options_with_files(paths, extra_overrides=TWO_RECORD_OVERRIDES),
+                _label_fit_warn_search_seconds=0.0,
             )
     for path in (tmp_path / "gone").iterdir():
         path.unlink()
 
     report = label_fit_report(drawings["gone"])
-    assert report is not None and report.drawn and len(report.records) == 2 and report.rows
+    assert report is not None and report.drawn and report.rows
+    assert {record.record_id for record in report.records} == {"LAMBDA_A", "LAMBDA_B"}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         for row in report.rows:
@@ -519,7 +594,7 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
     document = drawing_view(build_session_document(
         CircularDiagramRequest(
             records=tuple(RecordInput(source=InMemoryRecordSource(record)) for record in records),
-            options=_crossing_options_with_files(paths),
+            options=_crossing_options_with_files(paths, extra_overrides=TWO_RECORD_OVERRIDES),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
     ).to_dict())
@@ -530,7 +605,7 @@ def test_web_rows_of_two_circular_records_compute_after_their_input_files_are_go
     shutil.rmtree(tmp_path / "gone" / "resources")
     shutil.rmtree(tmp_path / "inputs")
 
-    assert len(entries["gone"]["report"]["records"]) == 2
+    assert {record["recordId"] for record in entries["gone"]["report"]["records"]} == {"LAMBDA_A", "LAMBDA_B"}
     kinds = [row["kind"] for row in entries["gone"]["report"]["rows"]]
     assert kinds
     for kind in kinds:
@@ -584,7 +659,7 @@ def test_a_row_whose_tracks_do_not_fit_does_not_fit() -> None:
         drawing = build_circular_diagram(record, options=options, _label_fit_warn_search_seconds=0.0)
     error = ValidationError(
         "Circular track slot 'features' cannot fit inside",
-        diagnostic={"code": "TRACK_LAYOUT", "reason": "DEFINITION_RESERVED"},
+        diagnostic={"code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"},
     )
 
     def assemble(overrides):

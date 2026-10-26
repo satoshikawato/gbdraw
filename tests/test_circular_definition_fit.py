@@ -1,12 +1,12 @@
-"""Circular center-definition fit (PV-08, D-24 / PD-OI-078).
+"""Circular center-definition fit (PV-08, D-24 / PD-OI-078 scenario revision 2).
 
-Only a placement that fails because of the center definition band wraps the
-species line at word boundaries and places the tracks again. An explicit
-``center_reserved_radius`` disables the wrap. ``definition_font_size`` 18 is
-the default, so 18 counts as not explicit and may wrap; any other value is
-explicit and never wraps. Earlier successful outputs keep a single species
-line, and a failure that the wrap cannot fix names the definition band as the
-cause.
+The centre definition never narrows or moves the inside tracks (DF-D02) and
+is never wrapped (DF-D25): the tracks are placed as without it, the Auto name
+rule's taxon and strain lines (not a wrap) are each drawn on one line, and a
+definition that does not fit is drawn over the tracks, at any definition font
+size and for a typed Species. An explicit ``center_reserved_radius`` keeps the
+inside tracks out of the centre (DF-D05); a failure inside it names the
+radius, the room kept inside, and the tracks to turn off or narrow.
 """
 
 from __future__ import annotations
@@ -25,9 +25,7 @@ from gbdraw.api import (
     CircularRequestTrackOptions,
 )
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
-from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.exceptions import ValidationError
-from gbdraw.render.groups.circular.definition import wrap_definition_line_parts
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -38,9 +36,10 @@ SALMONELLA = "Salmonella enterica subsp. enterica serovar Typhimurium"
 MYCOBACTERIUM = "Mycobacterium tuberculosis variant bovis BCG"
 ESCHERICHIA = "Escherichia coli str. K-12 substr. MG1655"
 HEPATOPLASMA = "Candidatus Hepatoplasma crinochetorum"
-# A long name the Auto rule keeps whole on line 1 (a virus name), for the
-# wrap of one long species line; a Latin name is cut into its taxon and strain lines.
+# A long name the Auto rule keeps whole on line 1 (a virus name); a Latin name is cut into its taxon and strain
+# lines.
 LONG_VIRUS = "Severe acute respiratory syndrome-related coronavirus"
+MJENMV = "Marsupenaeus japonicus endogenous nimavirus"
 
 # The Web defaults for a fresh Circular Generate (Multi-Record Canvas on).
 WEB_DEFAULT_OVERRIDES = {
@@ -66,7 +65,7 @@ def _record_with_organism(organism: str) -> SeqRecord:
         if feature.type == "source":
             feature.qualifiers["organism"] = [organism]
     record.annotations["organism"] = organism
-    if organism == LONG_VIRUS:
+    if organism in (LONG_VIRUS, MJENMV):
         record.annotations["taxonomy"] = ["Viruses", "Riboviria"]
     return record
 
@@ -115,6 +114,19 @@ def _definition_lines(svg_text: str) -> list[str]:
     return ["".join(text.itertext()) for text in group.findall("svg:text", SVG_NS)]
 
 
+def _track_paths(svg_text: str) -> dict[str, str]:
+    """The drawn GC content and GC skew paths, by group id: their radii and widths."""
+
+    root = ET.fromstring(svg_text)
+    paths: dict[str, str] = {}
+    for group in root.iter("{http://www.w3.org/2000/svg}g"):
+        group_id = str(group.get("id") or "")
+        if group_id.startswith(("gc_content", "skew", "gc_skew")):
+            paths[group_id] = "|".join(str(path.get("d")) for path in group.iter("{http://www.w3.org/2000/svg}path"))
+    assert paths
+    return paths
+
+
 @pytest.mark.circular
 @pytest.mark.parametrize(
     "organism,drawn",
@@ -144,15 +156,59 @@ def test_web_default_cli_generates_long_organism_names(
 
 
 @pytest.mark.circular
-def test_species_line_wraps_at_word_boundaries_only_when_placement_fails() -> None:
-    wrapped = _definition_lines(_web_default_grid(_record_with_organism(LONG_VIRUS)).tostring())
-    species_lines = wrapped[: len(wrapped) - 4]  # mitochondrion, accession, length, GC follow
+def test_a_name_the_floor_cannot_clear_keeps_the_inside_tracks() -> None:
+    """DF-D36: on the Web default grid the GC rows cannot move outward, and narrowing them to the 30 px floor does
+    not clear these names, so a name too long for the centre leaves the GC rows where a short name leaves them."""
 
-    assert len(species_lines) >= 2
-    assert " ".join(species_lines) == LONG_VIRUS
-    assert all(line == line.strip() and line for line in species_lines)
+    short = _track_paths(_web_default_grid(_record_with_organism("Homo sapiens")).tostring())
+    for organism in (LONG_VIRUS, "Salmonellaentericasubspentericaserovartyphimurium"):
+        assert _track_paths(_web_default_grid(_record_with_organism(organism)).tostring()) == short
 
-    # Names whose taxon and strain lines fit are not wrapped.
+
+def _short_name_tracks(config_overrides: dict | None = None) -> dict[str, str]:
+    return _track_paths(
+        _web_default_grid(_record_with_organism("Homo sapiens"), config_overrides=config_overrides).tostring()
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("organism", "species", "config_overrides", "drawn"),
+    [
+        # The default definition font.
+        (LONG_VIRUS, None, None, LONG_VIRUS),
+        # A long virus name (the Auto rule keeps it whole on one taxon line).
+        (MJENMV, None, None, MJENMV),
+        # An explicit definition font size (W2 is moot).
+        (LONG_VIRUS, None, {"objects.definition.circular.font_size": 17}, LONG_VIRUS),
+        # A typed Species keeps its text on one line.
+        ("Homo sapiens", "<i>Marsupenaeus japonicus</i> nimavirus", None, "Marsupenaeus japonicus nimavirus"),
+    ],
+    ids=["default-font", "long-virus-name", "explicit-font", "typed-species"],
+)
+def test_a_name_line_is_never_wrapped(
+    organism: str, species: str | None, config_overrides: dict | None, drawn: str
+) -> None:
+    """DF-D25: a name line too long for the centre stays one line. With track narrowing off (DF-D36) it is drawn
+    over tracks that stay where a short name leaves them; by default the inside tracks may narrow around it
+    (``tests/test_circular_track_narrowing.py``), and the line is still one line."""
+
+    no_narrowing = {**(config_overrides or {}), "canvas.circular.track_narrowing": False}
+    for overrides in (config_overrides, no_narrowing):
+        svg = _web_default_grid(
+            _record_with_organism(organism), species=species, config_overrides=overrides
+        ).tostring()
+        lines = _definition_lines(svg)
+
+        assert lines[0] == drawn
+        assert len(lines) == 5  # name, mitochondrion, accession, length, GC
+    assert _track_paths(svg) == _short_name_tracks(no_narrowing)
+
+
+@pytest.mark.circular
+def test_the_auto_taxon_and_strain_lines_are_not_a_wrap() -> None:
+    """The Auto name rule's two lines stay; each is one line."""
+
     for organism, auto_lines in (
         (SALMONELLA, ["Salmonella enterica subsp. enterica", "serovar Typhimurium"]),
         (MYCOBACTERIUM, ["Mycobacterium tuberculosis", "variant bovis BCG"]),
@@ -160,22 +216,31 @@ def test_species_line_wraps_at_word_boundaries_only_when_placement_fails() -> No
     ):
         lines = _definition_lines(_web_default_grid(_record_with_organism(organism)).tostring())
         assert lines[:2] == auto_lines
+        assert len(lines) == 6
 
 
 @pytest.mark.circular
-def test_pinned_track_on_the_definition_wraps_the_species_line() -> None:
-    # A pinned row that overlaps only the one-line definition fails because of
-    # the definition band, so the species line wraps (TK-02).
+def test_a_typed_species_keeps_its_italics_on_one_line() -> None:
+    typed = "<i>Marsupenaeus japonicus</i> nimavirus"
+    svg = _web_default_grid(_record_with_organism("Homo sapiens"), species=typed).tostring()
+    root = ET.fromstring(svg)
+    group = root.find(".//svg:g[@data-gbdraw-role='record-definition']", SVG_NS)
+    assert group is not None
+    first = group.findall("svg:text", SVG_NS)[0]
+    italic = ["".join(span.itertext()) for span in first.iter() if span.get("font-style") == "italic"]
+    assert " ".join(italic).split() == ["Marsupenaeus", "japonicus"]
+
+
+@pytest.mark.circular
+def test_a_pinned_track_on_the_definition_leaves_the_name_on_one_line() -> None:
     slots = ["gc_skew:dinucleotide_skew@side=inside,r=0.5"]
-    wrapped = _definition_lines(
+    lines = _definition_lines(
         _web_default_grid(_record_with_organism(LONG_VIRUS), circular_track_slots=slots).tostring()
     )
-    species_lines = wrapped[: len(wrapped) - 4]
 
-    assert len(species_lines) >= 2
-    assert " ".join(species_lines) == LONG_VIRUS
+    assert lines[0] == LONG_VIRUS
 
-    # An explicit center_reserved_radius is not wrapped away.
+    # An explicit center_reserved_radius that leaves the pinned row no room fails on that radius.
     with pytest.raises(ValidationError) as caught:
         _web_default_grid(
             _record_with_organism(LONG_VIRUS),
@@ -186,43 +251,7 @@ def test_pinned_track_on_the_definition_wraps_the_species_line() -> None:
 
 
 @pytest.mark.circular
-def test_wrap_keeps_the_text_and_its_italic_runs() -> None:
-    parts = parse_mixed_content_text(
-        "<i>Salmonella enterica</i> subsp. <i>enterica</i> serovar Typhimurium"
-    )
-
-    def text(lines):
-        return [[(part["text"], part["italic"]) for part in line] for line in lines]
-
-    assert text(wrap_definition_line_parts(parts, 1, len)) == [
-        [
-            ("Salmonella enterica", True),
-            (" subsp. ", False),
-            ("enterica", True),
-            (" serovar Typhimurium", False),
-        ]
-    ]
-    assert text(wrap_definition_line_parts(parts, 2, len)) == [
-        [("Salmonella enterica", True), (" subsp.", False)],
-        [("enterica", True), (" serovar Typhimurium", False)],
-    ]
-    assert len(wrap_definition_line_parts(parts, 99, len)) == 6
-
-
-@pytest.mark.circular
-def test_explicit_definition_font_size_disables_the_wrap() -> None:
-    with pytest.raises(ValidationError) as caught:
-        _web_default_grid(
-            _record_with_organism(LONG_VIRUS),
-            config_overrides={"objects.definition.circular.font_size": 17},
-        )
-
-    assert _layout_reason(caught.value) == "DEFINITION_RESERVED"
-    assert "center definition text reserves" in str(caught.value)
-
-
-@pytest.mark.circular
-def test_explicit_center_reserved_radius_disables_the_wrap() -> None:
+def test_explicit_center_reserved_radius_keeps_one_line() -> None:
     lines = _definition_lines(
         _web_default_grid(
             _record_with_organism(LONG_VIRUS), center_reserved_radius=150.0
@@ -231,9 +260,7 @@ def test_explicit_center_reserved_radius_disables_the_wrap() -> None:
 
     assert lines[0] == LONG_VIRUS
 
-    # A radius larger than the one-line definition reservation fails
-    # with the Web defaults; an explicit radius must not be replaced by a
-    # wrapped definition reservation.
+    # A radius larger than the room inside the tracks fails with the Web defaults.
     with pytest.raises(ValidationError) as caught:
         _web_default_grid(_record_with_organism(LONG_VIRUS), center_reserved_radius=250.0)
 
@@ -244,46 +271,39 @@ def test_explicit_center_reserved_radius_disables_the_wrap() -> None:
 
 
 @pytest.mark.circular
-def test_definition_that_cannot_be_wrapped_reports_the_definition_band() -> None:
+def test_a_definition_that_does_not_fit_is_drawn_over_the_tracks() -> None:
+    """No DEFINITION_RESERVED failure: a word too long for the centre draws over the tracks."""
+
     unbreakable = "Salmonellaentericasubspentericaserovartyphimurium"
 
-    with pytest.raises(ValidationError) as caught:
-        _web_default_grid(_record_with_organism(SALMONELLA), species=unbreakable)
+    svg = _web_default_grid(_record_with_organism(SALMONELLA), species=unbreakable).tostring()
 
-    error = caught.value
-    assert _layout_reason(error) == "DEFINITION_RESERVED"
-    message = str(error)
-    assert "because the center definition text reserves" in message
-    assert "center_reserved_radius" in message
-    payload = serialize_web_error(error, operation="generate", stage="render")
-    assert payload["code"] == "TRACK_LAYOUT"
-    assert payload["context"]["reason"] == "DEFINITION_RESERVED"
-    assert set(payload["context"]) <= {"reason", "slotIndex", "innerPx", "outerPx", "keptInsidePx", "keptInsideTracks", "slotTrack"}
+    assert _definition_lines(svg)[0] == unbreakable
+    assert _track_paths(svg) == _short_name_tracks()
 
 
 @pytest.mark.circular
-def test_the_definition_band_message_names_the_tracks_kept_inside(tmp_path: Path) -> None:
-    """OV-1268: the band starts above the definition text by the room kept for the tracks inside it."""
+def test_mers_cov_draws_its_name_on_one_line() -> None:
+    record = next(SeqIO.parse(str(REPO_ROOT / "tests" / "test_inputs" / "MERS-CoV.gbk"), "genbank"))
+    lines = _definition_lines(_web_default_grid(record).tostring())
+    assert lines[0] == "Middle East respiratory syndrome-related coronavirus"
 
-    from gbdraw.circular import circular_main
 
-    with pytest.raises(ValidationError) as caught:
-        circular_main(
-            [
-                "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"),
-                "--separate_strands", "--track_type", "tuckin", "-l", "left", "--resolve_overlaps",
-                "-o", str(tmp_path / "out"), "-f", "svg",
-            ]
-        )
+@pytest.mark.circular
+def test_the_center_reserved_radius_message_names_the_tracks_kept_inside(tmp_path: Path) -> None:
+    """OV-1268: the band starts above the reserved centre by the room kept for the tracks inside it."""
 
-    assert _layout_reason(caught.value) == "DEFINITION_RESERVED"
-    message = str(caught.value)
-    assert "cannot fit inside between 189.6px and 386.1px" in message
-    assert "the center definition text reserves 122.6px" in message
+    error = _lambda_resolved_overlaps(tmp_path)
+    assert _layout_reason(error) == "CENTER_RESERVED"
+    message = str(error)
+    assert "cannot fit inside between 189.7px and 386.1px" in message
+    assert "because center_reserved_radius reserves 122.6px" in message
     assert "and 67.1px are kept for the tracks inside it ('gc_content', 'gc_skew')" in message
 
 
 def _lambda_resolved_overlaps(tmp_path: Path, *extra: str) -> ValidationError:
+    """Lambda with Web-like tracks inside an explicit centre (the definition alone no longer stops it)."""
+
     from gbdraw.circular import circular_main
 
     with pytest.raises(ValidationError) as caught:
@@ -291,6 +311,7 @@ def _lambda_resolved_overlaps(tmp_path: Path, *extra: str) -> ValidationError:
             [
                 "--gbk", str(REPO_ROOT / "tests" / "test_inputs" / "NC_001416.gb"),
                 "--separate_strands", "--track_type", "tuckin", "-l", "left", "--resolve_overlaps",
+                "--center_reserved_radius", "122.6",
                 "-o", str(tmp_path / "out"), "-f", "svg", *extra,
             ]
         )
@@ -298,13 +319,13 @@ def _lambda_resolved_overlaps(tmp_path: Path, *extra: str) -> ValidationError:
 
 
 @pytest.mark.circular
-def test_the_definition_band_failure_offers_the_gc_tracks_kept_inside(tmp_path: Path) -> None:
+def test_the_center_reserved_radius_failure_offers_the_gc_tracks_kept_inside(tmp_path: Path) -> None:
     """OV-1274: the GC rows' kept room is a context key, and turning them off or narrowing them is a remedy."""
 
     error = _lambda_resolved_overlaps(tmp_path)
-    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert _layout_reason(error) == "CENTER_RESERVED"
     assert (
-        "set a smaller center_reserved_radius, turn off or narrow the GC content and GC skew tracks "
+        "Set a smaller center_reserved_radius, turn off or narrow the GC content and GC skew tracks "
         "(--no-gc, --no-skew, --gc_content_width, --gc_skew_width), or place tracks outside."
     ) in str(error)
     context = serialize_web_error(error, operation="generate", stage="render")["context"]
@@ -345,17 +366,17 @@ def test_the_room_kept_inside_names_every_row_and_offers_only_the_gc_rows(tmp_pa
 
 
 @pytest.mark.circular
-def test_the_definition_band_failure_starts_its_band_at_the_reserve(tmp_path: Path) -> None:
-    """OV-1276: a window with nothing kept inside it starts at the definition band, in the message and the context;
+def test_the_center_reserved_radius_failure_starts_its_band_at_the_reserve(tmp_path: Path) -> None:
+    """OV-1276: a window with nothing kept inside it starts at the reserved centre, in the message and the context;
     the scale ticks that do not fit offer hiding the scale."""
 
     error = _lambda_resolved_overlaps(tmp_path, "--no-gc", "--no-skew")
-    assert _layout_reason(error) == "DEFINITION_RESERVED"
+    assert _layout_reason(error) == "CENTER_RESERVED"
     assert (
         "Circular track slot 'ticks' cannot fit inside between 122.6px and 386.1px "
-        "because the center definition text reserves 122.6px."
+        "because center_reserved_radius reserves 122.6px."
     ) in str(error)
-    assert "set a smaller center_reserved_radius, hide the scale (--hide_scale; with an explicit track list, remove the ticks slot), or place tracks outside." in str(error)
+    assert "Set a smaller center_reserved_radius, hide the scale (--hide_scale; with an explicit track list, remove the ticks slot), or place tracks outside." in str(error)
     context = serialize_web_error(error, operation="generate", stage="render")["context"]
     assert (context["innerPx"], context["outerPx"], context["slotTrack"]) == (123, 386, "ticks")
 

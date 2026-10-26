@@ -64,8 +64,15 @@ class CircularCanvasWidthConfig:
         return cls(with_labels=ascii_int(d["with_labels"]), without_labels=ascii_int(d["without_labels"]))
 
 
+TRACK_NARROWING_PATH = "canvas.circular.track_narrowing"
+
+
 @dataclass(frozen=True)
 class CircularCanvasConfig:
+    """``track_narrowing``: when the centre definition reaches the inside tracks and moving them outward does not
+    clear it, the layout may narrow the inside tracks with an Auto width, each to ``track_narrowing_min_px`` at the
+    least (PD-OI-078, rule L). A track narrower than the floor, or with a typed width, keeps its width."""
+
     height: int
     radius: float
     track_ratio: float
@@ -73,6 +80,16 @@ class CircularCanvasConfig:
     width: CircularCanvasWidthConfig
     track_ratio_factors: dict[str, list[float]]
     track_dict: dict[str, dict[str, dict[str, float]]]
+    # The floor's domain (finite, zero or more) is a config leaf domain (``gbdraw.config.models.root``).
+    track_narrowing: bool
+    track_narrowing_min_px: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.track_narrowing, bool):
+            raise ValidationError(
+                f"{TRACK_NARROWING_PATH} must be true or false",
+                diagnostic={"code": "INPUT_INVALID", "reason": "BOOLEAN", "configPath": TRACK_NARROWING_PATH},
+            )
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CircularCanvasConfig":
@@ -106,6 +123,9 @@ class CircularCanvasConfig:
                 for k, v in dict(d["track_ratio_factors"]).items()
             },
             track_dict=track_dict,
+            # A full config stored before rule L lacks the two leaves and takes their packaged defaults.
+            track_narrowing=d.get("track_narrowing", True),
+            track_narrowing_min_px=ascii_float(d.get("track_narrowing_min_px", 30.0)),
         )
 
 

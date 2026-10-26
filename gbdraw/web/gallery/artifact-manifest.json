@@ -29,8 +29,8 @@
       "sha256": "89202a1910fd569fb9789ef89003786c58a5623b61f459eb1b169370554ddfa7"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 27251906,
-      "sha256": "ee963b0ebfbad3bdcae1c4b33c3defd1789abcec4041d5238f396999267a5d94"
+      "bytes": 27250676,
+      "sha256": "dc03c5c8133e57de6a0203881e45f6bffe006a851d4d9925614176f7913f7697"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
       "bytes": 14690610,
@@ -69,8 +69,8 @@
       "sha256": "f9988f8ad6d06a81d18f37a9062928eff49cefb5a86e58d7120eb8cc776f06cb"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11119897,
-      "sha256": "98c2ab16257d88114a5b114d6676bce19742c04efcc70765c5fe7e79c81a4ed9"
+      "bytes": 11119722,
+      "sha256": "86b3996c0acd776149e9fb9b7f36dcb5f9181cac73adde1651abeae22863cc11"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 10972491,
@@ -109,8 +109,8 @@
       "sha256": "ef86a2be18ad6bd97b56e45e88b9d1cb3cfde6b5959f8bf769c786f16d06f074"
     },
     "gallery/sources/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 2610108,
-      "sha256": "e03a9a9fc8eec29534dc518e80f2a5b3939ae9f8063c7db1a466c5ec175d28fc"
+      "bytes": 2608878,
+      "sha256": "debf973ba303965a76ed4047f6d1f7f82af6c036f748373ef546b9aaf0199d2e"
     },
     "gallery/sources/hepatoplasmataceae_collinear.svg": {
       "bytes": 3726471,
@@ -149,8 +149,8 @@
       "sha256": "3033ec56c45b773cfc9cab509ae9252d31a2d03176d871e178c731284807ca7d"
     },
     "gallery/thumbnails/Vnig_TUMSAT-TG-2018.webp": {
-      "bytes": 28182,
-      "sha256": "1e48978f02583b8b765e73972094c7d50eca3d6c8ce908ebfcb41fe5d622935a"
+      "bytes": 28308,
+      "sha256": "ef47e4a7f51053c02530215af9a353619a2abeb47c0a6a1c15df2b14141ccdaa"
     },
     "gallery/thumbnails/hepatoplasmataceae_collinear.webp": {
       "bytes": 19676,

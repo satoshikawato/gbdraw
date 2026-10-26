@@ -1073,6 +1073,7 @@ const CIRCULAR_CONFIG_VALUE_OPTIONS = Object.freeze({
   'objects.axis.circular.stroke_color': '--axis_stroke_color',
   'objects.definition.circular.font_size': '--definition_font_size',
   'canvas.circular.track_type': '--track_type',
+  'canvas.circular.track_narrowing_min_px': '--track_narrowing_min_px',
   'labels.spacing.circular': '--circular_label_spacing',
   'labels.circular.placement': '--label_placement',
   'labels.circular.line': '--label_line',
@@ -1226,6 +1227,7 @@ const appendConfigOverrides = (args, request) => {
   });
 
   if (request.mode === 'circular') {
+    appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
     const definitionInterval = take('objects.definition.circular.interval');
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];
