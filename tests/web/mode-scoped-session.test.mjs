@@ -1181,6 +1181,26 @@ test('Save writes each Circular drawing the conservation entries of its own ring
   assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
 });
 
+// K-3: a drawing's request names its rings. A ring file bound in place of the
+// request's after its Generate (no new Generate) names no pair: Save writes
+// neither the bound file's entry nor the request's, whose File it no longer has.
+test('Save writes no conservation entry for a ring whose bound file is not the one its request names (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  const second = session.drawings.find((entry) => entry.id === 'circular-2');
+  // circular-2's request still names `ring-other`; its ring 3 binds circular's ring 3 file.
+  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2].resourceId;
+  for (const field of ['c_conservation_fastas', 'c_conservation_sequence_sources']) {
+    second.webFiles.bindings[field][2] = { ...second.webFiles.bindings[field][2], resourceId: ringId };
+  }
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  await readRingFilesInPython(['circular', 'circular-2']);
+  const saved = await savedEntryKeys('replaced ring', loaded);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2]);
+});
+
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it
 // (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
 // the Depth track count only when a row holds a Depth file, as for Circular.

@@ -5737,27 +5737,50 @@ const artifactUiState = (view) => ({
  */
 
 /**
- * The conservation hash pairs a drawing Save writes names: those of its bound
- * rings (`circularConservationKeys`, the builder Generate keys its ring
- * searches with, D-15-123), when its written request is Circular and its
- * conservation rings read sequences; none otherwise. A ring or reference not
- * bound (after a settings-only Load) names none. The reads are kept per File,
- * so only a File no Generate or earlier Save read is read (once, by the
- * Python ring reader); a read that fails names no pair, and Save goes on.
+ * The conservation hash pairs a drawing Save writes names: those of the rings
+ * its written request names (`circularConservationKeys`, the builder Generate
+ * keys its ring searches with, D-15-123), when the request is Circular and
+ * its conservation rings read sequences; none otherwise. A ring is the
+ * request's when its binding (`written.webFiles.bindings`, aligned with
+ * `drawing.files`) is the resource the request names (the same
+ * content-deduplicated table); a ring file bound in its place after the
+ * Generate, or a ring or reference not bound (after a settings-only Load),
+ * names none, and its File is not read. The reads are kept per File, so only
+ * a File no Generate or earlier Save read is read (once, by the Python ring
+ * reader); a read that fails names no pair, and Save goes on.
  * @param {DrawingState} drawing
- * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
+ * @param {SessionResourceDrawing} written The drawing's written request and bindings.
  * @returns {Promise<Set<string>>}
  */
-const conservationPairsOfDrawing = async (drawing, request) => {
-  if (request === null || request.mode !== 'circular'
-    || !(request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null)) return new Set();
+const conservationPairsOfDrawing = async (drawing, { renderRequest: request, webFiles }) => {
+  const named = new Set((request?.mode === 'circular' ? request.diagramOptions.conservationFastaFiles ?? [] : [])
+    .flatMap((file) => (file === null ? [] : [file.resourceId])));
+  if (named.size === 0) return new Set();
+  /** @type {unknown} */
+  const bindings = webFiles.bindings;
+  // One binding per place of `drawing.files.c_conservation_fastas` (null: none bound).
+  const boundIds = isPlainObject(bindings) && Array.isArray(bindings.c_conservation_fastas)
+    ? bindings.c_conservation_fastas.map(resourceIdOfBinding) : [];
+  const rings = drawing.files.c_conservation_fastas;
+  const unnamed = new Set(rings.filter((ref, index) => ref !== null && !named.has(boundIds[index] ?? '')));
+  /** @type {typeof state.inputFiles.fileOf} */
+  const fileOf = (ref) => (ref && unnamed.has(ref) ? null : state.inputFiles.fileOf(ref));
   try {
-    return conservationHashPairs(await circularConservationKeys(drawing, state.inputFiles.fileOf));
+    return conservationHashPairs(await circularConservationKeys(drawing, fileOf));
   } catch (error) {
     console.warn('Save could not read the conservation ring files; it writes no conservation entry for this drawing.', normalizeUserFacingError(error));
     return new Set();
   }
 };
+/**
+ * The resource a single-file binding names (null: none).
+ * @param {unknown} binding
+ * @returns {string | null}
+ */
+const resourceIdOfBinding = (binding) => (
+  binding !== null && typeof binding === 'object' && 'resourceId' in binding && typeof binding.resourceId === 'string'
+    ? binding.resourceId : null
+);
 
 /**
  * The raw LOSAT entries Save writes into one Session 49 drawing: those its
@@ -5919,7 +5942,7 @@ const exportSessionDocument = async (
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
   const conservationPairs = await Promise.all(parts.map(({ saved }, index) => (
-    conservationPairsOfDrawing(saved, built.written[index].renderRequest)
+    conservationPairsOfDrawing(saved, built.written[index])
   )));
   // The project's original-name hints, from every drawing's request metadata.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
