@@ -198,3 +198,15 @@ def test_touching_aabb_index_equals_the_scan_as_boxes_change() -> None:
             query = finite_aabb(-400.0, -400.0, 400.0, 400.0)
         skip = rng.choice([None, idx])
         assert index.touching(query, skip=skip) == touching_aabb_indices(index.boxes, query, skip=skip)
+
+
+def test_touching_aabb_index_keeps_index_order_after_an_unknown_box_becomes_finite() -> None:
+    """A box that enters the grid after later ones (unknown, then finite) still comes back in index order."""
+    index = TouchingAabbIndex.of(
+        [None, finite_aabb(0, 0, 1, 1), finite_aabb(2, 0, 3, 1)]
+        + [finite_aabb(1000 + i * 50, 1000, 1001 + i * 50, 1001) for i in range(10)]
+    )
+    index.replace(0, finite_aabb(0.5, 0, 2.5, 1))
+    query = finite_aabb(0, 0, 3, 1)
+    assert index.touching(query) == touching_aabb_indices(index.boxes, query) == [0, 1, 2]
+    assert index.touching(query, skip=1) == [0, 2]

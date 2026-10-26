@@ -349,6 +349,9 @@ class TouchingAabbIndex:
         self.boxes: list[Aabb | None] = []
         self._unknown: set[int] = set()
         self._index = AabbIndex(bucket_size=bucket_size)
+        # The grid answers in first-insertion order. That is index order until an unknown box
+        # becomes finite: its index then enters the grid after later ones.
+        self._grid_in_index_order = True
 
     @classmethod
     def of(cls, bboxes: Sequence[Aabb | None]) -> TouchingAabbIndex:
@@ -368,6 +371,8 @@ class TouchingAabbIndex:
         old = self.boxes[idx]
         if old is None:
             self._unknown.discard(idx)
+            if bbox is not None:
+                self._grid_in_index_order = False
         else:
             self._index.remove(idx, old)
         self._place(idx, bbox)
@@ -384,11 +389,12 @@ class TouchingAabbIndex:
         if buckets >= len(boxes):
             # A query that spans more buckets than there are boxes: the scan is cheaper.
             return touching_aabb_indices(boxes, query, skip=skip)
-        # The index answers in insertion order, which is index order (boxes are appended in order).
         candidates = cast("list[int]", self._index.query(query))
         found = [idx for idx in candidates if idx != skip and aabbs_touch(query, boxes[idx])]
         if self._unknown:
             found.extend(idx for idx in self._unknown if idx != skip)
+            found.sort()
+        elif not self._grid_in_index_order:
             found.sort()
         return found
 
