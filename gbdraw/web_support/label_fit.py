@@ -23,6 +23,7 @@ from gbdraw.core.numeric import parse_ascii_nonnegative_integer
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
+    CENTER_RESERVED_RADIUS_PATH,
     DEFINITION_FONT_PATH,
     FONT_SIZE_PATHS,
     PLACEMENT_PATH,
@@ -44,6 +45,7 @@ from gbdraw.labels.fit import (
     label_fit_record_counts,
     label_kind_title,
     row_note,
+    split_row_option_values,
 )
 
 LABEL_FIT_PAYLOAD_SCHEMA: Literal[1] = 1
@@ -65,6 +67,8 @@ _SETTING_NAMES: Mapping[str, tuple[str, str]] = {
     PLACEMENT_PATH: ("Circular Label Placement", ""),
     # Record Labels > Default font size: the Circular centre definition's font (D-12).
     DEFINITION_FONT_PATH: ("Default font size", "pt"),
+    # Advanced > Center Reserved Radius: "narrow the inside tracks" (PD-OI-097).
+    CENTER_RESERVED_RADIUS_PATH: ("Center Reserved Radius", "px"),
 }
 # A control whose name differs by mode: the Circular and the Linear checkbox
 # of `canvas.resolve_overlaps`.
@@ -95,11 +99,20 @@ class LabelFitCanvasSizePayload(TypedDict):
     height: float
 
 
+class LabelFitTrackOptionsPayload(TypedDict, total=False):
+    """The canonical render request's Circular track options (``diagramOptions.tracks``) a row sets, by their
+    request names: "narrow the inside tracks" sets ``centerReservedRadius`` (PD-OI-097)."""
+
+    centerReservedRadius: float
+
+
 class LabelFitRowPayload(TypedDict):
     kind: LabelFitRowKind
     title: str
     status: LabelFitRowStatus
+    # The config overrides a row sets, by config path; set when offered.
     values: dict[str, bool | float | str] | None
+    trackOptions: LabelFitTrackOptionsPayload
     settings: list[LabelFitSettingPayload]
     canvasSize: LabelFitCanvasSizePayload | None
     reason: str | None
@@ -108,6 +121,8 @@ class LabelFitRowPayload(TypedDict):
 
 class LabelFitRecordPayload(TypedDict):
     recordId: str
+    # The record's drawn index (``data-gbdraw-record-index``); None for a Linear record.
+    recordIndex: int | None
     labelKind: LabelKind
     labelKindTitle: str
     labelCount: int
@@ -171,15 +186,21 @@ def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPa
     """One row with its title, the settings it changes (as the controls of ``mode`` name them), and its canvas size."""
 
     values = dict(row.values) if row.values is not None else None
+    # Drawing again takes the row's settings as config overrides and track options (``split_row_option_values``).
+    config, center_reserved_radius = split_row_option_values(values) if values else ({}, None)
+    track_options: LabelFitTrackOptionsPayload = {}
+    if center_reserved_radius is not None:
+        track_options["centerReservedRadius"] = center_reserved_radius
     return {
         "kind": row.kind,
         "title": ROW_TITLES[row.kind],
         "status": row.status,
         "values": (
-            {path: value if isinstance(value, (str, bool)) else float(value) for path, value in values.items()}
+            {path: value if isinstance(value, (str, bool)) else float(value) for path, value in config.items()}
             if values
             else None
         ),
+        "trackOptions": track_options,
         "settings": _settings(values, mode) if values else [],
         "canvasSize": (
             {"width": float(row.canvas_size[0]), "height": float(row.canvas_size[1])}
@@ -195,6 +216,7 @@ def label_fit_row_payload(row: LabelFitRow, mode: LabelFitMode) -> LabelFitRowPa
 def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
     return {
         "recordId": record.record_id,
+        "recordIndex": record.record_index,
         "labelKind": record.label_kind,
         "labelKindTitle": label_kind_title(record),
         "labelCount": record.label_count,

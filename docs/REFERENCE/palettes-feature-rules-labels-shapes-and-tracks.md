@@ -88,18 +88,34 @@ spacing, and an axis boundary. A feature slot's reserved band and the feature
 glyph height are different settings. Invalid anchor chains, missing logical
 depth indices, and contradictory overlay order are rejected.
 
-Circular inside tracks stack outward from the center definition. If they do not
-fit only because of the definition, the species line is wrapped at word
-boundaries into the fewest lines that let them fit, and the tracks are placed
-again; the text is unchanged. The wrap is not applied to a figure that already
-fits or to an explicit **Center Reserved Radius** (`--center_reserved_radius`).
-`definition_font_size` 18 is the default, so 18 counts as not explicit and may
-wrap; any other value is explicit and never wraps. If the tracks still do
-not fit, the error names the slot that could not be placed and the reserved
-definition radius. Shorten the species or strain text, reduce the definition
-font size, set a smaller center reserved radius, or place tracks outside. When
-an explicit center reserved radius is the limit, the error names that radius
-instead; set a smaller radius or place tracks outside. When GC content or GC
+The GC content, GC skew and depth rows of the default track stack start right
+under the tick labels. When the center definition of a Circular record reaches
+the inside tracks, gbdraw first moves them outward, as far as the room under the
+feature track allows, keeping their widths. If that does not clear the
+definition, it narrows the inside tracks that have an Auto width, each to no
+less than `canvas.circular.track_narrowing_min_px` (`--track_narrowing_min_px`,
+default 30 px), but only when that clears the definition; otherwise the tracks
+keep their widths. A width you set (`--gc_content_width`, `--gc_skew_width`,
+`--depth_width`, `--conservation_ring_width`, `w=` on a track slot, or a
+**Width** in the Web app) and a track already narrower than that floor are
+never narrowed for the definition, though a track with a set width may move
+outward. A track placed at an explicit radius keeps that radius; its width
+narrows with the others when it is Auto. `--no_track_narrowing`
+(`canvas.circular.track_narrowing = false`) turns the narrowing off; the tracks
+still move outward. The definition's lines are never
+wrapped: each line (an Auto organism name is drawn as a taxon line and a
+strain line) stays one line at any `definition_font_size`, also for a typed
+**Species** (`--species`). A line that still reaches the tracks is
+drawn over them, and the figure warns when its text overlaps what a track
+paints (see [Labels that do not fit](#labels-that-do-not-fit)). To keep a long
+name clear of the tracks, type a shorter one in **Species**, for example the
+abbreviation `MjeNMV` for "Marsupenaeus japonicus endogenous nimavirus". An
+explicit **Center Reserved Radius** (`--center_reserved_radius`) reserves that
+radius: the inside tracks are placed outside it and narrowed when needed, a
+set width included, below `--track_narrowing_min_px` and also with
+`--no_track_narrowing`. If they still do not fit, the error names the slot that
+could not be placed and that radius; set a smaller radius or place tracks
+outside. When GC content or GC
 skew tracks lie inside the slot that could not be placed, the error also names
 the room kept for the tracks inside it and offers turning the GC tracks off or
 narrowing them (`--no-gc`, `--no-skew`, `--gc_content_width`,
@@ -339,6 +355,7 @@ drawing the whole figure again. The rows depend on which labels do not fit:
 | radial labels | `--label_placement radial` | inner and embedded labels |
 | separate overlapping features | `--resolve_overlaps` | labels drawn on features that are drawn on top of each other, Circular and Linear |
 | smaller definition font | `--definition_font_size`, in steps of 0.5 pt, down to 6 pt | the Circular definition text over a track, when the figure is drawn |
+| narrow the inside tracks | `--center_reserved_radius`: the radius the definition needs on one line, rounded up to 0.01 px | the Circular definition text over a track whose band it enters, when the figure is drawn and no center reserved radius is set |
 
 Each row gives the mildest value that fits, or says that none fits within its
 limit. When nothing was drawn and a row has no value that fits, it gives the
@@ -371,14 +388,18 @@ not count. Each such line counts once (`1 line overlaps a track`), and the Web a
 shows "The definition text overlaps a track (N lines)." with **Choose a fix**.
 The smaller definition font is the first size, going down from the current
 one, at which no definition line overlaps a track, checked by drawing the whole
-figure again; the inner tracks may then widen, because they make room for the
-definition text. Each row is checked for what it fixes: the label rows for the
-labels and the definition row for the definition text, and neither may stop the
+figure again. Narrow the inside tracks reserves the room the definition needs
+on one line, so the inside tracks are narrowed outside it; it is checked by
+drawing the whole figure again, and when the text still overlaps a track the
+row says so (`1 definition line still overlaps a track`) and draws with the
+warning. Each row is checked for what it fixes: the label rows for the
+labels and the definition rows for the definition text, and neither may stop the
 figure. A font you set stays as it is: the row only suggests a value, and a
 definition line interval you set is kept while the row is checked; one set in
 `config_overrides` or the Web app is kept even when it equals the one the font
-gives. The rows
-do not include narrower GC content or GC skew tracks or a wrapped species name.
+gives. The warning also suggests a shorter **Species** or **Strain**
+(`--species`, `--strain`), for example an abbreviation: type `MjeNMV` in
+**Species** for "Marsupenaeus japonicus endogenous nimavirus".
 
 A Circular region label with `label_orientation` `auto` or `arc` is drawn
 along its circle and can take just under a whole turn, less 1 em at each
@@ -444,7 +465,11 @@ The next time the dialog opens, that row is searched again for up to 30
 seconds, continuing from where it stopped, so it can still find a value.
 While a row is being computed, Apply and Cancel first wait for it to finish,
 at most 30 seconds, and the dialog shows "Finishing the choice being
-computed…".
+computed…". Over a drawn figure, Cancel reads **Keep as drawn**. When the
+Circular definition text overlaps a track, the dialog also has **Edit Species /
+Strain…** (one per record, followed by the record ID when there are several):
+it closes the dialog without applying a row and shows the field that sets
+that record's name lines.
 
 With 50 or more outer labels, gbdraw packs the labels in rows with
 `--circular_label_spacing` between them. If those rows do not fit, the labels

@@ -176,6 +176,10 @@ def test_candidate_extraction_runs_once_across_inner_radius_preflight(
             "external_only",
             "--legend",
             "none",
+            # The full name is drawn over the GC rows on one line (DF-D25), and the definition rows of its warning
+            # draw the figure again; the abbreviation keeps this to the one drawing whose preflight is counted.
+            "--species",
+            "MjeNMV",
             "--format",
             "svg",
             "--output",

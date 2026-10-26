@@ -85,7 +85,7 @@ def test_inner_labels_over_the_definition_text_draw_and_warn(tmp_path: Path, mon
     assert record.fit.definition_overlaps == 2
     assert [row.kind for row in report.rows] == ["smaller_font", "labels_out", "radial"]
     assert str(warning).startswith(
-        "24 inner labels do not fit at 9 pt (0 label pairs overlap, 0 leader pairs cross, "
+        "NC_001416.1: 24 inner labels do not fit at 9 pt (0 label pairs overlap, 0 leader pairs cross, "
         "2 labels cover the definition text). Drawn anyway."
     )
 

@@ -177,6 +177,7 @@ import { rekeyLegendRecords } from './legend-svg.js';
 import { PAINT_SLICE, captureFeatureFills, captureLegendPaint, clearSessionPaint, legendEntryKey } from './drawing/paint.js';
 import { SETTINGS_SLICE } from './drawing/settings.js';
 /** @import { SettingsSlice } from './drawing/settings.js' */
+/** @import { LabelFitTrackOptions } from './label-fit.js' */
 /** @import { FeatureFill } from './drawing/paint.js' */
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
@@ -2764,8 +2765,9 @@ const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) =
 
 // The draft fields a label fit row may write: the fields of the config paths
 // `gbdraw/labels/fit.py` names for the rows (the label settings, the feature
-// overlap switch of "separate overlapping features", LP-D52, and the Circular
-// definition font of "smaller definition font", D-12), never a feature-slot
+// overlap switch of "separate overlapping features", LP-D52, the Circular
+// definition font of "smaller definition font", D-12, and the Center Reserved
+// Radius of "narrow the inside tracks", PD-OI-097), never a feature-slot
 // input (R10).
 /** @type {Readonly<Record<string, (adv: Record<string, unknown>, value: number | string | boolean) => void>>} */
 const LABEL_FIT_ADV_WRITERS = Object.freeze({
@@ -2775,24 +2777,27 @@ const LABEL_FIT_ADV_WRITERS = Object.freeze({
   circular_label_spacing: (adv, value) => { adv.circular_label_spacing = value; },
   circular_label_placement: (adv, value) => { adv.circular_label_placement = value; },
   resolve_overlaps: (adv, value) => { adv.resolve_overlaps = value; },
-  def_font_size: (adv, value) => { adv.def_font_size = value; }
+  def_font_size: (adv, value) => { adv.def_font_size = value; },
+  center_reserved_radius: (adv, value) => { adv.center_reserved_radius = value; }
 });
 /** @type {Readonly<Record<string, (form: Record<string, unknown>, value: string) => void>>} */
 const LABEL_FIT_FORM_WRITERS = Object.freeze({
   labels_mode: (form, value) => { form.labels_mode = value; }
 });
 
-// Settings a label fit row gives by config path (LP-D43) go into the drawing's
-// draft through the request mapping, so the next Generate sends exactly them.
-// A path the mode does not manage, or one that is not a label setting, is an
-// UNKNOWN_CONFIG_PATH error and writes nothing.
+// Settings a label fit row gives by config path (LP-D43) and by request track
+// option go into the drawing's draft through the request mapping, so the next
+// Generate sends exactly them. A path or option the mode does not manage, or
+// one that is not a label fit setting, is an UNKNOWN_CONFIG_PATH error and
+// writes nothing.
 /**
  * @param {DrawingState} drawing
  * @param {Readonly<Record<string, number | string | boolean>>} values
  * @param {'circular' | 'linear'} mode
+ * @param {Readonly<LabelFitTrackOptions>} [trackOptions] The row's request track options; none by default.
  */
-export const applyLabelFitValues = (drawing, values, mode) => {
-  const fields = draftFieldsForConfigValues(values, mode, drawing.adv);
+export const applyLabelFitValues = (drawing, values, mode, trackOptions = {}) => {
+  const fields = draftFieldsForConfigValues(values, mode, drawing.adv, trackOptions);
   const form = Object.entries(fields.form);
   const adv = Object.entries(fields.adv);
   if (!form.every(([field]) => Object.hasOwn(LABEL_FIT_FORM_WRITERS, field))

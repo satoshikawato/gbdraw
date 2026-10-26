@@ -1797,7 +1797,7 @@ def test_a_region_label_whose_backing_would_cover_an_underline_keeps_its_place_a
     drawing, messages = _region_case("left_end")
     report = label_fit_report(drawing)
 
-    assert messages == ["1 region label does not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert messages == ["left_end: 1 region label does not fit at 10 pt (1 region label overlap). Drawn anyway."]
     assert report is not None and report.region_overlaps == 1
     assert _front_labels(drawing.tostring()) == [] and _region_label_crossings(drawing.tostring()) == []
     plain, messages = _region_case("left_end", {"labels.linear.line": "none"})
@@ -1866,7 +1866,7 @@ def test_cli_moves_the_hmmtdna_trna_pro_label_off_the_control_region_label(
     # Without the move, the label keeps its overlap and warns, with no fix offered (LP-D77).
     monkeypatch.setattr(annotation_labels, "_make_way", lambda *args, **kwargs: None)
     kept, err = render("kept")
-    assert "WARNING: 2 region labels do not fit at 20 pt (1 region label overlap). Drawn anyway." in err
+    assert "WARNING: NC_012920.1: 2 region labels do not fit at 20 pt (1 region label overlap). Drawn anyway." in err
     assert "Run again" not in err
     assert _feature_label_ys(svg)["tRNA-Pro"] < _feature_label_ys(kept)["tRNA-Pro"]
 
@@ -1964,7 +1964,7 @@ def test_a_region_label_whose_overlap_no_way_clears_warns_with_no_fix() -> None:
     report = label_fit_report(drawing)
 
     assert report is not None and report.drawn and report.region_overlaps == 1 and report.rows == ()
-    assert messages == ["2 region labels do not fit at 10 pt (1 region label overlap). Drawn anyway."]
+    assert messages == ["adjacent: 2 region labels do not fit at 10 pt (1 region label overlap). Drawn anyway."]
     assert _front_labels(drawing.tostring()) == []
 
 

@@ -6,7 +6,7 @@ crossing (LP-D49 ``DEF-WARN``). A Linear region (annotation) label over other
 labels or lines is counted by its placer and only warns (LP-D68), and so does a
 Circular region label cut to fit its circle (LP-D87) or lying on another track
 because set radii leave it no room (LP-D86). The centre definition text of a Circular record
-that reaches into a track's band only warns too (D-12, ``circular_definition``). The counts take plain shapes: each label kind
+whose lines meet what a track paints only warns too (D-12, ``circular_definition``). The counts take plain shapes: each label kind
 has one adapter next to its owner that turns the drawn labels into
 :class:`LabelShape` values, and one record's labels of every kind are counted
 together (LP-D48 ``SCOPE-ALL-LABELS``).
@@ -45,7 +45,10 @@ LabelFitRowKind: TypeAlias = Literal[
     "radial",
     "separate_features",
     "smaller_definition_font",
+    "narrow_tracks",
 ]
+# The rows that answer for the Circular centre definition text over a track (D-12), not for the labels.
+DEFINITION_ROW_KINDS: frozenset[LabelFitRowKind] = frozenset({"smaller_definition_font", "narrow_tracks"})
 # ``found``: ``values`` fit; ``found_with_notice``: ``values`` leave no
 # overlapping labels but leave crossing leaders or labels over the definition
 # text, so the figure draws with the notice (LP-D57; offered only when nothing
@@ -83,6 +86,24 @@ PLACEMENT_PATH = "labels.circular.placement"
 SEPARATE_FEATURES_PATH = "canvas.resolve_overlaps"
 # ``--definition_font_size``: the Circular centre definition's font (its line interval follows it).
 DEFINITION_FONT_PATH = "objects.definition.circular.font_size"
+# ``--center_reserved_radius``: not a config path but the Circular track option (``CircularTrackOptions``) that keeps
+# the inside tracks out of the centre; the "narrow the inside tracks" row writes it (PD-OI-097).
+CENTER_RESERVED_RADIUS_PATH = "tracks.center_reserved_radius"
+
+
+def split_row_option_values(values: Mapping[str, LabelFitValue]) -> tuple[dict[str, LabelFitValue], float | None]:
+    """A row's settings as drawing again takes them: the config overrides, and the ``center_reserved_radius`` option
+    when the row sets it (``CENTER_RESERVED_RADIUS_PATH``)."""
+
+    config = {path: value for path, value in values.items() if path != CENTER_RESERVED_RADIUS_PATH}
+    radius = values.get(CENTER_RESERVED_RADIUS_PATH)
+    if radius is None:
+        return config, None
+    if isinstance(radius, (bool, str)):
+        raise ValueError(f"{CENTER_RESERVED_RADIUS_PATH} takes a number, not {radius!r}")
+    return config, float(radius)
+
+
 # The switch rows' values: every label outside (``--labels out``), radial
 # labels, and overlapping features on separate tracks (``--resolve_overlaps``).
 ALL_OUTSIDE_SCOPE = "outer"
@@ -117,8 +138,8 @@ class LabelFit:
     region label and what it covers, LP-D68), Circular region labels cut to fit
     their circle (``region_cuts``, LP-D87), Circular region labels whose letters
     lie on another track's band (``region_track_overlaps``, LP-D86), and lines of a
-    Circular record's centre definition text that reach into a track's band
-    (``definition_track_overlaps``, D-12).
+    Circular record's centre definition text that meet what a track paints, its
+    ink (``definition_track_overlaps``, D-12).
 
     The labels fit when all seven are 0.
     """
@@ -337,7 +358,10 @@ class LabelFitRecord:
     """One record's labels of one kind that do not fit.
 
     ``refused`` marks radial labels that could not be placed in the room the
-    tracks leave (their counts may then be 0).
+    tracks leave (their counts may then be 0). ``record_index`` is the index
+    of the record's drawn groups (``data-gbdraw-record-index``), the record's
+    identity where two records share an ID; Circular records carry it, Linear
+    records do not yet (None).
     """
 
     record_id: str
@@ -346,6 +370,7 @@ class LabelFitRecord:
     font_size: float
     fit: LabelFit
     refused: bool = False
+    record_index: int | None = None
 
 
 @dataclass(frozen=True)
@@ -485,6 +510,7 @@ _CLI_OPTIONS: Mapping[str, str] = {
     PLACEMENT_PATH: "--label_placement",
     SEPARATE_FEATURES_PATH: "--resolve_overlaps",
     DEFINITION_FONT_PATH: "--definition_font_size",
+    CENTER_RESERVED_RADIUS_PATH: "--center_reserved_radius",
 }
 # The CLI spells the all-outside scope ``out``.
 _CLI_WORDS: Mapping[str, str] = {ALL_OUTSIDE_SCOPE: "out"}
@@ -499,6 +525,7 @@ ROW_TITLES: Mapping[LabelFitRowKind, str] = {
     "radial": "radial labels",
     "separate_features": "separate overlapping features",
     "smaller_definition_font": "smaller definition font",
+    "narrow_tracks": "narrow the inside tracks",
 }
 _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "outward_both": "outward in both directions",
@@ -511,6 +538,7 @@ _ROW_NAMES: Mapping[LabelFitRowKind, str] = {
     "radial": "radial labels",
     "separate_features": "separating overlapping features",
     "smaller_definition_font": "a smaller definition font",
+    "narrow_tracks": "narrowing the inside tracks",
 }
 _KIND_WORDS: Mapping[LabelKind, str] = {
     "circular_outer": "outer",
@@ -550,11 +578,19 @@ def fit_counts(fit: LabelFit) -> str:
 
 
 def row_note(row: LabelFitRow) -> str | None:
-    """What a ``found_with_notice`` row leaves, in the counts' words (LP-D57)."""
+    """What a ``found_with_notice`` row leaves of what it answers for, in the counts' words: crossing leaders and
+    labels over the definition text for a label row (LP-D57), definition lines over a track for a definition row."""
 
     remaining = row.remaining
     if row.status != "found_with_notice" or remaining is None:
         return None
+    if row.kind in DEFINITION_ROW_KINDS:
+        if not remaining.definition_track_overlaps:
+            return None
+        return (
+            _counted(remaining.definition_track_overlaps, "definition line still overlaps", "definition lines still overlap")
+            + " a track"
+        )
     notes: list[str] = []
     if remaining.crossing_pairs:
         notes.append(_counted(remaining.crossing_pairs, "leader pair still crosses", "leader pairs still cross"))
@@ -590,6 +626,8 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
 
 
 _RADIAL_REFUSAL = "need more room than the circular tracks leave"
+# What else shortens a centre definition that overlaps a track: its text (an abbreviation typed as the species).
+DEFINITION_TEXT_REMEDY = "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
 
 
 def label_fit_error_counts(report: LabelFitReport) -> str:
@@ -661,10 +699,11 @@ def _first_line(report: LabelFitReport) -> str:
     outcome = "Drawn anyway." if report.drawn else "Nothing was drawn."
     records = report.records
     if len(records) == 1:
+        # The record is named: a run that writes each record to its own file reports each on its own (OV-1836).
         (record,) = records
         singular, plural = label_kind_nouns(record)
         return (
-            f"{_counted(record.label_count, f'{singular} does', f'{plural} do')} not fit at "
+            f"{record.record_id}: {_counted(record.label_count, f'{singular} does', f'{plural} do')} not fit at "
             f"{record.font_size:g} pt ({label_fit_record_counts(record)}). {outcome}"
         )
     kinds = {label_kind_nouns(record) for record in records}
@@ -717,6 +756,9 @@ def format_label_fit_report(report: LabelFitReport, *, search_seconds: float | N
         lines.append(
             f"Not searched within {seconds:g} s: {_joined([_ROW_NAMES[kind] for kind in skipped])}."
         )
+    if any(record.label_kind == "circular_definition" for record in report.records):
+        # The Web dialog's "Edit Species / Strain…" button (PD-OI-097).
+        lines.append(DEFINITION_TEXT_REMEDY)
     return "\n".join(lines)
 
 
@@ -733,7 +775,10 @@ def raise_or_warn(
 
 __all__ = [
     "ALL_OUTSIDE_SCOPE",
+    "CENTER_RESERVED_RADIUS_PATH",
     "DEFINITION_FONT_PATH",
+    "DEFINITION_ROW_KINDS",
+    "DEFINITION_TEXT_REMEDY",
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
     "FONT_SIZE_PATHS",
@@ -780,6 +825,7 @@ __all__ = [
     "raise_or_warn",
     "row_note",
     "shapes_overlap",
+    "split_row_option_values",
     "switch_row",
     "verified_row",
 ]

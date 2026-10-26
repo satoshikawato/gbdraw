@@ -285,6 +285,7 @@ def test_pinned_inside_slots_are_reserved_before_auto_feature_slots() -> None:
             ],
             feature_dict={"plus": _Feature(0), "minus": _Feature(-1)},
             definition_reserved_radius_px=60.0,
+            center_reserved_radius_explicit=True,
         )
 
 
@@ -499,6 +500,7 @@ def test_radial_numeric_stack_compresses_group_no_lower_than_readable_minimum() 
             CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
         ],
         definition_reserved_radius_px=65.0,
+        center_reserved_radius_explicit=True,
     )
     by_id = {track.id: track for track in layout.tracks}
 
@@ -523,6 +525,7 @@ def test_radial_numeric_stack_raises_when_readable_minimum_cannot_fit() -> None:
                 CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew"),
             ],
             definition_reserved_radius_px=70.0,
+            center_reserved_radius_explicit=True,
         )
 
 
@@ -538,6 +541,7 @@ def test_outside_auto_numeric_width_is_independent_from_inside_compression() -> 
             CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew"),
         ],
         definition_reserved_radius_px=65.0,
+        center_reserved_radius_explicit=True,
     )
     by_id = {track.id: track for track in layout.tracks}
 

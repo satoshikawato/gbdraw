@@ -209,14 +209,14 @@ def test_a_request_reference_must_resolve() -> None:
 # single-request output updates its digest here; so does a Session version
 # bump (46, 47, 48: only the version field changed) and a change of the packaged
 # config a stored full config is completed with (the label style keys, LP-D98;
-# the Linear box default, LP-D106).
+# the Linear box default, LP-D106; the Circular track narrowing leaves, PD-OI-078).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
         "235b826839a5fe1d5eccd211788346654a834ee3321446c6a2d46d27842fb623",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
         "310221ed0a68661d74c39905ad04eeb10b00000929f8037dd76fe5161e9bcd27",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "5a14a677b08b41dbb0d37b50a703933e4939daf0f385d771c419e4204ebac47a",
+        "dfc9cb7fb1ace859ee40981b0d1aabb505f08e1110233ee0089fb6e8e13dd4a0",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
         "d305aa656be34b4fd3511cdb8107737d2d61f5687107c7eba52ed894a8c2e1ee",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":

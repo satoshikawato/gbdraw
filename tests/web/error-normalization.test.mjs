@@ -478,7 +478,6 @@ test('diagnosticError carries a fixed message, stage, operation and bounded cont
 test('a Circular placement limited by the center reservation names that cause', () => {
   for (const [reason, pattern] of [
     ['CANNOT_FIT', /Move the track, reduce widths/],
-    ['DEFINITION_RESERVED', /center definition text limits the inside tracks\. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius/],
     ['CENTER_RESERVED', /The Center Reserved Radius limits the inside tracks\. Set a smaller Center Reserved Radius or place tracks outside\./]
   ]) {
     const layout = roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason } });
@@ -488,6 +487,9 @@ test('a Circular placement limited by the center reservation names that cause', 
     assert.match(layout.summary, pattern);
     assert.deepEqual(layout.actions, ['edit-track', 'retry']);
   }
+  // DF-D02: the definition text alone no longer limits the inside tracks, so Python sends no such reason.
+  assert.equal(roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason: 'DEFINITION_RESERVED' } })
+    .context.reason, undefined);
 });
 
 // OV-1274, OV-1276: Python names the room kept below the band, the rows with an
@@ -498,22 +500,22 @@ test('a Circular placement names the room the GC rows keep inside it and their r
   // OV-1274 review item 6: each remedy is one whole sentence, after the sentence that introduces them.
   const gcRemedies = 'To make room, do one of the following\\. Select Hide GC Content, or reduce GC Content Width \\(with Custom Track Slots'
     + ' on, the row width\\)\\. Select Hide GC Skew, or reduce GC Skew Width \\(with Custom Track Slots on, the row width\\)\\.';
-  const both = layout({ reason: 'DEFINITION_RESERVED', innerPx: 190, outerPx: 386, keptInsidePx: 67, keptInsideTracks: 'gc_content,gc_skew' });
+  const both = layout({ reason: 'CENTER_RESERVED', innerPx: 190, outerPx: 386, keptInsidePx: 67, keptInsideTracks: 'gc_content,gc_skew' });
   assert.equal(both.context.keptInsideTracks, 'gc_content,gc_skew');
-  assert.match(both.summary, new RegExp('^A circular track does not fit\\. The center definition text limits the inside tracks\\. .* Available band: 190–386 px\\. '
+  assert.match(both.summary, new RegExp('^A circular track does not fit\\. The Center Reserved Radius limits the inside tracks\\. .* Available band: 190–386 px\\. '
     + 'Below it, 67 px are kept for the tracks inside it, among them GC content and GC skew\\. '
     + `${gcRemedies}$`));
   // Review N-1: the Depth row that shares the room (tests/test_circular_definition_fit.py, lambda + Depth) is not
   // a named row, so the sentence does not give all of the room to the GC rows.
-  const depth = layout({ reason: 'DEFINITION_RESERVED', innerPx: 213, outerPx: 386, keptInsidePx: 91, keptInsideTracks: 'gc_content,gc_skew' });
+  const depth = layout({ reason: 'CENTER_RESERVED', innerPx: 213, outerPx: 386, keptInsidePx: 91, keptInsideTracks: 'gc_content,gc_skew' });
   assert.match(depth.summary, / Below it, 91 px are kept for the tracks inside it, among them GC content and GC skew\. To make room, /);
   const skew = layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34, keptInsideTracks: 'gc_skew' });
   assert.match(skew.summary, / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it, among them GC skew\. To make room, do one of the following\. Select Hide GC Skew, or reduce GC Skew Width \(with Custom Track Slots on, the row width\)\.$/);
   // Room kept for other rows is a fact, without a remedy.
   assert.match(layout({ reason: 'CANNOT_FIT', innerPx: 156, outerPx: 386, keptInsidePx: 34 }).summary,
     / Available band: 156–386 px\. Below it, 34 px are kept for the tracks inside it\.$/);
-  // OV-1276: scale ticks that do not fit beside the definition text offer the scale's control.
-  const ticks = layout({ reason: 'DEFINITION_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
+  // OV-1276: scale ticks that do not fit beside the center reservation offer the scale's control.
+  const ticks = layout({ reason: 'CENTER_RESERVED', innerPx: 123, outerPx: 386, slotTrack: 'ticks' });
   assert.equal(ticks.context.slotTrack, 'ticks');
   assert.match(ticks.summary, / Available band: 123–386 px\. To make room, do the following\. Clear Show Coordinate Scale \(with Custom Track Slots on, remove the Ticks row\)\.$/);
   // Unknown or repeated names are dropped; nothing is left of a list without a known name.
