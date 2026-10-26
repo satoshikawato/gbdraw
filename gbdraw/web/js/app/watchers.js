@@ -256,30 +256,68 @@ export const setupWatchers = ({
     linearReorderNotice.value = '';
   };
 
-  // A card's failed import, with Retry: it belongs to the drawing whose card
-  // it was chosen in, and Retry is that drawing's step, so it is offered
-  // while that drawing is shown (R16-4).
+  // A card's failed import, with Retry, is the card state of the drawing whose
+  // card it was chosen in (D-15-126): its message shows while that drawing is
+  // shown and on no other drawing, and Retry is that drawing's step (R16-4).
   /**
    * @typedef {object} AuxiliaryImportFailure
    * @property {unknown} error the error the failure showed
    * @property {FileImportCard} key
-   * @property {string} drawingId the drawing whose card failed
+   * @property {DrawingState} drawing the drawing whose card failed
    * @property {InputFileRef | null} selection the card's file when it failed
    * @property {ReturnType<RulePreparation['snapshot']> | null} snapshot the rule inputs a Specific rules failure was found on
    * @property {() => Promise<boolean> | false} retry
    */
-  const auxiliaryImportFailure = /** @type {{ value: AuxiliaryImportFailure | null }} */ (ref(null));
-  const canRetryAuxiliaryImportFailure = computed(() => {
-    const failure = auxiliaryImportFailure.value;
-    return Boolean(failure
+  // One failure per drawing ID. A Load or History restore builds new drawing
+  // objects, so a failure of a replaced drawing is never shown again.
+  const auxiliaryImportFailures = /** @type {{ value: Readonly<Record<string, AuxiliaryImportFailure>> }} */ (ref({}));
+  /** @param {DrawingState} drawing */
+  const auxiliaryImportFailureOf = (drawing) => {
+    const failure = auxiliaryImportFailures.value[drawing.id];
+    return failure !== undefined && failure.drawing === drawing ? failure : null;
+  };
+  /** @param {DrawingState} drawing @param {AuxiliaryImportFailure | null} failure */
+  const setAuxiliaryImportFailure = (drawing, failure) => {
+    const kept = Object.entries(auxiliaryImportFailures.value).filter(([id]) => id !== drawing.id);
+    auxiliaryImportFailures.value = Object.freeze(Object.fromEntries(failure ? [...kept, [drawing.id, failure]] : kept));
+  };
+  /** @param {DrawingState} drawing */
+  const retryableAuxiliaryImportFailure = (drawing) => {
+    const failure = auxiliaryImportFailureOf(drawing);
+    return failure
       && errorLog.value === failure.error
-      && failure.drawingId === state.activeDrawingId.value
-      && state.activeDrawing().files[failure.key] === failure.selection
-      && (!failure.snapshot || rulePreparation.isCurrent(failure.snapshot)));
+      && drawing.files[failure.key] === failure.selection
+      && (!failure.snapshot || rulePreparation.isCurrent(failure.snapshot))
+      ? failure : null;
+  };
+  const canRetryAuxiliaryImportFailure = computed(() => {
+    const drawing = state.activeDrawing();
+    return retryableAuxiliaryImportFailure(drawing) !== null;
   });
   const retryAuxiliaryImportFailure = () => {
     const busy = state.sessionOperationAvailability?.();
-    return busy || (canRetryAuxiliaryImportFailure.value ? /** @type {AuxiliaryImportFailure} */ (auxiliaryImportFailure.value).retry() : false);
+    if (busy) return busy;
+    const drawing = state.activeDrawing();
+    const failure = retryableAuxiliaryImportFailure(drawing);
+    return failure ? failure.retry() : false;
+  };
+  /**
+   * The shown drawing changes. The departing drawing keeps its card failure
+   * while its message was still shown (a dismissed or replaced message ends
+   * it); the arriving drawing's failure, while its card still holds the failed
+   * selection, is the message the switch shows again.
+   * @param {DrawingState} departing
+   * @param {DrawingState} arriving
+   * @returns {unknown} the arriving drawing's card failure error, or null
+   */
+  const auxiliaryImportFailureOnArrival = (departing, arriving) => {
+    const left = auxiliaryImportFailureOf(departing);
+    if (left && errorLog.value !== left.error) setAuxiliaryImportFailure(departing, null);
+    const waiting = auxiliaryImportFailureOf(arriving);
+    if (!waiting) return null;
+    if (arriving.files[waiting.key] === waiting.selection) return waiting.error;
+    setAuxiliaryImportFailure(arriving, null);
+    return null;
   };
   /**
    * The one writer of a card's binding: the drawing's inputs slice (R16-4).
@@ -431,15 +469,15 @@ export const setupWatchers = ({
     // stay; one about inputs that kept changing offers it on any inputs, since
     // Retry is meant to run on the new ones.
     const retainFailure = (inputsBound = key === 't_color') => {
-      auxiliaryImportFailure.value = {
-        error: errorLog.value, key, drawingId: drawing.id, selection: drawing.files[key],
+      setAuxiliaryImportFailure(drawing, {
+        error: errorLog.value, key, drawing, selection: drawing.files[key],
         snapshot: inputsBound ? rulePreparation.snapshot() : null,
         retry: () => {
           const retried = bindCard(drawing, key, source);
           if (!retried) return false;
           return startFileImport(drawing, key, retried, previousFile);
         }
-      };
+      });
     };
     const pending = readFileText(source).then((text) => {
       // Reads may finish out of order; serialize only their live application.
@@ -454,9 +492,9 @@ export const setupWatchers = ({
           bindCard(drawing, key, previousFile);
           if (errorLog.value !== previousError) retainFailure(key === 't_color' && !gaveUp);
           return false;
-        } else if (drawing.files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+        } else if (drawing.files[key] === file && errorLog.value === auxiliaryImportFailureOf(drawing)?.error) {
           errorLog.value = null;
-          auxiliaryImportFailure.value = null;
+          setAuxiliaryImportFailure(drawing, null);
         }
         return true;
       });
@@ -513,5 +551,8 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
+  return {
+    importAuxiliaryTable, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival,
+    resetModeTransientUi
+  };
 };

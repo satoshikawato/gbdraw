@@ -3664,7 +3664,7 @@ export const createAppSetup = () => {
   });
   const {
     importAuxiliaryTable,
-    canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi
+    canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, auxiliaryImportFailureOnArrival, resetModeTransientUi
   } = setupWatchers({
     state,
     rulePreparation,
@@ -4462,6 +4462,9 @@ export const createAppSetup = () => {
     if (arriving === departing) return;
     // 1. Settle the departing drawing; its capture runs in this call.
     void history.settlePendingIntent();
+    // A card's failed import is its drawing's card state (D-15-126): read
+    // before the departing drawing's message is cleared below.
+    const arrivingCardFailure = auxiliaryImportFailureOnArrival(departing, arriving);
     featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     rememberDepartingResultProjection(departing);
@@ -4485,6 +4488,7 @@ export const createAppSetup = () => {
       || (errorContext?.drawingId === undefined && errorContext?.diagramMode === arriving.mode))) {
       errorLog.value = null;
     }
+    if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
     // The arriving drawing's annotations, over its mode's record catalog.
     rebindAnnotationRecords();
     // 5. Presentation: the arriving Result is shown as a selection.

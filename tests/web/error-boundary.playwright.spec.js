@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 test('real Python adapters retain causes through one lazy Worker and successful retry', async ({ page }) => {
   test.setTimeout(180000);
@@ -301,6 +302,12 @@ test('table import failures retain exact cause and concrete retry without a draf
   await uploader.setInputFiles({name:'PRIVATE_FILE_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#ff0000\t\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
+  await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  // D-15-126: the failure is the Circular drawing's card state: not shown on another drawing, shown again with its Retry.
+  await showDrawing(page,{kind:'linear'});
+  await expect(alert).toHaveCount(0);
+  await showDrawing(page,{kind:'circular'});
+  await expect(alert).toContainText('Not a valid regular expression');
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
   await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
   await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
