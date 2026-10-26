@@ -82,7 +82,6 @@ import {
   readCommittedResourceRecordCount,
   assertDrawingInputs,
   importSession as importSessionFromFile,
-  SESSION_VERSION,
   serializeActiveRenderFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
@@ -3481,7 +3480,6 @@ export const createAppSetup = () => {
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     askChoice,
     showNotice,
-    canonicalSessionVersion: SESSION_VERSION,
     // A Generate that adopts a Circular LOSAT result reconciles its drawing's
     // rings; a Linear Generate and a Circular one without such a result leave them.
     adoptCanonicalRenderArtifacts: (canonical, options) => {

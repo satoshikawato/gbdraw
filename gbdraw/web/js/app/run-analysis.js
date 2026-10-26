@@ -1466,8 +1466,6 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
- * @property {number} [canonicalSessionVersion] Not read: the exact replay takes the Session 49 layout's version
- *   (`sessionDocumentOfViews`).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
