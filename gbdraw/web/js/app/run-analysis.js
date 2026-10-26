@@ -152,7 +152,7 @@ import {
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
 import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
-import { buildFastaText, circularConservationKeys } from '../services/circular-conservation-keys.js';
+import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -206,7 +206,7 @@ import {
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
-/** @import { CircularConservationKeys, ConservationSubject } from '../services/circular-conservation-keys.js' */
+/** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
@@ -1445,8 +1445,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
- *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState,
+ *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
+ *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
@@ -2801,6 +2802,9 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
+      // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
+      /** @type {ConservationPairs} */
+      let conservationPairs = NO_CONSERVATION_PAIRS;
       /**
        * Each ring LOSAT search, in ring order: its raw cache key (null without current search output) and the
        * Source recipe's generated BLAST table.
@@ -3292,8 +3296,10 @@ export const createRunAnalysis = ({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
-            // The ring keys Save matches too (one builder, D-15-123), in ring order.
+            // The ring keys, in ring order (the one builder, D-15-123); their
+            // pairs go with the request it installs, for Save (D-15-124).
             const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
+            conservationPairs = conservationHashPairs(conservationKeys);
             const conservationEntries = conservationKeys.rings.map(({ source }) => source);
             const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
             const conservationResults = await runCircularLosatConservation(conservationKeys);
@@ -5284,7 +5290,7 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs });
       }
       settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
@@ -5722,7 +5728,8 @@ export const createRunAnalysis = ({
         });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
+        // A candidate of the committed request runs no conservation search: the request's pairs stay.
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' });
       }
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;

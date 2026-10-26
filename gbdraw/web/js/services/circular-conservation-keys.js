@@ -1,11 +1,13 @@
 // @ts-check
 // The sequence hashes that key a Circular drawing's LOSAT conservation rings
-// (DESIGN §1, K-3, D-15-123): one builder that Generate (to reuse or run a
-// ring's search) and Save (to write into a drawing only the entries its rings
-// name) both call. Every read is kept per File (`readOncePerFile`), so a File
-// already hashed by a Generate or an earlier Save is not read again.
+// (DESIGN §1, K-3, D-15-123, D-15-124): one builder, which only Generate calls
+// (to reuse or run a ring's search). Every read is kept per File
+// (`readOncePerFile`), so a File a Generate already hashed is not read again.
+// The hash pairs a request names (`ConservationPairs`) are recorded with the
+// request when Generate or Load installs it; Save reads that record, no file.
 import { normalizeFileList, orderedConservationSources } from './conservation-series.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
+import { CIRCULAR_CONSERVATION_FLOW } from './losat-cache.js';
 import { readAllSequenceRecords, readComparisonSequenceDigest, readOncePerFile } from './record-discovery.js';
 
 /** @import { FileLike } from './session-resource-backing.js' */
@@ -101,12 +103,39 @@ export const circularConservationKeys = async (drawing, fileOf, beforeRing = () 
 export const conservationPairKey = (subjectCanonicalHash, queryCanonicalHash) => JSON.stringify([subjectCanonicalHash, queryCanonicalHash]);
 
 /**
- * The hash pairs (`conservationPairKey`) a drawing's bound conservation rings name: Save keeps a conservation entry
- * for the drawing only when its own two hashes are one of them. A ring or a subject that is not bound (after a
- * settings-only Load) names none.
+ * The conservation hash pairs (`conservationPairKey`) a drawing's committed request names: runtime state of the
+ * request, kept beside it (never written). Save writes the drawing a conservation entry only when the entry's own two
+ * hashes are one of them.
+ * @typedef {ReadonlySet<string>} ConservationPairs
+ */
+/**
+ * The pairs Generate gives the request it installs (`adoptCanonicalRenderArtifacts`): its ring keys' pairs, or
+ * `'committed'` when it re-renders the committed request without a conservation search, which keeps that request's.
+ * @typedef {ConservationPairs | 'committed'} AdoptedConservationPairs
+ */
+/** A request that names no conservation ring, and a drawing without a request. @type {ConservationPairs} */
+export const NO_CONSERVATION_PAIRS = Object.freeze(new Set());
+
+/**
+ * The pairs Generate records for the request it installs: those of the drawing's bound rings. A ring or a subject
+ * that is not bound names none.
  * @param {CircularConservationKeys} keys
- * @returns {Set<string>}
+ * @returns {ConservationPairs}
  */
 export const conservationHashPairs = ({ subject, rings }) => new Set(subject
   ? rings.flatMap(({ queryCanonicalHash }) => (queryCanonicalHash === null ? [] : [conservationPairKey(subject.hash, queryCanonicalHash)]))
   : []);
+
+/**
+ * The pairs Load records for a request it installs: those of the conservation entries the file wrote into the
+ * request's drawing (unvalidated; an entry that is not a conservation entry names none).
+ * @param {unknown} entries
+ * @returns {ConservationPairs}
+ */
+export const conservationPairsOfEntries = (entries) => new Set((Array.isArray(entries) ? entries : [])
+  .flatMap((/** @type {unknown} */ entry) => (
+    entry !== null && typeof entry === 'object' && 'flow' in entry && entry.flow === CIRCULAR_CONSERVATION_FLOW
+      && 'subjectCanonicalHash' in entry && typeof entry.subjectCanonicalHash === 'string'
+      && 'queryCanonicalHash' in entry && typeof entry.queryCanonicalHash === 'string'
+      ? [conservationPairKey(entry.subjectCanonicalHash, entry.queryCanonicalHash)] : []
+  )));

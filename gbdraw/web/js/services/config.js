@@ -200,7 +200,8 @@ import {
   validateProteinIdentityManifest,
   CIRCULAR_CONSERVATION_FLOW
 } from './losat-cache.js';
-import { circularConservationKeys, conservationHashPairs, conservationPairKey } from './circular-conservation-keys.js';
+import { NO_CONSERVATION_PAIRS, conservationPairKey, conservationPairsOfEntries } from './circular-conservation-keys.js';
+/** @import { AdoptedConservationPairs, ConservationPairs } from './circular-conservation-keys.js' */
 import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap,
@@ -846,12 +847,22 @@ const preservedCliOptions = new Map();
 // which the true type refuses (stage 1d).
 /** @type {Record<string, any> | null} */
 let committedCanonicalSession = null;
+// The conservation hash pairs the committed request names (D-15-124), set
+// with it: Generate's from its ring keys, Load's from the entries the file
+// wrote into the request's drawing; Save reads them. They travel with the
+// request (`canonicalRenderArtifactOwner`, the slots and History).
+/** @type {ConservationPairs} */
+let committedConservationPairs = NO_CONSERVATION_PAIRS;
 // Counts replacements of the committed Session, so a computed that reads the
 // committed request follows Generate, Load, a History restore, and a mode switch.
 const committedCanonicalRevision = ref(0);
-/** @param {Record<string, any> | null} next */
-const setCommittedCanonicalSession = (next) => {
+/**
+ * @param {Record<string, any> | null} next
+ * @param {ConservationPairs} conservationPairs The conservation hash pairs `next` names.
+ */
+const setCommittedCanonicalSession = (next, conservationPairs) => {
   committedCanonicalSession = next;
+  committedConservationPairs = next ? conservationPairs : NO_CONSERVATION_PAIRS;
   committedCanonicalRevision.value += 1;
 };
 // OV-484: the track settings a Session without a request (a Session 27 to 30)
@@ -3021,12 +3032,13 @@ const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedF
  *   savedEdits?: SavedResultEdits | null, legacy?: LegacyResultNormalization | null,
  *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>,
  *   resourceTable: any, webFiles: any, retainedBytes: number,
- *   repairs: LoadRepair[] | null }} options `drawing` is the Load's drawing of the set (its slot's ID);
- *   `at` is where the file holds the set, for its repair rows; `repairs` collects what Load cannot restore of the set's editor state.
+ *   repairs: LoadRepair[] | null, conservationPairs: ConservationPairs }} options `drawing` is the Load's drawing of the set (its slot's ID);
+ *   `at` is where the file holds the set, for its repair rows; `repairs` collects what Load cannot restore of the set's editor state;
+ *   `conservationPairs` are the hash pairs of the set's request (those of the entries the file wrote into its drawing).
  */
 const buildLoadedArtifactSlot = (set, {
   drawing, at, featureCatalog, admittedResults = null, savedEdits = null, legacy = null, restoredSequenceSources, resources, resourceTable,
-  webFiles, retainedBytes, repairs
+  webFiles, retainedBytes, repairs, conservationPairs
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
   const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
@@ -3080,7 +3092,8 @@ const buildLoadedArtifactSlot = (set, {
       committedCanonicalSession: adoptRuntimeCanonicalSession({
         renderRequest: set.renderRequest, resources, webFiles: isPlainObject(webFiles) ? webFiles : {}
       }),
-      activeSessionResourceTable: resourceTable
+      activeSessionResourceTable: resourceTable,
+      conservationPairs
     } },
     retainedBytes
   });
@@ -4148,13 +4161,15 @@ const deserializeCanonicalComparisons = (
 /**
  * @param {{ renderRequest?: unknown, resources?: unknown, webFiles?: unknown }} canonical A Generate candidate:
  *   the request it built or projected, its resources and Web file bindings.
- * @param {{ adoptOwnedRequest?: boolean, drawing: DrawingState }} options `drawing`: the drawing Generate
- *   drew, whose comparison and ring files the request's resources replace.
+ * @param {{ adoptOwnedRequest?: boolean, drawing: DrawingState, conservationPairs: AdoptedConservationPairs }} options
+ *   `drawing`: the drawing Generate drew, whose comparison and ring files the request's resources replace;
+ *   `conservationPairs`: the hash pairs of the request's conservation rings (`conservationHashPairs`), or
+ *   `'committed'` for a candidate of the committed request that ran no conservation search (its pairs stay).
  * @returns {boolean} Whether it installed the Circular drawing's ring files (a LOSAT-cache result).
  */
 export const adoptCanonicalRenderArtifacts = (
   canonical,
-  { adoptOwnedRequest = false, drawing }
+  { adoptOwnedRequest = false, drawing, conservationPairs }
 ) => {
   const ownedCanonical = adoptOwnedRequest
     ? adoptRuntimeCanonicalSession(canonical)
@@ -4215,7 +4230,8 @@ export const adoptCanonicalRenderArtifacts = (
   // Everything that can validate, project, or deserialize finishes before the
   // committed request and its comparison-backed draft resources are replaced.
   activeSessionResourceTable = sessionResourceTable;
-  setCommittedCanonicalSession(nextCommittedCanonicalSession);
+  setCommittedCanonicalSession(nextCommittedCanonicalSession,
+    conservationPairs === 'committed' ? committedConservationPairs : conservationPairs);
   if (nextLinearComparisons) {
     bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, nextLinearComparisons);
   }
@@ -4280,7 +4296,7 @@ export const commitLiveSettingValues = (writes) => {
   const renderRequest = cloneJsonData(committedCanonicalSession.renderRequest);
   applyLiveSettingWrites(renderRequest, writes);
   const next = { ...committedCanonicalSession, renderRequest };
-  setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next);
+  setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next, committedConservationPairs);
 };
 
 // The recorded track settings of the shown mode's loaded Result; the other mode has none.
@@ -4304,13 +4320,20 @@ export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
 );
 
-// `restore(null)` installs an artifact without a committed Session (E1: an
-// empty mode slot).
+/**
+ * A drawing's committed request as its artifact holds it: the request, its resource table and the conservation hash
+ * pairs it names. `restore(null)` installs an artifact without a committed Session (E1: an empty mode slot).
+ * @typedef {{
+ *   committedCanonicalSession: Record<string, any> | null, activeSessionResourceTable: any,
+ *   conservationPairs: ConservationPairs
+ * }} CanonicalArtifactState
+ */
 export const canonicalRenderArtifactOwner = Object.freeze({
-  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
-  /** @param {{ committedCanonicalSession: any, activeSessionResourceTable: any } | null} snapshot */
+  /** @returns {Readonly<CanonicalArtifactState>} */
+  capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable, conservationPairs: committedConservationPairs }),
+  /** @param {CanonicalArtifactState | null} snapshot */
   restore: (snapshot) => {
-    setCommittedCanonicalSession(snapshot?.committedCanonicalSession ?? null);
+    setCommittedCanonicalSession(snapshot?.committedCanonicalSession ?? null, snapshot?.conservationPairs ?? NO_CONSERVATION_PAIRS);
     activeSessionResourceTable = snapshot?.activeSessionResourceTable ?? null;
   }
 });
@@ -4328,11 +4351,11 @@ export const canonicalRenderArtifactOwner = Object.freeze({
  * @returns {Promise<Readonly<ArtifactSlot>[] | null>} Every kept artifact, the changed ones holding the converted bytes; null when none changed.
  */
 const convertLoadedProteinResultFrames = async (source, keptSlots, shownDrawing) => {
-  /** @typedef {{ committedCanonicalSession: typeof committedCanonicalSession, activeSessionResourceTable: typeof activeSessionResourceTable }} CanonicalHolder */
+  /** @typedef {Readonly<CanonicalArtifactState>} CanonicalHolder */
   /** @type {(CanonicalHolder | null)[]} */
   const kept = keptSlots.map((slot) => slot.runtimeState?.canonical ?? null);
   /** @type {CanonicalHolder} */
-  const shown = { committedCanonicalSession, activeSessionResourceTable };
+  const shown = canonicalRenderArtifactOwner.capture();
   const converted = await convertStoredProteinResultFrames(source, [
     shown.committedCanonicalSession, ...kept.map((holder) => holder?.committedCanonicalSession)
   ]);
@@ -4354,6 +4377,7 @@ const convertLoadedProteinResultFrames = async (source, keptSlots, shownDrawing)
     if (table && !tableOf.has(table)) tableOf.set(table, adoptCurrentSessionResources(resources));
     const next = { ...session, resources };
     return {
+      ...holder,
       committedCanonicalSession: isAdoptedCanonicalSession(session) ? adoptRuntimeCanonicalSession(next) : next,
       activeSessionResourceTable: table ? tableOf.get(table) ?? null : null
     };
@@ -4977,6 +5001,7 @@ const captureSessionImportSnapshot = (shownDrawingId) => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
+  committedConservationPairs,
   loadedTrackSettings,
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
@@ -5011,7 +5036,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     loadedTrackSettings = snapshot.loadedTrackSettings;
     setCommittedCanonicalSession(isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
       ? snapshot.committedCanonicalSession
-      : cloneCanonicalSession(snapshot.committedCanonicalSession));
+      : cloneCanonicalSession(snapshot.committedCanonicalSession), snapshot.committedConservationPairs);
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
     state.skipCaptureBaseConfig.value = true;
     applyResultsData(snapshot.results, shownUi);
@@ -5168,7 +5193,7 @@ const commitDrawingCopy = (drawing) => {
 const resetSessionProject = () => {
   previewRuntimePorts.clearActiveRuntime();
   preservedCliOptions.clear();
-  setCommittedCanonicalSession(null);
+  setCommittedCanonicalSession(null, NO_CONSERVATION_PAIRS);
   loadedTrackSettings = null;
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
@@ -5574,7 +5599,8 @@ const applySessionFeatureRecoveryPlan = (drawing, plan) => {
  * @typedef {Readonly<Record<string, any>> & {
  *   mode: 'circular' | 'linear',
  *   committedCanonicalSession: any,
- *   activeSessionResourceTable: any
+ *   activeSessionResourceTable: any,
+ *   conservationPairs: ConservationPairs
  * }} SessionArtifactView
  */
 /**
@@ -5589,7 +5615,8 @@ const displayedArtifactView = (drawing) => Object.freeze({
   originalLegendOrder: state.originalLegendOrder.value,
   mode: drawing.mode,
   committedCanonicalSession,
-  activeSessionResourceTable
+  activeSessionResourceTable,
+  conservationPairs: committedConservationPairs
 });
 /**
  * @param {Readonly<ArtifactSlot>} slot
@@ -5600,7 +5627,8 @@ const stashedArtifactView = (slot) => Object.freeze({
   originalLegendOrder: slot.legendInventory,
   mode: state.drawingOf(slot.drawingId).mode,
   committedCanonicalSession: slot.runtimeState?.canonical?.committedCanonicalSession ?? null,
-  activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null
+  activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null,
+  conservationPairs: slot.runtimeState?.canonical?.conservationPairs ?? NO_CONSERVATION_PAIRS
 });
 /** @param {SessionArtifactView | null} view */
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
@@ -5737,71 +5765,29 @@ const artifactUiState = (view) => ({
  */
 
 /**
- * The conservation hash pairs a drawing Save writes names: those of the rings
- * its written request names (`circularConservationKeys`, the builder Generate
- * keys its ring searches with, D-15-123), when the request is Circular and
- * its conservation rings read sequences; none otherwise. A ring is the
- * request's when its binding (`written.webFiles.bindings`, aligned with
- * `drawing.files`) is the resource the request names (the same
- * content-deduplicated table); a ring file bound in its place after the
- * Generate, or a ring or reference not bound (after a settings-only Load),
- * names none, and its File is not read. The reads are kept per File, so only
- * a File no Generate or earlier Save read is read (once, by the Python ring
- * reader); a read that fails names no pair, and Save goes on.
- * @param {DrawingState} drawing
- * @param {SessionResourceDrawing} written The drawing's written request and bindings.
- * @returns {Promise<Set<string>>}
- */
-const conservationPairsOfDrawing = async (drawing, { renderRequest: request, webFiles }) => {
-  const named = new Set((request?.mode === 'circular' ? request.diagramOptions.conservationFastaFiles ?? [] : [])
-    .flatMap((file) => (file === null ? [] : [file.resourceId])));
-  if (named.size === 0) return new Set();
-  /** @type {unknown} */
-  const bindings = webFiles.bindings;
-  // One binding per place of `drawing.files.c_conservation_fastas` (null: none bound).
-  const boundIds = isPlainObject(bindings) && Array.isArray(bindings.c_conservation_fastas)
-    ? bindings.c_conservation_fastas.map(resourceIdOfBinding) : [];
-  const rings = drawing.files.c_conservation_fastas;
-  const unnamed = new Set(rings.filter((ref, index) => ref !== null && !named.has(boundIds[index] ?? '')));
-  /** @type {typeof state.inputFiles.fileOf} */
-  const fileOf = (ref) => (ref && unnamed.has(ref) ? null : state.inputFiles.fileOf(ref));
-  try {
-    return conservationHashPairs(await circularConservationKeys(drawing, fileOf));
-  } catch (error) {
-    console.warn('Save could not read the conservation ring files; it writes no conservation entry for this drawing.', normalizeUserFacingError(error));
-    return new Set();
-  }
-};
-/**
- * The resource a single-file binding names (null: none).
- * @param {unknown} binding
- * @returns {string | null}
- */
-const resourceIdOfBinding = (binding) => (
-  binding !== null && typeof binding === 'object' && 'resourceId' in binding && typeof binding.resourceId === 'string'
-    ? binding.resourceId : null
-);
-
-/**
  * The raw LOSAT entries Save writes into one Session 49 drawing: those its
  * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
  * written in both and a drawing without a request names none. A Linear entry
  * names its pair's rows, which a Linear request names as its records' keys;
  * a Circular conservation entry names its subject and query hashes, which
- * the drawing's rings name (`conservationPairsOfDrawing`); any other entry
- * goes to every drawing with a request. Load merges every drawing's entries
- * into the one cache.
+ * must be a pair the drawing's committed request recorded (D-15-124; Save
+ * reads no ring file); any other entry goes to every drawing with a request.
+ * Load merges every drawing's entries into the one cache.
  * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
- * @param {ReadonlySet<string>} conservationPairs `conservationPairsOfDrawing`'s.
+ * @param {ConservationPairs} conservationPairs The hash pairs its committed request names (none for a draft request).
  * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
  * @returns {Record<string, unknown>[]}
  */
 const losatEntriesOfDrawing = (request, conservationPairs, entries) => {
   if (!request) return [];
   const records = new Set(request.mode === 'linear' ? request.records.map(({ recordKey }) => recordKey) : []);
+  // A request without sequence rings names no pair, whatever its drawing's file held.
+  const readsRings = request.mode === 'circular'
+    && (request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null);
   return entries.filter(({ queryUid, subjectUid, flow, queryCanonicalHash, subjectCanonicalHash }) => (
     typeof queryUid === 'string' && typeof subjectUid === 'string' ? records.has(queryUid) && records.has(subjectUid)
-      : flow === CIRCULAR_CONSERVATION_FLOW ? conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash))
+      : flow === CIRCULAR_CONSERVATION_FLOW
+        ? readsRings && conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash))
         : true
   ));
 };
@@ -5918,7 +5904,9 @@ const exportSessionDocument = async (
         omitUnsourcedDepth: true
       });
     }
-    parts.push({ saved, slice, artifact, ui, results, editorState, committed });
+    // The pairs belong to the committed request; a draft request names none (D-15-124).
+    const conservationPairs = artifact?.committedCanonicalSession ? artifact.conservationPairs : NO_CONSERVATION_PAIRS;
+    parts.push({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs });
   }
   const built = await buildSessionDrawingResources(
     state, parts.map(({ saved, committed }) => ({ drawing: saved, committed }))
@@ -5941,9 +5929,6 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
-  const conservationPairs = await Promise.all(parts.map(({ saved }, index) => (
-    conservationPairsOfDrawing(saved, built.written[index])
-  )));
   // The project's original-name hints, from every drawing's request metadata.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
   const createdAt = new Date().toISOString();
@@ -5956,7 +5941,7 @@ const exportSessionDocument = async (
   });
   // Each drawing as its one-drawing view; `sessionDocumentOfViews` places its
   // fields in the Session 49 layout (DESIGN §1, §4.4).
-  const sessionData = sessionDocumentOfViews(parts.map(({ saved, slice, artifact, ui, results, editorState, committed }, index) => {
+  const sessionData = sessionDocumentOfViews(parts.map(({ saved, slice, artifact, ui, results, editorState, committed, conservationPairs }, index) => {
     const cliInvocation = artifact ? artifactCliInvocation(artifact) : undefined;
     const shown = saved.id === drawing.id;
     return {
@@ -5991,7 +5976,7 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs[index], losatEntries) },
+        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs, losatEntries) },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
         ...(cliInvocation ? { cliInvocation } : {})
@@ -6254,6 +6239,31 @@ const importSessionDocument = async (e, options = {}) => {
     // Linear part (its comparisons, LOSAT caches and group names).
     const committedSetDrawingId = projectedDrawingId ?? fileDrawingIdOf(generatedMode);
     const linearPartDrawingId = fileDrawingIdOf('linear');
+    /**
+     * The saved entries of a LOSAT cache field the file wrote into each
+     * drawing, by drawing ID (unvalidated): a Session 49's own, the projected
+     * drawing's from its view; a Session 27-48's one list, `partDrawingId`'s.
+     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId} partDrawingId
+     * @returns {{ id: DrawingId, entries: unknown }[]}
+     */
+    const fileLosatEntriesOf = (projectedEntries, field, partDrawingId) => (projectedDrawingId !== null && upgraded
+      ? [{ id: projectedDrawingId, entries: projectedEntries },
+          ...upgraded.drawings.filter((entry) => entry.id !== projectedDrawingId).map((entry) => ({
+            id: /** @type {DrawingId} */ (entry.id),
+            entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
+          }))]
+      : [{ id: partDrawingId, entries: projectedEntries }]);
+    // The conservation hash pairs each loaded request names (D-15-124): those
+    // of the conservation entries the file wrote into its drawing (a Session
+    // 27-48's one list is its one Circular part's). A drawing without a
+    // request installs none.
+    /** @type {ReadonlyMap<DrawingId, ConservationPairs>} */
+    const loadedConservationPairs = new Map(projectionResult
+      ? fileLosatEntriesOf(projectionResult.artifactState.losatCache?.entries, 'losatCache', fileDrawingIdOf('circular'))
+        .map(({ id, entries }) => [id, conservationPairsOfEntries(entries)])
+      : []);
+    /** @param {DrawingId} drawingId @returns {ConservationPairs} */
+    const loadedConservationPairsOf = (drawingId) => loadedConservationPairs.get(drawingId) ?? NO_CONSERVATION_PAIRS;
     /**
      * Each drawing's draft part of a Session 46-49, by drawing ID: its entry's
      * (`drawingDraftPartOf`). An unused drawing (one of a mode the document
@@ -6583,7 +6593,8 @@ const importSessionDocument = async (e, options = {}) => {
         legacy: loadedResultNormalization(mode, null, at),
         repairs,
         restoredSequenceSources: sequenceSources.restored,
-        retainedBytes: setCharactersOf(set) * 2
+        retainedBytes: setCharactersOf(set) * 2,
+        conservationPairs: loadedConservationPairsOf(drawing.id)
       }));
     }
     // The rule rows of each drawing whose keys the reading of its saved
@@ -6991,7 +7002,8 @@ const importSessionDocument = async (e, options = {}) => {
           retainedBytes: topSetCharacters * 2,
           repairs: null,
           at: '',
-          drawing: { id: committedSetDrawingId, mode: generatedMode }
+          drawing: { id: committedSetDrawingId, mode: generatedMode },
+          conservationPairs: loadedConservationPairsOf(committedSetDrawingId)
         })
       : null;
     // The saved Result's editor edits: a Session 39 or older is read here,
@@ -7043,7 +7055,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.appliedPaletteName.value = artifact.appliedPaletteName;
     state.appliedPaletteColors.value = artifact.appliedPaletteColors;
     if (currentSchemaSession) {
-      setCommittedCanonicalSession(adoptedCanonicalSession);
+      setCommittedCanonicalSession(adoptedCanonicalSession, loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = currentResourceTable;
     }
     state.sessionTitle.value = canonicalSession
@@ -7166,13 +7178,8 @@ const importSessionDocument = async (e, options = {}) => {
      * cache (DESIGN §4.1); a Session 27-48's one list, its Linear part's.
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
      */
-    const losatSourcesOf = (projectedEntries, field) => (projectedDrawingId !== null && upgraded
-      ? [{ drawing: shownDrawing.id === projectedDrawingId ? shownDrawing : state.drawingOf(projectedDrawingId), entries: projectedEntries },
-          ...upgraded.drawings.filter((entry) => entry.id !== projectedDrawingId).map((entry) => ({
-            drawing: state.drawingOf(/** @type {DrawingId} */ (entry.id)),
-            entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
-          }))]
-      : [{ drawing: state.drawingOf(linearPartDrawingId), entries: projectedEntries }]);
+    const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, linearPartDrawingId)
+      .map(({ id, entries }) => ({ drawing: shownDrawing.id === id ? shownDrawing : state.drawingOf(id), entries }));
     if (!settingsOnly) {
       // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
       committed.forEach((drawing) => reconcileDepthTrackStateAfterSessionFiles(
@@ -7330,7 +7337,7 @@ const importSessionDocument = async (e, options = {}) => {
           slots: adv[`${shownMode}_track_slots_enabled`] ? cloneJsonData(adv[`${shownMode}_track_slots`]) : null
         });
       }
-      setCommittedCanonicalSession(committed);
+      setCommittedCanonicalSession(committed, loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = null;
     } else {
       // OV-1145 B-LOAD: after the stored figure, before History's base (`afterImport`).
