@@ -3190,25 +3190,35 @@ Status: active Product authority
     pull request, and the Review is `REQUIRED`.
 - Revision 90 changes: `PD-OI-078` gains scenario revision `2` (concern
   `diagram-generation.circular-definition-fit`; the outcome
-  `C / NO-TRACK-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; TRACKS-FIXED`)
+  `L / LIMITED-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; LANES-UNDER-TICK-LABELS`)
   and `PD-OI-097` gains scenario revision `18` (concern
   `product.circular-outer-label-fit`; it adds `DEF-TRIGGER-INK`,
   `DEF-ROW-NARROW-CRR`, `DEF-EDIT-TEXT-BUTTON`, and `DEF-KEEP-AS-DRAWN`). The
-  Circular centre definition no longer narrows or moves the inside tracks and
-  is never wrapped automatically. A name too long for the room inside the
-  tracks is drawn on one line over them, and when its ink touches a drawn
-  track line or area the label-fit warning names the record and offers a
-  smaller definition font, narrower inside tracks, and a button that opens the
-  record's Species and Strain fields. They come from replies of the Product
-  Decision Owner `satoshikawato` of `2026-10-25` and `2026-10-26` in the
-  Claude Code sessions of the campaign `definition-fit-choice-20261025`
-  (decisions DF-D02, DF-D05, DF-D14, DF-D15, DF-D16, DF-D25, DF-D26, and
-  DF-D29), given to reports and questions the sessions relayed because the
-  choices are the Product Decision Owner's. Each reply is quoted as written.
+  default Circular inside lanes start right under the tick-label band whatever
+  the strand count. When the definition band reaches the inside tracks they
+  move outward at their widths, then narrow only if that clears the band with
+  every narrowed track at or above the floor (default 30 px,
+  `canvas.circular.track_narrowing_min_px`; narrowing can be switched off with
+  `canvas.circular.track_narrowing`); otherwise they keep their widths and the
+  definition is drawn over them with the notice. The definition is never
+  wrapped automatically. A name too long for the room is drawn on one line,
+  and when its ink touches a drawn track line or area the label-fit warning
+  names the record and offers a smaller definition font, narrower inside
+  tracks, and a button that opens the record's Species and Strain fields. They
+  come from replies of the Product Decision Owner `satoshikawato` of
+  `2026-10-25` and `2026-10-26` in the Claude Code sessions of the campaign
+  `definition-fit-choice-20261025` (decisions DF-D02, DF-D05, DF-D14, DF-D16,
+  DF-D25, DF-D26, DF-D35, DF-D36, and DF-D37), given to reports and questions
+  the sessions relayed because the choices are the Product Decision Owner's.
+  Each reply is quoted as written. The earlier decisions DF-D15 (the tracks
+  never move) and DF-D29 (approval of the earlier receipt text) are
+  superseded by DF-D36 and DF-D37 and are not listed.
   - DF-D02 (`2026-10-25`). The session had reported that a centre definition
     too long for the ring made the layout narrow the GC content, GC skew, and
     other inside tracks by 16 steps. The Owner wrote:
     「とりあえずタイトルが収まらない時自動で勝手にGC contentsとかのトラックを縮めるのはやめて。」
+    Partly reversed by DF-D35 and DF-D36 below: the inside tracks narrow again, but
+    only down to a floor.
   - DF-D05 (`2026-10-25`). The session asked whether an explicit
     `center_reserved_radius`, the user's own value, keeps narrowing the inside
     tracks as today. Reply: 「それでよいです。」
@@ -3217,10 +3227,6 @@ Status: active Product authority
     area (as `DEF-TRACK-WARN` does today), A2 the definition band enters a
     track band, or A3 any wrap or overlap. Reply: 「Q-a 通知を出す条件: A1」
     (the trigger of scenario revision `17`).
-  - DF-D15 (`2026-10-25`). The session asked whether the tracks may move
-    toward the axis, keeping their width, out of their preset lanes: M-a
-    never, the tracks stay at their preset positions; M-b move them before the
-    name is wrapped (「折り返す前に寄せる」). Reply: 「Q-d そのほか：M-a 寄せない」
   - DF-D16 (`2026-10-25`). After an examples page, the session asked what the
     notice dialog lists. Reply: 「Q-b 通知のダイアログに何を並べるか: F、N-a, W3, E-b, K-a」
     (F smaller definition font; N-a narrow the inside tracks by writing the
@@ -3233,20 +3239,28 @@ Status: active Product authority
   - DF-D26 (`2026-10-25`). The session asked whether 「折り返し禁止」 also
     drops a later user-chosen wrap setting (W3) or only the automatic wrap.
     Reply: 「自動の折り返しだけを禁止する」
-  - DF-D29 (`2026-10-26`). The session showed the two receipts below, re-written
-    for DF-D25 and DF-D26 (the wrap is gone; the counts are those measured on
-    175 renderings; `PD-OI-097` scenario revision `18` is scenario revision `17`
+  - DF-D35 (`2026-10-26`). The session had shown the track layouts of dev, the
+    fixed lanes, and the move-only candidate side by side. The Owner wrote:
+    「ごめんdevみたいにある程度トラックを自動で縮小するのあり(限度を設ける。自動縮小はOFFにできる。そうするとKになる？)にして、Single strandのときの21px?の空白をなくすとどうなる？」
+    and added: 「自動縮小はmin pxを指定可能にすること。」
+  - DF-D36 (`2026-10-26`). The session proposed rule L (lanes under the tick
+    labels, move outward, narrow down to a floor, otherwise overlap) with a
+    30 px default floor, and settings in the config and as CLI flags now with
+    the Web input later. The Owner wrote: 「L を採り、下限の既定を 30 px にしてよいですか。:はい」
+    and 「設定は config の値と CLI のフラグとして今入れ、Web の入力欄は DRAWINGS-B の後にする、でよいですか。: はい」
+  - DF-D37 (`2026-10-26`). The session showed the two receipts below, written
+    for rule L (`PD-OI-097` scenario revision `18` is scenario revision `17`
     plus the listed additions), and their SHA-256 values. Reply:
-    「P1's receipt records (P1-RECEIPTS.md): 承認します」. The Decision date of
-    both receipts is `2026-10-25`, as written in the approved text.
+    「L 版の受領記録ヲ承認します」. The Decision date of both receipts is
+    `2026-10-26`, as written in the approved text.
   - The receipts and JSON reproduce the approved fields without translation or
     additional terms. The `PD-OI-078` scenario revision `1` receipt and JSON
     and the `PD-OI-097` scenario revision `7` to `17` receipts and JSON are
     kept as they were approved.
   - New receipt SHA-256: `PD-OI-078` scenario revision `2`
-    `71799b24860380afd2d42f652a2b3a3da9f7a71d3849be9a4bfc0dda393f8892`;
+    `5021706c36baf810248c1c7521f82bb7f711ba3896e616d38eac2f890d55fc76`;
     `PD-OI-097` scenario revision `18`
-    `a87e4b636c924c72ca6b33db3f67987230b47bd3197f73929920b1e5f93f9b7c`.
+    `8ab29ca132850cbd4aac2992cae3c607c4bbc2ffef1ed37abdd3f30526d32b69`.
   - `PD-OI-078` scenario revision `2` supersedes scenario revision `1`; its
     May retire names the parts of scenario revision `1` that are retired.
     `PD-OI-097` scenario revision `18` keeps every outcome and field of
@@ -7202,18 +7216,18 @@ Decision date: 2026-09-30
 }
 ```
 
-### PD-OI-078: Circular definition drawn on one line, without wrapping or narrowing the tracks
+### PD-OI-078: Circular definition drawn on one line; inside tracks move outward, then narrow down to a floor
 
 - Concern key: `diagram-generation.circular-definition-fit`
 - Scenario revision: `2`
 - Supersedes: `PD-OI-078`, scenario revision `1`. Scenario revision `2` retires
   the wrap of the organism name line on fit failure and the narrowing of the
-  inside tracks for the definition; the Owner replies of `2026-10-25` and
+  inside tracks for the definition below the floor; the Owner replies of `2026-10-25` and
   `2026-10-26` quoted in the Revision 90 entry above approve it. Every term of
   scenario revision `1` that its May retire does not name stays in force.
 - Status: `ACCEPTED`
 - Selected outcome: `B / WRAP-DEFINITION-ON-FIT-FAILURE` (scenario revision `1`) and
-  `C / NO-TRACK-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; TRACKS-FIXED`
+  `L / LIMITED-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; LANES-UNDER-TICK-LABELS`
   (scenario revision `2`)
 - Normative outcome: exactly the two approved `PRODUCT_DECISION` receipts and
   their nine-field JSON representations below.
@@ -7228,13 +7242,13 @@ Decision date: 2026-09-30
   `700a70feb21766e8d634b765ff9c5519cebe7871110a2037f7ec3f41cdfe1e80`.
 - Decision source (scenario revision `2`): the Owner replies of `2026-10-25` and
   `2026-10-26` quoted in the Revision 90 entry above (DF-D02, DF-D05, DF-D14,
-  DF-D15, DF-D16, DF-D25, DF-D26, and DF-D29). The second receipt and JSON below
+  DF-D16, DF-D25, DF-D26, DF-D35, DF-D36, and DF-D37). The second receipt and JSON below
   reproduce all nine fields of the approved receipt without translation or
   additional terms. The runtime, tests, and documentation that implement it
   merge with it (static Product Contract co-change); this record supplies no
   runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
-  `71799b24860380afd2d42f652a2b3a3da9f7a71d3849be9a4bfc0dda393f8892`.
+  `5021706c36baf810248c1c7521f82bb7f711ba3896e616d38eac2f890d55fc76`.
 
 ```text
 PRODUCT_DECISION
@@ -7264,32 +7278,32 @@ Decision date: 2026-09-30
 ```
 
 Scenario revision `2` receipt (approved by `satoshikawato` on `2026-10-26`;
-DF-D29 of the Revision 90 entry above):
+DF-D37 of the Revision 90 entry above):
 
 ```text
 PRODUCT_DECISION
 Concern: diagram-generation.circular-definition-fit
 Scenario revision: 2
-Choice: C / NO-TRACK-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; TRACKS-FIXED
-Rationale: 中央の定義文が入りきらないときに、GC content や GC skew などの内側のトラックを勝手に縮めない（DF-D02）。定義文を自動で折り返すこともしない（DF-D25、DF-D26）。種名の行と株名の行は名前の規則（PD-OI-107）で分け、それぞれを 1 行で描く。入らなければトラックに重ねて描き、文字が描いたトラックの線や面に触れるときは、直し方を示して知らせる（DF-D14、PD-OI-097）。
-Must preserve: 内側のトラックの幅と位置は、定義文によって変わらない。定義文の行は自動で折り返さない（definition_font_size を明示したときも、手で入力した Species のときも）。center_reserved_radius を明示したときは、今まで通りトラックを縮め、定義文を 1 行で描く（DF-D05）。定義の文字そのもの（手で入力した Species と Strain は、文字と書式とも入力どおり）。
-May retire: 定義文のために内側のトラックを縮める動作（16 段階）と、preset のレーンから寄せる動作。scenario revision 1 の選択（入りきらないときに種名の行を折り返す）。定義文の帯が原因で図を作れない失敗（DEFINITION_RESERVED）と、その案内。scenario revision 1 の Must preserve のうち「これまで成功していた出力」（トラックを縮めて収めていた図は、縮めずに描くので変わる）と「失敗したときの案内」（失敗しなくなる）。
-Accepted residual risk: 今まで内側のトラックを縮めて収めていた図は、縮めずに描くので、定義文がトラックに重なることがある（調べた 175 件の描画のうち 45 件。そのうち 31 件は文字が触れて PD-OI-097 の知らせが出る）。重なっても触れない図（Gallery Vnig_TUMSAT-TG-2018 の Multi-Record Canvas の 4 プラスミドなど 14 件）は知らせない。定義文が収まると判定されても、文字の角がトラックに触れることがある（今まで通り、PD-OI-097 で知らせる）。
+Choice: L / LIMITED-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; LANES-UNDER-TICK-LABELS
+Rationale: 中央の定義文が入りきらないときは、まず内側のトラックを幅を変えずに外側へ寄せ、それでも入らないときだけ、下限（既定 30 px）まで縮める。下限まで縮めても入らなければ、縮めずに元の幅のまま外側の限界に置き、定義文をトラックに重ねて描く（DF-D35、DF-D36）。縮める動作は止められ、下限も利用者が変えられる。定義文を自動で折り返すことはしない（DF-D25、DF-D26）。種名の行と株名の行は名前の規則（PD-OI-107）で分け、それぞれを 1 行で描く。文字が描いたトラックの線や面に触れるときは、直し方を示して知らせる（DF-D14、PD-OI-097）。既定の内側のトラックの並びは、鎖の数にかかわらず、いちばん外のトラックが ticks の文字の帯のすぐ下に来る位置から始める（DF-D36）。設定は今は config の値と CLI のフラグで変え、Web の入力欄はあとで足す。
+Must preserve: 既定の内側のトラックの並び（preset のレーン）は、定義文に関係なく、いちばん外のトラックが ticks の文字の帯のすぐ下に来る位置から並べる（1 本鎖の図も --separate_strands の図も同じ。並びの間隔はそのまま）。定義文の帯が内側のトラックに届くときは、(1) 幅を変えずに外側の限界まで寄せ、(2) それでも届くときは、下限まで縮めれば帯が空く場合にだけ縮め、(3) 下限でも空かないときは、どのトラックも縮めずに外側の限界に置いて定義文を重ねて描く。縮める下限は既定 30 px。下限より細いトラックはその幅のまま縮めない。幅を明示したトラック（CLI の --gc_content_width、--gc_skew_width、--depth_width、--conservation_ring_width、--circular_track_slot の w=、Python の CircularTrackSlot(width=...)、Web の Width 欄、Session の slot の width）は縮めない（幅を保ったまま外側へ寄せることはある）。縮める動作を止めたときは (1) と (3) だけを行い、幅は定義文によって変わらない。設定の置き場所は config の canvas.circular.track_narrowing（true / false）と canvas.circular.track_narrowing_min_px（px）、CLI の --no_track_narrowing と --track_narrowing_min_px、Python の config_overrides（例 {"canvas.circular.track_narrowing_min_px": 30}）。CLI のフラグの名前は仮で、実装で変わることがある。この設定は今ある config の上書きとして Session に入り、Session と描画要求の形は変えない。半径を明示したトラック（CLI の --circular_track_slot の r= または radius=、--circular_track_table の slot の r、--gc_content_radius、--gc_skew_radius、Python の CircularTrackSlot(radius=...)、Web の custom track の Radius 欄と GC Content / GC Skew の Radius 欄、Session の slot の radius）は、その半径に置く。定義文の行は自動で折り返さない（definition_font_size を明示したときも、手で入力した Species のときも）。center_reserved_radius を明示したときは、今まで通りトラックを縮め（自動の縮小の下限と、縮める動作を止める設定には関係なく）、定義文を 1 行で描く（DF-D05）。定義の文字そのもの（手で入力した Species と Strain は、文字と書式とも入力どおり）。
+May retire: 定義文のために内側のトラックを下限なしで縮める動作（16 段階の縮小のうち、下限より細くする部分。調べた図では 28.5 px まで縮めていた）。1 本鎖の図で、既定の内側のトラックの並びが ticks の文字の帯から離れていたこと（ticks の文字の下の約 21 px のすき間、OV-1850）。scenario revision 1 の選択（入りきらないときに種名の行を折り返す）。定義文の帯が原因で図を作れない失敗（DEFINITION_RESERVED）と、その案内。scenario revision 1 の Must preserve のうち「これまで成功していた出力」（1 本鎖の図はトラックが外へ動き、下限まで縮めても入らない図は縮めずに重ねて描くので変わる）と「失敗したときの案内」（失敗しなくなる）。
+Accepted residual risk: 下限（30 px）まで縮めても定義文が入らない図は、縮めずに重ねて描く。調べた 175 件の描画では、定義文がトラックに重なるか文字が触れる図は 14 件。そのうち 5 件は重なるが触れないので知らせない（Gallery Vnig_TUMSAT-TG-2018 の Multi-Record Canvas の 2 プラスミド、同じ 2 プラスミドの Web 既定、NZ_CP125877.1 の Web 既定）。9 件は文字が触れて PD-OI-097 の知らせが出る。この 9 件は、どれも定義文の帯が空くと判定された図で、そのうち 7 件は自動で縮めたあとも文字の角がトラックに触れる（帯と知らせを別々に測るため、OV-1854）。残る 2 件は縮めずに角が触れる（今まで通り）。自動で縮める図は 29 件で、いちばん細い幅は 35.5 px。1 本鎖の図（CLI の既定。調べた 78 件すべて）では、内側のトラックが 21 px（短いゲノムでは 26 px）外へ動き、名前の短い図でも ticks の文字の下のすき間はなくなる。名前の短いゲノムの Web 既定 3 件（SARS-CoV-1、SARS-CoV-2、MERS-CoV）も 26 px 外へ動く。ticks の文字と GC の線が 0.5 px 未満に近づく図は 9 件から 13 件に増える。Gallery Vnig_TUMSAT-TG-2018 は、4 プラスミドのうち 2 つを縮め（45.8 px と 37.4 px。今は 44.5 px と 38.1 px）、残りの 2 つ（今は 28.7 px と 28.5 px まで縮めている）は縮めずに重ねて描く（触れないので知らせない）。ほかの Circular の Gallery Session 3 件は変わらない。下限は px なので、図の大きさによって意味が変わる（既定のトラックの幅は radius に比例する）。
 Owner: satoshikawato
-Decision date: 2026-10-25
+Decision date: 2026-10-26
 ```
 
 ```json
 {
   "concern": "diagram-generation.circular-definition-fit",
   "scenarioRevision": 2,
-  "choice": "C / NO-TRACK-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; TRACKS-FIXED",
-  "rationale": "中央の定義文が入りきらないときに、GC content や GC skew などの内側のトラックを勝手に縮めない（DF-D02）。定義文を自動で折り返すこともしない（DF-D25、DF-D26）。種名の行と株名の行は名前の規則（PD-OI-107）で分け、それぞれを 1 行で描く。入らなければトラックに重ねて描き、文字が描いたトラックの線や面に触れるときは、直し方を示して知らせる（DF-D14、PD-OI-097）。",
-  "mustPreserve": "内側のトラックの幅と位置は、定義文によって変わらない。定義文の行は自動で折り返さない（definition_font_size を明示したときも、手で入力した Species のときも）。center_reserved_radius を明示したときは、今まで通りトラックを縮め、定義文を 1 行で描く（DF-D05）。定義の文字そのもの（手で入力した Species と Strain は、文字と書式とも入力どおり）。",
-  "mayRetire": "定義文のために内側のトラックを縮める動作（16 段階）と、preset のレーンから寄せる動作。scenario revision 1 の選択（入りきらないときに種名の行を折り返す）。定義文の帯が原因で図を作れない失敗（DEFINITION_RESERVED）と、その案内。scenario revision 1 の Must preserve のうち「これまで成功していた出力」（トラックを縮めて収めていた図は、縮めずに描くので変わる）と「失敗したときの案内」（失敗しなくなる）。",
-  "acceptedResidualRisk": "今まで内側のトラックを縮めて収めていた図は、縮めずに描くので、定義文がトラックに重なることがある（調べた 175 件の描画のうち 45 件。そのうち 31 件は文字が触れて PD-OI-097 の知らせが出る）。重なっても触れない図（Gallery Vnig_TUMSAT-TG-2018 の Multi-Record Canvas の 4 プラスミドなど 14 件）は知らせない。定義文が収まると判定されても、文字の角がトラックに触れることがある（今まで通り、PD-OI-097 で知らせる）。",
+  "choice": "L / LIMITED-NARROWING-FOR-DEFINITION ; NO-AUTOMATIC-WRAP ; ONE-LINE-OVERLAP ; LANES-UNDER-TICK-LABELS",
+  "rationale": "中央の定義文が入りきらないときは、まず内側のトラックを幅を変えずに外側へ寄せ、それでも入らないときだけ、下限（既定 30 px）まで縮める。下限まで縮めても入らなければ、縮めずに元の幅のまま外側の限界に置き、定義文をトラックに重ねて描く（DF-D35、DF-D36）。縮める動作は止められ、下限も利用者が変えられる。定義文を自動で折り返すことはしない（DF-D25、DF-D26）。種名の行と株名の行は名前の規則（PD-OI-107）で分け、それぞれを 1 行で描く。文字が描いたトラックの線や面に触れるときは、直し方を示して知らせる（DF-D14、PD-OI-097）。既定の内側のトラックの並びは、鎖の数にかかわらず、いちばん外のトラックが ticks の文字の帯のすぐ下に来る位置から始める（DF-D36）。設定は今は config の値と CLI のフラグで変え、Web の入力欄はあとで足す。",
+  "mustPreserve": "既定の内側のトラックの並び（preset のレーン）は、定義文に関係なく、いちばん外のトラックが ticks の文字の帯のすぐ下に来る位置から並べる（1 本鎖の図も --separate_strands の図も同じ。並びの間隔はそのまま）。定義文の帯が内側のトラックに届くときは、(1) 幅を変えずに外側の限界まで寄せ、(2) それでも届くときは、下限まで縮めれば帯が空く場合にだけ縮め、(3) 下限でも空かないときは、どのトラックも縮めずに外側の限界に置いて定義文を重ねて描く。縮める下限は既定 30 px。下限より細いトラックはその幅のまま縮めない。幅を明示したトラック（CLI の --gc_content_width、--gc_skew_width、--depth_width、--conservation_ring_width、--circular_track_slot の w=、Python の CircularTrackSlot(width=...)、Web の Width 欄、Session の slot の width）は縮めない（幅を保ったまま外側へ寄せることはある）。縮める動作を止めたときは (1) と (3) だけを行い、幅は定義文によって変わらない。設定の置き場所は config の canvas.circular.track_narrowing（true / false）と canvas.circular.track_narrowing_min_px（px）、CLI の --no_track_narrowing と --track_narrowing_min_px、Python の config_overrides（例 {\"canvas.circular.track_narrowing_min_px\": 30}）。CLI のフラグの名前は仮で、実装で変わることがある。この設定は今ある config の上書きとして Session に入り、Session と描画要求の形は変えない。半径を明示したトラック（CLI の --circular_track_slot の r= または radius=、--circular_track_table の slot の r、--gc_content_radius、--gc_skew_radius、Python の CircularTrackSlot(radius=...)、Web の custom track の Radius 欄と GC Content / GC Skew の Radius 欄、Session の slot の radius）は、その半径に置く。定義文の行は自動で折り返さない（definition_font_size を明示したときも、手で入力した Species のときも）。center_reserved_radius を明示したときは、今まで通りトラックを縮め（自動の縮小の下限と、縮める動作を止める設定には関係なく）、定義文を 1 行で描く（DF-D05）。定義の文字そのもの（手で入力した Species と Strain は、文字と書式とも入力どおり）。",
+  "mayRetire": "定義文のために内側のトラックを下限なしで縮める動作（16 段階の縮小のうち、下限より細くする部分。調べた図では 28.5 px まで縮めていた）。1 本鎖の図で、既定の内側のトラックの並びが ticks の文字の帯から離れていたこと（ticks の文字の下の約 21 px のすき間、OV-1850）。scenario revision 1 の選択（入りきらないときに種名の行を折り返す）。定義文の帯が原因で図を作れない失敗（DEFINITION_RESERVED）と、その案内。scenario revision 1 の Must preserve のうち「これまで成功していた出力」（1 本鎖の図はトラックが外へ動き、下限まで縮めても入らない図は縮めずに重ねて描くので変わる）と「失敗したときの案内」（失敗しなくなる）。",
+  "acceptedResidualRisk": "下限（30 px）まで縮めても定義文が入らない図は、縮めずに重ねて描く。調べた 175 件の描画では、定義文がトラックに重なるか文字が触れる図は 14 件。そのうち 5 件は重なるが触れないので知らせない（Gallery Vnig_TUMSAT-TG-2018 の Multi-Record Canvas の 2 プラスミド、同じ 2 プラスミドの Web 既定、NZ_CP125877.1 の Web 既定）。9 件は文字が触れて PD-OI-097 の知らせが出る。この 9 件は、どれも定義文の帯が空くと判定された図で、そのうち 7 件は自動で縮めたあとも文字の角がトラックに触れる（帯と知らせを別々に測るため、OV-1854）。残る 2 件は縮めずに角が触れる（今まで通り）。自動で縮める図は 29 件で、いちばん細い幅は 35.5 px。1 本鎖の図（CLI の既定。調べた 78 件すべて）では、内側のトラックが 21 px（短いゲノムでは 26 px）外へ動き、名前の短い図でも ticks の文字の下のすき間はなくなる。名前の短いゲノムの Web 既定 3 件（SARS-CoV-1、SARS-CoV-2、MERS-CoV）も 26 px 外へ動く。ticks の文字と GC の線が 0.5 px 未満に近づく図は 9 件から 13 件に増える。Gallery Vnig_TUMSAT-TG-2018 は、4 プラスミドのうち 2 つを縮め（45.8 px と 37.4 px。今は 44.5 px と 38.1 px）、残りの 2 つ（今は 28.7 px と 28.5 px まで縮めている）は縮めずに重ねて描く（触れないので知らせない）。ほかの Circular の Gallery Session 3 件は変わらない。下限は px なので、図の大きさによって意味が変わる（既定のトラックの幅は radius に比例する）。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-25"
+  "decisionDate": "2026-10-26"
 }
 ```
 
@@ -8233,7 +8247,7 @@ Decision date: 2026-10-16
 - Supersedes: `PD-OI-097`, scenario revision `17`. Scenario revision `18`
   keeps every outcome and field of scenario revision `17` and adds
   `DEF-TRIGGER-INK`, `DEF-ROW-NARROW-CRR`, `DEF-EDIT-TEXT-BUTTON`, and
-  `DEF-KEEP-AS-DRAWN`; DF-D29 of the Revision 90 entry approves its additions to
+  `DEF-KEEP-AS-DRAWN`; DF-D37 of the Revision 90 entry approves its additions to
   the Rationale, the Must preserve, and the Accepted residual risk. Scenario
   revision `17`
   keeps every outcome of scenario revision `16` and adds `DEF-TRACK-WARN`;
@@ -8377,12 +8391,12 @@ Decision date: 2026-10-16
   `d8a9d51d28ce221348930e2b7a90e0bfbeb783f93311435bee94c4669ac47c55`.
 - Decision source (scenario revision `18`): the Owner replies of `2026-10-25` and
   `2026-10-26` quoted in the Revision 90 entry above (DF-D02, DF-D14, DF-D16,
-  DF-D25, and DF-D29); DF-D29 approves the twelfth receipt and JSON below,
+  DF-D25, DF-D35, DF-D36, and DF-D37); DF-D37 approves the twelfth receipt and JSON below,
   without translation or additional terms. The runtime, tests, and
   documentation that implement it merge with it (static Product Contract
   co-change); this record supplies no runtime acceptance evidence.
 - Receipt SHA-256 (scenario revision `18`; UTF-8, excluding the final newline):
-  `a87e4b636c924c72ca6b33db3f67987230b47bd3197f73929920b1e5f93f9b7c`.
+  `8ab29ca132850cbd4aac2992cae3c607c4bbc2ffef1ed37abdd3f30526d32b69`.
 
 ```text
 PRODUCT_DECISION
@@ -8701,19 +8715,19 @@ Decision date: 2026-10-23
 }
 ```
 
-Scenario revision `18` receipt, approved by `satoshikawato` on `2026-10-26` (DF-D29 of the Revision 90 entry):
+Scenario revision `18` receipt, approved by `satoshikawato` on `2026-10-26` (DF-D37 of the Revision 90 entry):
 
 ```text
 PRODUCT_DECISION
 Concern: product.circular-outer-label-fit
 Scenario revision: 18
 Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN
-Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D02、DF-D14、DF-D16、DF-D25）。
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。
 Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。
 May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。
-Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 12 件から 31 件に増える。既定の設定でも、MjeNMV（tests/reference_outputs の 6 件を含む）、Staphylococcus aureus の 4 レコード、SARS-CoV-2、MERS-CoV に出る。トラックを縮める直し方で描いても、文字の角がトラックに触れることがある（今までの自動の結果と同じ）。その場合は、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 9 件（自動の縮小の下限が 30 px のとき）。同じ方法で数えた今の 8 件とほぼ同じ数だが、顔ぶれは変わる（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で出なくなり、Staphylococcus aureus の 4 レコードの Web 既定が新しく出る）。既定の設定で、MERS-CoV（CLI と Web）と、BGC0000712、BGC0000713、Staphylococcus aureus の 4 レコード、NC_001454.1 の Web 既定に出る。そのうち 7 件は、自動で縮めて定義文の帯は空いたのに、文字の角がトラックに触れる（帯と知らせを別々に測るため、OV-1854）。トラックを縮める直し方で描いても、文字の角がトラックに触れることがある（自動の縮小の結果と同じ）。その場合は、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。
 Owner: satoshikawato
-Decision date: 2026-10-25
+Decision date: 2026-10-26
 ```
 
 ```json
@@ -8721,12 +8735,12 @@ Decision date: 2026-10-25
   "concern": "product.circular-outer-label-fit",
   "scenarioRevision": 18,
   "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN",
-  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D02、DF-D14、DF-D16、DF-D25）。",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。",
   "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。",
   "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。",
-  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 12 件から 31 件に増える。既定の設定でも、MjeNMV（tests/reference_outputs の 6 件を含む）、Staphylococcus aureus の 4 レコード、SARS-CoV-2、MERS-CoV に出る。トラックを縮める直し方で描いても、文字の角がトラックに触れることがある（今までの自動の結果と同じ）。その場合は、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 9 件（自動の縮小の下限が 30 px のとき）。同じ方法で数えた今の 8 件とほぼ同じ数だが、顔ぶれは変わる（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で出なくなり、Staphylococcus aureus の 4 レコードの Web 既定が新しく出る）。既定の設定で、MERS-CoV（CLI と Web）と、BGC0000712、BGC0000713、Staphylococcus aureus の 4 レコード、NC_001454.1 の Web 既定に出る。そのうち 7 件は、自動で縮めて定義文の帯は空いたのに、文字の角がトラックに触れる（帯と知らせを別々に測るため、OV-1854）。トラックを縮める直し方で描いても、文字の角がトラックに触れることがある（自動の縮小の結果と同じ）。その場合は、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-25"
+  "decisionDate": "2026-10-26"
 }
 ```
 
