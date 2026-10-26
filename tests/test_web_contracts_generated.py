@@ -509,6 +509,7 @@ def _typed_results() -> dict[str, list[tuple[str, object]]]:
             ("an unknown field", changed(empty_graph, lambda r: r["value"]["fields"].update(extra={}))),
             ("another key", changed(empty_graph, lambda r: r.update(extra=1))),
             ("an older schema", changed(empty_graph, lambda r: r.update(schema=2))),
+            ("a fractional schema", changed(empty_graph, lambda r: r.update(schema=3.0))),
             ("another kind", changed(empty_graph, lambda r: r.update(kind="result"))),
             ("an array mapping", changed(empty_graph, lambda r: r["value"]["fields"].update(orthogroups=[]))),
             ("a member without its fields", changed(
@@ -523,6 +524,9 @@ def _typed_results() -> dict[str, list[tuple[str, object]]]:
                 r.update(schema=2), r["value"]["fields"].update(orthogroups=None)
             ))),
             ("an older schema with graph orthogroups", changed(empty_collinear, lambda r: r.update(schema=2))),
+            ("a boolean schema", changed(empty_collinear, lambda r: (
+                r.update(schema=True), r["value"]["fields"].update(orthogroups=None)
+            ))),
             ("nested no fields", changed(empty_collinear, lambda r: r["value"]["fields"]["orthogroups"].update(fields={}))),
             ("nested legacy type", changed(
                 empty_collinear, lambda r: r["value"]["fields"]["orthogroups"].update(type="OrthogroupResult")

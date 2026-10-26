@@ -4576,7 +4576,8 @@ def decode_canonical_typed_resource(
         raw, path=f"{path} resource", required={"schema", "kind", "value"}
     )
     resource_schema = payload["schema"]
-    if resource_schema not in _TYPED_RESOURCE_SCHEMAS or payload["kind"] != value_kind:
+    # `True == 1` and `1.0 == 1`: only an integer names a schema (OV-1930).
+    if type(resource_schema) is not int or resource_schema not in _TYPED_RESOURCE_SCHEMAS or payload["kind"] != value_kind:
         raise CanonicalRequestDecodingError(
             f"Canonical JSON resource metadata does not match {path}."
         )
