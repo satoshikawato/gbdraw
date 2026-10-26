@@ -7,7 +7,7 @@
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { runWhenPrepared } from '../rule-matching.js';
+import { runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
@@ -867,12 +867,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // (`moveLegendRecords`). So a Save, an Undo or a Redo
   // finds the whole change. When it is shown, the display draws its figure
   // again if its Legend cannot show the rules (app-setup.js, the rule table
-  // its Result was last shown with).
-  /** @param {DrawingState} drawing Not shown. */
-  const takeBackFileRulesOfHiddenDrawing = (drawing) => {
+  // its Result was last shown with). Delete settings takes back the same way,
+  // inside its step, the rows that name a feature instance of a record whose
+  // drawing is turned off (R2): no Result draws what they color.
+  /**
+   * @param {DrawingState} drawing Not shown, or the drawing of turned-off records.
+   * @param {(rules: SpecificColorRule[]) => SpecificColorRule[]} [keep] The rows that stay.
+   */
+  const takeBackRuleRows = (drawing, keep = (rules) => withoutImportedRows(rules, 't_color')) => {
     /** @type {SpecificColorRule[]} */
     const before = [...drawing.manualSpecificRules];
-    const kept = withoutImportedRows(before, 't_color');
+    const kept = keep(before);
     const entries = drawing.legendEntries.value;
     const listedKeys = [...entries, ...drawing.deletedLegendEntries.value, ...drawing.dormantLegendEntries.value].map(legendEntryKey);
     const { gone, rekeyed } = listedRuleRowRemoval(before, kept, listedKeys);
@@ -886,7 +891,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
     }
     return queueRuleWrite(async () => {
-      takeBackFileRulesOfHiddenDrawing(drawing);
+      takeBackRuleRows(drawing);
       return true;
     });
   };
@@ -1007,8 +1012,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       : override;
   };
 
-  // Python matches a single-feature color rule only by the stable generation
-  // hash, so duplicate record instances that share one hash share the rule.
+  // A feature that has a stable hash can take a single-feature color rule. The
+  // rule a color edit writes is Python's (`groupColorRules`): it names the
+  // feature instance, which Python composes from the catalog identity
+  // (PD-OI-069 revision 2). This stable-hash condition only prepares the rule
+  // matches a color action reads before it commits.
   /** @param {ColorFeature} feat */
   const getFeatureQualifier = (feat) => {
     const colorRuleHash = getFeatureColorRuleHash(feat);
@@ -1018,7 +1026,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // OV-244: the next table of a color edit is Python's. A group takes exact
   // rules on the feature type and its product, gene, or a label text the
   // features show, matching no unselected feature, and `hash` rules for the
-  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule.
+  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule,
+  // and "reset" takes back the `hash` rules that name the features, each
+  // feature that another rule still colors taking `color` unless it is empty.
   /**
    * @param {readonly ColorFeature[]} features
    * @param {string} color
@@ -1029,7 +1039,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const groupColorRules = (features, color, caption, scope) => async (current) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
     const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
-    return table.map((row) => (typeof row === 'number' ? current[row] : row));
+    return synthesizedRuleTable(table, current);
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
@@ -1154,6 +1164,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     ruleWritePending: () => writesOnLine.value > 0,
     importSpecificRules,
     removeImportedSpecificRules,
+    takeBackRuleRows,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,

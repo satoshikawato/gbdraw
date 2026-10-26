@@ -54,6 +54,7 @@ import {
   projectLiveSettingWrites,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
+  readCanonicalResourceText,
   requestLabelProjection,
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
@@ -4992,7 +4993,8 @@ export const createRunAnalysis = ({
           generatedFileNameHints,
           readResourceRecordCount: (/** @type {string} */ resourceId, /** @type {'genbank' | 'fasta'} */ kind) => (
             readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
-          )
+          ),
+          readResourceText: (/** @type {string} */ resourceId) => readCanonicalResourceText(canonical.resources, resourceId)
         }));
         throwIfGenerationCanceled();
       }

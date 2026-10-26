@@ -53,6 +53,7 @@ def test_selector_values_match_visibility_supported_selectors() -> None:
                 selected_features_set=["CDS"],
                 feature_visibility_rules=rules,
                 record_id=record.id,
+                instance=None,
             )
             is False
         )

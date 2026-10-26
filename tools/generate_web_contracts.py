@@ -59,6 +59,11 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
+    # A "This feature only" color rule names a feature instance; the Source
+    # recipe names the CLI record of its record key.
+    ("FEATURE_INSTANCE_SEPARATOR", "gbdraw.features.ids", "FEATURE_INSTANCE_SEPARATOR"),
+    ("CLI_RECORD_KEY_PREFIX", "gbdraw.api.record_planning", "CLI_RECORD_KEY_PREFIX"),
+    ("EXPANDED_RECORD_KEY_SEPARATOR", "gbdraw.api.record_planning", "EXPANDED_RECORD_KEY_SEPARATOR"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.
     ("FLAT_DRAFT_TOP_LEVEL_FIELDS", "gbdraw.session_io", "FLAT_DRAFT_TOP_LEVEL_FIELDS"),

@@ -44,6 +44,7 @@ import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
+import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -6611,6 +6612,13 @@ export const createAppSetup = () => {
     paint: drawing.slices.paint,
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
+    colorRuleEdits: drawing.manualSpecificRules.flatMap((row) => {
+      const instance = namedFeatureInstance(row);
+      return instance ? [{
+        recordKey: instance.recordKey,
+        remove: () => featureActions.takeBackRuleRows(drawing, (rules) => rules.filter((rule) => rule !== row))
+      }] : [];
+    }),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
     comparisonEdges: drawing === state.drawingOfMode('linear') ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
@@ -6662,7 +6670,10 @@ export const createAppSetup = () => {
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners().filter((owner) => deleted.has(owner.key))
       : linearSeqs.filter((seq) => deleted.has(seq.uid)).map(linearRecordSettingsOwner);
+    const ruleCount = drawing.manualSpecificRules.length;
     retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
+    // The color rows it took back color nothing drawn; the rule matches follow the table.
+    if (drawing.manualSpecificRules.length !== ruleCount && drawing === state.activeDrawing()) void projectPaletteAndRules();
     if (listMode === 'linear') {
       applyLinearSeqMutation(drawing, linearSeqs.map((seq) => (
         deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq

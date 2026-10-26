@@ -1,4 +1,5 @@
 // @ts-check
+import { FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
 /** @import { FeatureLike } from './feature-utils.js' */
 const FEATURE_ID_KEY_EMPTY = '';
 
@@ -19,6 +20,46 @@ export const SPECIFIC_COLOR_QUALIFIER_PRESETS = Object.freeze([
 export const escapeRegexLiteral = (value) => String(value ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /** @param {unknown} value */
 export const exactRegexValue = (value) => `^${escapeRegexLiteral(value)}$`;
+/**
+ * The text an exact pattern matches (`exactRegexValue` of it), or null for any
+ * other pattern.
+ * @param {string} pattern
+ * @returns {string | null}
+ */
+export const exactRegexLiteral = (pattern) => {
+  const literal = /^\^([\s\S]*)\$$/.exec(pattern)?.[1].replace(/\\([\s\S])/g, '$1') ?? null;
+  return literal !== null && exactRegexValue(literal) === pattern ? literal : null;
+};
+/**
+ * The one literal text of a pattern: an exact pattern's (`exactRegexLiteral`),
+ * or a text with no regex syntax as written; null for any other pattern.
+ * @param {string} pattern
+ * @returns {string | null}
+ */
+export const literalPatternText = (pattern) => exactRegexLiteral(pattern) ?? (escapeRegexLiteral(pattern) === pattern ? pattern : null);
+
+/**
+ * A feature instance a `hash` rule names: `<biological feature ID>` and
+ * `<record key>` joined by `FEATURE_INSTANCE_SEPARATOR` (Python's
+ * `feature_instance`, gbdraw/features/ids.py).
+ * @typedef {{ featureId: string, recordKey: string }} NamedFeatureInstance
+ */
+/**
+ * The feature instance a `hash` rule names: its value is one literal text (as
+ * written or as an exact pattern) with the separator, and Python's matcher
+ * matches it to the whole instance only (gbdraw/features/selector_values.py).
+ * Null for any other rule, a `hash` rule naming a stable hash included.
+ * @param {{ qual?: unknown, val?: unknown } | null | undefined} rule
+ * @returns {NamedFeatureInstance | null}
+ */
+export const namedFeatureInstance = (rule) => {
+  if (String(rule?.qual ?? '').trim().toLowerCase() !== 'hash') return null;
+  const text = literalPatternText(String(rule?.val ?? '').trim());
+  const at = text === null ? -1 : text.indexOf(FEATURE_INSTANCE_SEPARATOR);
+  return text !== null && at > 0 && at < text.length - 1
+    ? { featureId: text.slice(0, at), recordKey: text.slice(at + FEATURE_INSTANCE_SEPARATOR.length) }
+    : null;
+};
 
 /** @param {unknown} value */
 export const normalizeSelectorText = (value) => String(value ?? '').trim();

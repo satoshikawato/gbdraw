@@ -275,6 +275,8 @@ export const linearCardHasSettings = (card) => Object.entries(RECORD_SETTINGS_DE
  * @property {readonly { readonly annotations: readonly { readonly target?: { readonly kind?: string, readonly recordKey?: unknown },
  *   readonly metadata?: Readonly<Record<string, unknown>> | null }[] }[]} [annotationSets]
  * @property {(annotation: object) => void} [removeAnnotation] Removes an annotation of `annotationSets` (the writer of their slice).
+ * @property {readonly { readonly recordKey: string, readonly remove: () => void }[]} [colorRuleEdits] The specific
+ *   color rows that name a feature instance, by the instance's record key; `remove` takes the row out of the table.
  * @property {{ sourceUid?: unknown, selector?: unknown }[]} [recordDisplayDrafts]
  * @property {{ queryUid?: unknown, subjectUid?: unknown }[]} [comparisonEdges] Linear edges, by card uid.
  * @property {string} annotationBindingField The annotation metadata field of a record binding.
@@ -345,6 +347,10 @@ const forEachRecordEdit = (owners, data, visit) => {
   Object.keys(paint ? paintOf(paint).featureStrokeOverrides : {}).forEach((strokeKey) => {
     const key = strokeKey.includes('\0') ? match.ofRequestKey(strokeKey.split('\0')[0]) : undefined;
     if (paint && key !== undefined) visit(key, () => setFeatureStroke(paint, strokeKey, null));
+  });
+  (data.colorRuleEdits || []).forEach(({ recordKey, remove }) => {
+    const key = match.ofRequestKey(recordKey);
+    if (key !== undefined) visit(key, remove);
   });
   (data.annotationSets || []).forEach((set) => {
     [...set.annotations].forEach((item) => {

@@ -12,6 +12,21 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: a "This feature only" color in the Web app colors only the clicked
+  feature of the clicked File card and record, live and after Generate. Before,
+  the same feature in another record with the same ID (the same file in two
+  Linear File cards, or two records that share an ID) took the color as well.
+  The rule's `hash` value now names the feature instance
+  (`<feature id>@<record key>`), which a `hash` value must match whole; the Run
+  Info Source recipe writes it with the CLI record key `record-<n>` and leaves
+  out a row whose record is not drawn. Resetting one copy leaves the others as
+  they are, and **Delete settings** of a record removes its rows. Other `hash`
+  values keep their meaning (PD-OI-069 revision 2). Like the other
+  per-feature edits, the color belongs to the record key, so it does not apply
+  while the record is drawn under another key.
+- Fixed: two identical `source` features of a record, one shown by its own
+  Feature visibility, now have the same feature IDs in the Web feature list as
+  in the drawing and in a feature identity table.
 - Changed: the aminoglycoside BGC Gallery tutorial (BGC0000708-BGC0000713)
   shows the antiSMASH `gene_kind` qualifier in a step of its own before the
   color step, and says that its colors follow the scheme of the MIBiG website

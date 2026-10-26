@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from typing import Callable, Literal, Sequence, TypedDict, is_typeddict
 
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from pandas import DataFrame
 
 from gbdraw.contract_shapes import Shape, ref, typed_dict_shape, violations
 from gbdraw.features.colors import build_specific_color_rules
+from gbdraw.features.ids import feature_instance
 from gbdraw.features.selector_values import ColorRuleList, iter_specific_color_rules
 from gbdraw.features.visibility import (
     _first_matching_visibility_rule,
@@ -36,9 +38,16 @@ def _compile_visibility_rows(rules: list[dict]) -> list[dict | None]:
 
 
 class RuleFeatureSelector(TypedDict):
-    """The drawn values a `hash`, `location`, or `record_location` rule reads."""
+    """The drawn values a `hash`, `location`, or `record_location` rule reads,
+    and the feature's catalog identity: `record_key` and `feature_id` (the
+    catalog's ``recordKey`` and ``biologicalFeatureId``; None for a feature
+    that is not a catalog feature). A `hash` rule reads the stable hash and
+    the feature instance Python composes from that identity
+    (``gbdraw.features.ids.feature_instance``)."""
 
     hash: str | None
+    record_key: str | None
+    feature_id: str | None
     location: str | None
     record_location: str | None
 
@@ -51,6 +60,39 @@ class RuleFeaturePayload(TypedDict):
     qualifiers: dict[str, list[str]]
     selector: RuleFeatureSelector
     label: str
+
+
+class _MatchSelector(TypedDict):
+    """The selector the renderer's matchers read (``iter_specific_color_rules``)."""
+
+    hash: str | None
+    instance: str | None
+    location: str | None
+    record_location: str | None
+
+
+class _MatchFeature(TypedDict):
+    """A payload feature with the selector the renderer's matchers read."""
+
+    type: str
+    record: str
+    qualifiers: dict[str, list[str]]
+    selector: _MatchSelector
+    label: str
+
+
+def _match_feature(item: RuleFeaturePayload) -> _MatchFeature:
+    """The feature as Generate's matcher reads it: its instance composed from its
+    catalog identity, None without a source hash or a catalog identity. Like the
+    matchers, it reads a selector value the payload leaves out as None: the
+    payloads are not checked one by one (`synthesize_color_rules_json`)."""
+    selector = item["selector"]
+    feature_hash, record_key, feature_id = selector.get("hash"), selector.get("record_key"), selector.get("feature_id")
+    instance = feature_instance(feature_id, record_key) if feature_hash and record_key and feature_id else None
+    return _MatchFeature(
+        type=item["type"], record=item.get("record", ""), qualifiers=item["qualifiers"], label=item.get("label", ""),
+        selector=_MatchSelector(hash=feature_hash, instance=instance, location=selector.get("location"),
+                                record_location=selector.get("record_location")))
 
 
 class ColorRuleCondition(TypedDict):
@@ -72,13 +114,16 @@ class SynthesizeColorRulesRequest(TypedDict):
     """One color edit: color the `selected` features of the catalog `features`.
 
     `scope` "group" colors them as one group (exact conditions where they fit,
-    Owner R-07); "features" colors each by itself (a `hash` rule per feature, as
-    "This feature only" does). `labels` holds, for each selected feature in the
-    same order, the label texts it shows (its displayed and its annotation
-    label). `rules` is the rule table at the write's turn, in order.
+    Owner R-07); "features" colors each by itself (a `hash` rule naming the
+    feature instance, as "This feature only" does); "reset" takes back the
+    `hash` rows that name them and, when another rule still colors one and
+    `color` is not empty, gives it `color` and `caption` by itself. `labels`
+    holds, for each selected feature in the same order, the label texts it
+    shows (its displayed and its annotation label). `rules` is the rule table
+    at the write's turn, in order.
     """
 
-    scope: Literal["group", "features"]
+    scope: Literal["group", "features", "reset"]
     features: list[RuleFeaturePayload]
     selected: list[int]
     labels: list[list[str]]
@@ -87,12 +132,20 @@ class SynthesizeColorRulesRequest(TypedDict):
     caption: str
 
 
-class SynthesizedColorRules(TypedDict):
-    """The next rule table: a number keeps that row of the request's `rules`, an
-    object is a new row. A selected feature without a hash and without an exact
-    condition takes no rule."""
+class RetargetedColorRule(TypedDict):
+    """A copy of the request's row `row` with the pattern `val`."""
 
-    table: list[int | ColorRuleRow]
+    row: int
+    val: str
+
+
+class SynthesizedColorRules(TypedDict):
+    """The next rule table: a number keeps that row of the request's `rules`, a
+    row with `row` copies that row under another pattern, any other object is a
+    new row. A selected feature without a hash and without an exact condition
+    takes no rule."""
+
+    table: list[int | ColorRuleRow | RetargetedColorRule]
 
 
 def describe_rule_synthesis() -> dict[str, dict[str, Shape]]:
@@ -125,24 +178,25 @@ def _indexed_color_rules(rules: Sequence[ColorRuleCondition]) -> IndexedColorRul
     ]))
 
 
-def _color_rule_ranks(item: RuleFeaturePayload, color_rules: IndexedColorRules) -> dict[int, int]:
+def _color_rule_ranks(item: _MatchFeature, color_rules: IndexedColorRules) -> dict[int, int]:
     """The indexes of the rules a feature matches in precedence order (the first
     one colors it), each with its first rank."""
     feature = SimpleNamespace(type=item["type"], qualifiers=item["qualifiers"])
     ranks: dict[int, int] = {}
-    for color, _, rank in iter_specific_color_rules(feature, color_rules, item.get("record", ""),
-                                                    selector=item["selector"]):
+    selector = item["selector"]
+    for color, _, rank in iter_specific_color_rules(feature, color_rules, item["record"],
+                                                    selector=selector, instance=selector["instance"]):
         ranks.setdefault(int(color), rank)
     return ranks
 
 
-def _winners(features: Sequence[RuleFeaturePayload], rules: Sequence[ColorRuleCondition]) -> list[int]:
+def _winners(features: Sequence[_MatchFeature], rules: Sequence[ColorRuleCondition]) -> list[int]:
     color_rules = _indexed_color_rules(rules)
     return [next(iter(_color_rule_ranks(item, color_rules)), -1) for item in features]
 
 
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
-    features = json.loads(features_json)
+    features = [_match_feature(item) for item in json.loads(features_json)]
     rules = json.loads(rules_json)
     if kind == "color":
         color_rules = _indexed_color_rules(rules)
@@ -158,8 +212,8 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
     matches, winners, priorities = [], [], []
     for item in features:
         feature = SimpleNamespace(type=item["type"], qualifiers=item["qualifiers"])
-        selector = item["selector"]
-        record = item.get("record", "")
+        selector = dict(item["selector"])
+        record = item["record"]
         if kind == "color":
             ranks = _color_rule_ranks(item, color_rules)
             matched = list(ranks)
@@ -175,7 +229,7 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
             ])
         else:
             winner = _resolve_label_override(feature, feature.type, feature.qualifiers,
-                                             item.get("label", ""), label_rules, record, selector=selector)
+                                             item["label"], label_rules, record, selector=selector)
             winners.append(int(winner) if winner is not None else -1)
     return json.dumps({"matches": matches, "winners": winners, "priorities": priorities})
 
@@ -186,7 +240,7 @@ _CONDITION_QUALIFIERS = ("product", "gene")
 _REQUEST_DESCRIPTION = describe_rule_synthesis()
 
 # An exact condition: (feature type, qualifier, pattern). A target of `hash`
-# rules: (feature type, stable hash); duplicate record instances share one.
+# rules: (feature type, feature instance).
 Condition = tuple[str, str, str]
 HashTarget = tuple[str, str]
 
@@ -261,27 +315,117 @@ def _next_table(
     return table
 
 
+def _hash_targets(
+    features: Sequence[_MatchFeature], selected: Sequence[int],
+) -> tuple[list[HashTarget | None], set[int], dict[tuple[str, str], set[int]]]:
+    """Each feature's `hash` target (its type and instance; None without an
+    instance), the targets of an edit of `selected`, and the features of each
+    type and stable hash. The list holds a feature once as drawn and once from
+    its source, so the targets are every entry of a selected feature's target."""
+    hash_of: list[HashTarget | None] = []
+    holders: dict[tuple[str, str], set[int]] = defaultdict(set)
+    for i, item in enumerate(features):
+        instance = item["selector"]["instance"]
+        hash_of.append((item["type"], instance) if instance else None)
+        if item["selector"]["hash"]:
+            holders[(item["type"], item["selector"]["hash"])].add(i)
+    chosen = {key for key in (hash_of[i] for i in selected) if key is not None}
+    return hash_of, set(selected) | {i for i, key in enumerate(hash_of) if key in chosen}, holders
+
+
+def _spellings(value: str) -> tuple[str, str]:
+    """A `hash` row value naming `value` exactly: as written, or as an exact pattern."""
+    return value, exact_value_pattern(value)
+
+
+def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_MatchFeature]) -> SynthesizedColorRules:
+    """The table without the `hash` rows that name a target: its instance rows,
+    and its stable-hash rows. A stable-hash row that still colors other features
+    (an older "This feature only" row on a feature drawn twice: the row wins for
+    them) gives way to a copy per instance of each of those features, with its
+    color and caption, so they and the Legend keep it; a feature that another
+    row colors takes no copy. A target that another rule still colors
+    then takes `color` and `caption` by itself, unless `color` is empty. A
+    table that would change the winner of any other feature is refused."""
+    rules = request["rules"]
+    hash_of, targets, holders = _hash_targets(features, request["selected"])
+    old_winners = _winners(features, rules)
+    own: set[tuple[str, str]] = set()
+    stable_of: dict[tuple[str, str], tuple[str, str]] = {}
+    for i in targets:
+        feat, stable = features[i]["type"], features[i]["selector"]["hash"]
+        key = hash_of[i]
+        own.update((feat, spelling) for spelling in (_spellings(key[1]) if key else ()))
+        if stable:
+            stable_of.update(((feat, spelling), (feat, stable)) for spelling in _spellings(stable))
+    # Each entry of the next table, the row it reads as, and the old row it comes from.
+    table: list[int | ColorRuleRow | RetargetedColorRule] = []
+    rows: list[ColorRuleCondition] = []
+    origin: list[int] = []
+    for position, rule in enumerate(rules):
+        named = (rule["feat"], rule["val"].strip()) if rule["qual"].lower() == "hash" else None
+        if named in own:
+            continue
+        if named in stable_of:
+            others = {i for i in holders[stable_of[named]] - targets if old_winners[i] == position}
+            if any(hash_of[i] is None for i in others):
+                raise ValueError("The rule synthesis could not reset the color of the selected features.")
+            for instance in sorted({key[1] for key in (hash_of[i] for i in others) if key}):
+                table.append(RetargetedColorRule(row=position, val=exact_value_pattern(instance)))
+                rows.append(ColorRuleCondition(feat=rule["feat"], qual=rule["qual"], val=exact_value_pattern(instance)))
+                origin.append(position)
+            continue
+        table.append(position)
+        rows.append(rule)
+        origin.append(position)
+    winners = _winners(features, rows)
+    if any((origin[winners[i]] if winners[i] >= 0 else -1) != old_winners[i]
+           for i in range(len(features)) if i not in targets):
+        raise ValueError("The rule synthesis would change the color of a feature that is not selected.")
+    if not request["color"] or all(winners[i] < 0 for i in targets):
+        return SynthesizedColorRules(table=table)
+    colored = synthesize_color_rules(SynthesizeColorRulesRequest(
+        scope="features", features=request["features"], selected=request["selected"],
+        labels=[[] for _ in request["selected"]], rules=rows, color=request["color"], caption=request["caption"]))
+    return SynthesizedColorRules(table=[table[entry] if isinstance(entry, int) else entry for entry in colored["table"]])
+
+
 def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedColorRules:
     """The fewest rules that give the selected features `color` and `caption`
     and leave every other feature's winning rule as it was (Owner R-07); with
-    `scope` "features", one `hash` rule per feature.
+    `scope` "features", one `hash` rule per feature; with `scope` "reset", the
+    table without their own `hash` rows (`_reset_color_rules`).
 
-    Python matches a single-feature rule by the stable hash, which duplicate
-    record instances share: a feature that shares a selected feature's hash is a
-    target too. A condition is taken only when every feature it matches is a
-    target, largest first; the targets it does not cover take `hash` rules, and
-    a target's own old `hash` rows give way. The table is then verified with the
-    renderer's matcher: a target that a new row does not color (an older rule
-    of an earlier qualifier wins) takes a `hash` row, and a table that would
-    change the winner of any other feature is refused.
+    The targets are the selected features, with every other entry of the same
+    feature instance (a feature is listed as drawn and from its source). A
+    single-feature rule names the feature instance exactly, so a feature with
+    the same stable hash (the same file drawn twice, identical features of one
+    record) keeps its color. A condition is taken only when every feature it
+    matches is a target, largest first; the targets it does not cover take
+    `hash` rules, and a target's own old `hash` rows give way: its instance
+    rows, and a stable-hash row that no other feature shares. The table is then
+    verified with the renderer's matcher: a target that a new row does not
+    color (an older rule of an earlier qualifier wins) takes a `hash` row, and
+    a table that would change the winner of any other feature is refused.
     """
-    features, rules = request["features"], request["rules"]
+    features = [_match_feature(item) for item in request["features"]]
+    if request["scope"] == "reset":
+        return _reset_color_rules(request, features)
+    rules = request["rules"]
     color, caption = request["color"], request["caption"]
-    hash_of: list[HashTarget | None] = [
-        (item["type"], item["selector"]["hash"]) if item["selector"]["hash"] else None for item in features
-    ]
-    chosen = {key for key in (hash_of[i] for i in request["selected"]) if key is not None}
-    targets = set(request["selected"]) | {i for i, key in enumerate(hash_of) if key in chosen}
+    hash_of, targets, holders = _hash_targets(features, request["selected"])
+    # The rows that name a target exactly: its instance, and its stable hash
+    # when every feature with that hash is a target (a feature without an
+    # instance gives way by its stable hash only).
+    spellings: dict[tuple[str, str], HashTarget] = {}
+    for i in sorted(targets):
+        feat, key, stable = features[i]["type"], hash_of[i], features[i]["selector"]["hash"]
+        names = [(key, key[1])] if key else []
+        if stable and holders[(feat, stable)] <= targets:
+            names.append((key or (feat, stable), stable))
+        for target, value in names:
+            for spelling in _spellings(value):
+                spellings.setdefault((feat, spelling), target)
 
     old_rules = _indexed_color_rules(rules)
     old_matches = [list(_color_rule_ranks(item, old_rules)) for item in features]
@@ -295,9 +439,6 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
             hits[condition].add(index)
     usable = sorted((c for c, found in enumerate(hits) if found and found <= targets), key=lambda c: -len(hits[c]))
 
-    # The targets' hashes are the selected features' (`chosen`).
-    spellings = {(kind, spelling): (kind, value) for kind, value in chosen
-                 for spelling in (value, exact_value_pattern(value))}
     retired: dict[HashTarget, list[int]] = {}
     for position, rule in enumerate(rules):
         own = spellings.get((rule["feat"], rule["val"].strip())) if rule["qual"].lower() == "hash" else None
@@ -321,7 +462,9 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
         for i in sorted(needs_hash - declined):
             key = hash_of[i]
             assert key is not None
-            hash_rows.setdefault(key, ColorRuleRow(feat=key[0], qual="hash", val=key[1], color=color, cap=caption))
+            # An instance is named exactly: `f1@k` must not match `f1~1@k` or `f1@k:2`.
+            hash_rows.setdefault(key, ColorRuleRow(feat=key[0], qual="hash", val=exact_value_pattern(key[1]),
+                                                   color=color, cap=caption))
             anchor = next((r for r in old_matches[i] if r not in dropped and rules[r]["qual"].lower() == "hash"
                            and rules[r]["feat"] == key[0]), None)
             if anchor is not None:
@@ -340,7 +483,8 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
         forced |= missed
     else:
         raise ValueError("The rule synthesis could not color the selected features.")
-    return SynthesizedColorRules(table=table)
+    next_table: list[int | ColorRuleRow | RetargetedColorRule] = [*table]
+    return SynthesizedColorRules(table=next_table)
 
 
 def synthesize_color_rules_json(request_json: str) -> str:

@@ -20,6 +20,24 @@ test('the color rule hash drops record and instance suffixes (PD-OI-069)', () =>
 test('the live rule payload uses the hash Python matches', () => {
   const payload = ruleFeaturePayload({ type: 'CDS', svg_id: instanceId, qualifiers: {} });
   assert.equal(payload.selector.hash, 'ffa1f4c4a');
+  assert.equal(payload.selector.record_key, null);
+  assert.equal(payload.selector.feature_id, null);
+});
+
+// PD-OI-069 revision 2: the payload carries the catalog identity every
+// catalog feature has, a catalog saved before this change included; Python
+// composes the feature instance a "This feature only" rule names from it.
+test('the live rule payload sends the catalog identity Python composes the feature instance from', () => {
+  const payload = ruleFeaturePayload({
+    type: 'CDS', svg_id: 'ffa1f4c4a_record_2', qualifiers: {},
+    record_key: 'linear-seq-b', biological_feature_id: 'ffa1f4c4a',
+    drawnSelector: { hash: 'ffa1f4c4a', location: '300..600', recordLocation: 'TESTA:300..600:+' },
+    selector: { hash: 'ffa1f4c4a', qualifiers: {} }
+  });
+  assert.deepEqual(payload.selector, {
+    hash: 'ffa1f4c4a', record_key: 'linear-seq-b', feature_id: 'ffa1f4c4a',
+    location: '300..600', record_location: 'TESTA:300..600:+'
+  });
 });
 
 // OV-02: catalog 5 gives the drawn record's selector values; a cropped record
@@ -34,7 +52,7 @@ test('the live rule payload sends the source hash and the drawn locations of cat
     qualifiers: {}
   });
   assert.deepEqual(payload.selector, {
-    hash: 'fb5977f81', location: '2200..2300', record_location: 'TESTA:2200..2300:+'
+    hash: 'fb5977f81', record_key: null, feature_id: null, location: '2200..2300', record_location: 'TESTA:2200..2300:+'
   });
 });
 
@@ -43,7 +61,7 @@ test('a catalog before schema 5 sends no coordinates for location rules (R4)', (
     type: 'misc_feature', svg_id: 'f3b928d8c_record_1', record_id: 'TESTA', start: 2400, end: 2500,
     drawnSelector: null, qualifiers: {}
   });
-  assert.deepEqual(payload.selector, { hash: 'f3b928d8c', location: null, record_location: null });
+  assert.deepEqual(payload.selector, { hash: 'f3b928d8c', record_key: null, feature_id: null, location: null, record_location: null });
 });
 
 test('a catalog before schema 5 sends source coordinates where its rendered ID carries the source hash', () => {
@@ -53,5 +71,7 @@ test('a catalog before schema 5 sends source coordinates where its rendered ID c
     type: 'CDS', svg_id: 'ffa1f4c4a_record_1', record_id: 'TESTA', drawnSelector: null, qualifiers: {},
     selector: { hash: 'ffa1f4c4a', location: '300..600', record_location: 'TESTA:300..600:+', qualifiers: {} }
   });
-  assert.deepEqual(payload.selector, { hash: 'ffa1f4c4a', location: '300..600', record_location: 'TESTA:300..600:+' });
+  assert.deepEqual(payload.selector, {
+    hash: 'ffa1f4c4a', record_key: null, feature_id: null, location: '300..600', record_location: 'TESTA:300..600:+'
+  });
 });

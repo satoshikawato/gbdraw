@@ -392,8 +392,15 @@ class ColorRuleList(list):
         return [self[position] for position in sorted(positions)]
 
 
-def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=None):
-    """Yield matching rules and their stable renderer precedence rank."""
+def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=None, instance):
+    """Yield matching rules and their stable renderer precedence rank.
+
+    A `hash` rule is searched in the feature's stable hash, which every feature
+    with the same record ID, type, and location shares, and must match the
+    whole of its feature ``instance`` (``ids.feature_instance``; None for a
+    feature without one): a rule naming the instance colors that feature only,
+    and `<id>@record-1` does not name `<id>@record-10`.
+    """
     feature_type = get_feature_type(feature)
     qualifiers = get_feature_qualifiers(feature)
     keys = ["hash", "record_location", *qualifiers, "location"]
@@ -402,9 +409,11 @@ def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=No
         for index, key in enumerate(keys):
             if key not in rules:
                 continue
+            whole: list[str] = []
             if index == 0:
                 value = selector.get("hash") if selector is not None else get_feature_hash(feature, record_id)
                 values = [value] if value else []
+                whole = [instance] if instance else []
             elif index == 1:
                 value = selector.get("record_location") if selector is not None else get_feature_record_location_str(feature, record_id)
                 values = [value] if value else []
@@ -414,16 +423,18 @@ def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=No
             else:
                 values = get_qualifier_values(qualifiers, key)
             rule_list = rules[key]
-            candidates = rule_list.candidates(values) if isinstance(rule_list, ColorRuleList) else rule_list
+            candidates = rule_list.candidates([*values, *whole]) if isinstance(rule_list, ColorRuleList) else rule_list
             for rule in candidates:
                 pattern, color, caption = _unpack_color_rule(rule)
-                if any(pattern.search(value) for value in values):
+                if any(pattern.search(value) for value in values) or any(pattern.fullmatch(value) for value in whole):
                     yield color, caption, offset + index
 
 
-def find_specific_color_rule(feature, color_map, record_id=None, *, selector=None):
+def find_specific_color_rule(feature, color_map, record_id=None, *, selector=None, instance):
     """Return the first matching specific color rule, if any."""
-    matched = next(iter_specific_color_rules(feature, color_map, record_id, selector=selector), None)
+    matched = next(
+        iter_specific_color_rules(feature, color_map, record_id, selector=selector, instance=instance), None
+    )
     return matched[:2] if matched is not None else None
 
 
@@ -431,8 +442,10 @@ def feature_matches_specific_color_rule(
     feature: SeqFeature,
     color_map: Mapping,
     record_id: Optional[str] = None,
+    *,
+    instance: Optional[str],
 ) -> bool:
-    return find_specific_color_rule(feature, color_map, record_id=record_id) is not None
+    return find_specific_color_rule(feature, color_map, record_id=record_id, instance=instance) is not None
 
 
 def build_feature_selector_values(

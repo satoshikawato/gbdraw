@@ -1237,13 +1237,21 @@ under **All features with the same**, the matching **Color rule**, **Legend item
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
-features. Otherwise the editor keeps one exact `hash` rule per biological
-feature, also when two records share a record ID. The hash is the feature's
-hash in its source record, so the rule keeps matching the feature when the
-region or orientation of its Linear record changes. Identical duplicate records can
-share the same hash, so a regenerated diagram cannot preserve a one-instance-only
-rule for indistinguishable duplicates: a **This feature only** color then
-applies to both copies. A one-feature rule uses a qualifier value only when no other
+features. Otherwise the editor keeps one exact `hash` rule per feature
+instance: the feature's biological feature ID in its record, written
+`^<feature id>@<record key>$`. It colors that feature of that File card and
+record only, also when two records share a record ID or the same file is drawn
+twice, live and after Generate. The feature ID comes from the feature's hash in
+its source record, so the rule keeps matching the feature when the region or
+orientation of its Linear record changes. Like the other per-feature edits,
+the rule belongs to the record key: it does not apply while the record is
+drawn under another key (a Circular record drawn alone or on the
+**Multi-record canvas**, a Linear File card that draws all of its records or
+one of them), and it applies again when that key returns. Resetting **This feature only** on
+one copy leaves the other copies as they are: a rule that names the shared
+hash is narrowed to the copies it still colors. **Delete settings** of a record
+that is turned off removes the `hash` rules that name its feature instances;
+turning the record off keeps them. A one-feature rule uses a qualifier value only when no other
 feature of that record and type has the same value ignoring case, because the
 Python matcher ignores case; `orfA` and `ORFA` are one value.
 
