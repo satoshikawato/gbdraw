@@ -34,6 +34,8 @@ from gbdraw.io.colors import load_default_colors
 from gbdraw.layout.circular import CircularRadialLayout, CircularResolvedSlot
 from gbdraw.tracks import parse_circular_track_slots
 
+from tests.utils.session_drawing_view import drawing_view
+
 pytestmark = pytest.mark.circular
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -411,9 +413,8 @@ def test_the_cli_writes_the_narrowing_settings_into_the_config(tmp_path: Path, m
         ],
     )
     gbdraw_main()
-    circular = json.loads(gzip.decompress(session.read_bytes()))["renderRequest"]["diagramOptions"]["config"]["canvas"][
-        "circular"
-    ]
+    view = drawing_view(json.loads(gzip.decompress(session.read_bytes())))
+    circular = view["renderRequest"]["diagramOptions"]["config"]["canvas"]["circular"]
     assert circular["track_narrowing"] is False
     assert circular["track_narrowing_min_px"] == 44.0
 
