@@ -392,10 +392,12 @@ test('DOM edits Save and fresh Load retain draft apart from committed Result; fa
     const rejected = structuredClone(saved);
     const gcIndex = savedDrawing(rejected, 'circular').config.adv.circular_track_slots.findIndex(slot => slot.id === 'gc_content');
     savedDrawing(rejected, 'circular').config.adv.circular_track_slots.find(slot => slot.id === 'gc_content').width = { value: '1e', unit: 'px' };
+    // A Session 49 Load names a drawing's value by its place in `drawings`.
+    const circularIndex = rejected.drawings.findIndex(drawing => drawing.id === 'circular');
     // A Width Load cannot use is listed before Load changes anything (OV-758);
     // after Cancel the notice of the earlier Load stays and the state is unchanged.
     await load(fresh, { name: 'invalid.gbdraw-session.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rejected)) }, [
-      `Settings: the value "{"value":"1e","unit":"px"}" (modes.circular.config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
+      `Settings: the value "{"value":"1e","unit":"px"}" (drawings[${circularIndex}].config.adv.circular_track_slots[${gcIndex}].width) cannot be used;`
         + ' it is left unset.'
     ]);
     expect(await snapshot(fresh)).toEqual(restored);
