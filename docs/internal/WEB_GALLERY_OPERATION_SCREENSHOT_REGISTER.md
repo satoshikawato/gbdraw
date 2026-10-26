@@ -519,19 +519,13 @@ opened the loaded Session's folded card, showed the caret mid-turn.
 
 Issue #1385. In the `BGC0000708-BGC0000713` tutorial the qualifier inspection
 (old step 12) is now step 8, before the colors; the old steps 8-11 are steps
-9-12. The colors, the palette and the color tables stay as they were. The
-Gallery Session was saved again from a fresh upload, so it keeps the File card
-rows (`webFiles.bindings`) and its record keys are the uids `linear-seq-…`, not
-`record-N`; the recipes of steps 6 and 7 find the File 5 card and the
-alignment review cards by those uids. This section replaces the capture state
-of the same media in the rows of the earlier sections; those rows stay as
-history.
+9-12. The colors, the palette, the color tables and the Gallery Session stay
+as they were, so the media of the moved steps keep their bytes under the new
+step numbers. This section replaces the capture state of the same media in the
+rows of the earlier sections; those rows stay as history.
 
 | Tutorial | Operation media | Decision | Required capture state | Status |
 | --- | --- | --- | --- | --- |
-| `BGC0000708-BGC0000713` | `manual-08-01-feature-popup.webp` (was `manual-12-01-feature-popup.webp`) | Recapture; recipe changed | Replay through step 7 (every CDS still blue); `livE` typed in **Search features** and Enter; the livE CDS of BGC0000708 clicked; popup on **Qualifiers** with `gene` `livE` and `gene_kind` `biosynthetic` | Recaptured at DSF 3, 2511x945; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-09-02-preview-colors.webp`, `manual-10-02-preview-labels.webp`, `manual-11-04-preview-final.webp` (were `manual-08-02`, `manual-09-02`, `manual-10-04`) | Recapture | The same previews one step later; the current app draws the legend 3 px apart from the committed crops | Recaptured at DSF 3, 3372x1332, 3372x1521 and 3372x1128; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-10-01-show-labels-first.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-08-01`, `manual-09-01`, `manual-10-01`, `manual-10-02`, `manual-10-03`, `manual-11-01`) | Rename; keep bytes | Recaptures pixel-identical or within raster noise | Renamed with the committed bytes |
-| `BGC0000708-BGC0000713` | `manual-04-01-preview-defaults.webp`, `manual-05-03-preview-losatp.webp`, `manual-06-02-preview-reversed.webp`, `manual-07-04-preview-aligned.webp` | Recapture | Previews of steps 4-7; the legend 3 px apart, as above | Recaptured at DSF 3; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-05-01-comparison-settings.webp`, `manual-07-01-align-og6.webp` | Recapture | Current labels: **Max hits per protein for groups**; current tab widths in the alignment panel | Recaptured at DSF 3, 1422x3204 and 1926x858; compared by eye |
-| `BGC0000708-BGC0000713` | `manual-07-02-anchor-candidates.webp` and the other media of steps 1-7 | Keep | Recaptures within raster noise (`07-02` maximum channel difference 8) | Recaptured and reverted |
+| `BGC0000708-BGC0000713` | `manual-08-01-feature-popup.webp` (was `manual-12-01-feature-popup.webp`) | Recapture; recipe unchanged except `replayThrough` 7 | Exact Session replayed through step 7 (every CDS still blue); the capture clicks the livE CDS of BGC0000708 by its feature id (`fed46a3a6_record_1`) with the **Search features** bar hidden, and opens **Qualifiers** with `gene` `livE` and `gene_kind` `biosynthetic` | Recaptured at DSF 3, 2511x945; compared by eye |
+| `BGC0000708-BGC0000713` | `manual-09-01-specific-rules-all.webp`, `manual-09-02-preview-colors.webp`, `manual-10-01-show-labels-first.webp`, `manual-10-02-preview-labels.webp`, `manual-11-01-arrow-shaft-width.webp`, `manual-11-02-scale-style-ruler.webp`, `manual-11-03-plot-title.webp`, `manual-11-04-preview-final.webp`, `manual-12-01-orthogroup-popup.webp` (were `manual-08-01`, `08-02`, `09-01`, `09-02`, `10-01`, `10-02`, `10-03`, `10-04`, `11-01`) | Rename; keep bytes | The same states one step number later | Renamed with the committed bytes; `--check` passes |
+| `BGC0000708-BGC0000713` | Media of steps 1-7 | Keep | Unchanged recipes and Session | Committed bytes |

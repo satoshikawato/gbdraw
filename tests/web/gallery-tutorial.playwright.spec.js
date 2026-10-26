@@ -505,7 +505,15 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     'manual-04-03-track-layout-middle.webp',
     'manual-06-02-record-labels.webp',
     'manual-08-04-aligned-preview.webp',
+    'manual-08-01-specific-rules-all.webp',
     'manual-08-02-preview-colors.webp',
+    'manual-09-01-show-labels-first.webp',
+    'manual-09-02-preview-labels.webp',
+    'manual-10-01-arrow-shaft-width.webp',
+    'manual-10-02-scale-style-ruler.webp',
+    'manual-10-03-plot-title.webp',
+    'manual-10-04-preview-final.webp',
+    'manual-11-01-orthogroup-popup.webp',
     'manual-12-01-feature-popup.webp'
   ]) {
     await expect(tutorialPanel.locator(`img[src$="${retired}"]`)).toHaveCount(0);

@@ -17,8 +17,8 @@
       "sha256": "ac373f2eb9e357dda555d214611f9099afa67df19ffa78bbcd8b1df99b8d058e"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1352773,
-      "sha256": "646719a3f051e7bf9065a0c3de490d5f29904fcd9300af862a6474a407b45644"
+      "bytes": 1316971,
+      "sha256": "358929157b0417404f92b42a48bdad29905a3e3cb568ddd97533bffa62e1551d"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
       "bytes": 446702,
@@ -57,8 +57,8 @@
       "sha256": "643d401fa9e243003cc2b27f29eaa231314018c4e077d9e91145cad8a03345e0"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 3060825,
-      "sha256": "234247f85bae0032b9e3f3e8af1922650496378a74ac41698df03b29b8211cf6"
+      "bytes": 3016166,
+      "sha256": "16bbe8a23414c0455178585216c7d16ffdd17892fc87c47d1a791bd5e90b09d3"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
       "bytes": 278025,
@@ -97,8 +97,8 @@
       "sha256": "4b380573d86ecb5e2b28d48608fbc357c8ee36cab412a5b0432ace656b96fe08"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
-      "bytes": 233251,
-      "sha256": "5620adda9639acfc8e7f17604159fc839b4cfb083cf274a1934d452151d68277"
+      "bytes": 233056,
+      "sha256": "3738b151b757060ef0357f894694240d51db004675a30ed4f5ab29f32f3073a4"
     },
     "gallery/sources/HmmtDNA_ATskew.svg": {
       "bytes": 87199,

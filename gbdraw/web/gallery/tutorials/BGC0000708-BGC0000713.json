@@ -182,7 +182,7 @@
           }
         }
       ],
-      "note": "MIBiG has already cut each cluster out of its genome, so each file holds one cluster. For a whole genome of your own, find the cluster's coordinates first and enter them under the File's Record options › Region (optional) › Start and End; this tutorial skips that work."
+      "note": "MIBiG has already cut each cluster out of its genome, so each file holds one cluster. For a whole genome of your own, find the cluster's coordinates first and enter them in the record's options (Record options for a one-record file) › Region (optional) › Start and End; this tutorial skips that work."
     },
     {
       "title": "Add the other four clusters, one at a time",
@@ -682,7 +682,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'linear-seq-99305ccd-54e7-472f-ac4a-e0305e3dbb5c') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"linear-seq-99305ccd-54e7-472f-ac4a-e0305e3dbb5c\"]'); const options = row?.querySelector('[data-linear-record-options=\"linear-seq-99305ccd-54e7-472f-ac4a-e0305e3dbb5c\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const uploader = fold?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
+                "script": "const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; const seq = app.linearSeqs[4]; if (seq?.uid !== 'record-5') throw new Error('BGC0000713 record was not restored as sequence 5.'); const row = document.querySelector('[data-linear-record-card=\"record-5\"]'); const options = row?.querySelector('[data-linear-record-options=\"record-5\"]'); if (!row || !options) throw new Error('BGC0000713 Record options were not found.'); options.open = true; const card = row.closest('[data-linear-source-card]'); const fold = card?.querySelector(':scope > [data-linear-source-fold]'); const uploader = fold?.querySelector(':scope > .space-y-2'); if (!card || !uploader) throw new Error('BGC0000713 file card was not found.'); uploader.setAttribute('data-capture', 'bgc0713-file'); row.setAttribute('data-capture', 'bgc0713-record'); card.scrollIntoView({ block: 'start' });"
               },
               {
                 "type": "evaluate",
@@ -705,7 +705,7 @@
             },
             "assertAppState": {
               "mode": "linear",
-              "linearSeqs.4.uid": "linear-seq-99305ccd-54e7-472f-ac4a-e0305e3dbb5c",
+              "linearSeqs.4.uid": "record-5",
               "linearSeqs.4.gb.name": "BGC0000713.gbk",
               "linearSeqs.4.region_reverse": true
             },
@@ -937,18 +937,18 @@
               {
                 "type": "waitForFunction",
                 "timeout": 300000,
-                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08']\")); }"
+                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\")); }"
               },
               {
                 "type": "evaluate",
-                "script": "document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08']\").scrollIntoView({ block: 'center' });"
+                "script": "document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\").scrollIntoView({ block: 'center' });"
               },
               {
                 "type": "wait",
                 "ms": 250
               }
             ],
-            "selector": "[data-similarity-alignment-dialog] [data-alignment-record-key='linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08']",
+            "selector": "[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']",
             "cropPadding": {
               "top": 2,
               "right": 12,
@@ -958,7 +958,7 @@
             "assertAppState": {
               "mode": "linear",
               "similarityAlignmentDraft.rows.length": 4,
-              "similarityAlignmentDraft.rows.0.recordKey": "linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08",
+              "similarityAlignmentDraft.rows.0.recordKey": "record-1",
               "similarityAlignmentDraft.rows.0.candidates.length": 2,
               "similarityAlignmentDraft.rows.0.choice.kind": "select",
               "similarityAlignmentDraft.intent.mode": "keep",
@@ -974,7 +974,7 @@
             ],
             "visibleControls": [
               {
-                "selector": "[data-alignment-record-key='linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08'] label:nth-of-type(2) input[type='radio']",
+                "selector": "[data-alignment-record-key='record-1'] label:nth-of-type(2) input[type='radio']",
                 "checked": true
               }
             ]
@@ -1021,7 +1021,7 @@
               {
                 "type": "waitForFunction",
                 "timeout": 300000,
-                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08']\")); }"
+                "script": "() => { const app = window.__GBDRAW_APP__; return Boolean(app?.similarityAlignmentDraft && !app.similarityAlignmentBusy && document.querySelector(\"[data-similarity-alignment-dialog] [data-alignment-record-key='record-1']\")); }"
               },
               {
                 "type": "evaluate",
@@ -1046,7 +1046,7 @@
             "assertAppState": {
               "mode": "linear",
               "similarityAlignmentDraft.rows.length": 4,
-              "similarityAlignmentDraft.rows.0.recordKey": "linear-seq-d358d7d6-d45c-4971-b932-113f8791bf08",
+              "similarityAlignmentDraft.rows.0.recordKey": "record-1",
               "similarityAlignmentDraft.rows.0.candidates.length": 2,
               "similarityAlignmentDraft.rows.0.choice.kind": "select",
               "similarityAlignmentDraft.intent.mode": "keep",
@@ -1109,7 +1109,7 @@
     },
     {
       "title": "Find the qualifier to color by",
-      "body": "Every CDS is still the same blue. gbdraw can color features by the value of a qualifier, so first look at the qualifiers of one gene. Type livE in Search features above the preview and press Enter: the preview marks the livE CDS of BGC0000708 (row 1). Click it and open Qualifiers. gene_kind is the category that antiSMASH gave each gene in the MIBiG record, here biosynthetic; gene holds the short name livE, which the labels use in step 10.",
+      "body": "Every CDS is still the same blue. gbdraw can color features by the value of a qualifier, so first look at the qualifiers of one gene. Type livE in Search features above the preview and press Enter: the preview marks the livE CDS of BGC0000708 (row 1). Click it and open Qualifiers. gene_kind is the category that antiSMASH gave each gene it classified in the MIBiG record, here biosynthetic; gene holds the short name livE, which the labels use in step 10.",
       "operations": [
         {
           "media": {
@@ -1190,7 +1190,7 @@
     },
     {
       "title": "Color the genes by gene_kind",
-      "body": "MIBiG and antiSMASH have already put each gene into a category, its gene_kind, so color by it in the same scheme as the MIBiG website: core biosynthetic genes red, additional biosynthetic genes pink, transport genes blue, and regulatory genes green. Open Colors, choose the orange palette, and set the CDS default color to #dddddd for the genes that no rule matches: gene_kind other and resistance, and CDS without gene_kind. The palette also turns the ribbons blue, so the red core genes stand out against them. Then add the four SPECIFIC RULES below, one row at a time, and click Generate Diagram.",
+      "body": "antiSMASH has already put each gene it classified into a category, its gene_kind, so color by it in the same scheme as the MIBiG website: core biosynthetic genes red, additional biosynthetic genes pink, transport genes blue, and regulatory genes green. Open Colors, choose the orange palette, and set the CDS default color to #dddddd for the genes that no rule matches: gene_kind other and resistance, and CDS without gene_kind. The palette also turns the ribbons blue, so the red core genes stand out against them. Then add the four SPECIFIC RULES below, one row at a time, and click Generate Diagram.",
       "table": {
         "columns": [
           "Setting",
@@ -2262,7 +2262,7 @@
   "colorRules": [
     {
       "title": "Use gene_kind for antiSMASH categories",
-      "body": "MIBiG gives each gene of these records the antiSMASH gene_kind qualifier: biosynthetic (core), biosynthetic-additional, transport, regulatory, resistance, and other. The figure colors them in the same scheme as the MIBiG website: core biosynthetic genes red, additional biosynthetic genes pink, transport genes blue, and regulatory genes green; the CDS default color colors the rest. Use those annotations instead of matching broad product terms."
+      "body": "In these MIBiG records, the genes that antiSMASH classified carry the gene_kind qualifier: biosynthetic (core), biosynthetic-additional, transport, regulatory, resistance, or other; the other CDS have none. The figure colors them in the same scheme as the MIBiG website: core biosynthetic genes red, additional biosynthetic genes pink, transport genes blue, and regulatory genes green; the CDS default color colors the rest. Use those annotations instead of matching broad product terms."
     },
     {
       "title": "Use gene for label text",

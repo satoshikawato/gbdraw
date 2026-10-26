@@ -56,8 +56,8 @@ the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequen
 MIBiG has already cut each cluster out of its genome, so each file holds one
 cluster. Keep each record whole: leave all optional Region fields blank. For a
 cluster inside a whole genome of your own, you would first enter its
-coordinates under the File's **Record options** › **Region (optional)** ›
-**Start** and **End**.
+coordinates in the record's options (**Record options** for a one-record file)
+› **Region (optional)** › **Start** and **End**.
 
 In **File 5**, open **Record options** and turn on
 **Reverse complement** only for `BGC0000713`. This changes only its display
