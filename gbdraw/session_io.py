@@ -4477,6 +4477,17 @@ def _validated_protein_identity_manifest(
         return None
 
 
+def _protein_manifest_holders(
+    session: MutableMapping[str, object],
+) -> list[MutableMapping[str, object]]:
+    """Return the mappings that hold a manifest: each drawing of a 49, else the payload."""
+
+    drawings = session.get("drawings")
+    if isinstance(drawings, list):
+        return [drawing for drawing in drawings if isinstance(drawing, MutableMapping)]
+    return [session]
+
+
 def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
     """Replace the payload's ``proteinIdentityManifest`` by its checked proof.
 
@@ -4487,15 +4498,9 @@ def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None
     A Session 49 holds a manifest in each drawing: each is sealed.
     """
 
-    drawings = session.get("drawings")
-    holders = (
-        [drawing for drawing in drawings if isinstance(drawing, MutableMapping)]
-        if isinstance(drawings, list)
-        else [session]
-    )
     from .analysis.protein_colinearity import validate_protein_identity_manifest
 
-    for holder in holders:
+    for holder in _protein_manifest_holders(session):
         manifest = holder.get("proteinIdentityManifest")
         if not isinstance(manifest, Mapping):
             continue
@@ -4509,13 +4514,17 @@ def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None
 
 
 def thaw_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
-    """Replace a proof in the payload by a plain, mutable copy."""
+    """Replace each proof in the payload by a plain, mutable copy.
+
+    A Session 49 holds a manifest in each drawing: each is thawed.
+    """
 
     from .analysis.protein_colinearity import ProteinIdentityManifest
 
-    manifest = session.get("proteinIdentityManifest")
-    if isinstance(manifest, ProteinIdentityManifest):
-        session["proteinIdentityManifest"] = manifest.to_dict()
+    for holder in _protein_manifest_holders(session):
+        manifest = holder.get("proteinIdentityManifest")
+        if isinstance(manifest, ProteinIdentityManifest):
+            holder["proteinIdentityManifest"] = manifest.to_dict()
 
 
 def _protein_raw_entry_matches_manifest(
