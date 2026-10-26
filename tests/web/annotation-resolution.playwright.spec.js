@@ -119,7 +119,7 @@ for (const width of [1440, 390]) {
     const sessionPath = testInfo.outputPath('selectors.gbdraw-session.json.gz');
     await (await pendingSession).saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
-    expect(session.runMetadata.annotationWarnings).toEqual(all.warnings);
+    expect(shownSavedDrawing(session).runMetadata.annotationWarnings).toEqual(all.warnings);
     expect(shownSavedDrawing(session).config.annotationSets.map((set) => set.annotations.length)).toEqual(tables.setCounts);
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {

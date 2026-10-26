@@ -3,7 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
-const { savedDrawing } = require('./helpers/saved-session.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
@@ -2156,8 +2156,9 @@ test('a Session legend position outside its mode loads as the mode default and g
   const session = JSON.parse(readFileSync(
     join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json'), 'utf8'
   ));
-  expect(session.modes.linear.ui.layoutPreferences.legend).toBe('left');
-  session.modes.linear.ui.layoutPreferences.legend = 'Upper_Left';
+  const shown = shownSavedDrawing(session);
+  expect(shown.ui.layoutPreferences.legend).toBe('left');
+  shown.ui.layoutPreferences.legend = 'Upper_Left';
   await openApp(page);
   await page.locator('input[accept^=".json,"]').first().setInputFiles({
     name: 'legend-position.gbdraw-session.json',
@@ -2166,7 +2167,7 @@ test('a Session legend position outside its mode loads as the mode default and g
   });
   // The file is lossy on purpose: Load lists the position and the one it uses (BA-D25).
   await answerLoadRepairs(page, [
-    'Legend: the position "Upper_Left" (modes.linear.ui.layoutPreferences.legend) is not one of its mode\'s positions;'
+    'Legend: the position "Upper_Left" (drawings[0].ui.layoutPreferences.legend) is not one of its mode\'s positions;'
       + ' bottom is used.'
   ], 'load', { timeout: 180000 });
   await expectSessionLoadedWithoutWarnings(page, { timeout: 180000 });

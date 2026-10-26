@@ -232,7 +232,8 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
   const fixturePath = join(repoRoot, 'tests/fixtures/sessions', fixture);
   const bytes = readFileSync(fixturePath);
   const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
-  const subtitles = shownSavedDrawing(session).renderRequest.records.map(record => record.presentation?.subtitle || '');
+  // A released v40 fixture: the file keeps its own (pre-49) layout.
+  const subtitles = session.renderRequest.records.map(record => record.presentation?.subtitle || '');
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadDefinitionSession(page, fixturePath);
@@ -250,7 +251,7 @@ test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Ge
           attrs.map(attr => el.getAttribute(attr))]);
     };
     return [snapshot(saved), snapshot(window.__GBDRAW_APP__.currentResults()[0].content)];
-  }, shownSavedDrawing(session).results[0].content);
+  }, session.results[0].content);
   expect(previews[1]).toEqual(previews[0]);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
@@ -459,7 +460,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
         continue;
       }
       await answerLoadRepairs(page, [`Settings: the value "${typeof malformed === 'string' ? malformed : JSON.stringify(malformed)}"`
-        + ' (modes.linear.config.form.keep_definition_left_aligned) cannot be used; true is used.'], 'cancel');
+        + ' (drawings[1].config.form.keep_definition_left_aligned) cannot be used; true is used.'], 'cancel');
       expect((await pending).status).toBe('canceled');
       await expect(lock).toBeChecked({ checked: locked });
       expect(await measureDefinitionColumns(page)).toEqual(stable);
@@ -2177,7 +2178,8 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
     );
     const text = await response.text();
     const session = JSON.parse(text);
-    const sourceVisibleEntries = shownSavedDrawing(session).losatCache.entries.filter(
+    const shown = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+    const sourceVisibleEntries = shown.losatCache.entries.filter(
       (entry) => entry.display !== false
     );
     const file = new File(

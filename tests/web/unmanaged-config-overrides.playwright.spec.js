@@ -63,8 +63,8 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   await openApp(page);
 
   const preservedSession = structuredClone(sourceSession);
-  preservedSession.renderRequest.diagramOptions.configOverrides[unmanagedPath] = 0.42;
-  preservedSession.renderRequest.diagramOptions.configOverrides[
+  shownSavedDrawing(preservedSession).renderRequest.diagramOptions.configOverrides[unmanagedPath] = 0.42;
+  shownSavedDrawing(preservedSession).renderRequest.diagramOptions.configOverrides[
     'objects.gc_content.mode'
   ] = 'percent';
 
@@ -120,7 +120,7 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   }, unmanagedPath)).toBe(false);
 
   const rejectedSession = structuredClone(sourceSession);
-  rejectedSession.renderRequest.diagramOptions.configOverrides[
+  shownSavedDrawing(rejectedSession).renderRequest.diagramOptions.configOverrides[
     'objects.gc_content.unknown'
   ] = 1;
   const outcome = await evaluateWithRetainedPromise(page, async payload => {

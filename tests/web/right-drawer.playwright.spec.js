@@ -511,7 +511,7 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   // the established last-Result availability semantics.
   const replacement = await page.evaluate(async () => {
     const session = await (await fetch('/gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')).json();
-    const resource = session.resources[shownSavedDrawing(session).renderRequest.records[0].source.resourceId];
+    const resource = session.resources[session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).renderRequest.records[0].source.resourceId];
     return atob(resource.data);
   });
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({

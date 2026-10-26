@@ -93,7 +93,8 @@ test('the Legend layout owner equals Python on every Gallery Legend and its edit
     for (const vector of layoutCases) {
       const [base, index] = vector.name.split('#');
       if (!sessions.has(base)) sessions.set(base, JSON.parse(await sessionText(base)));
-      const content = sessions.get(base).results[Number(index)].content;
+      const session = sessions.get(base);
+      const content = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).results[Number(index)].content;
       const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
       const legend = svg.getElementById('legend');
       const keys = vector.rows.filter((row) => row.type === 'solid').map((row) => row.key);
