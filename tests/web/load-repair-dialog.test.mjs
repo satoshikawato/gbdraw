@@ -1505,16 +1505,12 @@ const DEPTH_ROUND_TRIP = {
 };
 for (const [mode, [name, stackKey, manualRow]] of Object.entries(DEPTH_ROUND_TRIP)) {
   test(`a ${mode} Session keeps a Depth series without a file and a row whose file was cleared through Save and Load (BA-OD94)`, async () => {
-    const { ensureDepthTrackConfigCount, normalizeDepthTrackConfig, padDepthFileSlots, reconcileManagedDepthSlots } = await import('../../gbdraw/web/js/services/depth-track-state.js');
+    const { normalizeDepthTrackConfig, padDepthFileSlots, reconcileManagedDepthSlots } = await import('../../gbdraw/web/js/services/depth-track-state.js');
     await loadAnswering(fixture(name));
     assert.equal(state.mode.value, mode);
     const { adv } = modeDrawing(state, mode);
-    // The Circular fixture stores series 0; the Linear one stores none and loads none, as a new
-    // drawing holds none (OV-1901): its Depth panel shows series 0 with its defaults.
-    assert.equal(adv.depth_tracks.length, mode === 'circular' ? 1 : 0);
-    // Add Depth track writes the series before it and the new series 1 (Linear pads each record's
-    // Depth slots to it).
-    adv.depth_tracks.splice(0, adv.depth_tracks.length, ...ensureDepthTrackConfigCount(adv.depth_tracks, 1));
+    assert.equal(adv.depth_tracks.length, 1);
+    // Add Depth track (Linear pads each record's Depth slots to the new series).
     adv.depth_tracks.push({ ...normalizeDepthTrackConfig(null, 1), label: 'Coverage B', small_tick_interval: 5 });
     if (mode === 'linear') modeDrawing(state, 'linear').linearSeqs.forEach((seq) => { seq.depth = padDepthFileSlots(seq.depth, 2); });
     // The row's series 1 had a file; clearing it keeps the row with geometry.
