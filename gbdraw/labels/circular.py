@@ -280,58 +280,45 @@ def _overlapping_label_pairs(
     total_length: int,
     *,
     padding: float,
-    margins: Callable[[int, int], tuple[float, float]],
+    margins: Callable[[int, int], OverlapMargins],
 ) -> Iterator[tuple[int, int]]:
-    """The candidate pairs (`_candidate_label_pairs`) whose boxes overlap; touching counts.
+    """The candidate pairs (`_candidate_label_pairs`) whose boxes at ``margins(i, j)`` overlap (`_label_bounds_overlap`).
 
-    ``margins(i, j)`` is the pair's (x, y) margin. Each pair costs four comparisons: `x_overlap`
-    and then `y_overlap`, with the interval test inlined as in `_labels_overlap`. The boxes are
-    kept for as long as they repeat and no longer (OV-1937): label i's boxes while its pairs
-    (i, j) run, and each label j's box at the last margin it was asked for, so the memory stays
-    linear when the margin differs per pair (min gap).
+    The boxes are kept for as long as they repeat and no longer (OV-1937): label i's boxes while
+    its pairs (i, j) run, and each label j's box at the last margin it was asked for, so the
+    memory stays linear when the margin differs per pair (min gap).
     """
-    BoundsBox = tuple[float, float, float, float]
-
-    def bounds(idx: int, margin: tuple[float, float]) -> BoundsBox:
-        label = labels[idx]
-        return (*_label_x_bounds(label, margin[0]), *_label_y_bounds(label, total_length, margin[1]))
-
-    last: list[tuple[tuple[float, float], BoundsBox] | None] = [None] * len(labels)
+    last: list[tuple[OverlapMargins, LabelBounds] | None] = [None] * len(labels)
     first_idx = -1
-    first_boxes: dict[tuple[float, float], BoundsBox] = {}
+    first_boxes: dict[OverlapMargins, LabelBounds] = {}
     for idx, jdx in _candidate_label_pairs(labels, total_length, padding=padding):
         margin = margins(idx, jdx)
         if idx != first_idx:
             first_idx, first_boxes = idx, {}
         box_a = first_boxes.get(margin)
         if box_a is None:
-            box_a = first_boxes[margin] = bounds(idx, margin)
+            box_a = first_boxes[margin] = _label_bounds(labels[idx], total_length, margin)
         held = last[jdx]
         if held is not None and held[0] == margin:
             box_b = held[1]
         else:
-            box_b = bounds(jdx, margin)
+            box_b = _label_bounds(labels[jdx], total_length, margin)
             last[jdx] = (margin, box_b)
-        min_xa, max_xa, min_ya, max_ya = box_a
-        min_xb, max_xb, min_yb, max_yb = box_b
-        if (max_xa >= min_xb if min_xa < min_xb else max_xb >= min_xa) and (
-            max_ya >= min_yb if min_ya < min_yb else max_yb >= min_ya
-        ):
+        if _label_bounds_overlap(box_a, box_b):
             yield idx, jdx
 
 
 def _count_label_overlaps(labels: list[CircularLabel], total_length: int, use_min_gap: bool) -> int:
-    """Count the label pairs that `_labels_overlap`, at their min gap or at the plain margins."""
+    """Count the label pairs that `_labels_overlap` finds overlapping, at their min gap or at the plain margins."""
     if use_min_gap:
         gaps = _PairGaps(labels)
 
-        def margins(idx: int, jdx: int) -> tuple[float, float]:
-            gap = gaps.gap(idx, jdx)
-            return gap, gap
+        def margins(idx: int, jdx: int) -> OverlapMargins:
+            return _min_gap_margins(gaps.gap(idx, jdx))
     else:
 
-        def margins(idx: int, jdx: int) -> tuple[float, float]:
-            return 1.0, 0.1
+        def margins(idx: int, jdx: int) -> OverlapMargins:
+            return PLAIN_OVERLAP_MARGINS
 
     return sum(
         1
@@ -487,7 +474,8 @@ def _label_x_offsets(
     Inlined copies of how the offsets are applied (the ``start_x > 0`` side choice, the
     two additions, the `_bounds_overlap` test) live in the step loops of
     `_legacy_place_labels_on_arc_fc` and `_legacy_improved_label_placement_fc`; change
-    them with this rule. `_labels_overlap` inlines only the interval test.
+    them with this rule. The overlap counts test boxes with `_label_bounds_overlap`, which
+    inlines only the interval test.
     """
     margin_half = 0.5 * minimum_margin
     away = (-0.0, -margin_half, label_width, margin_half)  # text from start_x to start_x + width
@@ -1181,23 +1169,60 @@ def _label_reach_box(
     return None if point_box is None else union_aabbs((box, point_box))
 
 
+OverlapMargins: TypeAlias = tuple[float, float]
+"""The (x, y) margins at which a pair of labels is tested."""
+LabelBounds: TypeAlias = tuple[float, float, float, float]
+"""A label's box at given margins: (min_x, max_x, min_y, max_y)."""
+PLAIN_OVERLAP_MARGINS: OverlapMargins = (1.0, 0.1)
+"""The plain overlap test's margins (x, y)."""
+
+
+def _min_gap_margins(gap_px: float) -> OverlapMargins:
+    """The margins of the min-gap overlap test for a pair whose minimum gap is `gap_px`: the gap on both axes."""
+    return gap_px, gap_px
+
+
+def _overlap_margins(label_a: CircularLabel, label_b: CircularLabel, *, use_min_gap: bool) -> OverlapMargins:
+    """The margins at which `label_a` and `label_b` are tested: their min gap, or the plain margins."""
+    if use_min_gap:
+        return _min_gap_margins(minimum_bbox_gap_px(label_a, label_b))
+    return PLAIN_OVERLAP_MARGINS
+
+
+def _label_bounds(label: CircularLabel, total_length: int, margins: OverlapMargins) -> LabelBounds:
+    """The label's box at `margins` (`_label_x_bounds` and `_label_y_bounds`)."""
+    return (*_label_x_bounds(label, margins[0]), *_label_y_bounds(label, total_length, margins[1]))
+
+
+def _label_bounds_overlap(bounds_a: LabelBounds, bounds_b: LabelBounds) -> bool:
+    """Whether two label boxes overlap; touching counts: `_labels_overlap_at` on boxes taken beforehand.
+
+    Twin of `_labels_overlap_at`, kept for speed (OV-870): the counts that keep boxes across pairs
+    test them here, with `_bounds_overlap` inlined on x and then on y. Change both together;
+    `test_circular_label_bounds_test_equals_the_pair_test` compares them.
+    """
+    min_xa, max_xa, min_ya, max_ya = bounds_a
+    min_xb, max_xb, min_yb, max_yb = bounds_b
+    return (max_xa >= min_xb if min_xa < min_xb else max_xb >= min_xa) and (
+        max_ya >= min_yb if min_ya < min_yb else max_yb >= min_ya
+    )
+
+
+def _labels_overlap_at(
+    label_a: CircularLabel, label_b: CircularLabel, total_length: int, margins: OverlapMargins
+) -> bool:
+    """Whether the boxes of two labels at `margins` overlap: on x (`x_overlap`), then on y (`y_overlap`)."""
+    x_margin, y_margin = margins
+    return x_overlap(label_a, label_b, minimum_margin=x_margin) and y_overlap(
+        label_a, label_b, total_length, y_margin
+    )
+
+
 def _labels_overlap(label_a: CircularLabel, label_b: CircularLabel, total_length: int, *, use_min_gap: bool) -> bool:
     """Return whether two label bboxes overlap, at their min gap or at the plain margins."""
-    if use_min_gap:
-        margin = minimum_bbox_gap_px(label_a, label_b)
-        y_margin = margin
-        x_margin = margin
-    else:
-        y_margin = 0.1
-        x_margin = 1.0
-    # `x_overlap` and then `y_overlap`, with the interval test inlined (OV-870).
-    min_a, max_a = _label_x_bounds(label_a, x_margin)
-    min_b, max_b = _label_x_bounds(label_b, x_margin)
-    if not (max_a >= min_b if min_a < min_b else max_b >= min_a):
-        return False
-    min_a, max_a = _label_y_bounds(label_a, total_length, y_margin)
-    min_b, max_b = _label_y_bounds(label_b, total_length, y_margin)
-    return max_a >= min_b if min_a < min_b else max_b >= min_a
+    return _labels_overlap_at(
+        label_a, label_b, total_length, _overlap_margins(label_a, label_b, use_min_gap=use_min_gap)
+    )
 
 
 def _count_local_label_overlaps(
@@ -1219,40 +1244,25 @@ def _count_local_label_overlaps(
     """
     overlap_count = 0
     # `_labels_overlap(candidate_label, other)` with the candidate's bounds taken once per margin.
-    candidate_bounds: dict[tuple[float, float], tuple[float, float, float, float]] = {}
-    margins = (1.0, 0.1)
+    candidate_bounds: dict[OverlapMargins, LabelBounds] = {}
+    plain_margins = None if use_min_gap else _overlap_margins(candidate_label, candidate_label, use_min_gap=False)
     for other_idx in range(len(labels)) if peers is None else peers:
         if other_idx == label_idx:
             continue
         other = labels[other_idx]
-        if use_min_gap:
-            margin = minimum_bbox_gap_px(candidate_label, other)
-            margins = (margin, margin)
+        margins = plain_margins or _overlap_margins(candidate_label, other, use_min_gap=True)
         bounds = candidate_bounds.get(margins)
         if bounds is None:
-            bounds = candidate_bounds[margins] = (
-                *_label_x_bounds(candidate_label, margins[0]),
-                *_label_y_bounds(candidate_label, total_length, margins[1]),
-            )
+            bounds = candidate_bounds[margins] = _label_bounds(candidate_label, total_length, margins)
         if peer_bounds is None:
-            other_bounds = None
+            other_bounds = _label_bounds(other, total_length, margins)
         else:
             other_key = (other_idx, *margins)
-            other_bounds = peer_bounds.get(other_key)
-            if other_bounds is None:
-                other_bounds = peer_bounds[other_key] = (
-                    *_label_x_bounds(other, margins[0]),
-                    *_label_y_bounds(other, total_length, margins[1]),
-                )
-        min_a, max_a = bounds[0], bounds[1]
-        min_b, max_b = _label_x_bounds(other, margins[0]) if other_bounds is None else other_bounds[:2]
-        if not (max_a >= min_b if min_a < min_b else max_b >= min_a):
-            continue
-        min_a, max_a = bounds[2], bounds[3]
-        min_b, max_b = (
-            _label_y_bounds(other, total_length, margins[1]) if other_bounds is None else other_bounds[2:]
-        )
-        if max_a >= min_b if min_a < min_b else max_b >= min_a:
+            kept = peer_bounds.get(other_key)
+            if kept is None:
+                kept = peer_bounds[other_key] = _label_bounds(other, total_length, margins)
+            other_bounds = kept
+        if _label_bounds_overlap(bounds, other_bounds):
             overlap_count += 1
             if cap is not None and overlap_count > cap:
                 break
@@ -2410,12 +2420,7 @@ def _resolve_outer_label_overlaps_with_fixed_radii(
         label["start_y"] = radius * math.sin(math.radians(angle_unwrapped))
 
     def _pair_overlaps(left: CircularLabel, right: CircularLabel, idx: int, jdx: int) -> bool:
-        min_gap_px = pair_gaps.gap(idx, jdx)
-        return y_overlap(left, right, total_length, min_gap_px) and x_overlap(
-            left,
-            right,
-            minimum_margin=min_gap_px,
-        )
+        return _labels_overlap_at(left, right, total_length, _min_gap_margins(pair_gaps.gap(idx, jdx)))
 
     def _pair_angle_bounds(label_idx: int) -> tuple[float, float]:
         target_angle = float(labels[label_idx]["_target_angle_unwrapped_fixed"])
@@ -2785,9 +2790,7 @@ def place_labels_on_arc_fc(
 
     def check_overlap(label1: CircularLabel, label2: CircularLabel, total_length: int, margin: float) -> bool:
         effective_margin = minimum_bbox_gap_px(label1, label2, base_margin_px=max(margin, resolved_spacing_px))
-        return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
-            label1, label2, minimum_margin=effective_margin
-        )
+        return _labels_overlap_at(label1, label2, total_length, _min_gap_margins(effective_margin))
 
     if not labels:
         return []
@@ -3212,9 +3215,7 @@ def improved_label_placement_fc(
     def check_overlap(
         label1: CircularLabel, label2: CircularLabel, total_length: int, effective_margin: float
     ) -> bool:
-        return y_overlap(label1, label2, total_length, effective_margin) and x_overlap(
-            label1, label2, minimum_margin=effective_margin
-        )
+        return _labels_overlap_at(label1, label2, total_length, _min_gap_margins(effective_margin))
 
     def pair_margin(idx1: int, idx2: int) -> float:
         return pair_gaps.gap(idx1, idx2)
@@ -3333,9 +3334,8 @@ def improved_label_placement_fc(
             )
         return pairs_at_positions
 
-    def pair_margins(idx1: int, idx2: int) -> tuple[float, float]:
-        margin = pair_margin(idx1, idx2)
-        return margin, margin
+    def pair_margins(idx1: int, idx2: int) -> OverlapMargins:
+        return _min_gap_margins(pair_margin(idx1, idx2))
 
     def count_remaining_overlaps() -> int:
         return len(overlapping_pairs())
@@ -3946,13 +3946,7 @@ def _neighbor_min_gap_overlap_count(
     for neighbor_idx in (label_idx - 1, label_idx + 1):
         if neighbor_idx < 0 or neighbor_idx >= len(labels):
             continue
-        neighbor_label = labels[neighbor_idx]
-        min_gap_px = minimum_bbox_gap_px(candidate_label, neighbor_label)
-        if y_overlap(candidate_label, neighbor_label, total_length, min_gap_px) and x_overlap(
-            candidate_label,
-            neighbor_label,
-            minimum_margin=min_gap_px,
-        ):
+        if _labels_overlap(candidate_label, labels[neighbor_idx], total_length, use_min_gap=True):
             overlap_count += 1
     return overlap_count
 
@@ -4394,14 +4388,14 @@ def _refine_labels_to_preferred_hemisphere(
     peers = _LabelPeers.of(labels, _reach_pad(1.0))
 
     def plain_overlap_count_for_candidate(label_idx: int, candidate_label: CircularLabel) -> int:
-        overlap_count = 0
-        for other_idx in peers.near(peers.box(candidate_label), skip=label_idx):
-            other = labels[other_idx]
-            if y_overlap(candidate_label, other, total_length, 0.1) and x_overlap(
-                candidate_label, other, minimum_margin=1.0
-            ):
-                overlap_count += 1
-        return overlap_count
+        return _count_local_label_overlaps(
+            labels,
+            total_length,
+            label_idx,
+            candidate_label,
+            use_min_gap=False,
+            peers=peers.near(peers.box(candidate_label), skip=label_idx),
+        )
 
     pass_orders = [range(len(labels) - 1, -1, -1), range(len(labels))]
     for pass_order in pass_orders:

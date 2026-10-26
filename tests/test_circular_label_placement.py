@@ -328,6 +328,31 @@ def test_circular_local_overlap_count_equals_the_pair_test() -> None:
 
 
 @pytest.mark.circular
+def test_circular_label_bounds_test_equals_the_pair_test() -> None:
+    """The box test of the counts (`_label_bounds_overlap`, a twin kept for speed) equals `_labels_overlap_at`."""
+    module = circular_labels_module
+    agreed = {True: 0, False: 0}
+    for seed in range(60):
+        rng = random.Random(seed)
+        labels, total_length, _ = _random_label_set(seed, max_labels=30)
+        for label in labels:
+            label["start_x"] += rng.choice([0.0, rng.uniform(-40.0, 40.0)])
+        for _ in range(200):
+            label_a, label_b = rng.choice(labels), rng.choice(labels)
+            margins = rng.choice([module.PLAIN_OVERLAP_MARGINS, (rng.uniform(0.0, 12.0), rng.uniform(0.0, 12.0))])
+            expected = module._labels_overlap_at(label_a, label_b, total_length, margins)
+            assert (
+                module._label_bounds_overlap(
+                    module._label_bounds(label_a, total_length, margins),
+                    module._label_bounds(label_b, total_length, margins),
+                )
+                == expected
+            )
+            agreed[expected] += 1
+    assert min(agreed.values()) > 100
+
+
+@pytest.mark.circular
 def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
     """`_PairGaps` answers `minimum_bbox_gap_px` for every pair, with one spacing and with mixed spacings."""
     module = circular_labels_module
@@ -754,11 +779,13 @@ _Loaded = TypeVar("_Loaded")
 def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]:
     """Run ``load`` and count the label pair overlap tests it makes.
 
-    Counts ``y_overlap`` and ``_labels_overlap``: the pair test inlines its interval
-    tests (OV-870), so ``y_overlap`` alone no longer sees the resolver's pair tests.
+    Counts the axis tests ``x_overlap`` and ``y_overlap`` and the box test ``_label_bounds_overlap``,
+    which inlines its interval tests (OV-870), so a pair test counts once or twice.
     """
     calls = 0
-    originals = {name: getattr(circular_labels_module, name) for name in ("y_overlap", "_labels_overlap")}
+    originals = {
+        name: getattr(circular_labels_module, name) for name in ("x_overlap", "y_overlap", "_label_bounds_overlap")
+    }
 
     def counting(original):
         def wrapper(*args, **kwargs):
