@@ -604,7 +604,9 @@ for (const continuation of ['disabled', 'inactive biological']) {
       expect(restored.request).toEqual(circular.request);
       expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
-        // The saved mode has no Result, so the Session opens on the mode that has one.
+        // The shown Linear drawing has no file, changed setting, edit or Result, so
+        // Save does not write it; with no saved tab after it, Load opens the one before (PD-OI-090
+        // 〔Save と Load〕, scenario rev 6).
         await expect(fresh.getByRole('tab', { name: 'Circular', exact: true }))
           .toHaveAttribute('aria-selected', 'true');
       }
