@@ -342,7 +342,8 @@ def test_web_saved_resource_checksum_loads_through_both_session_loaders(
     saved_path.write_text(
         json.dumps(
             {
-                **data,
+                **drawing_view(data),
+                "version": 48,
                 "renderRequest": canonical["renderRequest"],
                 "resources": canonical["resources"],
             }
@@ -547,7 +548,7 @@ def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> N
     document = load_session_document(
         {
             "format": "gbdraw-session",
-            "version": CURRENT_SESSION_VERSION,
+            "version": 48,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
             "results": [],
@@ -589,7 +590,7 @@ def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
     document = load_session_document(
         {
             "format": "gbdraw-session",
-            "version": CURRENT_SESSION_VERSION,
+            "version": 48,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
             "results": [],
@@ -723,7 +724,7 @@ def test_python_typed_protein_round_trip_with_explicit_adjacent_comparison(
     document = load_session_document(
         {
             "format": "gbdraw-session",
-            "version": CURRENT_SESSION_VERSION,
+            "version": 48,
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
             "results": [],
