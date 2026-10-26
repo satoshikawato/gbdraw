@@ -46,40 +46,36 @@ def sliding_window(seq: str, window: int, step: int) -> Generator[tuple[int, str
         yield start, out_seq
 
 
-# A gap between positions at most this long is counted by ``bytes.count``
-# (no call overhead per gap); a longer gap by a numpy pass over chunks of at
-# most ``_COUNT_CHUNK`` bases, so the mask never exceeds the chunk.
-_COUNT_BYTES_GAP = 4096
+# The sequence is read in chunks of this many bases, so the mask and the
+# occurrence offsets of one chunk are the only arrays beside the positions, and
+# every offset fits a 32-bit ``intp`` (Pyodide).
 _COUNT_CHUNK = 1 << 20
 
 
 def _prefix_counts_at(seq_bytes: bytes, base: int, positions: np.ndarray) -> np.ndarray:
     """``seq_bytes[:p].count(base)`` for each position ``p`` (0 to n).
 
-    The positions are visited in order and the bases between neighbouring
-    positions counted, so the extra memory is one entry per position plus at
-    most ``_COUNT_CHUNK`` mask bytes, never a list of the base's occurrences or
-    a mask as long as the sequence. Counts are Python ints and int64, so a
-    32-bit ``intp`` (Pyodide) cannot overflow.
+    The sequence is read once, a chunk at a time: the positions are sorted
+    once, each chunk takes the positions that fall in it, reads their counts
+    from the chunk's own occurrences, and adds the total of the chunks before
+    it. The extra memory is the positions plus one chunk, never an array as
+    long as the sequence.
     """
     sequence = np.frombuffer(seq_bytes, dtype=np.uint8)
-    base_byte = bytes((base,))
+    length = len(sequence)
     order = np.argsort(positions, kind="stable")
+    wanted = np.clip(positions[order], 0, length)
+    counts = np.empty(len(wanted), dtype=np.int64)
     running = 0
-    previous = 0
-    visited: list[int] = []
-    for position in positions[order].tolist():
-        while position > previous:
-            if position - previous <= _COUNT_BYTES_GAP:
-                running += seq_bytes.count(base_byte, previous, position)
-                previous = position
-            else:
-                stop = min(position, previous + _COUNT_CHUNK)
-                running += int(np.count_nonzero(sequence[previous:stop] == base))
-                previous = stop
-        visited.append(running)
+    for start in range(0, length, _COUNT_CHUNK):
+        lo, hi = np.searchsorted(wanted, (start, min(start + _COUNT_CHUNK, length)), side="left")
+        chunk_hits = np.flatnonzero(sequence[start : start + _COUNT_CHUNK] == base)
+        local = (wanted[lo:hi] - start).astype(np.intp)
+        counts[lo:hi] = running + np.searchsorted(chunk_hits, local, side="left")
+        running += len(chunk_hits)
+    counts[np.searchsorted(wanted, length, side="left") :] = running
     prefix = np.empty(len(positions), dtype=np.int64)
-    prefix[order] = visited
+    prefix[order] = counts
     return prefix
 
 

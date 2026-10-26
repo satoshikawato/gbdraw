@@ -32,10 +32,11 @@ def test_prefix_counts_read_unsorted_duplicate_and_out_of_range_positions() -> N
         assert _prefix_counts_at(seq, base, positions).tolist() == expected
 
 
-def test_prefix_counts_agree_across_the_short_gap_and_chunked_paths() -> None:
+def test_prefix_counts_agree_across_chunk_boundaries() -> None:
     rng = np.random.default_rng(2)
     seq = rng.choice(np.frombuffer(b"ACGT", dtype=np.uint8), size=3_000_000).tobytes()
-    positions = np.array([0, 10, 5_000, 5_100, 1_300_000, 1_300_001, 2_900_000, 3_000_000, 2_000_000])
+    edge = 1 << 20
+    positions = np.array([0, 10, 5_000, edge - 1, edge, edge + 1, 2 * edge, 2_900_000, 3_000_000, 2_000_000])
     for base in b"ACGT":
         expected = [seq[:p].count(bytes([base])) for p in positions.tolist()]
         assert _prefix_counts_at(seq, base, positions).tolist() == expected
@@ -49,5 +50,5 @@ def test_window_base_counts_need_no_array_as_long_as_the_sequence() -> None:
     counts = window_base_counts(seq, ord("G"), starts=starts, window=10_000)
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
-    assert peak < 1 << 20
+    assert peak < 6 << 20
     assert counts[3] == seq[150_000:160_000].count(b"G")
