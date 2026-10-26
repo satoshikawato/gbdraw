@@ -6437,9 +6437,10 @@ const importSessionDocument = async (e, options = {}) => {
     // the 49 document: its request, Results, editor state, `ui` and run
     // metadata, and the catalog preflight read where the file holds the set
     // (found by the drawing's ID); a set without one does not load.
-    /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, at: ResultSetPath, catalog: FeatureCatalog, set: LoadedResultSet }[]} */
+    /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, at: ResultSetPath, catalog: FeatureCatalog, set: LoadedResultSet, webFiles: unknown }[]} */
     const storedSets = [];
-    if (upgrade) upgrade.document.drawings.forEach((entry) => {
+    const upgradedDocument = upgrade ? upgrade.document : null;
+    if (upgrade && upgradedDocument) upgradedDocument.drawings.forEach((entry) => {
       const { renderRequest } = entry;
       if (entry.id === committedSetDrawingId || !renderRequest || entry.results.length === 0) return;
       const at = upgrade.setSources.get(entry.id);
@@ -6448,7 +6449,10 @@ const importSessionDocument = async (e, options = {}) => {
       // Each Result is read as a stored one (`normalizeLogicalResults`).
       const results = /** @type {Record<string, unknown>[]} */ (entry.results);
       const set = { renderRequest, results, editorState: entry.editorState, ui: entry.ui, runMetadata: entry.runMetadata };
-      storedSets.push({ drawing: { id: /** @type {DrawingId} */ (entry.id), mode: entry.mode }, mode: entry.mode, at, catalog, set });
+      // The set's request metadata is its own drawing's, read as the opened
+      // drawing's is (`drawingViewOf`), never the opened drawing's (OV-1872).
+      const { webFiles } = drawingViewOf(upgradedDocument, entry);
+      storedSets.push({ drawing: { id: /** @type {DrawingId} */ (entry.id), mode: entry.mode }, mode: entry.mode, at, catalog, set, webFiles });
     });
     // Each set's History byte estimate: its share of the decompressed file,
     // split by the size of its Results (a serialization of a set only to
@@ -6467,7 +6471,7 @@ const importSessionDocument = async (e, options = {}) => {
     const savedEditsOf = new Map([[committedSetDrawingId, committedSavedEdits]]);
     /** @type {ArtifactSlot[]} */
     const storedSetSlots = [];
-    for (const { drawing, mode, at, catalog, set } of storedSets) {
+    for (const { drawing, mode, at, catalog, set, webFiles } of storedSets) {
       // The drawing's own draft part, found by its ID.
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
         sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
@@ -6481,6 +6485,7 @@ const importSessionDocument = async (e, options = {}) => {
       }
       storedSetSlots.push(buildLoadedArtifactSlot(set, {
         ...slotOptions,
+        webFiles,
         drawing,
         at,
         featureCatalog: catalog,
