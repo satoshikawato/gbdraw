@@ -1,26 +1,17 @@
 // @ts-check
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { ArtifactSlot, FeatureEditorStatus } from './artifact-slot.js' */
-/** @import { ResourceBackedComparison } from './canonical-comparisons.js' */
 /** @import { AlignmentResetCanonical, AlignmentResetReceipt } from './session-active-config-contract.js' */
 /** @import { DrawingId, DrawingIdentity, DrawingView } from './drawing-view.js' */
-import {
-  INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFile, bindDrawingInputFileList, bindDrawingInputFileTree, bindInputFile, boundInputFileIds,
-  normalizeLinearSeqList, registerInputFileTree, replaceLinearSeqs, setConservationBlastsSource
-} from './drawing/inputs.js';
+import { INPUTS_SLICE, boundInputFileIds, installBoundInputs } from './drawing/inputs.js';
 import { isInputFileRef } from './history-files.js';
-import { FILE_IMPORT_CARDS } from './file-imports.js';
-/** @import { BoundFileValue, InputBindings, InputType, LoadedFileValue } from './drawing/inputs.js' */
+/** @import { BoundFileValue, DrawingInputFiles, InputBindings, InputsData, InputType } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { normalizeLayoutPreferences } from './layout-preferences.js';
-import {
-  isResourceBackedCanonicalComparison,
-  mapResourceBackedCanonicalComparison
-} from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import {
   ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, FEATURE_EDITOR_STATUS_IDLE, createArtifactSlot, createArtifactSlotStore
@@ -157,26 +148,12 @@ const editedIntentPartOf = (path, value) => (
  * @property {InputType} [inputType] The drawing's input type (its inputs slice).
  */
 /**
- * One Linear record row of an intent's files: the File descriptors and the metadata the row keeps.
- * @typedef {{
- *   uid?: unknown, gb?: unknown, gff?: unknown, fasta?: unknown, depth?: unknown,
- *   losat_gencode?: unknown, definition?: unknown, record_subtitle?: unknown, file_definition?: unknown,
- *   file_subtitle?: unknown, inferred_definition?: unknown, region_record_id?: unknown,
- *   region_start?: unknown, region_end?: unknown, region_reverse?: unknown
- * }} FilesDataSequence
- */
-/**
- * The files of an intent or checkpoint: the refs (`InputFileRef`) each input binds, copied (`refsOf`).
- * @typedef {{
- *   c_gb?: unknown, c_gff?: unknown, c_fasta?: unknown, c_depth?: unknown,
- *   c_conservation_blasts?: unknown, c_conservation_blasts_source?: unknown,
- *   c_conservation_fastas?: unknown, c_conservation_sequence_sources?: unknown,
- *   d_color?: unknown, t_color?: unknown, blacklist?: unknown, whitelist?: unknown, qualifier_priority?: unknown,
- *   linearSeqs?: FilesDataSequence[],
- *   linearComparisons?: { id?: unknown, file?: unknown }[],
- *   linearCanonicalComparisons?: ResourceBackedComparison[],
- *   inputType?: InputType
- * }} FilesData
+ * The files of an intent or checkpoint: the drawing's inputs slice capture
+ * (`INPUTS_SLICE.capture`), its `files` flattened beside its rows and input
+ * type, without the comparisons a Generate wrote (a Linear checkpoint adds
+ * them), and the comparison plan's files by edge ID.
+ * @typedef {Omit<DrawingInputFiles, 'linearCanonicalComparisons'> & Partial<Pick<DrawingInputFiles, 'linearCanonicalComparisons'>>
+ *   & Pick<InputsData, 'linearSeqs' | 'inputType'> & { linearComparisons: { id: string, file: BoundFileValue }[] }} FilesData
  */
 /**
  * The `ui` values that belong to a drawing (Session 46 `modes.<m>.ui`, and its LOSAT program).
@@ -731,41 +708,27 @@ const refsOf = (value) => (
 );
 
 /**
+ * A drawing's files as a step holds them: its inputs slice capture, the
+ * comparisons a Generate wrote only when `generated` (a Linear artifact
+ * checkpoint's; an intent leaves them out), and the plan edges' files.
  * @param {DrawingView} drawing
+ * @param {boolean} generated
  * @returns {FilesData}
  */
-const buildIntentFilesData = (drawing) => {
-  const { files, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
-  // The comparisons a Generate wrote are the artifact checkpoint's.
-  const { linearCanonicalComparisons: _generated, ...bound } = files;
+const filesDataOf = (drawing, generated) => {
+  const { files: { linearCanonicalComparisons, ...bound }, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
   return {
     ...bound,
+    ...(generated ? { linearCanonicalComparisons } : {}),
     inputType,
     linearSeqs,
     linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: refsOf(edge.file) }))
   };
 };
-
-// A Linear drawing's artifact checkpoint adds its generated comparisons.
-/**
- * @param {DrawingView} drawing
- * @returns {FilesData}
- */
-const buildFilesData = (drawing) => {
-  const files = buildIntentFilesData(drawing);
-  if (drawing.mode !== 'linear') return files;
-  return {
-    ...files,
-    linearCanonicalComparisons: drawing.files.linearCanonicalComparisons.map((/** @type {ResourceBackedComparison} */ comparison) => (
-      isResourceBackedCanonicalComparison(comparison)
-        ? {
-            ...mapResourceBackedCanonicalComparison(comparison),
-            file: refsOf(comparison.file)
-          }
-        : cloneJsonData(comparison)
-    ))
-  };
-};
+/** @param {DrawingView} drawing */
+const buildIntentFilesData = (drawing) => filesDataOf(drawing, false);
+/** @param {DrawingView} drawing */
+const buildFilesData = (drawing) => filesDataOf(drawing, drawing.mode === 'linear');
 
 /**
  * The input bindings of the app state.
@@ -777,74 +740,23 @@ const inputBindingsOf = (state) => ({ drawingList: state.drawingList });
 /**
  * @param {Record<string, any>} state
  * @param {DrawingView} drawing
- * @param {FilesData} filesData
+ * @param {Partial<FilesData>} filesData a step's (a field it leaves out binds nothing)
  * @param {HistorySnapshotFileStore} fileStore
  */
 const applyFilesData = (state, drawing, filesData, fileStore) => {
   state.matchSequenceRegistry?.reset?.();
-  // A binding holds the step's refs, which History keeps stored (a ref whose
-  // file was released binds nothing).
-  /** @param {unknown} value */
-  const restore = (value) => registerInputFileTree(fileStore, /** @type {LoadedFileValue} */ (value));
-  /** @param {unknown} value */
-  const restoreOne = (value) => fileStore.registerFile(isInputFileRef(value) ? value : null);
-  // The drawing's own fields go through its inputs slice's writers, its
-  // input type first (it names the fields its files fill; OIC-030).
-  const slice = drawing.slices.inputs;
-  FILE_IMPORT_CARDS.forEach((key) => {
-    bindInputFile(fileStore, slice, key, restoreOne(filesData?.[/** @type {keyof FilesData} */ (key)]));
+  // The drawing's inputs slice installs the step's capture: a binding holds
+  // the step's refs, which History keeps stored (a ref whose file was released
+  // binds nothing). An intent leaves out the comparisons a Generate wrote; a
+  // Linear checkpoint holds them.
+  const { linearSeqs = [], inputType, linearComparisons: _planFiles, ...files } = filesData;
+  installBoundInputs(fileStore, drawing.slices.inputs, { files, linearSeqs, inputType }, {
+    keep: Object.hasOwn(filesData, 'linearCanonicalComparisons') ? [] : ['linearCanonicalComparisons']
   });
-  if (filesData?.inputType) INPUTS_SLICE.install(slice, { inputType: filesData.inputType });
-  /** @param {unknown} value @returns {LoadedFileValue[]} */
-  const listOf = (value) => (Array.isArray(value) ? value : []);
-  if (drawing.mode !== 'linear') {
-    bindDrawingInputFile(fileStore, slice, 'c_gb', restoreOne(filesData?.c_gb));
-    bindDrawingInputFile(fileStore, slice, 'c_gff', restoreOne(filesData?.c_gff));
-    bindDrawingInputFile(fileStore, slice, 'c_fasta', restoreOne(filesData?.c_fasta));
-    bindDrawingInputFileTree(fileStore, slice, 'c_depth', /** @type {LoadedFileValue} */ (filesData?.c_depth ?? null));
-    bindDrawingInputFileList(fileStore, slice, 'c_conservation_blasts',
-      listOf(filesData?.c_conservation_blasts).map(restoreOne));
-    setConservationBlastsSource(slice, filesData?.c_conservation_blasts_source === 'losat-cache' ? 'losat-cache' : null);
-    bindDrawingInputFileTree(fileStore, slice, 'c_conservation_fastas', listOf(filesData?.c_conservation_fastas));
-    bindDrawingInputFileTree(fileStore, slice, 'c_conservation_sequence_sources',
-      listOf(filesData?.c_conservation_sequence_sources));
-    return;
-  }
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
-    bindDrawingCanonicalComparisons(fileStore, slice, Array.isArray(filesData?.linearCanonicalComparisons)
-      ? filesData.linearCanonicalComparisons.map((comparison) => (
-          isResourceBackedCanonicalComparison(comparison)
-            ? mapResourceBackedCanonicalComparison(comparison, restore)
-            : cloneJsonData(comparison)
-        )).filter((comparison) => comparison !== null)
-      : []);
-  }
-
-  const rows = Array.isArray(filesData?.linearSeqs)
-    ? filesData.linearSeqs.map((seq) => ({
-        uid: seq.uid,
-        gb: restore(seq.gb),
-        gff: restore(seq.gff),
-        fasta: restore(seq.fasta),
-        depth: restore(seq.depth),
-        losat_gencode: seq.losat_gencode ?? 1,
-        definition: seq.definition ?? '',
-        record_subtitle: seq.record_subtitle ?? '',
-        file_definition: seq.file_definition ?? '',
-        file_subtitle: seq.file_subtitle ?? '',
-        inferred_definition: seq.inferred_definition ?? '',
-        region_record_id: seq.region_record_id ?? '',
-        region_start: seq.region_start ?? null,
-        region_end: seq.region_end ?? null,
-        region_reverse: Boolean(seq.region_reverse)
-      }))
-    : [];
-  // The drawing's rows, normalized as every row writer leaves them.
-  replaceLinearSeqs(drawing.slices.inputs, normalizeLinearSeqList(rows));
   if (drawing.linearComparisonPlan && Array.isArray(drawing.linearComparisonPlan.edges)) {
     const comparisonFiles = new Map(
-      (Array.isArray(filesData?.linearComparisons) ? filesData.linearComparisons : [])
-        .map((comparison) => [String(comparison?.id || ''), restoreOne(comparison?.file)])
+      (filesData.linearComparisons ?? [])
+        .map((comparison) => [comparison.id, fileStore.registerFile(isInputFileRef(comparison.file) ? comparison.file : null)])
     );
     drawing.linearComparisonPlan.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(String(edge?.id || '')) || null;

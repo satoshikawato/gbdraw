@@ -51,7 +51,7 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
-from tests.utils.session_drawing_view import drawing_view, session_view, without_drawings_move
+from tests.utils.session_drawing_view import drawing_view, session_view
 from tests.utils.two_mode_session import two_mode_session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -616,14 +616,12 @@ def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
         _resource_bytes,
     )
 
-    # The Gallery tool reads the mode-scoped layout (its Sessions stay Session 48),
-    # so the CLI save is read before its move to drawings.
-    with without_drawings_move():
-        sidecar = _fresh_protein_session(
-            tmp_path, monkeypatch, "similarity_groups",
-            "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
-        )
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    sidecar = _fresh_protein_session(
+        tmp_path, monkeypatch, "similarity_groups",
+        "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
+    )
+    # The Gallery tool reads the mode-scoped layout: the saved drawing's view.
+    session = drawing_view(json.loads(sidecar.read_text(encoding="utf-8")), mode="linear")
     assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS["similarity_groups"]
     rebuild = json.loads(json.dumps(session))
     assert _reopen_stored_protein_comparisons(rebuild, "orthogroup") == 1

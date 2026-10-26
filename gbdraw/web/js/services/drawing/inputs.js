@@ -274,6 +274,42 @@ export const bindCanonicalComparisons = (store, comparisons) => comparisons.map(
 ));
 
 /**
+ * The input fields of loaded or captured `files`, each file registered and
+ * named by its ref (a released ref names nothing: null, and a place of
+ * `c_conservation_blasts`, a list of files only, is dropped). The one
+ * registration of a drawing's fields for Load and History.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {Readonly<Record<string, unknown>>} loaded
+ * @returns {Record<string, unknown>}
+ */
+const bindFileFields = (store, loaded) => {
+  /** @type {Record<string, unknown>} */
+  const files = { ...loaded };
+  BOUND_FILE_KEYS.forEach((key) => {
+    if (Object.hasOwn(files, key)) files[key] = registerInputFileTree(store, /** @type {LoadedFileValue} */ (files[key]));
+  });
+  if (Array.isArray(files.c_conservation_blasts)) files.c_conservation_blasts = files.c_conservation_blasts.filter((ref) => ref !== null);
+  if (Array.isArray(files.linearCanonicalComparisons)) {
+    files.linearCanonicalComparisons = bindCanonicalComparisons(store, files.linearCanonicalComparisons);
+  }
+  return files;
+};
+
+/**
+ * A Linear record row with its files registered and named by their refs.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {LoadedLinearSeq} seq
+ * @returns {LinearSeq}
+ */
+const bindLinearSeqRow = (store, seq) => ({
+  ...seq,
+  gb: store.registerFile(/** @type {InputFileCandidate} */ (seq.gb)),
+  gff: store.registerFile(/** @type {InputFileCandidate} */ (seq.gff)),
+  fasta: store.registerFile(/** @type {InputFileCandidate} */ (seq.fasta)),
+  depth: /** @type {DepthFileSlots<InputFileRef>} */ (registerInputFileTree(store, seq.depth))
+});
+
+/**
  * A Linear record row as a Load candidate or a rolled-back snapshot holds it.
  * @typedef {Omit<LinearSeq, 'gb' | 'gff' | 'fasta' | 'depth'> & {
  *   gb: LoadedFileValue, gff: LoadedFileValue, fasta: LoadedFileValue, depth: LoadedFileValue
@@ -303,25 +339,9 @@ export const bindCanonicalComparisons = (store, comparisons) => comparisons.map(
  */
 export const bindLoadedInputs = (store, loaded) => {
   /** @param {unknown} value */
-  const tree = (value) => registerInputFileTree(store, /** @type {LoadedFileValue} */ (value));
-  /** @param {unknown} value */
   const one = (value) => store.registerFile(/** @type {InputFileCandidate} */ (value));
-  /** @type {Record<string, unknown>} */
-  const files = { ...loaded.files };
-  BOUND_FILE_KEYS.forEach((key) => {
-    if (Object.hasOwn(files, key)) files[key] = tree(files[key]);
-  });
-  if (Array.isArray(files.linearCanonicalComparisons)) {
-    files.linearCanonicalComparisons = bindCanonicalComparisons(store, files.linearCanonicalComparisons);
-  }
-  /** @type {LinearSeq[]} */
-  const linearSeqs = loaded.linearSeqs.map((seq) => ({
-    ...seq,
-    gb: one(seq.gb),
-    gff: one(seq.gff),
-    fasta: one(seq.fasta),
-    depth: /** @type {DepthFileSlots<InputFileRef>} */ (tree(seq.depth))
-  }));
+  const files = bindFileFields(store, loaded.files);
+  const linearSeqs = loaded.linearSeqs.map((seq) => bindLinearSeqRow(store, seq));
   /** @type {LinearComparisonPlan} */
   const linearComparisonPlan = {
     ...loaded.linearComparisonPlan,
@@ -511,6 +531,38 @@ const install = (slice, data) => {
 const reset = (slice) => {
   const { files } = membersOf(slice);
   CARD_FILE_SLOTS.forEach((slot) => { files[slot] = null; });
+};
+
+/**
+ * What a History step holds of a drawing's inputs: a capture (`capture`) of
+ * its file fields, rows, and input type, whose refs may have been released
+ * since. A field `files` leaves out binds nothing.
+ * @typedef {object} CapturedInputs
+ * @property {Partial<DrawingInputFiles>} files
+ * @property {readonly LinearSeq[]} linearSeqs
+ * @property {InputType} [inputType] left out, the input type stays
+ */
+/**
+ * Install a History step's capture: each ref is registered with the store (a
+ * released ref binds nothing), the rows are normalized as every row writer
+ * leaves them, and the `files` fields `keep` names stay as they are (an
+ * intent leaves out the comparisons a Generate wrote). This is the one writer
+ * of a captured slice.
+ * @param {Pick<InputFileStore, 'registerFile'>} store
+ * @param {InputsSlice} slice
+ * @param {CapturedInputs} data
+ * @param {{ keep?: readonly (keyof DrawingInputFiles)[] }} [options]
+ */
+export const installBoundInputs = (store, slice, data, { keep = [] } = {}) => {
+  const current = membersOf(slice).files;
+  install(slice, {
+    files: /** @type {DrawingInputFiles} */ ({
+      ...bindFileFields(store, data.files),
+      ...Object.fromEntries(keep.map((key) => [key, current[key]]))
+    }),
+    linearSeqs: normalizeLinearSeqList(data.linearSeqs.map((seq) => bindLinearSeqRow(store, seq))),
+    ...(data.inputType ? { inputType: data.inputType } : {})
+  });
 };
 
 /**

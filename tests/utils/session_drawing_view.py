@@ -6,8 +6,7 @@ nowhere else.
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Any, Iterator, Mapping
+from typing import Any, Mapping
 
 from gbdraw.session_drawings import _drawing_view
 
@@ -33,32 +32,22 @@ def drawing_view(
     return _drawing_view(document, drawings[0])
 
 
-@contextmanager
-def without_drawings_move() -> Iterator[None]:
-    """Make ``build_session_json`` return the checked mode-scoped Session 48 it builds.
+def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """``build_session_json`` as its checked mode-scoped Session 48, before the move to drawings.
 
-    The writer builds the 46-48 layout and moves it to drawings last; inside
-    this context the move is skipped. For tests that need the 46-48 layout of
-    what a writer builds (a CLI save included).
+    The writer builds the 46-48 layout and moves it to drawings last; here the
+    move is skipped.
     """
 
     from unittest import mock
 
     from gbdraw import session_drawings
+    from gbdraw.session_io import build_session_json
 
     def keep_mode_scoped(data: Mapping[str, Any], *_args: Any, **_kwargs: Any) -> tuple[Mapping[str, Any], None]:
         return data, None
 
     with mock.patch.object(session_drawings, "drawings_document_from_mode_scoped", keep_mode_scoped):
-        yield
-
-
-def build_mode_scoped_session_json(*args: Any, **kwargs: Any) -> dict[str, Any]:
-    """``build_session_json`` as its checked mode-scoped Session 48, before the move to drawings."""
-
-    from gbdraw.session_io import build_session_json
-
-    with without_drawings_move():
         return dict(build_session_json(*args, **kwargs))
 
 
@@ -88,27 +77,6 @@ def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
     return _drawings_document(
         [view], ids=[mode], names=[mode.capitalize()], active=0, project_views=[view]
     )
-
-
-# fixround C1
-@contextmanager
-def without_drawings_move_in_session_module() -> Iterator[None]:
-    """``without_drawings_move`` for the upgrade in ``gbdraw.session`` (``upgrade_session_document``).
-
-    ``gbdraw.session`` binds ``drawings_document_from_mode_scoped`` by name, so it is skipped there too.
-    A save builds Session 49 directly (D-15-125) and a CLI re-save needs its
-    base upgraded to 49 (OV-1910), so this context is for upgrades only.
-    """
-
-    from unittest import mock
-
-    from gbdraw import session as session_module
-
-    def keep_mode_scoped(data: Mapping[str, Any], *_args: Any, **_kwargs: Any) -> tuple[Mapping[str, Any], None]:
-        return data, None
-
-    with without_drawings_move(), mock.patch.object(session_module, "drawings_document_from_mode_scoped", keep_mode_scoped):
-        yield
 
 
 # fixround C2

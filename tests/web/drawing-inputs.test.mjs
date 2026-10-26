@@ -318,6 +318,58 @@ test('a History intent\'s files are the drawing\'s inputs slice capture', async 
   bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', null);
 });
 
+// S-1 apply side: Undo installs the step's inputs slice capture through the
+// slice, so every field the slice holds comes back as captured (no per-mode
+// field list; D-15-127 J5), a ref whose file was released binds nothing, and
+// the comparisons a Generate wrote stay (an intent leaves them out).
+test('Undo of an input-file step installs the step\'s inputs slice capture', async () => {
+  const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
+  const { createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
+  const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+  const { INPUTS_SLICE, bindDrawingInputFile, bindDrawingCanonicalComparisons, bindLinearSeqFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const store = state.inputFiles;
+  const snapshots = createHistorySnapshotService({
+    state, fileStore: store, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+  });
+  const history = createHistoryRouter({
+    drawingIds: ['circular', 'linear'],
+    activeDrawingId: () => state.activeDrawingId.value,
+    managerOptions: (drawingId) => snapshots.drawingHistory(drawingId),
+    sessionHistory: snapshots.sessionHistory()
+  });
+  const linear = state.drawingOfMode('linear');
+  const slice = linear.slices.inputs;
+  const initial = INPUTS_SLICE.capture(slice);
+  installShownDrawing(linear.id);
+  await history.initializeIntentBaseline();
+  const uid = linear.linearSeqs[0].uid;
+  await history.runUndoable('Change uploaded file', () => {
+    bindLinearSeqFile(store, slice, uid, 'gb', fileNamed('first.gb'));
+    bindDrawingInputFile(store, slice, 'c_fasta', fileNamed('kept.fa'));
+  });
+  const stepCapture = INPUTS_SLICE.capture(slice);
+  await history.runUndoable('Change uploaded file', () => {
+    bindLinearSeqFile(store, slice, uid, 'gb', fileNamed('second.gb'));
+    bindDrawingInputFile(store, slice, 'c_fasta', null);
+  });
+  const generated = [{ kind: 'generatedProteinComparison', queryRecordIndex: 0, subjectRecordIndex: 1 }];
+  bindDrawingCanonicalComparisons(store, slice, generated);
+  const released = stepCapture.linearSeqs[0].gb;
+  // Only the first row file is released; the step's other file stays stored.
+  const stored = [...boundInputFileIds({ drawingList: () => state.drawingList() }), stepCapture.files.c_fasta.fileId];
+  store.retainOnly(stored.filter((id) => id !== released.fileId));
+  await history.undo();
+  const expected = {
+    ...stepCapture,
+    files: { ...stepCapture.files, linearCanonicalComparisons: generated },
+    linearSeqs: stepCapture.linearSeqs.map((seq) => ({ ...seq, gb: null }))
+  };
+  const { circularRecordList: _list, circularRecordDiscovery: _discovery, ...restored } = INPUTS_SLICE.capture(slice);
+  const { circularRecordList: _l, circularRecordDiscovery: _d, ...wanted } = expected;
+  assert.deepEqual(restored, wanted, 'the slice holds the step\'s capture: the released row file binds nothing, the generated comparisons stay');
+  INPUTS_SLICE.install(slice, initial);
+});
+
 // Save writes each drawing's own five card bindings (DESIGN §1
 // `drawings[i].webFiles.bindings`).
 test('Save writes each drawing\'s own card bindings', async () => {
