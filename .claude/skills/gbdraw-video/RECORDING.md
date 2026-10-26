@@ -75,23 +75,31 @@ Journey rules:
     python docs/capture/build_video.py build --journey <id> --out <task>/videos/runNN
   ```
 
-- **Re-render or re-record.**
-  - Re-render when the journey is unchanged, that is, only clip offsets,
-    labels, fades, the badge, or renderer fixes changed. It takes minutes and
-    keeps the same frames:
+- **Edit; do not record again (Owner 2026-10-23, repeated 2026-10-26).**
+  Fix what a review finds by editing the recorded material: re-render it. It
+  takes minutes and keeps the same frames:
 
-    ```bash
-    python docs/capture/build_video.py render --recording <run> --out <new folder>
-    ```
+  ```bash
+  python docs/capture/build_video.py render --recording <run> --out <new folder>
+  ```
 
-  - Re-record when what the app does, a camera cue, or a mark changes.
+  - Edits include clip offsets, holds, speed, labels, captions, fades, the
+    badge, the camera framing (crop, zoom, letterbox), and where the pointer
+    is drawn.
+  - When the renderer cannot make such a fix from what the take logged,
+    change the renderer. If the take lacks the geometry for it, make the
+    recorder log that geometry for the next video. Do not record again for it.
+  - Record a new take only for app operations that the take never captured.
+    First collect every such fix from one review, and tell the Owner why an
+    edit cannot make it. Then record one take for all of them.
+  - Put this rule in every brief that starts recordings.
 - **Machine load.** Check `heavy --status` first.
   - A take takes 8-10 minutes when the load is about 40.
   - Its length varies by several seconds from take to take; three takes of one
     journey ran 109.5-121.8 s.
   - "Chromium screencast produced no frames" at the start is load: retry once.
-- **Keep every take.** Pick the best one by the review in section 4. In the
-  handoff, say why you dropped each other take.
+- **Keep every take.** Never delete a take before delivery. If there is more
+  than one, say in the handoff why you dropped each of the others.
 
 ## 4. Review a take
 

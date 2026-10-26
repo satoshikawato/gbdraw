@@ -100,6 +100,8 @@ Keep these at normal speed:
 
 ## Checks before delivery
 
+- Fix what the review finds by re-rendering the take, not by recording again
+  (Owner 2026-10-23, repeated 2026-10-26; RECORDING.md section 3).
 - Run `scripts/review_take.py` (RECORDING.md, "Review a take"). Look at its
   cue sheet and opening sheet, and at the key moments at full size.
 - Check each item:
