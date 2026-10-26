@@ -13,7 +13,8 @@ const {
   CURRENT_REQUEST_SCHEMA: CURRENT_RENDER_REQUEST_SCHEMA,
   CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
-  expectSessionLoadedWithoutWarnings
+  expectSessionLoadedWithoutWarnings,
+  generatedConstant
 } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
@@ -27,8 +28,10 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_PROTEIN_RAW_SCHEMA = 4;
-const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
+// The cache and manifest schemas the current writer stores (contracts/schema.generated.js).
+const CURRENT_PROTEIN_RAW_SCHEMA = generatedConstant('PROTEIN_LOSAT_CACHE_SCHEMA');
+const CURRENT_PROTEIN_DERIVED_SCHEMA = generatedConstant('LOSAT_DERIVED_CACHE_SCHEMA');
+const CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA = generatedConstant('PROTEIN_IDENTITY_MANIFEST_SCHEMA');
 
 let sourceSession;
 let savedSessionCount = 0;
@@ -257,10 +260,10 @@ const assertCurrentProteinArtifacts = (session) => {
   const manifest = drawing.proteinIdentityManifest;
   const entries = drawing.losatCache.entries;
   const derivedEntries = drawing.losatDerivedCache?.entries || [];
-  expect(manifest?.schema).toBe(2);
+  expect(manifest?.schema).toBe(CURRENT_PROTEIN_IDENTITY_MANIFEST_SCHEMA);
   expect(entries).toHaveLength(expected.totalPairs);
   expect(entries.every((entry) => (
-    entry?.schema === 4 &&
+    entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA &&
     entry?.kind === 'raw-losat' &&
     entry?.identityKind === 'protein' &&
     entry?.idEncoding === 'runtime-handle-v1' &&
