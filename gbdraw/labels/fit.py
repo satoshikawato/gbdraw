@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_pairs
+from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_partners
 from ..layout.text_geometry import Point, convex_polygons_intersect, segments_intersect
 
 LabelKind: TypeAlias = Literal[
@@ -245,9 +245,8 @@ def overlapping_pairs(
     extent = max(max(box.width, box.max_y - box.min_y) for box in boxes)
     return [
         (left, right)
-        for left, right in sorted(
-            candidate_aabb_pairs(boxes, bucket_size=max(16.0, min(256.0, extent)))
-        )
+        for left, partners in enumerate(candidate_aabb_partners(boxes, bucket_size=max(16.0, min(256.0, extent))))
+        for right in sorted(partners)
         if shapes_overlap(shapes[left], shapes[right], touching=touching)
     ]
 
@@ -265,9 +264,10 @@ def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     indexed = [index for index, polyline in enumerate(polylines) if len(polyline) >= 2]
     return [
         (indexed[left], indexed[right])
-        for left, right in sorted(
-            candidate_aabb_pairs([_extent(polylines[index]) for index in indexed], bucket_size=64.0)
+        for left, partners in enumerate(
+            candidate_aabb_partners([_extent(polylines[index]) for index in indexed], bucket_size=64.0)
         )
+        for right in sorted(partners)
         if polylines_cross(polylines[indexed[left]], polylines[indexed[right]])
     ]
 

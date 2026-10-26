@@ -240,6 +240,144 @@ def test_circular_label_reach_boxes_keep_every_overlapping_peer() -> None:
     assert checked > 0
 
 
+def _dense_arc_labels(seed: int, count: int) -> tuple[list[dict], int]:
+    """A dense outer label set as the legacy packer leaves it: many labels for little arc."""
+    rng = random.Random(seed)
+    total_length = 600000
+    labels = []
+    for _ in range(count):
+        middle = rng.uniform(0, total_length)
+        angle = math.radians(360 * middle / total_length - 90)
+        labels.append(
+            {
+                "middle": middle,
+                "feature_middle_x": 300.0 * math.cos(angle),
+                "feature_middle_y": 300.0 * math.sin(angle),
+                "width_px": rng.choice([20.0, 45.5, 80.0]),
+                "height_px": rng.choice([8.0, 9.94]),
+                "is_inner": False,
+            }
+        )
+    arc = (0.0, 0.0, 420.0, 430.0, 0, 360, total_length)
+    placed = circular_labels_module._legacy_place_labels_on_arc_fc(
+        sorted(labels, key=lambda label: label["middle"]), *arc, spacing_px=0.1
+    )
+    return placed, total_length
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("seed, count", [(1, 60), (2, 150), (3, 400)])
+def test_circular_legacy_optimizer_equals_its_full_passes(seed: int, count: int) -> None:
+    """Visiting only labels whose own or neighbours' positions changed gives the full passes' result."""
+    module = circular_labels_module
+    labels, total_length = _dense_arc_labels(seed, count)
+    arc = dict(center_x=0.0, center_y=0.0, x_radius=420.0, y_radius=430.0, feature_radius=300.0)
+
+    def optimize(label_list: list[dict], max_iterations: int) -> list[dict]:
+        return module._legacy_improved_label_placement_fc(
+            label_list,
+            arc["center_x"],
+            arc["center_y"],
+            arc["x_radius"],
+            arc["y_radius"],
+            arc["feature_radius"],
+            total_length,
+            0,
+            360,
+            y_margin=0.1,
+            max_iterations=max_iterations,
+        )
+
+    # One pass of the optimizer visits every label, so repeating single passes until one moves
+    # nothing is the full-pass loop.
+    full = copy.deepcopy(labels)
+    for passes in range(10000):
+        before = [(label["start_x"], label["start_y"]) for label in full]
+        full = optimize(full, 1)
+        if [(label["start_x"], label["start_y"]) for label in full] == before:
+            break
+    assert passes > 2
+    fast = optimize(copy.deepcopy(labels), 10000)
+    assert [(label["start_x"], label["start_y"]) for label in fast] == [
+        (label["start_x"], label["start_y"]) for label in full
+    ]
+
+
+@pytest.mark.circular
+def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
+    """`_PairGaps` answers `minimum_bbox_gap_px` for every pair without a pair table, also for mixed spacings."""
+    module = circular_labels_module
+    for seed in range(120):
+        labels, _, _ = _random_label_set(seed, max_labels=14)
+        if seed % 3 == 0:
+            for label in labels:
+                label["_spacing_px"], label["_enforce_spacing_px"] = 1.5, True
+        base = [None, 0.1, 2.5][seed % 3]
+        gaps = module._PairGaps(labels, base_margin_px=base)
+        table = {
+            (i, j): minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base)
+            for i in range(len(labels))
+            for j in range(i + 1, len(labels))
+        }
+        assert gaps.largest == max(table.values(), default=0.0)
+        for (i, j), gap in table.items():
+            assert gaps.gap(i, j) == gap
+            assert gaps.gap(j, i) == gap
+
+
+@pytest.mark.circular
+def test_circular_label_peers_follow_moved_labels() -> None:
+    """Counts over `_LabelPeers.near` equal full scans while labels move and join."""
+    module = circular_labels_module
+    checked = 0
+    for seed in range(40):
+        rng = random.Random(seed)
+        labels, total_length, _ = _random_label_set(seed, max_labels=40)
+        pad = module._reach_pad(module._PairGaps(labels).largest)
+        peers = module._LabelPeers.of(labels[:-3], pad)
+        for label in labels[-3:]:
+            peers.add(label)
+        for _ in range(30):
+            idx = rng.randrange(len(labels))
+            labels[idx] = dict(labels[idx], start_x=labels[idx]["start_x"] + rng.gauss(0, 20))
+            if rng.random() < 0.05:
+                labels[idx]["start_y"] = float("nan")
+            peers.move(idx, labels[idx])
+            probe = labels[rng.randrange(len(labels))]
+            near = peers.near(peers.box(probe))
+            for use_min_gap in (False, True):
+                full = module._count_local_label_overlaps(labels, total_length, -1, probe, use_min_gap=use_min_gap)
+                checked += full
+                assert module._count_local_label_overlaps(
+                    labels, total_length, -1, probe, use_min_gap=use_min_gap, peers=near
+                ) == full
+    assert checked > 0
+
+
+@pytest.mark.circular
+def test_circular_overlap_count_holds_no_pair_set() -> None:
+    """Counting a pile of labels keeps one label's candidate pairs at a time, not all pairs (OV-1937)."""
+    import tracemalloc
+
+    module = circular_labels_module
+    labels = [
+        {"middle": float(idx), "start_x": 300.0 + (idx % 7), "start_y": float(idx % 11), "width_px": 60.0, "height_px": 9.0}
+        for idx in range(900)
+    ]
+    tracemalloc.start()
+    try:
+        count = module._count_label_overlaps(labels, 10000, use_min_gap=False)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert count == sum(
+        module._labels_overlap(labels[i], labels[j], 10000, use_min_gap=False)
+        for i in range(len(labels))
+        for j in range(i + 1, len(labels))
+    )
+    assert peak < 16 * 2**20
+
+
 @pytest.mark.circular
 def test_circular_moved_label_overlap_count_equals_the_full_recount() -> None:
     """The cluster relaxation counts a candidate from the current pairs; it must equal a full recount."""
