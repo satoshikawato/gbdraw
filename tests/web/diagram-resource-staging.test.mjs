@@ -271,3 +271,34 @@ test('a File a helper staged is held for the render that encodes it (OV-1595)', 
   });
   assert.equal(other.stagedResources.length, 1);
 });
+
+// The staging cache names a payload by its inline base64 text, else by the payload identity the owner
+// (`getResourcePayloadIdentity`) gives: a File, or a Session resource's source descriptor for every view of it.
+// Pinned on each staging input before the staging's own copy of the owner rule was removed (B2b-2b): rebuilt
+// descriptors of a File, of inline text, and of another view of one Session resource send nothing again.
+test('staging names payloads by inline text or by the payload owner identity', async () => {
+  const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
+    '../../gbdraw/web/js/services/session-resource-backing.js'
+  );
+  const fileText = 'LOCUS file\nORIGIN\n//\n';
+  const upload = { arrayBuffer: async () => new TextEncoder().encode(fileText).buffer };
+  const table = adoptCurrentSessionResources({ 'record-3-genbank': descriptor('LOCUS view\nORIGIN\n//\n') });
+  const views = [createSessionResourceFileView(table, 'record-3-genbank'), createSessionResourceFileView(table, 'record-3-genbank')];
+  const request = genbankRequest('record-1-genbank', 'record-2-genbank', 'record-3-genbank');
+  const withoutData = (text) => ({ ...descriptor(text), data: undefined });
+  const resources = (view) => ({
+    'record-1-genbank': setResourcePayloadOwner(withoutData(fileText), upload),
+    'record-2-genbank': descriptor('LOCUS inline\nORIGIN\n//\n'),
+    'record-3-genbank': setResourcePayloadOwner(withoutData('LOCUS view\nORIGIN\n//\n'), view)
+  });
+  const transport = createDiagramResourceTransport();
+  const first = await transport.prepare({ request, resources: resources(views[0]) });
+  assert.deepEqual(first.stagedResources.map(({ resourceId }) => resourceId),
+    ['record-1-genbank', 'record-2-genbank', 'record-3-genbank']);
+  assert.equal(first.commit(), true);
+  const again = await transport.prepare({ request, resources: resources(views[1]) });
+  assert.deepEqual(again.stagedResources, []);
+  assert.deepEqual(again.resourceManifest.map(({ cacheToken }) => cacheToken), first.resourceManifest.map(({ cacheToken }) => cacheToken));
+  assert.deepEqual(first.resourceManifest.map(({ cacheToken }) => cacheToken), [fileText, 'LOCUS inline\nORIGIN\n//\n', 'LOCUS view\nORIGIN\n//\n'].map(sha256Hex));
+  assert.equal(again.commit(), true);
+});

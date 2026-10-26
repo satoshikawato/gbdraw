@@ -1156,14 +1156,15 @@ const createLayoutPreferences = () => ({
     }
   });
 
-  // Each drawing's checkpoint holds its own slots' files: Circular's inputs, and
-  // Linear's comparison files and generated comparisons.
+  // Each drawing's checkpoint holds its own inputs slice capture (S-1) and its
+  // comparison plan's files; a Linear drawing's also holds its generated
+  // comparisons.
   const snapshot = await snapshots.drawingHistory('circular').buildCheckpoint();
   state.mode.value = 'linear';
   const linearSnapshot = await snapshots.drawingHistory('linear').buildCheckpoint();
   state.mode.value = 'circular';
-  assert.equal(Object.hasOwn(snapshot.files, 'linearComparisons'), false);
-  assert.equal(Object.hasOwn(linearSnapshot.files, 'c_gb'), false);
+  assert.equal(Object.hasOwn(snapshot.files, 'linearCanonicalComparisons'), false);
+  assert.equal(Object.hasOwn(linearSnapshot.files, 'linearCanonicalComparisons'), true);
   state.form.prefix = 'after';
   state.form.show_scale = false;
   state.adv.arrow_head_length_ratio = null;

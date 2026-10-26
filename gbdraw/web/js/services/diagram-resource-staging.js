@@ -121,14 +121,15 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
  */
 
 /**
- * What names a payload's bytes until they change: the base64 text, or the
- * object that owns them (the File the user chose, a Session resource view, or
- * the descriptor itself).
+ * What names a payload's bytes until they change: its inline base64 text, else
+ * the payload identity its owner gives (`getResourcePayloadIdentity`: the File
+ * the user chose, or the source descriptor of every view of one Session
+ * resource).
  * @param {ResourceDescriptor} descriptor
- * @returns {string | ResourcePayloadOwner}
+ * @returns {string | object}
  */
-const payloadIdentityOf = (descriptor) => (
-  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadOwner(descriptor) ?? descriptor
+const stagingKeyOf = (descriptor) => (
+  typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadIdentity(descriptor)
 );
 
 /** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets }} [ports] */
@@ -137,7 +138,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   /** @type {ReadonlySet<ResourceContentToken>} */
   let heldTokens = new Set();
   // The token of each payload identity seen whose bytes the Worker holds.
-  /** @type {Map<string | ResourcePayloadOwner, ResourceContentToken>} */
+  /** @type {Map<string | object, ResourceContentToken>} */
   let knownTokens = new Map();
   // A new Worker holds nothing: a helper staging prepared before the reset records nothing.
   let workerEpoch = 0;
@@ -157,7 +158,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       for (const resourceId of collectCanonicalResourceIds(request)) {
         const descriptor = resources && Object.hasOwn(resources, resourceId) ? resources[resourceId] : null;
         if (!descriptor || typeof descriptor !== 'object') continue;
-        const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
+        const token = knownTokens.get(stagingKeyOf(/** @type {ResourceDescriptor} */ (descriptor)));
         if (token && heldTokens.has(token)) retained.add(token);
       }
     }
@@ -194,7 +195,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
     for (const resourceId of referencedIds) {
       const descriptor = validateResourceDescriptor(resourceId, resources?.[resourceId]);
       const owner = getResourcePayloadOwner(descriptor);
-      const identity = payloadIdentityOf(descriptor);
+      const identity = stagingKeyOf(descriptor);
       /** @type {ArrayBufferLike | null} */
       let bytes = null;
       let cacheToken = knownTokens.get(identity);

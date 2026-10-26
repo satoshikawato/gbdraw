@@ -712,10 +712,15 @@ const applyFallbackResultsData = (state, results = []) => {
 };
 
 // A drawing's intent holds the file bindings of its slots by reference
-// (PD-OI-090): Circular's `c_*` inputs, including the BLAST rows and comparison
-// sequences of a LOSAT-cache replay (its ring rows and managed track slots name
-// those rows, so Undo restores them together, B23), or Linear's records and
-// comparison files, and its five card files (R16-4).
+// (PD-OI-090): its inputs slice capture (S-1, DESIGN §2) — Circular's `c_*`
+// inputs, including the BLAST rows and comparison sequences of a LOSAT-cache
+// replay (its ring rows and managed track slots name those rows, so Undo
+// restores them together, B23), Linear's record rows, its input type, and its
+// five card files (R16-4) — and the files of its Linear comparison plan, which
+// the plan (settings slice) binds. It leaves out what is not an edit: the
+// comparisons a Generate writes (the artifact checkpoint keeps them) and the
+// Circular record list and discovery, derived status that History must not see
+// as an edit.
 /**
  * A binding's refs as a step holds them: each list copied, each ref as is.
  * @param {unknown} value
@@ -730,48 +735,14 @@ const refsOf = (value) => (
  * @returns {FilesData}
  */
 const buildIntentFilesData = (drawing) => {
-  const cards = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, refsOf(drawing.files[key])]));
-  if (drawing.mode !== 'linear') {
-    const { files } = drawing;
-    return {
-      c_gb: refsOf(files.c_gb),
-      c_gff: refsOf(files.c_gff),
-      c_fasta: refsOf(files.c_fasta),
-      c_depth: refsOf(files.c_depth),
-      c_conservation_blasts: refsOf(files.c_conservation_blasts),
-      c_conservation_blasts_source: files.c_conservation_blasts_source === 'losat-cache'
-        ? 'losat-cache'
-        : null,
-      c_conservation_fastas: refsOf(files.c_conservation_fastas),
-      c_conservation_sequence_sources: refsOf(files.c_conservation_sequence_sources),
-      inputType: drawing.inputType.value,
-      ...cards
-    };
-  }
+  const { files, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
+  // The comparisons a Generate wrote are the artifact checkpoint's.
+  const { linearCanonicalComparisons: _generated, ...bound } = files;
   return {
-    ...cards,
-    inputType: drawing.inputType.value,
-    linearSeqs: drawing.linearSeqs.map((seq) => ({
-      uid: seq.uid,
-      gb: refsOf(seq.gb),
-      gff: refsOf(seq.gff),
-      fasta: refsOf(seq.fasta),
-      depth: refsOf(seq.depth),
-      losat_gencode: seq.losat_gencode ?? 1,
-      definition: seq.definition ?? '',
-      record_subtitle: seq.record_subtitle ?? '',
-      file_definition: seq.file_definition ?? '',
-      file_subtitle: seq.file_subtitle ?? '',
-      inferred_definition: seq.inferred_definition ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: Boolean(seq.region_reverse)
-    })),
-    linearComparisons: Array.from(drawing.linearComparisonPlan?.edges || []).map((edge) => ({
-      id: String(edge?.id || ''),
-      file: refsOf(edge?.file)
-    }))
+    ...bound,
+    inputType,
+    linearSeqs,
+    linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: refsOf(edge.file) }))
   };
 };
 

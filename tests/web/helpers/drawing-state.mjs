@@ -160,6 +160,11 @@ const withSliceHandles = (drawing) => {
   INPUTS_SLICE.members.filter((key) => !(key in drawing)).forEach((key) => {
     Object.defineProperty(drawing, key, { value: inputs[key], configurable: true, writable: true });
   });
+  // A fixture's `files` names the fields its test reads; the slice's other
+  // fields hold their defaults, as every drawing's do (the capture copies them).
+  if (drawing.files && typeof drawing.files === 'object' && !Object.isFrozen(drawing.files)) {
+    Object.entries(inputs.files).filter(([key]) => !(key in drawing.files)).forEach(([key, value]) => { drawing.files[key] = value; });
+  }
   const handles = {};
   const slices = {};
   for (const [name, slice] of Object.entries(DRAWING_SLICES)) {
