@@ -1000,6 +1000,16 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       ]
     )
   },
+  // Load of a Session 27-44: Python returns its Session 49, the stored Results
+  // a Session 49 cannot hold, and the Load repairs (DESIGN 4.3). The resources
+  // travel inside the document, so the call names no file.
+  [DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION]: {
+    keys: ['document'],
+    fileRoles: [],
+    run: (pyodide, payload) => callJsonHelper(
+      pyodide, 'legacy_session_to_drawings_json', [jsonArgument(payload.document, null)]
+    )
+  },
   // Generate's ring search output in the search frame of the records its
   // request draws (PD-OI-073): Python converts it from the staged request.
   [DIAGRAM_HELPER_OPERATIONS.CONVERT_RING_TABLES_TO_SEARCH_FRAME]: {

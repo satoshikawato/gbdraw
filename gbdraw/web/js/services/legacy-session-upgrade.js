@@ -1,0 +1,83 @@
+// @ts-check
+// Load of a Session 27-44 (DESIGN §4.3): Python moves it to a Session 49 in
+// one Worker call (`legacy_session_to_drawings_json`,
+// gbdraw/web_support/legacy_session.py); the Web has no converter of its own.
+// This module holds the port the composition root sets and reads the reply.
+import { diagnosticError } from '../utils/error-normalization.js';
+
+/** @import { LoadRepair } from '../utils/load-repairs.js' */
+
+/**
+ * Python's reply: the Session 49, the stored Results a Session 49 cannot
+ * hold (Sessions 27-39), by drawing ID, and the Load repairs of the draft
+ * migrations (`LegacySessionDrawings`, gbdraw/web_support/legacy_session.py).
+ * The document is read by Load's band-49 reader, as a file's would be.
+ * @typedef {object} LegacySessionUpgrade
+ * @property {Record<string, unknown>} document
+ * @property {ReadonlyMap<string, readonly unknown[]>} storedResults
+ * @property {readonly LoadRepair[]} warnings
+ */
+
+/** @typedef {(request: { document: unknown }) => Promise<unknown>} LegacySessionUpgrader */
+
+/** @type {LegacySessionUpgrader | null} */
+let legacySessionUpgrader = null;
+/** @param {LegacySessionUpgrader | null} upgrader */
+export const setLegacySessionUpgrader = (upgrader) => {
+  legacySessionUpgrader = typeof upgrader === 'function' ? upgrader : null;
+};
+
+const LEGACY_SESSION_UPGRADE = /** @type {const} */ ({ stage: 'helper', operation: 'upgradeLegacySession' });
+// The three codes `DraftMigrationRepair` names (gbdraw/session_migration.py), with their paths.
+const DRAFT_MIGRATION_REPAIR_PATHS = Object.freeze({
+  'feature-edit-unmatched': 'features',
+  'feature-visibility-narrowed': 'features.featureVisibilityOverrides',
+  'hash-selector-unmapped': 'config.rules'
+});
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * @param {unknown} value
+ * @returns {LoadRepair | null} null for an entry of another shape
+ */
+const readDraftMigrationRepair = (value) => {
+  if (!isRecord(value)) return null;
+  const { code, path, effect, count } = value;
+  if (typeof code !== 'string' || !Object.hasOwn(DRAFT_MIGRATION_REPAIR_PATHS, code)
+    || path !== DRAFT_MIGRATION_REPAIR_PATHS[/** @type {keyof typeof DRAFT_MIGRATION_REPAIR_PATHS} */ (code)]
+    || (effect !== 'dropped' && effect !== 'changed') || !Number.isSafeInteger(count) || Number(count) < 1) return null;
+  return /** @type {LoadRepair} */ ({ code, path, effect, count: Number(count) });
+};
+
+/**
+ * The Session 49 of a Session 27-44, from Python, once. A Worker failure
+ * throws its own diagnostic; a reply of another shape throws RESULT_INVALID
+ * of this operation; without the port, HELPER_PROTOCOL.
+ * @param {unknown} document The file's document as the Session input reader admitted it.
+ * @param {{ upgrade?: LegacySessionUpgrader | null }} [options]
+ * @returns {Promise<LegacySessionUpgrade>}
+ */
+export const upgradeLegacySession = async (document, { upgrade = legacySessionUpgrader } = {}) => {
+  if (!upgrade) throw diagnosticError('HELPER_PROTOCOL', {}, LEGACY_SESSION_UPGRADE);
+  const response = await upgrade({ document });
+  const reply = isRecord(response) ? response.result : null;
+  const invalid = () => diagnosticError('RESULT_INVALID', {}, LEGACY_SESSION_UPGRADE);
+  if (!isRecord(reply) || !isRecord(reply.document) || !isRecord(reply.storedResults) || !Array.isArray(reply.warnings)) {
+    throw invalid();
+  }
+  /** @type {Map<string, readonly unknown[]>} */
+  const storedResults = new Map();
+  for (const [drawingId, results] of Object.entries(reply.storedResults)) {
+    if (!Array.isArray(results)) throw invalid();
+    storedResults.set(drawingId, results);
+  }
+  const warnings = reply.warnings.map(readDraftMigrationRepair);
+  if (warnings.some((warning) => warning === null)) throw invalid();
+  return {
+    document: reply.document,
+    storedResults,
+    warnings: /** @type {LoadRepair[]} */ (warnings)
+  };
+};

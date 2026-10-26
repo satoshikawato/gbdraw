@@ -23,6 +23,7 @@ from gbdraw.web_support.rule_matching import evaluate_rules_json, synthesize_col
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_search_frame_json
+from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
@@ -1871,6 +1872,8 @@ _WEB_JSON_HELPERS = {
     "stored_protein_results_to_search_frame_json": (
         _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
     ),
+    # Load of a Session 27-44: Python moves it to a Session 49 once (DESIGN 4.3).
+    "legacy_session_to_drawings_json": (legacy_session_to_drawings_json, "upgradeLegacySession"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),

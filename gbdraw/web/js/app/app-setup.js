@@ -95,6 +95,7 @@ import {
 import {
   setMainSessionComparisonFrameConverter, setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
+import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryRouter } from '../services/history.js';
 import {
@@ -463,6 +464,10 @@ export const createAppSetup = () => {
   ));
   setStoredProteinResultFrameConverter((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.CONVERT_STORED_PROTEIN_RESULT_FRAMES,
+    payload
+  ));
+  setLegacySessionUpgrader((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION,
     payload
   ));
   const {
@@ -2168,6 +2173,7 @@ export const createAppSetup = () => {
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
     setStoredProteinResultFrameConverter(null);
+    setLegacySessionUpgrader(null);
     setDiagramWorkerFontSource(null);
     setDiagramResourceRetainSource(null);
     disposeSessionOperations();
