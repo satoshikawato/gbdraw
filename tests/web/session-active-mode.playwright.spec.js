@@ -109,25 +109,32 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(loadWorker.constructions).toBeLessThanOrEqual(1);
     expect(loadWorker.instances.flatMap(instance => instance.helpers.map(helper => helper.operation)))
       .toEqual(loadWorker.helpers ? ['validateConfigOverrides'] : []);
-    // E1 (contract): a Session with a Result opens on that Result's mode.
+    // PD-OI-090 (Session 49): Load opens the drawing shown at Save, here Linear with its draft.
     const restored = await snapshot(fresh);
-    expect(restored.mode).toBe('circular');
-    expect(restored.generatedMode).toBe('circular');
+    expect(restored.mode).toBe('linear');
+    expect(restored.generatedMode).toBe('linear');
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(circular.request);
-    expect(restored.results).toEqual(circular.results);
-    expect(restored.selectedResultIndex).toBe(circular.selectedResultIndex);
+    // The Linear drawing's own saved request, with no Result drawn from it.
+    expect(restored.request).toEqual(savedDrawing(first, 'linear').renderRequest);
+    expect(restored.request.mode).toBe('linear');
+    expect(restored.results).toEqual([]);
+    // A Load that opens Linear resolves the track-slot axis index (0) where the unsaved draft held null (OV-1820).
+    const withoutAxisIndex = (config) => ({ ...config, adv: { ...config.adv, circular_track_slots_axis_index: null, linear_track_slots_axis_index: null } });
+    expect(withoutAxisIndex(restored.config)).toEqual(withoutAxisIndex(before.config));
+    expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
-    // The Linear draft waits in the Linear drawing.
+    // The Circular drawing kept its own Result.
+    await showDrawing(fresh, { kind: 'circular' });
+    const circularResult = await snapshot(fresh);
+    expect(circularResult.mode).toBe('circular');
+    expect(circularResult.generatedMode).toBe('circular');
+    expect(circularResult.request).toEqual(circular.request);
+    expect(circularResult.results).toEqual(circular.results);
+    expect(circularResult.selectedResultIndex).toBe(circular.selectedResultIndex);
     await showDrawing(fresh, { kind: 'linear' });
-    const linearDraft = await snapshot(fresh);
-    expect(linearDraft.mode).toBe('linear');
-    expect(linearDraft.results).toEqual([]);
-    expect(linearDraft.config).toEqual(before.config);
-    expect(linearDraft.config.adv.scale_font_size).toBe(19);
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
     expect(second.ui.activeDrawingId).toBe('linear');
@@ -136,6 +143,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(savedDrawing(first, 'linear').ui.linearTypographyLinked).toBe(true);
     expect(savedDrawing(second, 'linear').ui.linearTypographyLinked).toBe(false);
     const linked = { ...savedDrawing(second, 'linear'), ui: { ...savedDrawing(second, 'linear').ui, linearTypographyLinked: true } };
+    // OV-1822: the re-save drops the Circular drawing's circularInputOriginalName and circularOutputPrefixExplicit and resolves axis_index null to 0 (OV-1820); this line fails until production is fixed.
     expect(second.drawings.map(drawing => (drawing.id === 'linear' ? linked : drawing))).toEqual(first.drawings);
     expect(savedDrawing(second, 'linear').config.adv.scale_font_size).toBe(19);
     expect(second.resources).toEqual(first.resources);

@@ -244,17 +244,21 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   expect(inactive.circularSources[0]).toBe(true);
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
   // E1: Linear has no Result of its own, so it shows and exports none; Save
-  // still writes the Circular Result, and Load opens on Circular, which has one.
+  // still writes the Circular Result, and a Session 49 Load opens the drawing
+  // shown at Save (PD-OI-090), here Linear. Run metadata belongs to each drawing.
   expect(inactive.results).toBe(0);
   expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(savedDrawing(inactiveSave.document, 'circular').renderRequest).toEqual(promoted);
   expect(savedDrawing(inactiveSave.document, 'circular').runMetadata).toEqual(runMetadata);
   await loadFile(page, inactiveSave.file);
-  expect(await page.evaluate(async () => {
+  const runState = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     return { annotationWarnings: state.annotationWarnings.value, trackSlotGeometry: state.trackSlotResolvedGeometry.value };
-  })).toEqual(runMetadata);
+  });
+  expect(await runState()).toEqual({ annotationWarnings: [], trackSlotGeometry: null });
+  await showDrawing(page, { kind: 'circular' });
+  expect(await runState()).toEqual(runMetadata);
   expect((await snapshot(page)).circularSources[0]).toBe(true);
   expect((await snapshot(page)).committed.renderRequest).toEqual(promoted);
   const full = await save(page, testInfo, 'full-control', { again: true });
@@ -272,14 +276,16 @@ test('settings-only Load replaces existing work, and canceled or refused candida
   const requestDropped = 'Saved diagram: the settings of the saved diagram (drawings[0].renderRequest) could not be read.'
     + ' The file loads as settings only; the saved Results, the GenBank, GFF and FASTA inputs, the feature list and the caches are left out.';
   const cases = [
-    // A null request of a file that holds Results reads as a missing one (E-OD29).
-    ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
-    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]],
     ['config', d => { savedDrawing(d, 'circular').config.form = []; }, ['Settings: the value "[]" (drawings[0].config.form) cannot be used; its default is used.']],
     ['binding', d => { savedDrawing(d, 'circular').webFiles.bindings.c_gb.resourceId = 'absent'; }, [unbound('c_gb')]],
     ['version', d => { d.version = 999; }, { field: 'schema', reason: 'SESSION_TOO_NEW', sessionVersion: 999, latestSessionVersion: NEWEST_READ_SESSION_VERSION }],
+    // OV-1821: these three currently end differently from what is asserted (see FINDINGS); kept last so the cases above still run.
+    // A top-level `config` is the pre-49 shape: the file takes the migrated path and opens the Circular drawing, not the one shown at Save.
     // A Session 49 holds each drawing's settings in its drawing only (Session format).
-    ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded']
+    ['retired-config', d => { d.config = structuredClone(savedDrawing(d, 'circular').config); }, 'Session loaded'],
+    // A null request of a file that holds Results reads as a missing one (E-OD29).
+    ['null-request-with-result', d => { savedDrawing(d, 'circular').renderRequest = null; }, [requestDropped]],
+    ['resource', d => { d.resources = {}; }, [requestDropped, unbound('c_gb'), unbound('d_color')]]
   ];
   for (const [name, mutate, expected] of cases) {
     const candidate = structuredClone(full.document);
