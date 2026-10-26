@@ -91,7 +91,7 @@ const drawnAnnotations = (page) => page.evaluate(async () => {
   const { admitFeatureCatalog } = await import('/gbdraw/web/js/services/feature-catalog.js');
   const raw = (value) => window.Vue.toRaw(value);
   return admitFeatureCatalog(raw(state.featureCatalog.value), raw(window.__GBDRAW_APP__.currentResults()), {
-    mode: state.generatedMode.value
+    mode: state.drawingOf(state.generatedDrawingId.value).mode
   }).annotations.map((item) => ({ id: item.id, recordIndex: item.record_index, segments: item.segments }));
 });
 
