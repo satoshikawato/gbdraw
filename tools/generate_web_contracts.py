@@ -77,6 +77,8 @@ _DERIVED: tuple[tuple[str, str, str], ...] = (
     ("CONFIG_UNSET_NUMBER_PATHS", "gbdraw.config.modify", "config_paths_reading_unset_spellings"),
     ("LEGACY_REQUEST_TABLES", "gbdraw.session_request_codec", "describe_legacy_request_tables"),
     ("SESSION_DRAWINGS_LAYOUT", "gbdraw.session_drawings", "describe_session_drawings_layout"),
+    # The Auto organism name rule's data; the Web fast path runs its steps (R4).
+    ("ORGANISM_NAME_RULE", "gbdraw.core.record_metadata", "organism_name_rule_data"),
 )
 # (Web name, Python module, dataclass, field): the values of a field typed as a
 # string Literal (typing.get_args, in the owner's order) and the field's

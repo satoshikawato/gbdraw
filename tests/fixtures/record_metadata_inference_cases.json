@@ -8,7 +8,12 @@
     "discovery: small synthetic inputs. The gbdraw.io.genome loader is the oracle for expected;",
     "tests/test_record_metadata.py checks the loader and the Worker helper, and the Node test checks",
     "that the fast path returns expected or declines to the Worker (Web GUI audit 2026-09-30, G-D).",
-    "tests/web/gui-audit-20260930-inputs.playwright.spec.js reads the multi-organism case for the Linear per-record definition check (IN-06)."
+    "tests/web/gui-audit-20260930-inputs.playwright.spec.js reads the multi-organism case for the Linear per-record definition check (IN-06).",
+    "definition: lineage is the record's lineage, highest taxon first (absent: none, as for GFF3 input);",
+    "lines are split_organism_lines' Circular lines (taxon, strain), which only the Python test reads.",
+    "The definition cases from 'no name' on are the Auto name rule's examples the Owner approved (2026-10-25).",
+    "A discovery case with \"fastPath\": \"declines\" is one the fast path leaves to the Worker; the Node test expects one Worker call.",
+    "A definition case with \"fastPath\": \"declines\" is one formatInferredOrganismStrain leaves to the Python reader."
   ],
   "definition": [
     {
@@ -82,6 +87,1212 @@
       "organism": "",
       "strain": "Sakai",
       "expected": "Sakai"
+    },
+    {
+      "name": "no name: . / X-4 (no lineage)",
+      "organism": ".",
+      "strain": "X-4",
+      "expected": "X-4",
+      "lines": [
+        "",
+        "X-4"
+      ]
+    },
+    {
+      "name": "no name: synthetic construct",
+      "organism": "synthetic construct",
+      "strain": "",
+      "lineage": [
+        "other sequences"
+      ],
+      "expected": "",
+      "lines": [
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Escherichia phage T5",
+      "organism": "Escherichia phage T5",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Escherichia phage T5",
+      "lines": [
+        "Escherichia phage T5",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Severe acute respiratory syndrome coronavirus 2 / Wuhan-Hu-1",
+      "organism": "Severe acute respiratory syndrome coronavirus 2",
+      "strain": "Wuhan-Hu-1",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Severe acute respiratory syndrome coronavirus 2 Wuhan-Hu-1",
+      "lines": [
+        "Severe acute respiratory syndrome coronavirus 2",
+        "Wuhan-Hu-1"
+      ]
+    },
+    {
+      "name": "virus: Litopenaeus vannamei majanivirus Nimav-1_LVa / Lva-Nima_1",
+      "organism": "Litopenaeus vannamei majanivirus Nimav-1_LVa",
+      "strain": "Lva-Nima_1",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Litopenaeus vannamei majanivirus Nimav-1_LVa Lva-Nima_1",
+      "lines": [
+        "Litopenaeus vannamei majanivirus Nimav-1_LVa",
+        "Lva-Nima_1"
+      ]
+    },
+    {
+      "name": "virus: White spot syndrome virus / CN01",
+      "organism": "White spot syndrome virus",
+      "strain": "CN01",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "White spot syndrome virus CN01",
+      "lines": [
+        "White spot syndrome virus",
+        "CN01"
+      ]
+    },
+    {
+      "name": "virus: Shrimp white spot syndrome virus / WSSV-CN",
+      "organism": "Shrimp white spot syndrome virus",
+      "strain": "WSSV-CN",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Shrimp white spot syndrome virus WSSV-CN",
+      "lines": [
+        "Shrimp white spot syndrome virus",
+        "WSSV-CN"
+      ]
+    },
+    {
+      "name": "virus: Chionoecetes opilio bacilliform virus",
+      "organism": "Chionoecetes opilio bacilliform virus",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Chionoecetes opilio bacilliform virus",
+      "lines": [
+        "Chionoecetes opilio bacilliform virus",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Marsupenaeus japonicus endogenous nimavirus",
+      "organism": "Marsupenaeus japonicus endogenous nimavirus",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Marsupenaeus japonicus endogenous nimavirus",
+      "lines": [
+        "Marsupenaeus japonicus endogenous nimavirus",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Whispovirus lacteolymphae",
+      "organism": "Whispovirus lacteolymphae",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "<i>Whispovirus lacteolymphae</i>",
+      "lines": [
+        "<i>Whispovirus lacteolymphae</i>",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Whispovirus xiabaidian / CN01",
+      "organism": "Whispovirus xiabaidian",
+      "strain": "CN01",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "<i>Whispovirus xiabaidian</i> CN01",
+      "lines": [
+        "<i>Whispovirus xiabaidian</i>",
+        "CN01"
+      ]
+    },
+    {
+      "name": "virus: Lambdavirus lambda",
+      "organism": "Lambdavirus lambda",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "<i>Lambdavirus lambda</i>",
+      "lines": [
+        "<i>Lambdavirus lambda</i>",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Enterovirus J",
+      "organism": "Enterovirus J",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Enterovirus J",
+      "lines": [
+        "Enterovirus J",
+        ""
+      ]
+    },
+    {
+      "name": "virus: Autographa californica nucleopolyhedrovirus (no lineage)",
+      "organism": "Autographa californica nucleopolyhedrovirus",
+      "strain": "",
+      "expected": "Autographa californica nucleopolyhedrovirus",
+      "lines": [
+        "Autographa californica nucleopolyhedrovirus",
+        ""
+      ]
+    },
+    {
+      "name": "kept whole: uncultured bacterium",
+      "organism": "uncultured bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "uncultured bacterium",
+      "lines": [
+        "uncultured bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "hybrid: Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7 / VIN7",
+      "organism": "Saccharomyces cerevisiae x Saccharomyces kudriavzevii VIN7",
+      "strain": "VIN7",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> VIN7",
+      "lines": [
+        "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> VIN7",
+        ""
+      ]
+    },
+    {
+      "name": "kept whole: Cloning vector pUC19",
+      "organism": "Cloning vector pUC19",
+      "strain": "",
+      "lineage": [
+        "other sequences"
+      ],
+      "expected": "Cloning vector pUC19",
+      "lines": [
+        "Cloning vector pUC19",
+        ""
+      ]
+    },
+    {
+      "name": "strain boundary: Escherichia coli str. K-12 substr. MG1655 / K-12",
+      "organism": "Escherichia coli str. K-12 substr. MG1655",
+      "strain": "K-12",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Escherichia coli</i> str. K-12 substr. MG1655",
+      "lines": [
+        "<i>Escherichia coli</i>",
+        "str. K-12 substr. MG1655"
+      ]
+    },
+    {
+      "name": "strain boundary: Escherichia coli O157:H7 str. EDL933 / EDL933",
+      "organism": "Escherichia coli O157:H7 str. EDL933",
+      "strain": "EDL933",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Escherichia coli</i> O157:H7 str. EDL933",
+      "lines": [
+        "<i>Escherichia coli</i>",
+        "O157:H7 str. EDL933"
+      ]
+    },
+    {
+      "name": "strain boundary: Sorangium cellulosum So ce56 / So ce 56",
+      "organism": "Sorangium cellulosum So ce56",
+      "strain": "So ce 56",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Sorangium cellulosum</i> So ce56",
+      "lines": [
+        "<i>Sorangium cellulosum</i>",
+        "So ce56"
+      ]
+    },
+    {
+      "name": "strain boundary: Klebsiella pneumoniae subsp. pneumoniae / pneumoniae",
+      "organism": "Klebsiella pneumoniae subsp. pneumoniae",
+      "strain": "pneumoniae",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Klebsiella pneumoniae</i> subsp. <i>pneumoniae</i>",
+      "lines": [
+        "<i>Klebsiella pneumoniae</i> subsp. <i>pneumoniae</i>",
+        ""
+      ]
+    },
+    {
+      "name": "strain boundary: Clostridioides difficile gs / gs",
+      "organism": "Clostridioides difficile gs",
+      "strain": "gs",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Clostridioides difficile</i> gs",
+      "lines": [
+        "<i>Clostridioides difficile</i>",
+        "gs"
+      ]
+    },
+    {
+      "name": "taxon reading: Streptomyces sp. CNQ-509 / CNQ-509",
+      "organism": "Streptomyces sp. CNQ-509",
+      "strain": "CNQ-509",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Streptomyces</i> sp. CNQ-509",
+      "lines": [
+        "<i>Streptomyces</i> sp.",
+        "CNQ-509"
+      ]
+    },
+    {
+      "name": "taxon reading: [Clostridium] scindens ATCC 35704 / ATCC 35704",
+      "organism": "[Clostridium] scindens ATCC 35704",
+      "strain": "ATCC 35704",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "[<i>Clostridium</i>] <i>scindens</i> ATCC 35704",
+      "lines": [
+        "[<i>Clostridium</i>] <i>scindens</i>",
+        "ATCC 35704"
+      ]
+    },
+    {
+      "name": "taxon reading: Staphylococcus aureus subsp. aureus N315 / N315",
+      "organism": "Staphylococcus aureus subsp. aureus N315",
+      "strain": "N315",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Staphylococcus aureus</i> subsp. <i>aureus</i> N315",
+      "lines": [
+        "<i>Staphylococcus aureus</i> subsp. <i>aureus</i>",
+        "N315"
+      ]
+    },
+    {
+      "name": "taxon reading: Photobacterium damselae subsp. damselae / CIP 102761",
+      "organism": "Photobacterium damselae subsp. damselae",
+      "strain": "CIP 102761",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Photobacterium damselae</i> subsp. <i>damselae</i> CIP 102761",
+      "lines": [
+        "<i>Photobacterium damselae</i> subsp. <i>damselae</i>",
+        "CIP 102761"
+      ]
+    },
+    {
+      "name": "taxon reading: Fusarium oxysporum f. sp. lycopersici 4287 / 4287",
+      "organism": "Fusarium oxysporum f. sp. lycopersici 4287",
+      "strain": "4287",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Fusarium oxysporum</i> f. sp. <i>lycopersici</i> 4287",
+      "lines": [
+        "<i>Fusarium oxysporum</i> f. sp. <i>lycopersici</i>",
+        "4287"
+      ]
+    },
+    {
+      "name": "taxon reading: Brassica oleracea var. capitata",
+      "organism": "Brassica oleracea var. capitata",
+      "strain": "",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Brassica oleracea</i> var. <i>capitata</i>",
+      "lines": [
+        "<i>Brassica oleracea</i> var. <i>capitata</i>",
+        ""
+      ]
+    },
+    {
+      "name": "taxon reading: Canis lupus familiaris",
+      "organism": "Canis lupus familiaris",
+      "strain": "",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Canis lupus familiaris</i>",
+      "lines": [
+        "<i>Canis lupus familiaris</i>",
+        ""
+      ]
+    },
+    {
+      "name": "taxon reading: Salmonella enterica subsp. enterica serovar Typhimurium str. LT2 / LT2",
+      "organism": "Salmonella enterica subsp. enterica serovar Typhimurium str. LT2",
+      "strain": "LT2",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Salmonella enterica</i> subsp. <i>enterica</i> serovar Typhimurium str. LT2",
+      "lines": [
+        "<i>Salmonella enterica</i> subsp. <i>enterica</i>",
+        "serovar Typhimurium str. LT2"
+      ]
+    },
+    {
+      "name": "taxon reading: Pseudomonas syringae pv. tomato str. DC3000 / DC3000",
+      "organism": "Pseudomonas syringae pv. tomato str. DC3000",
+      "strain": "DC3000",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Pseudomonas syringae</i> pv. tomato str. DC3000",
+      "lines": [
+        "<i>Pseudomonas syringae</i>",
+        "pv. tomato str. DC3000"
+      ]
+    },
+    {
+      "name": "host in parentheses: Buchnera aphidicola (Cinara cedri)",
+      "organism": "Buchnera aphidicola (Cinara cedri)",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Buchnera aphidicola</i> (<i>Cinara cedri</i>)",
+      "lines": [
+        "<i>Buchnera aphidicola</i> (<i>Cinara cedri</i>)",
+        ""
+      ]
+    },
+    {
+      "name": "host in parentheses: Buchnera aphidicola str. APS (Acyrthosiphon pisum) / APS",
+      "organism": "Buchnera aphidicola str. APS (Acyrthosiphon pisum)",
+      "strain": "APS",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Buchnera aphidicola</i> str. APS (Acyrthosiphon pisum)",
+      "lines": [
+        "<i>Buchnera aphidicola</i>",
+        "str. APS (Acyrthosiphon pisum)"
+      ]
+    },
+    {
+      "name": "no taxon: Lachnospiraceae bacterium A4 / A4",
+      "organism": "Lachnospiraceae bacterium A4",
+      "strain": "A4",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Lachnospiraceae bacterium A4",
+      "lines": [
+        "Lachnospiraceae bacterium A4",
+        ""
+      ]
+    },
+    {
+      "name": "no taxon: Solemya velum gill symbiont",
+      "organism": "Solemya velum gill symbiont",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Solemya velum gill symbiont",
+      "lines": [
+        "Solemya velum gill symbiont",
+        ""
+      ]
+    },
+    {
+      "name": "no taxon: Genus species / strain",
+      "organism": "Genus species",
+      "strain": "strain",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Genus species strain",
+      "lines": [
+        "Genus species",
+        "strain"
+      ]
+    },
+    {
+      "name": "Candidatus: Candidatus Hepatoplasma crinochetorum Av / Av",
+      "organism": "Candidatus Hepatoplasma crinochetorum Av",
+      "strain": "Av",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Hepatoplasma crinochetorum Av",
+      "lines": [
+        "<i>Ca.</i> Hepatoplasma crinochetorum",
+        "Av"
+      ]
+    },
+    {
+      "name": "Candidatus: Candidatus Hepatoplasma crinochetorum / Tokyo2021",
+      "organism": "Candidatus Hepatoplasma crinochetorum",
+      "strain": "Tokyo2021",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Hepatoplasma crinochetorum Tokyo2021",
+      "lines": [
+        "<i>Ca.</i> Hepatoplasma crinochetorum",
+        "Tokyo2021"
+      ]
+    },
+    {
+      "name": "Candidatus: Candidatus Pelagibacter ubique HTCC1062 / HTCC1062",
+      "organism": "Candidatus Pelagibacter ubique HTCC1062",
+      "strain": "HTCC1062",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Pelagibacter ubique HTCC1062",
+      "lines": [
+        "<i>Ca.</i> Pelagibacter ubique",
+        "HTCC1062"
+      ]
+    },
+    {
+      "name": "known limit: Marine alveolate L67-3",
+      "organism": "Marine alveolate L67-3",
+      "strain": "",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Marine alveolate</i> L67-3",
+      "lines": [
+        "<i>Marine alveolate</i>",
+        "L67-3"
+      ]
+    },
+    {
+      "name": "known limit: Clostridioides difficile gs",
+      "organism": "Clostridioides difficile gs",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Clostridioides difficile gs</i>",
+      "lines": [
+        "<i>Clostridioides difficile gs</i>",
+        ""
+      ]
+    },
+    {
+      "name": "known limit: Beihai barnacle viurs 1 (no lineage)",
+      "organism": "Beihai barnacle viurs 1",
+      "strain": "",
+      "expected": "<i>Beihai barnacle viurs</i> 1",
+      "lines": [
+        "<i>Beihai barnacle viurs</i>",
+        "1"
+      ]
+    },
+    {
+      "name": "known limit: Hyphomonas atlantica corrig.",
+      "organism": "Hyphomonas atlantica corrig.",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Hyphomonas atlantica corrig.",
+      "lines": [
+        "Hyphomonas atlantica corrig.",
+        ""
+      ]
+    },
+    {
+      "name": "known limit: Oreocharis qingyunshanensis",
+      "organism": "Oreocharis qingyunshanensis",
+      "strain": "",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Oreocharis qingyunshanensis</i>",
+      "lines": [
+        "<i>Oreocharis qingyunshanensis</i>",
+        ""
+      ]
+    },
+    {
+      "name": "known limit: [Clostridium] ultunense Esp / Clostridium ultunense strain Esp",
+      "organism": "[Clostridium] ultunense Esp",
+      "strain": "Clostridium ultunense strain Esp",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "[<i>Clostridium</i>] <i>ultunense</i> Esp Clostridium ultunense strain Esp",
+      "lines": [
+        "[<i>Clostridium</i>] <i>ultunense</i>",
+        "Esp Clostridium ultunense strain Esp"
+      ]
+    },
+    {
+      "name": "hybrid: a multiplication sign between two parents",
+      "organism": "Saccharomyces cerevisiae × Saccharomyces kudriavzevii",
+      "strain": "",
+      "lineage": [
+        "Eukaryota"
+      ],
+      "expected": "<i>Saccharomyces cerevisiae</i> × <i>Saccharomyces kudriavzevii</i>",
+      "lines": [
+        "<i>Saccharomyces cerevisiae</i> × <i>Saccharomyces kudriavzevii</i>",
+        ""
+      ]
+    },
+    {
+      "name": "kept whole: markup characters stay as written",
+      "organism": "Bacillus sp. A&B",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Bacillus sp. A&B",
+      "lines": [
+        "Bacillus sp. A&B",
+        ""
+      ],
+      "fastPath": "declines"
+    },
+    {
+      "name": "kept whole: a Candidatus name with markup characters keeps the italic Ca. and escapes the name",
+      "organism": "Candidatus Foo & Bar",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Foo &amp; Bar",
+      "lines": [
+        "<i>Ca.</i> Foo &amp; Bar",
+        ""
+      ],
+      "fastPath": "declines"
+    },
+    {
+      "name": "kept whole: a Candidatus name with a markup strain keeps the italic Ca. and escapes the strain",
+      "organism": "Candidatus Pelagibacter ubique",
+      "strain": "<A&B>",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Pelagibacter ubique &lt;A&amp;B&gt;",
+      "lines": [
+        "<i>Ca.</i> Pelagibacter ubique",
+        "&lt;A&amp;B&gt;"
+      ],
+      "fastPath": "declines"
+    },
+    {
+      "name": "virus: the lineage decides for a misspelt virus name",
+      "organism": "Beihai barnacle viurs 1",
+      "strain": "",
+      "lineage": [
+        "Viruses"
+      ],
+      "expected": "Beihai barnacle viurs 1",
+      "lines": [
+        "Beihai barnacle viurs 1",
+        ""
+      ]
+    },
+    {
+      "name": "Candidatus: an abbreviated Ca. with a strain",
+      "organism": "Ca. Hepatoplasma crinochetorum Av",
+      "strain": "Av",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Hepatoplasma crinochetorum Av",
+      "lines": [
+        "<i>Ca.</i> Hepatoplasma crinochetorum",
+        "Av"
+      ]
+    },
+    {
+      "name": "fix2: a -opsida genus under the zoological code is italic",
+      "organism": "Trichopsida boltoni",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "<i>Trichopsida boltoni</i>",
+      "lines": [
+        "<i>Trichopsida boltoni</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a class name under the botanical code stays whole",
+      "organism": "Bryopsida sp. RSa4",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "Bryopsida sp. RSa4",
+      "lines": [
+        "Bryopsida sp. RSa4",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: no lineage takes every ending",
+      "organism": "Trichopsida boltoni",
+      "strain": "",
+      "expected": "Trichopsida boltoni",
+      "lines": [
+        "Trichopsida boltoni",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: an order name under the prokaryotic code stays whole",
+      "organism": "Clostridiales sp. X1",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Clostridiales sp. X1",
+      "lines": [
+        "Clostridiales sp. X1",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a hyphenated genus under the botanical code",
+      "organism": "Pseudo-nitzschia multiseries",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Ochrophyta"
+      ],
+      "expected": "<i>Pseudo-nitzschia multiseries</i>",
+      "lines": [
+        "<i>Pseudo-nitzschia multiseries</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a hyphenated placeholder under the prokaryotic code stays whole",
+      "organism": "Legionella-like amoebal pathogen 1",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Legionella-like amoebal pathogen 1",
+      "lines": [
+        "Legionella-like amoebal pathogen 1",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a hyphenated placeholder under the botanical code stays whole",
+      "organism": "Non-geniculate coralline algae ASE278",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Rhodophyta"
+      ],
+      "expected": "Non-geniculate coralline algae ASE278",
+      "lines": [
+        "Non-geniculate coralline algae ASE278",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a letter-hyphen epithet",
+      "organism": "Aedes w-albus",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "<i>Aedes w-albus</i>",
+      "lines": [
+        "<i>Aedes w-albus</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: an organism-noun epithet suffix keeps the name whole",
+      "organism": "Alvinella pompejana epibiont 6C6",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Alvinella pompejana epibiont 6C6",
+      "lines": [
+        "Alvinella pompejana epibiont 6C6",
+        ""
+      ]
+    },
+    {
+      "name": "fix2: a placeholder word as epithet keeps the name whole",
+      "organism": "Navicula bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "Navicula bacterium",
+      "lines": [
+        "Navicula bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a nothospecies with the letter x",
+      "organism": "Citrus x limon",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Citrus</i> x <i>limon</i>",
+      "lines": [
+        "<i>Citrus</i> x <i>limon</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a multiplication sign joined to the epithet",
+      "organism": "Mentha ×piperita",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Mentha</i> ×<i>piperita</i>",
+      "lines": [
+        "<i>Mentha</i> ×<i>piperita</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a nothogenus",
+      "organism": "x Triticosecale",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "x <i>Triticosecale</i>",
+      "lines": [
+        "x <i>Triticosecale</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an infraspecific nothotaxon",
+      "organism": "Medicago sativa subsp. x tunetana",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "<i>Medicago sativa</i> subsp. x <i>tunetana</i>",
+      "lines": [
+        "<i>Medicago sativa</i> subsp. x <i>tunetana</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a hybrid formula keeps its strain line",
+      "organism": "Saccharomyces cerevisiae x Saccharomyces kudriavzevii",
+      "strain": "CEG",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i> CEG",
+      "lines": [
+        "<i>Saccharomyces cerevisiae</i> x <i>Saccharomyces kudriavzevii</i>",
+        "CEG"
+      ]
+    },
+    {
+      "name": "fix3: a hybrid formula under the zoological code",
+      "organism": "Bos indicus x Bos taurus",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "<i>Bos indicus</i> x <i>Bos taurus</i>",
+      "lines": [
+        "<i>Bos indicus</i> x <i>Bos taurus</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a hybrid without a lineage",
+      "organism": "Citrus x limon",
+      "strain": "",
+      "expected": "<i>Citrus</i> x <i>limon</i>",
+      "lines": [
+        "<i>Citrus</i> x <i>limon</i>",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an abbreviated parent genus keeps the name upright",
+      "organism": "Poeciliopsis monacha x P. lucida",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa"
+      ],
+      "expected": "Poeciliopsis monacha x P. lucida",
+      "lines": [
+        "Poeciliopsis monacha x P. lucida",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a strain after the sign keeps the name upright",
+      "organism": "Saccharomyces cerevisiae S96 x YJM789",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "Saccharomyces cerevisiae S96 x YJM789",
+      "lines": [
+        "Saccharomyces cerevisiae S96 x YJM789",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a quoted cultivar keeps the name upright",
+      "organism": "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae"
+      ],
+      "expected": "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+      "lines": [
+        "Paphiopedilum 'Dark Roller' x Paphiopedilum rothschildianum",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a sign before a word outside the name keeps it upright",
+      "organism": "Phytophthora sp. x amnicola",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Sar"
+      ],
+      "expected": "Phytophthora sp. x amnicola",
+      "lines": [
+        "Phytophthora sp. x amnicola",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a coculture reads each part",
+      "organism": "Synechococcus sp. PCC 7002 x Microcystis aeruginosa TAIHU98 coculture",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Synechococcus</i> sp. PCC 7002 x <i>Microcystis aeruginosa</i> TAIHU98 coculture",
+      "lines": [
+        "<i>Synechococcus</i> sp. PCC 7002 x <i>Microcystis aeruginosa</i> TAIHU98 coculture",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a family placeholder in its lineage",
+      "organism": "Lachnospiraceae bacterium A4",
+      "strain": "A4",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota",
+        "Clostridia",
+        "Lachnospirales",
+        "Lachnospiraceae"
+      ],
+      "expected": "<i>Lachnospiraceae</i> bacterium A4",
+      "lines": [
+        "<i>Lachnospiraceae</i> bacterium A4",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: uncultured before the higher taxon",
+      "organism": "uncultured Lachnospiraceae bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota",
+        "Clostridia",
+        "Lachnospirales",
+        "Lachnospiraceae"
+      ],
+      "expected": "uncultured <i>Lachnospiraceae</i> bacterium",
+      "lines": [
+        "uncultured <i>Lachnospiraceae</i> bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a phylum placeholder (-ota)",
+      "organism": "Bacillota bacterium",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota"
+      ],
+      "expected": "<i>Bacillota</i> bacterium",
+      "lines": [
+        "<i>Bacillota</i> bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: an old phylum name outside the lineage stays upright",
+      "organism": "Firmicutes bacterium M10-2",
+      "strain": "M10-2",
+      "lineage": [
+        "Bacteria",
+        "Bacillati",
+        "Bacillota"
+      ],
+      "expected": "Firmicutes bacterium M10-2",
+      "lines": [
+        "Firmicutes bacterium M10-2",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a Candidatus higher taxon stays upright",
+      "organism": "Pelagibacterales bacterium MED-G40",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Pseudomonadati",
+        "Pseudomonadota",
+        "Alphaproteobacteria",
+        "Candidatus Pelagibacterales"
+      ],
+      "expected": "Pelagibacterales bacterium MED-G40",
+      "lines": [
+        "Pelagibacterales bacterium MED-G40",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a Candidatus placeholder kept whole keeps the italic Ca. and an upright name",
+      "organism": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Candidatus Saccharimonadota"
+      ],
+      "expected": "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "lines": [
+        "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+        ""
+      ]
+    },
+    {
+      "name": "a Candidatus placeholder with a Bacteria lineage keeps the italic Ca.",
+      "organism": "Candidatus Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "strain": "",
+      "lineage": [
+        "Bacteria"
+      ],
+      "expected": "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+      "lines": [
+        "<i>Ca.</i> Saccharibacteria bacterium GW2011_GWC2_44_17",
+        ""
+      ]
+    },
+    {
+      "name": "a Candidatus family placeholder keeps the italic Ca. and an upright name",
+      "organism": "Candidatus Methanomethylophilaceae archaeon",
+      "strain": "",
+      "lineage": [
+        "Archaea"
+      ],
+      "expected": "<i>Ca.</i> Methanomethylophilaceae archaeon",
+      "lines": [
+        "<i>Ca.</i> Methanomethylophilaceae archaeon",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a misspelt higher taxon stays upright",
+      "organism": "Mehylophilales bacterium 35-46-6",
+      "strain": "",
+      "lineage": [
+        "Bacteria",
+        "Pseudomonadati",
+        "Pseudomonadota",
+        "Betaproteobacteria",
+        "Nitrosomonadales"
+      ],
+      "expected": "Mehylophilales bacterium 35-46-6",
+      "lines": [
+        "Mehylophilales bacterium 35-46-6",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a family placeholder under the zoological code stays upright",
+      "organism": "Trichoceridae sp. BV-2014",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Metazoa",
+        "Ecdysozoa",
+        "Arthropoda",
+        "Hexapoda",
+        "Insecta",
+        "Diptera",
+        "Trichoceridae"
+      ],
+      "expected": "Trichoceridae sp. BV-2014",
+      "lines": [
+        "Trichoceridae sp. BV-2014",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: a class placeholder under the botanical code",
+      "organism": "Dothideomycetes sp. 11042",
+      "strain": "",
+      "lineage": [
+        "Eukaryota",
+        "Fungi",
+        "Dikarya",
+        "Ascomycota",
+        "Pezizomycotina",
+        "Dothideomycetes"
+      ],
+      "expected": "<i>Dothideomycetes</i> sp. 11042",
+      "lines": [
+        "<i>Dothideomycetes</i> sp. 11042",
+        ""
+      ]
+    },
+    {
+      "name": "fix3: no lineage keeps a placeholder upright",
+      "organism": "Bacillota bacterium",
+      "strain": "",
+      "expected": "Bacillota bacterium",
+      "lines": [
+        "Bacillota bacterium",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: an order name under the botanical code stays whole",
+      "organism": "Helotiales sp. EF0021",
+      "strain": "EF0021",
+      "lineage": [
+        "Eukaryota",
+        "Fungi"
+      ],
+      "expected": "Helotiales sp. EF0021",
+      "lines": [
+        "Helotiales sp. EF0021",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1834: an order placeholder in its lineage",
+      "organism": "Helotiales sp. EF0021",
+      "strain": "EF0021",
+      "lineage": [
+        "Eukaryota",
+        "Fungi",
+        "Dikarya",
+        "Ascomycota",
+        "Pezizomycotina",
+        "Leotiomycetes",
+        "Helotiales"
+      ],
+      "expected": "<i>Helotiales</i> sp. EF0021",
+      "lines": [
+        "<i>Helotiales</i> sp. EF0021",
+        ""
+      ]
+    },
+    {
+      "name": "OV-1835: a genus ending in -phyta is read as a genus",
+      "organism": "Xerophyta viscosa",
+      "strain": "XV2016PP",
+      "lineage": [
+        "Eukaryota",
+        "Viridiplantae",
+        "Streptophyta",
+        "Embryophyta",
+        "Tracheophyta",
+        "Spermatophyta",
+        "Magnoliopsida",
+        "Liliopsida",
+        "Pandanales",
+        "Velloziaceae",
+        "Xerophyta"
+      ],
+      "expected": "<i>Xerophyta viscosa</i> XV2016PP",
+      "lines": [
+        "<i>Xerophyta viscosa</i>",
+        "XV2016PP"
+      ]
+    },
+    {
+      "name": "OV-1835: a genus ending in -phyta without a lineage",
+      "organism": "Symphyta nephelodes",
+      "strain": "",
+      "expected": "<i>Symphyta nephelodes</i>",
+      "lines": [
+        "<i>Symphyta nephelodes</i>",
+        ""
+      ]
     }
   ],
   "discovery": [
@@ -649,6 +1860,342 @@
             "recordLength": 70,
             "organism": "Bacillus subtilis",
             "inferredDefinition": "<i>Bacillus subtilis</i> 168"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bakta ORGANISM placeholder without a source organism gives no name line (OV-1831)",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "bakta_dot.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   CONTIG_1",
+            "VERSION     CONTIG_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  .",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /mol_type=\"genomic DNA\"",
+            "                     /strain=\"X-4\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "CONTIG_1.1",
+            "recordLength": 60,
+            "organism": ".",
+            "inferredDefinition": "X-4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a Viruses lineage keeps a misspelt virus name whole",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "virus_lineage.gbk",
+          "lines": [
+            "LOCUS       vir_1                    60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   VIR_1",
+            "VERSION     VIR_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Beihai barnacle viurs 1",
+            "            Viruses; Riboviria.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Beihai barnacle viurs 1\"",
+            "                     /mol_type=\"genomic RNA\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "VIR_1.1",
+            "recordLength": 60,
+            "organism": "Beihai barnacle viurs 1",
+            "inferredDefinition": "Beihai barnacle viurs 1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a lineage over two lines and a strain the name already holds (OV-1830)",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "k12_lineage.gbk",
+          "lines": [
+            "LOCUS       k12_1                    60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   K12_1",
+            "VERSION     K12_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli str. K-12 substr. MG1655",
+            "            Bacteria; Pseudomonadati; Pseudomonadota; Gammaproteobacteria;",
+            "            Enterobacterales; Enterobacteriaceae; Escherichia.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli str. K-12 substr. MG1655\"",
+            "                     /mol_type=\"genomic DNA\"",
+            "                     /strain=\"K-12\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "K12_1.1",
+            "recordLength": 60,
+            "organism": "Escherichia coli str. K-12 substr. MG1655",
+            "inferredDefinition": "<i>Escherichia coli</i> str. K-12 substr. MG1655"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a code word deep in the lineage picks its endings (fix2)",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "diatom_lineage.gbk",
+          "lines": [
+            "LOCUS       pn_1                     60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   PN_1",
+            "VERSION     PN_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Pseudo-nitzschia multiseries",
+            "            Eukaryota; Sar; Stramenopiles; Ochrophyta; Bacillariophyta;",
+            "            Bacillariophyceae; Bacillariophycidae; Bacillariales; Bacillariaceae;",
+            "            Pseudo-nitzschia.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Pseudo-nitzschia multiseries\"",
+            "                     /mol_type=\"genomic DNA\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "PN_1.1",
+            "recordLength": 60,
+            "organism": "Pseudo-nitzschia multiseries",
+            "inferredDefinition": "<i>Pseudo-nitzschia multiseries</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a name outside ASCII declines to the Worker",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "non_ascii.gbk",
+          "lines": [
+            "LOCUS       nonascii_1               60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NONASCII_1",
+            "VERSION     NONASCII_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus sp. Ödeme-1",
+            "            Bacteria; Bacillati; Bacillota.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Bacillus sp. Ödeme-1\"",
+            "                     /mol_type=\"genomic DNA\"",
+            "                     /strain=\"Ödeme-1\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NONASCII_1.1",
+            "recordLength": 60,
+            "organism": "Bacillus sp. Ödeme-1",
+            "inferredDefinition": "<i>Bacillus</i> sp. Ödeme-1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an organism with a markup character declines to the Worker",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "markup_1.gbk",
+          "lines": [
+            "LOCUS       MARKUP_1                 60 bp    DNA     linear       26-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   MARKUP_1",
+            "VERSION     MARKUP_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus sp. A&B",
+            "            Bacteria; Bacillati; Bacillota; Bacilli; Bacillales; Bacillaceae;",
+            "            Bacillus.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Bacillus sp. A&B\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "MARKUP_1.1",
+            "recordLength": 60,
+            "organism": "Bacillus sp. A&B",
+            "inferredDefinition": "Bacillus sp. A&B"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF before a lineage word declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomlin_1.gbk",
+          "lines": [
+            "LOCUS       BOMLIN_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMLIN_1",
+            "VERSION     BOMLIN_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Lachnospiraceae bacterium A4",
+            "            \ufeffBacteria; Bacillati; Bacillota; Clostridia; Lachnospirales;",
+            "            Lachnospiraceae.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Lachnospiraceae bacterium A4\"",
+            "                     /strain=\"A4\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMLIN_1.1",
+            "recordLength": 60,
+            "organism": "Lachnospiraceae bacterium A4",
+            "inferredDefinition": "Lachnospiraceae bacterium A4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF at the edge of the organism qualifier declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomorg_1.gbk",
+          "lines": [
+            "LOCUS       BOMORG_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMORG_1",
+            "VERSION     BOMORG_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Lachnospiraceae bacterium A4",
+            "            Bacteria; Bacillati; Bacillota; Clostridia; Lachnospirales;",
+            "            Lachnospiraceae.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"\ufeffLachnospiraceae bacterium A4\"",
+            "                     /strain=\"A4\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMORG_1.1",
+            "recordLength": 60,
+            "organism": "\ufeffLachnospiraceae bacterium A4",
+            "inferredDefinition": "\ufeffLachnospiraceae bacterium A4"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a U+FEFF at the edge of the strain qualifier declines to the Worker (OV-1833)",
+      "format": "genbank",
+      "fastPath": "declines",
+      "files": {
+        "source": {
+          "name": "bomstr_1.gbk",
+          "lines": [
+            "LOCUS       BOMSTR_1                 60 bp    DNA     linear       25-OCT-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   BOMSTR_1",
+            "VERSION     BOMSTR_1.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus subtilis",
+            "            Bacteria; Bacillati; Bacillota.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Bacillus subtilis\"",
+            "                     /strain=\"168\ufeff\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "BOMSTR_1.1",
+            "recordLength": 60,
+            "organism": "Bacillus subtilis",
+            "inferredDefinition": "<i>Bacillus subtilis</i> 168\ufeff"
           }
         ]
       }

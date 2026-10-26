@@ -159,8 +159,7 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
   expect(await page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content)).toBe(before.result);
 });
 
-// D-12, D-18 (OV-1606): AP027131 at the Web defaults (separate strands) touches the GC skew area with its bold
-// first definition line.
+// D-12, D-18 (OV-1606): MERS-CoV at the Web defaults touches the tracks with its bold first definition line.
 // The figure is drawn; the notice offers the smaller definition font, and Apply writes Record Labels >
 // Default font size and Generates a figure without the notice.
 test('the definition text over a track: the notice offers a smaller definition font, and Apply draws without it', async ({ page }) => {
@@ -168,8 +167,8 @@ test('the definition text over a track: the notice offers a smaller definition f
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openApp(page);
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({
-    name: 'AP027131.gb', mimeType: 'text/plain',
-    buffer: readFileSync(join(process.cwd(), 'tests/test_inputs/AP027131.gb'))
+    name: 'MERS-CoV.gbk', mimeType: 'text/plain',
+    buffer: readFileSync(join(process.cwd(), 'tests/test_inputs/MERS-CoV.gbk'))
   });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 1);
   await generateAndWaitForResult(page);
