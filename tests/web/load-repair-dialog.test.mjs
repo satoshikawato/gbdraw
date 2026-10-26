@@ -159,8 +159,19 @@ const savedSession = async (title) => {
   assert.equal(result?.status, 'saved', JSON.stringify(result));
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
-// The saved Session 49 read as the 46-48-shaped view of every drawing (`modes.<mode>`), for reads.
-const savedView = async (title) => savedModesView(await savedSession(title));
+// The saved Session 49 read as one 46-48-shaped file of every drawing: each
+// drawing's `modes.<mode>`, and the input bindings of every drawing in the
+// one `webFiles.bindings` a Session 48 holds (each drawing saves its own
+// mode's input slots; the shown drawing's card files win). Without the Linear
+// drawing's record rows the file's layout rows would name no record.
+const savedView = async (title) => {
+  const document = await savedSession(title);
+  const view = savedModesView(document);
+  const bindingsOf = (entry) => savedDrawingView(document, entry.id).webFiles.bindings;
+  const others = document.drawings.filter((entry) => entry.id !== document.ui.activeDrawingId);
+  view.webFiles = { ...view.webFiles, bindings: Object.assign({}, ...others.map(bindingsOf), view.webFiles.bindings) };
+  return view;
+};
 const leafPaths = (value, parts = []) => [
   ...(parts.length ? [parts] : []),
   ...(value && typeof value === 'object' ? Object.entries(value).flatMap(([key, child]) => (
