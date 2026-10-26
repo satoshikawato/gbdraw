@@ -476,10 +476,12 @@ def _format_size(num_bytes: int) -> str:
 
 
 def _load_session(example: GallerySessionExample) -> dict[str, Any]:
+    from tools.refresh_gallery_sessions import _gallery_view
+
     session = load_session(example.session_path)
     if not isinstance(session, dict):
         raise ValueError(f"{example.session_path} did not contain a JSON object.")
-    return session
+    return _gallery_view(session)[0]
 
 
 def _session_cli_invocation(session: dict[str, Any]) -> dict[str, Any]:
@@ -1556,7 +1558,13 @@ def _sync_session_result_svg(
                 item["resultName"] = example.id
                 changed = True
     if changed:
-        write_session_json(example.session_path, session)
+        from tools.refresh_gallery_sessions import _gallery_document, _gallery_view
+
+        document = load_session(example.session_path)
+        write_session_json(
+            example.session_path,
+            _gallery_document(document, session, _gallery_view(document)[1]),
+        )
 
 
 def _remove_stale_assets() -> None:

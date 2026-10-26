@@ -39,7 +39,8 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-migration.js'))
 );
 const {
-  createGallerySessionPublication
+  createGallerySessionPublication,
+  galleryPublicationView
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'gallery-session-publication.js'))
 );
@@ -87,7 +88,7 @@ const sessionRoot = join(repoRoot, 'gbdraw', 'web', 'gallery', 'sessions');
 const loadSession = async (name) => {
   const raw = await readFile(join(sessionRoot, name));
   const decoded = raw[0] === 0x1f && raw[1] === 0x8b ? gunzipSync(raw) : raw;
-  return JSON.parse(decoded.toString('utf8'));
+  return galleryPublicationView(JSON.parse(decoded.toString('utf8'))).view;
 };
 
 const resourceText = (session, ref) => Buffer.from(

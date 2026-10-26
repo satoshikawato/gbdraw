@@ -25,7 +25,7 @@ from gbdraw.api import (
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
 from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tests.utils.session_drawing_view import drawing_view
+from tests.utils.session_drawing_view import drawing_view, session_view
 from tools.prepare_interactive_gallery_assets import (
     EXAMPLES,
     SESSION_CONFIG_FLAGS,
@@ -68,7 +68,7 @@ def gallery_sessions(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> dict[str, tuple[GallerySessionExample, dict[str, object]]]:
     return {
-        example.id: (example, load_cached_gallery_session(example.session_path))
+        example.id: (example, session_view(load_cached_gallery_session(example.session_path)))
         for example in EXAMPLES
     }
 

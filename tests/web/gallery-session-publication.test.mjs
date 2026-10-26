@@ -14,7 +14,8 @@ const { resolveLinearComparisonPlan } = await import(
 
 const {
   applyDerivedCachePublicationPolicy,
-  createGallerySessionPublication
+  createGallerySessionPublication,
+  galleryPublicationView
 } = await import('../../gbdraw/web/js/services/gallery-session-publication.js');
 const {
   CANONICAL_REQUEST_SCHEMA,
@@ -62,7 +63,7 @@ const loadSessionFile = async (path) => {
   const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
     ? gunzipSync(bytes)
     : bytes;
-  return JSON.parse(decoded.toString('utf8'));
+  return galleryPublicationView(JSON.parse(decoded.toString('utf8'))).view;
 };
 const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
 // The released Session 44 Gallery files (first-parent main fe6861f0), kept to

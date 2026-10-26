@@ -27,7 +27,7 @@ from gbdraw.session_io import (
     load_session,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
-from tests.utils.session_drawing_view import drawing_view, drawings_document_of_view
+from tests.utils.session_drawing_view import drawing_view, drawings_document_of_view, session_view
 import tools.prepare_interactive_gallery_assets as gallery_assets_module
 import tools.refresh_gallery_sessions as refresh_gallery_sessions_module
 from tools.prepare_interactive_gallery_assets import (
@@ -329,7 +329,7 @@ def test_gallery_protein_results_equal_a_rebuild_from_the_raw_cache(
     trip change the drawing.
     """
 
-    session = load_session(session_path)
+    session = session_view(load_session(session_path))
     assert stored_protein_result_differences(session) == []
 
 
@@ -434,7 +434,7 @@ def test_vibrio_gallery_session_stores_resolved_comparisons_and_raw_cache(
     """
 
     path = _session_path("vibrio-harveyi-group-collinear")
-    session = load_cached_gallery_session(path)
+    session = session_view(load_cached_gallery_session(path))
 
     request = session["renderRequest"]
     assert request["schema"] in BUNDLED_REQUEST_SCHEMAS
@@ -532,7 +532,7 @@ def test_gallery_session_record_sources_are_the_declared_input_files(
     resource names resources that no declared input has, or repeats one.
     """
 
-    session = load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"]))
+    session = session_view(load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"])))
     names = _record_source_original_names(session)
 
     assert names
@@ -561,7 +561,7 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
 
     assert len(paths) == 11
     for path in paths:
-        session = load_cached_gallery_session(path)
+        session = session_view(load_cached_gallery_session(path))
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
@@ -590,7 +590,7 @@ def test_bundled_gallery_sources_match_current_session_results(
     for example in EXAMPLES:
         if not example.sync_result_svg:
             continue
-        session = load_cached_gallery_session(example.session_path)
+        session = session_view(load_cached_gallery_session(example.session_path))
         assert (
             example.source_svg_path.read_text(encoding="utf-8")
             == _session_result_svg(session, example)
@@ -1066,7 +1066,7 @@ def test_declared_command_gallery_sessions_store_their_input_files_unchanged(
         hashlib.sha256(path.read_bytes()).hexdigest(): path.name
         for path in _declared_input_files(example)
     }
-    session = load_cached_gallery_session(example.session_path)
+    session = session_view(load_cached_gallery_session(example.session_path))
     resource_ids = {
         record["source"][field]
         for record in session["renderRequest"]["records"]
@@ -1435,7 +1435,7 @@ def test_prepare_gallery_assets_preserves_existing_source_svgs() -> None:
     assert "example.source_svg_path.write_text(migrated" in source
     assert "_validate_source_feature_ids(example, session, migrated)" in source
     assert "def _sync_session_result_svg(" in source
-    assert "write_session_json(example.session_path, session)" in source
+    assert "_gallery_document(document, session, _gallery_view(document)[1])" in source
     assert "_sync_session_result_svg(example, session, source)" in source
     assert "_write_gallery_svg(example, session, source)" in source
     assert 'entry["tutorial"] = f"./tutorials/{example.id}.json"' in source
@@ -1448,6 +1448,8 @@ def test_gallery_result_sync_updates_track_geometry_result_name(
     example = EXAMPLES[0]
     session = {
         "title": "out",
+        "resources": {},
+        "renderRequest": {"mode": "circular"},
         "results": [{"name": "out", "content": "<svg id='old'/>"}],
         "runMetadata": {
             "trackSlotGeometry": {
@@ -2037,7 +2039,7 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     load_cached_svg_root: Callable[[Path], ET.Element],
 ) -> None:
     example = next(item for item in EXAMPLES if item.id == example_id)
-    session = load_cached_gallery_session(example.session_path)
+    session = session_view(load_cached_gallery_session(example.session_path))
     root = load_cached_svg_root(example.gallery_svg_path)
     metadata = next(
         element
