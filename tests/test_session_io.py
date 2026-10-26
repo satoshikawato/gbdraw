@@ -4417,3 +4417,33 @@ def test_a_python_manifest_with_tuples_takes_the_copy_path_through_render_and_wr
     # A Session payload that still holds the tuples is checked as raw data.
     payload["proteinIdentityManifest"] = raw
     assert type(SessionDocument(payload)._data["proteinIdentityManifest"]) is dict
+
+
+@pytest.mark.parametrize(
+    ("raw_args", "plan"),
+    [
+        (
+            ["--gbk", "P1.gb", "P2.gb", "--protein_blastp_mode", "orthogroup"],
+            {"mode": "adjacent", "defaultSource": "losat", "edges": []},
+        ),
+        (["--gbk", "P1.gb", "P2.gb", "--protein-blastp-mode=collinear"], {"mode": "adjacent", "defaultSource": "losat", "edges": []}),
+        (["--gbk", "P1.gb", "P2.gb", "--protein_blastp_mode", "orthogroup", "--protein_blastp_mode", "none"], None),
+        (["--gbk", "P1.gb", "P2.gb"], None),
+    ],
+)
+def test_cli_only_legacy_draft_states_its_protein_comparison_as_the_adjacent_plan(
+    raw_args: list[str], plan: dict[str, object] | None
+) -> None:
+    """A legacy CLI writer selected LOSATP exactly when the last --protein_blastp_mode
+    was not ``none``; that run compared adjacent records (OV-1929 f1, the Web Load's rule)."""
+
+    migrated_config, migrated_files = (
+        session_io_module.migrate_legacy_linear_comparison_draft_for_current_writer(
+            {"cliOptions": {"schema": 1, "mode": "argv", "rawArgs": raw_args}, "linearComparisonPlan": None},
+            {"linearSeqs": [{"uid": "a"}, {"uid": "b"}]},
+            force_web_draft=False,
+        )
+    )
+
+    assert migrated_config.get("linearComparisonPlan") == plan
+    assert migrated_files["linearComparisons"] == []

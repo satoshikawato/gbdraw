@@ -4957,6 +4957,22 @@ def _stable_migrated_comparison_id(
     )
 
 
+def _legacy_cli_protein_mode(config: Mapping[str, Any]) -> str:
+    """The last ``--protein_blastp_mode`` of a legacy draft's ``cliOptions.rawArgs``, else ``none``."""
+
+    cli_options = config.get("cliOptions")
+    raw_args = cli_options.get("rawArgs") if isinstance(cli_options, Mapping) else None
+    args = [str(arg) for arg in raw_args] if isinstance(raw_args, list) else []
+    names = ("--protein_blastp_mode", "--protein-blastp-mode")
+    values = [
+        value
+        for index, token in enumerate(args)
+        if token.split("=", 1)[0] in names
+        and (value := _option_value(args[index:index + 2], *names)) is not None
+    ]
+    return (values[-1] if values else "none").strip().lower()
+
+
 def _migrate_legacy_linear_comparison_draft(
     config: Mapping[str, Any],
     files: Mapping[str, Any],
@@ -5044,8 +5060,18 @@ def _migrate_legacy_linear_comparison_draft(
         return migrated_config, migrated_files
 
     if not force_web_draft:
+        # A CLI-only draft gains no synthetic Web comparison (No comparison).
+        # Its own protein comparison is stated as the adjacent LOSATP plan: a
+        # legacy CLI writer selected LOSATP exactly when the last
+        # --protein_blastp_mode was not ``none``, and compared adjacent records.
         migrated_config.pop("linearRecordLayout", None)
         migrated_config.pop("linearComparisonPlan", None)
+        if _legacy_cli_protein_mode(migrated_config) != "none":
+            migrated_config["linearComparisonPlan"] = {
+                "mode": "adjacent",
+                "defaultSource": "losat",
+                "edges": [],
+            }
         migrated_files["linearComparisons"] = []
         return migrated_config, migrated_files
 
