@@ -509,19 +509,6 @@ def candidate_aabb_partners(
     )
 
 
-def candidate_aabb_pairs(
-    bboxes: Sequence[Aabb],
-    padding: float = 0.0,
-    bucket_size: float = 128.0,
-) -> set[tuple[int, int]]:
-    """Return candidate bbox index pairs using an AABB broad phase (see :func:`candidate_aabb_partners`)."""
-    return {
-        (item_idx, partner)
-        for item_idx, partners in enumerate(candidate_aabb_partners(bboxes, padding, bucket_size))
-        for partner in partners
-    }
-
-
 __all__ = [
     "Aabb",
     "AabbIndex",
@@ -531,7 +518,6 @@ __all__ = [
     "aabb_cells",
     "aabbs_touch",
     "bounding_aabb",
-    "candidate_aabb_pairs",
     "candidate_aabb_partners",
     "cell_partners",
     "finite_aabb",

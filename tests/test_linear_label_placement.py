@@ -37,7 +37,7 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb_pairs
+from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb_partners
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
@@ -1006,7 +1006,10 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     overlapping = [
         (left, right)
-        for left, right in candidate_aabb_pairs([_row_label_aabb(label) for label in labels], bucket_size=64.0)
+        for left, partners in enumerate(
+            candidate_aabb_partners([_row_label_aabb(label) for label in labels], bucket_size=64.0)
+        )
+        for right in partners
         if _rotated_label_rects_intersect(labels[left], labels[right])
     ]
     assert overlapping == []

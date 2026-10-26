@@ -12,7 +12,6 @@ from gbdraw.layout.spatial import (
     IntervalIndex,
     TouchingAabbIndex,
     bounding_aabb,
-    candidate_aabb_pairs,
     candidate_aabb_partners,
     cell_partners,
     finite_aabb,
@@ -20,6 +19,14 @@ from gbdraw.layout.spatial import (
     split_circular_interval,
     touching_aabb_indices,
 )
+
+
+def _partner_pairs(bboxes: list[Aabb], padding: float = 0.0, bucket_size: float = 128.0) -> set[tuple[int, int]]:
+    return {
+        (idx, jdx)
+        for idx, partners in enumerate(candidate_aabb_partners(bboxes, padding=padding, bucket_size=bucket_size))
+        for jdx in partners
+    }
 
 
 def _intervals_overlap(left: Interval, right: Interval, padding: float = 0.0) -> bool:
@@ -120,7 +127,7 @@ def test_aabb_candidate_pairs_do_not_miss_overlapping_bboxes() -> None:
         Aabb(-5, -5, -1, -1),
     ]
 
-    candidates = candidate_aabb_pairs(bboxes, bucket_size=7)
+    candidates = _partner_pairs(bboxes, bucket_size=7)
     expected = {
         (idx, jdx)
         for idx in range(len(bboxes))
@@ -131,16 +138,16 @@ def test_aabb_candidate_pairs_do_not_miss_overlapping_bboxes() -> None:
     assert expected <= candidates
 
 
-def test_candidate_aabb_pairs_respects_padding() -> None:
+def test_candidate_aabb_partners_respect_padding() -> None:
     bboxes = [
         Aabb(0, 0, 10, 10),
         Aabb(12, 0, 20, 10),
         Aabb(30, 0, 40, 10),
     ]
 
-    assert (0, 1) not in candidate_aabb_pairs(bboxes, bucket_size=1)
-    assert (0, 1) in candidate_aabb_pairs(bboxes, padding=2, bucket_size=1)
-    assert (1, 2) not in candidate_aabb_pairs(bboxes, padding=2, bucket_size=1)
+    assert (0, 1) not in _partner_pairs(bboxes, bucket_size=1)
+    assert (0, 1) in _partner_pairs(bboxes, padding=2, bucket_size=1)
+    assert (1, 2) not in _partner_pairs(bboxes, padding=2, bucket_size=1)
 
 
 def test_candidate_aabb_partners_are_the_pairs_that_share_a_bucket() -> None:
@@ -167,7 +174,6 @@ def test_candidate_aabb_partners_are_the_pairs_that_share_a_bucket() -> None:
         partners = list(candidate_aabb_partners(bboxes, padding=padding, bucket_size=size))
         assert len(partners) == len(bboxes)
         assert {(i, j) for i, later in enumerate(partners) for j in later} == expected
-        assert candidate_aabb_pairs(bboxes, padding=padding, bucket_size=size) == expected
 
 
 def test_aabb_index_remove_takes_an_item_out() -> None:
