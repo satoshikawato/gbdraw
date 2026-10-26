@@ -985,29 +985,20 @@ export const isAdoptedFeatureCatalog = (catalog) => (
 );
 
 /**
- * The selector of a catalog feature. `instance` is the feature instance Python
- * writes on the catalog row (gbdraw/features/ids.py `feature_instance`), which
- * a "This feature only" `hash` rule names; it is null for a feature without a
- * source hash and for a catalog written before catalogs carried it.
- * @typedef {Record<string, unknown> & { instance: string | null }} CatalogFeatureSelector
- */
-/**
  * @param {FeatureCatalogRow} feature
  * @param {string} stableId
- * @returns {CatalogFeatureSelector}
  */
 const selectorForFeature = (feature, stableId) => {
-  const instance = text(feature.instance) || null;
-  if (isObject(feature.selector)) return { ...cloneJson(feature.selector), instance };
-  return {
+  if (isObject(feature.selector)) return cloneJson(feature.selector);
+  const selector = {
     type: text(feature.type),
     start: feature.start ?? null,
     end: feature.end ?? null,
     strand: feature.strand ?? null,
     qualifiers: isObject(feature.qualifiers) ? feature.qualifiers : {},
-    hash: stableId,
-    instance
+    hash: stableId
   };
+  return selector;
 };
 
 // The complement of each IUPAC base and of the gap, as base/complement pairs. Any other character becomes `N`.

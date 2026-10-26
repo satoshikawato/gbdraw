@@ -17,8 +17,10 @@ import { groupColorRulesOver, synthesizePythonColorRules } from './helpers/pytho
 
 const ref = (value) => ({ value });
 
+// Catalog features, each with its catalog identity (`record_key`, `biological_feature_id`).
 const featuresOf = (products) => products.map((product, index) => ({
-  id: `feature-${index}`, svg_id: `f${index}`, type: 'CDS', product, qualifiers: { product: [`p${index}`] }
+  id: `feature-${index}`, svg_id: `f${index}`, record_key: 'record-1', biological_feature_id: `f${index}`,
+  type: 'CDS', product, qualifiers: { product: [`p${index}`] }
 }));
 const savedRule = { feat: 'CDS', qual: 'product', val: '^p3$', color: '#111111', cap: 'p3' };
 
@@ -387,6 +389,6 @@ test('the popup Reset fill color after Auto resets to the applied palette color'
   setup_.stages.length = 0;
   await setup_.choices.reset('this_with_legend');
   assert.equal(setup_.stages.includes('commitSpecificRules'), true);
-  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'f0' && rule.color === '#cccccc'),
+  assert.ok(setup_.manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === '^f0@record-1$' && rule.color === '#cccccc'),
     JSON.stringify(setup_.manualSpecificRules));
 });

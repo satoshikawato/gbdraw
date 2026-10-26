@@ -930,21 +930,6 @@ test('admission binds each Result rendered ID to its identity and drawn selector
   assert.equal(admission.featureState.renderedFeaturesByResult, admission.renderedFeaturesByResult);
 });
 
-// PD-OI-069 revision 2: a feature's selector carries the feature instance
-// Python wrote on its catalog row; a catalog written before rows carried it
-// gives null, and the feature is named by its stable hash.
-test('admission puts the catalog feature instance in the selector', () => {
-  const withInstance = structuredClone(catalog);
-  withInstance.items[0].biologicalFeatures[0].instance = 'source-feature-a@record-instance-a';
-  const feature = admitFeatureCatalog(withInstance, results, { mode: 'linear' })
-    .renderedFeaturesByResult[0].get('f0001');
-  assert.equal(feature.selector.instance, 'source-feature-a@record-instance-a');
-  const older = admitFeatureCatalog(structuredClone(catalog), results, { mode: 'linear' })
-    .renderedFeaturesByResult[0].get('f0001');
-  assert.equal(older.selector.instance, null);
-  assert.equal(older.selector.hash, 'stable-source-a');
-});
-
 // PT-OD38: a migrated schema-3 part holds the bounds the anchor profile read
 // (`locationPartBound`), so the anchor accepts what the profile called exact.
 test('schema-3 migration writes the bounds its anchor profile read', () => {

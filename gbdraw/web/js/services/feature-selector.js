@@ -29,6 +29,12 @@ export const exactRegexLiteral = (pattern) => {
   const literal = /^\^([\s\S]*)\$$/.exec(pattern)?.[1].replace(/\\([\s\S])/g, '$1') ?? null;
   return literal !== null && exactRegexValue(literal) === pattern ? literal : null;
 };
+/**
+ * Whether a pattern matches one literal text: an exact pattern, or a text with
+ * no regex syntax.
+ * @param {string} pattern
+ */
+export const isLiteralPattern = (pattern) => exactRegexLiteral(pattern) !== null || escapeRegexLiteral(pattern) === pattern;
 
 /** @param {unknown} value */
 export const normalizeSelectorText = (value) => String(value ?? '').trim();

@@ -20,24 +20,34 @@ REPO = Path(__file__).resolve().parents[1]
 COLOR = "#ff0000"
 
 
-def _payload(feature: SeqFeature, record: str, label: str = "", instance: str | None = None) -> dict:
-    """A feature as the Web sends it; `instance` is None for a catalog written
-    before the catalog carried feature instances."""
+def _payload(feature: SeqFeature, record: str, label: str = "", record_key: str | None = None,
+             feature_id: str | None = None, catalog: bool = True) -> dict:
+    """A feature as the Web sends it: `record_key` and `feature_id` are its
+    catalog identity (the catalog's `recordKey` and `biologicalFeatureId`; by
+    default `record` and the stable hash), which every catalog row carries;
+    None without `catalog`, for a feature that is not a catalog feature."""
     selector = build_feature_selector_values(feature, record)
+    feature_hash = selector.get("hash")
     return dict(
         type=feature.type,
         record=record,
         qualifiers=selector["qualifiers"],
-        selector=dict(hash=selector.get("hash"), instance=instance, location=selector.get("location"),
-                      record_location=selector.get("record_location")),
+        selector=dict(hash=feature_hash, record_key=(record_key or record) if catalog else None,
+                      feature_id=(feature_id or feature_hash) if catalog else None,
+                      location=selector.get("location"), record_location=selector.get("record_location")),
         label=label,
     )
 
 
 def _instances(feature: SeqFeature, *record_keys: str, record: str = "rec") -> list[dict]:
     """The payloads of one feature drawn in each of `record_keys` (the same record twice)."""
-    feature_hash = build_feature_selector_values(feature, record)["hash"]
-    return [_payload(feature, record, instance=feature_instance(str(feature_hash), key)) for key in record_keys]
+    feature_hash = str(build_feature_selector_values(feature, record)["hash"])
+    return [_payload(feature, record, record_key=key, feature_id=feature_hash) for key in record_keys]
+
+
+def _instance(payload: dict) -> str:
+    """The feature instance Python composes from a payload's catalog identity."""
+    return feature_instance(payload["selector"]["feature_id"], payload["selector"]["record_key"])
 
 
 def _cds(index: int, **qualifiers: str) -> SeqFeature:
@@ -46,15 +56,18 @@ def _cds(index: int, **qualifiers: str) -> SeqFeature:
 
 
 def _synthesize(features: list[dict], selected: list[int], rules: list[dict] | None = None,
-                labels: list[list[str]] | None = None, caption: str = "Group", scope: str = "group") -> dict:
+                labels: list[list[str]] | None = None, caption: str = "Group", scope: str = "group",
+                color: str = COLOR) -> dict:
     request = dict(scope=scope, features=features, selected=selected, labels=labels or [[] for _ in selected],
                    rules=[{key: rule[key] for key in ("feat", "qual", "val")} for rule in rules or []],
-                   color=COLOR, caption=caption)
+                   color=color, caption=caption)
     return json.loads(synthesize_color_rules_json(json.dumps(request)))
 
 
 def _next_table(answer: dict, current: list[dict]) -> list[dict]:
-    return [current[row] if isinstance(row, int) else row for row in answer["table"]]
+    """The table as the Web writes it (rule-actions.js `groupColorRules`)."""
+    return [current[row] if isinstance(row, int) else {**current[row["row"]], "val": row["val"]} if "row" in row
+            else row for row in answer["table"]]
 
 
 def _winners(features: list[dict], table: list[dict]) -> list[int]:
@@ -87,7 +100,8 @@ def test_a_feature_colored_by_itself_takes_a_hash_rule_in_place_of_its_own():
     current = [dict(feat="CDS", qual="product", val="^other$", color="#0000ff", cap="others"),
                dict(feat="CDS", qual="hash", val=own, color="#00ff00", cap="one")]
     answer = _synthesize(features, [0], rules=current, labels=[["unique"]], scope="features")
-    assert answer["table"] == [0, {"feat": "CDS", "qual": "hash", "val": own, "color": COLOR, "cap": "Group"}]
+    assert answer["table"] == [0, {"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(features[0])),
+                                   "color": COLOR, "cap": "Group"}]
 
 
 def test_a_condition_that_hits_an_unselected_feature_is_refused():
@@ -110,7 +124,7 @@ def test_gene_and_label_text_conditions_cover_the_selection_and_the_rest_are_has
     table = _next_table(answer, [])
     conditions = sorted((row["qual"], row["val"]) for row in table if row["qual"] != "hash")
     assert conditions == [("gene", "^abcA$"), ("gene", "^abcB$"), ("locus_tag", "^T_4$")]
-    assert [row["val"] for row in table if row["qual"] == "hash"] == [features[4]["selector"]["hash"]]
+    assert [row["val"] for row in table if row["qual"] == "hash"] == [exact_value_pattern(_instance(features[4]))]
     assert _colors(features, table) == [COLOR, COLOR, None, COLOR, COLOR, None]
 
 
@@ -159,7 +173,7 @@ def test_one_of_two_record_instances_with_the_same_hash_is_the_only_target(scope
     features = [first, twin, _payload(_cds(1, product="other"), "rec")]
     answer = _synthesize(features, [0], labels=[["unique thing"]], scope=scope)
     table = _next_table(answer, [])
-    assert table == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(first["selector"]["instance"]),
+    assert table == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(first)),
                       "color": COLOR, "cap": "Group"}]
     assert _colors(features, table) == [COLOR, None, None]
 
@@ -167,7 +181,7 @@ def test_one_of_two_record_instances_with_the_same_hash_is_the_only_target(scope
 def test_one_of_identical_features_of_a_record_is_the_only_target():
     feature = _cds(0)
     feature_hash = build_feature_selector_values(feature, "rec")["hash"]
-    features = [_payload(feature, "rec", instance=feature_instance(f"{feature_hash}~{n}", "k")) for n in (1, 2)]
+    features = [_payload(feature, "rec", record_key="k", feature_id=f"{feature_hash}~{n}") for n in (1, 2)]
     table = _next_table(_synthesize(features, [1], scope="features"), [])
     assert _colors(features, table) == [None, COLOR]
 
@@ -177,7 +191,7 @@ def test_a_hash_rule_a_twin_shares_stays_and_the_new_instance_row_wins_before_it
     features = [first, twin]
     current = [dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#0000ff", cap="both")]
     answer = _synthesize(features, [0], rules=current, scope="features")
-    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(first["selector"]["instance"]),
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(first)),
                                 "color": COLOR, "cap": "Group"}, 0]
     assert _colors(features, _next_table(answer, current)) == [COLOR, "#0000ff"]
 
@@ -186,7 +200,7 @@ def test_a_hash_rule_of_a_feature_without_a_twin_gives_way_to_its_instance_row()
     (only,) = _instances(_cds(0), "k1")
     current = [dict(feat="CDS", qual="hash", val=only["selector"]["hash"], color="#0000ff", cap="old")]
     answer = _synthesize([only], [0], rules=current, scope="features")
-    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(only["selector"]["instance"]),
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(only)),
                                 "color": COLOR, "cap": "Group"}]
 
 
@@ -199,14 +213,59 @@ def test_a_feature_listed_as_drawn_and_from_its_source_is_one_target():
     assert _colors(features, table) == [COLOR, None, COLOR, None]
 
 
-def test_a_feature_of_an_older_catalog_is_named_by_its_stable_hash():
-    # A catalog written before catalogs carried instances names a feature by its
-    # stable hash, as the Session that holds it was drawn: every copy takes the color.
-    feature = _cds(0, product="unique thing")
-    features = [_payload(feature, "rec"), _payload(feature, "rec")]
-    table = _next_table(_synthesize(features, [0], scope="features"), [])
-    assert table == [{"feat": "CDS", "qual": "hash", "val": features[0]["selector"]["hash"], "color": COLOR, "cap": "Group"}]
-    assert _colors(features, table) == [COLOR, COLOR]
+def test_a_feature_of_a_catalog_saved_before_this_change_colors_only_its_instance():
+    # A 0.14.1 catalog row carries `recordKey` and `biologicalFeatureId` and no
+    # instance; Python composes the instance from them, so a saved Session's
+    # copy keeps its color too.
+    row = {"type": "CDS", "biologicalFeatureId": None, "recordKey": None}
+    first, twin = _instances(_cds(0, product="unique thing"), "linear-seq-a", "linear-seq-b")
+    assert set(first["selector"]) - {"hash", "location", "record_location"} == {"record_key", "feature_id"}
+    assert set(row) - {"type"} == {"biologicalFeatureId", "recordKey"}
+    table = _next_table(_synthesize([first, twin], [1], scope="features"), [])
+    assert _colors([first, twin], table) == [None, COLOR]
+
+
+def test_a_feature_without_a_catalog_identity_takes_no_hash_rule():
+    features = [_payload(_cds(0), "rec", catalog=False)]
+    assert _synthesize(features, [0], scope="features")["table"] == []
+
+
+def test_a_reset_of_one_copy_retargets_the_hash_rule_its_twin_shares():
+    # An older "This feature only" row names the stable hash both copies share;
+    # resetting one copy keeps the twin's color and Legend row.
+    first, twin = _instances(_cds(0), "k1", "k2")
+    features = [first, twin, dict(first), dict(twin)]
+    shared = dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#0000ff", cap="both", fromFile=True)
+    current = [shared, dict(feat="CDS", qual="product", val="^x$", color="#00ff00", cap="x")]
+    answer = _synthesize(features, [0], rules=current, scope="reset", color="")
+    assert answer["table"] == [{"row": 0, "val": exact_value_pattern(_instance(twin))}, 1]
+    table = _next_table(answer, current)
+    assert table[0] == {**shared, "val": exact_value_pattern(_instance(twin))}
+    assert _colors(features, table) == [None, "#0000ff", None, "#0000ff"]
+
+
+def test_a_reset_takes_back_the_instance_row_and_a_hash_row_no_other_feature_holds():
+    first, twin = _instances(_cds(0), "k1", "k2")
+    (other,) = _instances(_cds(1), "k1")
+    current = [dict(feat="CDS", qual="hash", val=exact_value_pattern(_instance(first)), color="#0000ff", cap="mine"),
+               dict(feat="CDS", qual="hash", val=other["selector"]["hash"], color="#00ff00", cap="other"),
+               dict(feat="CDS", qual="hash", val=exact_value_pattern(_instance(twin)), color="#0000ff", cap="mine")]
+    assert _synthesize([first, twin, other], [0], rules=current, scope="reset", color="")["table"] == [1, 2]
+    assert _synthesize([first, twin, other], [2], rules=current, scope="reset", color="")["table"] == [0, 2]
+
+
+def test_a_reset_feature_another_rule_still_colors_takes_the_reset_color():
+    first, twin = _instances(_cds(0, product="x"), "k1", "k2")
+    current = [dict(feat="CDS", qual="hash", val=first["selector"]["hash"], color="#0000ff", cap="both"),
+               dict(feat="CDS", qual="product", val="^x$", color="#00ff00", cap="x")]
+    answer = _synthesize([first, twin], [0], rules=current, scope="reset", color="#999999", caption="other proteins")
+    table = _next_table(answer, current)
+    assert _colors([first, twin], table) == ["#999999", "#0000ff"]
+    assert {"feat": "CDS", "qual": "hash", "val": exact_value_pattern(_instance(first)), "color": "#999999",
+            "cap": "other proteins"} in table
+    # Without another rule, the feature takes no row: it shows its palette color.
+    answer = _synthesize([first, twin], [0], rules=current[:1], scope="reset", color="#999999", caption="other proteins")
+    assert _colors([first, twin], _next_table(answer, current[:1])) == [None, "#0000ff"]
 
 
 def test_a_feature_without_hash_or_condition_is_declined():
@@ -248,10 +307,11 @@ def test_a_new_hash_rule_goes_before_a_broader_old_hash_rule_that_colors_the_fea
     # colors it, so the new row cannot take the own row's place.
     seqs = [_cds(0, product="kinase"), _cds(1, product="kinase")]
     features = [_payload(f, "rec") for f in seqs]
-    features[0]["selector"]["hash"], features[1]["selector"]["hash"] = "aaa1", "zzz9"
+    for feature, value in zip(features, ("aaa1", "zzz9")):
+        feature["selector"]["hash"] = feature["selector"]["feature_id"] = value
     current = [dict(feat="CDS", qual="hash", val="aaa1|zzz9", color="#0000ff", cap="both"),
                dict(feat="CDS", qual="hash", val="aaa1", color="#00ff00", cap="one")]
     answer = _synthesize(features, [0], rules=current, labels=[["kinase"]], scope=scope)
     table = _next_table(answer, current)
     assert _colors(features, table) == [COLOR, "#0000ff"]
-    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": "aaa1", "color": COLOR, "cap": "Group"}, 0]
+    assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": r"^aaa1@rec$", "color": COLOR, "cap": "Group"}, 0]

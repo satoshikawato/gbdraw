@@ -7,12 +7,11 @@
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { runWhenPrepared } from '../rule-matching.js';
+import { runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
-import { formatFeatureRange, getFeatureColorRuleHash, getFeatureInstance } from '../../services/feature-utils.js';
-import { exactRegexValue } from '../../services/feature-selector.js';
+import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
@@ -1008,15 +1007,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       : override;
   };
 
-  // A single-feature color rule names the feature instance exactly (PD-OI-069
-  // revision 2): another feature with the same stable hash, of the same file
-  // drawn twice or identical in its record, keeps its color. A feature of a
-  // catalog written before catalogs carried instances is named by its stable
-  // hash, which those features share.
+  // A feature that has a stable hash can take a single-feature color rule. The
+  // rule a color edit writes is Python's (`groupColorRules`): it names the
+  // feature instance, which Python composes from the catalog identity
+  // (PD-OI-069 revision 2). This stable-hash condition only prepares the rule
+  // matches a color action reads before it commits.
   /** @param {ColorFeature} feat */
   const getFeatureQualifier = (feat) => {
-    const instance = getFeatureInstance(feat);
-    if (instance) return { qual: 'hash', val: exactRegexValue(instance) };
     const colorRuleHash = getFeatureColorRuleHash(feat);
     return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };
@@ -1024,7 +1021,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // OV-244: the next table of a color edit is Python's. A group takes exact
   // rules on the feature type and its product, gene, or a label text the
   // features show, matching no unselected feature, and `hash` rules for the
-  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule.
+  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule,
+  // and "reset" takes back the `hash` rules that name the features, each
+  // feature that another rule still colors taking `color` unless it is empty.
   /**
    * @param {readonly ColorFeature[]} features
    * @param {string} color
@@ -1035,7 +1034,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const groupColorRules = (features, color, caption, scope) => async (current) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
     const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
-    return table.map((row) => (typeof row === 'number' ? current[row] : row));
+    return synthesizedRuleTable(table, current);
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */

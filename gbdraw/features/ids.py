@@ -349,8 +349,10 @@ def feature_instance(biological_feature_id: str, record_key: str) -> str:
     A `hash` color rule whose pattern matches it colors that feature only,
     while its stable hash names every feature with the same record ID, type,
     and location (the same file drawn twice, identical features of one
-    record). The Web feature catalog (``instance``) and the renderer's rule
-    matcher (``feature_instances``) compose it here, and no other code does.
+    record). The renderer's rule matcher (``feature_instances``) and the Web's
+    rule matching and synthesis (``gbdraw.web_support.rule_matching``, from the
+    catalog's ``biologicalFeatureId`` and ``recordKey``) compose it here, and no
+    other code does.
     """
     return f"{biological_feature_id}@{record_key}"
 
