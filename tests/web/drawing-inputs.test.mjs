@@ -291,6 +291,33 @@ test('a card step is the shown drawing\'s: Undo from another drawing never undoe
   bindInputFile(state.inputFiles, circular.slices.inputs, 't_color', null);
 });
 
+// S-1 (DESIGN §2): a drawing's History intent holds its inputs slice capture,
+// the slice's own copy, not a field list of History's. It leaves out what is
+// not an edit: the comparisons a Generate writes (the artifact checkpoint keeps
+// them) and the Circular record list and discovery, which are derived status.
+// The Linear comparison plan's files stay with the plan (settings slice).
+test('a History intent\'s files are the drawing\'s inputs slice capture', async () => {
+  const { buildConfigData, applyCapturedConfigData } = await import('../../gbdraw/web/js/services/config.js');
+  const { createHistorySnapshotService } = await import('../../gbdraw/web/js/services/history-snapshot.js');
+  const { INPUTS_SLICE } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const snapshots = createHistorySnapshotService({
+    state, fileStore: state.inputFiles, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
+  });
+  const circular = state.drawingOfMode('circular');
+  bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', fileNamed('keep.tsv'));
+  for (const drawing of [circular, state.drawingOfMode('linear')]) {
+    const { files, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
+    const { linearCanonicalComparisons: _generated, ...bound } = files;
+    const intent = snapshots.drawingHistory(drawing.id).buildIntent();
+    const expected = JSON.parse(JSON.stringify({
+      ...bound, inputType, linearSeqs,
+      linearComparisons: drawing.linearComparisonPlan.edges.map((edge) => ({ id: edge.id, file: edge.file ?? null }))
+    }));
+    assert.deepEqual(intent.files, expected, drawing.mode);
+  }
+  bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', null);
+});
+
 // Save writes each drawing's own five card bindings (DESIGN §1
 // `drawings[i].webFiles.bindings`).
 test('Save writes each drawing\'s own card bindings', async () => {
