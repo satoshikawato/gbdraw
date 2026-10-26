@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "một khe track {mode} chuẩn sai định dạng.",
   "a canonical {mode} track slot is not accepted by the current CLI.": "CLI hiện tại không chấp nhận một khe track {mode} chuẩn.",
   "a comparison cannot be bound losslessly to its source records.": "không thể gắn một so sánh với các bản ghi nguồn của nó mà không mất thông tin.",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "một quy tắc màu feature chỉ định các thực thể feature bằng một mẫu mà khoá bản ghi CLI không thể chứa.",
   "a feature edit has a value that the feature override table cannot carry.": "một chỉnh sửa feature có giá trị mà bảng ghi đè feature không thể chứa.",
   "a feature edit names a feature identity that no table row can carry.": "một chỉnh sửa feature trỏ đến định danh feature mà không hàng nào trong bảng có thể chứa.",
   "a feature edit or placement names a feature that the source does not have.": "một chỉnh sửa hoặc bố trí feature trỏ đến một feature mà nguồn không có.",

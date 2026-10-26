@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "正規の{mode}トラックスロットの形式が不正です。",
   "a canonical {mode} track slot is not accepted by the current CLI.": "正規の{mode}トラックスロットは、現在のCLIでは受け付けられません。",
   "a comparison cannot be bound losslessly to its source records.": "比較を、そのソースレコードに情報を失わずに結び付けることができません。",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "フィーチャーの色ルールが、CLIのレコードキーでは表せないパターンでフィーチャーのインスタンスを指定しています。",
   "a feature edit has a value that the feature override table cannot carry.": "フィーチャーの編集に、フィーチャーの上書き表では保持できない値が含まれています。",
   "a feature edit names a feature identity that no table row can carry.": "フィーチャーの編集が指しているフィーチャーの識別情報を、表の行では保持できません。",
   "a feature edit or placement names a feature that the source does not have.": "フィーチャーの編集または配置が、ソースに存在しないフィーチャーを指しています。",

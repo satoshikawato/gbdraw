@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "slot track kanonik pada mode {mode} salah format.",
   "a canonical {mode} track slot is not accepted by the current CLI.": "slot track kanonik pada mode {mode} tidak diterima oleh CLI saat ini.",
   "a comparison cannot be bound losslessly to its source records.": "perbandingan tidak dapat diikat ke record sumbernya tanpa kehilangan data.",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "aturan warna fitur menamai instans fitur dengan pola yang tidak dapat dibawa oleh kunci record CLI.",
   "a feature edit has a value that the feature override table cannot carry.": "edit fitur memiliki nilai yang tidak dapat dibawa oleh tabel penimpaan fitur.",
   "a feature edit names a feature identity that no table row can carry.": "edit fitur merujuk ke identifikasi fitur yang tidak dapat dibawa oleh baris tabel mana pun.",
   "a feature edit or placement names a feature that the source does not have.": "edit atau penempatan fitur merujuk ke fitur yang tidak ada di sumber.",

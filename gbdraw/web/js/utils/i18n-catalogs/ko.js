@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "표준 {mode} 트랙 슬롯의 형식이 올바르지 않습니다.",
   "a canonical {mode} track slot is not accepted by the current CLI.": "현재 CLI는 표준 {mode} 트랙 슬롯을 지원하지 않습니다.",
   "a comparison cannot be bound losslessly to its source records.": "비교를 원본 레코드에 손실 없이 연결할 수 없습니다.",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "feature 색 규칙이 CLI 레코드 키가 담을 수 없는 패턴으로 feature 인스턴스를 지정합니다.",
   "a feature edit has a value that the feature override table cannot carry.": "feature 편집에 feature 재정의 표가 담을 수 없는 값이 있습니다.",
   "a feature edit names a feature identity that no table row can carry.": "표의 어떤 행에도 담을 수 없는 feature 식별 정보를 feature 편집이 지정하고 있습니다.",
   "a feature edit or placement names a feature that the source does not have.": "feature 편집 또는 배치가 원본에 없는 feature를 지정하고 있습니다.",

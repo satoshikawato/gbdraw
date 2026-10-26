@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "规范的 {mode} 轨道槽位格式错误。",
   "a canonical {mode} track slot is not accepted by the current CLI.": "当前CLI不接受规范的 {mode} 轨道槽位。",
   "a comparison cannot be bound losslessly to its source records.": "无法将比较无损地绑定到其来源记录。",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "某条特征颜色规则用 CLI 记录键无法承载的匹配模式来指定特征实例。",
   "a feature edit has a value that the feature override table cannot carry.": "某个特征编辑含有特征覆盖表格无法承载的值。",
   "a feature edit names a feature identity that no table row can carry.": "某个特征编辑指定了表格行无法承载的特征标识。",
   "a feature edit or placement names a feature that the source does not have.": "某个特征编辑或放置指定了来源中不存在的特征。",

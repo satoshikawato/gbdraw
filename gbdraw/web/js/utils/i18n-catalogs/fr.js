@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "en mode {mode}, un emplacement de piste canonique est mal formé.",
   "a canonical {mode} track slot is not accepted by the current CLI.": "en mode {mode}, un emplacement de piste canonique n’est pas accepté par le CLI actuel.",
   "a comparison cannot be bound losslessly to its source records.": "une comparaison ne peut pas être liée sans perte d’information à ses enregistrements source.",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "une règle de couleur d’élément désigne des instances d’élément par un motif que les clés d’enregistrement de la CLI ne peuvent pas représenter.",
   "a feature edit has a value that the feature override table cannot carry.": "une modification d’élément contient une valeur que la table de remplacement des éléments ne peut pas représenter.",
   "a feature edit names a feature identity that no table row can carry.": "une modification d’élément désigne une identification d’élément qu’aucune ligne de table ne peut représenter.",
   "a feature edit or placement names a feature that the source does not have.": "une modification ou un placement d’élément désigne un élément que la source ne contient pas.",

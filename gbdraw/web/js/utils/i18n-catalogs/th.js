@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "ช่องแทร็ก {mode} มาตรฐานมีรูปแบบไม่ถูกต้อง",
   "a canonical {mode} track slot is not accepted by the current CLI.": "CLI ปัจจุบันไม่รองรับช่องแทร็ก {mode} มาตรฐาน",
   "a comparison cannot be bound losslessly to its source records.": "ผูกการเปรียบเทียบเข้ากับระเบียนต้นทาง โดยไม่สูญเสียข้อมูลไม่ได้",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "กฎสีของฟีเจอร์ระบุอินสแตนซ์ของฟีเจอร์ด้วยรูปแบบ ซึ่งคีย์ระเบียนของ CLI เก็บไม่ได้",
   "a feature edit has a value that the feature override table cannot carry.": "การแก้ไขฟีเจอร์หนึ่งรายการมีค่า ซึ่งตารางการลบล้างฟีเจอร์เก็บไม่ได้",
   "a feature edit names a feature identity that no table row can carry.": "การแก้ไขฟีเจอร์หนึ่งรายการระบุข้อมูลระบุของฟีเจอร์ ซึ่งไม่มีแถวใดของตารางเก็บได้",
   "a feature edit or placement names a feature that the source does not have.": "การแก้ไขฟีเจอร์หรือการวางฟีเจอร์ระบุฟีเจอร์ที่ไม่มีในต้นทาง",

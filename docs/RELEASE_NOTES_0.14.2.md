@@ -14,9 +14,14 @@ published packages, and [Installation](./INSTALL.md) explains each install route
 
 ## Fixed
 
-- The popup fill with **This feature only** colors only the clicked feature,
-  also when two File cards hold the same record ID or the same file. The rule
-  value names the feature instance.
+- A "This feature only" color colors only the clicked feature of the clicked
+  File card and record, live and after Generate, also when two File cards hold
+  the same file or two records share an ID. The rule's `hash` value now names
+  the feature instance (`<feature id>@<record key>`). Resetting one copy leaves
+  the others as they are.
+- Two identical `source` features of a record, one shown by its own Feature
+  visibility, have the same feature IDs in the Web feature list as in the
+  drawing and in a feature identity table.
 - The Legend is laid out at the width of its painted captions, so a caption in
   a monospace or other wide face is no longer cut off at the canvas edge. A
   corner Legend that fits beside the records no longer grows the canvas.
@@ -78,7 +83,7 @@ published packages, and [Installation](./INSTALL.md) explains each install route
   wheels, fonts, icons, or LOSAT wasm again.
 - **Command line and Python.** Replaying a Session, rendering, and Similarity
   group inference do less repeated work and hold less memory, with the same
-  SVG and the same Sessions. The installed `gbdraw` command sets
+  SVG and the same Sessions; GC content and GC skew of a 52 Mb Circular diagram peak at 576 MiB RSS instead of 750 MiB. The installed `gbdraw` command sets
   `OPENBLAS_NUM_THREADS=1` before NumPy loads, which cuts the CPU time of a
   one-shot render without changing its wall time.
 
@@ -100,6 +105,10 @@ The browser wheel grows from 3.7 MB to 6.5 MB because it carries Pyodide
 bytecode, so the PyPI wheel and the sdist each grow by about 2.8 MB.
 
 ## Known issues
+
+New in this release:
+
+- A "This feature only" color belongs to its record key, like the other per-feature edits, so it does not apply while the record is drawn under another key (OV-1949).
 
 Carried from 0.14.1:
 

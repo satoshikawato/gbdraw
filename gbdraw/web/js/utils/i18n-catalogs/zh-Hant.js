@@ -2566,6 +2566,7 @@ export default Object.freeze({
   "a canonical {mode} track slot is malformed.": "標準的 {mode} 軌道槽位格式不正確。",
   "a canonical {mode} track slot is not accepted by the current CLI.": "目前的CLI不接受標準的 {mode} 軌道槽位。",
   "a comparison cannot be bound losslessly to its source records.": "比較無法無損地對應到其來源記錄。",
+  "a feature color rule names feature instances by a pattern that the CLI record keys cannot carry.": "某條特徵顏色規則用 CLI 記錄鍵無法承載的比對模式來指定特徵實例。",
   "a feature edit has a value that the feature override table cannot carry.": "某項特徵編輯含有特徵覆寫表格無法承載的值。",
   "a feature edit names a feature identity that no table row can carry.": "某項特徵編輯指定了表格中任何一列都無法承載的特徵識別資訊。",
   "a feature edit or placement names a feature that the source does not have.": "特徵編輯或特徵放置指定的特徵不存在於來源中。",
