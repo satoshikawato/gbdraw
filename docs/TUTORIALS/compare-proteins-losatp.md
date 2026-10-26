@@ -53,7 +53,11 @@ files selected.
 
 Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
 the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** below the File list four times and upload the remaining files in the table order.
-Keep each record whole: leave all optional Region fields blank.
+MIBiG has already cut each cluster out of its genome, so each file holds one
+cluster. Keep each record whole: leave all optional Region fields blank. For a
+cluster inside a whole genome of your own, you would first enter its
+coordinates in the record's options (**Record options** for a one-record file)
+› **Region (optional)** › **Start** and **End**.
 
 In **File 5**, open **Record options** and turn on
 **Reverse complement** only for `BGC0000713`. This changes only its display

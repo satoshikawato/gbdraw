@@ -206,7 +206,8 @@
   ],
   "persistedContractCoChange": {
     "exemptGeneratedExports": [
-      "EXPECTED_WEB_RUNTIME_CAPABILITIES"
+      "EXPECTED_WEB_RUNTIME_CAPABILITIES",
+      "ORGANISM_NAME_RULE"
     ],
     "sessionVersionUnit": "main"
   }
