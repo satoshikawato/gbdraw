@@ -4,6 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const inspect = (page, mode) => page.evaluate(async mode => {
   const { state: s } = await import('./js/state.js');
@@ -172,11 +173,11 @@ for (const width of [1440, 390]) {
       const sessionPath = testInfo.outputPath('pixel.gbdraw-session.json.gz');
       const savedBytes = await download(page, 'Save Session', sessionPath);
       const saved = JSON.parse(gunzipSync(savedBytes));
-      const savedSlot = saved.modes[mode].config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content');
+      const savedSlot = savedDrawing(saved, mode).config.adv[`${mode}_track_slots`].find(slot => slot.id === 'gc_content');
       expect(savedSlot.enabled).toBe(false);
       if (mode === 'linear') { expect(savedSlot.height).toBe('10px'); expect(savedSlot.spacing).toBe('10px'); }
       else { expect(savedSlot.inner_gap_px).toBe('10'); expect(savedSlot.outer_gap_px).toBe('10'); }
-      expect(saved.renderRequest).toEqual(control.request);
+      expect(shownSavedDrawing(saved).renderRequest).toEqual(control.request);
       console.log(`pixel ${mode}/${width}: Session Load`);
       const restored = await load(browser, sessionPath, { width, height: 1000 });
       const restoredState = await inspect(restored, mode);

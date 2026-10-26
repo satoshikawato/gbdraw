@@ -6,6 +6,7 @@ const { promisify } = require('node:util');
 const { gunzipSync } = require('node:zlib');
 const { test, expect } = require('@playwright/test');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
@@ -351,9 +352,9 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   const savedPath = await (await pendingSave).path();
   const saved = JSON.parse(gunzipSync(fs.readFileSync(savedPath)));
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
-  expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
-  expect(saved.modes[saved.ui.mode].config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
+  expect(shownSavedDrawing(saved).renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
+  expect(shownSavedDrawing(saved).renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
+  expect(shownSavedDrawing(saved).config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
     placement: 'anchor',
     anchor: 'midpoint',

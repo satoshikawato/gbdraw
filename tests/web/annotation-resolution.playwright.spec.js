@@ -4,6 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
 const { openApp, generateAndWaitForResult, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 const artifact = (page) => page.evaluate(async () => {
@@ -119,7 +120,7 @@ for (const width of [1440, 390]) {
     await (await pendingSession).saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
     expect(session.runMetadata.annotationWarnings).toEqual(all.warnings);
-    expect(session.modes[session.ui.mode].config.annotationSets.map((set) => set.annotations.length)).toEqual(tables.setCounts);
+    expect(shownSavedDrawing(session).config.annotationSets.map((set) => set.annotations.length)).toEqual(tables.setCounts);
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {
       const fresh = await context.newPage();

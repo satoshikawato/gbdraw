@@ -4,6 +4,7 @@ const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const seed = resolve('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
 const conservationSession = resolve('tests/fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz');
@@ -123,7 +124,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     const savedPath = testInfo.outputPath('restored.gbdraw-session.json.gz');
     await download.saveAs(savedPath);
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('out');
+    expect(shownSavedDrawing(saved).config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
     const freshContext = await browser.newContext({ baseURL });

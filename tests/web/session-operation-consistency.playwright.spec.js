@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const fixture = (name = 'HmmtDNA_basic_circular') => ({
   name: `${name}.gbdraw-session.json`, mimeType: 'application/json',
@@ -146,7 +147,7 @@ for (const operation of ['save', 'load']) {
       await download.saveAs(path);
       const saved = JSON.parse(gunzipSync(readFileSync(path)));
       expect(saved.ui.zoom).not.toBe(browsedZoom);
-      expect(saved.modes[saved.ui.mode].config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
+      expect(shownSavedDrawing(saved).config).toEqual(JSON.parse(await page.evaluate(() => window.beforeSession.config)));
     }
     await expectIntact(page);
     await expect(page.getByRole('button', { name: 'Load Session', exact: true })).toBeEnabled();
@@ -333,10 +334,10 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const file = info.outputPath('private-draft.json.gz');
   await (await download).saveAs(file);
   const saved = JSON.parse(gunzipSync(readFileSync(file)));
-  expect(saved.renderRequest.records).toHaveLength(1);
-  expect(saved.renderRequest.records[0]).toMatchObject({ cardinality: 'all', selector: null });
-  const resourceId = saved.renderRequest.records[0].source.resourceId;
+  expect(shownSavedDrawing(saved).renderRequest.records).toHaveLength(1);
+  expect(shownSavedDrawing(saved).renderRequest.records[0]).toMatchObject({ cardinality: 'all', selector: null });
+  const resourceId = shownSavedDrawing(saved).renderRequest.records[0].source.resourceId;
   expect(Buffer.from(saved.resources[resourceId].data, 'base64').toString('utf8')).toBe(text + text);
-  expect(saved.results).toEqual([]);
+  expect(shownSavedDrawing(saved).results).toEqual([]);
   expect(await page.evaluate(() => privateSaveEvents)).toEqual([{ count: 1, sameSource: true }]);
 });
