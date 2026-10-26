@@ -227,8 +227,8 @@ Results are dropped until the next render. A drawing whose Results are dropped
 gets one line in `warnings` that names each dropped Result, and the line is
 logged as a warning. Render the drawing and save the Session to write new
 Results. Sessions 27–30 have no canonical request and raise
-`SessionVersionError`. A Session 46 or 47 keeps its drawings and is written as
-Session 48 ([compatibility](session-and-request-compatibility.md)).
+`SessionVersionError`. A Session 46 to 48 moves each mode's part into its own drawing and is written as
+Session 49 ([compatibility](session-and-request-compatibility.md)).
 
 Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands

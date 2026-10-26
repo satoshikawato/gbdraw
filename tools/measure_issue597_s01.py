@@ -20,6 +20,8 @@ import psutil
 from playwright.sync_api import sync_playwright
 import websocket
 
+from gbdraw.session_drawings import checked_drawing_views
+
 ROOT = Path(__file__).resolve().parents[1]
 OBSERVER = ROOT / "tests/web/fixtures/issue597-session-measurement.js"
 VIBRIO = (
@@ -40,7 +42,11 @@ def document(path):
 
 
 def summary(path):
-    data = document(path)
+    whole = document(path)
+    # The summary reads the one drawing of a Session 49; the whole-document hash and the version stay the file's.
+    data = whole
+    if "drawings" in whole:
+        (data,) = checked_drawing_views(whole)
 
     def normalise_numbers(value):
         # JSON has one numeric type. CLI 1.0 and browser 1 are the same value;
@@ -66,7 +72,7 @@ def summary(path):
     return {
         "sha256": sha(path),
         "bytes": path.stat().st_size,
-        "version": data.get("version"),
+        "version": whole.get("version"),
         "requestSchema": data.get("renderRequest", {}).get("schema"),
         "records": len(data.get("renderRequest", {}).get("records", [])),
         "features": sum(
@@ -77,7 +83,7 @@ def summary(path):
         ),
         "cacheEntries": len(data.get("losatCache", {}).get("entries", [])),
         "hashes": {k: digest(v) for k, v in data.items()},
-        "wholeHash": digest(data),
+        "wholeHash": digest(whole),
     }
 
 

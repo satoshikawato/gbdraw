@@ -32,8 +32,7 @@ from gbdraw.session_io import (
     validate_session,
 )
 
-# The flip (B2d-3) moves them up to fixtures/sessions/, which the Web fixture walks list.
-FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions" / "drawings-v49"
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions"
 V49 = sorted(FIXTURES.glob("drawings-*.v49.gbdraw-session.json.gz"))
 Document = dict[str, Any]
 

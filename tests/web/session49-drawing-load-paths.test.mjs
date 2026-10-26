@@ -30,7 +30,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
-const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/drawings-v49/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
 const load = async (session) => {
   const loaded = await importSession({
     target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }

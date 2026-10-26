@@ -35,7 +35,7 @@ Session 49, and Save writes it. Reading a Session 46 to 48 moves each mode's
 part into its own drawing (`circular`, `linear`), the rules of
 `services/session-drawings-upgrade.js` in the Web app and of the 46-48 step of
 `upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
-once at Load. Fixtures: `tests/fixtures/sessions/drawings-v49/`.
+once at Load. Fixtures: `tests/fixtures/sessions/`.
 
 ## Unreleased: one comparison-match attribute in saved Results
 

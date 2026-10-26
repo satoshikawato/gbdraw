@@ -1402,7 +1402,7 @@ assert.equal(failedImportEvent.target.value, '');
 // nothing to what the displayed-artifact port gives back.
 const { gunzipSync } = await import('node:zlib');
 const session49 = JSON.parse(gunzipSync(await readFile(
-  'tests/fixtures/sessions/drawings-v49/drawings-circular-only.v49.gbdraw-session.json.gz'
+  'tests/fixtures/sessions/drawings-circular-only.v49.gbdraw-session.json.gz'
 )).toString('utf8'));
 const drawingsBefore49 = state.drawingList();
 const tabsBefore49 = state.drawingTabs.value;

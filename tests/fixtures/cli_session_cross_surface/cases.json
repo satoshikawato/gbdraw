@@ -1,5 +1,5 @@
 {
-  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records. `legacySessions` are Sessions of the case that older CLI writers on main wrote (OV-269, see each provenance file); every surface must draw the case's current CLI figure from them.",
+  "description": "CLI Sessions that every load surface must draw as the CLI did (D-01, OV-221). Paths are relative to the repository root; the tables cover the lambda (NC_001416) and human mitochondrial (HmmtDNA) records. `legacySessions` are Sessions of the case that older CLI writers on main wrote (OV-269, see each provenance file); every surface must draw the case's current CLI figure from them. `drawings` are the drawing IDs a case compares (default: the one drawing its `mode` names). A case with `session` and no `args` starts from that Session 49 fixture instead of a CLI run: its CLI figure of each drawing is `gbdraw render --session FILE --drawing ID`, and every other surface must draw that drawing as the CLI did.",
   "cases": [
     {
       "id": "linear_tables",
@@ -75,6 +75,16 @@
         "--losat", "losatp", "--losatp_mode", "similarity_groups",
         "-t", "tests/fixtures/cli_session_cross_surface/colors.tsv",
         "--feature_visibility_table", "tests/fixtures/cli_session_cross_surface/visibility.tsv"]
+    },
+    {
+      "id": "drawings_circular_linear",
+      "session": "tests/fixtures/sessions/drawings-circular-linear.v49.gbdraw-session.json.gz",
+      "drawings": ["circular", "linear"]
+    },
+    {
+      "id": "drawings_linear_pair",
+      "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v49.gbdraw-session.json.gz",
+      "drawings": ["linear-2"]
     }
   ]
 }
