@@ -32,7 +32,7 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const v49Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
-  '../fixtures/sessions/drawings-v49/drawings-circular-linear.v49.gbdraw-session.json.gz', import.meta.url
+  '../fixtures/sessions/drawings-circular-linear.v49.gbdraw-session.json.gz', import.meta.url
 ))));
 // The Load hands its caller the artifact slot of each drawing it does not
 // show (app-setup keeps them; Save writes each drawing's request metadata from

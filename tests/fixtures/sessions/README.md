@@ -356,10 +356,8 @@ Session 48 to drawings (`tests/test_session_compat.py`,
 `drawings-vectors.json` `upgrades`). The route, inputs and checks are in
 `two-mode-linear-shown.v48.provenance.json`.
 
-The four `drawings-v49/drawings-*.v49.gbdraw-session.json.gz` files are Session 49
-(`drawings`, DESIGN §1), which Python reads before the Web does (D-15-81).
-They stay in `drawings-v49/`, which the Web's fixture walks do not list, until
-the Web reads Session 49.
+The four `drawings-*.v49.gbdraw-session.json.gz` files are Session 49
+(`drawings`, DESIGN §1).
 `gbdraw.session_drawings.write_session_drawings(version=49)` wrote each from a
 fixture above, upgraded to Session 48 first, leaving out the resources no
 drawing names: `circular-only` (one Circular drawing,

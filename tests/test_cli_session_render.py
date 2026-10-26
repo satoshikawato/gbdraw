@@ -1017,7 +1017,7 @@ def test_a_cli_resave_that_promotes_the_last_candidate_drops_the_legacy_evidence
 
 
 # Session 49: several drawings of one mode (DESIGN §8 row B2a, B3 / OV-139).
-DRAWINGS_V49 = SESSION_FIXTURES / "drawings-v49"
+DRAWINGS_V49 = SESSION_FIXTURES
 
 
 def _linear_pair() -> Path:

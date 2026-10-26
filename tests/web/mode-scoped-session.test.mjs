@@ -683,7 +683,7 @@ test('Load reads each Result set\'s request, reset receipt and catalog where the
 });
 
 // Session 49 (D-15-109): the Web reads the drawings document Python writes.
-const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/drawings-v49/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
 const loadKeepingSlots = async (session) => {
   const stashed = [];
   let opening = null;
