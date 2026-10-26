@@ -89,3 +89,16 @@ export const logicalResultsOf = (results) => normalizeLogicalResults(results.map
   name: result.name || `Result ${index + 1}`,
   content: result.content
 })));
+
+/**
+ * A Session's stored Results as Load reads them: each entry's name and text
+ * (a Result without a name is named by its place, one without text is
+ * empty); an entry that is no object reads as nameless and empty.
+ * @param {unknown} stored The file's `results` (no list reads as none).
+ */
+export const storedLogicalResults = (stored) => normalizeLogicalResults(
+  (Array.isArray(stored) ? stored : []).map((/** @type {{ name?: unknown, content?: unknown } | null | undefined} */ result, index) => ({
+    name: result?.name || `Result ${index + 1}`,
+    content: result?.content || ''
+  }))
+);

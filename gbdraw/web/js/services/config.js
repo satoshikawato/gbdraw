@@ -138,7 +138,7 @@ import {
   isSessionResourceFileView,
   webBindingInputSlot
 } from './session-resource-backing.js';
-import { logicalResultsOf, normalizeLogicalResults } from './result-normalization.js';
+import { logicalResultsOf, normalizeLogicalResults, storedLogicalResults } from './result-normalization.js';
 import {
   admitCurrentSessionResults,
   admitLegacyImportedResults,
@@ -2108,12 +2108,7 @@ export const restoreCurrentWriterActiveConfig = ({
  * @param {{ adopt?: boolean }} [options]
  */
 const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {}) => {
-  const results = normalizeLogicalResults(
-    (Array.isArray(data.results) ? data.results : []).map((/** @type {unknown} */ stored, /** @type {number} */ index) => {
-      const result = /** @type {UnvalidatedFields<'name' | 'content'>} */ (stored);
-      return { name: result?.name || `Result ${index + 1}`, content: result?.content || '' };
-    })
-  );
+  const results = storedLogicalResults(data.results);
   const catalog = /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog ?? null;
   if (catalog === null) return null;
   return validateFeatureCatalogForImport(catalog, results, {
@@ -3064,12 +3059,7 @@ const buildLoadedArtifactSlot = (set, {
   webFiles, retainedBytes, repairs, conservationPairs
 }) => {
   const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
-  const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
-    (/** @type {Record<string, any>} */ result, /** @type {number} */ index) => ({
-      name: result?.name || `Result ${index + 1}`,
-      content: result?.content || ''
-    })
-  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet, savedEdits, legacy });
+  const results = admittedResults || admitLoadedSetResults(storedLogicalResults(set.results), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet, savedEdits, legacy });
   const features = featureStateFromCatalog(featureCatalog, { mode });
   const editorState = normalizeEditorStateData(
     isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
@@ -6173,8 +6163,10 @@ const importSessionDocument = async (e, options = {}) => {
       /** @type {LoadRepair[]} */
       const fileRepairs = [...fileRead.repairs];
       const fileParts = await readSessionImportParts(fileDocument, fileRead.value, fileRepairs, uncomposedSets);
-      // The stored figure is the Results the readers kept; one Load cannot
-      // admit drops the file's one set (at its top level) as A20 does.
+      // The stored figure is the Results the readers kept, admitted by the
+      // owner Load admits the file's set with (OV-1932): a Session 40-44's
+      // with its catalog, a 27-39's by legacy repair (`applyResultsData`).
+      // One Load cannot admit drops the file's one set (at its top level) as A20 does.
       if (!storedFigureWithdrawal) {
         storedFigureWithdrawal = {
           results: previewRuntimePorts.currentResults(),
@@ -6182,7 +6174,16 @@ const importSessionDocument = async (e, options = {}) => {
           failedGeneratePreservedResult: state.failedGeneratePreservedResult.value
         };
         const { results: storedResults, ui: storedUi } = /** @type {{ results?: unknown, ui?: { selectedResultIndex?: unknown } }} */ (fileParts.data);
-        admittedOrUncomposed('', () => applyResultsData(Array.isArray(storedResults) ? storedResults : [], storedUi ?? {}));
+        const storedRequest = fileParts.adoptedSession?.canonical?.renderRequest ?? null;
+        const storedCatalog = fileParts.validatedFeatureCatalog;
+        admittedOrUncomposed('', () => applyResultsData(storedRequest && storedCatalog
+          ? admitLoadedSetResults(storedLogicalResults(storedResults), {
+              featureCatalog: storedCatalog,
+              mode: storedRequest.mode === 'linear' ? 'linear' : 'circular',
+              selectedFeatureTypes: storedRequest.diagramOptions?.selectedFeaturesSet,
+              savedEdits: null
+            })
+          : storedLogicalResults(storedResults), storedUi ?? {}));
         await nextTick();
       }
       // Its one draft is read by the draft field readers here, at the file's
@@ -6478,12 +6479,7 @@ const importSessionDocument = async (e, options = {}) => {
     const importedResults = legacyStoredResults ?? (canonicalSession
       ? projectionResult.artifactState.results
       : data.results);
-    const logicalImportedResults = normalizeLogicalResults(
-      (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
-        name: result?.name || `Result ${index + 1}`,
-        content: result?.content || ''
-      }))
-    );
+    const logicalImportedResults = storedLogicalResults(importedResults);
     const storedEditorState = canonicalSession
       ? projectionResult.artifactState.editorState
       : data.editorState;

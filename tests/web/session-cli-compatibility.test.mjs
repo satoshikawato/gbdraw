@@ -758,8 +758,10 @@ await test('only a Result without composition metadata takes the legacy composit
     const early = gunzipSync(await readFile('tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'));
     assert.equal(early.toString().includes('data-gbdraw-composition-schema='), false);
     // The fake DOM serializes the parsed text unchanged; the Playwright
-    // OV-273 case checks the composition the transform writes.
-    assert.deepEqual(await admission(early), { plan: ['MUTATING'], parses: 1, normalized: 1 });
+    // OV-273 case checks the composition the transform writes. The Session
+    // 40's stored figure is admitted with its catalog as written (`EMPTY`, no
+    // parse, OV-1932) before Load admits the committed set (`MUTATING`).
+    assert.deepEqual(await admission(early), { plan: ['EMPTY', 'MUTATING'], parses: 1, normalized: 1 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
