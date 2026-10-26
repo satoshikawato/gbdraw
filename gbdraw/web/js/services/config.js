@@ -5603,16 +5603,20 @@ const stashedArtifactView = (slot) => Object.freeze({
 });
 /** @param {SessionArtifactView | null} view */
 const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
-// The artifact Save writes of a drawing: one with a Result or a committed
-// request, as Load keeps one (a slot per drawing with a request). The empty
-// slot a drawing switch keeps for a drawing without either, and the shown
-// view of one, are none, so a Save after Load writes the drawing as the first
-// Save did (PD-OI-090 〔Save と Load〕, OV-1902).
+// The artifact Save writes of a drawing: one with a Result or a request it
+// writes (committed, or the shown drawing's draft request), as Load keeps one
+// (a slot per drawing with a request). The empty slot a drawing switch keeps
+// for a drawing without either, and the shown view of one, are none, so a
+// Save after Load writes the drawing as the first Save did (PD-OI-090
+// 〔Save と Load〕, OV-1902, OV-1904).
 /**
  * @param {SessionArtifactView | null} view
+ * @param {boolean} [writesDraftRequest] Save writes the drawing's inputs as its draft request.
  * @returns {SessionArtifactView | null}
  */
-const savedArtifactOf = (view) => (artifactHasResult(view) || view?.committedCanonicalSession ? view : null);
+const savedArtifactOf = (view, writesDraftRequest = false) => (
+  artifactHasResult(view) || view?.committedCanonicalSession || writesDraftRequest ? view : null
+);
 // Save writes every Result (Owner, 2026-10-07): each drawing's artifact, by
 // drawing ID, the shown drawing's from `state` and any other's from its kept
 // slot; a drawing without either has none.
@@ -5716,12 +5720,14 @@ const artifactUiState = (view) => ({
  * }} ExportSessionDocumentOptions
  */
 /**
- * One drawing Save writes: the drawing, its slice as Save writes it, its
- * artifact (null: no Result and no committed request), and its view keys
- * (`ui` of its one-drawing view: its input type, the generated layout of its
- * Results, the shown one's viewport).
+ * One drawing Save writes: the drawing, whether Save writes its inputs as
+ * its draft request (the shown drawing's, without a Generate), its slice as
+ * Save writes it, its artifact (null: no Result and no request it writes),
+ * and its view keys (`ui` of its one-drawing view: its input type, the
+ * generated layout of its Results, the shown one's viewport).
  * @typedef {{
  *   drawing: DrawingState,
+ *   draftRequest: boolean,
  *   slice: SessionModeSlice & { config: ActiveWebConfig },
  *   artifact: SessionArtifactView | null,
  *   ui: Record<string, unknown>
@@ -5804,7 +5810,7 @@ const exportSessionDocument = async (
   // Each drawing's Results, catalog and committed request; its slice's
   // unmanaged overrides are checked against its own mode (PD-OI-009, OV-106).
   const parts = [];
-  for (const { drawing: saved, slice, artifact, ui } of written) {
+  for (const { drawing: saved, slice, artifact, ui, draftRequest } of written) {
     const config = slice.config;
     Object.assign(config.adv, normalizedArrowGeometryState(config.adv));
     config.unmanagedConfigOverrides = await validateUnmanagedConfigOverrides({
@@ -5839,9 +5845,8 @@ const exportSessionDocument = async (
     }
     if (!committed && results.length) throw sessionSaveRequiresGenerate({ diagramMode: saved.mode });
     // The shown drawing's inputs without a Generate are saved as its draft
-    // request; another drawing's inputs are saved as its bindings.
-    if (!committed && saved.id === drawing.id
-      && hasBiologicalSessionInputs({ ...saved.files, linearSeqs: saved.linearSeqs })) {
+    // request (`exportSession` decides it once).
+    if (!committed && draftRequest) {
       const comparisonPlanSnapshot = saved.mode === 'linear'
         ? resolveLinearComparisonPlan({
             plan: saved.linearComparisonPlan,
@@ -7456,10 +7461,11 @@ export const exportSession = (titleOverride = null, options) => {
       || sliceDiffersFromDefault(/** @type {Record<string, unknown>} */ (slices.get(saved.id)), saved.mode);
     const { drawings: writtenDrawings, activeDrawingId } = savedDrawingsOf(savedDrawings, drawing, isUsed);
     const shownArtifact = /** @type {SessionArtifactView} */ (artifacts.get(drawing.id));
-    if (!shownArtifact.committedCanonicalSession
-      && hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs })) {
-      assertDrawingInputs(drawing);
-    }
+    // The shown drawing's inputs without a Generate are saved as its draft
+    // request; another drawing's inputs are saved as its bindings.
+    const shownWritesDraftRequest = !shownArtifact.committedCanonicalSession
+      && hasBiologicalSessionInputs({ ...drawing.files, linearSeqs: drawing.linearSeqs });
+    if (shownWritesDraftRequest) assertDrawingInputs(drawing);
     // App-level settings shared by every drawing.
     const projectUi = {
       featurePanelTab: state.featurePanelTab.value,
@@ -7476,9 +7482,11 @@ export const exportSession = (titleOverride = null, options) => {
     artifacts = readArtifacts();
     /** @type {SavedSessionDrawing[]} */
     const written = writtenDrawings.map((saved) => {
-      const artifact = savedArtifactOf(artifacts.get(saved.id) ?? null);
+      const draftRequest = shownWritesDraftRequest && saved.id === drawing.id;
+      const artifact = savedArtifactOf(artifacts.get(saved.id) ?? null, draftRequest);
       return {
         drawing: saved,
+        draftRequest,
         slice: /** @type {SavedSessionDrawing['slice']} */ (slices.get(saved.id)),
         artifact,
         // The view keys of the drawing's one-drawing view: its mode and input

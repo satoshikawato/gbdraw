@@ -88,6 +88,27 @@ test('Save, Load and Save of drawings without a Result write the same drawings (
   assert.deepEqual(second.drawings, first.drawings);
 });
 
+// OV-1904: Save writes the shown drawing's inputs without a Generate as its
+// draft request, which a Load keeps as the drawing's request (a slot per
+// drawing with a request), so Save writes that drawing's Result editor and
+// view fields as it does for a committed request, and a second Save writes
+// them again. Runs on the drawings the case above loaded.
+test('Save, Load and Save of a shown drawing saved with a draft request write the same Result fields (OV-1904)', async () => {
+  assert.equal(state.activeDrawing().id, 'circular');
+  state.activeDrawing().files.c_gb = state.inputFiles.registerFile(new File(
+    [readFileSync(new URL('../fixtures/sessions/cli-web-mito.gb', import.meta.url))], 'cli-web-mito.gb', { type: 'text/plain' }
+  ));
+  const resultFields = (document) => {
+    const { editorState, runMetadata, ui } = document.drawings.find((entry) => entry.id === 'circular');
+    return { editorState, runMetadata, ui };
+  };
+  const first = await savedDocument('ov-1904', () => []);
+  assert.equal(first.drawings.find((entry) => entry.id === 'circular').renderRequest?.mode, 'circular');
+  const stashed = await loadKeepingSlots(first);
+  const second = await savedDocument('ov-1904', () => stashed);
+  assert.deepEqual(resultFields(second), resultFields(first));
+});
+
 for (const opened of ['linear', 'circular']) {
   test(`a Session 49 Load keeps each drawing's own request metadata in the drawing it does not open (${opened} opened)`, async () => {
     const session = v49Session();
