@@ -36,7 +36,7 @@ for kind in ("sourceRecipe", "exactReplay"):
     report = {"kind": kind, "command": command, "exit_code": result.returncode}
     if result.returncode == 0:
         document = json.loads((work / "replayed.gbdraw-session.json").read_text())
-        request = next(entry for entry in document["drawings"] if entry["id"] == document["ui"]["activeDrawingId"])["renderRequest"]
+        request = document["renderRequest"]
         svg = next(work.glob("*.svg"))
         tree = ET.parse(svg)
         paths = [node for node in tree.iter() if node.tag.endswith("}path") and node.get("d")]
