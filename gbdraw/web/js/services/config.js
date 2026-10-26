@@ -13,7 +13,7 @@ import {
   resetRightDrawerState,
   restoreRightDrawerState
 } from './right-drawer-state.js';
-import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
+import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from './reset.js';
 import {
   INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
   bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
@@ -5052,24 +5052,26 @@ export const installShownDrawing = (id) => {
 /**
  * The drawings a Load makes, in tab order, and the one it opens (DESIGN §4):
  * a Session's 49 document's, the fast path's for a Session 46-48
- * (`upgradeModeScopedSession`).
- * @typedef {Readonly<{ drawings: readonly LoadedDrawing[], activeDrawingId: DrawingId }>} LoadedDrawingPlan
+ * (`upgradeModeScopedSession`). `unused` is a new drawing of each mode
+ * `drawings` have none of, which a Load keeps for the mode buttons until B4
+ * removes them (D-15-93); it takes nothing of the file (D-15-120).
+ * @typedef {Readonly<{ drawings: readonly LoadedDrawing[], unused: readonly LoadedDrawing[], activeDrawingId: DrawingId }>} LoadedDrawingPlan
  */
-/** @param {Session49} document @returns {LoadedDrawingPlan} */
-const loadedDrawingPlan = (document) => Object.freeze({
-  drawings: Object.freeze(document.drawings.map(({ id, mode, name }) => Object.freeze({
-    id: /** @type {DrawingId} */ (id), mode, name
-  }))),
-  activeDrawingId: /** @type {DrawingId} */ (openedDrawingOf(document).id)
-});
 /**
- * A new drawing of each mode `drawings` have none of, which a Load keeps for
- * the mode buttons until B4 removes them (D-15-93).
- * @param {readonly LoadedDrawing[]} drawings
- * @returns {LoadedDrawing[]}
+ * The one place a Load decides which drawings it makes.
+ * @param {readonly LoadedDrawing[]} drawings @param {DrawingId} activeDrawingId
+ * @returns {LoadedDrawingPlan}
  */
-const unusedDrawingsOf = (drawings) => SLICE_MODES.filter((mode) => !drawings.some((drawing) => drawing.mode === mode))
-  .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))));
+const drawingPlanOf = (drawings, activeDrawingId) => Object.freeze({
+  drawings: Object.freeze(drawings),
+  unused: Object.freeze(SLICE_MODES.filter((mode) => !drawings.some((drawing) => drawing.mode === mode))
+    .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))))),
+  activeDrawingId
+});
+/** @param {Session49} document @returns {LoadedDrawingPlan} */
+const loadedDrawingPlan = (document) => drawingPlanOf(document.drawings.map(({ id, mode, name }) => Object.freeze({
+  id: /** @type {DrawingId} */ (id), mode, name
+})), /** @type {DrawingId} */ (openedDrawingOf(document).id));
 /**
  * One drawing's part of a Session file that its draft reads: `slice` holds
  * its `config`, `features`, `editorState` and `ui` as stored, `at` the place
@@ -5106,27 +5108,25 @@ const legacyDrawingPlan = (openingMode) => {
   const drawings = [openingMode, ...SLICE_MODES.filter((mode) => mode !== openingMode)]
     .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))));
   const [opening] = drawings;
-  return Object.freeze({ drawings: Object.freeze(drawings), activeDrawingId: opening.id });
+  return drawingPlanOf(drawings, opening.id);
 };
 /**
  * The Load commit's one store write (DESIGN §4.1): a new drawing state for
- * each drawing of the plan, then a new, unused one for each mode the plan has
- * none of, so the mode buttons keep a drawing of each mode until B4 removes
- * them (D-15-93). They replace the store at once; the caller installs each
- * committed drawing and shows the plan's.
+ * each drawing of the plan, then the plan's unused drawings (D-15-93). They
+ * replace the store at once; the caller installs each committed drawing and
+ * shows the plan's.
  * A rollback puts the previous drawings back (`restoreSessionImportSnapshot`).
- * Each takes the install a loaded drawing takes, its mode's part of a
- * Session 27-48 (so an unused drawing is at its mode's defaults as a Load
- * gives them, and a Save and Load keep it so).
+ * An unused drawing is a new drawing at its mode's defaults
+ * (`withNewDrawingDefaults`) that takes nothing of the file, so Save does not
+ * write it (R16-8, OV-1811).
  * @param {LoadedDrawingPlan} plan
- * @returns {readonly DrawingState[]} The plan's drawings, in tab order, then the unused ones.
+ * @returns {readonly DrawingState[]} The plan's drawings, in tab order: the ones Load installs.
  */
 const commitLoadedDrawings = (plan) => {
   const loaded = plan.drawings.map(({ id, mode }) => createDrawingState(id, mode));
-  const unusedTabs = unusedDrawingsOf(plan.drawings);
-  const unused = unusedTabs.map(({ id, mode }) => createDrawingState(id, mode));
-  state.replaceDrawings([...loaded, ...unused], [...plan.drawings, ...unusedTabs].map(({ id, name }) => ({ id, name })));
-  return Object.freeze([...loaded, ...unused]);
+  const unused = plan.unused.map(({ id, mode }) => withNewDrawingDefaults(state, createDrawingState(id, mode)));
+  state.replaceDrawings([...loaded, ...unused], [...plan.drawings, ...plan.unused].map(({ id, name }) => ({ id, name })));
+  return Object.freeze(loaded);
 };
 
 /**
@@ -6174,7 +6174,7 @@ const importSessionDocument = async (e, options = {}) => {
      * The drawing that takes a Session's part of `mode` the projection reads:
      * a Session 49's opened drawing for its mode, else its 49 document's
      * drawing of that mode, else the new drawing of it a Load makes
-     * (`legacyDrawingPlan`, `unusedDrawingsOf`). The one place a Load maps
+     * (`drawingPlanOf`). The one place a Load maps
      * the file's modes to drawing IDs.
      * @param {DiagramMode} mode @returns {DrawingId}
      */
@@ -6188,10 +6188,10 @@ const importSessionDocument = async (e, options = {}) => {
     const linearPartDrawingId = fileDrawingIdOf('linear');
     /**
      * Each drawing's draft part of a Session 46-49, by drawing ID: its entry's
-     * (`drawingDraftPartOf`). A drawing the document has none of takes a
-     * Session 46-48's slice of its mode (D-15-103), and a Session 49's none,
-     * so its mode's defaults install through the same path (D-15-105 (5)).
-     * A Session 27-44's parts come from its split, below.
+     * (`drawingDraftPartOf`). An unused drawing (one of a mode the document
+     * has none of) takes none, so its draft is its mode's defaults, which the
+     * reads that map a mode to a drawing see; Load installs nothing into it
+     * (D-15-120, OV-1811). A Session 27-44's parts come from its split, below.
      * @type {Map<DrawingId, LoadedDraftPart>}
      */
     const draftParts = new Map();
@@ -6199,10 +6199,7 @@ const importSessionDocument = async (e, options = {}) => {
       upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
         slice: drawingDraftPartOf(entry), at: draftPartAt(entry.mode, drawingSetPath(index))
       }));
-      const modes = /** @type {UnvalidatedFields<'circular' | 'linear'>} */ (projectedDrawingId === null ? data.modes : null);
-      unusedDrawingsOf(loadedDrawingPlan(upgraded).drawings).forEach(({ id, mode }) => draftParts.set(id, {
-        slice: isPlainObject(modes?.[mode]) ? modes[mode] : {}, at: projectedDrawingId === null ? `modes.${mode}` : ''
-      }));
+      loadedDrawingPlan(upgraded).unused.forEach(({ id }) => draftParts.set(id, { slice: {}, at: '' }));
     }
     /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
     const draftPartOf = (drawingId) => /** @type {LoadedDraftPart} */ (draftParts.get(drawingId));
@@ -6455,8 +6452,9 @@ const importSessionDocument = async (e, options = {}) => {
       : legacyDrawingPlan(committedImportedResults.length === 0 ? candidateMode : generatedMode);
     /** @type {DiagramMode} The mode of the drawing the Load opens. */
     const shownMode = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.id === plan.activeDrawingId)).mode;
-    // Every drawing the Load commits: the plan's, then a new one of each mode the plan has none of.
-    const loadedDrawings = [...plan.drawings, ...unusedDrawingsOf(plan.drawings)];
+    // Every drawing whose draft the Load reads: the plan's, which it installs,
+    // and its unused ones, whose empty part reads as their mode's defaults.
+    const loadedDrawings = [...plan.drawings, ...plan.unused];
     // Every other drawing with a saved Result set, read from its own entry of
     // the 49 document: its request, Results, editor state, `ui` and run
     // metadata, and the catalog preflight read where the file holds the set

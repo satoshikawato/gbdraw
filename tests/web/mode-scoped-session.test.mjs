@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { modeDrawing, withModeDrawings } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
@@ -333,25 +334,6 @@ test('Session 47 keeps the edits of two rows of one name; a Session 46 is read b
   assert.deepEqual(Object.keys(loadedDrawing.legendStrokeOverrides), ['GC skew']);
 });
 
-// OV-337: Load leaves a Linear row without a Depth file as the Session binds it
-// (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
-// the Depth track count only when a row holds a Depth file, as for Circular.
-test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
-  resetDrawings();
-  installShownDrawing('circular');
-  const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
-  assert.equal((await load(gallery)).status, 'ok');
-  const first = await save('gallery round trip');
-  const linearRows = (document) => savedDrawingView(document, 'linear').webFiles.bindings.linearSeqs;
-  const rows = linearRows(first);
-  assert.deepEqual(rows.map((row) => row.depth), [null]);
-  assert.equal(savedDrawingView(first, 'linear').modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
-  assert.equal((await load(first)).status, 'ok');
-  assert.deepEqual(modeDrawing(state, 'linear').linearSeqs.map((seq) => seq.depth), [null]);
-  const second = await save('gallery round trip again');
-  assert.deepEqual(linearRows(second).map((row) => row.depth), rows.map((row) => row.depth));
-});
-
 // A Session does not save the label fit report, so a loaded Result has no
 // "Leader lines cross" notice (PD-OI-097).
 test('Session Load clears the label fit notice of the Result shown before', async () => {
@@ -588,8 +570,7 @@ test('a Load of a Session with a drawing of one mode keeps a new drawing of the 
   assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
   const linear = modeDrawing(state, 'linear');
   assert.equal(before.includes(linear), false);
-  // At its mode's defaults as a Load installs them (the Session's unused
-  // Linear part, as 0.14.0 did): the pre-Load edit is gone.
+  // A new drawing at its mode's defaults (D-15-120): the pre-Load edit is gone.
   assert.deepEqual({ ...linear.form }, createDefaultForm());
   assert.equal(linear.adv.label_font_size, createDefaultAdv('linear').label_font_size);
   installShownDrawing(linear.id);
@@ -1078,13 +1059,48 @@ test('Save writes into each Session 49 drawing the LOSAT entries of its own Line
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
 });
 
-// OV-1811: the Circular drawing Load adds for the mode buttons (T-1) differs from the packaged
-// Circular defaults (a Depth placeholder row, a track slot field, the palette colors), so Save counts it as used.
-test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8)', { todo: 'OV-1811' }, async () => {
+// OV-337: Load leaves a Linear row without a Depth file as the Session binds it
+// (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
+// the Depth track count only when a row holds a Depth file, as for Circular.
+test('Load and Save keep a Linear row without a Depth file as depth null (OV-337)', async () => {
   const session = v49Session('drawings-linear-pair-losat');
+  const saveKept = async (title, outcome) => {
+    assert.equal(outcome.loaded.status, 'ok', JSON.stringify(outcome.loaded.error));
+    const result = await exportSession(title, { readKeptArtifacts: () => [outcome.opening, ...outcome.stashed].filter(Boolean) });
+    assert.equal(result.status, 'saved', result.error?.message);
+    return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  };
   resetDrawings();
-  const first = await loadKeepingSlots(session);
+  const first = await saveKept('round trip', await loadKeepingSlots(session));
+  const linearRows = (document) => savedDrawingView(document, 'linear').webFiles.bindings.linearSeqs;
+  const rows = linearRows(first);
+  assert.deepEqual(rows.map((row) => row.depth), [null, null]);
+  assert.equal(savedDrawingView(first, 'linear').modes.linear.config.adv.depth_tracks.length, 1, 'the Linear drawing has a Depth series');
+  const reloaded = await loadKeepingSlots(first);
+  assert.deepEqual(state.drawingOf('linear').linearSeqs.map((seq) => seq.depth), [null, null]);
+  const second = await saveKept('round trip again', reloaded);
+  assert.deepEqual(linearRows(second).map((row) => row.depth), rows.map((row) => row.depth));
+});
+
+// OV-1811: the drawing Load adds for a mode the Session lacks (T-1) is a new drawing at its mode's
+// defaults (D-15-120), so Save does not count it as used.
+test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+  resetDrawings();
+  const first = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
   const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
   const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
   assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
-});
+}));
+
+// OV-1811, a Session 48 the move gives one drawing (its Linear part unused): the Linear drawing Load
+// adds takes nothing of that part, so Save writes the Circular drawing alone.
+test('Save does not write the unused Linear drawing Load adds after a Session 48 Load (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+  assert.deepEqual(drawingsVector('file-card-imports-circular.v48').drawings.map((drawing) => drawing.mode), ['circular']);
+  resetDrawings();
+  const loaded = await load(fixtureSession('file-card-imports-circular.v48'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
+  const saved = await save('ov-1811 48');
+  assert.deepEqual(saved.drawings.map((entry) => entry.id), ['circular']);
+}));

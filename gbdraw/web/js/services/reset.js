@@ -73,6 +73,21 @@ const resetPaletteState = (state, drawing) => {
   return { appliedPaletteName: createDefaultPaletteDraftState().appliedPaletteName, appliedPaletteColors: { ...colors } };
 };
 
+/**
+ * A new drawing at its mode's defaults: the drawing state `createDrawingState`
+ * just made takes its default palette's colors (a new drawing state has
+ * none). It is the drawing `tools/generate_mode_slice_defaults.mjs` reads as a
+ * mode's default, so Save counts it as unused (R16-8, OV-1811). Load's
+ * drawings for the mode buttons take it; B4's "+ New drawing" will.
+ * @param {typeof AppState} state
+ * @param {DrawingState} drawing A new drawing state.
+ * @returns {DrawingState} The same drawing.
+ */
+export const withNewDrawingDefaults = (state, drawing) => {
+  resetPaletteState(state, drawing);
+  return drawing;
+};
+
 // The rule drafts of the editor forms (one form for every drawing).
 /** @param {typeof AppState} state */
 const resetRuleDrafts = (state) => {

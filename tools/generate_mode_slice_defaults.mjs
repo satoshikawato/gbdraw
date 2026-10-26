@@ -6,9 +6,9 @@
 // gbdraw/web/js/mode-slice-defaults.generated.js, which the Web's move
 // (services/session-drawings-upgrade.js) reads without building a drawing.
 //
-// The Web owns the defaults (D-15-86): a drawing as `createDrawingState(id,
-// mode)` builds it, with the palette file applied as the app does at boot
-// (`createPaletteLoader().applyPalettes`, app/palettes.js). Its slice is read
+// The Web owns the defaults (D-15-86): a new drawing as the app builds one
+// (`withNewDrawingDefaults` over `createDrawingState(id, mode)`, with the
+// palette file's default palette, services/reset.js). Its slice is read
 // as Save writes it (`buildModeSliceData`), one value per
 // `MODE_SCOPED_SETTINGS` row the mode holds, keyed by the row's identity
 // (domain, path).
@@ -44,7 +44,8 @@ const MODULE_TARGET = 'gbdraw/web/js/mode-slice-defaults.generated.js';
 const { MODE_SCOPED_SETTINGS } = await import('../gbdraw/web/js/mode-scoped-settings.generated.js');
 const { buildModeSliceData } = await import('../gbdraw/web/js/services/config.js');
 const { createDrawingState } = await import('../gbdraw/web/js/state.js');
-const { createPaletteLoader } = await import('../gbdraw/web/js/app/palettes.js');
+const { withNewDrawingDefaults } = await import('../gbdraw/web/js/services/reset.js');
+const { normalizePaletteDefinitions } = await import('../gbdraw/web/js/utils/color-utils.js');
 const { reconcileLinearRecordLayout, withoutUnarrangedEntries } = await import('../gbdraw/web/js/services/linear-record-layout.js');
 
 /** @import { UnarrangedFieldRule } from '../gbdraw/web/js/services/linear-record-layout.js' */
@@ -93,21 +94,14 @@ const rowValue = (slice, row) => {
   return Object.hasOwn(holder, row.path) ? { value: /** @type {Record<string, unknown>} */ (holder)[row.path] } : null;
 };
 
-/** @param {'circular' | 'linear'} mode */
-const defaultDrawing = (mode) => createDrawingState(mode, mode);
-const drawings = { circular: defaultDrawing('circular'), linear: defaultDrawing('linear') };
 const palettes = JSON.parse(fs.readFileSync(path.join(ROOT, 'gbdraw/web/gallery/palettes/palettes.json'), 'utf8'));
-const loader = createPaletteLoader({
-  state: {
-    paletteDefinitions: { value: null },
-    paletteNames: { value: [] },
-    appliedPaletteName: { value: '' },
-    appliedPaletteColors: { value: {} },
-    activeDrawing: () => drawings.circular,
-    drawingList: () => [drawings.circular, drawings.linear]
-  }
-});
-if (!loader.applyPalettes(palettes.palettes || palettes)) throw new Error('The palette file is empty.');
+const paletteDefinitions = normalizePaletteDefinitions(palettes.palettes || palettes);
+if (!Object.keys(paletteDefinitions).length) throw new Error('The palette file is empty.');
+// A mode's default is a new drawing of it, built by the Web's one builder.
+const paletteState = /** @type {Parameters<typeof withNewDrawingDefaults>[0]} */ (/** @type {unknown} */ ({ paletteDefinitions: { value: paletteDefinitions } }));
+/** @param {'circular' | 'linear'} mode */
+const defaultDrawing = (mode) => withNewDrawingDefaults(paletteState, createDrawingState(mode, mode));
+const drawings = { circular: defaultDrawing('circular'), linear: defaultDrawing('linear') };
 
 /** @param {'circular' | 'linear'} mode */
 const modeDefaults = (mode) => {

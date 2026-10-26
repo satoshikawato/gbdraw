@@ -821,6 +821,10 @@ test('a value both drawings of a Session 27-44 read is one row; a Session 46 lis
   const session46 = fixture('legend-renamed-rows.v46.gbdraw-session.json.gz');
   const MODES = ['circular', 'linear'];
   MODES.forEach((mode) => lossy(session46.modes[mode].config));
+  // A Linear-only setting makes the Linear part a drawing the move keeps; an
+  // unused part would take nothing of the file (D-15-120).
+  const linearConfig = session46.modes.linear.config;
+  linearConfig.form = { ...linearConfig.form, linear_track_layout: 'above' };
   const { loaded, items } = await load(session46, 'Session 46');
   assert.deepEqual(rowsOf(loaded), MODES.flatMap((mode) => [
     `setting-replaced modes.${mode}.config.adv.label_rendering sideways -> auto`,

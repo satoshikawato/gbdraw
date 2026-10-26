@@ -23,6 +23,7 @@ import { webLayerOf } from '../../tools/web-owner-graph-detectors.mjs';
 import { DRAWING_EDITOR_KEYS, DRAWING_SLICES, modeDrawing } from './helpers/drawing-state.mjs';
 import { memberWriteSites, refValueWriteSites, templateMemberWrites } from './helpers/drawing-writes.mjs';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
+import { withBootPalettes } from './helpers/boot-palettes.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -381,7 +382,9 @@ const saveSession = async () => {
 // Before Load the edit is undone: by the slice's reset, or, for the inputs
 // slice, whose reset keeps every binding (PD-OI-070), by a new drawing's inputs.
 const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle, slice.capture(slice.create().handle)) : slice.reset(handle));
-test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', async () => {
+// The other mode's drawing of a one-mode fixture is the new drawing Load adds
+// (D-15-120), at the defaults with the boot palettes, so Save does not write it.
+test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', () => withBootPalettes(state, async () => {
   assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
   for (const mode of MODES) {
@@ -410,7 +413,7 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       slice.install(modeDrawing(state, mode).slices[name], JSON.parse(loaded));
     }
   }
-});
+}));
 
 // 7. Reset Settings returns the settings a Reset owns and keeps the record
 // gap and rows, the OFF records, and the comparison edges that hold a file
