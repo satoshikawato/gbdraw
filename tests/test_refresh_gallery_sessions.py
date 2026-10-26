@@ -2508,3 +2508,17 @@ def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> 
 
     with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
         _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw-session.json", two_drawn)
+
+
+def test_staged_gallery_validator_requires_the_linear_comparison_plan_through_validate_session(
+    tmp_path: Path,
+) -> None:
+    """A staged Linear draft without ``linearComparisonPlan`` is refused by the Session validator itself."""
+
+    session = _staged_geometry_session(mode="linear", records=None)
+    session["modes"] = {"linear": {"config": {"linearRecordLayout": {}}}}
+
+    from gbdraw.exceptions import ValidationError
+
+    with pytest.raises(ValidationError, match="Current Web comparison draft requires config.linearComparisonPlan"):
+        _validate_staged_gallery_session(tmp_path / "no-plan.gbdraw-session.json", session)

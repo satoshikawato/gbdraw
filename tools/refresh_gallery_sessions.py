@@ -747,16 +747,6 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    modes = session.get("modes")
-    # Session 46 keeps the Linear draft in its Linear slice.
-    linear = modes.get("linear") if isinstance(modes, Mapping) else None
-    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
-    if isinstance(config, Mapping) and "linearRecordLayout" in config:
-        plan = config.get("linearComparisonPlan")
-        if not isinstance(plan, Mapping):
-            raise ValueError(
-                f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
-            )
     # A Gallery Session stores its protein comparison results, so the first
     # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
     # the regenerated Vibrio Session must store the finished protein comparison
