@@ -295,9 +295,10 @@ def segment_cells(start: Point, end: Point, bucket_size: float) -> set[GridCell]
 
     The segment is cut into pieces no longer than one bucket, and each piece adds
     the buckets its box meets, padded by :data:`SEGMENT_PIECE_PAD` for the rounding
-    of the cut points. Every point of the segment lies in a returned bucket, so two
-    segments that meet share one; a long diagonal covers about three buckets per
-    bucket length instead of its whole box.
+    of the cut points. While that rounding stays under the pad, which holds for
+    coordinates below about 1e10 px (far beyond any canvas gbdraw draws), every point
+    of the segment lies in a returned bucket, so two segments that meet share one; a
+    long diagonal covers about three buckets per bucket length instead of its whole box.
     """
     ax, ay = start
     dx, dy = end[0] - ax, end[1] - ay

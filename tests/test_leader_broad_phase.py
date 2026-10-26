@@ -119,6 +119,16 @@ def _counting(monkeypatch: pytest.MonkeyPatch, module: object, name: str) -> lis
     return seen
 
 
+def test_crossing_pairs_keep_a_crossing_the_cut_point_rounding_could_hide() -> None:
+    # The cut points of the long segment are rounded; without SEGMENT_PIECE_PAD (on every
+    # piece) the cell of the crossing is missing from its cover and the pair is lost.
+    long_leader = ((-37213.81971366056, 18715.974944659632), (1314.7739683781765, -661.2402822229997))
+    tiny_leader = ((-2.13453691728464e-12, -6.225769573961266e-13), (-100.0, -100.0))
+
+    assert fit.polylines_cross([*long_leader], [*tiny_leader])
+    assert fit.crossing_pairs([list(long_leader), list(tiny_leader)]) == [(0, 1)]
+
+
 def test_crossing_pairs_test_only_leaders_that_come_near(monkeypatch: pytest.MonkeyPatch) -> None:
     polylines = _radial_fan(random.Random(3), 120, 6000.0, 0.0)
     tested = _counting(monkeypatch, fit, "polylines_cross")
