@@ -158,9 +158,10 @@ test('crossing leaders: the notice bar opens the dialog, which computes the rows
 });
 
 // D-12, D-18 (OV-1606), DF-D16, DF-D25, DF-D36: MERS-CoV's organism name is drawn on one line (never wrapped)
-// over the tracks at the Web defaults, with the notice. The inside tracks are narrowed around it already (rule L),
-// so the dialog offers the font at which the one line clears the tracks (no narrow row; its data with narrowing
-// off is pinned in tests/test_web_label_fit.py), and Edit Species / Strain… (E-b) closes it and shows the
+// over the tracks at the Web defaults, with the notice. Its band (the bold line's ink, OV-1854) is cleared neither
+// by the narrowing floor nor by any Center Reserved Radius (rule L), so the dialog offers the font at which the one
+// line clears the tracks and a narrow row that finds nothing (a found narrow row is pinned in
+// tests/test_web_label_fit.py), and Edit Species / Strain… (E-b) closes it and shows the
 // record's name field without a History step. Apply writes Record Labels > Default font size and Generates a
 // figure without the notice.
 test('the definition text over a track: the notice offers a smaller font and the name field', async ({ page }) => {
@@ -189,7 +190,10 @@ test('the definition text over a track: the notice offers a smaller font and the
   await expect(dialog.locator('[data-label-fit-records]')).toContainText('1 definition line at 18 pt (1 line overlaps a track)');
   const row = dialog.locator('[data-label-fit-row="smaller_definition_font"]');
   await expect(row).toHaveAttribute('data-label-fit-status', 'found', { timeout: 300000 });
-  expect((await rowStatuses(dialog)).map(([kind]) => kind)).toEqual(['smaller_definition_font']);
+  await expect(dialog.locator('[data-label-fit-row="narrow_tracks"]')).toHaveAttribute(
+    'data-label-fit-status', 'not_found', { timeout: 300000 }
+  );
+  expect(await rowStatuses(dialog)).toEqual([['smaller_definition_font', 'found'], ['narrow_tracks', 'not_found']]);
   await expect(row).toContainText('Default font size 17 pt');
   await shot(dialog.getByRole('dialog'), 'definition-dialog.png');
 
