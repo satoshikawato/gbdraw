@@ -1139,10 +1139,15 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
             source_version=39,
         )
     )
+    # The projection of a Session 39 splits its flat draft into both modes'
+    # slices (Session 48's layout). A Session 49 drawing holds its own mode's
+    # slice only, so the Linear replay takes the Linear slice; the dormant
+    # comparison lives in that slice's plan and in the Web file inventory.
+    linear_state = {**adjunct, "modes": {"linear": adjunct["modes"]["linear"]}}
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=linear_state)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
@@ -1174,8 +1179,11 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
 def test_current_typed_replay_retains_web_only_conservation_fastas(
     tmp_path: Path,
 ) -> None:
-    source_document = load_session_document(_SYNTHETIC_CONSERVATION_SESSION)
-    source_payload = source_document.to_dict()
+    # The CLI re-save upgrades first and replays each drawing's own view.
+    source_document = upgrade_session_document(
+        load_session_document(_SYNTHETIC_CONSERVATION_SESSION), temporary_directory=tmp_path
+    ).document
+    source_payload = drawing_view(source_document.to_dict(), mode="circular")
     source_web_files = source_payload["webFiles"]
     source_resources = source_payload["resources"]
     source_ids = source_web_files["conservationLosatFastaSources"]
@@ -1195,7 +1203,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
+            drawings=[SessionDrawingSpec(session_to_request(materialized, drawing="circular"), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 

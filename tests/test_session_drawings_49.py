@@ -9,8 +9,6 @@ admission of 49 is tested in ``tests/test_session_admission_49.py``.
 from __future__ import annotations
 
 import copy
-import gzip
-import json
 from pathlib import Path
 from typing import Any
 
@@ -20,14 +18,12 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session_drawings import (
     active_session_drawing,
     read_session_drawings,
-    mode_scoped_build_fields,
     replace_session_drawings,
     write_session_drawings,
 )
 from tests.utils.two_mode_session import two_mode_session
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions"
-CARD_FIXTURE = FIXTURES / "file-card-imports-circular.v48.gbdraw-session.json.gz"
 CARDS = {"d_color": None, "t_color": None, "blacklist": None, "whitelist": None, "qualifier_priority": None}
 
 
@@ -228,13 +224,3 @@ def test_49_drawing_names_are_unique_ignoring_case() -> None:
 
     with pytest.raises(ValidationError, match="name of its own"):
         write_session_drawings([view, view], ids=["linear", "linear-2"], names=["Map", "map"])
-
-
-def test_the_build_intermediate_is_the_48_layout_the_move_reads() -> None:
-    with gzip.open(CARD_FIXTURE, "rt", encoding="utf-8") as handle:
-        document = json.load(handle)
-    assert document["version"] == 48
-
-    views = [part.artifacts.fields for part in read_session_drawings(document)]
-
-    assert mode_scoped_build_fields(views) == document

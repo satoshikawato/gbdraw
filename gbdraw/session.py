@@ -51,9 +51,10 @@ from gbdraw.session_drawings import (
     active_session_drawing,
     allocate_session_drawing,
     drawings_document_from_mode_scoped,
+    other_mode_fields,
     read_session_drawings,
-    mode_scoped_build_fields,
     replace_session_drawings,
+    write_session_drawings,
 )
 
 if TYPE_CHECKING:
@@ -899,41 +900,71 @@ def _build_session_document_from_drawings(
     """Build a current (Session 49) document from already-resolved drawings.
 
     With a ``base`` (a Session 49) the drawings replace its drawings of their
-    IDs; otherwise :func:`_session_data_from_drawings` builds the mode-scoped
-    document, checked, and it moves to drawings as a Session 48 does at Load
-    (:func:`_drawings_of_current`).
+    IDs and the other drawings stay; otherwise the drawings are the
+    Session's, in the given order (D-15-125). ``resources`` are the
+    resources of the Session being saved again: equal bytes keep their IDs,
+    and those that no request or Web file binding names are dropped. A
+    drawing's ``state`` holds its own mode's slice only: another mode's
+    (the retired ``modes`` key of Sessions 46-48) is refused.
     """
 
-    built = _session_data_from_drawings(
-        drawings,
-        base=base,
-        title=title,
-        created_at=created_at,
-        active_drawing=active_drawing,
-        web_file_inventory=web_file_inventory,
-        resources=resources,
-    )
-    if isinstance(built, SessionDocument):
-        return built
-    # One check, of the Session 49 written (OV-1815): the mode-scoped data is
-    # this writer's own and moves unchecked.
-    return SessionDocument(cast(Mapping[str, Any], _drawings_of_current(built)))
+    for drawing in drawings:
+        other = other_mode_fields(drawing.state, drawing.mode)
+        if other:
+            raise SessionFormatError(
+                f"A {drawing.mode} drawing's state cannot hold "
+                + ", ".join(other)
+                + "; give that mode a drawing of its own."
+            )
+    encoded = _encoded_drawings(drawings, allocate=base is None, resources=resources)
+    active = _active_drawing_index(encoded, active_drawing)
+    if base is not None:
+        if base.version < DRAWINGS_SESSION_MIN_VERSION:
+            raise SessionFormatError(
+                f"A Session {base.version} moves to drawings before it is saved again."
+            )
+        return _drawings_session_document(
+            base,
+            dict(zip(encoded.ids, encoded.views, strict=True)),
+            resources=encoded.resources,
+            title=title,
+            created_at=created_at,
+            web_file_inventory=web_file_inventory,
+        )
+    timestamp = created_at or datetime.now(timezone.utc)
+    views = [
+        _enveloped(view, DRAWINGS_SESSION_MIN_VERSION, timestamp, encoded.resources)
+        for view in encoded.views
+    ]
+    _finish_views(views, title=title, web_file_inventory=web_file_inventory)
+    if resources:
+        from gbdraw.session_resources import drawing_resource_ids
+
+        referenced = set().union(*(drawing_resource_ids(view) for view in views))
+        for view in views:
+            _keep_resources(view, referenced | (set(encoded.resources) - set(resources)))
+    try:
+        fields = write_session_drawings(views, ids=encoded.ids, names=encoded.names, active=active)
+    except ValidationError as exc:
+        raise SessionFormatError(str(exc)) from exc
+    return SessionDocument(fields)
 
 
 def _mode_scoped_document(
-    drawings: Sequence[_DrawingBuild],
+    drawing: _DrawingBuild,
     *,
     created_at: datetime | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument:
-    """The checked mode-scoped (Session 48) document of new drawings, before their move to drawings."""
+    """The checked mode-scoped (Session 48) document of one drawing upgraded
+    from a Session 31-45, before its move to drawings."""
 
-    built = _session_data_from_drawings(
-        drawings, created_at=created_at, web_file_inventory=web_file_inventory, resources=resources,
+    return SessionDocument(
+        _mode_scoped_data(
+            drawing, created_at=created_at, web_file_inventory=web_file_inventory, resources=resources,
+        )
     )
-    assert not isinstance(built, SessionDocument)  # no Session 49 base
-    return SessionDocument(built)
 
 
 def _mode_scoped_document_of_request(
@@ -945,34 +976,58 @@ def _mode_scoped_document_of_request(
     """:func:`_mode_scoped_document` of one request, resolved here unless ``resolved``
     (:func:`gbdraw.session_io.build_session_json` builds on it)."""
 
-    builds = (
+    (build,) = (
         (_DrawingBuild(mode=_diagram_request_mode(request), request=request, state={}),)
         if resolved
         else _drawing_builds(request, None)
     )
-    return _mode_scoped_document(builds, created_at=created_at)
+    return _mode_scoped_document(build, created_at=created_at)
 
 
-def _session_data_from_drawings(
-    drawings: Sequence[_DrawingBuild],
+def _mode_scoped_data(
+    drawing: _DrawingBuild,
     *,
-    base: SessionDocument | None = None,
-    title: str | None = None,
     created_at: datetime | None = None,
-    active_drawing: str | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
-) -> SessionDocument | dict[str, Any]:
-    """The document of already-resolved drawings; with a ``base`` (a
-    Session 49) the checked Session 49, otherwise the data of the mode-scoped
-    build intermediate (:func:`gbdraw.session_drawings.mode_scoped_build_fields`),
-    not yet checked.
+) -> dict[str, Any]:
+    """The mode-scoped (Session 48) data of one drawing of an older Session,
+    not yet checked; the move to drawings
+    (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`)
+    reads its ``modes`` and ``ui.mode``. ``resources`` are the source's."""
 
-    Every request is encoded through one resource table. With ``base``, each
-    drawing replaces the base drawing of its ID and the other drawings stay. ``resources`` are the resources of the Session
-    being saved again: equal bytes keep their IDs, and those that no request
-    or Web file binding names are dropped.
-    """
+    encoded = _encoded_drawings((drawing,), allocate=True, resources=resources)
+    (view,) = encoded.views
+    data = _enveloped(
+        view, MODE_SCOPED_SESSION_MAX_VERSION, created_at or datetime.now(timezone.utc), encoded.resources,
+    )
+    if web_file_inventory is not None:
+        _attach_current_web_file_bindings(data, web_file_inventory)
+    if resources:
+        _drop_unreferenced_resources(data, resources)
+    normalize_current_session_artifacts(data)
+    return data
+
+
+@dataclass(frozen=True)
+class _EncodedDrawings:
+    """Drawings with their requests encoded through one resource table."""
+
+    views: list[dict[str, Any]]
+    ids: list[str]
+    names: list[str]
+    resources: dict[str, Any]
+
+
+def _encoded_drawings(
+    drawings: Sequence[_DrawingBuild],
+    *,
+    allocate: bool,
+    resources: Mapping[str, Mapping[str, Any]] | None,
+) -> _EncodedDrawings:
+    """The one-drawing view of each drawing, its request encoded through one
+    resource table that starts from ``resources``. New drawings (``allocate``)
+    get their IDs and names from their modes; drawings saved again keep theirs."""
 
     from gbdraw.session_request_codec import (
         CanonicalRequestCodecError,
@@ -988,7 +1043,7 @@ def _session_data_from_drawings(
     taken_ids: list[str] = []
     names: list[str] = []
     for drawing in drawings:
-        if base is None:
+        if allocate:
             try:
                 drawing_id, name = allocate_session_drawing(
                     drawing.mode,
@@ -1002,7 +1057,7 @@ def _session_data_from_drawings(
             drawing_id, name = drawing.id or drawing.mode, drawing.name or ""
         taken_ids.append(drawing_id)
         names.append(name)
-        # The views are assembled from new mappings; SessionDocument(data) below
+        # The views are assembled from new mappings; SessionDocument(data)
         # detaches the document from ``drawing.state`` with one deep copy.
         state = dict(drawing.state)
         conflicting = _RESERVED_DRAWING_FIELDS & set(state)
@@ -1041,57 +1096,56 @@ def _session_data_from_drawings(
         descriptors = table.descriptors()
     except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
-    active: int | None = None
-    if active_drawing is not None:
-        matches = [
-            index
-            for index, (drawing_id, name) in enumerate(zip(taken_ids, names, strict=True))
-            if active_drawing in (drawing_id, name)
-        ]
-        if not matches:
-            raise SessionDrawingSelectionError(
-                f"active_drawing {active_drawing!r} names none of the drawings: "
-                + ", ".join(taken_ids)
-                + "."
-            )
-        active = matches[0]
-    if base is not None:
-        if base.version < DRAWINGS_SESSION_MIN_VERSION:
-            raise SessionFormatError(
-                f"A Session {base.version} moves to drawings before it is saved again."
-            )
-        return _drawings_session_document(
-            base,
-            dict(zip(taken_ids, views, strict=True)),
-            resources=descriptors,
-            title=title,
-            created_at=created_at,
-            web_file_inventory=web_file_inventory,
-        )
-    try:
-        fields = mode_scoped_build_fields(views, active=active)
-    except ValidationError as exc:
-        raise SessionFormatError(str(exc)) from exc
-    for envelope_field in ("format", "version", "createdAt", "resources"):
-        fields.pop(envelope_field, None)
+    return _EncodedDrawings(views, taken_ids, names, descriptors)
 
-    timestamp = created_at or datetime.now(timezone.utc)
-    data: dict[str, Any] = {
+
+def _active_drawing_index(encoded: _EncodedDrawings, active_drawing: str | None) -> int | None:
+    """The index of the drawing whose ID or name is ``active_drawing``."""
+
+    if active_drawing is None:
+        return None
+    for index, (drawing_id, name) in enumerate(zip(encoded.ids, encoded.names, strict=True)):
+        if active_drawing in (drawing_id, name):
+            return index
+    raise SessionDrawingSelectionError(
+        f"active_drawing {active_drawing!r} names none of the drawings: "
+        + ", ".join(encoded.ids)
+        + "."
+    )
+
+
+def _enveloped(
+    view: Mapping[str, Any],
+    version: int,
+    created_at: datetime,
+    resources: Mapping[str, Any],
+) -> dict[str, Any]:
+    """``view`` behind the Session envelope, in the written key order."""
+
+    return {
         "format": SESSION_FORMAT,
-        "version": MODE_SCOPED_SESSION_MAX_VERSION,
-        "createdAt": timestamp.isoformat(),
-        "renderRequest": fields.pop("renderRequest"),
-        "resources": descriptors,
-        **fields,
+        "version": version,
+        "createdAt": created_at.isoformat(),
+        "renderRequest": view["renderRequest"],
+        "resources": resources,
+        **{key: value for key, value in view.items() if key != "renderRequest"},
     }
-    if web_file_inventory is not None:
-        _attach_current_web_file_bindings(data, web_file_inventory)
-    if resources:
-        _drop_unreferenced_resources(data, resources)
-    if title is not None:
-        data["title"] = str(title)
-    normalize_current_session_artifacts(data)
-    return data
+
+
+def _finish_views(
+    views: Sequence[dict[str, Any]],
+    *,
+    title: str | None,
+    web_file_inventory: Mapping[str, Any] | None,
+) -> None:
+    """Bind each view's Web files, set the Session title and normalize its artifacts."""
+
+    for view in views:
+        if web_file_inventory is not None:
+            _attach_current_web_file_bindings(view, web_file_inventory)
+        if title is not None:
+            view["title"] = str(title)
+        normalize_current_session_artifacts(view)
 
 
 def _build_session_document_from_resolved_request(
@@ -1134,11 +1188,7 @@ def _drawings_session_document(
     shared = dict(resources)
     for view in views.values():
         view["resources"] = shared
-        if title is not None:
-            view["title"] = str(title)
-        if web_file_inventory is not None:
-            _attach_current_web_file_bindings(view, web_file_inventory)
-        normalize_current_session_artifacts(view)
+    _finish_views(list(views.values()), title=title, web_file_inventory=web_file_inventory)
     kept = [drawing.artifacts.fields for drawing in base._drawings if drawing.id not in views]
     referenced = set().union(*(drawing_resource_ids(fields) for fields in (*views.values(), *kept)))
     for view in views.values():
@@ -1261,10 +1311,13 @@ def build_session_document(
     requests or :class:`SessionDrawingSpec` values) in drawing order.
     ``active_drawing`` names the drawing the Web app opens. A drawing's
     ``state`` may contain Web/editor fields such as ``ui`` or ``results``; it
-    cannot replace canonical envelope fields. The current Session version
-    is 49; Python writes it from the mode-scoped Session 48 of the drawings,
-    which holds at most one drawing of each mode, and a second drawing only
-    with its Results.
+    cannot replace canonical envelope fields, and it holds its own mode's
+    draft only: another mode's slice (``state["modes"]["linear"]`` on a
+    Circular drawing) raises :class:`SessionFormatError`. The current
+    Session version is 49: it keeps the drawings in the given order, any
+    number of them, several of one mode, and drawings without a request.
+    Each drawing gets its ID and name from its mode (``circular``,
+    ``circular-2``; ``Circular``, ``Circular 2``).
     """
 
     return _build_session_document_from_drawings(
@@ -1627,13 +1680,11 @@ def _request_less_data(
     ui = state.get("ui")
     shown = ui.get("mode") if isinstance(ui, Mapping) else None
     mode = shown if isinstance(shown, str) and shown in DRAWING_NAMES else drawing.mode
-    data = _session_data_from_drawings(
-        (_DrawingBuild(mode=mode, request=None, state=state),),
+    return _mode_scoped_data(
+        _DrawingBuild(mode=mode, request=None, state=state),
         web_file_inventory=web_file_inventory,
         resources=loaded._data.get("resources"),
     )
-    assert not isinstance(data, SessionDocument)  # no Session 49 base
-    return data
 
 
 def _upgrade_to_current(
@@ -1725,15 +1776,13 @@ def _upgrade_to_current(
             state.pop("runMetadata", None)
         replace_current_derived_feature_state(state, catalog)
         upgraded = _mode_scoped_document(
-            (
-                _DrawingBuild(
-                    mode=drawing.mode,
-                    request=project_legacy_similarity_alignment_for_current_write(
-                        adapted.request,
-                        legacy_source=request,
-                    ),
-                    state=state,
+            _DrawingBuild(
+                mode=drawing.mode,
+                request=project_legacy_similarity_alignment_for_current_write(
+                    adapted.request,
+                    legacy_source=request,
                 ),
+                state=state,
             ),
             web_file_inventory=web_file_inventory,
             resources=source["resources"],

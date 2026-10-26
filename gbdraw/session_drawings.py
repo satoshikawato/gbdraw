@@ -149,19 +149,6 @@ def _without(source: Mapping[str, Any], fields: frozenset[str]) -> dict[str, Any
     return {key: value for key, value in source.items() if key not in fields}
 
 
-def _result_set(view: Mapping[str, Any]) -> dict[str, Any]:
-    """The committed Result set of a one-drawing view, as ``otherModeResult`` holds it."""
-
-    editor = _mapping(view.get("editorState"))
-    result = _only(view, _SET_FIELDS)
-    result["editorState"] = {
-        **_only(editor, _SET_EDITOR_FIELDS),
-        "legend": _only(_mapping(editor.get("legend")), OTHER_MODE_RESULT_LEGEND_FIELDS),
-    }
-    result["ui"] = _only(_mapping(view.get("ui")), OTHER_MODE_RESULT_UI_FIELDS)
-    return result
-
-
 def _shared(view: Mapping[str, Any]) -> dict[str, Any]:
     """Every field of a one-drawing view outside its committed Result set."""
 
@@ -391,137 +378,11 @@ def allocate_session_drawing(
     return drawing_id, name
 
 
-_ARTIFACT_ENTRY_FIELDS = ("losatCache", "losatDerivedCache")
-
-
 def _pruned(value: Any) -> Any:
     if isinstance(value, Mapping):
         pruned = {key: _pruned(item) for key, item in value.items()}
         return {key: item for key, item in pruned.items() if item not in (None, {}, [])}
     return value
-
-
-def _merged_entries(groups: Sequence[Any]) -> list[Any]:
-    merged: list[Any] = []
-    for entries in groups:
-        for entry in entries if isinstance(entries, list) else ():
-            if entry not in merged:
-                merged.append(entry)
-    return merged
-
-
-def _without_slices(shared: Mapping[str, Any], modes: frozenset[str]) -> dict[str, Any]:
-    """``shared`` without the mode slices of ``modes``."""
-
-    slices = shared.get("modes")
-    if not isinstance(slices, Mapping):
-        return dict(shared)
-    return {**shared, "modes": _without(slices, modes)}
-
-
-def _merged_slices(
-    shared_slices: Any,
-    owners: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """``shared_slices`` with each owner view's own mode slice, in place."""
-
-    slices = dict(_mapping(shared_slices))
-    for view in owners:
-        mode = _request_mode(view)
-        if mode is None:
-            continue
-        own = _mapping(view.get("modes")).get(mode)
-        if own is None:
-            slices.pop(mode, None)
-        else:
-            slices[mode] = own
-    return slices
-
-
-def _merged_shared(views: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """The fields that the drawings of a Session 46 share, from their views.
-
-    Each drawing owns its mode's slice in ``modes``, from its view. The
-    first view gives every other shared field, and the others may repeat but
-    not change it, except the LOSAT artifacts: their entries are merged
-    without repeats, the legacy protein artifacts are the Linear view's (the
-    first view's without one), because only a Linear drawing decides them,
-    and the protein identity manifest is the one non-empty manifest among
-    the views.
-    """
-
-    owned = frozenset(mode for view in views if (mode := _request_mode(view)) is not None)
-    shared = _shared(views[0])
-    artifact_fields = {*_ARTIFACT_ENTRY_FIELDS, "legacyArtifacts", "proteinIdentityManifest"}
-    first = _pruned(_without_slices(_without(shared, frozenset(artifact_fields)), owned))
-    for view in views[1:]:
-        changed = sorted(
-            key
-            for key, value in _pruned(
-                _without_slices(_without(_shared(view), frozenset(artifact_fields)), owned)
-            ).items()
-            if first.get(key) != value
-        )
-        if changed:
-            raise ValidationError(
-                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} drawings share "
-                + ", ".join(changed)
-                + "; give these fields to one drawing only.",
-                diagnostic=_LAYOUT_INVALID,
-            )
-    if len(views) > 1:
-        slices = _merged_slices(shared.get("modes"), views)
-        if slices or "modes" in shared:
-            shared["modes"] = slices
-    if len(views) == 1:
-        return shared
-    for field_name in _ARTIFACT_ENTRY_FIELDS:
-        if any(field_name in view for view in views):
-            shared[field_name] = {
-                "entries": _merged_entries(
-                    [_mapping(view.get(field_name)).get("entries") for view in views]
-                )
-            }
-    legacy_owner = next((view for view in views if _request_mode(view) == "linear"), views[0])
-    if "legacyArtifacts" in legacy_owner:
-        shared["legacyArtifacts"] = legacy_owner["legacyArtifacts"]
-    else:
-        shared.pop("legacyArtifacts", None)
-    manifests = []
-    for view in views:
-        manifest = view.get("proteinIdentityManifest")
-        if (
-            isinstance(manifest, Mapping)
-            and any(manifest.get(key) for key in ("proteinSets", "recordAnalyses", "recordInstances"))
-            and manifest not in manifests
-        ):
-            manifests.append(manifest)
-    if len(manifests) > 1:
-        raise ValidationError(
-            f"Session {MODE_SCOPED_SESSION_MAX_VERSION} drawings share one protein identity manifest; "
-            "two drawings carry different ones.",
-            diagnostic=_LAYOUT_INVALID,
-        )
-    if manifests:
-        shared["proteinIdentityManifest"] = manifests[0]
-    return shared
-
-
-def _assemble(
-    shared: Mapping[str, Any],
-    result_sets: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    data = _view(shared, result_sets[0])
-    if len(result_sets) > 1:
-        if not result_sets[1].get("results"):
-            mode = _request_mode(result_sets[1]) or "second"
-            raise ValidationError(
-                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} keeps a second drawing only with its Result; "
-                f"give the {mode} drawing its Results or save it alone.",
-                diagnostic=_LAYOUT_INVALID,
-            )
-        data["otherModeResult"] = dict(result_sets[1])
-    return data
 
 
 def _view_mode(view: Mapping[str, Any]) -> DrawingMode:
@@ -546,6 +407,23 @@ def _project_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
 # off before a view is built, and Session 49 has no place for it.
 _VIEW_FIELDS = PROJECT_FIELDS | _DRAWING_FIELDS | {"editorState", "ui", "webFiles", "modes"}
 _DRAWING_WEB_FILE_KEYS = PROJECT_WEB_FILES_FIELDS | {"bindings"} | frozenset().union(*_DRAWING_WEB_FILES_FIELDS.values())
+
+
+def other_mode_fields(state: Mapping[str, Any], mode: str) -> list[str]:
+    """The fields of a new drawing's ``state`` that belong to the other mode:
+    its ``modes`` slice, Web file bindings and request metadata, which
+    :func:`_drawing_of_view` leaves out (D-15-125: a new build refuses them)."""
+
+    (other,) = set(DRAWING_NAMES) - {mode}
+    web_files = _mapping(state.get("webFiles"))
+    return [
+        *(f"modes.{key}" for key in sorted(set(_mapping(state.get("modes"))) - {mode})),
+        *(f"webFiles.{key}" for key in sorted(_DRAWING_WEB_FILES_FIELDS[other] & set(web_files))),
+        *(
+            f"webFiles.bindings.{key}"
+            for key in sorted(WEB_BINDING_MODE_SLOTS[other] & set(_mapping(web_files.get("bindings"))))
+        ),
+    ]
 
 
 def _drawing_of_view(view: Mapping[str, Any], drawing_id: str, name: str) -> dict[str, Any]:
@@ -775,54 +653,6 @@ def write_session_drawings(
     if ids is None or names is None:
         raise ValidationError("Give both the IDs and the names of the drawings, or neither.", diagnostic=_LAYOUT_INVALID)
     return _drawings_document(views, ids=ids, names=names, active=active or 0, project_views=views)
-
-
-def mode_scoped_build_fields(
-    views: Sequence[Mapping[str, Any]],
-    *,
-    active: int | None = None,
-) -> dict[str, Any]:
-    """The mode-scoped (Session 46-48 shaped) fields of new drawings, which
-    ``gbdraw.session`` moves to Session 49 as Load moves a Session 48.
-
-    This intermediate is not a written format: the build of a new Session
-    still goes through it because the move decides what the written
-    Session 49 holds (the drawing order, a used other-mode drawing, the
-    LOSAT artifacts both drawings share). It holds at most one Circular and
-    one Linear drawing, the second only with its Result. Each drawing's view
-    gives its mode's slice in ``modes``; the drawings share every other
-    field outside a committed Result set (see :func:`_merged_shared`).
-    ``active`` is the index of the drawing the Web app opens (``ui.mode``).
-    """
-
-    if not views:
-        raise ValidationError("A Session holds at least one drawing.", diagnostic=_LAYOUT_INVALID)
-    if len(views) > 2:
-        raise ValidationError(
-            f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds at most one Circular and one Linear drawing.",
-            diagnostic=_LAYOUT_INVALID,
-        )
-    modes = [_request_mode(view) for view in views]
-    if len(views) == 2:
-        if None in modes:
-            raise ValidationError(
-                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds a drawing without a request only as its only drawing.",
-                diagnostic=_LAYOUT_INVALID,
-            )
-        if modes[0] == modes[1]:
-            raise ValidationError(
-                f"Session {MODE_SCOPED_SESSION_MAX_VERSION} holds at most one drawing of each mode; "
-                f"both drawings are {modes[0]}.",
-                diagnostic=_LAYOUT_INVALID,
-            )
-    if len(views) == 1:
-        data = _without(views[0], frozenset({"otherModeResult"}))
-    else:
-        data = _assemble(_merged_shared(views), [_result_set(view) for view in views])
-    if active is not None:
-        shown = modes[active] or _mapping(views[active].get("ui")).get("mode")
-        data["ui"] = {**_mapping(data.get("ui")), "mode": shown}
-    return data
 
 
 def replace_session_drawings(
@@ -1221,6 +1051,7 @@ __all__ = [
     "describe_session_drawings_layout",
     "drawing_draft_config",
     "drawings_document_from_mode_scoped",
+    "other_mode_fields",
     "read_session_drawings",
     "replace_session_drawings",
     "write_session_drawings",
