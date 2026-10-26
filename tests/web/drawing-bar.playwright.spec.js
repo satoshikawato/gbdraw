@@ -143,6 +143,12 @@ test.describe('390 px', () => {
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     expect(await page.locator('.origin-top svg').count()).toBe(0);
     await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
+    // The pane after a Load depends only on the loaded Session: with the Preview pane shown, a Load without a
+    // Result switches to Settings.
+    await tab('preview').click();
+    await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
+    await page.locator('input[accept^=".json,"]').setInputFiles(path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
+    await expect(tab('settings')).toHaveAttribute('aria-selected', 'true');
     expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
     await expect(tab('preview')).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('.origin-top svg')).toBeVisible();
