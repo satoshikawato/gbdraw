@@ -2212,6 +2212,29 @@ const readResultSetRequest = ({ at, set }, project) => {
  */
 const readSessionRequests = (rawData, version, repairs) => {
   const sets = storedResultSets(rawData);
+  // A Session 49 drawing without a request that holds saved Results or a
+  // feature list, which only a drawing with a request holds, has a request
+  // Load cannot read (E-OD29): its row, and the drawing stays without its set.
+  if (isDrawingsBand(/** @type {SessionChecked} */ (/** @type {unknown} */ (rawData)))) {
+    const document = /** @type {Session49} */ (/** @type {unknown} */ (rawData));
+    const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
+    const requestLess = document.drawings.flatMap((entry, index) => (entry.renderRequest == null && (
+      (Array.isArray(entry.results) && entry.results.length > 0)
+      || isPlainObject(/** @type {UnvalidatedFields<'featureCatalog'>} */ (entry.editorState)?.featureCatalog)
+    ) ? [{ entry, index }] : []));
+    if (requestLess.length > 0) {
+      let data = rawData;
+      for (const { entry, index } of requestLess) {
+        repairs.push(loadRepair({
+          code: entry.id === openedId ? 'request-dropped' : 'other-result-set-dropped',
+          path: `${drawingSetPath(index)}renderRequest`, effect: 'dropped',
+          ...(entry.id === openedId ? {} : { mode: entry.mode })
+        }));
+        data = withStoredResultSet(data, drawingSetPath(index), null);
+      }
+      return readSessionRequests(data, version, repairs);
+    }
+  }
   // A Session 49 whose opened drawing holds no request projects no set.
   const projected = sets.find((entry) => entry.projected);
   const stored = sets.filter((entry) => !entry.projected);
@@ -2233,6 +2256,12 @@ const readSessionRequests = (rawData, version, repairs) => {
   if ('kind' in projectedRead) {
     const envelope = /** @type {SessionEnvelope} */ (rawData);
     repairs.push(loadRepair({ code: 'request-dropped', path: projectedRead.path, effect: 'dropped' }));
+    // A Session 49 drawing whose request cannot be read stays, without its
+    // set, as a stored drawing's does (`readStoredSetRequests`).
+    if (projected.at !== '') {
+      const kept = withStoredResultSet(rawData, projected.at, null);
+      return { data: readStoredSetRequests(kept, stored, project, repairs), storedSchemas, settingsOnly: false, comparisonClassification: null };
+    }
     // Without a settings-only form, an unread request is never committed
     // (C-OD25): the row alone restores nothing, and so does a settings-only
     // reading that keeps no settings (a CLI or Python API Session 42, 44 or

@@ -63,3 +63,44 @@ for (const opened of ['linear', 'circular']) {
     assert.deepEqual(requestMetadata(slot.runtimeState.canonical.committedCanonicalSession.webFiles), requestMetadata(other.webFiles));
   });
 }
+
+// OV-1871: what a Session 49 Load cannot restore of one drawing is listed
+// before anything changes (BA-D25), and the drawing stays without its set
+// (`withStoredResultSet`); only a newer version refuses (〔拒否〕).
+const loadRows = async (session) => {
+  let asked = false;
+  const loaded = await importSession({
+    target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
+  }, { confirmLoadRepairs: async () => { asked = true; return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error ?? loaded.status));
+  assert.equal(asked, true, 'the Load lists its rows before it changes anything');
+  return loaded.repairs.map(({ code, path }) => `${code} ${path}`);
+};
+for (const [name, mutate] of [
+  // A drawing without a request holds no Results (Session format): a null
+  // request beside Results reads as one Load cannot read (E-OD29).
+  ['a null request beside Results', (entry) => { entry.renderRequest = null; }],
+  ['a missing request beside Results', (entry) => { delete entry.renderRequest; }]
+]) {
+  test(`a Session 49 Load lists the opened drawing's request of ${name} and keeps the drawing (OV-1871)`, async () => {
+    const session = v49Session();
+    session.ui.activeDrawingId = 'circular';
+    const index = session.drawings.findIndex((entry) => entry.id === 'circular');
+    mutate(session.drawings[index]);
+    assert.deepEqual(await loadRows(session), [`request-dropped drawings[${index}].renderRequest`]);
+  });
+}
+test('a Session 49 Load lists the request of a drawing it does not open, without a request beside Results (OV-1871)', async () => {
+  const session = v49Session();
+  session.ui.activeDrawingId = 'linear';
+  const index = session.drawings.findIndex((entry) => entry.id === 'circular');
+  session.drawings[index].renderRequest = null;
+  assert.deepEqual(await loadRows(session), [`other-result-set-dropped drawings[${index}].renderRequest`]);
+});
+test('a Session 49 whose resources are gone lists the opened drawing\'s request and its bindings, not a refusal (OV-1871)', async () => {
+  const session = v49Session();
+  session.ui.activeDrawingId = 'circular';
+  session.resources = {};
+  const rows = await loadRows(session);
+  assert.ok(rows.includes('request-dropped drawings[0].renderRequest'), JSON.stringify(rows));
+});

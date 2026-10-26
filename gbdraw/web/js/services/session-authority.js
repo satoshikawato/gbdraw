@@ -653,7 +653,8 @@ const withNullRequestAsMissing = (document) => {
  */
 export const restoresNothing = (stored, repairs) => {
   const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
-  if (requestDropped && !hasSettingsOnlyForm(stored)) return true;
+  // A Session 49 drawing whose request was dropped stays, with its settings.
+  if (requestDropped && !hasSettingsOnlyForm(stored) && !versionHoldsDrawings(stored.version)) return true;
   // A Session 46-48's stored set dropped for its request is its top-level
   // part (a Session 49 drawing stays without its set).
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
