@@ -51,6 +51,7 @@ const BASES = {
   v44: () => fixture('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz'),
   v44L: () => fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz'),
   so46: () => structuredClone(VECTORS.bases['settings-only-46'].document),
+  // The bundled Gallery Session is a 49: a leaf is edited in its drawing (`drawings[0]`), and a row names it there.
   g47L: () => gallery('lambda_basic_linear.gbdraw-session.json'),
   // tests/utils/two_mode_session.py: a Circular Session 46 with a Linear `otherModeResult`.
   twoMode: () => evaluatePython('from tests.utils.two_mode_session import two_mode_session\nresult = two_mode_session()')
@@ -71,6 +72,8 @@ const saved = async () => {
   assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
   return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
 };
+// A 49 Load names a place in `drawings` by its index: `drawings.0.x` is the row `drawings[0].x`.
+const rowOf = (path) => path.replace(/\.(\d+)(?=\.|$)/g, '[$1]');
 const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
 
 // [base, the edited path, the stored value, the rows, a check of the loaded state]
@@ -99,15 +102,15 @@ const CASES = [
   ['so46', 'ui.mode', 'zigzag', ['setting-replaced ui.mode'], () => assert.equal(state.mode.value, 'circular')],
   ['g47L', 'ui.mode', 'zigzag', [], () => assert.equal(state.mode.value, 'linear')],
   // RL-D: a drawing's feature color edits and label rows read per entry.
-  ['g47L', 'modes.linear.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
-    ['setting-entries-dropped modes.linear.features.featureColorOverrides'],
+  ['g47L', 'drawings.0.features.featureColorOverrides', { a: 5, b: 'notacolor', c: { color: '#ff0000', caption: 'x' } },
+    ['setting-entries-dropped drawings[0].features.featureColorOverrides'],
     () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, { c: { color: '#ff0000', caption: 'x' } })],
   // OV-866: an edit map of another kind (a list) is dropped as its row says, not read by index.
-  ['g47L', 'modes.linear.features.featureColorOverrides', ['#ff0000'],
-    ['setting-replaced modes.linear.features.featureColorOverrides'],
+  ['g47L', 'drawings.0.features.featureColorOverrides', ['#ff0000'],
+    ['setting-replaced drawings[0].features.featureColorOverrides'],
     () => assert.deepEqual(modeDrawing(state, 'linear').featureColorOverrides, {})],
-  ['g47L', 'modes.linear.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
-    ['setting-entries-dropped modes.linear.features.labelOverrideRows'],
+  ['g47L', 'drawings.0.features.labelOverrideRows', [5, 'x', { recordId: '*', featureType: 'CDS', qualifier: 'product', valueRegex: 'x', labelText: 'y' }],
+    ['setting-entries-dropped drawings[0].features.labelOverrideRows'],
     () => assert.equal(modeDrawing(state, 'linear').canonicalLabelOverrideRows.value.length, 1)],
   // OV-578: the alignment plan and record translations of a settings-only file.
   ['so46', 'modes.linear.config.linearRecordLayout.similarityAlignment', 'junk',
@@ -115,7 +118,7 @@ const CASES = [
   ['so46', 'modes.linear.config.linearRecordLayout.recordTranslations', 'nope',
     ['setting-replaced modes.linear.config.linearRecordLayout.recordTranslations'], () => assert.deepEqual(state.linearRecordTranslations.value, [])],
   // E1a residuals: LOSAT execution settings are no slice field of a Session 46 (E-OD03).
-  ['g47L', 'modes.linear.config.losat.executionMode', 'serial', ['setting-replaced modes.linear.config.losat.executionMode'],
+  ['g47L', 'drawings.0.config.losat.executionMode', 'serial', ['setting-replaced drawings[0].config.losat.executionMode'],
     () => assert.equal(state.losatExecution.executionMode, 'auto')],
   // An older Linear visibility that is no boolean is dropped with a row on every path.
   ['v30', 'config.adv.linear_show_accession', 'yes', ['setting-replaced config.adv.linear_show_accession'],
@@ -125,15 +128,15 @@ const CASES = [
   ['v44', 'config.qualifierPriorityRules', [{ feat: 'CDS', order: 'product', zzz: 1 }], ['setting-replaced config.qualifierPriorityRules[0].zzz']],
   ['v44', 'config.annotationSets', [{ id: 'a', annotations: [], zzz: 1 }], ['setting-replaced config.annotationSets[0].zzz']],
   // The two Linear font sizes are read as settings (a positive number or unset).
-  ['g47L', 'modes.linear.config.adv.scale_font_size', 'big', ['setting-replaced modes.linear.config.adv.scale_font_size'],
+  ['g47L', 'drawings.0.config.adv.scale_font_size', 'big', ['setting-replaced drawings[0].config.adv.scale_font_size'],
     () => assert.equal(modeDrawing(state, 'linear').adv.scale_font_size, null)],
-  ['g47L', 'modes.linear.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(modeDrawing(state, 'linear').adv.ruler_label_font_size), 14)],
+  ['g47L', 'drawings.0.config.adv.ruler_label_font_size', '14', [], () => assert.equal(Number(modeDrawing(state, 'linear').adv.ruler_label_font_size), 14)],
   // A7i at a Session 46: recordsOff of another kind, an entry of no key, an unbound uid.
-  ['g47L', 'modes.linear.config.recordsOff', 'x', ['setting-replaced modes.linear.config.recordsOff']],
+  ['g47L', 'drawings.0.config.recordsOff', 'x', ['setting-replaced drawings[0].config.recordsOff']],
   ['so46', 'modes.linear.config.recordsOff', [5], ['setting-entries-dropped modes.linear.config.recordsOff']],
   ['so46', 'modes.linear.config.recordsOff', ['unbound'], [], () => assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], [])],
   // OV-822: a null over a settings group merges nothing (E-OD06), and the group keeps its defaults.
-  ['g47L', 'modes.linear.config.losat.blastp', null, [], () => assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object')],
+  ['g47L', 'drawings.0.config.losat.blastp', null, [], () => assert.equal(typeof modeDrawing(state, 'linear').losat.blastp, 'object')],
   ['so46', 'modes.circular.config.losat.blastp', null, []]
 ];
 
@@ -150,12 +153,12 @@ for (const [base, path, value, rows, check] of CASES) {
 // nothing acts after the commit point. The dialog's wording is the owner's.
 test('K14: record display drafts of no list are listed before the dialog and applied as listed', async () => {
   const configFile = () => {
-    const config = structuredClone(BASES.g47L().modes.linear.config);
+    const config = structuredClone(BASES.g47L().drawings[0].config);
     installShownDrawing('linear');
     return config;
   };
   const cases = [
-    ['g47L', () => BASES.g47L(), 'modes.linear.config.recordDisplayDrafts', 'linear'],
+    ['g47L', () => BASES.g47L(), 'drawings.0.config.recordDisplayDrafts', 'linear'],
     ['v44', () => BASES.v44(), 'config.recordDisplayDrafts', 'circular'],
     ['configuration file', configFile, 'recordDisplayDrafts', 'linear']
   ];
@@ -173,9 +176,9 @@ test('K14: record display drafts of no list are listed before the dialog and app
       });
       const label = `${name} ${JSON.stringify(value)}`;
       assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
-      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${path}`], label);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), [`setting-replaced ${rowOf(path)}`], label);
       assert.deepEqual(dialogs, [describeLoadRepairs(loaded.repairs)?.items], label);
-      assert.ok(dialogs[0].some((line) => line.includes(`(${path})`)), `${label}: ${dialogs[0]}`);
+      assert.ok(dialogs[0].some((line) => line.includes(`(${rowOf(path)})`)), `${label}: ${dialogs[0]}`);
       // A Session Load makes new drawing states; a configuration file keeps the drawing.
       assert.deepEqual([...modeDrawing(state, mode).recordDisplayDrafts], [], label);
     }
@@ -192,12 +195,12 @@ test('K14: record display drafts of no list are listed before the dialog and app
 // Session slice, a Session 44 draft and a configuration file.
 test('OV-892: a Label blacklist that is no text is listed and keeps its text', async () => {
   const configFile = () => {
-    const config = structuredClone(BASES.g47L().modes.linear.config);
+    const config = structuredClone(BASES.g47L().drawings[0].config);
     installShownDrawing('linear');
     return config;
   };
   const cases = [
-    ['g47L', () => BASES.g47L(), 'modes.linear.config.blacklistText', 'linear'],
+    ['g47L', () => BASES.g47L(), 'drawings.0.config.blacklistText', 'linear'],
     ['v44', () => BASES.v44(), 'config.blacklistText', 'circular'],
     ['configuration file', configFile, 'blacklistText', 'linear']
   ];
@@ -213,7 +216,7 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
       });
       const label = `${name} ${JSON.stringify(value)}`;
       assert.ok(['ok', 'legacy'].includes(loaded.status), `${label}: ${JSON.stringify(loaded.error)}`);
-      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${path}`] : [], label);
+      assert.deepEqual(loaded.repairs.map(({ code, path: at }) => `${code} ${at}`), listed ? [`setting-replaced ${rowOf(path)}`] : [], label);
       assert.deepEqual(dialogs, listed ? [describeLoadRepairs(loaded.repairs)?.items] : [], label);
       assert.equal(modeDrawing(state, mode).manualBlacklist.value, text, label);
     }
@@ -222,11 +225,11 @@ test('OV-892: a Label blacklist that is no text is listed and keeps its text', a
 
 test('E1b: an unknown field of a stored comparison edge is dropped with a row (E-OD12)', async () => {
   const session = BASES.g47L();
-  session.modes.linear.config.linearComparisonPlan.edges = [{
+  session.drawings[0].config.linearComparisonPlan.edges = [{
     id: 'e1', queryUid: 'a', subjectUid: 'b', included: false, fileActive: false, losatFilenameActive: false,
     source: 'losat', losatFilename: '', zzz: 1
   }];
-  assert.deepEqual(await load(session), ['setting-replaced modes.linear.config.linearComparisonPlan.edges[0].zzz']);
+  assert.deepEqual(await load(session), ['setting-replaced drawings[0].config.linearComparisonPlan.edges[0].zzz']);
   assert.equal(Object.hasOwn(modeDrawing(state, 'linear').linearComparisonPlan.edges[0], 'zzz'), false);
   await saved();
 });
@@ -281,7 +284,7 @@ test('OV-789: a Session 27-39 Result Load cannot admit drops the Results with th
 
 test('OV-822: a configuration file\'s null LOSAT group loads with no row, and saves', async () => {
   assert.deepEqual(await load(BASES.g47L()), []);
-  const config = structuredClone(BASES.g47L().modes.linear.config);
+  const config = structuredClone(BASES.g47L().drawings[0].config);
   config.losat = { blastp: null };
   installShownDrawing('linear');
   assert.deepEqual(await load(config), []);
@@ -292,7 +295,7 @@ test('OV-822: a configuration file\'s null LOSAT group loads with no row, and sa
 test('A configuration file: a Legend position outside its mode is listed (receipt residual)', async () => {
   const session = BASES.g47L();
   await load(session);
-  const config = structuredClone(session.modes.linear.config);
+  const config = structuredClone(session.drawings[0].config);
   config.form.legend = 'upper_right';
   assert.deepEqual(await load(config), ['legend-position-defaulted form.legend']);
   await saved();
@@ -448,16 +451,18 @@ test('OV-899: a dropped comparison file binding loads as a removed file; Save an
 // R2-B1: a null request of a full Session reads as an absent one (E-OD29):
 // the settings-only row names everything that is left out.
 test('R2-B1: a full Session 44 or 47 whose request is null loads as settings only with the request row', async () => {
-  for (const base of ['v44', 'g47L']) {
+  // The 46-48 top level of a Session 44, and the request of the one drawing of a bundled 49.
+  for (const [base, request] of [['v44', 'renderRequest'], ['g47L', 'drawings.0.renderRequest']]) {
     const absent = BASES[base]();
-    delete absent.renderRequest;
+    const owner = request.split('.').slice(0, -1).reduce((current, part) => current[part], absent);
+    delete owner.renderRequest;
     const expected = await load(absent);
-    assert.deepEqual(expected, ['request-dropped renderRequest'], base);
-    assert.deepEqual(await load(set(BASES[base](), 'renderRequest', null)), expected, base);
+    assert.deepEqual(expected, [`request-dropped ${rowOf(request)}`], base);
+    assert.deepEqual(await load(set(BASES[base](), request, null)), expected, base);
     assert.equal(state.results.value.length, 0);
   }
   // A settings-only file that holds Results is read the same way.
-  const results = BASES.g47L().results;
+  const results = BASES.g47L().drawings[0].results;
   assert.deepEqual(await load({ ...BASES.so46(), results }), ['request-dropped renderRequest']);
   assert.deepEqual(await load(BASES.so46()), []);
 });
