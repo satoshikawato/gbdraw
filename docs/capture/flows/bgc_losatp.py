@@ -190,8 +190,8 @@ def _set_gallery_quality_presentation(
     colors = page.get_by_label("Colors", exact=True)
     toggle_disclosure(colors)
     palette = page.get_by_label("Palette", exact=True)
-    palette.select_option("orange")
-    expect(palette).to_have_value("orange")
+    palette.select_option("galaxy")
+    expect(palette).to_have_value("galaxy")
     page.get_by_label("Default colors file", exact=True).set_input_files(
         BGC_DEFAULT_COLORS
     )

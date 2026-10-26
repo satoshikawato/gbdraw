@@ -424,16 +424,16 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
       name: 'CDS gene ^dnaA$ #d95f02 DnaA'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByText(/color genes by antiSMASH gene_kind/)).toBeVisible();
+  await expect(tutorialPanel.getByText(/color the genes by its value in the colors of the MIBiG website/)).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Feature' }).first()).toBeVisible();
   await expect(tutorialPanel.getByRole('columnheader', { name: 'Qualifier' }).first()).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'CDS gene_kind biosynthetic$ #d03535 Core biosynthetic genes'
+      name: 'CDS gene_kind biosynthetic$ #810e15 Core biosynthetic genes'
     })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Palette orange' }).first()).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: 'Default Colors › CDS feature color #dddddd' })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Palette galaxy' }).first()).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: 'Default Colors › CDS feature color #808080' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Min identity (%) 30 (default 0)' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', { name: 'File 5 › Record options › Reverse complement On' })
@@ -478,22 +478,22 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
   await expect(mediaImages).toHaveCount(23);
-  // One preview per Generate (steps 4, 5, 6, 8, 9, 10) and after Apply (step 7).
+  // One preview per Generate (steps 4, 5, 6, 9, 10, 11) and after Apply (step 7).
   for (const name of [
     'manual-04-01-preview-defaults.webp',
     'manual-05-03-preview-losatp.webp',
     'manual-06-02-preview-reversed.webp',
     'manual-07-04-preview-aligned.webp',
-    'manual-08-02-preview-colors.webp',
-    'manual-09-02-preview-labels.webp',
-    'manual-10-04-preview-final.webp',
+    'manual-09-02-preview-colors.webp',
+    'manual-10-02-preview-labels.webp',
+    'manual-11-04-preview-final.webp',
     'manual-02-01-file1-defaults.webp',
     'manual-03-01-file5-defaults.webp',
     'manual-05-02-select-losatp-orthogroups.webp',
     'manual-06-01-reverse-bgc0000713.webp',
     'manual-07-02-anchor-candidates.webp',
-    'manual-11-01-orthogroup-popup.webp',
-    'manual-12-01-feature-popup.webp'
+    'manual-12-01-orthogroup-popup.webp',
+    'manual-08-01-feature-popup.webp'
   ]) {
     await expect(tutorialPanel.locator(`img[src$="${name}"]`)).toHaveCount(1);
   }
@@ -504,7 +504,9 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     'manual-03-04-first-raw-result.webp',
     'manual-04-03-track-layout-middle.webp',
     'manual-06-02-record-labels.webp',
-    'manual-08-04-aligned-preview.webp'
+    'manual-08-04-aligned-preview.webp',
+    'manual-08-02-preview-colors.webp',
+    'manual-12-01-feature-popup.webp'
   ]) {
     await expect(tutorialPanel.locator(`img[src$="${retired}"]`)).toHaveCount(0);
   }
@@ -849,7 +851,7 @@ test('Gallery opens tutorial images at natural size in a modal', async ({ page }
   await page.getByRole('tab', { name: 'Tutorial' }).click();
 
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
-  const image = tutorialPanel.locator('img[src$="manual-11-01-orthogroup-popup.webp"]');
+  const image = tutorialPanel.locator('img[src$="manual-12-01-orthogroup-popup.webp"]');
   await expect(image).toHaveCount(1);
   await image.scrollIntoViewIfNeeded();
   await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
@@ -868,7 +870,7 @@ test('Gallery opens tutorial images at natural size in a modal', async ({ page }
   await expect(dialog.getByRole('button')).toHaveCount(0);
 
   const fullSizeImage = dialog.getByRole('img');
-  await expect(fullSizeImage).toHaveAttribute('src', /manual-11-01-orthogroup-popup\.webp$/);
+  await expect(fullSizeImage).toHaveAttribute('src', /manual-12-01-orthogroup-popup\.webp$/);
   await expect.poll(() => fullSizeImage.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
 
   const fullSizeImageSize = await fullSizeImage.evaluate((element) => {

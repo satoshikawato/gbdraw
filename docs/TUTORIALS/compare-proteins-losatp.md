@@ -53,7 +53,11 @@ files selected.
 
 Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
 the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** below the File list four times and upload the remaining files in the table order.
-Keep each record whole: leave all optional Region fields blank.
+MIBiG has already cut each cluster out of its genome, so each file holds one
+cluster. Keep each record whole: leave all optional Region fields blank. For a
+cluster inside a whole genome of your own, you would first enter its
+coordinates under the File's **Record options** › **Region (optional)** ›
+**Start** and **End**.
 
 In **File 5**, open **Record options** and turn on
 **Reverse complement** only for `BGC0000713`. This changes only its display
@@ -96,7 +100,7 @@ Apply these display settings. They follow the Interactive SVG Gallery entry but 
 
 | Control | Value |
 |---|---|
-| Palette | `orange` |
+| Palette | `galaxy` |
 | Default colors file | `BGC0000708-BGC0000713_default_colors.tsv` |
 | Specific rules file | `BGC0000708-BGC0000713_specific_colors.tsv` |
 | Show Labels | First Record Only |
@@ -271,7 +275,7 @@ gbdraw linear \
   --identity 30 \
   --alignment_length 0 \
   --similarity_alignment_feature CAG38695.1 \
-  --palette orange \
+  --palette galaxy \
   --default_colors BGC0000708-BGC0000713_default_colors.tsv \
   --table BGC0000708-BGC0000713_specific_colors.tsv \
   --qualifier_priority cds_gene_qualifier_priority.tsv \
@@ -401,7 +405,7 @@ request = LinearDiagramRequest(
         colors=ColorOptions(
             color_table_file="BGC0000708-BGC0000713_specific_colors.tsv",
             default_colors_file="BGC0000708-BGC0000713_default_colors.tsv",
-            default_colors_palette="orange",
+            default_colors_palette="galaxy",
         ),
         qualifier_priority_file="cds_gene_qualifier_priority.tsv",
         plot_title="LOSATP Similarity groups across five whole BGC records",

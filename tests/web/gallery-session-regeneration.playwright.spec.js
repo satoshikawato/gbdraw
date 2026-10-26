@@ -166,7 +166,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
     window.__GBDRAW_APP__,
     'pyodideReady'
   ))).toBe(false);
-  expect(imported.settings.cdsColor).toBe('#dddddd');
+  expect(imported.settings.cdsColor).toBe('#808080');
   expect(imported.settings.labels).toBe('first');
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');
   expect(imported.settings.rules).toHaveLength(4);
@@ -188,7 +188,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
       result,
       errorLog: app.errorLog,
       settings: inspectSettings(),
-      hasCoreColor: content.toLowerCase().includes('#d03535'),
+      hasCoreColor: content.toLowerCase().includes('#810e15'),
       hasCustomRecordLabel: content.includes('Streptomyces lividus')
     };
   });

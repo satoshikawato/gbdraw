@@ -408,7 +408,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
         "Ribostamycin biosynthetic gene",
     )
     title = "Aminoglycoside biosynthetic gene clusters from Streptomyces spp."
-    rule_colors = {"#d03535", "#f787a9", "#577edb", "#57b767"}
+    rule_colors = {"#810e15", "#f16d75", "#6495ed", "#2e8b57"}
     rule_captions = {
         "Core biosynthetic genes",
         "Additional biosynthetic genes",
@@ -429,7 +429,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
     assert _plain_label(options["plotTitle"]) == title
     colors = options["colors"]
     assert isinstance(colors, dict)
-    assert colors["defaultColorsPalette"] == "orange"
+    assert colors["defaultColorsPalette"] == "galaxy"
     rules_ref = _option_resource_ref(colors, "colorTableFile", "colorTable")
     rules = _resource_text(session, rules_ref)
     assert rule_colors <= set(re.findall(r"#[0-9a-fA-F]{6}", rules))
@@ -454,7 +454,7 @@ def test_bgc_gallery_session_keeps_curated_presentation_and_styles(
         assert set(expected_labels) <= texts, location
         assert set(expected_subtitles) <= texts, location
         assert rule_captions <= texts, location
-        assert {"#dddddd", *rule_colors} <= fills, location
+        assert {"#808080", *rule_colors} <= fills, location
         assert "livZ" in texts, location
         assert len(definitions) == 5, location
         for definition in definitions:
