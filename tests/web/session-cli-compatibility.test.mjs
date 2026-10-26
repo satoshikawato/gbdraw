@@ -821,12 +821,16 @@ await test('every drawing of a Session 49 draws the CLI figure after a Web Load,
         assert.equal(saved.status, 'saved', saved.error?.message);
         const webSave = path.join(directory, entry.id, `${drawingId} web-save.json`);
         await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
-        // OV-1884: a Web Save also gives a drawing the entries the file holds in another drawing, so only the
-        // "kept" half of "keeps each drawing's own entries" is asserted.
-        const savedEntries = entriesOf(JSON.parse(await readFile(webSave, 'utf8')));
+        // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): a drawing whose
+        // request names another drawing's rows also gets that drawing's entries (OV-1884), so only "kept" is asserted
+        // for a drawing with a request. This harness passes Save no kept artifacts, so another drawing is written
+        // without its request and names no entry (OV-1903).
+        const savedSession = JSON.parse(await readFile(webSave, 'utf8'));
+        const savedEntries = entriesOf(savedSession);
         for (const [id, keys] of Object.entries(entriesOf(stored))) {
-          assert.deepEqual(keys.filter(key => !savedEntries[id].includes(key)), [],
-            `${entry.id}, ${drawingId}: a Web Save keeps the LOSAT entries of ${id}`);
+          const hasRequest = savedSession.drawings.find(drawing => drawing.id === id).renderRequest !== null;
+          assert.deepEqual(hasRequest ? keys.filter(key => !savedEntries[id].includes(key)) : savedEntries[id], [],
+            `${entry.id}, ${drawingId}: a Web Save keeps the LOSAT entries of ${id}, or none without a request`);
         }
         const mode = state.mode.value;
         const first = checks.length;

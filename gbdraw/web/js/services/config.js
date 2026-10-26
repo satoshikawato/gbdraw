@@ -197,7 +197,8 @@ import {
   serializableLegacyProteinCandidateEnvelope,
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
-  validateProteinIdentityManifest
+  validateProteinIdentityManifest,
+  CIRCULAR_CONSERVATION_FLOW
 } from './losat-cache.js';
 import {
   defaultFeatureRendering,
@@ -328,7 +329,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
 /** @import { CurrentResultsPort, LegacyResultNormalization, SavedResultEdits } from './svg-result-ingestion.js' */
 /** @import { DroppedLegendRecord, PythonLegendKey, PythonLegendRow } from './legend-svg.js' */
-/** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { SessionResourceDrawing, SessionResourceSource } from './session-resources.js' */
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot, LoadedArtifactSlots } from './artifact-slot.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
@@ -5735,20 +5736,29 @@ const artifactUiState = (view) => ({
  */
 
 /**
- * The raw LOSAT entries Save writes into one Session 49 drawing (DESIGN §1,
- * K-3): an entry that names its pair's Linear rows goes to each drawing that
- * holds both rows, so an entry two drawings use is written in both; an entry
- * that names no row (a Circular conservation pair) cannot tell its drawing
- * and goes to every drawing. Load merges every drawing's entries into the one
+ * The raw LOSAT entries Save writes into one Session 49 drawing: those its
+ * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
+ * written in both and a drawing without a request names none. A Linear entry
+ * names its pair's rows, which a Linear request names as its records' keys;
+ * a Circular conservation entry goes to each Circular request whose
+ * conservation rings read sequences (its hashes are not matched to the
+ * ring files: the remaining step of K-3); any other entry goes to every
+ * drawing with a request. Load merges every drawing's entries into the one
  * cache.
- * @param {DrawingState} drawing
+ * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
  * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
  * @returns {Record<string, unknown>[]}
  */
-const losatEntriesOfDrawing = (drawing, entries) => {
-  const rows = new Set(drawing.linearSeqs.map((sequence) => String(sequence.uid)));
-  return entries.filter(({ queryUid, subjectUid }) => (typeof queryUid !== 'string' || typeof subjectUid !== 'string'
-    || (rows.has(queryUid) && rows.has(subjectUid))));
+const losatEntriesOfDrawing = (request, entries) => {
+  if (!request) return [];
+  const records = new Set(request.mode === 'linear' ? request.records.map(({ recordKey }) => recordKey) : []);
+  const readsRingSequences = request.mode === 'circular'
+    && (request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null);
+  return entries.filter(({ queryUid, subjectUid, flow }) => (
+    typeof queryUid === 'string' && typeof subjectUid === 'string' ? records.has(queryUid) && records.has(subjectUid)
+      : flow === CIRCULAR_CONSERVATION_FLOW ? readsRingSequences
+        : true
+  ));
 };
 
 /**
@@ -5933,7 +5943,7 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntriesOfDrawing(saved, losatEntries) },
+        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, losatEntries) },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
         ...(cliInvocation ? { cliInvocation } : {})

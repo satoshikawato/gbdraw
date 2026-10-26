@@ -168,7 +168,8 @@ import {
   losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord,
-  writtenLegacyProteinArtifacts
+  writtenLegacyProteinArtifacts,
+  CIRCULAR_CONSERVATION_FLOW
 } from '../services/losat-cache.js';
 import {
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA, LEGACY_PROTEIN_CANDIDATE_SCHEMA,
@@ -3193,7 +3194,7 @@ export const createRunAnalysis = ({
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
               const cacheMetadata = {
-                flow: 'circular-conservation',
+                flow: CIRCULAR_CONSERVATION_FLOW,
                 program: circularLosatProgram,
                 outfmt: String(drawing.losat.outfmt || '6'),
                 args: extraArgs,
@@ -3268,7 +3269,7 @@ export const createRunAnalysis = ({
                   identityKind: 'nucleotide',
                   text: result.text,
                   program: circularLosatProgram,
-                  flow: 'circular-conservation',
+                  flow: CIRCULAR_CONSERVATION_FLOW,
                   outfmt: String(drawing.losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',

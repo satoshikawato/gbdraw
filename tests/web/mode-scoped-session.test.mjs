@@ -1059,6 +1059,51 @@ test('Save writes into each Session 49 drawing the LOSAT entries of its own Line
   assert.deepEqual(keysOf('linear-2'), [`${entry.key}-second`]);
 });
 
+// DESIGN §1, B2-D9: a drawing writes the LOSAT entries its request's inputs
+// name. linear-2 binds linear's rows but has no request (no Generate), so it
+// names none; the shown drawing linear keeps its entry.
+test('Save writes no LOSAT entry into a Session 49 drawing without a request, though it binds the entry\'s rows', async () => {
+  const session = v49Session('drawings-linear-pair-losat');
+  const entry = session.drawings.find((candidate) => candidate.id === 'linear').losatCache.entries[0];
+  const second = session.drawings.find((candidate) => candidate.id === 'linear-2');
+  Object.assign(second, { renderRequest: null, results: [], editorState: { featureCatalog: null } });
+  delete second.runMetadata;
+  session.ui.activeDrawingId = 'linear';
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(state.drawingOf('linear-2').linearSeqs.map(({ uid }) => uid), [entry.queryUid, entry.subjectUid]);
+  const result = await exportSession('losat-no-request', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const keysOf = (id) => saved.drawings.find((candidate) => candidate.id === id).losatCache.entries.map(({ key }) => key);
+  assert.equal(saved.drawings.find((candidate) => candidate.id === 'linear-2').renderRequest, null);
+  assert.deepEqual(keysOf('linear'), [entry.key]);
+  assert.deepEqual(keysOf('linear-2'), []);
+});
+
+// K-3: a Circular conservation entry names no Linear row; only a Circular
+// request whose conservation rings read sequences names it. Neither drawing
+// here has such rings, so neither writes it.
+test('Save writes a Circular conservation LOSAT entry into no drawing whose request has no conservation sequences (K-3)', async () => {
+  const session = v49Session('drawings-circular-linear');
+  const conservation = {
+    schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', program: 'blastn', flow: 'circular-conservation',
+    outfmt: '6', args: ['--task', 'megablast'], queryCanonicalHash: 'a'.repeat(64), subjectCanonicalHash: 'b'.repeat(64),
+    text: 'q\ts\t100.000\t10\t0\t0\t1\t10\t1\t10\t0.0\t20\n', key: 'c'.repeat(64), filename: 'ring.circular_conservation.losatn.tsv', display: true
+  };
+  session.drawings.find((candidate) => candidate.id === 'circular').losatCache.entries = [conservation];
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual([...state.losatCache.value.keys()], [conservation.key]);
+  const result = await exportSession('losat-conservation', { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  assert.deepEqual(Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)])),
+    { circular: [], linear: [] });
+});
+
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it
 // (`depth: null`), so Save writes it back unchanged. Load pads Depth rows to
 // the Depth track count only when a row holds a Depth file, as for Circular.
