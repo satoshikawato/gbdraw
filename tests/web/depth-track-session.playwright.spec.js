@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { savedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
@@ -2056,26 +2057,28 @@ ORIGIN
   ];
   expect(exportedSession.version).toBe(CURRENT_SESSION_VERSION);
   expect(exportedSession).not.toHaveProperty('files');
-  expect(exportedSession.webFiles).toEqual(expect.any(Object));
-  expect(exportedSession.webFiles.bindings.schema).toBe(2);
-  expect(exportedSession.webFiles.bindings.c_gb.name).toBe('layout-preferences.gbk');
-  expect(exportedSession.webFiles.bindings.linearSeqs[0].gb.name).toBe(
+  const circularDrawing = savedDrawing(exportedSession, 'circular');
+  const linearDrawing = savedDrawing(exportedSession, 'linear');
+  expect(circularDrawing.webFiles).toEqual(expect.any(Object));
+  expect(circularDrawing.webFiles.bindings.schema).toBe(2);
+  expect(circularDrawing.webFiles.bindings.c_gb.name).toBe('layout-preferences.gbk');
+  expect(linearDrawing.webFiles.bindings.linearSeqs[0].gb.name).toBe(
     'inactive-linear-layout.gbk'
   );
-  expect(exportedSession.webFiles.bindings.c_gb.resourceId).toBe(
-    exportedSession.webFiles.bindings.linearSeqs[0].gb.resourceId
+  expect(circularDrawing.webFiles.bindings.c_gb.resourceId).toBe(
+    linearDrawing.webFiles.bindings.linearSeqs[0].gb.resourceId
   );
-  expect(exportedSession.editorState).toEqual(expect.any(Object));
-  expect(exportedSession.editorState.featureCatalog).toBeNull();
+  expect(circularDrawing.editorState).toEqual(expect.any(Object));
+  expect(circularDrawing.editorState.featureCatalog).toBeNull();
   expect(exportedSession).not.toHaveProperty('config');
   expect(exportedSession).not.toHaveProperty('features');
-  for (const mode of ['circular', 'linear']) {
-    expect(exportedSession.modes[mode].features).not.toHaveProperty('extractedFeatures');
-    expect(exportedSession.modes[mode].features).not.toHaveProperty('biologicalFeatures');
+  for (const drawing of [circularDrawing, linearDrawing]) {
+    expect(drawing.features).not.toHaveProperty('extractedFeatures');
+    expect(drawing.features).not.toHaveProperty('biologicalFeatures');
   }
-  expect(exportedSession.orthogroupState).not.toHaveProperty('groups');
-  const circularConfig = exportedSession.modes.circular.config;
-  const linearConfig = exportedSession.modes.linear.config;
+  expect(circularDrawing.orthogroupState).not.toHaveProperty('groups');
+  const circularConfig = circularDrawing.config;
+  const linearConfig = linearDrawing.config;
   expect(circularConfig.adv.circular_track_slots).toEqual(expect.any(Array));
   expect(linearConfig.adv.linear_track_slots).toEqual([
     expect.objectContaining({
@@ -2092,8 +2095,8 @@ ORIGIN
   expect(circularConfig).not.toHaveProperty('modeProfiles');
   expect([circularConfig.adv.identity, circularConfig.adv.axis_stroke_color]).toEqual([88, '#123456']);
   expect([linearConfig.adv.identity, linearConfig.adv.axis_stroke_color]).toEqual([77, '#654321']);
-  expect(exportedSession.modes.circular.ui.layoutPreferences).toEqual(expectedPreferences.circular);
-  expect(exportedSession.modes.linear.ui.layoutPreferences).toEqual(expectedPreferences.linear);
+  expect(circularDrawing.ui.layoutPreferences).toEqual(expectedPreferences.circular);
+  expect(linearDrawing.ui.layoutPreferences).toEqual(expectedPreferences.linear);
   expect(exportedSession.ui).not.toHaveProperty('layoutPreferences');
   expect(legacyLayoutFields.filter((field) => (
     Object.prototype.hasOwnProperty.call(exportedSession.ui, field)
@@ -2182,14 +2185,14 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     hatch: { pattern: 'diagonal', spacing: 4 },
     label: { color: '#445566', fontSize: 9 }
   };
-  // Each stack is its own mode's drawing's (Session 46 `modes.<mode>`).
+  // Each stack is its drawing's own (Session 49 `drawings[]`, by drawing ID).
   const p3Draft = (session) => ({
-    circularEnabled: session.modes.circular.config.adv.circular_track_slots_enabled,
-    circularAxis: session.modes.circular.config.adv.circular_track_slots_axis_index,
-    circularSlots: session.modes.circular.config.adv.circular_track_slots,
-    linearEnabled: session.modes.linear.config.adv.linear_track_slots_enabled,
-    linearAxis: session.modes.linear.config.adv.linear_track_slots_axis_index,
-    linearSlots: session.modes.linear.config.adv.linear_track_slots
+    circularEnabled: savedDrawing(session, 'circular').config.adv.circular_track_slots_enabled,
+    circularAxis: savedDrawing(session, 'circular').config.adv.circular_track_slots_axis_index,
+    circularSlots: savedDrawing(session, 'circular').config.adv.circular_track_slots,
+    linearEnabled: savedDrawing(session, 'linear').config.adv.linear_track_slots_enabled,
+    linearAxis: savedDrawing(session, 'linear').config.adv.linear_track_slots_axis_index,
+    linearSlots: savedDrawing(session, 'linear').config.adv.linear_track_slots
   });
   const readSessionDownload = async (download) => {
     const filePath = await download.path();
@@ -3217,8 +3220,8 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
   const savedSession = JSON.parse(gunzipSync(readFileSync(savedSessionPath)).toString('utf8'));
-  expect(savedSession.webFiles.bindings.linearSeqs[0].depth[0].name).toBe('sample-a.tsv');
-  expect(savedSession.webFiles.bindings.linearSeqs[1].depth[1].name).toBe('sample-b.tsv');
+  expect(savedDrawing(savedSession, 'linear').webFiles.bindings.linearSeqs[0].depth[0].name).toBe('sample-a.tsv');
+  expect(savedDrawing(savedSession, 'linear').webFiles.bindings.linearSeqs[1].depth[1].name).toBe('sample-b.tsv');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });

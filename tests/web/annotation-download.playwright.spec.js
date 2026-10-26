@@ -5,6 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
 const { openApp, assertDiagramWorkerIdle, getDiagramWorkerActivity, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 // The card's own summary; each annotation row has a Style disclosure with a summary too.
@@ -301,9 +302,9 @@ for (const width of [1440, 390]) {
     const sessionPath = testInfo.outputPath('annotations.gbdraw-session.json.gz');
     await sessionDownload.saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
-    expect(session.modes[session.ui.mode].config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
+    expect(shownSavedDrawing(session).config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
     expect(JSON.stringify(session)).not.toContain('PRIVATE-CELL');
-    for (const name of good.ignored) expect(JSON.stringify(session.modes[session.ui.mode].config.annotationSets)).not.toContain(name);
+    for (const name of good.ignored) expect(JSON.stringify(shownSavedDrawing(session).config.annotationSets)).not.toContain(name);
     expect(JSON.stringify(session)).not.toContain('Ignored annotation table columns:');
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {
