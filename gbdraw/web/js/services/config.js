@@ -200,6 +200,7 @@ import {
   validateProteinIdentityManifest,
   CIRCULAR_CONSERVATION_FLOW
 } from './losat-cache.js';
+import { circularConservationKeys, conservationHashPairs, conservationPairKey } from './circular-conservation-keys.js';
 import {
   defaultFeatureRendering,
   normalizeFeatureRenderingMap,
@@ -5736,27 +5737,48 @@ const artifactUiState = (view) => ({
  */
 
 /**
+ * The conservation hash pairs a drawing Save writes names: those of its bound
+ * rings (`circularConservationKeys`, the builder Generate keys its ring
+ * searches with, D-15-123), when its written request is Circular and its
+ * conservation rings read sequences; none otherwise. A ring or reference not
+ * bound (after a settings-only Load) names none. The reads are kept per File,
+ * so only a File no Generate or earlier Save read is read (once, by the
+ * Python ring reader); a read that fails names no pair, and Save goes on.
+ * @param {DrawingState} drawing
+ * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
+ * @returns {Promise<Set<string>>}
+ */
+const conservationPairsOfDrawing = async (drawing, request) => {
+  if (request === null || request.mode !== 'circular'
+    || !(request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null)) return new Set();
+  try {
+    return conservationHashPairs(await circularConservationKeys(drawing, state.inputFiles.fileOf));
+  } catch (error) {
+    console.warn('Save could not read the conservation ring files; it writes no conservation entry for this drawing.', normalizeUserFacingError(error));
+    return new Set();
+  }
+};
+
+/**
  * The raw LOSAT entries Save writes into one Session 49 drawing: those its
  * request's inputs name (DESIGN §1, K-3), so an entry two drawings use is
  * written in both and a drawing without a request names none. A Linear entry
  * names its pair's rows, which a Linear request names as its records' keys;
- * a Circular conservation entry goes to each Circular request whose
- * conservation rings read sequences (its hashes are not matched to the
- * ring files: the remaining step of K-3); any other entry goes to every
- * drawing with a request. Load merges every drawing's entries into the one
- * cache.
+ * a Circular conservation entry names its subject and query hashes, which
+ * the drawing's rings name (`conservationPairsOfDrawing`); any other entry
+ * goes to every drawing with a request. Load merges every drawing's entries
+ * into the one cache.
  * @param {SessionResourceDrawing['renderRequest']} request The drawing's written request.
+ * @param {ReadonlySet<string>} conservationPairs `conservationPairsOfDrawing`'s.
  * @param {readonly Record<string, unknown>[]} entries `serializeLosatCache`'s.
  * @returns {Record<string, unknown>[]}
  */
-const losatEntriesOfDrawing = (request, entries) => {
+const losatEntriesOfDrawing = (request, conservationPairs, entries) => {
   if (!request) return [];
   const records = new Set(request.mode === 'linear' ? request.records.map(({ recordKey }) => recordKey) : []);
-  const readsRingSequences = request.mode === 'circular'
-    && (request.diagramOptions.conservationFastaFiles ?? []).some((file) => file !== null);
-  return entries.filter(({ queryUid, subjectUid, flow }) => (
+  return entries.filter(({ queryUid, subjectUid, flow, queryCanonicalHash, subjectCanonicalHash }) => (
     typeof queryUid === 'string' && typeof subjectUid === 'string' ? records.has(queryUid) && records.has(subjectUid)
-      : flow === CIRCULAR_CONSERVATION_FLOW ? readsRingSequences
+      : flow === CIRCULAR_CONSERVATION_FLOW ? conservationPairs.has(conservationPairKey(subjectCanonicalHash, queryCanonicalHash))
         : true
   ));
 };
@@ -5896,6 +5918,9 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
+  const conservationPairs = await Promise.all(parts.map(({ saved }, index) => (
+    conservationPairsOfDrawing(saved, built.written[index].renderRequest)
+  )));
   // The project's original-name hints, from every drawing's request metadata.
   const resourceOriginalNames = Object.assign({}, ...built.written.map(({ webFiles }) => webFiles.resourceOriginalNames ?? {}));
   const createdAt = new Date().toISOString();
@@ -5943,7 +5968,7 @@ const exportSessionDocument = async (
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),
-        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, losatEntries) },
+        losatCache: { entries: losatEntriesOfDrawing(built.written[index].renderRequest, conservationPairs[index], losatEntries) },
         losatDerivedCache: { entries: [] },
         proteinIdentityManifest,
         ...(cliInvocation ? { cliInvocation } : {})
