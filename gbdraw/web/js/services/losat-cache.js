@@ -8,6 +8,8 @@ import {
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA
 } from '../contracts/schema.generated.js';
+import { DERIVED_RESULT_DESCRIPTION } from '../contracts/derived-result-shape.generated.js';
+import { shapeViolations } from '../utils/contract-shape.js';
 
 // Membership is tested on unvalidated Session values, hence `ReadonlySet<unknown>`.
 /** @type {ReadonlySet<unknown>} */
@@ -760,10 +762,25 @@ const holdsNoValue = (value) => {
 };
 
 /**
+ * Whether `resource` decodes as the typed result of `mode` by Python's typed codec: the shape Python's
+ * `describe_derived_analysis_results` generates (`contracts/derived-result-shape.generated.js`), so Python's
+ * `_decodes_as_derived_result` and this check are one rule (OV-1926). The shape does not run a class's value checks;
+ * a result that holds no value has none to run.
+ * @param {unknown} mode
+ * @param {unknown} resource
+ * @returns {boolean}
+ */
+const decodesAsDerivedResult = (mode, resource) => {
+  const { roots, types } = DERIVED_RESULT_DESCRIPTION;
+  return typeof mode === 'string' && Object.hasOwn(roots, mode)
+    && shapeViolations(resource, { kind: 'ref', name: roots[mode] }, types, 'result').length === 0;
+};
+
+/**
  * Whether a derived entry is the result of zero-hit searches, which names no protein (OV-1127): its mode computes a
- * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) is the
- * mode's, and every other member holds no value: the typed result and the members of the form written before it
- * (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
+ * result, its identity (if present) is current, every pair is a zero-hit pair, its typed result (if present) decodes
+ * as the mode's, and every other member holds no value: the typed result and the members of the form written before
+ * it (`orthogroups: []`) are empty. The Python twin is `_is_zero_hit_result` in `gbdraw/analysis/protein_artifacts.py`;
  * `tests/fixtures/session_admission_vectors.json` pins both.
  * @param {LosatDerivedCacheEntry} entry A derived entry that `isLosatDerivedCacheEntry` accepted.
  * @returns {boolean}
@@ -824,11 +841,12 @@ const isZeroHitDerivedResult = (entry) => {
     ) return false;
   }
 
-  if (Object.hasOwn(payload, result.member) && !isDerivedAnalysisResult(mode, payload[result.member])) return false;
+  if (Object.hasOwn(payload, result.member) && !isPlainObject(payload[result.member])) return false;
+  // The decode runs last, on a result that holds no value, so it walks no member.
   return Object.entries(payload).every(([key, value]) => (
     ['identity', 'provenance', 'pairs'].includes(key)
     || holdsNoValue(key === result.member && isPlainObject(value) ? value.value : value)
-  ));
+  )) && (!Object.hasOwn(payload, result.member) || decodesAsDerivedResult(mode, payload[result.member]));
 };
 
 /**
