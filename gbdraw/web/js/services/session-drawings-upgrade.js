@@ -205,6 +205,19 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean }} SourceFacts
  */
 /**
+ * The one reading of a Session file's source facts by its version, for the
+ * Session 49 Load reads from it (a Session 46-48's here, a Session 27-44's
+ * from Python's conversion, a Session 49 itself).
+ * @param {number} version The file's Session version.
+ * @param {boolean} hasDraft The file holds a Web draft (a Session 49 holds
+ *   each drawing's own, which the drawing's projection reads: pass false).
+ * @returns {SourceFacts}
+ */
+export const sessionSourceFactsOf = (version, hasDraft) => ({
+  cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
+  proteinResultsInDrawnFrame: version < FILE_IMPORT_ORIGIN_SESSION_VERSION
+});
+/**
  * One drawing of a Session 49 (`SessionDrawing`, gbdraw/session_contract.py).
  * @typedef {{
  *   id: string,
@@ -673,9 +686,6 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   return {
     setSources,
     document: /** @type {Session49} */ (/** @type {unknown} */ (project)),
-    sourceFacts: {
-      cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
-      proteinResultsInDrawnFrame: version < FILE_IMPORT_ORIGIN_SESSION_VERSION
-    }
+    sourceFacts: sessionSourceFactsOf(version, hasDraft)
   };
 };

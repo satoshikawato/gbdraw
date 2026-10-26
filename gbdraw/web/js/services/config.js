@@ -288,7 +288,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
-  drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey, sliceDiffersFromDefault,
+  drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey, sessionSourceFactsOf, sliceDiffersFromDefault,
   upgradeRowKeyedModeScopedSession
 } from './session-drawings-upgrade.js';
 import { CANVAS_SLICE } from './drawing/canvas.js';
@@ -341,7 +341,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
-/** @import { ModeScopedUpgrade, Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
+/** @import { ModeScopedUpgrade, Session49, SessionDrawing49, SourceFacts } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
 /** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
@@ -2462,9 +2462,10 @@ const drawingProjectionInputOf = (view, {
  * @param {Session49} document
  * @param {SessionDrawing49} drawing
  * @param {ReturnType<typeof adoptCurrentSessionResources> | null} sessionResourceTable
+ * @param {SourceFacts} sourceFacts The source facts of the file the document came from.
  * @returns {StoredDrawingInputs}
  */
-const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
+const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFacts) => {
   const view = /** @type {SessionInput} */ (/** @type {unknown} */ (drawingViewOf(document, drawing)));
   const { mode } = drawing;
   const ui = /** @type {UnvalidatedFields<'cInputType' | 'lInputType'>} */ (view.ui);
@@ -2492,8 +2493,8 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable) => {
     comparisonClassification,
     storedConfig,
     hasStoredDraft,
-    // A Session 49 holds each table of a drawing without a draft as its card's file (DESIGN §6).
-    cardRowsAreFileRows: true,
+    // A drawing without a draft holds each table as its card's file when its file says so (DESIGN §6).
+    cardRowsAreFileRows: sourceFacts.cardRowsAreFileRows,
     sessionResourceTable
   }));
   const inputType = drawingInputTypeOf(storedInputType, projection.inputType || null);
@@ -2546,8 +2547,11 @@ const openedDrawingPathOf = (sessionData) => {
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
+ * @param {SourceFacts} [drawingsSourceFacts] A Session 49 document's source facts when it came from another
+ *   file (Python's conversion of a Session 27-44: that file's); by default a Session 49 file's own.
  */
-const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSets) => {
+const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSets,
+  drawingsSourceFacts = sessionSourceFactsOf(sessionData.version, false)) => {
   const sourceSessionVersion = sessionData.version;
   // A Session before 47 stored the Legend edits under the shown caption; every
   // reader below reads them by row key (PD-OI-061 revision 5). An edit a later
@@ -2632,7 +2636,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
       upgrade = {
         document: /** @type {Session49} */ (/** @type {unknown} */ (readSets)),
         setSources: new Map(storedResultSets(readSets).map(({ at, set }) => [/** @type {SessionDrawing49} */ (/** @type {unknown} */ (set)).id, at])),
-        sourceFacts: { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false }
+        sourceFacts: drawingsSourceFacts
       };
       recordSessionLifecycleEvent('session-authority-validation-start');
       adoptedSession = adoptCurrentSessionDocument(catalogData, sourceSessionVersion, requestRead.storedSchemas);
@@ -2686,9 +2690,10 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
  * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
+ * @param {SourceFacts} [drawingsSourceFacts] As `readSessionImportParts`.
  */
-const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets) => {
-  const read = await readSessionImportParts(stored, sessionData, repairs, uncomposedSets);
+const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts) => {
+  const read = await readSessionImportParts(stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts);
   const {
     sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, adoptedSession,
     currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData
@@ -2901,8 +2906,8 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     settingsOnly,
     upgrade,
     // Each other Session 49 drawing's inputs, by drawing ID.
-    storedDrawingInputs: new Map(document49 ? document49.drawings.filter((entry) => entry !== openedDrawingOf(document49))
-      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document49, entry, currentResourceTable)]) : []),
+    storedDrawingInputs: new Map(document49 && upgrade ? document49.drawings.filter((entry) => entry !== openedDrawingOf(document49))
+      .map((entry) => [/** @type {DrawingId} */ (entry.id), storedDrawingInputsOf(document49, entry, currentResourceTable, upgrade.sourceFacts)]) : []),
     openedDrawingAt,
     // The drawing whose set Load projects: a Session 49's opened drawing.
     projectedDrawingId: drawingsBand ? /** @type {DrawingId} */ (openedDrawingOf(/** @type {Session49} */ (/** @type {unknown} */ (sessionData))).id) : null
@@ -6067,7 +6072,7 @@ class UncomposedResultSet extends Error {
 /**
  * A Session 27-44 read by Load's readers at the file's own paths, with their
  * rows and Python's, and Python's conversion of the read document.
- * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[] }} LegacySessionRead
+ * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts }} LegacySessionRead
  */
 /**
  * The Results a Session 27-44's stored figure replaced while Python upgrades
@@ -6193,7 +6198,11 @@ const importSessionDocument = async (e, options = {}) => {
       if (draftRead) fileRepairs.push(...draftRead.repairs);
       const upgrade = await upgradeLegacySession(draftRead ? { ...fileParts.data, config: draftRead.value } : fileParts.data);
       if (!options.isCurrent()) return { status: 'canceled' };
-      legacyRead = { upgrade, repairs: [...fileRepairs, ...upgrade.warnings] };
+      // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
+      legacyRead = {
+        upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
+        sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft))
+      };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
     // What Load cannot restore as stored, listed in the dialog before the
@@ -6206,7 +6215,8 @@ const importSessionDocument = async (e, options = {}) => {
     const storedDocument = legacyRead ? readSessionInput(legacyRead.upgrade.document) : fileDocument;
     const document = readSessionDocument(storedDocument);
     repairs.push(...document.repairs);
-    const preflight = await preflightSessionImport(storedDocument, document.value, repairs, uncomposedSets);
+    const preflight = await preflightSessionImport(storedDocument, document.value, repairs, uncomposedSets,
+      legacyRead?.sourceFacts);
     // Preflight read the receipts against the requests Load read (RK-2).
     const { data } = preflight;
     recordSessionLifecycleEvent('current-session-preflight-end');
