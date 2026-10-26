@@ -5885,7 +5885,9 @@ const exportSessionDocument = async (
         },
         results,
         ...(committed && artifact ? { runMetadata: artifactRunMetadata(artifact) } : {}),
-        ...(editorState ? { editorState } : {}),
+        // A drawing not generated yet has no catalog: `null`, as Python reads every
+        // drawing (`_validate_current_feature_catalog_authority`, DESIGN §1; OV-1813).
+        editorState: editorState ?? { featureCatalog: null },
         // The shown drawing's selected Similarity group: transient UI that a
         // drawing switch clears (`resetModeTransientUi`), so no other drawing
         // holds one. The group names are each drawing's draft's (`config.webEdits`).
