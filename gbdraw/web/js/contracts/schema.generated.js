@@ -260,7 +260,7 @@ export const SESSION_DRAWINGS_LAYOUT = Object.freeze({
   projectUiFields: Object.freeze(['autoLabelReflow', 'downloadDpi', 'featurePanelTab', 'losatExecution', 'paletteInstantPreviewEnabled', 'richFeaturePopup']),
   projectWebFilesFields: Object.freeze(['resourceOriginalNames']),
   drawingFields: Object.freeze(['cliInvocation', 'cliOptions', 'losatCache', 'losatDerivedCache', 'orthogroupState', 'proteinIdentityManifest', 'renderRequest', 'results', 'runMetadata']),
-  viewFields: Object.freeze(['cliInvocation', 'cliOptions', 'createdAt', 'editorState', 'format', 'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState', 'otherModeResult', 'proteinIdentityManifest', 'renderRequest', 'resources', 'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles']),
+  viewFields: Object.freeze(['cliInvocation', 'cliOptions', 'createdAt', 'editorState', 'format', 'legacyArtifacts', 'losatCache', 'losatDerivedCache', 'modes', 'orthogroupState', 'proteinIdentityManifest', 'renderRequest', 'resources', 'results', 'runMetadata', 'title', 'ui', 'version', 'webFiles']),
   drawingWebFileKeys: Object.freeze(['bindings', 'circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources', 'linearRecordMetadata', 'resourceOriginalNames']),
   drawingWebFilesFields: Object.freeze({
     circular: Object.freeze(['circularInputOriginalName', 'circularOutputPrefixExplicit', 'conservationBlastSource', 'conservationLosatFastaSources', 'conservationSequenceSources']),

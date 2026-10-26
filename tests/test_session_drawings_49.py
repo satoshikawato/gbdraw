@@ -210,6 +210,8 @@ def test_replacing_a_49_drawing_keeps_the_others_in_place() -> None:
         (lambda view: view["webFiles"].update(unplacedWebFile=[]), "webFiles.unplacedWebFile"),
         (lambda view: view["resources"].update({"unused-gb": {"name": "unused.gb"}}), "unused-gb"),
         (lambda view: view.update(config={}), "config"),
+        # A 46-48 other-mode Result set: SessionChecked49 refuses it, so the writer does not drop it silently.
+        (lambda view: view.update(otherModeResult={"results": []}), "otherModeResult"),
     ],
 )
 def test_a_49_writer_refuses_what_it_cannot_place(change: Any, message: str) -> None:

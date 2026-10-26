@@ -548,7 +548,9 @@ def _project_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
     return project
 
 
-_VIEW_FIELDS = PROJECT_FIELDS | _DRAWING_FIELDS | {"editorState", "ui", "webFiles", "modes", "otherModeResult"}
+# A one-drawing view holds no ``otherModeResult``: the 46-48 readers split it
+# off before a view is built, and Session 49 has no place for it.
+_VIEW_FIELDS = PROJECT_FIELDS | _DRAWING_FIELDS | {"editorState", "ui", "webFiles", "modes"}
 _DRAWING_WEB_FILE_KEYS = PROJECT_WEB_FILES_FIELDS | {"bindings"} | frozenset().union(*_DRAWING_WEB_FILES_FIELDS.values())
 
 
