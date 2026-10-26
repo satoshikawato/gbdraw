@@ -1792,6 +1792,24 @@ def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_pa
     ]
 
 
+def test_upgrade_keeps_the_group_names_a_session_39_held_in_orthogroup_state(
+    tmp_path: Path,
+) -> None:
+    # A Session 27-44 holds its group names in ``orthogroupState`` (as Web
+    # Load read them, OV-1929 d); Session 46 keeps them in the Linear
+    # drawing's ``config.webEdits``, so the upgrade moves them there.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    session["orthogroupState"]["orthogroupNameOverrides"] = {"og_1": "renamed"}
+    session["orthogroupState"]["orthogroupDescriptionOverrides"] = {"og_2": "about"}
+    assert session["config"]["webEdits"]["orthogroupNameOverrides"] == {}
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["config"]["webEdits"]["orthogroupNameOverrides"] == {"og_1": "renamed"}
+    assert linear["config"]["webEdits"]["orthogroupDescriptionOverrides"] == {"og_2": "about"}
+
+
 @pytest.mark.parametrize("index", ["x", None, "missing"])
 def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
     index: object, tmp_path: Path

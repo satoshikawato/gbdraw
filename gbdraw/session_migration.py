@@ -556,6 +556,30 @@ def project_session_adjunct_for_current_write(
     return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
 
 
+# The group name and description edits a Session 27-44 holds in
+# ``orthogroupState`` (the ones Web Load read, OV-1929 d).
+_ORTHOGROUP_STATE_NAME_FIELDS = ("orthogroupNameOverrides", "orthogroupDescriptionOverrides")
+
+
+def _with_group_names_in_web_edits(adjunct: dict[str, Any]) -> dict[str, Any]:
+    """Move the group names a flat draft's ``orthogroupState`` holds into its
+    ``config.webEdits``, which the split gives the Linear drawing (Session 46
+    keeps them there, ``SessionOrthogroupState``); a field the state holds
+    wins over the draft's. A Session without a draft ``config`` has no names.
+    """
+
+    state = adjunct.get("orthogroupState")
+    config = adjunct.get("config")
+    if not isinstance(state, Mapping) or not isinstance(config, Mapping):
+        return adjunct
+    held = {field: state[field] for field in _ORTHOGROUP_STATE_NAME_FIELDS if field in state}
+    if not held:
+        return adjunct
+    web_edits = config.get("webEdits")
+    kept = dict(web_edits) if isinstance(web_edits, Mapping) else {}
+    return {**adjunct, "config": {**config, "webEdits": {**kept, **held}}}
+
+
 def _split_session_adjunct(
     adjunct: dict[str, Any],
     session: Mapping[str, Any],
@@ -576,7 +600,7 @@ def _split_session_adjunct(
     web_files = session.get("webFiles")
     bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
     return session_legend_edits_by_row_key(split_draft_into_modes(
-        adjunct,
+        _with_group_names_in_web_edits(adjunct),
         committed_mode=session_mode(session),
         depth_sources=session_depth_source_widths(
             bindings if isinstance(bindings, Mapping) else session.get("files")

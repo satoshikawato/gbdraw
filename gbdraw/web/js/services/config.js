@@ -3866,11 +3866,22 @@ const orthogroupEditsOf = (edits, groupIds) => {
   const kept = all.filter(([id]) => groupIds.has(id));
   return { value: Object.fromEntries(kept), dropped: all.length - kept.length };
 };
+/**
+ * Lists the group name and description edits of groups `groupIds` does not
+ * hold (B47), at `editsPath`, where the file holds the edits.
+ * @param {Record<string, unknown>} names @param {ReadonlySet<string>} groupIds @param {string} editsPath
+ * @param {LoadRepair[]} repairs
+ */
+const groupNameRepairs = (names, groupIds, editsPath, repairs) => (
+  /** @type {const} */ (['orthogroupNameOverrides', 'orthogroupDescriptionOverrides'])).forEach((field) => {
+  const { dropped } = orthogroupEditsOf(names[field], groupIds);
+  if (dropped) repairs.push(loadRepair({ code: 'orthogroup-edit-dropped', path: `${editsPath}.${field}`, effect: 'dropped', count: dropped }));
+});
 
 /**
  * @param {DrawingState} drawing
  * @param {Record<string, any>} [orthogroupState]
- * @param {{ legacyRecords?: any, catalogFeatureState?: Record<string, any> | null }} [options]
+ * @param {{ catalogFeatureState?: Record<string, any> | null }} [options]
  */
 export const applyOrthogroupStateData = (drawing, orthogroupState = {}, options = {}) => {
   installGroupNames(drawing, orthogroupState, applyOrthogroupArtifactData(orthogroupState, options));
@@ -3883,11 +3894,8 @@ export const applyOrthogroupStateData = (drawing, orthogroupState = {}, options 
  * @param {NonNullable<Parameters<typeof applyOrthogroupStateData>[2]>} [options]
  * @returns {Set<string>} The IDs of the installed groups.
  */
-const applyOrthogroupArtifactData = (orthogroupState, { legacyRecords = null, catalogFeatureState = null } = {}) => {
-  const storedGroups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
-  const groups = legacyRecords
-    ? migrateLegacyOrthogroupMembers(storedGroups, legacyRecords)
-    : storedGroups;
+const applyOrthogroupArtifactData = (orthogroupState, { catalogFeatureState = null } = {}) => {
+  const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groupIds = orthogroupIdsOf(groups);
   const groupIdSet = new Set(groupIds);
   const index = catalogFeatureState?.featureOrthogroupIndex || buildOrthogroupFeatureIndex(groups);
@@ -6062,7 +6070,9 @@ class UncomposedResultSet extends Error {
 /**
  * A Session 27-44 read by Load's readers at the file's own paths, with their
  * rows and Python's, and Python's conversion of the read document.
- * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts }} LegacySessionRead
+ * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts,
+ *   orthogroups: readonly unknown[] }} LegacySessionRead `orthogroups`: the similarity groups of the
+ *   file's `orthogroupState` (a Session 27-39's, members by record key), which its set-aside Results draw
  */
 /**
  * The Results a Session 27-44's stored figure replaced while Python upgrades
@@ -6197,12 +6207,35 @@ const importSessionDocument = async (e, options = {}) => {
         : storedDraft;
       const draftRead = isPlainObject(draft) ? readSingleDraftValues(draft, 'config') : null;
       if (draftRead) fileRepairs.push(...draftRead.repairs);
-      const upgrade = await upgradeLegacySession(draftRead ? { ...fileParts.data, config: draftRead.value } : fileParts.data);
+      // A Session 27-39's group names are read against its own groups, at
+      // the file's path; the groups travel with the Results Python sets
+      // aside, and the kept names go to Python (D-15-137). A Session 40-44's
+      // groups are its catalog's, read on Python's Session 49.
+      const { orthogroupState: storedGroupState, renderRequest: storedRequest } = /** @type {{ orthogroupState?: unknown,
+        renderRequest?: { records?: unknown } }} */ (fileParts.data);
+      const groupState = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedGroupState)
+        ? storedGroupState : null;
+      const orthogroups = groupState
+        ? migrateLegacyOrthogroupMembers(Array.isArray(groupState.groups) ? groupState.groups : [],
+          Array.isArray(storedRequest?.records) ? storedRequest.records : null) : [];
+      /** @type {Record<string, unknown>} */
+      const readData = { ...fileParts.data, ...(draftRead ? { config: draftRead.value } : {}) };
+      if (groupState) {
+        const groupIds = new Set(orthogroupIdsOf(orthogroups));
+        groupNameRepairs(groupState, groupIds, 'orthogroupState', fileRepairs);
+        readData.orthogroupState = {
+          ...groupState,
+          orthogroupNameOverrides: orthogroupEditsOf(groupState.orthogroupNameOverrides, groupIds).value,
+          orthogroupDescriptionOverrides: orthogroupEditsOf(groupState.orthogroupDescriptionOverrides, groupIds).value
+        };
+      }
+      const upgrade = await upgradeLegacySession(readData);
       if (!options.isCurrent()) return { status: 'canceled' };
       // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
       legacyRead = {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
-        sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft))
+        sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
+        orthogroups
       };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
@@ -7028,19 +7061,15 @@ const importSessionDocument = async (e, options = {}) => {
       orthogroupNameOverrides: draftOf(id).config.webEdits?.orthogroupNameOverrides || {},
       orthogroupDescriptionOverrides: draftOf(id).config.webEdits?.orthogroupDescriptionOverrides || {}
     });
-    /** @param {Record<string, unknown>} names @param {ReadonlySet<string>} groupIds @param {string} editsPath */
-    const groupNameRepairs = (names, groupIds, editsPath) => (
-      /** @type {const} */ (['orthogroupNameOverrides', 'orthogroupDescriptionOverrides'])).forEach((field) => {
-      const { dropped } = orthogroupEditsOf(names[field], groupIds);
-      if (dropped) repairs.push(loadRepair({ code: 'orthogroup-edit-dropped', path: `${editsPath}.${field}`, effect: 'dropped', count: dropped }));
-    });
     const loadedOrthogroupState = canonicalSession
       ? {
           ...projectionResult.artifactState.orthogroupState,
           ...(modeScopedSession ? groupNamesOf(groupNamesDrawingId) : {}),
           ...(currentCatalogFeatureState
             ? { groups: currentCatalogFeatureState.orthogroups }
-            : {})
+            : {}),
+          // A Session 27-39's groups travel with its set-aside Results (D-15-137).
+          ...(legacyStoredResults && legacyRead ? { groups: legacyRead.orthogroups } : {})
         }
       : data.orthogroupState && typeof data.orthogroupState === 'object'
         ? data.orthogroupState
@@ -7064,7 +7093,7 @@ const importSessionDocument = async (e, options = {}) => {
       const editsPath = canonicalSession
         ? (modeScopedSession ? `${pathIn(draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits` : 'orthogroupState')
         : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
-      groupNameRepairs(loadedOrthogroupState, groupIds, editsPath);
+      groupNameRepairs(loadedOrthogroupState, groupIds, editsPath, repairs);
     }
     // Each other Session 49 drawing's group names, of the groups its own
     // Result holds (its slot's), installed in it by drawing ID.
@@ -7072,7 +7101,7 @@ const importSessionDocument = async (e, options = {}) => {
       .map(({ id }) => {
         const names = groupNamesOf(id);
         const groupIds = new Set(orthogroupIdsOf(storedSetSlots.find((slot) => slot.drawingId === id)?.values.orthogroups));
-        groupNameRepairs(names, groupIds, `${pathIn(draftPartOf(id).at, 'config')}.webEdits`);
+        groupNameRepairs(names, groupIds, `${pathIn(draftPartOf(id).at, 'config')}.webEdits`, repairs);
         return { id, names, groupIds };
       });
     // The LOSAT caches and the protein identity manifest Load drops are
@@ -7349,10 +7378,7 @@ const importSessionDocument = async (e, options = {}) => {
     applyOrthogroupStateData(
       state.drawingOf(groupNamesDrawingId),
       loadedOrthogroupState,
-      {
-        legacyRecords: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION ? data.renderRequest?.records : null,
-        catalogFeatureState: currentCatalogFeatureState
-      }
+      { catalogFeatureState: currentCatalogFeatureState }
     );
     storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
