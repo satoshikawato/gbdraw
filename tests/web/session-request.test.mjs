@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 const repoRoot = process.cwd();
 const sourceRoot = join(repoRoot, 'gbdraw', 'web', 'js');
@@ -5542,6 +5543,10 @@ assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).
   '9f0a68dde640b4645bbbef3813fbdce3d59072167910543562c539ca3bbbfea3',
   'Extraction preserves the 81 characterized request meanings, including topology, tracks and typed comparisons');
 
+// The Python tests hand this bridge a Session of any version; a 49 is read as the one-drawing view of its shown drawing.
+const bridgeSessionView = (session) => Array.isArray(session.drawings)
+  ? savedDrawingView(session, session.ui.activeDrawingId) : session;
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
@@ -5550,7 +5555,7 @@ if (projectSessionIndex >= 0) {
   const sessionText = sessionBytes[0] === 0x1f && sessionBytes[1] === 0x8b
     ? gunzipSync(sessionBytes).toString('utf8')
     : sessionBytes.toString('utf8');
-  const session = JSON.parse(sessionText);
+  const session = bridgeSessionView(JSON.parse(sessionText));
   const projectedSession = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -5644,7 +5649,7 @@ const roundTripSessionIndex = process.argv.indexOf('--round-trip-session');
 if (roundTripSessionIndex >= 0) {
   const sessionPath = process.argv[roundTripSessionIndex + 1];
   if (!sessionPath) throw new Error('--round-trip-session requires a JSON path.');
-  const session = JSON.parse(await readFile(sessionPath, 'utf8'));
+  const session = bridgeSessionView(JSON.parse(await readFile(sessionPath, 'utf8')));
   const sessionProjection = projectCanonicalSessionRequest({
     renderRequest: session.renderRequest,
     resources: session.resources,
@@ -5708,7 +5713,8 @@ if (roundTripSessionIndex >= 0) {
       assert.deepEqual(backing.sessionResourceSource(file).descriptors.map(({ descriptor, readBytes, ...part }) => part), components);
     }
   }
-  const linear = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
+  const linearSession = JSON.parse(await readFile(join(repoRoot, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json')));
+  const linear = savedDrawingView(linearSession, linearSession.ui.activeDrawingId);
   const inactive = projectCanonicalSessionRequest({ ...linear,
     resources: { ...linear.resources, first: resources.first, second: resources.second },
     webFiles: { ...linear.webFiles, bindings: { schema: 2, c_gb: composite } },
@@ -5945,9 +5951,10 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
 // translations of a Linear Result set kept in `otherModeResult` with the rules
 // the request projection applies to the top-level set.
 {
-  const gallery = JSON.parse(await readFile(
+  const saved = JSON.parse(await readFile(
     join(process.cwd(), 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'), 'utf8'
   ));
+  const gallery = savedDrawingView(saved, saved.ui.activeDrawingId);
   const request = gallery.renderRequest;
   assert.equal(request.mode, 'linear');
   const admitted = canonicalLinearRecordLayout(request);
