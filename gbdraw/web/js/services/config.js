@@ -212,7 +212,6 @@ import {
   isDrawingsBand,
   isCanonicalBand,
   isModeScopedBand,
-  isModeScopedVersion,
   holdsCaptionLegendRows,
   hasBiologicalSessionInputs,
   holdsNothing,
@@ -233,6 +232,7 @@ import {
   storedRequestSchemas,
   storedResultSets,
   validateSessionAuthorityInventory,
+  versionKeepsModeSlices,
   withStoredResultSet
 } from './session-authority.js';
 import {
@@ -2684,9 +2684,9 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
-  // Session 46 keeps each mode's draft in its slice (PD-OI-086); a Session
-  // 27-44 keeps one flat draft.
-  const modeScopedSession = isModeScopedVersion(sessionData);
+  // Session 46 and later keep each mode's draft in its slice (PD-OI-086), a
+  // Session 49 in each drawing's part; a Session 27-44 keeps one flat draft.
+  const modeScopedSession = versionKeepsModeSlices(sessionData.version);
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
@@ -2935,7 +2935,7 @@ const restoreLoadedSetSequenceSources = async ({
 export const savedResultEdits = (data, mode, setEditorState, sessionVersion, storedRules) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
-  const slice = isModeScopedVersion({ format: 'gbdraw-session', version: sessionVersion })
+  const slice = versionKeepsModeSlices(sessionVersion)
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
   const edits = normalizeEditorStateData(isPlainObject(slice?.editorState) ? slice.editorState : {});

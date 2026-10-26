@@ -557,6 +557,10 @@ assert.throws(() => validateSessionAuthorityInventory({
     [isDrawingsBand, ['SessionChecked49']]
   ];
   const { bands } = SESSION_ADMISSION_DESCRIPTION;
+  // D-15-95: the 46-48 band has one range predicate; a version test that
+  // also admits 49 is `versionKeepsModeSlices`, not a second band predicate.
+  const authority = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
+  assert.equal(Object.hasOwn(authority, 'isModeScopedVersion'), false, 'isModeScopedVersion duplicates the band predicates');
   assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
   assert.deepEqual(bands.map(({ root }) => root), ['SessionChecked27', ...predicates[0][1], ...predicates[4][1]]);
   for (const version of SUPPORTED_SESSION_VERSIONS) {
