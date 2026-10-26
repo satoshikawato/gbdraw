@@ -2939,14 +2939,10 @@ export const createAppSetup = () => {
       linearTrackSlotEditor.normalizeLinearTrackSlots();
     });
   });
-  // Each drawing holds a series for each of its own mode's Depth sources: a
-  // new drawing at setup and after Reset Settings. Each Depth control fits its
-  // drawing itself; Load and History restore install the saved or captured
-  // series (OV-1164).
-  const fitDepthSeriesToSources = () => {
-    state.drawingList().forEach((drawing) => ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing)));
-  };
-  fitDepthSeriesToSources();
+  // A new drawing, and one Reset Settings resets, holds no Depth series, as
+  // its mode's default says (`withNewDrawingDefaults`, OV-1901): each Depth
+  // control fits its drawing itself, Generate shapes the series it draws, and
+  // Load and History restore install the saved or captured series (OV-1164).
   /** @param {DrawingState} drawing */
   const isCircularConservationUploadSource = (drawing) => (
     String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -5559,7 +5555,6 @@ export const createAppSetup = () => {
       circularTrackNewRenderer.value = 'dinucleotide_skew';
       linearTrackNewRenderer.value = 'dinucleotide_skew';
       depthTrackUiCounts.circular = 1;
-      fitDepthSeriesToSources();
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({

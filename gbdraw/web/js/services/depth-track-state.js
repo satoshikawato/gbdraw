@@ -456,7 +456,8 @@ const storedSeriesDefaults = (adv, index) => ({
 });
 
 /**
- * A drawing's stored Depth series (`adv.depth_tracks`), at least one.
+ * A drawing's stored Depth series (`adv.depth_tracks`); none when it stores
+ * none, as a new drawing (OV-1901).
  * @param {unknown} tracks
  * @param {StoredDepthSettings} [adv]
  * @returns {FieldReading<DepthTrackConfig[]>}
@@ -464,7 +465,6 @@ const storedSeriesDefaults = (adv, index) => ({
 export const readDepthTracks = (tracks, adv = {}) => {
   const readings = (Array.isArray(tracks) ? tracks : [])
     .map((entry, index) => readDepthTrackConfig(entry, index, storedSeriesDefaults(adv, index)));
-  if (!readings.length) readings.push(readDepthTrackConfig(null, 0, storedSeriesDefaults(adv, 0)));
   const notList = !Array.isArray(tracks) && !isUnsetValue(tracks);
   const value = readings.map((reading) => reading.value);
   // An entry that is no series is replaced by a default series.
@@ -555,7 +555,8 @@ export const depthTrackConfigForEdit = (tracks, index, seriesCount, defaults = {
 // Each series keeps the config of its index, or a later config whose label
 // names its file; a series whose config another series took takes the first
 // config no series took, so no config is lost while there are as many series
-// as configs. `sources`: the config index each series took.
+// as configs. `sources`: the config index each series took. A drawing with
+// no series and no Depth file keeps none (OV-1901).
 /**
  * @param {ReconcileDepthTracksToFilesOptions} [options]
  * @returns {{ tracks: DepthTrackConfig[], sources: number[] }}
@@ -570,7 +571,7 @@ export const reconcileDepthTracksToFiles = ({
   const rawTracks = Array.isArray(depthTracks) ? depthTracks : [];
   /** @type {Set<number>} */
   const usedTrackIndexes = new Set();
-  const sources = Array.from({ length: Math.max(1, Number(targetCount) || 1) }, (_, index) => {
+  const sources = Array.from({ length: Math.max(0, Number(targetCount) || 0) }, (_, index) => {
     const file = fileSlots[index] || null;
     let sourceIndex = index;
     if (

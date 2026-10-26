@@ -518,7 +518,7 @@ test('a Web Similarity groups Generate stores a cropped reversed record in its s
   const { stdout } = await promisify(execFile)('python', ['-c', SEARCH_FRAME_CHECK, file, directory],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const stored = JSON.parse(stdout.trim().split('\n').pop());
-  expect(stored).toEqual(expect.objectContaining({ version: 48, reverse: true, same: true, unmatched: 0 }));
+  expect(stored).toEqual(expect.objectContaining({ version: CURRENT_SESSION_VERSION, reverse: true, same: true, unmatched: 0 }));
   expect(stored.members).toBeGreaterThan(0);
   expect(stored.inSearchFrame).toBe(stored.members);
   const cli = await svgRibbons(page, readFileSync(path.join(directory, 'cli.svg'), 'utf8'));
