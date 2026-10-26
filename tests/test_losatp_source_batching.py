@@ -19,6 +19,7 @@ import gbdraw.analysis.protein_colinearity as protein_colinearity
 import gbdraw.comparisons.losat_runtime as runtime_module
 from gbdraw.analysis.protein_colinearity import validate_protein_raw_entry_references
 from gbdraw.linear import linear_main
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INPUTS = REPO_ROOT / "tests" / "test_inputs"
@@ -104,7 +105,7 @@ def _run(tmp_path: Path, name: str, inputs: list[str], mode: str) -> tuple[dict,
         *inputs, "--losat", "losatp", "--losatp_mode", mode, "--losat_bin", losat,
         "--losat_threads", "1", "-o", str(prefix), "-f", "svg", "--save_session",
     ])
-    session = json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
     return session, _searches(log)
 
 
@@ -190,7 +191,7 @@ def test_single_record_files_search_each_pair(tmp_path: Path) -> None:
 
 def _replay(session_path: Path, prefix: Path) -> dict:
     linear_main(["--session", str(session_path), "-o", str(prefix), "-f", "svg", "--save_session"])
-    return json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
 
 
 @pytest.mark.linear

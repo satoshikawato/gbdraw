@@ -88,3 +88,10 @@ def drawings_document_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
     return _drawings_document(
         [view], ids=[mode], names=[mode.capitalize()], active=0, project_views=[view]
     )
+
+
+# fixround C2
+def session_view(document: Mapping[str, Any]) -> dict[str, Any]:
+    """The one-drawing view of a 49, or the 27-48 document itself (a fixture an older writer made)."""
+
+    return drawing_view(document) if "drawings" in document else dict(document)

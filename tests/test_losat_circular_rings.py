@@ -34,6 +34,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session_request_codec import CanonicalRequestEncodingError, encode_canonical_request
 from tests.test_comparison_sequences import ddbj_flat_file
 from tests.test_losat_linear_nucleotide import _fake_losat, _fresh_probe_caches, _searches  # noqa: F401
+from tests.utils.session_drawing_view import drawing_view
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TUTORIAL = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
@@ -66,7 +67,7 @@ T_CLI_09_STYLE = [
 
 
 def _session(prefix: Path) -> dict:
-    return json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8"))
+    return drawing_view(json.loads(prefix.with_suffix(".gbdraw-session.json").read_text(encoding="utf-8")))
 
 
 def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:
