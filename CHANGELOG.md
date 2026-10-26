@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
+
+- Patch release of 0.14.1. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.2.md).
 - Fixed: a "This feature only" color in the Web app colors only the clicked
   feature of the clicked File card and record, live and after Generate. Before,
   the same feature in another record with the same ID (the same file in two
@@ -298,6 +302,30 @@ write-up of a release.
   times. Replaying the Vibrio collinearity Gallery Session used 12.7 s of CPU
   time instead of 16.8 s (21.3 s instead of 26.4 s with `--session_output`);
   the SVG and the saved Session are unchanged (#1359).
+- Performance (CLI, Python, web app): GC content and GC skew count bases
+  without an array of every base position, and the counted sequence is one
+  bytes copy instead of three or four string copies. A 52 Mb Circular diagram
+  with defaults drops its Python allocation peak from 521.7 MiB to 363.3 MiB
+  and its process RSS from 750 MiB to 576 MiB; the drawing is byte-identical
+  (#1393).
+- Performance (CLI, Python, web app): Similarity group inference for LOSATP
+  protein comparisons runs about 2.5 times faster and needs about a third less
+  memory on the Vibrio Gallery input. LOSATP output is parsed without a regex
+  attempt at every character, HSP aggregation and the bitscore fit work on
+  whole columns, directional hits stay numpy columns over integer protein
+  codes, and the per-protein score thresholds are plain floats freed before the
+  memory peak. Similarity groups, edges and names are identical (#1347, #1350,
+  #1351, #1353).
+- Performance (web app): a live edit (for example a Legend color) no longer
+  serializes the whole SVG into the displayed Result. The Result's text is
+  written once, when Save, a History checkpoint, Generate, a Load rollback, or a
+  Result or drawing switch reads it. On the Vibrio Gallery Session one Legend
+  color edit took 25 ms instead of 71 ms. Saved Sessions, exports, History and
+  the drawn SVG do not change (#1374).
+- Fixed (web app): installing a drawing's layout preferences no longer merges a
+  `__proto__` key into `Object.prototype` (CodeQL alert 61, OV-1915). No saved
+  file reached the merge, because Session Load already rejects such keys
+  (#1390, #1391).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

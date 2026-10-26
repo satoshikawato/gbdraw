@@ -39,7 +39,7 @@ rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md
 ## Main command
 
 ```text
-gbdraw v. 0.14.1: A diagram generator for small genomes
+gbdraw v. 0.14.2: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
