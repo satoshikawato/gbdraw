@@ -382,15 +382,35 @@ test('a request whose comparisons Load holds is promoted like any other, and the
   }
 });
 
-// OV-1873: a Circular request that carries a Linear comparison loses it with no row when Load opens it as a 49
-// drawing, so the "unsupported Linear comparison data" notice never shows. Todo until the Owner decides the outcome.
-test('a Linear comparison in a Circular request keeps the Comparisons notice (C-OD14)', { todo: 'OV-1873' }, async () => {
+// A Circular request of a Session 27-48 that carries a Linear comparison keeps the Comparisons notice in the Linear
+// Comparisons card after the Load upgrades it to 49, as before (C-OD14): the Linear drawing holds the classification
+// of the stored request, and the Circular drawing stays editable (its Generate is not held by a choice only the
+// Linear card offers).
+const linearComparison = () => clone(gallery('BGC0000708-BGC0000713').renderRequest.comparisons.slice(0, 1));
+test('a Linear comparison in a Circular request of a v44 keeps the Comparisons notice in the Linear card (C-OD14)', async () => {
+  const v44 = read('tests/fixtures/sessions/HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
+  v44.renderRequest.comparisons = linearComparison();
+  const { result } = await load(v44);
+  assert.equal(result.status, 'ok', JSON.stringify(result.error));
+  assert.equal(state.activeDrawing().mode, 'circular');
+  assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
+  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
+  assert.deepEqual([intent.disposition, intent.message],
+    ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
+});
+
+// OV-1873: the same request in a Session 49 Circular drawing shows the notice nowhere: the Linear drawing the file
+// does not hold takes no classification, and the Circular drawing's intent is not restored. Which drawing holds it
+// is an open Product question (handoff flip3-F3b): restoring it on the Circular drawing would hold its Generate on a
+// choice only the Linear card offers.
+test('a Linear comparison in a Session 49 Circular request keeps the Comparisons notice (C-OD14)', { todo: 'OV-1873' }, async () => {
   const session = gallery('HmmtDNA_basic_circular');
-  session.renderRequest.comparisons = clone(gallery('BGC0000708-BGC0000713').renderRequest.comparisons.slice(0, 1));
+  session.renderRequest.comparisons = linearComparison();
   const { result } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  assert.equal(frame()[0], 'DECISION_REQUIRED');
-  assert.equal(frame()[1], 'A Circular session contains unsupported Linear comparison data.');
+  const intent = modeDrawing(state, 'linear').importedComparisonIntent;
+  assert.deepEqual([intent.disposition, intent.message],
+    ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
 });
 
 test('Save writes the request Load read: the legacy alignment keeps the feature the Load context names (OV-770, BC-1)', async () => {
