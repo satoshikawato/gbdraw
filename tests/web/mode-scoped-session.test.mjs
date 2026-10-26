@@ -14,6 +14,7 @@ import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.ge
 import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { createHash } from 'node:crypto';
 
 globalThis.window = {
   Vue: {
@@ -1102,6 +1103,107 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
   const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
   assert.deepEqual(Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)])),
     { circular: [], linear: [] });
+});
+
+// K-3: a ring's query hash is the SHA-256 of the FASTA the Python ring reader
+// (the Worker's) returns; node has no Worker, so the fixture's other ring is
+// hashed here through Python.
+const readRingInPython = async (_operation, { files: [{ bytes }] }) => ({
+  result: JSON.parse(String(await evaluatePython(`
+import base64, os, tempfile
+from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+with tempfile.NamedTemporaryFile(delete=False) as handle:
+    handle.write(base64.b64decode(payload))
+try:
+    result = read_comparison_sequence_json(handle.name)
+finally:
+    os.unlink(handle.name)
+`, Buffer.from(new Uint8Array(bytes)).toString('base64'))))
+});
+// The Worker helper requests (ring reads) started while `callback` runs.
+const helperRequestsDuring = async (callback) => {
+  const requests = [];
+  globalThis.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric: ({ name, operation }) => { if (name === 'diagramHelperRequest') requests.push(operation); }
+  };
+  try {
+    return { value: await callback(), requests };
+  } finally {
+    delete globalThis.__GBDRAW_TEST_HOOKS__;
+  }
+};
+const ringQueryHash = async (text) => {
+  const { result } = await readRingInPython('', { files: [{ bytes: Buffer.from(text) }] });
+  return createHash('sha256').update(result.fasta, 'utf8').digest('hex');
+};
+// A Session 49 of `synthetic_conservation` (three LOSAT rings and their entries)
+// with a second Circular drawing `circular-2` whose ring 3 reads other bytes
+// (one base changed) and whose entries are rings 1 and 2's and that ring 3's.
+let conservationSaves = 0;
+const twoConservationDrawings = async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const first = await loadKeepingSlots(fixture);
+  assert.equal(first.loaded.status, 'ok', JSON.stringify(first.loaded.error));
+  // Each call saves under its own title, so no repeat-download question cancels it.
+  const result = await exportSession(`conservation-${++conservationSaves}`, { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  const entries = circular.losatCache.entries;
+  assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
+  const ringId = circular.webFiles.bindings.c_conservation_fastas[2].resourceId;
+  const ringText = Buffer.from(session.resources[ringId].data, 'base64').toString();
+  const otherText = ringText.replace('\nACGT', '\nTCGT');
+  assert.notEqual(otherText, ringText);
+  session.resources['ring-other'] = { ...session.resources[ringId], name: 'ring-other-comparison-d.fasta', data: Buffer.from(otherText).toString('base64') };
+  const other = { ...entries[2], key: 'e'.repeat(64), filename: 'ring-other.circular_conservation.losatn.tsv', queryCanonicalHash: await ringQueryHash(otherText) };
+  assert.notEqual(other.queryCanonicalHash, entries[2].queryCanonicalHash);
+  const second = JSON.parse(JSON.stringify(circular).replaceAll(`"${ringId}"`, '"ring-other"'));
+  Object.assign(second, { id: 'circular-2', name: 'Circular 2' });
+  second.losatCache.entries = [entries[0], entries[1], other];
+  session.drawings.splice(session.drawings.indexOf(circular) + 1, 0, second);
+  return { session, keys: { ring1: entries[0].key, ring2: entries[1].key, ring3: entries[2].key, other: other.key } };
+};
+const savedEntryKeys = async (title, loaded) => {
+  const result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)]));
+};
+
+// K-3 (D-15-124): Save keeps a conservation entry only in the drawing whose
+// request names it, by the entry's subject and query hashes: after a Load, the
+// pairs of the entries the file wrote into that drawing. Save reads no ring
+// file (OV-1908: the first Save after a Load booted the Worker to hash them).
+test('Save after a Load reads no ring file and writes each Circular drawing its own conservation entries (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const { value: saved, requests } = await helperRequestsDuring(() => savedEntryKeys('two rings', loaded));
+  assert.deepEqual(requests, []);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
+});
+
+// K-3 (D-15-124): a drawing's entries are its request's. A ring file bound in
+// place of the request's after its Generate (no new Generate) changes nothing
+// Save writes: the request's entry stays, the bound file's is not added.
+test('Save keeps the request\'s conservation entry for a ring whose bound file is another (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  const second = session.drawings.find((entry) => entry.id === 'circular-2');
+  // circular-2's request still names `ring-other`; its ring 3 binds circular's ring 3 file.
+  const ringId = session.drawings.find((entry) => entry.id === 'circular').webFiles.bindings.c_conservation_fastas[2].resourceId;
+  for (const field of ['c_conservation_fastas', 'c_conservation_sequence_sources']) {
+    second.webFiles.bindings[field][2] = { ...second.webFiles.bindings[field][2], resourceId: ringId };
+  }
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  const saved = await savedEntryKeys('replaced ring', loaded);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
 });
 
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it

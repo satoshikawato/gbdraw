@@ -147,13 +147,12 @@ import {
   discoveryErrorIsFinal,
   gffFastaReaderSelector,
   parseSequenceRecordsFast,
-  readAllSequenceRecords,
   readComparisonSequence,
-  readComparisonSequenceDigest,
   readOncePerFile,
   readParsedSequenceRecords
 } from '../services/record-discovery.js';
 import { idleCircularRecordDiscovery } from '../services/drawing/inputs.js';
+import { NO_CONSERVATION_PAIRS, buildFastaText, circularConservationKeys, conservationHashPairs } from '../services/circular-conservation-keys.js';
 import {
   classifyRawLosatCacheEntry,
   emptyProteinIdentityManifest,
@@ -207,7 +206,7 @@ import {
 /** @import { FileLike } from '../services/session-resource-backing.js' */
 /** @import { FeatureCatalog } from '../services/feature-catalog.js' */
 /** @import { LosatJob, LosatJobResult, LosatRunOptions } from '../services/losat.js' */
-/** @import { OrderedConservationSource } from '../services/conservation-series.js' */
+/** @import { AdoptedConservationPairs, CircularConservationKeys, ConservationPairs, ConservationSubject } from '../services/circular-conservation-keys.js' */
 /** @import { LosatJobSpec } from '../services/linear-comparisons.js' */
 /** @import { FeatureCatalogRow } from '../services/feature-catalog.js' */
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
@@ -1008,18 +1007,10 @@ const reverseComplementSequence = (sequence) => {
   }
   return out;
 };
-/** @param {string} sequence */
-const wrapFastaSequence = (sequence) => {
-  const lines = [];
-  for (let i = 0; i < sequence.length; i += 60) lines.push(sequence.slice(i, i + 60));
-  return lines.join('\n');
-};
 /**
  * A record's sequence as the LOSAT search reads it.
  * @typedef {{ id: string, sequence: string }} LosatSequence
  */
-/** @param {LosatSequence} record */
-const buildFastaText = (record) => `>${record.id}\n${wrapFastaSequence(record.sequence)}\n`;
 /** @param {unknown} fasta */
 const getFastaSequenceLength = (fasta) =>
   String(fasta || '')
@@ -1168,19 +1159,6 @@ const losatSeqEntryFromRecord = (record, regionSpec) => {
 export const extractLosatFastaFast = async ({ text, fmt, regionSpec, recordSelector }) => (
   losatSeqEntryFromRecord(selectParsedRecord(parseSequenceRecordsFast(text, fmt), recordSelector), regionSpec)
 );
-/**
- * The LOSAT FASTA of every record of the Circular reference: the subject database of the conservation rings, the
- * records the CLI loader reads (OV-1599). A record without a sequence is left out.
- * @param {FileLike} file
- * @param {string} fmt
- */
-const readAllLosatFasta = async (file, fmt) => {
-  /** @type {LosatSequence[]} */
-  const records = (await readAllSequenceRecords(file, fmt))
-    .flatMap(({ id, sequence }) => (sequence === null ? [] : [{ id, sequence }]));
-  if (!records.length) throw new Error('No records found for circular conservation reference.');
-  return records.map((record) => buildFastaText(record)).join('');
-};
 /**
  * @param {InputFileRef | InputFileRef[] | null | undefined} sourceFiles
  * @param {CircularConservationLike | null | undefined} circularConservation
@@ -1467,8 +1445,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
- * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
- *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState,
+ *   conservationPairs: AdoptedConservationPairs }) => void} adoptCanonicalRenderArtifacts
+ *   The Session owner's adoption of a candidate's request, resources, files, and the conservation hash pairs it names.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
  *   The ring owner's switch of a Circular drawing's comparison rings, with their managed stack rows.
  * @property {(() => (CommittedCanonicalSession | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
@@ -2823,6 +2802,9 @@ export const createRunAnalysis = ({
       const resolvedComparisons = [];
       /** @type {ResolvedCircularConservation[]} */
       let resolvedCircularConservation = [];
+      // The conservation hash pairs the request names: its rings' when it reads them (D-15-124).
+      /** @type {ConservationPairs} */
+      let conservationPairs = NO_CONSERVATION_PAIRS;
       /**
        * Each ring LOSAT search, in ring order: its raw cache key (null without current search output) and the
        * Source recipe's generated BLAST table.
@@ -3140,8 +3122,8 @@ export const createRunAnalysis = ({
           // projects the same resolution, and the draft keeps what was typed.
           resolveComparisonThresholds(drawing.adv, 'circular');
 
-          /** @param {OrderedConservationSource<InputFileRef>[]} comparisonEntries */
-          const runCircularLosatConservation = async (comparisonEntries) => {
+          /** @param {CircularConservationKeys} conservationKeys */
+          const runCircularLosatConservation = async (conservationKeys) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
               drawing.circularConservation.losat_program
             );
@@ -3161,15 +3143,8 @@ export const createRunAnalysis = ({
               return ['--task', normalizedTask];
             };
             const circularLosatSuffix = circularLosatProgram === 'tblastx' ? 'tlosatx' : 'losatn';
-            // Generate checked above that the Circular input is complete.
-            const subjectFile = /** @type {FileLike} */ (inputFiles.fileOf(drawing.inputType.value === 'gb' ? drawing.files.c_gb : drawing.files.c_fasta));
-            const subjectFmt = drawing.inputType.value === 'gb' ? 'genbank' : 'fasta';
-            const { fasta: subjectFasta, hash: subjectHash } = await readOncePerFile(
-              [subjectFile], `ring-subject:${subjectFmt}`, async () => {
-                const fasta = await readAllLosatFasta(subjectFile, subjectFmt);
-                return Object.freeze({ fasta, hash: await hashText(fasta) });
-              }
-            );
+            // Generate checked above that the Circular input is complete, so the subject and every ring are bound.
+            const { fasta: subjectFasta, hash: subjectHash } = /** @type {ConservationSubject} */ (conservationKeys.subject);
             const subjectSequenceKey = `circular-subject:${subjectHash}`;
             const sequenceEntriesByKey = new Map([[subjectSequenceKey, subjectFasta]]);
             const cacheMap = new Map(losatCache.value || []);
@@ -3181,15 +3156,14 @@ export const createRunAnalysis = ({
             const pendingJobKeys = new Set();
             const executionMode = getLosatExecutionMode();
 
-            for (let index = 0; index < comparisonEntries.length; index += 1) {
+            for (const [index, ring] of conservationKeys.rings.entries()) {
               throwIfGenerationCanceled();
-              const comparisonEntry = comparisonEntries[index];
-              // A ring source names its bound file.
-              const fileObj = /** @type {FileLike} */ (inputFiles.fileOf(comparisonEntry.file));
+              const comparisonEntry = ring.source;
+              const fileObj = /** @type {FileLike} */ (ring.file);
+              const queryHash = /** @type {string} */ (ring.queryCanonicalHash);
               // One sequence reader (D12): the Python helper reads FASTA, GenBank
               // or DDBJ and returns the query FASTA that the CLI ring hashes.
               const { fasta: queryFasta } = await readComparisonSequence({ file: fileObj });
-              const queryHash = await readComparisonSequenceDigest({ file: fileObj });
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
               const extraArgs = buildExtraArgs(comparisonEntry?.losat_gencode);
@@ -3322,9 +3296,13 @@ export const createRunAnalysis = ({
             if (comparisonFiles.length === 0) {
               throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
-            const conservationEntries = orderedConservationSources(comparisonFiles, drawing.circularConservation);
+            // The ring keys, in ring order (the one builder, D-15-123); their
+            // pairs go with the request it installs, for Save (D-15-124).
+            const conservationKeys = await circularConservationKeys(drawing, inputFiles.fileOf, throwIfGenerationCanceled);
+            conservationPairs = conservationHashPairs(conservationKeys);
+            const conservationEntries = conservationKeys.rings.map(({ source }) => source);
             const conservationSeries = buildConservationSeries(comparisonFiles, drawing.circularConservation);
-            const conservationResults = await runCircularLosatConservation(conservationEntries);
+            const conservationResults = await runCircularLosatConservation(conservationKeys);
             drawing.circularConservation.reference = 'subject';
             resolvedCircularConservation = conservationResults.map((result, index) => {
               /** @type {Record<string, any>} */
@@ -5312,7 +5290,7 @@ export const createRunAnalysis = ({
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs });
       }
       settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
@@ -5750,7 +5728,8 @@ export const createRunAnalysis = ({
         });
       }
       if (typeof adoptCanonicalRenderArtifacts === 'function') {
-        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing });
+        // A candidate of the committed request runs no conservation search: the request's pairs stay.
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, drawing, conservationPairs: 'committed' });
       }
       if (typeof commitIntent === 'function') await commitIntent();
       if (isCurrentAlert()) errorLog.value = null;

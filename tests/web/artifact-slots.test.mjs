@@ -49,7 +49,7 @@ const memberOf = (key) => (Object.hasOwn(state, key) ? state : state.activeDrawi
 const fillCircularArtifact = async () => {
   const saved = JSON.parse(await readFile('gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'));
   const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
-  adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+  adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true, conservationPairs: new Set(['["s","q"]']) });
   const values = {
     results: [{ name: 'a.svg', content: '<svg id="a"/>' }, { name: 'b.svg', content: '<svg id="b"/>' }],
     selectedResultIndex: 1, featureCatalog: { schema: 5, items: [] }, extractedFeatures: [{ id: 'f1' }],
@@ -105,6 +105,7 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   assert.equal(state.featureCatalog.value, null);
   assert.equal(state.generatedDrawingId.value, 'linear');
   assert.equal(canonicalRenderArtifactOwner.capture().committedCanonicalSession, null);
+  assert.equal(canonicalRenderArtifactOwner.capture().conservationPairs.size, 0);
   assert.equal(state.matchSequenceRegistry.values().length, 0);
   // An empty slot keeps the applied palette: it has no Result to project.
   assert.equal(state.appliedPaletteName.value, 'tableau');
@@ -120,6 +121,9 @@ test('an empty slot clears only the artifact, and the captured slot comes back b
   SWAPPED.forEach((key) => assert.strictEqual(state[key].value, values[key], key));
   assert.strictEqual(canonicalRenderArtifactOwner.capture().committedCanonicalSession, committed.committedCanonicalSession);
   assert.strictEqual(canonicalRenderArtifactOwner.capture().activeSessionResourceTable, committed.activeSessionResourceTable);
+  // D-15-124: the request's conservation hash pairs wait in its slot with it.
+  assert.strictEqual(canonicalRenderArtifactOwner.capture().conservationPairs, committed.conservationPairs);
+  assert.deepEqual([...committed.conservationPairs], ['["s","q"]']);
   assert.strictEqual(state.matchSequenceRegistry.captureTrustedOwner(), registryOwner);
   Object.entries(kept).forEach(([key, value]) => assert.strictEqual(memberOf(key).value, value, key));
 
