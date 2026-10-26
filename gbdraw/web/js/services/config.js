@@ -3438,6 +3438,23 @@ const serializeFileValue = async (store, value) => (
 // (Web IDL), so `String` and `Number` below pass the values it used before; a stored value is JSON or a
 // descriptor `serializeFile` made, never a symbol or a BigInt, for which the two conversions differ.
 /**
+ * Whether `deserializeFile` reads a stored file entry (D-15-139): a Session
+ * resource view, or a descriptor whose own `data` is base64 text or a Depth
+ * payload. It decodes nothing, so Load's first reading of a Session 27-44
+ * keeps the entries it reads in the stored form.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+const isReadableStoredFile = (value) => {
+  if (isSessionResourceFileView(value)) return true;
+  // A view: each member is tested where it is read.
+  const entry = /** @type {UnvalidatedFields<'data'>} */ (value);
+  if (!entry || !Object.prototype.hasOwnProperty.call(entry, 'data') || entry.data === null || entry.data === undefined) return false;
+  return typeof entry.data === 'string'
+    || isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (entry));
+};
+
+/**
  * @param {unknown} value A stored file value: a descriptor, a Session resource view, or a list of them.
  * @returns {DeserializedFile}
  */
@@ -3446,15 +3463,9 @@ const deserializeFile = (value) => {
     return value.map((/** @type {unknown} */ item) => deserializeFile(item));
   }
   if (isSessionResourceFileView(value)) return value;
-  // A view: each member is tested or converted where it is read.
-  const entry = /** @type {UnvalidatedFields<'data' | 'name' | 'type' | 'lastModified'>} */ (value);
-  if (
-    !entry ||
-    !Object.prototype.hasOwnProperty.call(entry, 'data') ||
-    entry.data === null ||
-    entry.data === undefined
-  ) return null;
-  // A value with an own `data` is an object: a descriptor as the Session stores it.
+  if (!isReadableStoredFile(value)) return null;
+  // A readable value that is no view is a descriptor as the Session stores it; each member is converted where it is read.
+  const entry = /** @type {NonNullable<UnvalidatedFields<'data' | 'name' | 'type' | 'lastModified'>>} */ (value);
   const descriptor = /** @type {RawSessionResourceDescriptor} */ (entry);
   if (isEncodedDepthFileEntry(/** @type {{ encoding?: unknown, data?: { schema?: unknown } | null }} */ (entry))) {
     // The test above read `data.schema`; `decodeDepthText` checks every field it reads.
@@ -3465,8 +3476,8 @@ const deserializeFile = (value) => {
       lastModified: Number(entry.lastModified ?? Date.now())
     });
   }
-  if (typeof entry.data !== 'string') return null;
-  const bytes = base64ToBytes(entry.data);
+  // `isReadableStoredFile`: a descriptor that is no Depth payload holds base64 text.
+  const bytes = base64ToBytes(/** @type {string} */ (entry.data));
   recordStructuralMetric('base64DecodeCount');
   recordStructuralMetric('decodedByteCount', bytes.byteLength);
   recordStructuralMetric('fileConstructionCount');
@@ -4532,36 +4543,133 @@ const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, sto
 };
 
 /**
- * A single file slot's stored value: the first entry `deserializeFile` reads.
+ * Which stored file entries a reading keeps (D-15-139): a descriptor or a
+ * Session resource view `deserializeFile` reads (`isReadableStoredFile`), or,
+ * for the bindings of a Session 31-44 file, a binding the Session reader
+ * kept (`readWebFileBindings` set each one it dropped to null).
+ * @typedef {(entry: unknown) => boolean} StoredFileTest
+ */
+/** @type {StoredFileTest} */
+const isKeptBinding = (entry) => isPlainObject(entry);
+
+/**
+ * A single file slot's stored value: the first entry `readable` keeps.
  * The other entries of a list, and an entry it cannot read, are dropped and
  * listed at `path` (OV-655, TB23, E-OD07); an entry that holds nothing is no row.
  * @param {unknown} stored
  * @param {string} path
+ * @param {StoredFileTest} readable
  * @param {LoadRepair[] | null} repairs
- * @returns {FileLike | null}
+ * @returns {unknown} The kept stored entry, or null.
  */
-const readFileSlot = (stored, path, repairs) => {
+const readFileSlot = (stored, path, readable, repairs) => {
   const entries = Array.isArray(stored) ? stored : [stored];
-  const files = entries.map((entry) => (Array.isArray(entry) ? null : deserializeFile(entry)));
-  const kept = files.findIndex(Boolean);
+  const kept = entries.findIndex((entry) => !Array.isArray(entry) && readable(entry));
   const dropped = entries.filter((entry, index) => index !== kept && !holdsNothing(entry)).length;
   if (dropped && repairs) repairs.push(loadRepair({ code: 'file-entry-dropped', path, effect: 'dropped', count: dropped }));
-  return kept < 0 ? null : /** @type {FileLike} */ (files[kept]);
+  return kept < 0 ? null : entries[kept];
 };
 
 /**
- * A file list's stored value, read by place: an entry `deserializeFile`
- * cannot read keeps its place empty and is listed at `path[index]`; an entry
- * that holds nothing is no row.
+ * A file list's stored value, read by place: an entry `readable` does not
+ * keep leaves its place empty and is listed at `path[index]`; an entry that
+ * holds nothing is no row. (A list in a place is kept, as `deserializeFile` reads one.)
  * @param {unknown} stored
  * @param {string} path
+ * @param {StoredFileTest} readable
  * @param {LoadRepair[] | null} repairs
+ * @returns {unknown[]}
  */
-const readFileList = (stored, path, repairs) => (Array.isArray(stored) ? stored : []).map((entry, index) => {
-  const file = deserializeFile(entry);
-  if (!file && !holdsNothing(entry)) repairs?.push(loadRepair({ code: 'file-entry-dropped', path: `${path}[${index}]`, effect: 'dropped' }));
-  return file;
+const readFileList = (stored, path, readable, repairs) => (Array.isArray(stored) ? stored : []).map((entry, index) => {
+  if (Array.isArray(entry) || readable(entry)) return entry;
+  if (!holdsNothing(entry)) repairs?.push(loadRepair({ code: 'file-entry-dropped', path: `${path}[${index}]`, effect: 'dropped' }));
+  return null;
 });
+
+/**
+ * A Depth value (a list, by place, of lists): each entry `readable` does not keep is null, with no row.
+ * @param {unknown} stored @param {StoredFileTest} readable @returns {unknown}
+ */
+const readDepthValue = (stored, readable) => (Array.isArray(stored)
+  ? stored.map((entry) => readDepthValue(entry, readable)) : (readable(stored) ? stored : null));
+
+/** The single file slots of a Session's input files. */
+const STORED_FILE_SLOTS = Object.freeze(['c_gb', 'c_gff', 'c_fasta', 'd_color', 't_color', 'blacklist', 'whitelist', 'qualifier_priority']);
+/** The file lists, read by place. */
+const STORED_FILE_LISTS = Object.freeze(['c_conservation_blasts', 'c_conservation_fastas', 'c_conservation_sequence_sources']);
+/** A Linear card's file slots. */
+const STORED_LINEAR_SEQ_SLOTS = Object.freeze(['gb', 'gff', 'fasta']);
+
+/**
+ * The one stored-form reader of a Session's input files (D-15-139): the
+ * stored entries Load keeps, in the form the file holds them, with the rows
+ * of what it drops at `at`. A field the file holds is read; one it lacks
+ * stays absent. A Linear card's genetic code, crop and texts are read
+ * (`readLinearSeqFields`, OV-568); a Linear comparison whose file is not kept
+ * is left out (OV-899: its edge loads with no file, as Remove leaves it).
+ * Load's first reading of a Session 27-44 sends this value to Python;
+ * `applyFiles` deserializes from it.
+ * @param {Record<string, unknown>} filesData `files`, or a Session 31-44's `webFiles.bindings`.
+ * @param {string} at Where they are in the file.
+ * @param {StoredFileTest} readable
+ * @param {LoadRepair[] | null} repairs
+ * @returns {Record<string, unknown>}
+ */
+const readStoredFiles = (filesData, at, readable, repairs) => {
+  /** @type {Record<string, unknown>} */
+  const read = { ...filesData };
+  STORED_FILE_SLOTS.forEach((slot) => {
+    if (Object.hasOwn(filesData, slot)) read[slot] = readFileSlot(filesData[slot], `${at}.${slot}`, readable, repairs);
+  });
+  STORED_FILE_LISTS.forEach((slot) => {
+    if (Object.hasOwn(filesData, slot)) read[slot] = readFileList(filesData[slot], `${at}.${slot}`, readable, repairs);
+  });
+  if (Object.hasOwn(filesData, 'c_depth')) read.c_depth = readDepthValue(filesData.c_depth, readable);
+  if (Array.isArray(filesData.linearSeqs)) {
+    read.linearSeqs = filesData.linearSeqs.map((/** @type {Record<string, unknown>} */ seq, index) => {
+      const seqAt = `${at}.linearSeqs[${index}]`;
+      const fields = readLinearSeqFields(seq, seqAt);
+      repairs?.push(...fields.repairs);
+      /** @type {Record<string, unknown>} */
+      const kept = { ...seq };
+      Object.entries(fields.value).forEach(([field, value]) => {
+        if (Object.hasOwn(seq, field)) kept[field] = value;
+      });
+      STORED_LINEAR_SEQ_SLOTS.forEach((slot) => {
+        if (Object.hasOwn(seq, slot)) kept[slot] = readFileSlot(seq[slot], `${seqAt}.${slot}`, readable, repairs);
+      });
+      if (Object.hasOwn(seq, 'depth')) kept.depth = readDepthValue(seq.depth, readable);
+      return kept;
+    });
+  }
+  if (Array.isArray(filesData.linearComparisons)) {
+    read.linearComparisons = filesData.linearComparisons.filter((/** @type {UnvalidatedFields<'file'>} */ comparison) => (
+      Array.isArray(comparison?.file) || readable(comparison?.file)));
+  }
+  return read;
+};
+
+/**
+ * A read draft's Linear comparison plan in the form Save writes it
+ * (`serializeLinearComparisonPlan`; the draft readers give the drawing's,
+ * whose edges hold their runtime `file`, OV-1933), with each edge the read
+ * files keep no comparison file for no longer file-active, as `applyFiles`
+ * leaves it (OV-899, as the pair card's Remove leaves it). Load's first
+ * reading of a Session 27-44 sends this draft to Python.
+ * @param {Record<string, unknown>} config
+ * @param {Record<string, unknown> | null} readFiles The files `readStoredFiles` kept; none, no edge is changed.
+ * @returns {Record<string, unknown>}
+ */
+const withStoredComparisonPlan = (config, readFiles) => {
+  if (!Object.hasOwn(config, 'linearComparisonPlan')) return config;
+  const plan = serializeLinearComparisonPlan(config.linearComparisonPlan);
+  if (readFiles) {
+    const bound = new Set((Array.isArray(readFiles.linearComparisons) ? readFiles.linearComparisons : [])
+      .map((/** @type {UnvalidatedFields<'id'>} */ comparison) => String(comparison?.id || '')));
+    plan.edges.forEach((edge) => { if (!bound.has(edge.id)) edge.fileActive = false; });
+  }
+  return { ...config, linearComparisonPlan: plan };
+};
 
 /**
  * The inputs a Load reads into its candidate before the commit installs them
@@ -4611,15 +4719,18 @@ const applyFiles = (filesData, {
     return { collapsedLinearSeqs: false, linearSeqs };
   }
 
+  // The stored entries Load keeps, with their rows; each is deserialized below.
+  const read = readStoredFiles(filesData, at, isReadableStoredFile, repairs);
+  /** @param {unknown} entry A kept single slot's entry (`readFileSlot`): a file or null. */
+  const slotFile = (entry) => /** @type {FileLike | null} */ (deserializeFile(entry));
   /** @param {string} slot */
-  const fileSlot = (slot) => readFileSlot(filesData[slot], `${at}.${slot}`, repairs);
-  targetState.files.c_gb = fileSlot('c_gb');
-  targetState.files.c_gff = fileSlot('c_gff');
-  targetState.files.c_fasta = fileSlot('c_fasta');
+  const fileList = (slot) => (Array.isArray(read[slot]) ? /** @type {unknown[]} */ (read[slot]) : [])
+    .map((entry) => deserializeFile(entry));
+  targetState.files.c_gb = slotFile(read.c_gb);
+  targetState.files.c_gff = slotFile(read.c_gff);
+  targetState.files.c_fasta = slotFile(read.c_fasta);
   // A Depth slot holds a list.
-  targetState.files.c_depth = deserializeFile(filesData.c_depth);
-  /** @param {string} slot */
-  const fileList = (slot) => readFileList(filesData[slot], `${at}.${slot}`, repairs);
+  targetState.files.c_depth = deserializeFile(read.c_depth);
   // A table's place stays until Load leaves out its series (`withoutUnreadConservationSeries`).
   targetState.files.c_conservation_blasts = fileList('c_conservation_blasts');
   targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
@@ -4631,11 +4742,11 @@ const applyFiles = (filesData, {
     filesData.linearCanonicalComparisons,
     { adoptCanonicalPayloads, repairs }
   );
-  targetState.files.d_color = fileSlot('d_color');
-  targetState.files.t_color = fileSlot('t_color');
-  targetState.files.blacklist = fileSlot('blacklist');
-  targetState.files.whitelist = fileSlot('whitelist');
-  targetState.files.qualifier_priority = fileSlot('qualifier_priority');
+  targetState.files.d_color = slotFile(read.d_color);
+  targetState.files.t_color = slotFile(read.t_color);
+  targetState.files.blacklist = slotFile(read.blacklist);
+  targetState.files.whitelist = slotFile(read.whitelist);
+  targetState.files.qualifier_priority = slotFile(read.qualifier_priority);
 
   const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
     ? filesData.circularRecords
@@ -4670,21 +4781,16 @@ const applyFiles = (filesData, {
     });
   }
 
-  if (Array.isArray(filesData.linearSeqs)) {
-    const loadedLinearSeqs = filesData.linearSeqs.map((seq, index) => {
-      const seqAt = `${at}.linearSeqs[${index}]`;
-      // The genetic code, crop and texts, read once (OV-568).
-      const read = readLinearSeqFields(seq, seqAt);
-      repairs?.push(...read.repairs);
-      return {
-        uid: seq.uid,
-        gb: readFileSlot(seq.gb, `${seqAt}.gb`, repairs),
-        gff: readFileSlot(seq.gff, `${seqAt}.gff`, repairs),
-        fasta: readFileSlot(seq.fasta, `${seqAt}.fasta`, repairs),
-        depth: deserializeFile(seq.depth),
-        ...read.value
-      };
-    });
+  if (Array.isArray(read.linearSeqs)) {
+    const loadedLinearSeqs = read.linearSeqs.map((/** @type {Record<string, unknown>} */ seq, /** @type {number} */ index) => ({
+      uid: /** @type {string} */ (seq.uid),
+      gb: slotFile(seq.gb),
+      gff: slotFile(seq.gff),
+      fasta: slotFile(seq.fasta),
+      depth: deserializeFile(seq.depth),
+      // The genetic code, crop and texts (OV-568), read with their rows above; this reading lists none.
+      ...readLinearSeqFields(seq, `${at}.linearSeqs[${index}]`).value
+    }));
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
@@ -4709,7 +4815,7 @@ const applyFiles = (filesData, {
       });
     }
     const comparisonFiles = new Map(
-      /** @type {[string, any][]} */ ((Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
+      /** @type {[string, any][]} */ ((Array.isArray(read.linearComparisons) ? read.linearComparisons : [])
         .map((comparison) => [
           String(comparison?.id || ''),
           deserializeFile(comparison?.file)
@@ -6229,6 +6335,20 @@ const importSessionDocument = async (e, options = {}) => {
           orthogroupDescriptionOverrides: orthogroupEditsOf(groupState.orthogroupDescriptionOverrides, groupIds).value
         };
       }
+      // Its input files are read here, at the file's own path, and Python
+      // receives the entries Load keeps (D-15-139): a Session 31-44's
+      // bindings as the Session reader kept them, a 27-30's `files`.
+      const { files: storedFiles, webFiles: storedWebFiles } = readData;
+      /** @type {Record<string, unknown> | null} */
+      let readFiles = null;
+      if (isPlainObject(storedWebFiles) && isPlainObject(storedWebFiles.bindings)) {
+        readFiles = readStoredFiles(storedWebFiles.bindings, 'webFiles.bindings', isKeptBinding, fileRepairs);
+        readData.webFiles = { ...storedWebFiles, bindings: readFiles };
+      } else if (isPlainObject(storedFiles)) {
+        readFiles = readStoredFiles(storedFiles, 'files', isReadableStoredFile, fileRepairs);
+        readData.files = readFiles;
+      }
+      if (isPlainObject(readData.config)) readData.config = withStoredComparisonPlan(readData.config, readFiles);
       const upgrade = await upgradeLegacySession(readData);
       if (!options.isCurrent()) return { status: 'canceled' };
       // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
@@ -6455,6 +6575,10 @@ const importSessionDocument = async (e, options = {}) => {
     const inputTypes = { cInputType: inputTypeOf('cInputType'), lInputType: inputTypeOf('lInputType') };
     // Where the input files are in the file.
     const filesAt = canonicalSession ? 'webFiles.bindings' : 'files';
+    // A Session 27-44's files were read with their rows before Python
+    // converted them (D-15-139); its Session 49's are read with none.
+    /** @type {LoadRepair[]} */
+    const fileRows = legacyRead ? [] : repairs;
     /**
      * Restored file slots as a drawing reads them (`applyFiles`), with the
      * Linear record layout it reconciles, in a settings slice of its own
@@ -6479,7 +6603,7 @@ const importSessionDocument = async (e, options = {}) => {
       };
       const { collapsedLinearSeqs, linearSeqs } = applyFiles(/** @type {Parameters<typeof applyFiles>[0]} */ (restored), {
         adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
-        targetState: target, targetDrawing: target, repairs, at
+        targetState: target, targetDrawing: target, repairs: fileRows, at
       });
       return { target, linearSeqs, collapsed: collapsedLinearSeqs, at };
     };

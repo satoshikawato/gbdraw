@@ -430,8 +430,9 @@ test('OV-899: a dropped comparison file binding loads as a removed file; Save an
     const removed = q42();
     delete removed.resources['comparison-nucleotide-1'];
     for (const [name, session, rows, comparisons] of [
+      // The request's table, in the search frame, is the one Python's conversion frames as a new resource (D-15-129).
       ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
-        ['comparison-nucleotide-1']],
+        ['comparison-losat-1']],
       ['resource removed', removed, [
         'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
         'request-reference-dropped renderRequest.comparisons[0]'
