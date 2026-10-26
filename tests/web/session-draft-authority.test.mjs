@@ -375,14 +375,14 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
-// The Linear drawing's draft is its Session 46 slice.
-const divergentSlice = divergentSession.modes.linear;
+// The Linear drawing's draft is the one drawing of the Session 49.
+const divergentSlice = divergentSession.drawings[0];
 divergentSlice.ui ||= {};
 // This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
-divergentSession.renderRequest.layout.similarityAlignment = null;
+divergentSession.drawings[0].renderRequest.layout.similarityAlignment = null;
 // The Reset evidence of an Align binds that plan, so it goes with it.
-if (divergentSession.editorState) divergentSession.editorState.alignmentResetReceipt = null;
-const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
+if (divergentSlice.editorState) divergentSlice.editorState.alignmentResetReceipt = null;
+const committedComparisonCount = divergentSession.drawings[0].renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
 divergentSlice.config.linearComparisonPlan = {
   mode: 'none',
@@ -443,13 +443,13 @@ const dormantComparisonDraft = structuredClone({
       divergentSlice.config.losat.blastp.collinearColorMode
   }
 });
-divergentSession.renderRequest.diagramOptions.output.legend = 'right';
-divergentSession.ui.generatedLegendPosition = 'right';
+divergentSession.drawings[0].renderRequest.diagramOptions.output.legend = 'right';
+divergentSlice.ui.generatedLegendPosition = 'right';
 // The Linear slot of the layout (the slice holds its own mode's slot).
 divergentSlice.ui.layoutPreferences = { legend: 'bottom', plotTitlePosition: 'bottom' };
 divergentSession.ui.paletteInstantPreviewEnabled = false;
-divergentSession.ui.appliedPaletteName = 'orchid';
-divergentSession.ui.appliedPaletteColors = { CDS: '#123456' };
+divergentSlice.ui.appliedPaletteName = 'orchid';
+divergentSlice.ui.appliedPaletteColors = { CDS: '#123456' };
 divergentSlice.ui.pendingPaletteName = 'mint';
 divergentSlice.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
@@ -535,7 +535,7 @@ const legacyLayoutFields = [
 ];
 const withoutStoredLayoutPreferences = () => {
   const payload = structuredClone(divergentSession);
-  delete payload.modes.linear.ui.layoutPreferences;
+  delete payload.drawings[0].ui.layoutPreferences;
   legacyLayoutFields.forEach((field) => delete payload.ui[field]);
   return payload;
 };
@@ -550,7 +550,7 @@ const importPayload = async (payload, options = {}) => importSession({
 // (PD-OI-009, before the Font setting) loads it into the setting, so no
 // preserved override names a path the GUI manages (custom-fonts PR-2).
 const preservedFontSession = structuredClone(divergentSession);
-const preservedFontSlice = preservedFontSession.modes.linear;
+const preservedFontSlice = preservedFontSession.drawings[0];
 preservedFontSlice.config ||= {};
 preservedFontSlice.config.adv ||= {};
 delete preservedFontSlice.config.adv.font_family;
@@ -561,14 +561,14 @@ assert.equal(modeDrawing(state, 'linear').adv.font_family, "'DejaVu Serif', seri
 assert.deepEqual({ ...modeDrawing(state, 'linear').unmanagedConfigOverrides }, {});
 
 const decisionRequiredSession = structuredClone(divergentSession);
-decisionRequiredSession.renderRequest.comparisons = [{
+decisionRequiredSession.drawings[0].renderRequest.comparisons = [{
   kind: 'nucleotideBlast',
   resourceId: 'missing-comparison-resource',
   queryRecordIndex: 0,
   subjectRecordIndex: 1
 }];
-decisionRequiredSession.losatCache = { entries: [] };
-decisionRequiredSession.losatDerivedCache = { entries: [] };
+decisionRequiredSession.drawings[0].losatCache = { entries: [] };
+decisionRequiredSession.drawings[0].losatDerivedCache = { entries: [] };
 const decisionRequiredDialogs = [];
 const decisionRequiredImport = await importPayload(decisionRequiredSession, {
   confirmLoadRepairs: async ({ items }) => { decisionRequiredDialogs.push(items); return true; }
@@ -581,7 +581,7 @@ assert.equal(
 // Load lists the comparison that names a resource the Session lacks (OV-951)
 // and asks once; the drawing still records that a decision is required.
 assert.deepEqual(decisionRequiredImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
-  ['request-reference-dropped', 'renderRequest.comparisons[0]', 'dropped']
+  ['request-reference-dropped', 'drawings[0].renderRequest.comparisons[0]', 'dropped']
 ]);
 assert.equal(decisionRequiredDialogs.length, 1);
 assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
@@ -591,7 +591,7 @@ assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   message: 'The saved comparison is missing a required resource.',
   hasCommittedComparison: true
 });
-assert.equal(state.results.value.length, divergentSession.results.length);
+assert.equal(state.results.value.length, divergentSession.drawings[0].results.length);
 assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
 
 for (const savedPlan of [{
@@ -613,7 +613,7 @@ for (const savedPlan of [{
   }]
 }]) {
   const savedPlanSession = structuredClone(divergentSession);
-  savedPlanSession.modes.linear.config.linearComparisonPlan = structuredClone(savedPlan);
+  savedPlanSession.drawings[0].config.linearComparisonPlan = structuredClone(savedPlan);
   const savedPlanImport = await importPayload(savedPlanSession);
   assert.equal(savedPlanImport.status, 'ok');
   assert.deepEqual(state.activeDrawing().linearComparisonPlan, {
@@ -648,8 +648,8 @@ assert.equal(state.generatedLegendPosition.value, 'right');
 assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'right');
 
 const partialLayoutSession = withoutStoredLayoutPreferences();
-partialLayoutSession.modes.linear.ui.layoutPreferences = { legend: 'top' };
-partialLayoutSession.ui.generatedLegendPosition = 'right';
+partialLayoutSession.drawings[0].ui.layoutPreferences = { legend: 'top' };
+partialLayoutSession.drawings[0].ui.generatedLegendPosition = 'right';
 const partialLayoutImport = await importPayload(partialLayoutSession);
 assert.equal(partialLayoutImport.status, 'ok');
 assert.equal(state.activeDrawing().form.legend, 'top');
@@ -675,11 +675,11 @@ const activeIntentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   'utf8'
 ));
-const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
+const activeFeature = activeIntentSession.drawings[0].editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
 // The Circular drawing's draft is its Session 46 slice; per-feature edits are
 // keyed by the feature's source identity (R2).
-const activeSlice = activeIntentSession.modes.circular;
+const activeSlice = activeIntentSession.drawings[0];
 activeSlice.ui ||= {};
 const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
 Object.assign(activeSlice.config.form, {
@@ -734,8 +734,8 @@ Object.assign(activeSlice.config, {
   linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] }
 });
 activeIntentSession.ui.paletteInstantPreviewEnabled = false;
-activeIntentSession.ui.appliedPaletteName = 'default';
-activeIntentSession.ui.appliedPaletteColors = { CDS: '#e8b441', tRNA: '#71ee7d' };
+activeSlice.ui.appliedPaletteName = 'default';
+activeSlice.ui.appliedPaletteColors = { CDS: '#e8b441', tRNA: '#71ee7d' };
 activeSlice.ui.pendingPaletteName = 'orange';
 activeSlice.ui.pendingPaletteColors = { CDS: '#123456', tRNA: '#abcdef' };
 activeSlice.ui.selectedFeatureRecordIdx = 0;
@@ -761,7 +761,9 @@ activeSlice.features = {
   labelOverrideRows: [],
   labelTextBulkOverrides: {}
 };
+// The drawing's editor state also holds its Feature catalog: keep it.
 activeSlice.editorState = {
+  ...activeSlice.editorState,
   legend: {
     entries: [],
     deletedEntries: [],
@@ -777,9 +779,9 @@ activeSlice.editorState = {
     }
   }
 };
-activeIntentSession.editorState = {
-  ...activeIntentSession.editorState,
-  legend: { originalOrder: [], originalColors: {} },
+activeSlice.editorState = {
+  ...activeSlice.editorState,
+  legend: { ...activeSlice.editorState.legend, originalOrder: [], originalColors: {} },
   originalSvgStroke: { color: '#000000', width: 1 }
 };
 
@@ -861,7 +863,7 @@ assert.equal(
   activeIntentImport.error?.message || 'active-intent session import failed'
 );
 assert.deepEqual(activeIntentDialogs, [[
-  'Track stack: the Depth row "disabled-draft" (modes.circular.config.adv.circular_track_slots) names a Depth series its'
+  'Track stack: the Depth row "disabled-draft" (drawings[0].config.adv.circular_track_slots) names a Depth series its'
     + ' drawing does not have; the row is turned off and no longer names that series.'
 ]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
@@ -925,7 +927,7 @@ assert.deepEqual(
 // row says the default is used, the rest of the slice loads as saved, and the
 // Results stay. (A failed Load keeps the state; see `failedImport` below.)
 const invalidActiveConfigSession = structuredClone(activeIntentSession);
-invalidActiveConfigSession.modes.circular.config.form = 'spreadout';
+invalidActiveConfigSession.drawings[0].config.form = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
     files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
@@ -939,9 +941,9 @@ const invalidActiveConfigImport = await importSession(invalidActiveConfigEvent, 
 });
 assert.equal(invalidActiveConfigImport.status, 'ok', JSON.stringify(invalidActiveConfigImport.error));
 assert.deepEqual(invalidActiveConfigImport.repairs.map(({ code, path, effect }) => [code, path, effect]), [
-  ['setting-replaced', 'modes.circular.config.form', 'defaulted'],
+  ['setting-replaced', 'drawings[0].config.form', 'defaulted'],
   // The off Depth row of the slice, as in the Load above (B45).
-  ['depth-row-disabled', 'modes.circular.config.adv.circular_track_slots', 'changed']
+  ['depth-row-disabled', 'drawings[0].config.adv.circular_track_slots', 'changed']
 ]);
 assert.equal(invalidActiveConfigDialogs.length, 1);
 // The stored form's edits are not loaded (the committed request's form is

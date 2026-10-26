@@ -110,7 +110,7 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
     return { result: { overrides: payload.configOverrides } };
   });
   const session = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', import.meta.url), 'utf8'));
-  session.modes.linear.config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
+  session.drawings.find((entry) => entry.id === session.ui.activeDrawingId).config.unmanagedConfigOverrides = { 'objects.gc_content.percent_background_opacity': 0.42 };
   const input = { target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' } };
   const loaded = await importSession(input, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));

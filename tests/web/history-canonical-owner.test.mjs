@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { readFile } from 'node:fs/promises';
 
 globalThis.window = { Vue: {
@@ -15,9 +16,10 @@ const { createInputFileStore } = await import('../../gbdraw/web/js/services/hist
 const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
 
 const empty = canonicalRenderArtifactOwner.capture();
-const canonical = JSON.parse(await readFile(
+const saved = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', 'utf8'
 ));
+const canonical = savedDrawingView(saved, saved.ui.activeDrawingId);
 adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
 const a = canonicalRenderArtifactOwner.capture();
 assert(Object.isFrozen(a));

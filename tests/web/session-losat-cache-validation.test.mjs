@@ -1043,7 +1043,7 @@ test('current schema-8 alignment retains exact typed anchors and explicit histor
   assert.equal(result.status, 'ok');
   assert.equal(state.similarityAlignmentPlan.value.groupId, 'og_1');
   assert.deepEqual(state.similarityAlignmentPlan.value.reference, {
-    recordKey: source.renderRequest.records[0].recordKey,
+    recordKey: source.drawings.find((entry) => entry.id === source.ui.activeDrawingId).renderRequest.records[0].recordKey,
     biologicalFeatureId: 'fed46a3a6',
     sourceFeatureIndex: 14,
     stableFeatureSvgId: 'fed46a3a6'

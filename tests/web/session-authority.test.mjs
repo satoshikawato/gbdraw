@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -454,7 +455,11 @@ assert.throws(() => validateSessionAuthorityInventory({
 // (Session 46; the Gallery Sessions are current-writer Sessions).
 {
   const { readFileSync } = await import('node:fs');
-  const read = (name) => JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+  const read = (name) => {
+    const saved = JSON.parse(readFileSync(join(repoRoot, 'gbdraw/web/gallery/sessions', name), 'utf8'));
+    // The one-drawing view is the 46 layout this block checks (`modes`, `otherModeResult`).
+    return { ...savedDrawingView(saved, saved.ui.activeDrawingId), version: 46 };
+  };
   const circularSession = read('HmmtDNA_basic_circular.gbdraw-session.json');
   const linearSession = read('lambda_basic_linear.gbdraw-session.json');
   const otherModeResult = {
