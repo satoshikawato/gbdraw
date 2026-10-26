@@ -80,7 +80,7 @@ export const ARTIFACT_KEYS = Object.freeze([
   'appliedPaletteName', 'appliedPaletteColors', 'extractedFeatures', 'biologicalFeatures', 'featureCatalog',
   'featureRecordIds', 'editableLabels', 'originalLegendOrder', 'originalLegendColors', 'originalSvgStroke',
   'legendCurrentOffset', 'diagramOffset', 'lengthBarUserOffset', 'plotTitleUserOffset',
-  'generatedLegendPosition', 'generatedMode', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition'
+  'generatedLegendPosition', 'generatedDrawingId', 'generatedMultiRecordCanvas', 'generatedCircularPlotTitlePosition'
 ]);
 
 // Inputs and caches that every drawing shares.
@@ -208,6 +208,12 @@ const cardFilesProperty = (fixture) => (Object.hasOwn(fixture, 'cardFiles') ? {}
   cardFiles: { value: { d_color: null, t_color: null, blacklist: null, whitelist: null, qualifier_priority: null }, configurable: true, writable: true }
 });
 
+// The drawing the displayed Result belongs to (state.generatedDrawingId), the
+// Circular drawing unless the fixture names one, as in state.js.
+const generatedDrawingProperty = (fixture) => (Object.hasOwn(fixture, 'generatedDrawingId') ? {} : {
+  generatedDrawingId: { value: { value: drawingIdOfMode('circular') }, configurable: true, writable: true }
+});
+
 // The fixture with the drawing store that services and owners read
 // (`state.drawingOf`, `state.drawingList()`, `state.activeDrawing()`): the
 // fixture is the drawing of both modes, so a member the test replaces later is
@@ -218,6 +224,7 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
   ...storeProperties(fixture, fixture),
   ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
   ...cardFilesProperty(fixture),
+  ...generatedDrawingProperty(fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });
 
@@ -226,5 +233,6 @@ export const withDrawings = (fixture) => Object.defineProperties(withSliceHandle
 export const withModeDrawings = (fixture, { circular, linear }) => Object.defineProperties(fixture, {
   ...storeProperties(withSliceHandles(circular), withSliceHandles(linear)),
   ...cardFilesProperty(fixture),
+  ...generatedDrawingProperty(fixture),
   activeDrawing: { value: () => (fixture.mode?.value === 'linear' ? linear : circular), configurable: true }
 });

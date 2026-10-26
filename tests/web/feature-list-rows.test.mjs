@@ -157,9 +157,9 @@ test('the Features list names Linear records by the drawing it lists for, not by
   } };
   const { state } = await import('../../gbdraw/web/js/state.js');
   const shownBefore = state.activeDrawingId.value;
-  const generatedBefore = state.generatedMode.value;
+  const generatedBefore = state.generatedDrawingId.value;
   state.activeDrawingId.value = state.drawingOfMode('linear').id;
-  state.generatedMode.value = null;
+  state.generatedDrawingId.value = state.activeDrawingId.value;
   state.featureCatalog.value = { schema: 5, items: [item(0, 'REC1', [['A', 'CDS']], ['A'])] };
   state.selectedResultIndex.value = 0;
   state.results.value = [{ name: 'result-0.svg', content: '<svg />' }];
@@ -168,7 +168,7 @@ test('the Features list names Linear records by the drawing it lists for, not by
   } finally {
     state.results.value = [];
     state.featureCatalog.value = null;
-    state.generatedMode.value = generatedBefore;
+    state.generatedDrawingId.value = generatedBefore;
     state.activeDrawingId.value = shownBefore;
   }
 });

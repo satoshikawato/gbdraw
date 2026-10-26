@@ -158,7 +158,7 @@ test('a drawing never holds a position outside its mode: the Position control an
 test('a stored generated position outside its mode reads as the side an unset one had', () => {
   const read = (generatedMode, generatedLegendPosition) => {
     state.generatedLegendPosition.value = 'right';
-    applyUiStateData(modeDrawing(state, generatedMode), { generatedMode, generatedLegendPosition });
+    applyUiStateData(modeDrawing(state, generatedMode), { generatedDrawingId: modeDrawing(state, generatedMode).id, generatedLegendPosition });
     return state.generatedLegendPosition.value;
   };
   assert.equal(read('linear', 'Upper_Left'), 'bottom');

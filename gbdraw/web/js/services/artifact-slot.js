@@ -47,7 +47,6 @@ export const ARTIFACT_SLOT_EMPTY = Object.freeze({
   pairwiseMatchFactors: () => ({}),
   editableLabels: () => [],
   generatedLegendPosition: () => 'left',
-  generatedMode: (mode) => mode,
   generatedMultiRecordCanvas: () => false,
   generatedCircularPlotTitlePosition: () => 'none',
   // An empty slot has no Result to project a palette onto: it keeps the applied one,

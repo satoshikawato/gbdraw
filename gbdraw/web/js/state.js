@@ -578,7 +578,10 @@ const showCanvasControls = ref(false);
 
 // Track legend position at generation time (for repositioning without regeneration)
 const generatedLegendPosition = ref('left');
-const generatedMode = ref('circular');
+// The drawing the displayed Result belongs to, by ID (S6): the artifact slot
+// installs write it (`installArtifactSlot`, the History owner set), and Load.
+/** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
+const generatedDrawingId = typedRef(drawingIdOfMode('circular'));
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 
@@ -1366,7 +1369,7 @@ export const state = Object.freeze({
   plotTitleUserOffset,
   showCanvasControls,
   generatedLegendPosition,
-  generatedMode,
+  generatedDrawingId,
   generatedMultiRecordCanvas,
   generatedCircularPlotTitlePosition,
   skipCaptureBaseConfig,
