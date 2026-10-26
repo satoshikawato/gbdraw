@@ -2494,3 +2494,17 @@ def test_gallery_session_refresh_keeps_the_session_created_at(
     assert refreshed["createdAt"] == original["createdAt"]
     assert refreshed["title"] == "new"
     assert tracked.read_bytes() == first_run
+
+
+def test_staged_gallery_validator_requires_one_drawn_drawing(tmp_path: Path) -> None:
+    """The staged Session is checked against the one-drawn-drawing rule the Web reads from the generator."""
+
+    from gbdraw.session_drawings import _drawings_document
+
+    view = {"createdAt": "2026-01-02T00:00:00Z", **_staged_geometry_session(mode="linear", records=None)}
+    two_drawn = _drawings_document(
+        [view, view], ids=["linear", "linear-2"], names=["Linear", "Linear 2"], active=0, project_views=[view, view]
+    )
+
+    with pytest.raises(ValueError, match="shows 1 drawn drawing; this one has 2"):
+        _validate_staged_gallery_session_49(tmp_path / "two-drawn.gbdraw-session.json", two_drawn)

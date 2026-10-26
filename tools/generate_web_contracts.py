@@ -59,6 +59,7 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("LEGACY_PROTEIN_CANDIDATE_SCHEMA", "gbdraw.session_io", "LEGACY_PROTEIN_CANDIDATE_SCHEMA"),
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
+    ("GALLERY_SESSION_DRAWN_DRAWINGS", "gbdraw.session_contract", "GALLERY_SESSION_DRAWN_DRAWINGS"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.

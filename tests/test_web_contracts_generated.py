@@ -439,3 +439,14 @@ def test_the_circular_conservation_flow_has_one_python_owner() -> None:
         )
     )
     assert holders == []
+
+
+@pytest.mark.browser
+def test_the_gallery_drawn_drawing_count_has_one_python_owner() -> None:
+    """The Web publication reads how many drawn drawings a Gallery Session shows from the generator."""
+    from gbdraw.session_contract import GALLERY_SESSION_DRAWN_DRAWINGS
+
+    generated = (REPO_ROOT / "gbdraw/web/js/contracts/schema.generated.js").read_text(encoding="utf-8")
+    assert f"export const GALLERY_SESSION_DRAWN_DRAWINGS = {GALLERY_SESSION_DRAWN_DRAWINGS};" in generated
+    publication = (REPO_ROOT / "gbdraw/web/js/services/gallery-session-publication.js").read_text(encoding="utf-8")
+    assert "drawn.length !== GALLERY_SESSION_DRAWN_DRAWINGS" in publication

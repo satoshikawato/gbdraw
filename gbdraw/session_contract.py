@@ -244,6 +244,10 @@ class LegacySessionFields(FlatDraftFields, total=False):
 # lowercase words joined by hyphens.
 SESSION_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 DRAWING_ID_MAX_LENGTH = 40
+# A Gallery Session shows one diagram: this many of its drawings have a
+# committed render (``renderRequest`` not null). tools/refresh_gallery_sessions.py
+# checks the Sessions it reads and writes; the Web publication reads it generated.
+GALLERY_SESSION_DRAWN_DRAWINGS = 1
 
 
 class SessionProjectUi(TypedDict, total=False):
