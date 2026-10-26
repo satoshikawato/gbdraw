@@ -95,3 +95,24 @@ for (const vector of FIXTURE.vectors) {
     assert.equal(verdicts.at(-1) === true, vector.webClass === 'R4', `${vector.id}: restoresNothing verdicts ${JSON.stringify(verdicts)}`);
   });
 }
+
+// A Session 41-43 record display row lacks the two fields Session 44 added;
+// Load reads the file's flat draft before Python converts it, so the row is
+// read as its Session wrote it (OV-1928), not dropped.
+test('a Session 40-43 display row without the fields Session 44 added loads into its drawing', async () => {
+  const vector = FIXTURE.vectors.find(({ id }) => id === 'ov575-session-40-display-draft');
+  const document = edited(vector);
+  const [row] = document.config.recordDisplayDrafts;
+  delete row.reverseComplementOverride;
+  delete row.anchorIntent;
+  const outcome = await importSession({
+    target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
+  }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual((outcome.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`), []);
+  // The drawing that opens is the file's Circular one (its `ui.mode`).
+  const opened = state.activeDrawing();
+  assert.equal(opened.mode, 'circular');
+  assert.deepEqual(opened.recordDisplayDrafts.map(({ sourceUid, selector, startCoordinate }) => ({ sourceUid, selector, startCoordinate })),
+    [{ sourceUid: 'circular', selector: '#1', startCoordinate: 25 }]);
+});

@@ -864,8 +864,13 @@ const DRAWING_TABLES = Object.freeze({
   circular: [{ at: '', rows: [row('recordsOff', recordsOffReader('circular')), row('featurePlacementOverrides', featurePlacementsReader('circular'))] }],
   linear: [{ at: '', rows: [row('recordsOff', recordsOffReader('linear')), row('featurePlacementOverrides', featurePlacementsReader('linear'))] }]
 });
-/** The fields read from the configuration as stored. @type {readonly FieldTable[]} */
-const VALUE_TABLES = Object.freeze([
+/**
+ * The fields read from the configuration as stored; `scopedDrafts`: each
+ * record display draft row names its mode (a flat draft, below).
+ * @param {boolean} scopedDrafts
+ * @returns {readonly FieldTable[]}
+ */
+const valueTables = (scopedDrafts) => Object.freeze([
   { at: 'losat', rows: LOSAT_EXECUTION_ROWS },
   {
     at: 'linearRecordLayout',
@@ -905,11 +910,18 @@ const VALUE_TABLES = Object.freeze([
       row('palette', readPalette),
       row('colors', readPlainObject),
       row('unmanagedConfigOverrides', readPlainObject),
-      row('recordDisplayDrafts', (value) => readRecordDisplayDrafts(value)),
+      row('recordDisplayDrafts', (value) => readRecordDisplayDrafts(value, { scoped: scopedDrafts })),
       row('linearComparisonPlan', readLinearComparisonPlan)
     ]
   }
 ]);
+const VALUE_TABLES = valueTables(false);
+// The record display rows of a flat draft (Session 27-44) name their mode:
+// Python's split moves each row into the drawing of the mode it names (the
+// registry's `by-scope` token), so the draft is read with it (D-15-133).
+const FLAT_DRAFT_VALUE_TABLES = valueTables(MODE_SCOPED_SETTINGS.rows.some(({ domain, path, migrate }) => (
+  domain === 'config' && path === 'recordDisplayDrafts' && migrate === 'by-scope'
+)));
 
 /** @param {unknown} value */
 const storedText = (value) => typeof value === 'string' && value.trim() !== '';
@@ -1270,23 +1282,68 @@ export const installStoredSettings = (targets, stored, mode, { captured = false 
 };
 
 /**
+ * `value` with the container at `at` (dotted; '' is the value itself)
+ * replaced by `container`; the containers above it are copied.
+ * @param {unknown} value @param {string} at @param {Record<string, unknown>} container
+ * @returns {unknown}
+ */
+const withContainerAt = (value, at, container) => {
+  if (!at) return container;
+  const [key, ...rest] = at.split('.');
+  const parent = isPlainObject(value) ? value : {};
+  return { ...parent, [key]: withContainerAt(parent[key], rest.join('.'), container) };
+};
+
+/**
+ * Reads `tables` of `value` as stored: what they could not restore, and
+ * `value` with each container read in place of the stored one.
+ * @param {readonly FieldTable[]} tables
+ * @param {unknown} value
+ * @returns {{ losses: SettingLoss[], value: unknown }}
+ */
+const readValueTablesOf = (tables, value) => {
+  let readValue = value;
+  const losses = tables.flatMap(({ at, rows }) => {
+    const source = containerAt(value, at);
+    if (!source) {
+      // A container that is no object is not read (its fields take their
+      // defaults); `installStoredSettings` lists the merged ones.
+      const stored = at && !MERGED_CONTAINERS.includes(at) ? valueAt(value, at) : undefined;
+      return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
+    }
+    /** @type {Record<string, unknown>} */
+    const read = { ...(containerAt(readValue, at) ?? source) };
+    const containerLosses = readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
+    readValue = withContainerAt(readValue, at, read);
+    return containerLosses;
+  });
+  return { losses, value: readValue };
+};
+/**
  * Reads `tables` of `value` as stored; returns what they could not restore.
  * @param {readonly FieldTable[]} tables
  * @param {unknown} value
  * @returns {SettingLoss[]}
  */
-const readValueTables = (tables, value) => tables.flatMap(({ at, rows }) => {
-  const source = containerAt(value, at);
-  if (!source) {
-    // A container that is no object is not read (its fields take their
-    // defaults); `installStoredSettings` lists the merged ones.
-    const stored = at && !MERGED_CONTAINERS.includes(at) ? valueAt(value, at) : undefined;
-    return isUnsetValue(stored) ? [] : [{ at, stored, used: {} }];
-  }
-  /** @type {Record<string, unknown>} */
-  const read = { ...source };
-  return readRows(read, rows.filter(({ field }) => Object.hasOwn(source, field)), at, source);
-});
+const readValueTables = (tables, value) => readValueTablesOf(tables, value).losses;
+
+/**
+ * A Session 27-44's one draft (`config`, at `path`) as the draft field
+ * readers read it before Python splits it into drawings (D-15-129): the read
+ * value Python receives, and what the readers could not restore, listed for
+ * a field any mode draws (every drawing of the split reads the draft). The
+ * fields a drawing of one mode reads are read in its drawing, after the split.
+ * @param {Record<string, unknown>} config
+ * @param {string} path
+ * @returns {{ value: Record<string, unknown>, repairs: LoadRepair[] }}
+ */
+export const readSingleDraftValues = (config, path) => {
+  const { losses, value } = readValueTablesOf(FLAT_DRAFT_VALUE_TABLES, config);
+  return {
+    value: /** @type {Record<string, unknown>} */ (value),
+    repairs: lossRepairs(losses, path, config, { root: 'config' })
+  };
+};
 
 /** Free text: Load names the place of such a value, not the value (12.3). */
 const FREE_TEXT_KEYS = new Set([

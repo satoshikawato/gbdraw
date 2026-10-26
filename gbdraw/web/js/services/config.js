@@ -50,7 +50,7 @@ import {
   readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
-  readSessionInputType, readSimilarityAlignment
+  readSessionInputType, readSimilarityAlignment, readSingleDraftValues
 } from './config-field-readers.js';
 import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -2728,13 +2728,6 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
-  if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && isPlainObject(currentStoredConfig)
-    && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
-    currentStoredConfig = {
-      ...currentStoredConfig,
-      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(currentStoredConfig.recordDisplayDrafts)
-    };
-  }
   // A Session 41-44 placement row reached both modes; the migration names
   // its mode (Main rows both), and the Session 46 split moves it there (R2).
   if (!modeScopedSession && isPlainObject(currentStoredConfig)
@@ -6175,7 +6168,18 @@ const importSessionDocument = async (e, options = {}) => {
         applyResultsData(Array.isArray(storedResults) ? storedResults : [], storedUi ?? {});
         await nextTick();
       }
-      const upgrade = await upgradeLegacySession(fileParts.data);
+      // Its one draft is read by the draft field readers here, at the file's
+      // own path; each drawing of Python's split reads its mode's fields. A
+      // Session 41-43 display row lacks the two fields Session 44 added (as
+      // Python's migration of the draft, OV-1928).
+      const { config: storedDraft } = /** @type {{ config?: unknown }} */ (fileParts.data);
+      const draft = isPlainObject(storedDraft) && fileDocument.version < TYPED_DRAFT_SESSION_VERSION
+        && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
+        ? { ...storedDraft, recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(storedDraft.recordDisplayDrafts) }
+        : storedDraft;
+      const draftRead = isPlainObject(draft) ? readSingleDraftValues(draft, 'config') : null;
+      if (draftRead) fileRepairs.push(...draftRead.repairs);
+      const upgrade = await upgradeLegacySession(draftRead ? { ...fileParts.data, config: draftRead.value } : fileParts.data);
       if (!options.isCurrent()) return { status: 'canceled' };
       legacyRead = { upgrade, repairs: [...fileRepairs, ...upgrade.warnings] };
     }
