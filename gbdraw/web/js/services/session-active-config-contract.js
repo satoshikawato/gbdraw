@@ -14,6 +14,7 @@ import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, labelStyleForMode, 
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { isUnsetValue } from '../utils/field-reading.js';
+import { depthTrackEditDefaults, ensureDepthTrackConfigCount } from './depth-track-state.js';
 import { validateRecordDisplayDrafts } from './record-display-model.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
@@ -82,6 +83,11 @@ export const createDefaultForm = () => ({
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });
+// A new drawing's Depth settings. It holds one Depth series, the default
+// series of these settings, as 0.14.0 stored it in every mode (OV-1901,
+// D-15-122); the drawing, Reset Settings and the generated mode defaults read
+// it here.
+const DEFAULT_DEPTH_SETTINGS = Object.freeze({ depth_height: null, depth_color: '#4A90E2' });
 /**
  * @param {string} [mode] `circular` or `linear`.
  * @returns {Record<string, any>}
@@ -94,7 +100,7 @@ export const createDefaultAdv = (mode = 'circular') => ({
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
   legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: DEFAULT_FEATURE_OVERLAP_TOLERANCE_BP, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
   linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
-  depth_height: null, depth_color: '#4A90E2', depth_tracks: [], depth_window_size: null, depth_step_size: null, depth_share_axis: false,
+  ...DEFAULT_DEPTH_SETTINGS, depth_tracks: ensureDepthTrackConfigCount([], 1, depthTrackEditDefaults(DEFAULT_DEPTH_SETTINGS)), depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,
   depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,

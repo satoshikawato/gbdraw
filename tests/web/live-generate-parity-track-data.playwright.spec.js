@@ -269,7 +269,11 @@ test('A Depth row renamed to Coverage, hidden, shown, saves its key once', async
   const entries = savedDrawing(saved, 'circular').editorState.legend.entries
     .filter((entry) => /depth|coverage/i.test(`${entry.originalCaption} ${entry.caption}`));
   expect(entries.map((entry) => `${entry.originalCaption}=>${entry.caption}`), 'saved Legend entries').toEqual(['depth=>Coverage']);
-  const text = JSON.stringify(savedDrawing(saved, 'circular').editorState);
+  // A Session 49 drawing's editor state also holds its Result's Legend order (`legend.originalOrder`,
+  // a project field in 48), which names the row's key once; the edits name it at most once more.
+  const { editorState } = savedDrawing(saved, 'circular');
+  expect(editorState.legend.originalOrder.filter((key) => key === 'depth'), 'the Result\'s Legend order').toEqual(['depth']);
+  const text = JSON.stringify({ ...editorState, legend: { ...editorState.legend, originalOrder: [] } });
   expect((text.match(/"depth"/g) || []).length, 'the key "depth" in the saved editor state').toBeLessThanOrEqual(1);
   expect(sessionKeyCount(saved, 'Coverage'), 'a "Coverage" object key').toBeLessThanOrEqual(1);
 });

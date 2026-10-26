@@ -131,6 +131,21 @@ def test_other_mode_settings_count_only_when_they_differ_from_its_default_and_th
     assert _ids(data) == ["circular", "linear"]
 
 
+def test_an_other_mode_holding_the_default_depth_series_is_not_used_when_the_shown_mode_has_two() -> None:
+    # OV-1901 (D-15-122): 0.14.0 wrote one default Depth series in every mode,
+    # so rule d sees it as the mode's default (session-drawings-upgrade.test.mjs).
+    data = _settings_only_v48()
+    series = {
+        "label": "", "color": "#4A90E2", "height": None,
+        "large_tick_interval": None, "small_tick_interval": None, "tick_font_size": None,
+    }
+    _slices(data)["circular"]["config"]["adv"]["depth_tracks"] = [series, {**series, "color": "#E45756"}]
+    _slices(data)["linear"]["config"]["adv"]["depth_tracks"] = [series]
+    assert _ids(data) == ["circular"]
+    _slices(data)["linear"]["config"]["adv"]["depth_tracks"] = []
+    assert _ids(data) == ["circular", "linear"]
+
+
 def test_a_linear_record_layout_counts_only_when_it_arranges_records() -> None:
     data = _settings_only_v48()
     layout = _slices(data)["linear"]["config"]["linearRecordLayout"]

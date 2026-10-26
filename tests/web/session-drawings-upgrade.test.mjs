@@ -46,6 +46,19 @@ test('other-mode settings count only when they differ from its default and the s
   assert.deepEqual(idsOf(data), ['circular', 'linear']);
 });
 
+test('an other mode that holds the default Depth series is not used when the shown mode has two', () => {
+  // OV-1901 (D-15-122): 0.14.0 wrote one default Depth series in every mode,
+  // so rule d sees it as the mode's default; Python's rule d agrees
+  // (tests/test_session_drawings_vectors.py, the same mutation).
+  const data = settingsOnly();
+  const series = { label: '', color: '#4A90E2', height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null };
+  data.modes.circular.config.adv.depth_tracks = [series, { ...series, color: '#E45756' }];
+  data.modes.linear.config.adv.depth_tracks = [series];
+  assert.deepEqual(idsOf(data), ['circular']);
+  data.modes.linear.config.adv.depth_tracks = [];
+  assert.deepEqual(idsOf(data), ['circular', 'linear']);
+});
+
 test('a Linear record layout counts only when it arranges records', () => {
   const data = settingsOnly();
   data.modes.linear.config.linearRecordLayout.rows = [{ row: 1, uid: 'linear-seq-a' }, { row: 2, uid: 'linear-seq-b' }];
