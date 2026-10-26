@@ -272,15 +272,6 @@ def _text_collision_pairs(labels: Sequence[CircularLabel], spacing_px: float) ->
     )
 
 
-def _segment_aabb(segment: tuple[tuple[float, float], tuple[float, float]]) -> Aabb:
-    return Aabb(
-        min(segment[0][0], segment[1][0]),
-        min(segment[0][1], segment[1][1]),
-        max(segment[0][0], segment[1][0]),
-        max(segment[0][1], segment[1][1]),
-    )
-
-
 def _leader_text_collision_count(labels: Sequence[CircularLabel]) -> int:
     boxes = [_box_for_label(label) for label in labels]
     box_index = AabbIndex(bucket_size=64.0)
@@ -289,7 +280,7 @@ def _leader_text_collision_count(labels: Sequence[CircularLabel]) -> int:
     count = 0
     for label_index, label in enumerate(labels):
         for segment in leader_segments(label):
-            for candidate in box_index.query(_segment_aabb(segment)):
+            for candidate in box_index.query_segment(*segment):
                 # Every id inserted into box_index above is a label index (int).
                 candidate_index = cast(int, candidate)
                 if candidate_index == label_index:

@@ -14,7 +14,9 @@ from gbdraw.layout.spatial import (
     bounding_aabb,
     candidate_aabb_pairs,
     candidate_aabb_partners,
+    cell_partners,
     finite_aabb,
+    segment_cells,
     split_circular_interval,
     touching_aabb_indices,
 )
@@ -210,3 +212,53 @@ def test_touching_aabb_index_keeps_index_order_after_an_unknown_box_becomes_fini
     query = finite_aabb(0, 0, 3, 1)
     assert index.touching(query) == touching_aabb_indices(index.boxes, query) == [0, 1, 2]
     assert index.touching(query, skip=1) == [0, 2]
+
+
+def _cell_of(point: tuple[float, float], size: float) -> tuple[int, int]:
+    return (math.floor(point[0] / size), math.floor(point[1] / size))
+
+
+def test_segment_cells_cover_every_point_of_the_segment() -> None:
+    rng = random.Random(11)
+    for _ in range(400):
+        scale = rng.choice([1.0, 64.0, 1000.0, 20000.0])
+        size = rng.choice([1.0, 7.0, 64.0])
+        start = (rng.uniform(-scale, scale), rng.uniform(-scale, scale))
+        end = (rng.uniform(-scale, scale), rng.uniform(-scale, scale))
+        if rng.random() < 0.3:  # end points on bucket lines
+            start = (round(start[0] / size) * size, round(start[1] / size) * size)
+            end = (round(end[0] / size) * size, end[1])
+        cells = segment_cells(start, end, size)
+        length = math.hypot(end[0] - start[0], end[1] - start[1])
+        for step in range(0, 2001):
+            t = step / 2000
+            point = (start[0] + (end[0] - start[0]) * t, start[1] + (end[1] - start[1]) * t)
+            assert _cell_of(point, size) in cells
+        # A long segment covers a band along itself, not its whole box.
+        assert len(cells) <= 4 * (length / size + 1)
+
+
+def test_segment_cells_of_a_point_and_of_non_finite_points() -> None:
+    assert segment_cells((64.0, 10.0), (64.0, 10.0), 64.0) == {(0, 0), (1, 0)}
+    with pytest.raises(ValueError, match="finite"):
+        segment_cells((0.0, 0.0), (float("nan"), 1.0), 64.0)
+
+
+def test_cell_partners_are_the_later_items_that_share_a_cell() -> None:
+    rng = random.Random(13)
+    for _ in range(200):
+        inserted = [{(rng.randint(0, 5), rng.randint(0, 5)) for _ in range(rng.randint(0, 4))} for _ in range(rng.randint(0, 12))]
+        queried = [{(rng.randint(0, 5), rng.randint(0, 5)) for _ in range(rng.randint(0, 4))} for _ in inserted]
+        expected = [
+            {j for j in range(i + 1, len(inserted)) if queried[i] & inserted[j]} for i in range(len(inserted))
+        ]
+        assert list(cell_partners(iter(inserted), iter(queried))) == expected
+
+
+def test_aabb_index_query_segment_returns_the_boxes_along_the_segment() -> None:
+    index = AabbIndex(bucket_size=10.0)
+    index.insert("on", Aabb(48, 48, 52, 52))
+    index.insert("corner", Aabb(90, 0, 99, 9))  # inside the segment's box, far from the segment
+    index.insert("start", Aabb(0, 0, 1, 1))
+    assert index.query(Aabb(0, 0, 100, 100)) == ["on", "corner", "start"]
+    assert index.query_segment((0.0, 0.0), (100.0, 100.0)) == ["on", "start"]

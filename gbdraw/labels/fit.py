@@ -16,12 +16,20 @@ from __future__ import annotations
 
 import math
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
-from ..layout.spatial import Aabb, bounding_aabb, candidate_aabb_partners, grid_bucket_size
+from ..layout.spatial import (
+    Aabb,
+    GridCell,
+    bounding_aabb,
+    candidate_aabb_partners,
+    cell_partners,
+    grid_bucket_size,
+    segment_cells,
+)
 from ..layout.text_geometry import Point, convex_polygons_intersect, segments_intersect
 
 LabelKind: TypeAlias = Literal[
@@ -257,15 +265,26 @@ def shapes_overlap(first: Sequence[Polygon], second: Sequence[Polygon], *, touch
     return any(overlap(left, right) for left in first for right in second)
 
 
+_CROSSING_BUCKET_PX = 64.0
+
+
 def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     """Index pairs of polylines that cross (touching does not count); empty polylines never cross."""
 
     indexed = [index for index, polyline in enumerate(polylines) if len(polyline) >= 2]
+
+    def covers() -> Iterator[set[GridCell]]:
+        # The buckets each polyline's segments pass through, not its box: a long radial
+        # leader's box would make every leader in that part of the map a candidate (OV-1946).
+        for index in indexed:
+            polyline = polylines[index]
+            yield set().union(
+                *(segment_cells(start, end, _CROSSING_BUCKET_PX) for start, end in zip(polyline, polyline[1:]))
+            )
+
     return [
         (indexed[left], indexed[right])
-        for left, partners in enumerate(
-            candidate_aabb_partners([_extent(polylines[index]) for index in indexed], bucket_size=64.0)
-        )
+        for left, partners in enumerate(cell_partners(covers(), covers()))
         for right in sorted(partners)
         if polylines_cross(polylines[indexed[left]], polylines[indexed[right]])
     ]
