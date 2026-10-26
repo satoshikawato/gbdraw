@@ -12,6 +12,7 @@ const {
   getDiagramWorkerActivity,
   openApp
 } = require('../helpers/app-lifecycle.cjs');
+const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const svgComparisonRoot = mkdtempSync(join(tmpdir(), 'gbdraw-svg-compare-'));
@@ -49,8 +50,8 @@ const jsonDigest = (value) => createHash('sha256')
   .update(JSON.stringify(stableValue(value)))
   .digest('hex');
 
-// The draft of a Session's committed mode (Session 46 `modes.<mode>`).
-const sessionDraft = (session) => session.modes?.[session.renderRequest?.mode || session.ui?.mode] || {};
+// The draft of the drawing a Session opens (Session 49 `drawings[]`, by `ui.activeDrawingId`).
+const sessionDraft = (session) => shownSavedDrawing(session);
 
 const sessionCanonicalEvidence = (session) => {
   const draft = sessionDraft(session);
@@ -78,7 +79,7 @@ const sessionCanonicalEvidence = (session) => {
     annotationSetIds: (draft.config?.annotationSets || []).map(({ id }) => id)
   };
   return {
-    renderRequestSha256: jsonDigest(session.renderRequest),
+    renderRequestSha256: jsonDigest(draft.renderRequest),
     activeConfigSha256: jsonDigest(active),
     resourcePayloadsSha256: jsonDigest(Object.fromEntries(
       Object.entries(session.resources || {}).map(([resourceId, resource]) => [
@@ -92,11 +93,11 @@ const sessionCanonicalEvidence = (session) => {
         }
       ])
     )),
-    featureCatalogSha256: jsonDigest(session.editorState?.featureCatalog || null),
-    mode: session.renderRequest?.mode,
-    requestSchema: session.renderRequest?.schema,
-    recordCount: session.renderRequest?.records?.length || 0,
-    comparisonCount: session.renderRequest?.comparisons?.length || 0,
+    featureCatalogSha256: jsonDigest(draft.editorState?.featureCatalog || null),
+    mode: draft.renderRequest?.mode,
+    requestSchema: draft.renderRequest?.schema,
+    recordCount: draft.renderRequest?.records?.length || 0,
+    comparisonCount: draft.renderRequest?.comparisons?.length || 0,
     active
   };
 };
@@ -250,9 +251,9 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: CURRENT_SESSION_VERSION,
-    renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
+    version: CURRENT_SESSION_VERSION
   });
+  expect(shownSavedDrawing(session).renderRequest).toMatchObject({ schema: CURRENT_REQUEST_SCHEMA });
   return { path, session };
 };
 
@@ -1715,7 +1716,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expectBiologicalOwnersUnchanged(afterSave);
   await capturePreviewWorkerStage(page, 'after Save without Generate', previewWorkerStages, true);
   expect(
-    saved.session.results[saved.session.ui.selectedResultIndex].content
+    shownSavedDrawing(saved.session).results[shownSavedDrawing(saved.session).ui.selectedResultIndex].content
   ).toBe(await page.evaluate(() => (
     window.__GBDRAW_APP__.currentResults()[window.__GBDRAW_APP__.selectedResultIndex].content
   )));
@@ -1976,7 +1977,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   // Save serializes the current preview, which can advance after the earlier
   // asynchronous capture. Fresh Load must preserve the actual saved artifact.
   const savedPreview = await capturePageEvidence(
-    page, divergentSave.session.results[0].content
+    page, shownSavedDrawing(divergentSave.session).results[0].content
   );
   expect(savedPreview.active).toEqual(savedDraftIntent.active);
   expect(savedPreview.history).toEqual(savedDraftIntent.history);
@@ -1985,8 +1986,8 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
-  expect(divergentSave.session.renderRequest.diagramOptions.colors.defaultColorsPalette).toBe(
-    sourceSession.renderRequest.diagramOptions.colors.defaultColorsPalette
+  expect(shownSavedDrawing(divergentSave.session).renderRequest.diagramOptions.colors.defaultColorsPalette).toBe(
+    shownSavedDrawing(sourceSession).renderRequest.diagramOptions.colors.defaultColorsPalette
   );
 
   const expectedB = await runGenerate(page);
@@ -1999,7 +2000,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   await loadCurrentSession(freshPage, divergentSave.path, divergentSave.session);
   const loadedDraft = await capturePageEvidence(freshPage);
   await testInfo.attach('divergent-preview-checkpoints.json', {
-    body: JSON.stringify({ savedDraftIntent, savedPreview, loadedDraft, savedSvg: divergentSave.session.results[0].content }),
+    body: JSON.stringify({ savedDraftIntent, savedPreview, loadedDraft, savedSvg: shownSavedDrawing(divergentSave.session).results[0].content }),
     contentType: 'application/json'
   });
   expect(loadedDraft.active).toEqual(savedDraftIntent.active);
@@ -2241,7 +2242,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   expect(sessionDraft(saved.session).config.qualifierPriorityRules).toEqual([
     { feat: 'CDS', order: 'product,gene' }
   ]);
-  const colors = saved.session.renderRequest.diagramOptions.colors;
+  const colors = shownSavedDrawing(saved.session).renderRequest.diagramOptions.colors;
   const defaultColorRef = colors.defaultColorsFile || colors.defaultColors;
   expect(defaultColorRef?.resourceId).toBeTruthy();
   const defaultColorResource = saved.session.resources[defaultColorRef.resourceId];

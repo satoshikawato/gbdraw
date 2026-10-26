@@ -1226,7 +1226,7 @@ test('released Session 44 schema 7 and catalog 4 load and save through the curre
   const shown = shownSavedDrawing(saved);
   expect(shown.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(shown.editorState.featureCatalog.schema).toBe(CURRENT_FEATURE_CATALOG_SCHEMA);
-  const previous = JSON.parse(source.toString('utf8'));
+  const previous = shownSavedDrawing(JSON.parse(source.toString('utf8')));
   expect(shown.results.map(({ name }) => name)).toEqual(previous.results.map(({ name }) => name));
   const previewEquivalent = await page.evaluate(({ before, after }) => {
     const parser = new DOMParser();
@@ -1672,7 +1672,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   // A receipt that no longer binds the request is dropped with a row before
   // anything changes (receipt 〔確認〕, BA-D25); Cancel keeps the restored receipt.
   const pendingCorrupt=evaluateWithRetainedPromise(freshPage,async raw=>window.__GBDRAW_APP__.importSession({target:{files:[new File([raw],'corrupted.json')],value:'selected'}}),JSON.stringify(corrupt));
-  await answerLoadRepairs(freshPage,['Session file: the field editorState.alignmentResetReceipt could not be read and was left out.'],'cancel');
+  await answerLoadRepairs(freshPage,[`Session file: the field drawings[${corrupt.drawings.indexOf(shownSavedDrawing(corrupt))}].editorState.alignmentResetReceipt could not be read and was left out.`],'cancel');
   expect((await pendingCorrupt).status).toBe('canceled');expect((await recordState(freshPage)).receipt).toEqual(saved.receipt);
   // Re-render the restored Session and compare the complete SVG tree.
   const regenerated = await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_APP__.runAnalysis());
@@ -2019,7 +2019,7 @@ test('minority reference, source strands and Reset scopes have truthful accessib
   await reset.getByRole('button', { name: 'Cancel', exact: true }).press('Enter');
   // A Session with an Align plan but no Reset receipt (PD-OI-028); the Gallery Session ships an empty one.
   const historical = JSON.parse(readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'));
-  historical.editorState.alignmentResetReceipt = null;
+  shownSavedDrawing(historical).editorState.alignmentResetReceipt = null;
   await importSession(page, Buffer.from(JSON.stringify(historical)), 'historical-receipt.json');
   if (!await page.evaluate(() => window.__GBDRAW_APP__.showRightDrawer)) await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Similarity groups' }).click();
@@ -2155,7 +2155,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
     }
     const seed=JSON.parse(readFileSync(seedPath,'utf8'));
     if(entry==='multiple target ambiguity') {
-      const catalog=seed.editorState.featureCatalog.items[0];
+      const catalog=shownSavedDrawing(seed).editorState.featureCatalog.items[0];
       const group=catalog.orthogroups.find(group=>group.id==='og_1');
       for(const recordKey of ['record-2','record-3']) {
         const existing=new Set(group.members.filter(member=>member.recordKey===recordKey).map(member=>member.biologicalFeatureId));
@@ -2381,7 +2381,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
   const seeded = JSON.parse(readFileSync(
     'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json', 'utf8'
   ));
-  seeded.orthogroupState.selectedOrthogroupId = 'og_18';
+  shownSavedDrawing(seeded).orthogroupState.selectedOrthogroupId = 'og_18';
   await importSession(page, Buffer.from(JSON.stringify(seeded)), 'BGC0000708-BGC0000713.gbdraw-session.json');
   const plan = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
@@ -2397,7 +2397,7 @@ test('choosing Upload BLAST TSV without a file keeps a loaded alignment and the 
     const { state } = await import('./js/state.js');
     return state.orthogroups.value.map(({ id }) => id);
   });
-  const savedSelection = seeded.orthogroupState.selectedOrthogroupId;
+  const savedSelection = shownSavedDrawing(seeded).orthogroupState.selectedOrthogroupId;
   expect(groups[0]).not.toBe(loaded.groupId);
   expect(savedSelection).not.toBe(loaded.groupId);
 
@@ -2786,7 +2786,8 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(before.zoom);
   // Another Session arrives with its own view.
-  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  const shownView = shownSavedDrawing(session);
+  shownView.ui = { ...shownView.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
   await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
   const loaded = await previewView(page);
   expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
@@ -3148,7 +3149,8 @@ test('a Session loaded while the other mode is shown under a review keeps its ow
   await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
   const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
-  session.ui = { ...session.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  const shownView = shownSavedDrawing(session);
+  shownView.ui = { ...shownView.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
   await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
   const loaded = await previewView(page);
   expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });

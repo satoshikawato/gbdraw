@@ -6,7 +6,7 @@ const { execFile } = require('node:child_process');
 const { mkdirSync, readFileSync, writeFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_SESSION_VERSION, answerSessionTitle, evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
@@ -433,7 +433,7 @@ test('a Session 47 with protein results of a reversed record shows its figure, t
   const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const saved = JSON.parse(stdout.trim().split('\n').pop());
-  expect(saved.version).toBe(48);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.web).toEqual(saved.python);
   expect(saved.web).not.toEqual(saved.stored);
   // A Generate reads the converted results and draws like the CLI replay of the Session.
@@ -460,7 +460,7 @@ test('a main Session 39 with a protein table of a reversed record converts it at
   const { stdout } = await promisify(execFile)('python', ['-c', PROTEIN_RESOURCES_CHECK, file, fixture],
     { cwd: directory, env: { ...process.env, PYTHONPATH: root }, timeout: 600_000, maxBuffer: 10_000_000 });
   const saved = JSON.parse(stdout.trim().split('\n').pop());
-  expect(saved.version).toBe(48);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.web).toEqual(saved.python);
   expect(saved.web).not.toEqual(saved.stored);
 });
