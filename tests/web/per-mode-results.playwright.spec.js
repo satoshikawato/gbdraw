@@ -471,7 +471,7 @@ test('Save writes every Result and a fresh Load shows each mode\'s own Result', 
   }
 });
 
-test('a Session with one Result opens on that Result\'s mode', async ({ page, browser }, info) => {
+test('a Session with one Result opens on the drawing shown at Save; the other drawing keeps its Result', async ({ page, browser }, info) => {
   test.setTimeout(240_000);
   await openBothSources(page);
   await generate(page);
@@ -487,11 +487,13 @@ test('a Session with one Result opens on that Result\'s mode', async ({ page, br
   const fresh = await freshPage(browser);
   try {
     await load(fresh, info.outputPath('one.gbdraw-session.json.gz'));
+    // A Session 49 opens the drawing shown at Save (PD-OI-090): the Linear drawing, which has no Result.
+    expect((await shown(fresh)).mode).toBe('linear');
+    await expectEmptyPreview(fresh, 'linear');
+    await showMode(fresh, 'circular');
     const loaded = await shown(fresh);
     expect(loaded).toMatchObject({ mode: 'circular', generatedMode: 'circular', count: 1, mounted: true });
     expect(await drawing(fresh, loaded.content)).toEqual(await drawing(page, circular.content));
-    await showMode(fresh, 'linear');
-    await expectEmptyPreview(fresh, 'linear');
   } finally {
     await fresh.context().close();
   }

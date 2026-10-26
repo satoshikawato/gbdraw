@@ -2,6 +2,7 @@
 // Generate already encoded is bound by that text with no read, hash or decode,
 // and the Worker check of a slice's unmanaged overrides runs once per distinct
 // request across Load and every Save.
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -117,7 +118,7 @@ test('Load and two Saves check a slice\'s unmanaged overrides once (OV-1567)', a
   for (const save of [1, 2]) {
     const result = await exportSession(`OV-1567 ${save}`, { askChoice: async () => 'download' });
     assert.equal(result?.status, 'saved', JSON.stringify(result?.error ?? result));
-    const document = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+    const document = savedDrawingView(JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer()))), 'linear');
     assert.deepEqual(document.modes.linear.config.unmanagedConfigOverrides,
       { 'objects.gc_content.percent_background_opacity': 0.42 });
   }

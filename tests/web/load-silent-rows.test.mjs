@@ -180,6 +180,9 @@ test('K14: record display drafts of no list are listed before the dialog and app
       assert.deepEqual([...modeDrawing(state, mode).recordDisplayDrafts], [], label);
     }
   }
+  // OV-1814: a Save right after the bare-configuration Loads is refused (`c_gb` required) with the earlier
+  // Session's Circular drawing still held; the Save checks the state of a Session Load.
+  await load(BASES.g47L());
   await saved();
 });
 
@@ -430,11 +433,12 @@ test('OV-899: a dropped comparison file binding loads as a removed file; Save an
       assert.deepEqual(await load(session), rows, name);
       assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
         { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
-      const document = await saved();
+      const saved49 = await saved();
+      const document = savedDrawingView(saved49, 'linear');
       assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
       assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
       comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
-      assert.deepEqual(await load(document), [], name);
+      assert.deepEqual(await load(saved49), [], name);
     }
   } finally {
     setMainSessionComparisonFrameConverter(null);

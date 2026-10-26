@@ -63,8 +63,8 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
     ? sliceKeys(child, path) : [])];
 });
 
-test('Session 46 saves each drawing as its mode slice and loads it back into that drawing (S1, S6)', async () => {
-  assert.equal(SESSION_VERSION, 48);
+test('Session 49 saves each drawing as its own entry and loads it back into that drawing (S1, S6)', async () => {
+  assert.equal(SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version);
   resetDrawings();
   installShownDrawing('circular');
   modeDrawing(state, 'circular').adv.label_font_size = 13;

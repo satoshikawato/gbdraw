@@ -20,6 +20,7 @@ import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
+import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 
 globalThis.window = {
   Vue: {
@@ -379,7 +380,9 @@ test('Save writes the request Load read: the legacy alignment keeps the feature 
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
   const saved = await exportSession('probe', { askChoice: async () => 'download' });
   assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
-  const session = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+  // A Session 49 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
+  const session = savedDrawingView(document, document.ui.activeDrawingId);
   assert.equal(session.renderRequest.schema, 9);
   assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
 });
@@ -572,8 +575,12 @@ test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is
   const sessions = [
     ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
     ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
-    ['cli.v47', { ...cliCurrent, version: 47 }],
-    ['cli.current', cliCurrent]
+    // The version the case names: the CLI's Session 49 drawing as a Session 47 (a 49 drawing without a request is
+    // an undrawn drawing and loads, PD-OI-090).
+    ['cli.v47', (() => {
+      const { modes: _modes, ...view } = savedDrawingView(cliCurrent, cliCurrent.ui.activeDrawingId);
+      return { ...view, version: 47 };
+    })()]
   ];
   assert.equal(cliCurrent.version, SESSION_VERSION);
   for (const [name, base] of sessions) {
@@ -750,7 +757,8 @@ test('a schema-1 Session takes a live edit and Save before any Generate (H2)', a
     assert.equal(edited.renderRequest.schema, 9, name);
     const saved = await save(name);
     assert.equal(saved.status, 'saved', `${name}: ${saved.error?.code}`);
-    const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const saved49 = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
+    const document = savedDrawingView(saved49, saved49.ui.activeDrawingId);
     assert.equal(document.renderRequest.schema, 9, name);
   }
 });
