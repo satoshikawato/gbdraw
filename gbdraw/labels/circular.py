@@ -8,7 +8,7 @@ from __future__ import annotations
 import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from typing import Any, Literal, NamedTuple, TypeAlias, get_args
 
 from ..features.coordinates import get_strand
@@ -189,7 +189,6 @@ class _PairGaps:
 
     When the pair's spacing does not depend on the pair (a given ``base_margin_px``, or labels that
     all resolve one spacing), a gap is the larger of the two labels' parts, so no pair table is kept.
-    ``largest`` is the largest gap of a pair (0.0 for fewer than two labels).
     """
 
     def __init__(self, labels: Sequence[CircularLabel], base_margin_px: float | None = None) -> None:
@@ -200,12 +199,20 @@ class _PairGaps:
         if len(spacings) <= 1:
             spacing_px = next(iter(spacings), 0.0)
             self._parts = [_label_gap_part_px(label, spacing_px) for label in labels]
-            self.largest = max(self._parts) if len(labels) >= 2 else 0.0
-        else:
-            self.largest = max(
-                (self.gap(idx, jdx) for idx in range(len(labels)) for jdx in range(idx + 1, len(labels))),
-                default=0.0,
-            )
+
+    @cached_property
+    def largest(self) -> float:
+        """The largest gap of a pair (0.0 for fewer than two labels).
+
+        Taken on first use: with mixed spacings it visits every pair, which a reader of `gap` alone
+        (the min-gap overlap count) must not pay for.
+        """
+        count = len(self._labels)
+        if count < 2:
+            return 0.0
+        if self._parts is not None:
+            return max(self._parts)
+        return max(self.gap(idx, jdx) for idx in range(count) for jdx in range(idx + 1, count))
 
     def gap(self, idx: int, jdx: int) -> float:
         """The gap of labels ``idx`` and ``jdx`` (either order)."""

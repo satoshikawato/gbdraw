@@ -329,24 +329,70 @@ def test_circular_local_overlap_count_equals_the_pair_test() -> None:
 
 @pytest.mark.circular
 def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
-    """`_PairGaps` answers `minimum_bbox_gap_px` for every pair without a pair table, also for mixed spacings."""
+    """`_PairGaps` answers `minimum_bbox_gap_px` for every pair, with one spacing and with mixed spacings."""
     module = circular_labels_module
+    mixed_sets = 0
     for seed in range(120):
         labels, _, _ = _random_label_set(seed, max_labels=14)
-        if seed % 3 == 0:
+        if seed % 2 == 0:
             for label in labels:
                 label["_spacing_px"], label["_enforce_spacing_px"] = 1.5, True
-        base = [None, 0.1, 2.5][seed % 3]
-        gaps = module._PairGaps(labels, base_margin_px=base)
-        table = {
-            (i, j): minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base)
-            for i in range(len(labels))
-            for j in range(i + 1, len(labels))
+        for base in (None, 0.1, 2.5):
+            # Without a base, the labels' own spacings decide; `_random_label_set` mixes them.
+            mixed_sets += base is None and len({module._resolve_label_spacing_px(label) for label in labels}) > 1
+            gaps = module._PairGaps(labels, base_margin_px=base)
+            table = {
+                (i, j): minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base)
+                for i in range(len(labels))
+                for j in range(i + 1, len(labels))
+            }
+            for (i, j), gap in table.items():
+                assert gaps.gap(i, j) == gap
+                assert gaps.gap(j, i) == gap
+            assert gaps.largest == max(table.values(), default=0.0)
+    assert mixed_sets > 20
+
+
+@pytest.mark.circular
+def test_circular_min_gap_count_of_mixed_spacings_takes_no_gap_per_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With mixed spacings the min-gap count asks for the gaps of its candidate pairs only, not of all pairs.
+
+    Outer labels from the legacy packer carry no spacing and inner ones from the improved
+    placement carry theirs; the largest pair gap, which visits every pair, is not needed.
+    """
+    module = circular_labels_module
+    count = 600
+    labels = []
+    for idx in range(count):
+        angle = 2 * math.pi * idx / count
+        label = {
+            "middle": idx * 1000.0,
+            "start_x": 2000 * math.cos(angle),
+            "start_y": 2000 * math.sin(angle),
+            "width_px": 30.0,
+            "height_px": 8.0,
+            "is_inner": idx % 2 == 1,
         }
-        assert gaps.largest == max(table.values(), default=0.0)
-        for (i, j), gap in table.items():
-            assert gaps.gap(i, j) == gap
-            assert gaps.gap(j, i) == gap
+        if idx % 2:
+            label["_spacing_px"], label["_enforce_spacing_px"] = 1.5, True
+        labels.append(label)
+    gaps = 0
+    original = module.minimum_bbox_gap_px
+
+    def counting(*args: object, **kwargs: object) -> float:
+        nonlocal gaps
+        gaps += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "minimum_bbox_gap_px", counting)
+    overlaps = module._count_label_overlaps(labels, count * 1000, use_min_gap=True)
+    monkeypatch.setattr(module, "minimum_bbox_gap_px", original)
+    assert overlaps == sum(
+        module._labels_overlap(labels[i], labels[j], count * 1000, use_min_gap=True)
+        for i in range(count)
+        for j in range(i + 1, count)
+    )
+    assert gaps < count * (count - 1) // 2 // 10
 
 
 @pytest.mark.circular
