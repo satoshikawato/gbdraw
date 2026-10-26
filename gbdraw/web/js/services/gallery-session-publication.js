@@ -11,6 +11,7 @@ import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-c
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
+  GALLERY_SESSION_DRAWN_DRAWINGS,
   MODE_SCOPED_SESSION_VERSION,
   PROTEIN_IDENTITY_MANIFEST_SCHEMA,
   PROTEIN_LOSAT_CACHE_SCHEMA,
@@ -121,8 +122,8 @@ const holdsDrawings = (document) => Array.isArray(document.drawings);
 export const galleryPublicationView = (document) => {
   if (!holdsDrawings(document)) return { view: document, drawing: null };
   const drawn = document.drawings.filter((drawing) => drawing.renderRequest !== null);
-  if (drawn.length !== 1) {
-    // A Gallery Session shows one drawn drawing (`tools/refresh_gallery_sessions.py`).
+  if (drawn.length !== GALLERY_SESSION_DRAWN_DRAWINGS) {
+    // The rule is Python's (`gbdraw/session_contract.py`); the refresh tool checks it too.
     throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   }
   const [shown] = drawn;

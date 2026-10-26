@@ -49,6 +49,7 @@ from gbdraw.session_drawings import (  # noqa: E402
     replace_session_drawings,
     write_session_drawings,
 )
+from gbdraw.session_contract import GALLERY_SESSION_DRAWN_DRAWINGS  # noqa: E402
 from gbdraw.session_resources import drawing_resource_ids  # noqa: E402
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA  # noqa: E402
 from gbdraw.tracks.circular import (  # noqa: E402
@@ -727,13 +728,9 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
-    # A staged Session is a Session 49 with one drawing; read that drawing
-    # through the production reader as the one-drawing view.
-    drawings = session.get("drawings")
-    if isinstance(drawings, list) and len(drawings) == 1:
-        from gbdraw.session_drawings import _drawing_view
-
-        session = _drawing_view(session, drawings[0])
+    # A staged Session is a Session 49 that shows one drawing: read its drawn
+    # drawing as the one-drawing view (this checks the Gallery rule).
+    session, _drawing_id = _gallery_view(session)
     expected_session_version = CURRENT_SESSION_VERSION
     expected_request_schema = CANONICAL_REQUEST_SCHEMA
     if session.get("version") != expected_session_version:
@@ -750,16 +747,6 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    modes = session.get("modes")
-    # Session 46 keeps the Linear draft in its Linear slice.
-    linear = modes.get("linear") if isinstance(modes, Mapping) else None
-    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
-    if isinstance(config, Mapping) and "linearRecordLayout" in config:
-        plan = config.get("linearComparisonPlan")
-        if not isinstance(plan, Mapping):
-            raise ValueError(
-                f"{session_path.name} has a Web Linear draft without linearComparisonPlan"
-            )
     # A Gallery Session stores its protein comparison results, so the first
     # Generate after Load reuses them (perf-014x D-17 / docs-restructure D-20:
     # the regenerated Vibrio Session must store the finished protein comparison
@@ -1188,17 +1175,19 @@ def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]
     """The one-drawing view a refresh reads and edits, and the ID of its drawing.
 
     A Gallery Session shows one drawing: a Session 49's only drawing with a
-    committed render (``galleryPublicationView`` in
-    services/gallery-session-publication.js). A Session 46-48 is its own view
-    (ID ``None``).
+    committed render (``GALLERY_SESSION_DRAWN_DRAWINGS`` in
+    gbdraw/session_contract.py, which ``galleryPublicationView`` reads
+    generated). A Session 46-48 is its own view (ID ``None``).
     """
 
     drawings = document.get("drawings")
     if not isinstance(drawings, list):
         return document, None
     drawn = [drawing for drawing in drawings if drawing.get("renderRequest") is not None]
-    if len(drawn) != 1:
-        raise ValueError(f"A Gallery Session shows one drawn drawing; this one has {len(drawn)}.")
+    if len(drawn) != GALLERY_SESSION_DRAWN_DRAWINGS:
+        raise ValueError(
+            f"A Gallery Session shows {GALLERY_SESSION_DRAWN_DRAWINGS} drawn drawing; this one has {len(drawn)}."
+        )
     return _drawing_view(document, drawn[0]), str(drawn[0]["id"])
 
 

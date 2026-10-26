@@ -53,11 +53,13 @@ _CONSTANTS: tuple[tuple[str, str, str], ...] = (
     ("PROTEIN_IDENTITY_MANIFEST_SCHEMA", "gbdraw.analysis.protein_colinearity", "PROTEIN_IDENTITY_MANIFEST_SCHEMA"),
     ("ORTHOGROUP_INFERENCE_VERSION", "gbdraw.analysis.protein_colinearity", "ORTHOGROUP_INFERENCE_VERSION"),
     ("NUCLEOTIDE_LOSAT_CACHE_SCHEMA", "gbdraw.comparisons.losat_jobs", "NUCLEOTIDE_LOSAT_CACHE_SCHEMA"),
+    ("CIRCULAR_CONSERVATION_FLOW", "gbdraw.comparisons.circular_losat", "CIRCULAR_CONSERVATION_FLOW"),
     ("LOSAT_DERIVED_CACHE_SCHEMA", "gbdraw.analysis.protein_artifacts", "CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA"),
     ("LEGACY_LOSAT_DERIVED_CACHE_SCHEMA", "gbdraw.session_io", "LEGACY_LOSAT_DERIVED_CACHE_SCHEMA"),
     ("LEGACY_PROTEIN_CANDIDATE_SCHEMA", "gbdraw.session_io", "LEGACY_PROTEIN_CANDIDATE_SCHEMA"),
     ("DEPTH_FILE_SCHEMA", "gbdraw.session_io", "DEPTH_FILE_SCHEMA"),
     ("DEPTH_FILE_ENCODING", "gbdraw.session_io", "DEPTH_FILE_ENCODING"),
+    ("GALLERY_SESSION_DRAWN_DRAWINGS", "gbdraw.session_contract", "GALLERY_SESSION_DRAWN_DRAWINGS"),
     ("LEGEND_POSITIONS", "gbdraw.api.options", "LEGEND_POSITIONS"),
     ("CONFIG_UNSET_NUMBER_SPELLINGS", "gbdraw.config.models.objects", "UNSET_NUMBER_SPELLINGS"),
     # Session field sets: the keys of the classes of gbdraw/session_contract.py.

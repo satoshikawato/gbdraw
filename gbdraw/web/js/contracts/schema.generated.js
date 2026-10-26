@@ -92,6 +92,9 @@ export const ORTHOGROUP_INFERENCE_VERSION = 'anchor_core_v1';
 // gbdraw/comparisons/losat_jobs.py: NUCLEOTIDE_LOSAT_CACHE_SCHEMA
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;
 
+// gbdraw/comparisons/circular_losat.py: CIRCULAR_CONSERVATION_FLOW
+export const CIRCULAR_CONSERVATION_FLOW = 'circular-conservation';
+
 // gbdraw/analysis/protein_artifacts.py: CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
 export const LOSAT_DERIVED_CACHE_SCHEMA = 3;
 
@@ -106,6 +109,9 @@ export const DEPTH_FILE_SCHEMA = 1;
 
 // gbdraw/session_io.py: DEPTH_FILE_ENCODING
 export const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
+
+// gbdraw/session_contract.py: GALLERY_SESSION_DRAWN_DRAWINGS
+export const GALLERY_SESSION_DRAWN_DRAWINGS = 1;
 
 // gbdraw/api/options.py: LEGEND_POSITIONS
 /** @type {Readonly<Record<'circular' | 'linear', readonly string[]>>} */
