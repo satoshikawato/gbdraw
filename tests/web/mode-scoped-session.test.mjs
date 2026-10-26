@@ -14,6 +14,7 @@ import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.ge
 import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { createHash } from 'node:crypto';
 
 globalThis.window = {
   Vue: {
@@ -38,6 +39,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+const { readComparisonSequenceDigest } = await import('../../gbdraw/web/js/services/record-discovery.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const MODES = ['circular', 'linear'];
@@ -1102,6 +1104,81 @@ test('Save writes a Circular conservation LOSAT entry into no drawing whose requ
   const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
   assert.deepEqual(Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)])),
     { circular: [], linear: [] });
+});
+
+// K-3, D-15-123: the ring reader Save and Generate key conservation entries
+// by is the Python one the Worker runs; node has no Worker, so each test reads
+// a drawing's ring Files through Python first and the per-File cache serves Save.
+const readRingInPython = async (_operation, { files: [{ bytes }] }) => ({
+  result: JSON.parse(String(await evaluatePython(`
+import base64, os, tempfile
+from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+with tempfile.NamedTemporaryFile(delete=False) as handle:
+    handle.write(base64.b64decode(payload))
+try:
+    result = read_comparison_sequence_json(handle.name)
+finally:
+    os.unlink(handle.name)
+`, Buffer.from(new Uint8Array(bytes)).toString('base64'))))
+});
+const readRingFilesInPython = async (ids) => {
+  for (const id of ids) {
+    for (const ref of state.drawingOf(id).files.c_conservation_fastas) {
+      const file = state.inputFiles.fileOf(ref);
+      if (file) await readComparisonSequenceDigest({ file, runHelperOperation: readRingInPython });
+    }
+  }
+};
+const ringQueryHash = async (text) => {
+  const { result } = await readRingInPython('', { files: [{ bytes: Buffer.from(text) }] });
+  return createHash('sha256').update(result.fasta, 'utf8').digest('hex');
+};
+// A Session 49 of `synthetic_conservation` (three LOSAT rings and their entries)
+// with a second Circular drawing `circular-2` whose ring 3 reads other bytes
+// (one base changed) and whose entries are rings 1 and 2's and that ring 3's.
+const twoConservationDrawings = async () => {
+  const fixture = JSON.parse(gunzipSync(readFileSync(new URL('../fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz', import.meta.url))));
+  resetDrawings();
+  const first = await loadKeepingSlots(fixture);
+  assert.equal(first.loaded.status, 'ok', JSON.stringify(first.loaded.error));
+  await readRingFilesInPython(['circular']);
+  const result = await exportSession('conservation', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const session = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  const circular = session.drawings.find((entry) => entry.id === 'circular');
+  const entries = circular.losatCache.entries;
+  assert.deepEqual(entries.map(({ key }) => key), fixture.losatCache.entries.map(({ key }) => key));
+  const ringId = circular.webFiles.bindings.c_conservation_fastas[2].resourceId;
+  const ringText = Buffer.from(session.resources[ringId].data, 'base64').toString();
+  const otherText = ringText.replace('\nACGT', '\nTCGT');
+  assert.notEqual(otherText, ringText);
+  session.resources['ring-other'] = { ...session.resources[ringId], name: 'ring-other-comparison-d.fasta', data: Buffer.from(otherText).toString('base64') };
+  const other = { ...entries[2], key: 'e'.repeat(64), filename: 'ring-other.circular_conservation.losatn.tsv', queryCanonicalHash: await ringQueryHash(otherText) };
+  assert.notEqual(other.queryCanonicalHash, entries[2].queryCanonicalHash);
+  const second = JSON.parse(JSON.stringify(circular).replaceAll(`"${ringId}"`, '"ring-other"'));
+  Object.assign(second, { id: 'circular-2', name: 'Circular 2' });
+  second.losatCache.entries = [entries[0], entries[1], other];
+  session.drawings.splice(session.drawings.indexOf(circular) + 1, 0, second);
+  return { session, keys: { ring1: entries[0].key, ring2: entries[1].key, ring3: entries[2].key, other: other.key } };
+};
+const savedEntryKeys = async (title, loaded) => {
+  const result = await exportSession(title, { readKeptArtifacts: () => [loaded.opening, ...loaded.stashed].filter(Boolean) });
+  assert.equal(result.status, 'saved', result.error?.message);
+  const saved = JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
+  return Object.fromEntries(saved.drawings.map(({ id, losatCache }) => [id, losatCache.entries.map(({ key }) => key)]));
+};
+
+// K-3 (D-15-123): Save keeps a conservation entry only in the drawing whose
+// ring names it, by the entry's subject and query hashes.
+test('Save writes each Circular drawing the conservation entries of its own rings (K-3)', async () => {
+  const { session, keys } = await twoConservationDrawings();
+  resetDrawings();
+  const loaded = await loadKeepingSlots(session);
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  await readRingFilesInPython(['circular', 'circular-2']);
+  const saved = await savedEntryKeys('two rings', loaded);
+  assert.deepEqual(saved.circular, [keys.ring1, keys.ring2, keys.ring3]);
+  assert.deepEqual(saved['circular-2'], [keys.ring1, keys.ring2, keys.other]);
 });
 
 // OV-337: Load leaves a Linear row without a Depth file as the Session binds it
