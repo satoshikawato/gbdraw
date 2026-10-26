@@ -38,6 +38,7 @@ import {
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
+import { isUnsafeObjectKey } from './safe-object-keys.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
 import { isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -1120,8 +1121,6 @@ const READ_ELSEWHERE = new Set([
   ...LOSAT_EXECUTION_ROWS.map(({ field }) => `losat.${field}`),
   ...LOSAT_SEARCH_ROWS.filter(({ retired }) => retired).map(({ field }) => `losat.blastp.${field}`)
 ]);
-/** @type {readonly string[]} */
-const UNSAFE_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
 /**
  * Merges a stored settings object into `target`: a key `target` lacks is
  * not used, except in a map of `FREE_KEY_MAPS`, where it is copied; it is
@@ -1143,7 +1142,7 @@ const mergeStoredSettings = (target, source, at, defaults) => {
   if (!source || typeof source !== 'object') return [];
   const stored = /** @type {Record<string, unknown>} */ (source);
   return Object.keys(stored).flatMap((key) => {
-    if (UNSAFE_KEYS.includes(key)) return [];
+    if (isUnsafeObjectKey(key)) return [];
     const keyAt = at ? `${at}.${key}` : key;
     if (!Object.hasOwn(target, key)) {
       // A shape of a feature type the defaults do not name is the user's own.

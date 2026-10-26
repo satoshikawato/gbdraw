@@ -1,7 +1,14 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
 
-const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const UNSAFE_OBJECT_KEYS = Object.freeze(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Whether a key of stored data names an object's prototype or constructor
+ * rather than a field: a merge skips it, and Load refuses a Session that holds it.
+ * @param {string} key
+ */
+export const isUnsafeObjectKey = (key) => UNSAFE_OBJECT_KEYS.includes(key);
 
 /**
  * Walks every own key; an unsafe key is the Session-schema diagnostic that
@@ -20,7 +27,7 @@ export const assertSafeObjectKeys = (value) => {
     if (!current || typeof current !== 'object' || seen.has(current)) continue;
     seen.add(current);
     for (const key of Object.keys(current)) {
-      if (UNSAFE_OBJECT_KEYS.has(key)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
+      if (isUnsafeObjectKey(key)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
       // `key` comes from `Object.keys(current)`.
       pending.push(/** @type {Record<string, unknown>} */ (current)[key]);
     }
