@@ -696,3 +696,49 @@ def test_a_percent_background_and_border_count_only_when_they_show(
     gc_df = pd.DataFrame({"GC content": [0.0] * 4}, index=[0, 250, 500, 750])
     inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC", font_family="Liberation Sans")
     assert _lines_at(inks, radius, 0.5) == lines
+
+
+WEB_DEFAULT_ARGS = ("--multi_record_canvas", "--track_type", "tuckin", "--gc", "--skew", "--separate_strands")
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("gbk", "args"),
+    [
+        (MERS_COV, ()),
+        (MERS_COV, WEB_DEFAULT_ARGS),
+        (TEST_INPUTS / "BGC0000712.gbk", WEB_DEFAULT_ARGS),
+    ],
+    ids=["mers-cli", "mers-web", "bgc0000712-web"],
+)
+def test_tracks_narrowed_around_the_definition_leave_no_notice(
+    gbk: Path,
+    args: tuple[str, ...],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """OV-1854: the band the inside tracks narrow around and the notice read the same painted letters, so a figure
+    whose tracks were narrowed (rule L) has no definition line on a track."""
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+    from gbdraw import cli
+
+    fits: list[object] = []
+    fit = circular_assemble_module._resolve_radial_layout_fitting_definition
+
+    def capture(*fit_args, **fit_kwargs):
+        result = fit(*fit_args, **fit_kwargs)
+        fits.append(result)
+        return result
+
+    monkeypatch.setattr(circular_assemble_module, "_resolve_radial_layout_fitting_definition", capture)
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", "--gbk", str(gbk), *args, "-o", str(output), "-f", "svg"])
+    cli.main()
+
+    drawn = fits[0].layout  # type: ignore[attr-defined]
+    narrowed = any(track.compressed for track in drawn.tracks)
+    notice = "definition line does not fit" in capsys.readouterr().err
+    assert not (narrowed and notice), (narrowed, notice)
