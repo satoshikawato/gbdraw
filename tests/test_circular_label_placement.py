@@ -40,6 +40,9 @@ from gbdraw.labels.circular import (
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
 from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
+from gbdraw.labels.label_ink import circular_label_ink, segment_through_box
+from gbdraw.labels.label_style import FeatureLabelStyle
+from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
@@ -556,9 +559,10 @@ def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]
     return loaded, calls
 
 
-# The crowded MjeNMV inner fixture keeps one overlapping pair (hypothetical protein / tyrosine
-# recombinase next to the origin) since OV-1366: it may no longer spread by wrapping past the origin.
-MJENMV_INNER_TUCKIN_OVERLAPS = 1
+# The crowded MjeNMV inner fixture kept one overlapping pair (hypothetical protein / tyrosine
+# recombinase next to the origin) from OV-1366, when it could no longer spread by wrapping past the
+# origin, until its labels were laid out in their drawn boxes (OV-165): none now, drawn or modelled.
+MJENMV_INNER_TUCKIN_OVERLAPS = 0
 
 
 @pytest.fixture(scope="module")
@@ -1908,7 +1912,7 @@ def test_mjenmv_inner_labels_keep_feature_order(
     assert min(deltas) > 0.0
 
 
-def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
+def test_mjenmv_wsv209_hypothetical_leader_lines_do_not_cross(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, _total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1927,7 +1931,8 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
     assert wsv209 is not None
     assert near_hypothetical is not None
 
-    assert circular_labels_module._segments_properly_intersect(
+    # They crossed while the labels were laid out in point-mode boxes; in their drawn boxes they do not (OV-165).
+    assert not circular_labels_module._segments_properly_intersect(
         circular_labels_module._primary_leader_segment(wsv209),
         circular_labels_module._primary_leader_segment(near_hypothetical),
     )
@@ -2178,7 +2183,7 @@ def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> No
     assert y_overlap_calls < 2500000
 
 
-def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision() -> None:
+def test_nc001879_inner_dense_keeps_the_legacy_inner_layout_without_leader_collisions() -> None:
     improved_calls = 0
     original_improved = circular_labels_module.improved_label_placement_fc
 
@@ -2197,7 +2202,10 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
-    assert improved_calls == 2
+    # OV-165: in their drawn boxes the dense inner labels' legacy layout has no leader collision, so it is kept
+    # and only the outer side runs the current solver (before, the point-mode boxes left 1 collision and both
+    # sides ran it).
+    assert improved_calls == 1
     assert _count_overlaps(inner_labels, total_length) == 0
     assert (
         circular_labels_module._count_label_leader_line_collisions(
@@ -2205,7 +2213,7 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
             total_length,
             margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
         )
-        == 1
+        == 0
     )
 
 
@@ -2947,6 +2955,30 @@ def test_hmmtdna_resolve_overlaps_middle_has_no_label_leader_line_collisions() -
     assert collision_count == 0
 
 
+def test_hmmtdna_resolve_overlaps_middle_draws_no_leader_through_another_label() -> None:
+    """OV-1823: no drawn leader runs through another label's letters (the ATP8 leader under tRNA-Lys)."""
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    inks = [circular_label_ink(label, total_length, FeatureLabelStyle("none", "none")) for label in external_labels]
+    through = [
+        (label["label_text"], other["label_text"])
+        for label, own_ink in zip(external_labels, inks)
+        for other, ink in zip(external_labels, inks)
+        if other is not label
+        and any(
+            segment_through_box(ink.to_label_frame(start), ink.to_label_frame(end), ink.ink)
+            for start, end in zip(own_ink.leader, own_ink.leader[1:])
+        )
+    ]
+    assert through == []
+
+
 def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> None:
     labels, total_length = _make_label_leader_collision_fixture()
     labels = [label.copy() for label in labels]
@@ -3453,10 +3485,17 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
     assert abs(labels[1]["start_y"] - initial_high_y) > 0.1
 
 
-def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -> None:
+@pytest.mark.parametrize(
+    "style",
+    [FeatureLabelStyle(line="none", protection="none"), FeatureLabelStyle(line="under", protection="box")],
+    ids=["plain", "underline_box"],
+)
+def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas(style: FeatureLabelStyle) -> None:
     total_length = 4000
     labels = [
         {
+            "label_text": "hypothetical protein",
+            "font_family": "Liberation Sans",
             "middle": 1000,
             "start_x": 470.0,
             "start_y": 0.0,
@@ -3482,6 +3521,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         legend_offset_x=0.0,
         legend_offset_y=0.0,
         length_param="short",
+        profile=SimpleNamespace(label_style=style),
     )
     original_canvas = vars(canvas_config).copy()
     original_labels = copy.deepcopy(labels)
@@ -3492,12 +3532,20 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         canvas_config,
     )
 
+    # The letters' ink (and what the style draws with them), not the layout box, bounds the label.
+    ink = circular_label_ink(labels[0], total_length, style)
+    drawn = [point for part in feature_label_drawn_parts(ink, style) for point in part]
     assert len(obstacles) == 1
-    assert obstacles[0].max_x == pytest.approx(1090.0)
+    assert obstacles[0].max_x == pytest.approx(500.0 + max([ink.ink.max_x, *(x for x, _y in drawn)]))
+    assert obstacles[0].min_y == pytest.approx(500.0 + min([ink.ink.min_y, *(y for _x, y in drawn)]))
+    assert obstacles[0].max_x != pytest.approx(500.0 + 470.0 + 120.0)
     assert obstacles[0].min_x == pytest.approx(889.3)
     assert obstacles[0].max_x > canvas_config.total_width
     assert vars(canvas_config) == original_canvas
     assert labels == original_labels
+    # The layout box does not reach the paint bounds.
+    resized = [{**labels[0], "width_px": 999.0, "height_px": 99.0}]
+    assert circular_assemble_module._external_label_obstacles_on_canvas(resized, total_length, canvas_config) == obstacles
 
 
 def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:

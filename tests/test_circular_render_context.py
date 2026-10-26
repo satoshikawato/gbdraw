@@ -124,8 +124,8 @@ def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> Non
     canvas = CircularCanvasConfigurator("test", _profile(), "none", record)
     geometry = canvas.geometry()
 
-    assert (geometry.radius, geometry.track_ratio, geometry.dpi, geometry.length_param) == (
-        canvas.radius, canvas.track_ratio, canvas.dpi, canvas.length_param,
+    assert (geometry.radius, geometry.track_ratio, geometry.length_param) == (
+        canvas.radius, canvas.track_ratio, canvas.length_param,
     )
     assert geometry.track_ratio_factors == tuple(canvas.track_ratio_factors)
     assert hash(geometry) == hash(canvas.geometry())

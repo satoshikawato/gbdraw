@@ -25,7 +25,7 @@ from gbdraw.api.requests import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
-from gbdraw.core.text import create_text_element
+from gbdraw.core.text import create_text_element, drawn_text_box
 from gbdraw.definition_line_styles import (
     parse_definition_line_style_assignment,
     parse_definition_line_style_overrides,
@@ -382,23 +382,26 @@ def test_definition_line_specific_font_size_affects_layout(monkeypatch: pytest.M
     line_styles["accession"] = {"font_size": 5}
     calls: list[tuple[str, float, str]] = []
 
-    def fake_bbox(text, _font_family, font_size, _dpi, *, font_weight="normal", font_style="normal"):
+    def fake_bbox(text, _font_family, font_size, font_weight="normal", font_style="normal"):
         calls.append((str(text), float(font_size), str(font_style)))
         return float(font_size) * len(str(text)), float(font_size)
 
+    style = LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict))
+    # Each line is as tall as its face's line box at its own size (OV-165), not the measured text height.
+    line_boxes = drawn_text_box("AA", style.font_family, 20.0)[1] + drawn_text_box("BBBB", style.font_family, 5.0)[1]
+
     # Plain and mixed lines both measure in gbdraw.core.text.measure_mixed_text_line.
     for module in ("gbdraw.core.text",):
-        monkeypatch.setattr(f"{module}.calculate_bbox_dimensions", fake_bbox)
         monkeypatch.setattr(f"{module}.calculate_svg_bbox_dimensions", fake_bbox)
 
     definition_group = DefinitionGroup(
         _record("BBBB"),
         (_canvas_config()).length_param,
-        style=LinearDefinitionStyle.of(GbdrawConfig.from_dict(config_dict)),
+        style=style,
         record_presentation=RecordPresentation(label="AA"),
     )
 
     assert definition_group.definition_bounding_box_width == pytest.approx(40.0)
-    assert definition_group.definition_bounding_box_height == pytest.approx(30.0)
+    assert definition_group.definition_bounding_box_height == pytest.approx(line_boxes + style.definition.interval)
     assert ("AA", 20.0, "normal") in calls
     assert ("BBBB", 5.0, "normal") in calls

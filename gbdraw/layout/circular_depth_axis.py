@@ -111,7 +111,7 @@ def scalar_axis_ink(
     for tick in ticks:
         inks.append(CircularInkPolygon.segment((0.0, -tick.radius_px), (tick.length_px, -tick.radius_px), half))
         if tick.label is not None:
-            width, _ = calculate_svg_bbox_dimensions(tick.label, font_family, font_size, 72)
+            width, _ = calculate_svg_bbox_dimensions(tick.label, font_family, font_size)
             left = tick.length_px + SCALAR_AXIS_LABEL_GAP_PX
             inks.append(
                 CircularInkPolygon.box(

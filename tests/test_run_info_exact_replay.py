@@ -32,7 +32,8 @@ SOURCE_SHA = "f2e922c26561d37a8d3b410ba972526c709cad5635f598bbdcfc234f02642c92"
 # 3-decimal path numbers and simplified track paths (perf-audit D-13 D2, OV-1230):
 # only path d attributes and the ids hashed from them changed (555a3c90... before), and again when Circular arcs
 # were split so that none is near 180 or 360 degrees (OV-1840; 381911f5... before).
-OUTPUT_SHA = "ef86a2be18ad6bd97b56e45e88b9d1cb3cfde6b5959f8bf769c786f16d06f074"
+# OV-165 PR-2 (labels, ticks, definition and canvas) moved OUTPUT_SHA again.
+OUTPUT_SHA = "91d361e5d2a24a0f00fea2abce86292c9a9c06d02473fe1fe52eb598f153ddf0"
 # The replay before the feature label style (dev d84352d8a, hash
 # 76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0), with only
 # the overlayObstacles array of the composition removed. The leader width went
@@ -42,7 +43,7 @@ OUTPUT_SHA = "ef86a2be18ad6bd97b56e45e88b9d1cb3cfde6b5959f8bf769c786f16d06f074"
 # and since D-13 D2 with 3-decimal path numbers (9a34cf0d... before), and since OV-1840 with split Circular arcs
 # (bcdd87d3... before).
 PRE_FEATURE_LABEL_STYLE_COMPARABLE_SHA = (
-    "57e415f4f7d5a903751136a5a98a4f89e228776f757492139e335d509371308c"
+    "8d5f02078f438bfaca3367c3d7b269a4b51630d9021a8af539a7f4ce79d48e71"
 )
 
 

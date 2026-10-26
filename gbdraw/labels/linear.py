@@ -12,13 +12,13 @@ from typing import Any, NamedTuple, cast
 from .coordinates import display_label_segment
 
 from .filtering import get_label_text, label_filter_maps
-from .label_style import ROW_LABEL_GAP_EM
+from .label_style import LINEAR_LABEL_HEIGHT_MARGIN_EM, ROW_LABEL_GAP_EM
 from .linear_types import LinearLabel, is_above_feature_label, is_horizontal_label, is_level_rotation
 from ..config.models import LinearRenderProfile
 from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
-from ..core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
+from ..core.text import drawn_text_box
 from ..auto_sizes import determine_length_parameter
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
@@ -646,7 +646,6 @@ def linear_record_labels(
             "label_rendering embedded_only|external_only cannot be used with label_placement above_feature"
         )
     base_rotation_deg = profile.label_rotation
-    interval = cfg.canvas.dpi
     if label_filtering is None:
         label_filtering = label_filter_maps(cfg.labels.filtering.as_dict())
     # First pass: Calculate feature track positions
@@ -696,7 +695,7 @@ def linear_record_labels(
         bottom_feature_y_limit = 0.0
 
     # Second pass: Process labels
-    max_bbox_height = 0
+    max_bbox_height = 0.0
     for feature_id, feature_object in reversed(list(feature_dict.items())):
         overrides_only = labels_overrides_only or not _passes_orthogroup_label_eligibility(
             feature_object,
@@ -715,8 +714,8 @@ def linear_record_labels(
             continue
 
         # Calculate label dimensions and positions
-        bbox_width_px, _ = calculate_svg_bbox_dimensions(feature_label_text, font_family, font_size, interval)
-        _, bbox_height_px = calculate_bbox_dimensions(feature_label_text, font_family, font_size, interval)
+        bbox_width_px, bbox_height_px = drawn_text_box(feature_label_text, font_family, font_size)
+        bbox_height_px += LINEAR_LABEL_HEIGHT_MARGIN_EM * float(font_size)
         if bbox_height_px > max_bbox_height:
             max_bbox_height = bbox_height_px
         # Find the longest segment and its middle point

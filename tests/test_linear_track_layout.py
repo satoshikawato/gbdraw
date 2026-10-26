@@ -228,7 +228,6 @@ def _build_bottom_ruler_fragment(
         canvas_config.length_param,
         scale=cfg.objects.scale,
         font_family=cfg.objects.text.font_family,
-        dpi=cfg.canvas.dpi,
         ruler_width=ruler_width,
     ).get_group().tostring()
 

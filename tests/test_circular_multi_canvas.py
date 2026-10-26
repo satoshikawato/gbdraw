@@ -335,7 +335,6 @@ def _with_mock_circular_result(
             font_weight="normal",
             font_size=0.0,
             color_rect_size=0.0,
-            dpi=96,
             legend_width=0.0,
             legend_height=0.0,
             total_feature_legend_width=0.0,
@@ -1064,7 +1063,6 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = determine_length_parameter(
@@ -1124,7 +1122,6 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size

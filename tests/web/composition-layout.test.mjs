@@ -505,7 +505,6 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
 // The Legend layout inputs Python writes into legendReflow: absent from SVGs
 // written before them, all or none, and kept unchanged by a composition edit.
 const pythonLayoutInputs = {
-  dpi: 96,
   fontFile: 'LiberationSans-Regular',
   fontSize: 14,
   primaryLocalBounds: { minX: 10.1, minY: 20, maxX: 110.30000000000001, maxY: 100 },
@@ -548,6 +547,15 @@ const editLegendSide = (svg) => applyCompositionEdit(svg, {
   );
 }
 
+// Results saved by v0.14.x still carry the unread `dpi`; it validates and is
+// dropped, and the same Result without it validates too.
+{
+  const full = { ...legendReflow, ...pythonLayoutInputs };
+  for (const stored of [{ ...full, dpi: 96 }, { ...full, dpi: 'ignored' }, full]) {
+    assert.deepEqual(parseCompositionMetadata(withLegendReflow(stored).svg).legendReflow, full);
+  }
+}
+
 // A replan docks against the primary box Python recorded (Z1), while it is
 // still the primary's box: rebuilt from x and width, a max edge can differ
 // by one ulp. A recorded box the primary no longer has is not used.
@@ -584,10 +592,6 @@ for (const field of Object.keys(pythonLayoutInputs)) {
 }
 
 for (const [field, invalid, message] of [
-  ['dpi', 96.5, /dpi must be a positive integer/],
-  ['dpi', 0, /dpi must be a positive integer/],
-  ['dpi', '96', /dpi must be a positive integer/],
-  ['dpi', true, /dpi must be a positive integer/],
   ['fontFile', '', /fontFile must be a non-empty string or null/],
   ['fontFile', 3, /fontFile must be a non-empty string or null/],
   ['fontSize', 0, /legendReflow\.fontSize must be positive/],

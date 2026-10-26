@@ -7,9 +7,9 @@
    "geometry": {
     "side": "inside",
     "widthPx": 0.0,
-    "radiusFactor": 0.9249365651709403
+    "radiusFactor": 0.9294471153846153
    },
-   "anchorFactor": 0.9374365651709402
+   "anchorFactor": 0.9419471153846154
   },
   {
    "tickLabelLayout": "label_out_tick_in",
@@ -18,9 +18,9 @@
    "geometry": {
     "side": "inside",
     "widthPx": 7.8,
-    "radiusFactor": 0.9274365651709401
+    "radiusFactor": 0.9319471153846154
    },
-   "anchorFactor": 0.9374365651709402
+   "anchorFactor": 0.9419471153846154
   },
   {
    "tickLabelLayout": "label_out_tick_in",
@@ -183,9 +183,9 @@
    "geometry": {
     "side": "inside",
     "widthPx": 0.0,
-    "radiusFactor": 0.8725013020833333
+    "radiusFactor": 0.881296875
    },
-   "anchorFactor": 0.8875013020833333
+   "anchorFactor": 0.896296875
   },
   {
    "tickLabelLayout": "label_out_tick_in",
@@ -194,9 +194,9 @@
    "geometry": {
     "side": "inside",
     "widthPx": 7.8,
-    "radiusFactor": 0.8680013020833333
+    "radiusFactor": 0.876796875
    },
-   "anchorFactor": 0.8875013020833333
+   "anchorFactor": 0.896296875
   },
   {
    "tickLabelLayout": "label_out_tick_in",

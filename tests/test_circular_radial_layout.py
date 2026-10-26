@@ -874,9 +874,10 @@ def _gx05_args(gc_content_spec: str, output: Path) -> list[str]:
 def test_cli_pin_just_above_the_auto_radius_compresses_the_pinned_row(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # GX-05, GX-17: gc_content's Auto radius is 0.60128 R. At r=0.6013 its full
-    # width left features and ticks 0.007 px too little room. A pinned row with
-    # an Auto width now compresses like Auto, centred on its radius.
+    # GX-05, GX-17: gc_content's Auto radius is 0.60692 R (0.60128 R, pinned at
+    # r=0.6013, while the tick labels were laid out in points; OV-165). Just above
+    # it, its full width leaves features and ticks too little room. A pinned row
+    # with an Auto width now compresses like Auto, centred on its radius.
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     layouts = []
@@ -888,11 +889,11 @@ def test_cli_pin_just_above_the_auto_radius_compresses_the_pinned_row(
         return layout
 
     monkeypatch.setattr(assemble_module, "resolve_circular_radial_layout", capture)
-    circular_main(_gx05_args("r=0.6013", tmp_path / "gx05"))
+    circular_main(_gx05_args("r=0.6070", tmp_path / "gx05"))
 
     assert (tmp_path / "gx05.svg").is_file()
     gc_content = next(slot for slot in layouts[-1].slots if slot.id == "gc_content")
-    assert gc_content.anchor_radius_px == pytest.approx(0.6013 * layouts[-1].axis.radius_px)
+    assert gc_content.anchor_radius_px == pytest.approx(0.6070 * layouts[-1].axis.radius_px)
     assert gc_content.packing_band_px.center_px == pytest.approx(gc_content.anchor_radius_px)
     assert gc_content.compressed
     assert 10.0 <= gc_content.resolved_width_px < gc_content.requested_width_px
@@ -901,11 +902,11 @@ def test_cli_pin_just_above_the_auto_radius_compresses_the_pinned_row(
 def test_cli_pinned_row_with_an_explicit_width_keeps_it(tmp_path: Path) -> None:
     # An explicit width is not compressed: the same pin then leaves the ticks no room.
     with pytest.raises(ValidationError, match="'ticks' cannot fit inside between") as error:
-        circular_main(_gx05_args("r=0.6013,w=74.1px", tmp_path / "explicit"))
+        circular_main(_gx05_args("r=0.6070,w=74.1px", tmp_path / "explicit"))
     assert error.value.diagnostic == {
         "code": "TRACK_LAYOUT",
         "reason": "CANNOT_FIT",
-        "innerPx": 275,
+        "innerPx": 278,
         "outerPx": 386,
         "slotIndex": 1,
         # OV-1276: the scale ticks offer hiding the scale.

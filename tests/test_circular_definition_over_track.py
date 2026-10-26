@@ -164,9 +164,10 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """OV-1606, DF-D16, DF-D25, OV-1836, DF-D36: MERS-CoV's taxon line is drawn on one line (never wrapped) and
-    warns. By default the inside tracks are already narrowed around its band, so the warning offers only the font
-    at which the line clears the tracks and a shorter Species or Strain. With ``--no_track_narrowing`` it also
-    offers the narrower inside tracks, which still leave the line over a track (N-a)."""
+    warns. Its band (the farthest corner of the bold line's ink, OV-1854) is not cleared by narrowing the inside
+    tracks to the floor, so they keep their widths, and no center_reserved_radius fits either: the warning offers
+    the font at which the line clears the tracks (17 pt, where the floor clears the smaller band) and a shorter
+    Species or Strain. With ``--no_track_narrowing`` the font must clear the tracks at their widths (13 pt)."""
 
     from gbdraw import cli
 
@@ -185,6 +186,7 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
         "  --definition_font_size 17   (smaller definition font)\n"
+        "Narrowing the inside tracks does not fit this map.\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
     assert draw("mers_font", "--definition_font_size", "17") == ""
@@ -196,13 +198,13 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     assert draw("mers_off", "--no_track_narrowing") == (
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 12.5       (smaller definition font)\n"
-        "  --center_reserved_radius 231.99   (narrow the inside tracks; 1 definition line still overlaps a track)\n"
+        "  --definition_font_size 13   (smaller definition font)\n"
+        "Narrowing the inside tracks does not fit this map.\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
-    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "12.5") == ""
-    assert draw("mers_off_narrow", "--no_track_narrowing", "--center_reserved_radius", "231.99").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "13") == ""
+    assert draw("mers_off_font_13_5", "--no_track_narrowing", "--definition_font_size", "13.5").startswith(
+        "WARNING: NC_019843.3: 1 definition line does not fit at 13.5 pt (1 line overlaps a track). Drawn anyway.\n"
     )
 
 
@@ -394,7 +396,7 @@ def test_mjenmv_full_name_is_drawn_on_one_line_and_warns_only_without_narrowing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """DF-D25: "Marsupenaeus japonicus endogenous nimavirus" stays one line. Rule L narrows the GC rows (to about
-    47 px, above the 30 px floor) so it clears them; with narrowing off it is drawn over them and the warning offers
+    35.5 px, above the 30 px floor) so it clears them; with narrowing off it is drawn over them and the warning offers
     the one-line font."""
 
     from gbdraw import cli
@@ -412,8 +414,8 @@ def test_mjenmv_full_name_is_drawn_on_one_line_and_warns_only_without_narrowing(
     assert capsys.readouterr().err.endswith(
         "WARNING: LC738868.1: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 14         (smaller definition font)\n"
-        "  --center_reserved_radius 210.15   (narrow the inside tracks)\n"
+        "  --definition_font_size 14.5       (smaller definition font)\n"
+        "  --center_reserved_radius 233.39   (narrow the inside tracks)\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
     root = ET.fromstring(output.with_suffix(".svg").read_text())
@@ -696,3 +698,48 @@ def test_a_percent_background_and_border_count_only_when_they_show(
     gc_df = pd.DataFrame({"GC content": [0.0] * 4}, index=[0, 250, 500, 750])
     inks = drawer.ink(100.0, gc_df, 1000, 20.0, 1.0, "GC", font_family="Liberation Sans")
     assert _lines_at(inks, radius, 0.5) == lines
+
+
+WEB_DEFAULT_ARGS = ("--multi_record_canvas", "--track_type", "tuckin", "--gc", "--skew", "--separate_strands")
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize(
+    ("gbk", "args"),
+    [
+        (TEST_INPUTS / "BGC0000712.gbk", WEB_DEFAULT_ARGS),
+        (TEST_INPUTS / "NC_002745.gb", WEB_DEFAULT_ARGS),
+    ],
+    ids=["bgc0000712-web", "nc002745-web"],
+)
+def test_tracks_narrowed_around_the_definition_leave_no_notice(
+    gbk: Path,
+    args: tuple[str, ...],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """OV-1854: the band the inside tracks narrow around and the notice read the same painted letters, so a figure
+    whose tracks were narrowed (rule L) has no definition line on a track. Both figures were narrowed with the
+    notice while the band read the line boxes."""
+
+    import gbdraw.diagrams.circular.assemble as circular_assemble_module
+    from gbdraw import cli
+
+    fits: list[circular_assemble_module._CentreDefinitionFit] = []
+    fit = circular_assemble_module._resolve_radial_layout_fitting_definition
+
+    def capture(*fit_args, **fit_kwargs):
+        result = fit(*fit_args, **fit_kwargs)
+        fits.append(result)
+        return result
+
+    monkeypatch.setattr(circular_assemble_module, "_resolve_radial_layout_fitting_definition", capture)
+    monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", "--gbk", str(gbk), *args, "-o", str(output), "-f", "svg"])
+    cli.main()
+
+    narrowed = any(track.compressed for track in fits[0].layout.tracks)
+    notice = "definition line does not fit" in capsys.readouterr().err
+    assert narrowed and not notice, (narrowed, notice)

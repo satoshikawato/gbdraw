@@ -578,7 +578,6 @@ const expectValidComposition = (
     // round trip, and export below.
     expect(snapshot.metadata.legendReflow).toMatchObject({
       colorRectSize: expect.any(Number),
-      dpi: 96,
       fontFile: 'LiberationSans-Regular',
       fontSize: expect.any(Number),
       lineHeight: expect.any(Number),

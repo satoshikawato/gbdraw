@@ -13,13 +13,19 @@ const linearSession = join(repoRoot, 'gbdraw/web/gallery/sessions/BGC0000708-BGC
 const fitButton = (page) => page.getByRole('button', { name: 'Fit to preview', exact: true });
 
 // The computed transform equals the state and stays still for two frames.
+// Chromium serializes the computed matrix to six significant digits (a pan of
+// -1045.2734375 px reads -1045.27) while the state and the layout keep the
+// double, so each value is compared within half a unit of its own sixth
+// significant digit: 0.005 px for a pan of 1000 to 9999 px, 5e-7 for a zoom
+// below 1. A transition frame or a stale pan is off by far more.
 const settle = async (page) => {
   await expect.poll(() => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const transform = new DOMMatrix(getComputedStyle(app.svgContainer).transform);
-    return Math.max(Math.abs(transform.a - app.zoom),
-      Math.abs(transform.e - app.canvasPan.x), Math.abs(transform.f - app.canvasPan.y));
-  })).toBeLessThan(0.001);
+    const serializedPrecision = (value) => 0.5 * 10 ** (Math.floor(Math.log10(Math.abs(value) || 1)) - 5);
+    return Math.max(...[[transform.a, app.zoom], [transform.e, app.canvasPan.x], [transform.f, app.canvasPan.y]]
+      .map(([computed, state]) => Math.abs(computed - state) / serializedPrecision(state)));
+  })).toBeLessThanOrEqual(1);
   await expect.poll(() => page.evaluate(() => new Promise((resolve) => {
     const sample = () => {
       const box = window.__GBDRAW_APP__.svgContainer.querySelector('svg').getBoundingClientRect();

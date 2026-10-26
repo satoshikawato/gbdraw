@@ -93,6 +93,24 @@ write-up of a release.
   Species / Strain…** shows that record's name field, and Cancel reads **Keep
   as drawn** over a drawn figure. A label-fit warning for one record now names
   that record, so records drawn to separate files can be told apart (OV-1836).
+- Changed (CLI, Python, web app): feature labels, tick labels, the Linear
+  ruler and scale bar, and the Circular centre definition are laid out at the
+  box their text is drawn in, as the Legend already is. A Circular label keeps
+  0.30 em of room beside its text and a Linear label 0.126 em above it, so the
+  same labels sit outside and inside their features as before and Linear label
+  rows keep their spacing; stacked Circular labels sit slightly closer, tick
+  labels and the inside tracks under them move about 2 px outward, and
+  canvases change by a few pixels. The room kept for the Circular definition,
+  its warning and the smaller-font remedy all measure the letters as painted,
+  in each line's weight and at its place, so tracks narrowed for the
+  definition no longer leave a line touching them (OV-1854): of the 175
+  figures measured, only MERS-CoV, whose name the 30 px floor cannot clear,
+  still warns. The room is a little wider than the line boxes gave, so more
+  figures narrow their GC rows (MjeNMV at the Web defaults: 46.5 to 35.5 px),
+  and definitions that were drawn over the innermost track now clear it
+  (OV-1820, OV-1824, OV-1826). An embedded label sits at the same depth
+  whether or not its letters have descenders (OV-1743). Saved Results are not
+  migrated: they keep their drawing until Generate redraws them (OV-165).
 - SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
   `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
   within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a
