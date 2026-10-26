@@ -12,6 +12,47 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: the Auto organism name has one rule for the Circular centre, the
+  Circular plot title and the Web Linear Auto definition. Line 1 is the
+  scientific name (genus and epithets italic, rank words such as `subsp.`,
+  `sp.` and `pv.` upright, `[Genus]` brackets upright); line 2 is the strain, drawn once even when the
+  /organism already holds it (OV-1830). Virus names, names above the genus
+  with a placeholder (`Lachnospiraceae bacterium A4`), hybrids, cloning
+  vectors and names the rule cannot read stay whole on line 1; an ICTV
+  binomial species (`Lambdavirus lambda`) is italic. A Candidatus name is
+  drawn upright after an italic `Ca.`, also when the rule keeps it whole
+  (*Ca.* Saccharibacteria bacterium GW2011_GWC2_44_17) and when the name holds
+  the characters `&`, `<` or `>` (*Ca.* Foo & Bar); any other name with those
+  characters stays as written. In a hybrid, each
+  parent's genus and epithets are italic and the sign stays as written and
+  upright (*Citrus* x *limon*, *Mentha* ×*piperita*); a hybrid with a part the
+  rule cannot read stays upright. In a placeholder, the name above the genus
+  is italic (*Lachnospiraceae* bacterium A4, uncultured *Lachnospiraceae*
+  bacterium, *Dothideomycetes* sp. 11042) only for Bacteria, Archaea and the
+  botanical lineages, when it has an ending of that code (for Bacteria and
+  Archaea also the phylum ending `-ota`) and the record's lineage holds it as
+  written; other placeholders stay upright. The endings that
+  mark a name above the genus follow the nomenclature code of the record's
+  GenBank lineage: `-idae`, `-inae` for Metazoa; `-aceae`, `-ineae`, `-inae`,
+  `-idae`, `-opsida`, `-phyceae`, `-mycetes`, `-mycota`, `-ales` for
+  Viridiplantae, Fungi, Rhodophyta and Ochrophyta, so
+  `Helotiales sp. EF0021` stays whole (OV-1834); `-aceae`, `-ales`, `-ineae`,
+  `-idae` for Bacteria and Archaea; all of them for other lineages and
+  records without one (GFF3). A hyphenated genus (`Pseudo-nitzschia`) is read under the
+  botanical code only, and a letter-hyphen epithet (`Aedes w-albus`) is
+  italic. A Bakta ORGANISM
+  `.` gives no name line instead of an italic "." (OV-1831), and a Circular
+  record with no organism and no typed title draws no plot title, where it
+  drew "." (OV-1837); a typed plot title with nothing to draw (`<i></i>`) now
+  draws no title in either mode instead of failing (OV-1845). A typed Species
+  without a typed Strain is cut into two lines by the same rule, keeping its
+  words and italics as typed; a typed Record label is drawn as typed. Under a
+  typed Record label, line 2 is the Subtitle, the typed Strain or the record's
+  strain, as before; under a typed Species, that strain line is the record's
+  Auto strain line, so a strain the /organism named is kept (`My isolate` over
+  `Lachnospiraceae bacterium A4` draws `A4`), and it is left out when the typed
+  text names the record's strain. Saved Linear Auto
+  definitions keep their text until the file is read again.
 - SVG output: a comparison match carries its ID only in `data-gbdraw-match-id`. The duplicate
   `data-gbdraw-pairwise-match-id` is no longer written, so scripts that read it from new files must read
   `data-gbdraw-match-id`. Results saved by gbdraw 0.12.0 to 0.13.0 and by the web app from 2026-06-18 to

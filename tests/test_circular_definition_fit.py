@@ -24,7 +24,7 @@ from gbdraw.api import (
     CircularOutputOptions,
     CircularRequestTrackOptions,
 )
-from gbdraw.api.diagram import build_circular_multi_diagram
+from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.core.text import parse_mixed_content_text
 from gbdraw.exceptions import ValidationError
 from gbdraw.render.groups.circular.definition import wrap_definition_line_parts
@@ -38,6 +38,9 @@ SALMONELLA = "Salmonella enterica subsp. enterica serovar Typhimurium"
 MYCOBACTERIUM = "Mycobacterium tuberculosis variant bovis BCG"
 ESCHERICHIA = "Escherichia coli str. K-12 substr. MG1655"
 HEPATOPLASMA = "Candidatus Hepatoplasma crinochetorum"
+# A long name the Auto rule keeps whole on line 1 (a virus name), for the
+# wrap of one long species line; a Latin name is cut into its taxon and strain lines.
+LONG_VIRUS = "Severe acute respiratory syndrome-related coronavirus"
 
 # The Web defaults for a fresh Circular Generate (Multi-Record Canvas on).
 WEB_DEFAULT_OVERRIDES = {
@@ -63,6 +66,8 @@ def _record_with_organism(organism: str) -> SeqRecord:
         if feature.type == "source":
             feature.qualifiers["organism"] = [organism]
     record.annotations["organism"] = organism
+    if organism == LONG_VIRUS:
+        record.annotations["taxonomy"] = ["Viruses", "Riboviria"]
     return record
 
 
@@ -111,9 +116,17 @@ def _definition_lines(svg_text: str) -> list[str]:
 
 
 @pytest.mark.circular
-@pytest.mark.parametrize("organism", [SALMONELLA, MYCOBACTERIUM, HEPATOPLASMA])
+@pytest.mark.parametrize(
+    "organism,drawn",
+    [
+        (SALMONELLA, SALMONELLA),
+        (MYCOBACTERIUM, MYCOBACTERIUM),
+        # The Auto name writes Candidatus as an italic "Ca." (OV-1720).
+        (HEPATOPLASMA, "Ca. Hepatoplasma crinochetorum"),
+    ],
+)
 def test_web_default_cli_generates_long_organism_names(
-    organism: str, tmp_path: Path, gbdraw_runner
+    organism: str, drawn: str, tmp_path: Path, gbdraw_runner
 ) -> None:
     source = _genbank_with_organism(tmp_path, organism)
 
@@ -127,21 +140,26 @@ def test_web_default_cli_generates_long_organism_names(
 
     assert returncode == 0, output
     lines = _definition_lines(svg_path.read_text())
-    assert " ".join(lines).startswith(organism)
+    assert " ".join(lines).startswith(drawn)
 
 
 @pytest.mark.circular
 def test_species_line_wraps_at_word_boundaries_only_when_placement_fails() -> None:
-    wrapped = _definition_lines(_web_default_grid(_record_with_organism(SALMONELLA)).tostring())
+    wrapped = _definition_lines(_web_default_grid(_record_with_organism(LONG_VIRUS)).tostring())
     species_lines = wrapped[: len(wrapped) - 4]  # mitochondrion, accession, length, GC follow
 
     assert len(species_lines) >= 2
-    assert " ".join(species_lines) == SALMONELLA
+    assert " ".join(species_lines) == LONG_VIRUS
     assert all(line == line.strip() and line for line in species_lines)
 
-    for organism in (MYCOBACTERIUM, ESCHERICHIA):
+    # Names whose taxon and strain lines fit are not wrapped.
+    for organism, auto_lines in (
+        (SALMONELLA, ["Salmonella enterica subsp. enterica", "serovar Typhimurium"]),
+        (MYCOBACTERIUM, ["Mycobacterium tuberculosis", "variant bovis BCG"]),
+        (ESCHERICHIA, ["Escherichia coli", "str. K-12 substr. MG1655"]),
+    ):
         lines = _definition_lines(_web_default_grid(_record_with_organism(organism)).tostring())
-        assert lines[0] == organism
+        assert lines[:2] == auto_lines
 
 
 @pytest.mark.circular
@@ -150,17 +168,17 @@ def test_pinned_track_on_the_definition_wraps_the_species_line() -> None:
     # the definition band, so the species line wraps (TK-02).
     slots = ["gc_skew:dinucleotide_skew@side=inside,r=0.5"]
     wrapped = _definition_lines(
-        _web_default_grid(_record_with_organism(SALMONELLA), circular_track_slots=slots).tostring()
+        _web_default_grid(_record_with_organism(LONG_VIRUS), circular_track_slots=slots).tostring()
     )
     species_lines = wrapped[: len(wrapped) - 4]
 
     assert len(species_lines) >= 2
-    assert " ".join(species_lines) == SALMONELLA
+    assert " ".join(species_lines) == LONG_VIRUS
 
     # An explicit center_reserved_radius is not wrapped away.
     with pytest.raises(ValidationError) as caught:
         _web_default_grid(
-            _record_with_organism(SALMONELLA),
+            _record_with_organism(LONG_VIRUS),
             circular_track_slots=slots,
             center_reserved_radius=250.0,
         )
@@ -195,7 +213,7 @@ def test_wrap_keeps_the_text_and_its_italic_runs() -> None:
 def test_explicit_definition_font_size_disables_the_wrap() -> None:
     with pytest.raises(ValidationError) as caught:
         _web_default_grid(
-            _record_with_organism(SALMONELLA),
+            _record_with_organism(LONG_VIRUS),
             config_overrides={"objects.definition.circular.font_size": 17},
         )
 
@@ -207,17 +225,17 @@ def test_explicit_definition_font_size_disables_the_wrap() -> None:
 def test_explicit_center_reserved_radius_disables_the_wrap() -> None:
     lines = _definition_lines(
         _web_default_grid(
-            _record_with_organism(SALMONELLA), center_reserved_radius=150.0
+            _record_with_organism(LONG_VIRUS), center_reserved_radius=150.0
         ).tostring()
     )
 
-    assert lines[0] == SALMONELLA
+    assert lines[0] == LONG_VIRUS
 
-    # A radius as large as the one-line definition reservation (241.9 px) fails
+    # A radius larger than the one-line definition reservation fails
     # with the Web defaults; an explicit radius must not be replaced by a
     # wrapped definition reservation.
     with pytest.raises(ValidationError) as caught:
-        _web_default_grid(_record_with_organism(SALMONELLA), center_reserved_radius=250.0)
+        _web_default_grid(_record_with_organism(LONG_VIRUS), center_reserved_radius=250.0)
 
     # The user's radius, not the species text, is named as the cause.
     assert _layout_reason(caught.value) == "CENTER_RESERVED"
@@ -365,3 +383,21 @@ def test_a_kept_scale_row_adds_no_scale_remedy() -> None:
     message = str(_InsideFitError("slot", intent=None, placement_window=window))
     assert "turn off or narrow the GC content track (--no-gc, --gc_content_width)" in message
     assert "--hide_scale" not in message
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("multi_record", [False, True], ids=["one record", "multi-record canvas"])
+def test_a_plot_title_with_no_name_to_draw_draws_no_title(multi_record: bool) -> None:
+    """A record with no organism (GenBank writes ORGANISM ".") and no typed plot
+    title has no plot-title line (OV-1831); asking for the title at the top
+    draws no title instead of failing the composition (OV-1837)."""
+    record = _record_with_organism(".")
+    options = CircularDiagramOptions(output=CircularOutputOptions(plot_title_position="top"))
+    drawing = (
+        build_circular_multi_diagram([record], options=options)
+        if multi_record
+        else build_circular_diagram(record, options=options)
+    )
+    root = ET.fromstring(drawing.tostring())
+    assert root.find(".//svg:g[@data-gbdraw-composition-role='title']", SVG_NS) is None
+

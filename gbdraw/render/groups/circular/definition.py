@@ -15,7 +15,7 @@ from gbdraw.svg.elements import Group
 from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasGeometry
 from ....config.models import GbdrawConfig
-from ....core.record_metadata import RecordSourceMetadata, infer_record_source_metadata
+from ....core.record_metadata import RecordSourceMetadata, infer_record_source_metadata, organism_name_lines
 from ....core.text import (
     calculate_bbox_dimensions,
     measure_mixed_text_line,
@@ -318,28 +318,23 @@ class DefinitionGroup:
 
     def find_organism_name(self) -> None:
         metadata = self.record_facts.metadata
-        strain_name = metadata.strain
-        record_name = metadata.organism
         presentation = self.record_presentation
         explicit_label = str((presentation.label if presentation else None) or "").strip()
         explicit_subtitle = str((presentation.subtitle if presentation else None) or "").strip()
         self.replicon = metadata.replicon
         self.organelle = metadata.organelle
-
-        if explicit_label:
-            self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(explicit_label)
-        elif self.species:
-            self.species_parts = parse_mixed_content_text(self.species)
-        else:
-            self.species_parts = parse_mixed_content_text(record_name)
-        self.record_name = explicit_label or str(record_name).strip() or self.record_facts.record_id
-
-        if explicit_subtitle:
-            self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(explicit_subtitle)
-        elif self.strain:
-            self.strain_parts = parse_mixed_content_text(self.strain)
-        else:
-            self.strain_parts = parse_mixed_content_text(strain_name)
+        # One owner chooses the two name lines from the record and the typed
+        # text (the request's label and subtitle win over Species and Strain;
+        # only a typed Species is cut by the Auto rule).
+        lines = organism_name_lines(
+            metadata,
+            typed_taxon=self.species or "",
+            typed_strain=explicit_subtitle or self.strain or "",
+            record_label=explicit_label,
+        )
+        self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.taxon)
+        self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.strain)
+        self.record_name = explicit_label or str(metadata.organism).strip() or self.record_facts.record_id
 
         if self.replicon:
             self.replicon_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.replicon)

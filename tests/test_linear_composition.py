@@ -188,6 +188,21 @@ def test_linear_title_uses_shared_gap_or_center_overlay(
 
 
 @pytest.mark.linear
+@pytest.mark.parametrize("title", ("<i></i>", "<i> </i>"))
+def test_a_linear_title_that_paints_nothing_draws_no_title(title: str) -> None:
+    """A typed title with no text to paint places no title target (OV-1845),
+    as Circular does since OV-1837, instead of failing the composition."""
+    drawing = _assemble(title=title, title_position="top")
+    root = ET.fromstring(drawing.tostring())
+    assert drawing._gbdraw_linear_composition_plan.placement_for("title") is None
+    assert not [
+        element
+        for element in root.iter()
+        if element.attrib.get("data-gbdraw-composition-role") == "title"
+    ]
+
+
+@pytest.mark.linear
 @pytest.mark.parametrize("side", ("top", "bottom"))
 def test_linear_same_side_legend_is_nearest_plot_and_title_is_outward(
     side: str,

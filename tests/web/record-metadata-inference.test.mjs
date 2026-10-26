@@ -17,13 +17,27 @@ const CASES = JSON.parse(
   readFileSync(new URL('../fixtures/record_metadata_inference_cases.json', import.meta.url), 'utf8')
 );
 
+test('formatInferredOrganismStrain declines text it cannot read as Python does', () => {
+  assert.throws(() => formatInferredOrganismStrain({ organism: 'Bacillus sp. \u00d6deme-1', strain: '', lineage: [] }), /Python reader/);
+  assert.throws(() => formatInferredOrganismStrain({ organism: 'Bacillus subtilis', strain: '\u00d6-1', lineage: [] }), /Python reader/);
+  // Python's str.strip removes \x1c-\x1f and \x85 from a lineage word and String.trim does not;
+  // String.trim removes \ufeff and Python's str.strip does not (OV-1833). Text holding either declines.
+  for (const word of ['\u001cBacteria', '\ufeffBacteria']) {
+    assert.throws(
+      () => formatInferredOrganismStrain({ organism: 'Bacillus subtilis', strain: '', lineage: [word] }),
+      /Python reader/
+    );
+  }
+});
+
 test('formatInferredOrganismStrain matches the shared inference table', () => {
   for (const testCase of CASES.definition) {
-    assert.equal(
-      formatInferredOrganismStrain({ organism: testCase.organism, strain: testCase.strain }),
-      testCase.expected,
-      testCase.name
-    );
+    const fields = { organism: testCase.organism, strain: testCase.strain, lineage: testCase.lineage ?? [] };
+    if (testCase.fastPath === 'declines') {
+      assert.throws(() => formatInferredOrganismStrain(fields), /Python reader/, testCase.name);
+    } else {
+      assert.equal(formatInferredOrganismStrain(fields), testCase.expected, testCase.name);
+    }
   }
 });
 
@@ -159,6 +173,9 @@ test('record discovery returns the loader records or declines to the Worker', as
     if (testCase.expected.error) {
       assert.equal(Object.hasOwn(observed, 'error'), true, `${testCase.name}: ${JSON.stringify(observed)}`);
       // Only the Worker's loader can report this failure, so the fast path declines.
+      assert.equal(observed.calls.length, 1, `${testCase.name}: the fast path declines to the Worker`);
+    } else if (testCase.fastPath === 'declines') {
+      assert.deepEqual(observed.records, testCase.expected.records, testCase.name);
       assert.equal(observed.calls.length, 1, `${testCase.name}: the fast path declines to the Worker`);
     } else {
       assert.deepEqual(observed.records, testCase.expected.records, testCase.name);

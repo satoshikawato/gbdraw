@@ -197,7 +197,7 @@ from .annotation_labels import (
     place_linear_annotation_labels,
 )
 from ...render.groups.linear import build_linear_feature_dom_index
-from ...render.composition import apply_composition_plan
+from ...render.composition import apply_composition_plan, painted_title_content
 
 from .builders import (
     add_explicit_comparisons_on_linear_canvas,
@@ -2191,16 +2191,17 @@ def assemble_linear_diagram(
     if normalized_plot_title_position not in {"center", "top", "bottom"}:
         raise ValueError("plot_title_position must be one of: center, top, bottom")
 
+    # A typed title that paints nothing ("<i></i>") gets no title (OV-1845).
     title_content: GroupContent | None = None
     if normalized_plot_title:
-        title_content = render_stage(
+        title_content = painted_title_content(render_stage(
             "plot_title_content",
             plot_title_content,
             normalized_plot_title,
             font_family=cfg.objects.text.font_family,
             font_size=float(plot_title_font_size),
             dpi=int(cfg.canvas.dpi),
-        )
+        ))
 
     comparison_thresholds = ComparisonThresholds(
         evalue=blast_config.evalue,
