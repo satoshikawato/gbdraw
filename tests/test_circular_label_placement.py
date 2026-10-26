@@ -1,7 +1,7 @@
 import copy
 import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TypeVar
@@ -441,6 +441,7 @@ _PLACEMENT_CASES = [
     *((seed, lambda seed: _random_label_set(seed, max_labels=12)) for seed in range(4)),
     (11, lambda seed: _pile_label_set(seed, 10, 0.4, 0.01)),
     (12, lambda seed: _pile_label_set(seed, 14, 0.0, 0.01)),
+    (18, lambda seed: _random_label_set(seed, max_labels=8)),  # moves a single label between two requests
 ]
 
 
@@ -495,21 +496,46 @@ def test_circular_improved_placement_skips_only_evaluations_that_move_nothing(
 
 @pytest.mark.circular
 def test_circular_improved_placement_pair_cache_equals_recounts(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The overlapping pairs kept for unchanged positions equal a recount at every request."""
+    """At every request, the overlapping pairs kept for unchanged positions equal a fresh recount."""
     module = circular_labels_module
     positions = module._label_positions
-    keys: list[object] = []
+    count_pairs = module._overlapping_label_pairs
+    recounts: list[list[tuple[int, int]]] = []
+    call: list[tuple[int, dict]] = []  # the arguments of the last recount (same for every request of one run)
+    requests: list[tuple[int, list[tuple[int, int]] | None]] = []  # (recounts so far, fresh recount of that moment)
+    keys: list[tuple[tuple[float, float], ...]] = []
+
+    def counting(labels: list[dict], total_length: int, **kwargs: object) -> Iterator[tuple[int, int]]:
+        pairs = list(count_pairs(labels, total_length, **kwargs))  # type: ignore[arg-type]
+        if getattr(kwargs["margins"], "__name__", "") == "pair_margins":  # improved placement's own request
+            call[:] = [(total_length, kwargs)]
+            recounts.append(pairs)
+        return iter(pairs)
 
     def recording(labels: list[dict]) -> tuple[tuple[float, float], ...]:
+        # `overlapping_pairs` is the only reader, so this runs once per request, before it answers from its cache.
+        fresh = list(count_pairs(labels, call[0][0], **call[0][1])) if call else None  # type: ignore[arg-type]
+        requests.append((len(recounts), fresh))
         keys.append(positions(labels))
         return keys[-1]
 
     monkeypatch.setattr(module, "_label_positions", recording)
-    cached = [_placement_runs(*case)[1] for case in _PLACEMENT_CASES]
-    # `overlapping_pairs` is the only reader: a key equal to the one before it was answered from the kept pairs.
-    assert any(key == before for before, key in zip(keys, keys[1:]))
+    monkeypatch.setattr(module, "_overlapping_label_pairs", counting)
+    results = []
+    for case in _PLACEMENT_CASES:
+        call.clear()
+        first = len(requests)
+        results.append(_placement_runs(*case)[1])
+        run = requests[first:]
+        for (_, fresh), (answered, _) in zip(run, [*run[1:], (len(recounts), None)]):
+            assert fresh is None or recounts[answered - 1] == fresh  # the answer after this request's recount, if any
+    assert any(key == before for before, key in zip(keys, keys[1:]))  # some request was answered from the cache
+    moved = [
+        sum(a != b for a, b in zip(before, key)) for before, key in zip(keys, keys[1:]) if len(before) == len(key)
+    ]
+    assert 1 in moved  # one label moved between two requests
     monkeypatch.setattr(module, "_label_positions", lambda labels: (object(),))  # never equal: always recount
-    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == cached
+    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == results
 
 
 @pytest.mark.circular
