@@ -1,7 +1,6 @@
 // @ts-check
 /** @import { WebFontEntry } from './services/font-store.js' */
 /** @import { FileImports } from './services/file-imports.js' */
-/** @import { CardInputFiles } from './services/drawing/inputs.js' */
 /** @typedef {import('./services/drawing/inputs.js').LinearSeq} LinearSeq */
 import { msg, t, tn } from './utils/i18n.js';
 import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
@@ -129,16 +128,6 @@ const canvasContainerRef = ref(null);
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
 const activeDrawingId = typedRef(drawingIdOfMode('circular'));
 const mode = typedComputed(() => activeDrawing().mode);
-// The five card files stay the project's until the card steps move them into
-// the drawing (D-15-91 S-2 A); every other input field is a drawing's
-// (`drawing.files`, services/drawing/inputs.js).
-const cardFiles = /** @type {CardInputFiles} */ (reactive({
-  d_color: null,
-  t_color: null,
-  blacklist: null,
-  whitelist: null,
-  qualifier_priority: null
-}));
 
 const selectedAnnotation = ref(null);
 
@@ -1237,7 +1226,6 @@ export const state = Object.freeze({
   renameDrawing,
   drawingOfMode,
   activeDrawing,
-  cardFiles,
   selectedAnnotation,
   losatCacheInfo,
   losatThreadingStatus,

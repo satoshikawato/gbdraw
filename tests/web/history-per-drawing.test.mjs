@@ -645,13 +645,15 @@ for (const later of ['redraw', 'rename']) test(`an Undo from the other drawing $
   assert.deepEqual(captions(), later === 'redraw' ? ['Hand', 'Imported', 'GC content'] : ['Hand', 'GC']);
 });
 
-// A Retry of a failed card import changes every drawing its apply reaches (the
-// earlier file's part leaves the other drawings), so it is recorded as the
-// card's own import is: one project step, not the shown drawing's checkpoint.
-test('Retry of a failed card import is recorded as a project step', async () => {
+// R16-4 (PD-OI-090): a card's import, Remove, and Retry change only the shown
+// drawing, so each is a step of the shown drawing's History, never a project
+// step that an Undo from another drawing would take.
+test('a card import, Remove, and Retry are steps of the shown drawing', async () => {
   const { readFile } = await import('node:fs/promises');
-  const source = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
-  const retry = source.split('\n').find((line) => line.includes('retryAuxiliaryImportFailure: () =>')) || '';
-  assert.match(retry, /history\.runProjectStep\(/);
-  assert.doesNotMatch(retry, /runUndoableCheckpoint/);
+  const read = async (path) => readFile(new URL(`../../gbdraw/web/js/${path}`, import.meta.url), 'utf8');
+  const retry = (await read('app/app-setup.js')).split('\n').find((line) => line.includes('retryAuxiliaryImportFailure: () =>')) || '';
+  assert.match(retry, /history\.runUndoableCheckpoint\(/);
+  const uploader = (await read('components.js')).split('\n').filter((line) => line.includes("msg('Change uploaded file')"));
+  assert.equal(uploader.length, 4, 'a selection and a Remove, each with and without the import step');
+  assert.deepEqual(uploader.filter((line) => /runProjectStep/.test(line)), []);
 });

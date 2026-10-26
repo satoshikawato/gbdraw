@@ -30,7 +30,7 @@ const setup = () => {
   const drawings = { circular: drawing(), linear: drawing() };
   const state = withModeDrawings({
     mode: ref('circular'), extractedFeatures: ref([]), biologicalFeatures: ref([]), svgResultIdentity: ref('one'),
-    cardFiles: {}, linearSeqs: [], results: ref([]), selectedResultIndex: ref(0)
+    linearSeqs: [], results: ref([]), selectedResultIndex: ref(0)
   }, drawings);
   return { drawings, state, preparation: createRulePreparation({ state, evaluate: async () => ({}) }) };
 };

@@ -119,14 +119,11 @@ test('no module reads a drawing key from state', () => {
 
 // The project input keys the inputs slice replaced (multi-drawing B, DESIGN
 // §2): each is gone from `state`, and no module reads it from `state`.
-const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs', 'circularRecordList', 'circularRecordDiscovery', 'cInputType', 'lInputType']);
-// The project's `state.cardFiles` holds only the five card files (D-15-91
-// S-2 A, D-15-92); the other fields are each drawing's (`drawing.files`, a
-// drawing key that the drawing-key guard above keeps off `state`).
-const CARD_FILE_KEYS = Object.freeze(['blacklist', 'd_color', 'qualifier_priority', 't_color', 'whitelist']);
+// The five card files are each drawing's too (`drawing.files`, R16-4), so
+// the project's `cardFiles` is gone.
+const MOVED_INPUT_KEYS = Object.freeze(['linearSeqs', 'circularRecordList', 'circularRecordDiscovery', 'cInputType', 'lInputType', 'cardFiles']);
 test('no module reads a project input key the drawing\'s inputs replaced', () => {
   assert.deepEqual(MOVED_INPUT_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a moved input key is on state');
-  assert.deepEqual(Object.keys(state.cardFiles).sort(), CARD_FILE_KEYS, 'the project holds only the card files');
   const found = {};
   for (const path of modules(JS)) {
     const source = readFileSync(path, 'utf8');

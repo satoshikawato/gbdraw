@@ -341,7 +341,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session49, SessionDrawing49 } from './session-drawings-upgrade.js' */
 /** @import { InputFileRef, InputFileStore } from './history-files.js' */
-/** @import { BoundCanonicalComparison, BoundFileValue, CardInputFiles, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
+/** @import { BoundCanonicalComparison, BoundFileValue, CircularRecordEntry, DrawingInputFiles, InputType, LoadedInputs } from './drawing/inputs.js' */
 /** @import { CircularRecordDiscovery } from './record-discovery.js' */
 /** @import { LinearRecordRow } from './linear-record-layout.js' */
 /** @import { StoredLayoutPreferences } from './layout-preferences.js' */
@@ -4803,8 +4803,9 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
 // request and bindings, B2d-3a-2), or a Session 27-48's one set, of which
 // each loaded drawing takes its mode's part: the Circular drawing its input
 // fields and record catalog, the Linear drawing its committed comparisons,
-// record rows, layout, and comparison plan. The card files are the
-// project's (`state.cardFiles`), the shown drawing's (D-15-93).
+// record rows, layout, and comparison plan. Each drawing takes the five card
+// files of its inputs (R16-4): a Session 49 drawing its own bindings, a
+// Session 27-48's drawings the one set's.
 /**
  * @typedef {LoadedInputs & { circularRecordList: CircularRecordEntry[], linearRecordRows: LinearRecordRow[] }} LiveFileState
  */
@@ -4816,10 +4817,8 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
 /**
  * @param {readonly LoadedDrawingInputs[]} loaded Each loaded drawing with its inputs. A rollback installs none:
  *   the previous drawings come back as they were.
- * @param {LiveFileState} shown The shown drawing's inputs, whose card files the project takes.
- * @returns {Partial<DrawingInputFiles>} The input fields of the shown drawing's inputs, as refs.
  */
-const restoreLiveFileState = (loaded, shown) => {
+const restoreLiveFileState = (loaded) => {
   state.matchSequenceRegistry?.reset?.();
   /** @type {Map<LiveFileState, ReturnType<typeof bindLoadedInputs>>} One registration per set of inputs. */
   const bound = new Map();
@@ -4828,11 +4827,11 @@ const restoreLiveFileState = (loaded, shown) => {
     if (!bound.has(snapshot)) bound.set(snapshot, bindLoadedInputs(state.inputFiles, snapshot));
     return /** @type {ReturnType<typeof bindLoadedInputs>} */ (bound.get(snapshot));
   };
-  const shownFiles = /** @type {Partial<DrawingInputFiles> & Partial<CardInputFiles>} */ (boundOf(shown).files);
-  FILE_IMPORT_CARDS.forEach((key) => { state.cardFiles[key] = shownFiles[key] ?? null; });
   loaded.forEach(({ drawing, inputs: snapshot }) => {
     const { files, linearSeqs, linearComparisonPlan, circularRecordDiscovery } = boundOf(snapshot);
     const { linearCanonicalComparisons = [], ...circularFiles } = /** @type {Partial<DrawingInputFiles>} */ (files);
+    /** @type {Partial<DrawingInputFiles>} */
+    const cardFiles = Object.fromEntries(FILE_IMPORT_CARDS.map((key) => [key, circularFiles[key] ?? null]));
     if (drawing.mode === 'circular') {
       INPUTS_SLICE.install(drawing.slices.inputs, {
         files: /** @type {DrawingInputFiles} */ (circularFiles),
@@ -4842,7 +4841,7 @@ const restoreLiveFileState = (loaded, shown) => {
       return;
     }
     INPUTS_SLICE.install(drawing.slices.inputs, {
-      files: /** @type {DrawingInputFiles} */ ({ linearCanonicalComparisons }),
+      files: /** @type {DrawingInputFiles} */ ({ linearCanonicalComparisons, ...cardFiles }),
       linearSeqs
     });
     SETTINGS_SLICE.install(drawing.slices.settings, {
@@ -4850,7 +4849,6 @@ const restoreLiveFileState = (loaded, shown) => {
       linearComparisonPlan: normalizeLinearComparisonPlan(linearComparisonPlan)
     });
   });
-  return shownFiles;
 };
 
 const captureSessionImportTransientState = () => ({
@@ -4987,7 +4985,6 @@ const captureSessionImportSnapshot = (shownDrawingId) => ({
   shownOrthogroups: orthogroupArtifactData(),
   shownEditorState: editorArtifactData(),
   richFeaturePopup: Boolean(state.richFeaturePopup.value),
-  cardFiles: { ...state.cardFiles },
   // A holder restored later reads the Results with the shown Result's edits (R1).
   results: previewRuntimePorts.currentResults(),
   collinearGroups: state.collinearGroups.value,
@@ -5028,7 +5025,6 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.appliedPaletteName.value = shownUi.appliedPaletteName;
     state.appliedPaletteColors.value = cloneColors(shownUi.appliedPaletteColors);
     state.richFeaturePopup.value = snapshot.richFeaturePopup;
-    FILE_IMPORT_CARDS.forEach((key) => { state.cardFiles[key] = snapshot.cardFiles[key] ?? null; });
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
@@ -7162,9 +7158,8 @@ const importSessionDocument = async (e, options = {}) => {
       });
       return /** @type {LiveFileState} */ (liveFileStates.get(loaded));
     };
-    // Each drawing takes its own files; the cards are the shown drawing's (D-15-93).
-    restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })),
-      liveFileStateOf(filesOf(plan.activeDrawingId)));
+    // Each drawing takes its own files, its card files among them (R16-4).
+    restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })));
     // The Linear drawing the Files card list folds: the shown one, else a
     // Session 27-48's Linear part's (a Session 49's first Linear drawing).
     const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing : state.drawingOf(linearPartDrawingId);

@@ -2030,7 +2030,6 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
-    moveLegendRecords: legendActions.moveLegendRecords,
     readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
@@ -4510,7 +4509,7 @@ export const createAppSetup = () => {
     drawingOf: state.drawingOf,
     drawingHasResult: (drawingId) => resultsOf(drawingId).length > 0,
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
-    boundFileIdsOf: (drawingId) => boundInputFileIds({ cardFiles: null, drawingList: () => [state.drawingOf(drawingId)] }),
+    boundFileIdsOf: (drawingId) => boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] }),
     createDrawing: createDrawingState,
     addDrawing: state.addDrawing,
     removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
@@ -7226,10 +7225,9 @@ export const createAppSetup = () => {
     setLinearSourceDepthFile,
     clearLinearSourceDepthFile,
     linearSeqs: drawingMember('linearSeqs'),
-    // The shown drawing's input fields and Circular record list; the project's
-    // five card files (D-15-91 S-2 A).
+    // The shown drawing's input fields (its five card files among them) and
+    // Circular record list.
     files: drawingMember('files'),
-    cardFiles: state.cardFiles,
     circularRecordList: drawingMember('circularRecordList'),
     linearSourceGroups,
     linearCardFileLine,
@@ -7548,7 +7546,7 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     refreshCircularRecordOrder,
     importAuxiliaryTable, waitForAuxiliaryFileImport: auxiliaryFileImports.wait, canRetryAuxiliaryImportFailure,
-    retryAuxiliaryImportFailure: () => history.runProjectStep(msg('Change uploaded file'), retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint(msg('Change uploaded file'), retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,

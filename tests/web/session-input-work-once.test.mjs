@@ -90,9 +90,9 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
   await serializeActiveRenderFiles('circular', otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
-  const saved = await buildSessionResources({
-    inputFiles: state.inputFiles, cardFiles: { d_color: state.inputFiles.registerFile(other) }
-  }, committed, bindingDrawings({ files: { c_gb: state.inputFiles.registerFile(file) } }));
+  const saved = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({
+    files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }
+  }));
   const otherId = saved.webFiles.bindings.d_color.resourceId;
   assert.notEqual(otherId, 'src');
   assert.deepEqual(saved.resources[otherId], {

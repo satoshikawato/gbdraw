@@ -276,7 +276,8 @@ export const createRulePreparation = ({
     mode: state.mode?.value,
     // Every drawing's input type, in tab order.
     inputKinds: JSON.stringify(state.drawingList().map((/** @type {DrawingState} */ drawing) => drawing.inputType.value)),
-    file: state.cardFiles.t_color,
+    // The shown drawing's Specific rules file (R16-4).
+    file: state.activeDrawing().files.t_color,
     // Every drawing's cards, in tab order: the same invalidation as the
     // project's rows had.
     linearFiles: state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs)
@@ -290,9 +291,9 @@ export const createRulePreparation = ({
       ...state.drawingList().flatMap((/** @type {DrawingState} */ { files }) => [
         files.c_gb, files.c_gff, files.c_fasta, files.c_depth,
         files.c_conservation_blasts, files.c_conservation_blasts_source,
-        files.c_conservation_fastas, files.c_conservation_sequence_sources
-      ]),
-      state.cardFiles.d_color, state.cardFiles.blacklist, state.cardFiles.whitelist, state.cardFiles.qualifier_priority
+        files.c_conservation_fastas, files.c_conservation_sequence_sources,
+        files.d_color, files.blacklist, files.whitelist, files.qualifier_priority
+      ])
     ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
   });
   /** @type {RulePreparation['isCurrent']} */

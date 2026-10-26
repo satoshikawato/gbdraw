@@ -21,7 +21,7 @@ import {
 /** @import { CanonicalRenderEnvelope } from './session-request.js' */
 /** @import { EncodedFilePayload } from './file-content-cache.js' */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
-/** @import { BoundFileValue, CardInputFiles, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
+/** @import { BoundFileValue, DrawingInputFiles, LinearSeq } from './drawing/inputs.js' */
 /**
  * What a Session binds of a drawing (`webBindings`): a Circular drawing's input
  * fields, a Linear drawing's record rows and comparison plan.
@@ -209,9 +209,9 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
  * positional ID that names different bytes in two requests gets a new ID;
  * each request's references are rewritten. The first set with a request is
  * the primary one: an adopted table's resources keep their IDs. `state` holds
- * the card files and the store. A Circular drawing binds its input fields, a
- * Linear drawing its records and comparison plan, whose uploaded comparison
- * files the Session also binds; every drawing binds the file cards.
+ * the store. A Circular drawing binds its input fields, a Linear drawing its
+ * records and comparison plan, whose uploaded comparison files the Session
+ * also binds; every drawing binds its own five card files (R16-4).
  * @param {Record<string, any>} state
  * @param {readonly SessionResourceSet[]} sets
  * @returns {Promise<{ resources: Record<string, RawSessionResourceDescriptor>, written: SessionResourceDrawing[] }>} `written` in the order of `sets`.
@@ -504,15 +504,14 @@ export const buildSessionDrawingResources = async (state, sets) => {
     return bindFile(/** @type {InputFileRef | null | undefined} */ (value));
   };
 
-  /** @type {Readonly<Partial<CardInputFiles>>} */
-  const cards = state.cardFiles;
-  const cardBindings = {
-    d_color: await bindFile(cards.d_color),
-    t_color: await bindFile(cards.t_color),
-    blacklist: await bindFile(cards.blacklist),
-    whitelist: await bindFile(cards.whitelist),
-    qualifier_priority: await bindFile(cards.qualifier_priority)
-  };
+  /** @param {SessionBindingDrawing} drawing Its five card files (R16-4). */
+  const cardBindings = async ({ files }) => ({
+    d_color: await bindFile(files.d_color),
+    t_color: await bindFile(files.t_color),
+    blacklist: await bindFile(files.blacklist),
+    whitelist: await bindFile(files.whitelist),
+    qualifier_priority: await bindFile(files.qualifier_priority)
+  });
   /** @param {SessionBindingDrawing} drawing The bindings of its mode's inputs. */
   const circularBindings = async ({ files }) => ({
     c_gb: await bindFile(files.c_gb),
@@ -556,11 +555,15 @@ export const buildSessionDrawingResources = async (state, sets) => {
     )
   });
   /** @param {SessionBindingDrawing} drawing */
-  const bindingsOf = async (drawing) => ({
-    schema: 2,
-    ...(drawing.mode === 'linear' ? await linearBindings(drawing) : await circularBindings(drawing)),
-    ...cardBindings
-  });
+  const bindingsOf = async (drawing) => {
+    // The cards first: a drawing's files are allocated in the order 48 wrote them.
+    const cards = await cardBindings(drawing);
+    return {
+      schema: 2,
+      ...(drawing.mode === 'linear' ? await linearBindings(drawing) : await circularBindings(drawing)),
+      ...cards
+    };
+  };
 
   /** @type {SessionResourceDrawing[]} */
   const written = [];
@@ -586,9 +589,7 @@ export const buildSessionDrawingResources = async (state, sets) => {
  * @param {CanonicalRenderEnvelope | null} [otherCommittedRequest]
  */
 export const buildSessionResources = async (state, committedRequest, drawings = [], otherCommittedRequest = null) => {
-  const circularFiles = drawings.find((drawing) => drawing.mode === 'circular')?.files ?? {};
-  // The card files: a test's fixture may hold them among the Circular input fields.
-  const built = await buildSessionDrawingResources({ ...state, cardFiles: { ...circularFiles, ...state?.cardFiles } }, [
+  const built = await buildSessionDrawingResources(state, [
     { drawing: null, committed: committedRequest },
     ...(otherCommittedRequest ? [{ drawing: null, committed: otherCommittedRequest }] : []),
     // Without drawings, the bindings of an empty drawing of each mode.
@@ -597,7 +598,9 @@ export const buildSessionResources = async (state, committedRequest, drawings = 
     ])).map((drawing) => ({ drawing, committed: null }))
   ]);
   const [top, other] = built.written;
-  const bindings = Object.assign({}, ...built.written.slice(otherCommittedRequest ? 2 : 1).map((drawing) => drawing.webFiles.bindings));
+  // One set of bindings: each mode's own fields, and the card files of the
+  // first drawing (a test's fixture binds them in one drawing).
+  const bindings = Object.assign({}, ...built.written.slice(otherCommittedRequest ? 2 : 1).reverse().map((drawing) => drawing.webFiles.bindings));
   return {
     renderRequest: top.renderRequest,
     ...(otherCommittedRequest ? { otherRenderRequest: other.renderRequest } : {}),

@@ -635,11 +635,11 @@ const installSimpleCircularInput = (primary, inactive) => {
   modeDrawing(state, 'circular').files.c_conservation_blasts = bound([]);
   modeDrawing(state, 'circular').files.c_conservation_fastas = bound([]);
   modeDrawing(state, 'circular').files.c_conservation_sequence_sources = bound([]);
-  state.cardFiles.d_color = inactive;
-  state.cardFiles.t_color = inactive;
-  state.cardFiles.blacklist = inactive;
-  state.cardFiles.whitelist = inactive;
-  state.cardFiles.qualifier_priority = inactive;
+  modeDrawing(state, 'circular').files.d_color = inactive;
+  modeDrawing(state, 'circular').files.t_color = inactive;
+  modeDrawing(state, 'circular').files.blacklist = inactive;
+  modeDrawing(state, 'circular').files.whitelist = inactive;
+  modeDrawing(state, 'circular').files.qualifier_priority = inactive;
   state.activeDrawing().form.prefix = 'audit-simple';
   state.activeDrawing().form.show_depth = false;
   state.activeDrawing().form.multi_record_canvas = false;
