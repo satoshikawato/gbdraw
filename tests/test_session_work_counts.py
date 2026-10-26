@@ -279,9 +279,9 @@ def test_cli_circular_session_checks_its_identity_manifest_once(
     # A Circular drawing extracts no proteins: the render and the writer carry
     # the loaded Session's own manifest.
     session = json.loads(CIRCULAR_SESSION.read_text(encoding="utf-8"))
-    manifest = json.loads(PROTEIN_SESSION.read_text(encoding="utf-8"))["proteinIdentityManifest"]
+    manifest = drawing_view(json.loads(PROTEIN_SESSION.read_text(encoding="utf-8")))["proteinIdentityManifest"]
     assert manifest["recordInstances"]
-    session["proteinIdentityManifest"] = manifest
+    session["drawings"][0]["proteinIdentityManifest"] = manifest
     path = tmp_path / "manifest.gbdraw-session.json"
     path.write_text(json.dumps(session), encoding="utf-8")
     checks = _count_manifest_checks(monkeypatch)

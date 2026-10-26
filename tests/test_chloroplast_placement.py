@@ -40,11 +40,11 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
     chloroplast_session, separate, scope, reverse_placement, monkeypatch, tmp_path,
 ):
     document = copy.deepcopy(chloroplast_session)
-    options = document["renderRequest"]["diagramOptions"]
+    options = document["drawings"][0]["renderRequest"]["diagramOptions"]
     options["configOverrides"]["canvas.strandedness"] = separate
     options["configOverrides"]["labels.circular.scope"] = scope
     selected = {}
-    for feature in document["editorState"]["featureCatalog"]["items"][0]["biologicalFeatures"]:
+    for feature in document["drawings"][0]["editorState"]["featureCatalog"]["items"][0]["biologicalFeatures"]:
         if feature["type"] != "CDS" or feature["qualifiers"].get("gene", [""])[0] not in {
             "clpP", "rpl16", "rpoC1", "petB",
         }:
@@ -149,7 +149,7 @@ def test_label_reflow_keeps_outside_rows_beyond_the_moved_feature_row(chloroplas
     # canvas and move the feature row outside the axis. The outside annotation row
     # stays an outside row beyond it instead of a frozen ring inside the axis.
     document = copy.deepcopy(chloroplast_session)
-    options = document["renderRequest"]["diagramOptions"]
+    options = document["drawings"][0]["renderRequest"]["diagramOptions"]
 
     def slot(slot_id, renderer, side, params, width=None):
         return {"kind": "circularTrackSlot", "id": slot_id, "renderer": renderer, "enabled": True, "side": side,

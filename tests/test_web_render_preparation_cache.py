@@ -13,6 +13,8 @@ from Bio.SeqRecord import SeqRecord
 import pandas as pd
 import pytest
 
+from tests.utils.session_drawing_view import drawing_view
+
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.api import (
     CircularBatchRequest,
@@ -442,7 +444,7 @@ def test_gallery_genbank_preparation_owner_remains_read_only(tmp_path: Path) -> 
         / "sessions"
         / "HmmtDNA_basic_circular.gbdraw-session.json"
     )
-    document = json.loads(session_path.read_text(encoding="utf-8"))
+    document = drawing_view(json.loads(session_path.read_text(encoding="utf-8")))
     cache = PreparedBiologicalInputCache()
 
     first, first_diagnostics = _render(

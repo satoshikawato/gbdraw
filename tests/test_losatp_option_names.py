@@ -419,7 +419,7 @@ def _round_trip(session_path: Path, tmp_path: Path):
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
         encoded = encode_canonical_request(request)
-    return session, request, encoded.payload
+    return session_view(session), request, encoded.payload
 
 
 @pytest.mark.parametrize(
