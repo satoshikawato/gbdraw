@@ -245,6 +245,22 @@ class SessionDocument:
         if self.source_path is not None:
             object.__setattr__(self, "source_path", Path(self.source_path))
 
+    @classmethod
+    def _from_checked_move(cls, data: Mapping[str, Any]) -> SessionDocument:
+        """Keep the Session 49 that a checked Session 46-48 document moved to, unchecked.
+
+        Only the CLI re-save keeps one (``_upgraded_session``): the document it
+        writes holds every drawing of this one and is checked (OV-1815).
+        """
+
+        document = object.__new__(cls)
+        object.__setattr__(document, "source_path", None)
+        moved = dict(data)
+        seal_protein_identity_manifest(moved)
+        object.__setattr__(document, "_data", moved)
+        object.__setattr__(document, "_drawings", read_session_drawings(moved))
+        return document
+
     @property
     def version(self) -> int:
         """Session envelope version."""
@@ -899,7 +915,9 @@ def _build_session_document_from_drawings(
     )
     if isinstance(built, SessionDocument):
         return built
-    return SessionDocument(cast(Mapping[str, Any], _drawings_of_current(SessionDocument(built)._data)))
+    # One check, of the Session 49 written (OV-1815): the mode-scoped data is
+    # this writer's own and moves unchecked.
+    return SessionDocument(cast(Mapping[str, Any], _drawings_of_current(built)))
 
 
 def _mode_scoped_document(
@@ -1465,14 +1483,27 @@ def upgrade_session_document(
     27-30 have no canonical request and raise :class:`SessionVersionError`.
     """
 
-    upgrade = _upgrade_to_current(load_session_document(document), temporary_directory)
+    return _upgraded_session(load_session_document(document), temporary_directory, checked=True)
+
+
+def _upgraded_session(
+    document: SessionDocument,
+    temporary_directory: str | Path | None,
+    *,
+    checked: bool,
+) -> SessionUpgrade:
+    """:func:`upgrade_session_document`. ``checked=False`` (the CLI re-save,
+    which checks the document it writes) keeps the move to drawings unchecked."""
+
+    upgrade = _upgrade_to_current(document, temporary_directory)
     if upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
         return upgrade
     # The move reads the document's own data, whose manifest stays sealed
     # (``to_dict`` thaws it), and builds a new document that SessionDocument
     # copies: the manifest is not checked again.
-    drawings = _drawings_of_current(upgrade.document._data)
-    return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
+    drawings = cast(Mapping[str, Any], _drawings_of_current(upgrade.document._data))
+    moved = SessionDocument(drawings) if checked else SessionDocument._from_checked_move(drawings)
+    return SessionUpgrade(moved, upgrade.warnings)
 
 
 def _drawings_of_current(
