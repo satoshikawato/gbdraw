@@ -378,17 +378,18 @@ class TouchingAabbIndex:
             return [idx for idx in range(len(self.boxes)) if idx != skip]
         boxes = self.boxes
         size = self._index.bucket_size
-        buckets = len(_bucket_range(query.min_x, query.max_x, size)) * len(_bucket_range(query.min_y, query.max_y, size))
+        buckets = (math.floor(query.max_x / size) - math.floor(query.min_x / size) + 1) * (
+            math.floor(query.max_y / size) - math.floor(query.min_y / size) + 1
+        )
         if buckets >= len(boxes):
             # A query that spans more buckets than there are boxes: the scan is cheaper.
             return touching_aabb_indices(boxes, query, skip=skip)
-        found = [
-            idx
-            for idx in cast("list[int]", self._index.query(query))
-            if idx != skip and aabbs_touch(query, boxes[idx])
-        ]
-        found.extend(idx for idx in self._unknown if idx != skip)
-        found.sort()
+        # The index answers in insertion order, which is index order (boxes are appended in order).
+        candidates = cast("list[int]", self._index.query(query))
+        found = [idx for idx in candidates if idx != skip and aabbs_touch(query, boxes[idx])]
+        if self._unknown:
+            found.extend(idx for idx in self._unknown if idx != skip)
+            found.sort()
         return found
 
     def _place(self, idx: int, bbox: Aabb | None) -> None:

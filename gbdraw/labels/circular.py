@@ -209,11 +209,12 @@ class _PairGaps:
 
     def gap(self, idx: int, jdx: int) -> float:
         """The gap of labels ``idx`` and ``jdx`` (either order)."""
-        if jdx < idx:
-            idx, jdx = jdx, idx
         parts = self._parts
         if parts is not None:
-            return max(parts[idx], parts[jdx])
+            low, high = (parts[idx], parts[jdx]) if idx < jdx else (parts[jdx], parts[idx])
+            return high if high > low else low  # max(low, high)
+        if jdx < idx:
+            idx, jdx = jdx, idx
         return minimum_bbox_gap_px(self._labels[idx], self._labels[jdx], base_margin_px=self._base_margin_px)
 
 
