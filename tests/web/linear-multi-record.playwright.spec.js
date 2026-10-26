@@ -424,6 +424,11 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
     expect(savedDrawing(saved, 'linear').config.form.keep_definition_left_aligned).toBe(locked);
     expect(shownSavedDrawing(saved).renderRequest).toEqual(requestBefore);
+    // The untouched Circular drawing has no file, changed setting, edit, or
+    // Result, so Save does not write it (PD-OI-090 〔Save と Load〕, R16-8);
+    // a Load names a value by the drawing's place in `drawings`.
+    expect(saved.drawings.map((drawing) => drawing.id)).toEqual(['linear']);
+    const linearAt = saved.drawings.findIndex((drawing) => drawing.id === 'linear');
     await page.reload();
     await waitForAppShell(page);
     await loadDefinitionSession(page, savedPath);
@@ -460,7 +465,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
         continue;
       }
       await answerLoadRepairs(page, [`Settings: the value "${typeof malformed === 'string' ? malformed : JSON.stringify(malformed)}"`
-        + ' (drawings[1].config.form.keep_definition_left_aligned) cannot be used; true is used.'], 'cancel');
+        + ` (drawings[${linearAt}].config.form.keep_definition_left_aligned) cannot be used; true is used.`], 'cancel');
       expect((await pending).status).toBe('canceled');
       await expect(lock).toBeChecked({ checked: locked });
       expect(await measureDefinitionColumns(page)).toEqual(stable);

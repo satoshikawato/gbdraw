@@ -630,17 +630,26 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
     await selectUnit(page, 'px');
     await page.evaluate(() => { window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false; });
     await selectUnit(page, 'px', 'features');
+    const circular = await snapshot(page);
     await showDrawing(page, { kind: 'linear' });
     const before = await snapshot(page);
     expect(before.request).toBeNull();
     expect(before.resultHashes).toEqual([]);
     const saved = await save(page, testInfo, 'settings-only', { title: '' });
     expect(saved.document.runMetadata).toBeUndefined();
+    // The untouched Linear drawing shown at Save has no file, changed setting,
+    // edit, or Result, so Save does not write it and Load opens the saved
+    // drawing of the previous tab, the Circular one (PD-OI-090 〔Save と Load〕, R16-8).
+    expect(saved.document.drawings.map(drawing => drawing.id)).toEqual(['circular']);
+    expect(saved.document.ui.activeDrawingId).toBe('circular');
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
-      expect(restored.config).toEqual(before.config);
+      expect(restored.config).toEqual(circular.config);
       expect(restored.request).toBeNull();
       expect(restored.resultHashes).toEqual([]);
+      // Load keeps a new Linear drawing at its mode's defaults.
+      await showDrawing(fresh, { kind: 'linear' });
+      expect((await snapshot(fresh)).config).toEqual(before.config);
       await showDrawing(fresh, { kind: 'circular' });
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('1e-12');
