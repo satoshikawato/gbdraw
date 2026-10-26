@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { importSessionFile } from '../../gbdraw/web/js/services/session-import-client.js';
 import { gzipSync } from 'node:zlib';
 import { readSessionText } from '../../gbdraw/web/js/services/session-file.js';
-import { assertSafeObjectKeys } from '../../gbdraw/web/js/services/safe-object-keys.js';
+import { assertSafeObjectKeys, isUnsafeObjectKey } from '../../gbdraw/web/js/services/safe-object-keys.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 installSessionImportWorker();
@@ -77,4 +78,15 @@ test('codec rejects exact file and expanded caps before reading/decoding oversiz
   try {
     await assert.rejects(readSessionText(new Blob([new Uint8Array([0x1f, 0x8b])])), { code: 'SESSION_SIZE_LIMIT', stage: 'read' });
   } finally { globalThis.DecompressionStream = native; }
+});
+
+// services/safe-object-keys.js is the one list of the keys that name an
+// object's prototype or constructor: Load refuses them, and a merge skips them.
+test('the unsafe object keys are listed once, in services/safe-object-keys.js', () => {
+  assert.deepEqual(['__proto__', 'constructor', 'prototype', 'toString', 'proto'].map(isUnsafeObjectKey),
+    [true, true, true, false, false]);
+  const root = new URL('../../gbdraw/web/js/', import.meta.url);
+  const lists = readdirSync(root, { recursive: true }).map(String).filter((path) => path.endsWith('.js')
+    && /['"]__proto__['"]\s*,\s*['"]constructor['"]/.test(readFileSync(new URL(path, root), 'utf8')));
+  assert.deepEqual(lists.map((path) => path.replaceAll('\\', '/')), ['services/safe-object-keys.js']);
 });
