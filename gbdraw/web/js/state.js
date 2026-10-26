@@ -1103,6 +1103,13 @@ const requireDrawingTab = (operation, id) => {
   if (index < 0) throw drawingStoreError(operation, 'UNKNOWN_DRAWING', { drawingId: id });
   return index;
 };
+/**
+ * A drawing's tab (its ID and name): the one reader of a drawing's name for
+ * Save and Run info. An unknown ID is a refused read.
+ * @param {DrawingId} id
+ * @returns {DrawingTab}
+ */
+const drawingTabOf = (id) => drawingTabs.value[requireDrawingTab('drawingTabOf', id)];
 /** @param {number} index @param {number} length */
 const clampTabIndex = (index, length) => Math.max(0, Math.min(length, Math.trunc(Number(index) || 0)));
 /**
@@ -1220,6 +1227,7 @@ export const state = Object.freeze({
   activeDrawingId,
   mode,
   drawingTabs,
+  drawingTabOf,
   drawingList,
   drawingOf,
   replaceDrawings,

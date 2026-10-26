@@ -234,6 +234,21 @@ test('the shown drawing is drawings[activeDrawingId], mode follows it, and one w
   assert.deepEqual(templateMemberWrites(html, names), []);
 });
 
+// A drawing's tab name has one owner (`state.drawingTabOf`): Save's drawing
+// entry and the Run info replay read it there, and an unknown drawing ID is a
+// typed refusal, not a bare Error.
+test('a drawing\'s tab name is read through one owner, which refuses an unknown drawing', () => {
+  for (const id of MODES) {
+    assert.equal(state.drawingTabOf(id), state.drawingTabs.value.find((tab) => tab.id === id));
+  }
+  assert.throws(() => state.drawingTabOf('none'),
+    (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'UNKNOWN_DRAWING');
+  const readers = webModules().filter((file) => file !== 'state.js')
+    .filter((file) => /drawingTabs\.value\.find\(/.test(readFileSync(join(JS, file), 'utf8')));
+  assert.deepEqual(readers, [], 'a module finds a drawing\'s tab itself: read state.drawingTabOf');
+  assert.doesNotMatch(readFileSync(join(JS, 'app/run-analysis.js'), 'utf8'), /new Error\(`Unknown drawing/);
+});
+
 test('the shown-drawing write scan finds each write form and leaves reads alone', () => {
   assert.deepEqual(refValueWriteSites([
     'state.mode.value = next;',

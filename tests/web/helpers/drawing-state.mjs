@@ -138,7 +138,7 @@ export const TRANSIENT_KEYS = Object.freeze([
 // The drawing store itself: the drawings by ID, their tab order and names
 // (`drawingTabs`), and the store writers.
 export const STORE_KEYS = Object.freeze([
-  'drawingTabs', 'drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing',
+  'drawingTabs', 'drawingTabOf', 'drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing',
   'replaceDrawings', 'addDrawing', 'removeDrawing', 'moveDrawing', 'renameDrawing'
 ]);
 

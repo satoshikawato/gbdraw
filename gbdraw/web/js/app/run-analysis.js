@@ -4971,10 +4971,8 @@ export const createRunAnalysis = ({
       );
       /** @type {{ results: any[] | null, featureCatalog: Record<string, any> | null | undefined }} */
       const publishedReplayArtifact = { results: null, featureCatalog: null };
-      const drawnTab = state.drawingTabs.value.find((tab) => tab.id === drawing.id);
-      if (!drawnTab) throw new Error(`Unknown drawing: ${drawing.id}`);
       const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
-        drawing: drawnTab,
+        drawing: state.drawingTabOf(drawing.id),
         startedAtIso: manualRunStartedAtIso,
         renderRequest: canonical.renderRequest,
         resources: canonical.resources,

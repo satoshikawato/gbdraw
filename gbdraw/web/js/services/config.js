@@ -5897,7 +5897,7 @@ const exportSessionDocument = async (
     const shown = saved.id === drawing.id;
     return {
       id: saved.id,
-      name: /** @type {{ name: string }} */ (state.drawingTabs.value.find((tab) => tab.id === saved.id)).name,
+      name: state.drawingTabOf(saved.id).name,
       view: {
         format: 'gbdraw-session',
         version: SESSION_DRAWINGS_LAYOUT.version,
