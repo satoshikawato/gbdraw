@@ -58,7 +58,6 @@ def test_each_v49_fixture_is_admitted_and_rewritten_unchanged(path: Path) -> Non
 
     rewritten = write_session_drawings(
         [drawing.artifacts.fields for drawing in drawings],
-        version=49,
         ids=[drawing.id for drawing in drawings],
         names=[drawing.name for drawing in drawings],
         active=active,
@@ -167,7 +166,7 @@ def test_the_conservation_web_files_are_the_circular_drawings() -> None:
     view["webFiles"]["conservationLosatFastaSources"] = [resource_id]
     view["webFiles"]["conservationBlastSource"] = "losat-cache"
 
-    drawing = write_session_drawings([view], version=49)["drawings"][0]
+    drawing = write_session_drawings([view])["drawings"][0]
 
     assert drawing["webFiles"]["conservationLosatFastaSources"] == [resource_id]
     assert drawing["webFiles"]["conservationBlastSource"] == "losat-cache"
