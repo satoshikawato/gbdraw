@@ -27,7 +27,8 @@ test('real Python adapters retain causes through one lazy Worker and successful 
       }
     }
     const session = await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).json();
-    const request = structuredClone(session.renderRequest);
+    const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+    const request = structuredClone(drawing.renderRequest);
     request.diagramOptions.colors.colorTable = { resourceId: 'error-colors', representation: 'canonicalTsv' };
     const resource = (value) => {
       const bytes = new TextEncoder().encode(`feature_type\tqualifier_key\tvalue\tcolor\tcaption\nCDS\tproduct\t${value}\t#ff0000\t\n`);

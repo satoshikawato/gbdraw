@@ -622,7 +622,7 @@ test('source-free settings Save and fresh Load retain an inactive disabled scala
       const app = window.__GBDRAW_APP__;
       app.adv.circular_track_slots_enabled = true;
       app.adv.circular_track_slots = slots.filter(row => row.renderer !== 'annotations');
-    }, JSON.parse(readFileSync(fixture, 'utf8')).modes.circular.config.adv.circular_track_slots);
+    }, shownSavedDrawing(JSON.parse(readFileSync(fixture, "utf8"))).config.adv.circular_track_slots);
     await openPanel(page);
     await edit(page, '1e-12');
     await selectUnit(page, 'px');
