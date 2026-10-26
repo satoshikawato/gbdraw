@@ -18,6 +18,7 @@ from svgwrite import Drawing
 import gbdraw.api.request_render as request_render_module
 import gbdraw.linear as linear_cli_module
 from gbdraw.api.requests import LinearDiagramRequest
+from tests.utils.session_drawing_view import session_view
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
@@ -213,7 +214,7 @@ def test_release_0_13_0_protein_session_replays_unchanged_svg(tmp_path, monkeypa
 
     expected = (FIXTURES / "cli-linear-protein.v30.replay.svg").read_bytes()
     assert (tmp_path / "replay.svg").read_bytes() == expected
-    saved = json.loads((tmp_path / "replay.gbdraw-session.json").read_text(encoding="utf-8"))
+    saved = session_view(json.loads((tmp_path / "replay.gbdraw-session.json").read_text(encoding="utf-8")))
     args = saved["cliInvocation"]["args"]
     assert args[args.index("--losat") : args.index("--losat") + 4] == [
         "--losat", "losatp", "--losatp_mode", "similarity_groups",

@@ -19,6 +19,7 @@ from Bio.SeqRecord import SeqRecord
 
 from gbdraw import linear as linear_cli
 from gbdraw.exceptions import GbdrawError
+from tests.utils.session_drawing_view import session_view
 
 _RNG = random.Random(7)
 _X, _Y, _Z = ("".join(_RNG.choice("ACGT") for _ in range(size)) for size in (3000, 1000, 2000))
@@ -221,7 +222,7 @@ def test_resaved_session_keeps_nucleotide_blast_comparisons(tmp_path: Path, fixt
     from gbdraw.session_io import load_session
 
     def comparison(session: Path) -> tuple[dict, bytes]:
-        payload = load_session(session)
+        payload = session_view(load_session(session))
         item = payload["renderRequest"]["comparisons"][0]
         return item, base64.b64decode(payload["resources"][item["resourceId"]]["data"])
 
@@ -261,7 +262,7 @@ def test_comparison_tables_with_one_basename_in_two_directories_save_and_replay(
         "--gbk", str(r2), str(r3), str(r2), "-b", *map(str, tables),
         "-o", str(tmp_path / "fresh"), "-f", "svg", "--session_output", str(sidecar),
     ])
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = session_view(json.loads(sidecar.read_text(encoding="utf-8")))
     names = [session["resources"][item["resourceId"]]["name"] for item in session["renderRequest"]["comparisons"]
              if item["kind"] == "nucleotideBlast"]
     assert names == ["e.tsv", "e.2.tsv"]
@@ -301,7 +302,7 @@ def test_cli_session_output_with_a_reversed_record_replays_the_cli_ribbons(tmp_p
         tmp_path, "fresh", [r2, r3], row,
         "--reverse_complement", "0", "--reverse_complement", "1", "--session_output", str(sidecar),
     )
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = session_view(json.loads(sidecar.read_text(encoding="utf-8")))
     comparison = session["renderRequest"]["comparisons"][0]
     assert comparison["kind"] == "nucleotideBlast"
     assert base64.b64decode(session["resources"][comparison["resourceId"]]["data"]) == (
@@ -354,7 +355,7 @@ def _stored_comparison_table(session: Path) -> bytes:
 
     from gbdraw.session_io import load_session
 
-    payload = load_session(session)
+    payload = session_view(load_session(session))
     (item,) = [item for item in payload["renderRequest"]["comparisons"] if "resourceId" in item]
     return base64.b64decode(payload["resources"][item["resourceId"]]["data"])
 

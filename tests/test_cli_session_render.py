@@ -51,7 +51,7 @@ from gbdraw.session_io import (
     write_session_json,
 )
 from gbdraw.web_support.request_render import render_canonical_web_request
-from tests.utils.session_drawing_view import drawing_view, without_drawings_move
+from tests.utils.session_drawing_view import drawing_view, session_view, without_drawings_move
 from tests.utils.two_mode_session import two_mode_session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -686,7 +686,7 @@ def test_a_session_call_keys_its_decoded_collinearity_by_its_resource(
     sidecar = _fresh_protein_session(tmp_path, monkeypatch, "collinear")
     (resource_id,) = [
         comparison["resourceId"]
-        for comparison in json.loads(sidecar.read_text(encoding="utf-8"))["renderRequest"]["comparisons"]
+        for comparison in session_view(json.loads(sidecar.read_text(encoding="utf-8")))["renderRequest"]["comparisons"]
         if comparison["kind"] == "collinearityResult"
     ]
     monkeypatch.setattr(protein_colinearity_module, "run_losatp_blastp", _no_search)
