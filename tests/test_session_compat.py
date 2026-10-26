@@ -815,7 +815,8 @@ def test_session_adaptation_scans_each_protein_artifact_string_once(
             RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
         ),
     )
-    session = build_session_document(base_request).to_dict()
+    # A Session 33 holds the one-request layout of 46-48, not the drawings of 49.
+    session = build_mode_scoped_session_document(base_request)
     session["version"] = 33
     # Each string holds both prefixes and matches neither pattern.
     texts = [f"p_f_{index}" for index in range(20)]

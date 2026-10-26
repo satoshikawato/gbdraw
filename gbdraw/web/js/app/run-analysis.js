@@ -108,6 +108,7 @@ import {
 } from '../services/definition-line-style-state.js';
 import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
+import { sessionDocumentOfViews } from '../services/session-drawings-upgrade.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
 import { base64ToBytes, bytesToBase64, bytesToText, sha256Hex, textToBytes } from '../services/byte-utils.js';
@@ -912,32 +913,39 @@ const makeSafeFilename = (name) => {
 // files. Build it outside that scope so it retains only the published artifact,
 // not the pre-Generate rollback handle and, through it, every earlier artifact.
 /**
+ * The exact replay is a Session 49 of the drawn drawing alone, under its ID and
+ * name: its one-drawing view placed by the Save's layout owner
+ * (`sessionDocumentOfViews`), so the CLI loads it as it loads a Save (OV-1806).
  * @param {{
- *   version: unknown, startedAtIso: unknown, renderRequest: unknown, resources: unknown,
+ *   drawing: { id: string, name: string }, startedAtIso: string | null,
+ *   renderRequest: { mode: 'circular' | 'linear' }, resources: unknown,
  *   publishedArtifact: { results: unknown, featureCatalog: unknown }
- * }} replay Only `JSON.stringify` reads the first four.
+ * }} replay
  */
 const createCanonicalReplayTextBuilder = ({
-  version,
+  drawing,
   startedAtIso,
   renderRequest,
   resources,
   publishedArtifact
 }) => () => {
   recordSessionLifecycleEvent('canonical-replay-json-start');
-  const replayText = JSON.stringify({
-    format: 'gbdraw-session',
-    version,
-    createdAt: startedAtIso || new Date().toISOString(),
-    renderRequest,
-    resources,
-    // Export only after successful generation; reuse the published artifact.
-    results: publishedArtifact.results,
-    editorState: { featureCatalog: publishedArtifact.featureCatalog },
-    losatCache: { entries: [] },
-    losatDerivedCache: { entries: [] },
-    proteinIdentityManifest: emptyProteinIdentityManifest()
-  });
+  const replayText = JSON.stringify(sessionDocumentOfViews([{
+    id: drawing.id,
+    name: drawing.name,
+    view: {
+      format: 'gbdraw-session',
+      createdAt: startedAtIso || new Date().toISOString(),
+      renderRequest,
+      resources,
+      // Export only after successful generation; reuse the published artifact.
+      results: publishedArtifact.results,
+      editorState: { featureCatalog: publishedArtifact.featureCatalog },
+      losatCache: { entries: [] },
+      losatDerivedCache: { entries: [] },
+      proteinIdentityManifest: emptyProteinIdentityManifest()
+    }
+  }], drawing.id));
   recordStructuralMetric('canonicalReplayFullSerializationCount');
   recordSessionLifecycleEvent('canonical-replay-json-end');
   recordSessionLifecycleEvent('canonical-replay-json-characters', {
@@ -1458,7 +1466,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(feature: RecordKeyedFeature) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
  * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, drawing: DrawingState) => any} serializeCanonicalFiles
  *   The Session owner's serialization of the active render files, chosen by the run's drawing.
- * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
+ * @property {number} [canonicalSessionVersion] Not read: the exact replay takes the Session 49 layout's version
+ *   (`sessionDocumentOfViews`).
  * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean, drawing: DrawingState }) => void} adoptCanonicalRenderArtifacts
  *   The Session owner's adoption of a candidate's request, resources, and files.
  * @property {(drawing: DrawingState, enabled: boolean) => void} setCircularConservationEnabled
@@ -1518,7 +1527,6 @@ export const createRunAnalysis = ({
   rulePreparation = null,
   isCurrentFeature,
   serializeCanonicalFiles,
-  canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
   setCircularConservationEnabled,
   getCommittedCanonicalSession = null,
@@ -4959,17 +4967,16 @@ export const createRunAnalysis = ({
         'canonicalResourceBase64Characters',
         canonicalResourceBase64Characters
       );
-      if (!Number.isInteger(canonicalSessionVersion)) {
-        throw new Error('Canonical session version is unavailable.');
-      }
       const canonicalReplayPath = '/canonical-render-session.gbdraw-session.json';
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
       /** @type {{ results: any[] | null, featureCatalog: Record<string, any> | null | undefined }} */
       const publishedReplayArtifact = { results: null, featureCatalog: null };
+      const drawnTab = state.drawingTabs.value.find((tab) => tab.id === drawing.id);
+      if (!drawnTab) throw new Error(`Unknown drawing: ${drawing.id}`);
       const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
-        version: canonicalSessionVersion,
+        drawing: drawnTab,
         startedAtIso: manualRunStartedAtIso,
         renderRequest: canonical.renderRequest,
         resources: canonical.resources,
