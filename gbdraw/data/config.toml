@@ -20,6 +20,10 @@ track_ratio = 0.19
 track_dict.short = {"spreadout" = {1 = 1.0, 2 = 0.85, 3 = 0.65, 4 = 0.45}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55, 4 = 0.35}, "tuckin" = {1 = 1.0, 2 = 0.64, 3 = 0.44, 4 = 0.24}}
 track_dict.long = {"spreadout" = {1 = 1.0, 2 = 0.80, 3 = 0.60, 4 = 0.40}, "middle" = {1 = 1.0, 2 = 0.75, 3 = 0.55, 4 = 0.35}, "tuckin" = {1 = 1.0, 2 = 0.70, 3 = 0.50, 4 = 0.30}}
 track_type = 'tuckin'
+# When the centre definition reaches the inside tracks and moving them outward does not clear it, narrow the
+# inside tracks with an Auto width, but never below track_narrowing_min_px (px); otherwise keep the widths.
+track_narrowing = true
+track_narrowing_min_px = 30
 [canvas.circular.width]
   with_labels = 1400
   without_labels = 1000

@@ -64,8 +64,30 @@ class CircularCanvasWidthConfig:
         return cls(with_labels=ascii_int(d["with_labels"]), without_labels=ascii_int(d["without_labels"]))
 
 
+TRACK_NARROWING_MIN_PX_PATH = "canvas.circular.track_narrowing_min_px"
+
+
+def validate_track_narrowing_min_px(value: Any) -> float:
+    """The narrowing floor is a finite number of px, zero or more, never a boolean."""
+    if not isinstance(value, bool):
+        try:
+            parsed = ascii_float(value)
+        except (TypeError, ValueError):
+            parsed = math.nan
+        if math.isfinite(parsed) and parsed >= 0:
+            return parsed
+    raise ValidationError(
+        f"{TRACK_NARROWING_MIN_PX_PATH} must be a finite number >= 0",
+        diagnostic={"code": "INPUT_INVALID", "reason": "NONNEGATIVE_NUMBER", "configPath": TRACK_NARROWING_MIN_PX_PATH},
+    )
+
+
 @dataclass(frozen=True)
 class CircularCanvasConfig:
+    """``track_narrowing``: when the centre definition reaches the inside tracks and moving them outward does not
+    clear it, the layout may narrow the inside tracks with an Auto width, each to ``track_narrowing_min_px`` at the
+    least (PD-OI-078, rule L). A track narrower than the floor, or with a typed width, keeps its width."""
+
     height: int
     radius: float
     track_ratio: float
@@ -73,6 +95,13 @@ class CircularCanvasConfig:
     width: CircularCanvasWidthConfig
     track_ratio_factors: dict[str, list[float]]
     track_dict: dict[str, dict[str, dict[str, float]]]
+    track_narrowing: bool = True
+    track_narrowing_min_px: float = 30.0
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.track_narrowing, bool):
+            raise ValidationError("canvas.circular.track_narrowing must be true or false")
+        object.__setattr__(self, "track_narrowing_min_px", validate_track_narrowing_min_px(self.track_narrowing_min_px))
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "CircularCanvasConfig":
@@ -106,6 +135,8 @@ class CircularCanvasConfig:
                 for k, v in dict(d["track_ratio_factors"]).items()
             },
             track_dict=track_dict,
+            track_narrowing=d.get("track_narrowing", True),
+            track_narrowing_min_px=d.get("track_narrowing_min_px", 30.0),
         )
 
 

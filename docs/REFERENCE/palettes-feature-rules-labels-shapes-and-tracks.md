@@ -88,11 +88,23 @@ spacing, and an axis boundary. A feature slot's reserved band and the feature
 glyph height are different settings. Invalid anchor chains, missing logical
 depth indices, and contradictory overlay order are rejected.
 
-The center definition of a Circular record does not narrow or move the inside
-tracks: they are placed by the track settings alone. Its lines are never
+The GC content, GC skew and depth rows of the default track stack start right
+under the tick labels. When the center definition of a Circular record reaches
+the inside tracks, gbdraw first moves them outward, as far as the room under the
+feature track allows, keeping their widths. If that does not clear the
+definition, it narrows the inside tracks that have an Auto width, each to no
+less than `canvas.circular.track_narrowing_min_px` (`--track_narrowing_min_px`,
+default 30 px), but only when that clears the definition; otherwise the tracks
+keep their widths. A width you set (`--gc_content_width`, `--gc_skew_width`,
+`--depth_width`, `--conservation_ring_width`, `w=` on a track slot, or a
+**Width** in the Web app), a track already narrower than that floor, and a
+track placed at an explicit radius are never narrowed for the definition, though
+a track with a set width may move outward. `--no_track_narrowing`
+(`canvas.circular.track_narrowing = false`) turns the narrowing off; the tracks
+still move outward. The definition's lines are never
 wrapped: each line (an Auto organism name is drawn as a taxon line and a
 strain line) stays one line at any `definition_font_size`, also for a typed
-**Species** (`--species`). A line too long for the room inside the tracks is
+**Species** (`--species`). A line that still reaches the tracks is
 drawn over them, and the figure warns when its text overlaps what a track
 paints (see [Labels that do not fit](#labels-that-do-not-fit)). To keep a long
 name clear of the tracks, type a shorter one in **Species**, for example the

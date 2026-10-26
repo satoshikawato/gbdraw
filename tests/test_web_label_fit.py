@@ -299,13 +299,14 @@ def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_dra
     assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 15)
 
 
-def _mers_request(center_reserved_radius: float | None = None) -> dict:
+def _mers_request(center_reserved_radius: float | None = None, *, track_narrowing: bool = True) -> dict:
     record = SeqIO.read(str(TEST_INPUTS / "MERS-CoV.gbk"), "genbank")
     return build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=CircularDiagramOptions(
-                tracks=CircularRequestTrackOptions(center_reserved_radius=center_reserved_radius)
+                tracks=CircularRequestTrackOptions(center_reserved_radius=center_reserved_radius),
+                config_overrides=None if track_narrowing else {"canvas.circular.track_narrowing": False},
             ),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
@@ -313,12 +314,17 @@ def _mers_request(center_reserved_radius: float | None = None) -> dict:
 
 
 def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_narrows_them(tmp_path) -> None:
-    """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. The font row offers the size at
-    which that line clears the tracks; the narrow row writes the radius the definition used to reserve as Center
-    Reserved Radius and says the text still overlaps; drawn with it, the figure still has the notice."""
+    """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. By default the inside tracks are
+    narrowed around it already (DF-D36), so only the font row is offered. With track narrowing off, the font row
+    offers the size at which that line clears the tracks; the narrow row writes the radius the definition reserves
+    as Center Reserved Radius and says the text still overlaps; drawn with it, the figure still has the notice."""
+
+    (narrowed_by_default,) = _web_render(_mers_request(), tmp_path / "default")["metadata"]["labelFitReports"]
+    assert narrowed_by_default["report"]["drawn"] is True
+    assert [row["kind"] for row in narrowed_by_default["report"]["rows"]] == ["smaller_definition_font"]
 
     searches = LabelFitRowSearches()
-    (entry,) = _web_render(_mers_request(), tmp_path, searches)["metadata"]["labelFitReports"]
+    (entry,) = _web_render(_mers_request(track_narrowing=False), tmp_path, searches)["metadata"]["labelFitReports"]
     assert entry["report"]["drawn"] is True
     # The record is named by its drawn index too: "Edit Species / Strain…" finds its definition by it.
     assert [(record["recordId"], record["recordIndex"], record["labelKind"]) for record in entry["report"]["records"]] == [
@@ -326,7 +332,7 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     ]
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
     font = searches.row(entry["rowToken"], "smaller_definition_font")
-    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 10.5})
+    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 12.5})
     narrow = searches.row(entry["rowToken"], "narrow_tracks")
     # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
     assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (
@@ -336,7 +342,9 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 231.99}]
     assert narrow["note"] == "1 definition line still overlaps a track"
 
-    (narrowed,) = _web_render(_mers_request(231.99), tmp_path / "narrowed")["metadata"]["labelFitReports"]
+    (narrowed,) = _web_render(_mers_request(231.99, track_narrowing=False), tmp_path / "narrowed")["metadata"][
+        "labelFitReports"
+    ]
     assert narrowed["report"]["notice"] == ["The definition text overlaps a track (1 line)."]
     # An explicit Center Reserved Radius is never offered again: only the font row is left.
     assert [row["kind"] for row in narrowed["report"]["rows"]] == ["smaller_definition_font"]

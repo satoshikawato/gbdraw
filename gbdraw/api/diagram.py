@@ -2497,6 +2497,7 @@ def assemble_circular_diagram_from_record(
     identity: float = CIRCULAR_MODE_PROFILE.comparison.identity,
     alignment_length: int = CIRCULAR_MODE_PROFILE.comparison.alignment_length,
     _definition_profile: CircularDefinitionProfile = "full",
+    _layout_definition_profile: CircularDefinitionProfile | None = None,
     _precomputed_depth_df: DataFrame | None = None,
     _precomputed_depth_track_specs: Sequence[DepthTrackSpec] | None = None,
     _precomputed_depth_tracks: Sequence[DepthTrackData] | None = None,
@@ -2869,6 +2870,10 @@ def assemble_circular_diagram_from_record(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position="center",
         definition_profile=effective_definition_profile,
+        # The tracks are placed around the definition drawn without the plot title (OV-1710).
+        layout_definition_profile=(
+            _definition_profile if _layout_definition_profile is None else _layout_definition_profile
+        ),
         definition_group_id=_definition_group_id,
         center_reserved_radius=center_reserved_radius,
         title_content=title_content,
@@ -3106,6 +3111,11 @@ def assemble_circular_diagram_from_records(
         show_plot_title=show_plot_title,
         keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
     )
+    layout_definition_profile = _circular_record_definition_profile(
+        record_count=len(records),
+        show_plot_title=False,
+        keep_full_definition_with_plot_title=keep_full_definition_with_plot_title,
+    )
     record_lengths = [len(record.seq) for record in records]
     cfg = _harmonize_multi_record_circular_style_cfg(
         cfg,
@@ -3254,6 +3264,7 @@ def assemble_circular_diagram_from_records(
             identity=identity,
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
+            _layout_definition_profile=layout_definition_profile,
             _precomputed_depth_tracks=(
                 record_depth_track_data[record_index]
                 if record_depth_track_data is not None

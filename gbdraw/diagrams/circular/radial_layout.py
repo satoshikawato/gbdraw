@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Collection, Literal, Mapping, Protocol, Sequence, TypedDict, TypeVar
 
@@ -107,9 +108,18 @@ def _switched_track_remedy(tracks: Sequence[_SwitchedTrack]) -> str:
     return remedy + "".join(f"hide the {track.words} ({track.off_remedy}), " for track in tracks if track.width_option is None)
 
 
-# The owner of the center reservation band among the occupied bands: only an explicit ``center_reserved_radius``
-# occupies the centre (DF-D05); the centre definition text never narrows or moves a track (DF-D02).
+# The owner of the center reservation band among the occupied bands: an explicit ``center_reserved_radius``
+# (DF-D05), or the centre definition text's band in the "move" pass of rule L (``_resolve_around_definition``).
 _CENTER_RESERVATION = "definition"
+
+# The passes of rule L (PD-OI-078) that place the tracks around the centre definition text's band:
+# "move" keeps the inside tracks out of the band, moving them outward and narrowing Auto widths down to the floor
+# (``canvas.circular.track_narrowing_min_px``); "limit" packs the inside rows on preset lanes outward at their own
+# widths and draws the definition over them; "none" only records the band (no definition, or the tracks clear it).
+_DefinitionPass = Literal["none", "move", "limit"]
+
+# Inside rows that are not tracks of the inside stack: the outermost stack track starts right under them.
+_ROWS_ABOVE_THE_INSIDE_STACK = frozenset({"features", "ticks"})
 
 
 @dataclass(frozen=True)
@@ -128,7 +138,8 @@ class PlacementWindow:
     # The room kept below inner_px for the inside rows placed after this window's rows, and those rows.
     kept_inside_px: float = 0.0
     kept_inside_slots: tuple[_KeptInsideSlot, ...] = ()
-    # The outer edge of the center reservation (an explicit center_reserved_radius). Placement reads it from
+    # The outer edge of the center reservation (an explicit center_reserved_radius, or the definition band in the
+    # "move" pass). Placement reads it from
     # the occupied bands; a fit failure reports the window from it (OV-1276).
     center_reserved_px: float = 0.0
 
@@ -185,6 +196,9 @@ class _RadialSlotIntent:
     label_room: Callable[[RadialBand], float] | None = None
     # The rooms of the span overlays whose outermost covered slot this is: reserved past its band while it is packed.
     span_label_rooms: tuple[_SpanLabelRoom, ...] = ()
+    # The narrowest width (px) an Auto width may take: 0 keeps the readable minimums alone; the "move" pass of rule L
+    # sets ``canvas.circular.track_narrowing_min_px`` (infinite with ``track_narrowing`` off).
+    narrowing_floor_px: float = 0.0
 
 
 def _cannot_fit_diagnostic(
@@ -945,44 +959,56 @@ def _reserved_overlap_any(band: RadialBand, occupied: Sequence[tuple[str, Radial
     return None
 
 
-def _min_readable_numeric_width_px(renderer: str, default_width_px: float) -> float:
-    width = max(0.0, float(default_width_px))
+def _floored_min_width_px(intent: _RadialSlotIntent, min_width_px: float) -> float:
+    """A readable minimum raised to the intent's narrowing floor; a track narrower than the floor keeps its width."""
+
+    return max(float(min_width_px), min(max(0.0, float(intent.width_px)), float(intent.narrowing_floor_px)))
+
+
+def _min_readable_numeric_width_px(intent: _RadialSlotIntent) -> float:
+    width = max(0.0, float(intent.width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
-    if renderer == "sequence_conservation":
-        return min(width, max(MIN_CONSERVATION_WIDTH_PX, MIN_CONSERVATION_WIDTH_FRACTION * width))
-    if renderer == "dinucleotide_skew":
-        return min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
-    return min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
+    if intent.renderer == "sequence_conservation":
+        minimum = min(width, max(MIN_CONSERVATION_WIDTH_PX, MIN_CONSERVATION_WIDTH_FRACTION * width))
+    elif intent.renderer == "dinucleotide_skew":
+        minimum = min(width, max(MIN_SKEW_WIDTH_PX, MIN_SKEW_WIDTH_FRACTION * width))
+    else:
+        minimum = min(width, max(MIN_NUMERIC_WIDTH_PX, MIN_NUMERIC_WIDTH_FRACTION * width))
+    return _floored_min_width_px(intent, minimum)
 
 
-def _min_readable_preferred_width_px(renderer: str, default_width_px: float) -> float:
-    width = max(0.0, float(default_width_px))
+def _min_readable_preferred_width_px(intent: _RadialSlotIntent) -> float:
+    width = max(0.0, float(intent.width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
-    if renderer == "sequence_conservation":
-        return min(width, max(MIN_CONSERVATION_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
-    if renderer == "dinucleotide_skew":
-        return min(width, max(MIN_SKEW_WIDTH_PX, PREFERRED_MIN_SKEW_WIDTH_FRACTION * width))
-    return min(width, max(MIN_NUMERIC_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
+    if intent.renderer == "sequence_conservation":
+        minimum = min(width, max(MIN_CONSERVATION_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
+    elif intent.renderer == "dinucleotide_skew":
+        minimum = min(width, max(MIN_SKEW_WIDTH_PX, PREFERRED_MIN_SKEW_WIDTH_FRACTION * width))
+    else:
+        minimum = min(width, max(MIN_NUMERIC_WIDTH_PX, PREFERRED_MIN_NUMERIC_WIDTH_FRACTION * width))
+    return _floored_min_width_px(intent, minimum)
 
 
-def _min_dense_stack_numeric_width_px(renderer: str, default_width_px: float) -> float:
-    width = max(0.0, float(default_width_px))
+def _min_dense_stack_numeric_width_px(intent: _RadialSlotIntent) -> float:
+    width = max(0.0, float(intent.width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
-    if renderer == "sequence_conservation":
-        return min(width, MIN_DENSE_CONSERVATION_WIDTH_PX)
-    if renderer == "dinucleotide_skew":
-        return min(width, MIN_SKEW_WIDTH_PX)
-    return min(width, MIN_NUMERIC_WIDTH_PX)
+    if intent.renderer == "sequence_conservation":
+        minimum = min(width, MIN_DENSE_CONSERVATION_WIDTH_PX)
+    elif intent.renderer == "dinucleotide_skew":
+        minimum = min(width, MIN_SKEW_WIDTH_PX)
+    else:
+        minimum = min(width, MIN_NUMERIC_WIDTH_PX)
+    return _floored_min_width_px(intent, minimum)
 
 
 def _candidate_widths(intent: _RadialSlotIntent) -> list[tuple[float, bool]]:
     width = max(0.0, float(intent.width_px))
     if not intent.compress or intent.renderer not in NUMERIC_CIRCULAR_TRACK_RENDERERS:
         return [(width, False)]
-    min_width = _min_readable_numeric_width_px(intent.renderer, width)
+    min_width = _min_readable_numeric_width_px(intent)
     if min_width >= width - LAYOUT_EPSILON:
         return [(width, False)]
     values = [width]
@@ -1385,7 +1411,7 @@ def _inside_movable_stack_group_from(
 
 def _inside_auto_stack_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
     min_scales = [
-        _min_dense_stack_numeric_width_px(intent.renderer, intent.width_px) / intent.width_px
+        _min_dense_stack_numeric_width_px(intent) / intent.width_px
         for intent in intents
         if _shrinkable_inside_numeric(intent) and intent.width_px > LAYOUT_EPSILON
     ]
@@ -1398,7 +1424,7 @@ def _scaled_inside_auto_width(intent: _RadialSlotIntent, scale: float) -> tuple[
     width = max(0.0, float(intent.width_px))
     if not _shrinkable_inside_numeric(intent) or width <= LAYOUT_EPSILON:
         return width, False
-    min_width = _min_dense_stack_numeric_width_px(intent.renderer, width)
+    min_width = _min_dense_stack_numeric_width_px(intent)
     scaled_width = max(min_width, width * float(scale))
     return scaled_width, scaled_width < width - LAYOUT_EPSILON
 
@@ -1671,9 +1697,9 @@ def _linear_scales_from_1_to_min(min_scale: float, *, steps: int = 8) -> list[fl
 
 def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[float]:
     min_scales = [
-        _min_readable_preferred_width_px(intent.renderer, intent.width_px) / intent.width_px
+        _min_readable_preferred_width_px(intent) / intent.width_px
         for intent in intents
-        if intent.width_px > LAYOUT_EPSILON
+        if intent.compress and intent.width_px > LAYOUT_EPSILON
     ]
     if not min_scales:
         return [1.0]
@@ -1681,10 +1707,14 @@ def _preferred_group_width_scales(intents: Sequence[_RadialSlotIntent]) -> list[
 
 
 def _scaled_preferred_width(intent: _RadialSlotIntent, scale: float) -> float:
+    """A row's width at ``scale``; a typed width (``compress`` off) is never narrowed (OV-1853)."""
+
     width = max(0.0, float(intent.width_px))
     if width <= LAYOUT_EPSILON:
         return 0.0
-    return max(_min_readable_preferred_width_px(intent.renderer, width), width * float(scale))
+    if not intent.compress:
+        return width
+    return max(_min_readable_preferred_width_px(intent), width * float(scale))
 
 
 def _preferred_numeric_group_from(
@@ -1855,6 +1885,14 @@ def _place_inside_auto_group_with_width_scale(
     return None
 
 
+def _same_band(a: RadialBand | None, b: RadialBand | None) -> bool:
+    if a is None or b is None:
+        return a is b
+    return abs(float(a.inner_px) - float(b.inner_px)) <= LAYOUT_EPSILON and abs(
+        float(a.outer_px) - float(b.outer_px)
+    ) <= LAYOUT_EPSILON
+
+
 def _place_preferred_numeric_group(
     intents: Sequence[_RadialSlotIntent],
     *,
@@ -1866,24 +1904,34 @@ def _place_preferred_numeric_group(
     cfg: GbdrawConfig,
     total_length: int,
     depth_config: DepthAxisSource | None,
+    under_a_track: bool,
+    pack: bool,
 ) -> tuple[CircularResolvedSlot, ...]:
-    anchored = _try_place_preferred_numeric_group_at_anchors(
-        intents,
-        occupied=occupied,
-        placement_window=placement_window,
-        axis_radius_px=axis_radius_px,
-        feature_dict=feature_dict,
-        geometry=geometry,
-        cfg=cfg,
-        total_length=total_length,
-        depth_config=depth_config,
-    )
-    if anchored is not None:
-        return anchored
+    """Place a group of inside rows on preset lanes (rule L, PD-OI-078).
 
-    for scale in _preferred_group_width_scales(intents):
-        placed = _place_inside_auto_group_with_width_scale(
-            intents,
+    Without an inside stack track above the group (``under_a_track``), its lanes start right under the tick labels:
+    they move outward together, keeping their spacing, until the outermost lane row's band meets the rows above it,
+    as the Auto packing places it. A pinned row keeps its radius. Then the rows stay on their lanes when the lanes fit; otherwise they pack outward
+    against each other at their own widths, and then at narrower Auto widths (``_preferred_group_width_scales``).
+    With ``pack`` (the "limit" pass) the rows pack outward at their own widths without trying the lanes.
+    """
+
+    def at_anchors(group: Sequence[_RadialSlotIntent]) -> tuple[CircularResolvedSlot, ...] | None:
+        return _try_place_preferred_numeric_group_at_anchors(
+            group,
+            occupied=occupied,
+            placement_window=placement_window,
+            axis_radius_px=axis_radius_px,
+            feature_dict=feature_dict,
+            geometry=geometry,
+            cfg=cfg,
+            total_length=total_length,
+            depth_config=depth_config,
+        )
+
+    def packed_at(group: Sequence[_RadialSlotIntent], scale: float) -> tuple[CircularResolvedSlot, ...] | None:
+        return _place_inside_auto_group_with_width_scale(
+            group,
             width_scale=scale,
             occupied=occupied,
             placement_window=placement_window,
@@ -1894,6 +1942,40 @@ def _place_preferred_numeric_group(
             total_length=total_length,
             depth_config=depth_config,
         )
+
+    lanes = list(intents)
+    # The first row on a lane, under the pinned rows of the group above it (GX-17): its packed place against them
+    # sets the shift of every lane.
+    first = next((pos for pos, intent in enumerate(intents) if _preferred_inside_numeric(intent)), None)
+    if first is not None and not under_a_track:
+        first_lane = at_anchors(intents[: first + 1])
+        first_packed = packed_at(intents[: first + 1], 1.0)
+        lane_band = first_lane[first].draw_band_px if first_lane else None
+        packed_band = first_packed[first].draw_band_px if first_packed else None
+        shift = 0.0 if lane_band is None or packed_band is None else float(packed_band.outer_px) - float(lane_band.outer_px)
+        if shift > LAYOUT_EPSILON:
+            lanes = [
+                replace(intent, anchor_offset_px=float(intent.anchor_offset_px or 0.0) + shift)
+                if _preferred_inside_numeric(intent)
+                else intent
+                for intent in intents
+            ]
+    on_lanes = at_anchors(lanes)
+    if on_lanes is not None and not pack:
+        return on_lanes
+    if pack:
+        packed = packed_at(intents, 1.0)
+        # Where the packed places are the lanes, keep the lanes' measurement: the packed radii differ from the
+        # lanes only in the last bits, which would change the SVG IDs hashed from them (OV-1852).
+        if packed is not None and on_lanes is not None and all(
+            _same_band(a.draw_band_px, b.draw_band_px) for a, b in zip(packed, on_lanes)
+        ):
+            return on_lanes
+        if packed is not None:
+            return packed
+
+    for scale in _preferred_group_width_scales(intents):
+        placed = packed_at(intents, scale)
         if placed is not None:
             return placed
 
@@ -1981,11 +2063,12 @@ def _minimum_future_inside_width_px(
     depth_config: DepthAxisSource | None,
 ) -> float:
     width = max(0.0, float(intent.width_px))
-    if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
-        if intent.placement_policy == "preferred":
-            width = _min_readable_preferred_width_px(intent.renderer, width)
-        elif intent.compress:
-            width = _min_readable_numeric_width_px(intent.renderer, width)
+    if intent.renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS and intent.compress:
+        width = (
+            _min_readable_preferred_width_px(intent)
+            if intent.placement_policy == "preferred"
+            else _min_readable_numeric_width_px(intent)
+        )
 
     if intent.renderer in {"features", "ticks", "depth"}:
         resolved = _measure_radial_slot(
@@ -2191,6 +2274,7 @@ class _RadialLayoutInputs(TypedDict):
     center_reserved_radius_explicit: bool
     keep_preset_lanes: bool
     annotation_label_rooms: Mapping[str, AnnotationLabelRoom]
+    definition_pass: _DefinitionPass
 
 
 def resolve_circular_radial_layout(
@@ -2218,9 +2302,10 @@ def resolve_circular_radial_layout(
     rooms.
 
     ``definition_reserved_radius_px`` is the centre's band: with
-    ``center_reserved_radius_explicit`` the tracks keep out of it; otherwise
-    it is the centre definition text's band, which is only recorded (radial
-    labels keep out of it) and never narrows or moves a track (DF-D02).
+    ``center_reserved_radius_explicit`` the tracks keep out of it and the
+    inside tracks narrow as far as their readable minimums (DF-D05);
+    otherwise it is the centre definition text's band, placed by rule L
+    (``_resolve_around_definition``). Radial labels keep out of it either way.
     When an inside slot cannot be placed but the same slots fit without an
     explicit center reservation, the ``TRACK_LAYOUT`` diagnostic reason is
     ``CENTER_RESERVED``; otherwise it is ``CANNOT_FIT``.
@@ -2237,6 +2322,7 @@ def resolve_circular_radial_layout(
         center_reserved_radius_explicit=center_reserved_radius_explicit,
         keep_preset_lanes=True,
         annotation_label_rooms=annotation_label_rooms or {},
+        definition_pass="none",
     )
 
     try:
@@ -2294,6 +2380,49 @@ def _label_rooms_off_failed_side(
 def _resolve_explaining_failure(
     definition_reserved_radius_px: float | None, layout_inputs: _RadialLayoutInputs
 ) -> CircularRadialLayout:
+    if (
+        not layout_inputs["center_reserved_radius_explicit"]
+        and definition_reserved_radius_px is not None
+        and definition_reserved_radius_px > LAYOUT_EPSILON
+    ):
+        return _resolve_around_definition(float(definition_reserved_radius_px), layout_inputs)
+    return _resolve_in_pass(definition_reserved_radius_px, layout_inputs, "none")
+
+
+def _resolve_around_definition(definition_reserved_radius_px: float, layout_inputs: _RadialLayoutInputs) -> CircularRadialLayout:
+    """Rule L (PD-OI-078): place the tracks around the centre definition text's band.
+
+    1. "move": the band is occupied; the inside rows move outward at their own widths, then narrow, each Auto width
+       to the floor at the least (``canvas.circular.track_narrowing_min_px``; no narrowing with
+       ``canvas.circular.track_narrowing`` off). A typed width, a track narrower than the floor, and a pinned radius
+       are kept.
+    2. When that fails and the band does not reach the tracks placed without it, those tracks (they failed for
+       another reason, as without a definition).
+    3. Otherwise "limit": the inside rows on preset lanes pack outward at their own widths, and the definition is
+       drawn over them (the label fit check warns, PD-OI-097). If even that fails, the tracks placed without the band.
+    """
+
+    try:
+        return _resolve_in_pass(definition_reserved_radius_px, layout_inputs, "move")
+    except ValidationError:
+        pass
+    free = _resolve_in_pass(definition_reserved_radius_px, layout_inputs, "none")
+    band = RadialBand(0.0, definition_reserved_radius_px)
+    reserved = [(slot.id, slot.reserved_band_px) for slot in free.slots if slot.reserved_band_px is not None]
+    if _reserved_overlap_any(band, reserved) is None:
+        return free
+    try:
+        return _resolve_in_pass(definition_reserved_radius_px, layout_inputs, "limit")
+    except ValidationError:
+        return free
+
+
+def _resolve_in_pass(
+    definition_reserved_radius_px: float | None, layout_inputs: _RadialLayoutInputs, definition_pass: _DefinitionPass
+) -> CircularRadialLayout:
+    # Each pass starts from the caller's inputs: the retry below turns the preset lanes off in its own copy.
+    layout_inputs = layout_inputs.copy()
+    layout_inputs["definition_pass"] = definition_pass
     try:
         return _resolve_circular_radial_layout(
             definition_reserved_radius_px=definition_reserved_radius_px,
@@ -2336,6 +2465,7 @@ def _resolve_circular_radial_layout(
     center_reserved_radius_explicit: bool = False,
     keep_preset_lanes: bool = True,
     annotation_label_rooms: Mapping[str, AnnotationLabelRoom],
+    definition_pass: _DefinitionPass = "none",
 ) -> CircularRadialLayout:
     axis_radius_px = float(geometry.radius)
     axis = CircularAxisLayout(
@@ -2348,9 +2478,14 @@ def _resolve_circular_radial_layout(
         else None
     )
     occupied: list[tuple[str, RadialBand]] = []
-    # The centre definition text's band is only recorded (radial labels keep out of it); only an explicit
-    # center_reserved_radius keeps the tracks out of the centre (DF-D02, DF-D05).
-    if center_reserved_radius_explicit and definition_band is not None and definition_band.width_px > LAYOUT_EPSILON:
+    # An explicit center_reserved_radius keeps the tracks out of the centre (DF-D05), and so does the centre
+    # definition text's band in the "move" pass of rule L; otherwise the band is only recorded (radial labels keep
+    # out of it).
+    if (
+        (center_reserved_radius_explicit or definition_pass == "move")
+        and definition_band is not None
+        and definition_band.width_px > LAYOUT_EPSILON
+    ):
         occupied.append((_CENTER_RESERVATION, definition_band))
 
     intents = _slot_intents(
@@ -2361,6 +2496,10 @@ def _resolve_circular_radial_layout(
         axis=axis,
         annotation_label_rooms=annotation_label_rooms,
     )
+    if definition_pass == "move":
+        circular = cfg.canvas.circular
+        floor_px = float(circular.track_narrowing_min_px) if circular.track_narrowing else math.inf
+        intents = [replace(intent, narrowing_floor_px=floor_px) for intent in intents]
     resolved_by_index: dict[int, CircularResolvedSlot] = {}
     intent_by_index = {intent.slot_index: intent for intent in intents}
     movable_by_index = {
@@ -2575,6 +2714,10 @@ def _resolve_circular_radial_layout(
                 cfg=cfg,
                 total_length=int(total_length),
                 depth_config=depth_config,
+                under_a_track=any(
+                    row.renderer not in _ROWS_ABOVE_THE_INSIDE_STACK for row, _edge in rows_above_inside
+                ),
+                pack=definition_pass == "limit",
             )
             for group_intent, group_resolved in zip(preferred_group, resolved_group):
                 resolved_by_index[group_intent.slot_index] = group_resolved

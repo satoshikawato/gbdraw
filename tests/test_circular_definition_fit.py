@@ -156,8 +156,9 @@ def test_web_default_cli_generates_long_organism_names(
 
 
 @pytest.mark.circular
-def test_the_definition_never_narrows_or_moves_the_inside_tracks() -> None:
-    """DF-D02: a name too long for the centre leaves the GC rows where a short name leaves them."""
+def test_a_name_the_floor_cannot_clear_keeps_the_inside_tracks() -> None:
+    """DF-D36: on the Web default grid the GC rows cannot move outward, and narrowing them to the 30 px floor does
+    not clear these names, so a name too long for the centre leaves the GC rows where a short name leaves them."""
 
     short = _track_paths(_web_default_grid(_record_with_organism("Homo sapiens")).tostring())
     for organism in (LONG_VIRUS, "Salmonellaentericasubspentericaserovartyphimurium"):
@@ -188,17 +189,20 @@ def _short_name_tracks(config_overrides: dict | None = None) -> dict[str, str]:
 def test_a_name_line_is_never_wrapped(
     organism: str, species: str | None, config_overrides: dict | None, drawn: str
 ) -> None:
-    """DF-D25: a name line too long for the centre stays one line, drawn over tracks that stay where a short name
-    leaves them."""
+    """DF-D25: a name line too long for the centre stays one line. With track narrowing off (DF-D36) it is drawn
+    over tracks that stay where a short name leaves them; by default the inside tracks may narrow around it
+    (``tests/test_circular_track_narrowing.py``), and the line is still one line."""
 
-    svg = _web_default_grid(
-        _record_with_organism(organism), species=species, config_overrides=config_overrides
-    ).tostring()
-    lines = _definition_lines(svg)
+    no_narrowing = {**(config_overrides or {}), "canvas.circular.track_narrowing": False}
+    for overrides in (config_overrides, no_narrowing):
+        svg = _web_default_grid(
+            _record_with_organism(organism), species=species, config_overrides=overrides
+        ).tostring()
+        lines = _definition_lines(svg)
 
-    assert lines[0] == drawn
-    assert len(lines) == 5  # name, mitochondrion, accession, length, GC
-    assert _track_paths(svg) == _short_name_tracks(config_overrides)
+        assert lines[0] == drawn
+        assert len(lines) == 5  # name, mitochondrion, accession, length, GC
+    assert _track_paths(svg) == _short_name_tracks(no_narrowing)
 
 
 @pytest.mark.circular

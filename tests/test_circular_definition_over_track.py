@@ -163,10 +163,10 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """OV-1606, DF-D16, DF-D25, OV-1836: MERS-CoV's taxon line is drawn on one line over the tracks (never wrapped)
-    and warns. The warning names the record, offers the font at which that one line clears the tracks and the
-    narrower inside tracks that still leave the line over a track (N-a), and suggests a shorter Species or
-    Strain."""
+    """OV-1606, DF-D16, DF-D25, OV-1836, DF-D36: MERS-CoV's taxon line is drawn on one line (never wrapped) and
+    warns. By default the inside tracks are already narrowed around its band, so the warning offers only the font
+    at which the line clears the tracks and a shorter Species or Strain. With ``--no_track_narrowing`` it also
+    offers the narrower inside tracks, which still leave the line over a track (N-a)."""
 
     from gbdraw import cli
 
@@ -184,16 +184,24 @@ def test_cli_draws_mers_cov_with_the_warning_and_the_suggested_font_clears_it(
     assert draw("mers") == (
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"
-        "  --definition_font_size 10.5       (smaller definition font)\n"
+        "  --definition_font_size 17   (smaller definition font)\n"
+        "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
+    )
+    assert draw("mers_font", "--definition_font_size", "17") == ""
+    # The size above it does not clear the one line: the row offers the mildest size.
+    assert draw("mers_font_17_5", "--definition_font_size", "17.5").startswith(
+        "WARNING: NC_019843.3: 1 definition line does not fit at 17.5 pt (1 line overlaps a track). Drawn anyway.\n"
+    )
+
+    assert draw("mers_off", "--no_track_narrowing") == (
+        "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
+        "Run again with one of:\n"
+        "  --definition_font_size 12.5       (smaller definition font)\n"
         "  --center_reserved_radius 231.99   (narrow the inside tracks; 1 definition line still overlaps a track)\n"
         "Or shorten the definition text with --species or --strain (for example, an abbreviation).\n"
     )
-    assert draw("mers_font", "--definition_font_size", "10.5") == ""
-    # The size above it does not clear the one line: the row offers the mildest size.
-    assert draw("mers_font_11", "--definition_font_size", "11").startswith(
-        "WARNING: NC_019843.3: 1 definition line does not fit at 11 pt (1 line overlaps a track). Drawn anyway.\n"
-    )
-    assert draw("mers_narrow", "--center_reserved_radius", "231.99").startswith(
+    assert draw("mers_off_font", "--no_track_narrowing", "--definition_font_size", "12.5") == ""
+    assert draw("mers_off_narrow", "--no_track_narrowing", "--center_reserved_radius", "231.99").startswith(
         "WARNING: NC_019843.3: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
     )
 
@@ -233,14 +241,14 @@ def test_python_warns_with_the_report_and_a_figure_without_the_overlap_does_not(
     assert report is not None and report.drawn
     assert [(item.label_kind, item.fit) for item in report.records] == [("circular_definition", DEFINITION)]
     row = label_fit_row(drawing, "smaller_definition_font")
-    assert row is not None and row.values == {DEFINITION_FONT_PATH: 10.5}
+    assert row is not None and row.values == {DEFINITION_FONT_PATH: 17.0}
 
     from gbdraw.config.models import GbdrawConfig
     from gbdraw.config.modify import with_config_overrides
     from gbdraw.config.toml import load_config_toml
 
     cfg = with_config_overrides(
-        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 10.5}
+        GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")), {DEFINITION_FONT_PATH: 17.0}
     )
     with warnings.catch_warnings():
         warnings.simplefilter("error", LabelLeadersCrossWarning)
@@ -382,23 +390,25 @@ def test_a_definition_clear_of_the_drawn_tracks_does_not_warn(
 
 
 @pytest.mark.circular
-def test_mjenmv_full_name_is_drawn_on_one_line_over_the_tracks_and_warns(
+def test_mjenmv_full_name_is_drawn_on_one_line_and_warns_only_without_narrowing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """DF-D25: "Marsupenaeus japonicus endogenous nimavirus" stays one line; the warning offers the one-line font."""
+    """DF-D25: "Marsupenaeus japonicus endogenous nimavirus" stays one line. Rule L narrows the GC rows (to about
+    47 px, above the 30 px floor) so it clears them; with narrowing off it is drawn over them and the warning offers
+    the one-line font."""
 
     from gbdraw import cli
 
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
     output = tmp_path / "out"
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["gbdraw", "circular", "--gbk", str(TEST_INPUTS / "MjeNMV.gbk"), "--separate_strands", "--legend", "none",
-         "-o", str(output), "-f", "svg"],
-    )
+    argv = ["gbdraw", "circular", "--gbk", str(TEST_INPUTS / "MjeNMV.gbk"), "--separate_strands", "--legend", "none",
+            "-o", str(output), "-f", "svg"]
+    monkeypatch.setattr(sys, "argv", argv)
     cli.main()
+    assert "definition line" not in capsys.readouterr().err
 
+    monkeypatch.setattr(sys, "argv", [*argv, "--no_track_narrowing", "--overwrite"])
+    cli.main()
     assert capsys.readouterr().err.endswith(
         "WARNING: LC738868.1: 1 definition line does not fit at 18 pt (1 line overlaps a track). Drawn anyway.\n"
         "Run again with one of:\n"

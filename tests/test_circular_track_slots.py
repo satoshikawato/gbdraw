@@ -929,7 +929,7 @@ def test_circular_preset_slots_do_not_emit_origin_metadata() -> None:
 @pytest.mark.circular
 def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stack() -> None:
     # GX-19: a preset stack with nothing typed resolves like the default stack;
-    # here the preset anchors fit, so both keep them.
+    # here the preset lanes fit, so both keep them.
     from gbdraw.canvas import CircularCanvasConfigurator
     from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
     from gbdraw.diagrams.circular.presets import (
@@ -992,12 +992,11 @@ def test_blank_builtin_numeric_slots_keep_the_preset_anchors_of_the_default_stac
 
     assert not by_id["gc_content"].explicit_anchor
     assert not by_id["gc_skew"].explicit_anchor
-    assert by_id["gc_content"].anchor_radius_px == pytest.approx(
-        float(canvas_config.radius) * float(track_dict["2"])
+    # Rule L: the lanes keep their spacing and start right under the tick labels (OV-1850).
+    assert by_id["gc_content"].anchor_radius_px - by_id["gc_skew"].anchor_radius_px == pytest.approx(
+        float(canvas_config.radius) * (float(track_dict["2"]) - float(track_dict["3"]))
     )
-    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(
-        float(canvas_config.radius) * float(track_dict["3"])
-    )
+    assert by_id["gc_content"].reserved_band_px.outer_px == pytest.approx(by_id["ticks"].reserved_band_px.inner_px)
     default_plan = circular_radial_plan_for_preset("middle", context)
     default_layout = resolve_circular_radial_layout(
         total_length=len(record.seq),
@@ -1093,17 +1092,20 @@ def test_web_auto_slot_sizes_are_the_sizes_generate_draws(
     # OV-1712: before Generate draws a row, the Web shows these Auto sizes
     # (mode-profiles.generated.js) and no radius. They are the width and gaps
     # Generate draws for each row the layout does not narrow, for the preset's
-    # stack and for a stack that packs (an AT skew row added, OV-1711).
+    # stack and for a stack that packs (an AT skew row added, OV-1711). A row
+    # narrowed around the centre definition stays at or above the floor
+    # (canvas.circular.track_narrowing_min_px, rule L).
     from gbdraw.circular import _get_args, run_circular_from_namespace
     from gbdraw.mode_profiles import mode_profiles_payload
 
     sizes = mode_profiles_payload()["autoSizes"]["circularSlots"]  # type: ignore[index]
     record_path = Path(__file__).parent / "test_inputs" / input_name
     record = SeqIO.read(str(record_path), "genbank")
-    threshold = int(GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml")).labels.length_threshold.circular)
+    packaged = GbdrawConfig.from_dict(load_config_toml("gbdraw.data", "config.toml"))
+    threshold = int(packaged.labels.length_threshold.circular)
+    floor_px = float(packaged.canvas.circular.track_narrowing_min_px)
     size = "short" if len(record.seq) < threshold else "long"
     default_stack = ["features:features", "ticks:ticks", "gc_content:dinucleotide_content", "gc_skew:dinucleotide_skew"]
-    narrowed = 0
     for stack in (default_stack, [*default_stack, "at_skew:dinucleotide_skew@nt=AT"]):
         argv = ["--gbk", str(record_path), "-o", str(tmp_path / f"out{len(stack)}"), "--track_type", track_type,
                 "-f", "svg", "--legend", "none"]
@@ -1124,14 +1126,11 @@ def test_web_auto_slot_sizes_are_the_sizes_generate_draws(
             )
             name = f"{row['slotId']} in {len(stack)} rows"
             if row["compressed"]:
-                narrowed += 1
-                assert row["widthPx"] < auto_width, name
+                assert floor_px - 1e-6 <= row["widthPx"] < auto_width, name
             else:
                 assert row["widthPx"] == pytest.approx(auto_width), name
             assert (row["innerGapPx"], row["outerGapPx"]) == pytest.approx((sizes["gapPx"], sizes["gapPx"])), name
     assert sizes["presetNumericRowSides"][track_type] == {"depth": "inside", "gc_content": "inside", "gc_skew": "inside"}
-    # DF-D02: the centre definition narrows no row, even where a packed stack used to narrow for it.
-    assert narrowed == 0
 
 
 @pytest.mark.circular
@@ -1262,44 +1261,6 @@ def test_default_preset_tick_draw_uses_resolved_tick_options(
     assert captured["tick_side"] != "legacy"
     assert captured["tick_length_px"] is not None
     assert captured["track_preset"] == "spreadout"
-
-
-@pytest.mark.circular
-def test_default_preset_slots_keep_their_widths_beside_the_center_definition(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """DF-D02: the MjeNMV definition used to narrow GC content and GC skew to clear its one-line band. Now the
-    rows keep their preset widths and positions, and the name stays one line over them (DF-D25)."""
-
-    import gbdraw.diagrams.circular.assemble as circular_assemble_module
-
-    record = _load_mjenmv_record()
-    config_dict = modify_config_dict(
-        _base_config(track_type="tuckin"),
-        {"canvas.strandedness": True},
-    )
-    default_colors = load_default_colors("", palette="default")
-    captured: dict[str, object] = {}
-    _capture_resolved_radial_layout(monkeypatch, circular_assemble_module, captured)
-
-    canvas = assemble_circular_diagram_from_record(
-        record,
-        cfg=GbdrawConfig.from_dict(config_dict),
-        default_colors=default_colors,
-        selected_features_set=SELECTED_FEATURES,
-        legend="none",
-    )
-
-    layout = captured["radial_layout"]
-    by_id = {track.id: track for track in layout.tracks}  # type: ignore[attr-defined]
-    for slot_id in ("gc_content", "gc_skew"):
-        assert not by_id[slot_id].compressed, slot_id
-    assert by_id["gc_content"].anchor_radius_px == pytest.approx(271.5503255208334)
-    assert by_id["gc_content"].draw_width_px == pytest.approx(74.1)
-    assert by_id["gc_skew"].anchor_radius_px == pytest.approx(193.55032552083338)
-    assert by_id["gc_skew"].draw_width_px == pytest.approx(74.1)
-    assert "Marsupenaeus japonicus endogenous nimavirus" in canvas.tostring()
-    assert "<tspan>Marsupenaeus japonicus</tspan>" not in canvas.tostring()
 
 
 @pytest.mark.circular
@@ -1862,10 +1823,11 @@ def test_default_custom_slots_with_depth_use_outer_to_inner_numeric_lanes(
 
 
 @pytest.mark.circular
-def test_custom_duplicate_skew_with_depth_tuckin_keeps_its_rows_beside_the_definition(
+def test_custom_duplicate_skew_with_depth_tuckin_avoids_definition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """DF-D02: the rows keep their widths; the definition's one-line band no longer pushes them outward."""
+    """Rule L: the inside rows move outward, then narrow (not below the floor), until the definition's band clears
+    them."""
 
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
 
@@ -1927,11 +1889,9 @@ def test_custom_duplicate_skew_with_depth_tuckin_keeps_its_rows_beside_the_defin
     )
 
     definition_reserved = float(captured["definition_reserved"])
-    innermost = min(
-        center_px - (0.5 * width_px)  # type: ignore[operator]
-        for center_px, width_px in (captured[slot_id] for slot_id in ("depth", "gc_content", "gc_skew"))  # type: ignore[misc]
-    )
-    assert innermost < definition_reserved
+    for slot_id in ("depth", "gc_content", "gc_skew", "at_skew"):
+        center_px, width_px = captured[slot_id]  # type: ignore[misc]
+        assert center_px - (0.5 * width_px) >= definition_reserved - 1e-6
 
 
 @pytest.mark.circular
@@ -2999,9 +2959,12 @@ def test_a_multi_record_canvas_draws_the_gallery_stack_as_the_single_record_figu
 def test_the_default_stack_keeps_its_preset_lanes_on_a_multi_record_canvas() -> None:
     # OV-1711: only rows that pack follow the full definition; the preset's own
     # stack keeps its lanes around the drawn record summary (Vnig Gallery figure).
+    # Rule L moves the lanes outward together, under the tick labels, keeping
+    # their spacing and widths.
     canvas, _svg = _gallery_session_drawing(_with_default_stack, _on_a_two_record_canvas)
 
     for record in canvas["records"]:
-        lanes = {slot["slotId"]: slot["radiusFactor"] for slot in record["slots"] if slot["side"] == "inside"}
-        assert lanes["gc_content"] == pytest.approx(0.75)
-        assert lanes["gc_skew"] == pytest.approx(0.55)
+        inside = {slot["slotId"]: slot for slot in record["slots"] if slot["side"] == "inside"}
+        assert inside["gc_content"]["radiusFactor"] >= 0.75 - 1e-9
+        assert inside["gc_content"]["radiusFactor"] - inside["gc_skew"]["radiusFactor"] == pytest.approx(0.20)
+        assert not any(inside[slot_id]["compressed"] for slot_id in ("gc_content", "gc_skew"))

@@ -275,6 +275,23 @@ def _get_args(
         help='Override the center-label reserved radius for circular track packing (in px; must be >= 0).',
         type=argparse_float)
     parser.add_argument(
+        '--no_track_narrowing',
+        dest='track_narrowing',
+        help=(
+            'Never narrow the inside tracks for the center definition: when moving them outward does not clear it, '
+            'keep their widths and draw the definition over them (default: narrow Auto widths down to '
+            '--track_narrowing_min_px).'
+        ),
+        action='store_false',
+        default=None)
+    parser.add_argument(
+        '--track_narrowing_min_px',
+        help=(
+            'The narrowest width (px; must be >= 0) an inside track with an Auto width takes when it is narrowed for '
+            'the center definition (default: 30). A narrower track, or a typed width, is not narrowed.'
+        ),
+        type=argparse_float)
+    parser.add_argument(
         '--label_font_size',
         help='Label font size (optional; default: 14 (pt) for genomes < 75 kb, 8 for genomes >= 75 kb)',
         type=argparse_float)
@@ -645,6 +662,8 @@ def _get_args(
         parser.error("--conservation_ring_gap must be > 0")
     if args.center_reserved_radius is not None and args.center_reserved_radius < 0:
         parser.error("--center_reserved_radius must be a finite number >= 0")
+    if args.track_narrowing_min_px is not None and args.track_narrowing_min_px < 0:
+        parser.error("--track_narrowing_min_px must be a finite number >= 0")
     try:
         ComparisonThresholds(
             evalue=args.evalue,
@@ -1151,6 +1170,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "outer" if labels_mode == "out" else labels_mode
         ),
         "canvas.circular.track_type": track_type,
+        "canvas.circular.track_narrowing": args.track_narrowing,
+        "canvas.circular.track_narrowing_min_px": args.track_narrowing_min_px,
         "canvas.strandedness": strandedness,
         "canvas.resolve_overlaps": resolve_overlaps,
         "canvas.feature_overlap_tolerance_bp": args.feature_overlap_tolerance_bp,

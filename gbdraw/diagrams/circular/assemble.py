@@ -1549,19 +1549,27 @@ def _resolve_radial_layout_fitting_definition(
     strain: str | None,
     plot_title: str | None,
     definition_profile: CircularDefinitionProfile,
+    layout_definition_profile: CircularDefinitionProfile,
     definition_position: str,
     center_reserved_radius: float | None,
     record_presentation: RecordPresentation | None,
 ) -> _CentreDefinitionFit:
-    """Place the tracks, then draw the centre definition among them (PD-OI-078).
+    """Place the tracks around the centre definition, then draw it among them (PD-OI-078, rule L).
 
-    The definition never narrows or moves a track (DF-D02) and is never
-    wrapped (DF-D25): the tracks are placed as without a definition, and a
-    definition whose band enters a track band is drawn over the tracks; the
-    label fit check warns when its painted lines meet a track's ink
-    (``_definition_lines_on_tracks``, PD-OI-097). An
-    explicit ``center_reserved_radius`` keeps the tracks out of the centre
-    (DF-D05).
+    The definition is never wrapped (DF-D25). The radial layout places the
+    tracks around its band (``resolve_circular_radial_layout``): it moves the
+    inside tracks outward, then narrows their Auto widths down to
+    ``canvas.circular.track_narrowing_min_px``, and when that does not clear
+    the band it keeps the widths and the definition is drawn over the tracks;
+    the label fit check warns when its painted lines meet a track's ink
+    (``_definition_lines_on_tracks``, PD-OI-097). An explicit
+    ``center_reserved_radius`` keeps the tracks out of the centre (DF-D05).
+
+    The tracks are placed around the band of ``layout_definition_profile``,
+    the definition the record draws without a plot title or, for rows that
+    pack on a Multi-Record Canvas, alone (OV-1710, OV-1711), so a title or the
+    canvas changes only the centre text. The band and the narrow row read the
+    drawn definition (``definition_profile``).
     """
 
     if center_reserved_radius is not None:
@@ -1570,25 +1578,25 @@ def _resolve_radial_layout_fitting_definition(
     if str(definition_position).strip().lower() != "center":
         return _CentreDefinitionFit(resolve_layout(None), None)
 
-    layout = resolve_layout(None)
-    reserved = _definition_reserved_radius_px(
-        gb_record,
-        geometry,
-        species,
-        strain,
-        cfg=cfg,
-        plot_title=plot_title,
-        definition_profile=definition_profile,
-        record_presentation=record_presentation,
-    )
+    def band_px(profile: CircularDefinitionProfile) -> float:
+        return _definition_reserved_radius_px(
+            gb_record,
+            geometry,
+            species,
+            strain,
+            cfg=cfg,
+            plot_title=plot_title,
+            definition_profile=profile,
+            record_presentation=record_presentation,
+        )
+
+    reserved = band_px(definition_profile)
+    layout_band = reserved if layout_definition_profile == definition_profile else band_px(layout_definition_profile)
+    if max(reserved, layout_band) <= FEATURE_BAND_EPSILON:
+        return _CentreDefinitionFit(resolve_layout(None), None)
+    layout = resolve_layout(float(layout_band) if layout_band > FEATURE_BAND_EPSILON else None)
     narrow_radius = 0.0 if reserved <= _definition_clearance_px(layout) + FEATURE_BAND_EPSILON else reserved
-    if reserved <= FEATURE_BAND_EPSILON:
-        return _CentreDefinitionFit(layout, None, narrow_radius)
-    return _CentreDefinitionFit(
-        replace(layout, definition_reserved_band_px=RadialBand(0.0, float(reserved))),
-        reserved,
-        narrow_radius,
-    )
+    return _CentreDefinitionFit(layout, reserved, narrow_radius)
 
 
 def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
@@ -2648,6 +2656,7 @@ def add_record_on_circular_canvas(
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: CircularDefinitionProfile = "full",
+    layout_definition_profile: CircularDefinitionProfile | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: ResolvedAnnotationBundle,
@@ -2827,9 +2836,16 @@ def add_record_on_circular_canvas(
         record_length=len(gb_record.seq),
         font_family=str(cfg.objects.text.font_family),
     )
+    # Rows that pack from the feature track are placed around the full definition the record draws alone, so a
+    # record summary on a Multi-Record Canvas changes only the center text (OV-1711). The preset lanes keep the
+    # drawn definition there (D-08 covers the plot title).
+    reserved_definition_profile: CircularDefinitionProfile = (
+        "full"
+        if definition_profile == "record_summary" and not preferred_anchor_slot_ids
+        else definition_profile if layout_definition_profile is None else layout_definition_profile
+    )
     # The tracks and the definition text drawn among them, for a config: the figure's own, or a smaller definition
-    # font that the definition row probes (D-12). The tracks do not follow the definition (DF-D02), so a plot title or
-    # a record summary on a Multi-Record Canvas changes only the center text (OV-1710, OV-1711).
+    # font that the definition row probes (D-12).
     def place_around_definition(layout_cfg: GbdrawConfig) -> _CentreDefinitionFit:
         return _resolve_radial_layout_fitting_definition(
             lambda reserved_radius_px: resolve_circular_radial_layout(
@@ -2853,6 +2869,7 @@ def add_record_on_circular_canvas(
             strain=strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
+            layout_definition_profile=reserved_definition_profile,
             definition_position=definition_position,
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,
@@ -3508,6 +3525,7 @@ def _assemble_circular_diagram_result(
     dinucleotide_skew_dataframes: dict[str, DataFrame] | None = None,
     definition_position: str = "center",
     definition_profile: CircularDefinitionProfile = "full",
+    layout_definition_profile: CircularDefinitionProfile | None = None,
     definition_group_id: str | None = None,
     center_reserved_radius: float | None = None,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None = None,
@@ -3614,6 +3632,7 @@ def _assemble_circular_diagram_result(
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
         definition_position=definition_position,
         definition_profile=definition_profile,
+        layout_definition_profile=layout_definition_profile,
         definition_group_id=definition_group_id,
         center_reserved_radius=center_reserved_radius,
         annotations=resolved_annotations,

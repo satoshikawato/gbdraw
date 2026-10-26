@@ -664,6 +664,36 @@ const nextGenerate = async () => {
   return candidate;
 };
 
+// The narrowing settings around the centre definition (`--no_track_narrowing`,
+// `--track_narrowing_min_px`) have no Web control yet. A CLI Session carries
+// them in its config; Load keeps them and the next Generate sends them, so the
+// Web draws the tracks as the CLI did (PD-OI-078, rule L).
+await test('a CLI Session keeps its track narrowing settings through Load and the next Generate', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-cli-narrowing-'));
+  try {
+    const file = path.join(directory, 'narrowing.gbdraw-session.json.gz');
+    execFileSync('python', ['-m', 'gbdraw.cli', 'circular', '--gbk', mito, '--no_track_narrowing',
+      '--track_narrowing_min_px', '44', '-o', path.join(directory, 'narrowing'), '--session_output', file], {
+      cwd: directory, env: { ...process.env, PYTHONPATH: root }, stdio: 'pipe', timeout: 1_800_000
+    });
+    const bytes = gunzipSync(await readFile(file));
+    const session = JSON.parse(bytes);
+    const circular = session.renderRequest.diagramOptions.config.canvas.circular;
+    assert.equal(circular.track_narrowing, false);
+    assert.equal(circular.track_narrowing_min_px, 44);
+    const result = await load(bytes);
+    assert.equal(result.status, 'ok', result.error?.stack);
+    assert.deepEqual(getCommittedCanonicalRenderRequest(), session.renderRequest);
+    const candidate = await nextGenerate();
+    const options = candidate.renderRequest.diagramOptions;
+    const sent = (leaf) => options.configOverrides?.[`canvas.circular.${leaf}`] ?? options.config?.canvas?.circular?.[leaf];
+    assert.equal(sent('track_narrowing'), false);
+    assert.equal(sent('track_narrowing_min_px'), 44);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 // Generate reuses committed LOSATP results only under the visibility rules
 // they were drawn with; the CLI stores its rules as `featureVisibilityTable`.
 await test('a CLI Session keeps its comparisons under its own visibility rules', () => {
