@@ -12,6 +12,7 @@ radius, the room kept inside, and the tracks to turn off or narrow.
 from __future__ import annotations
 
 import math
+import re
 import warnings
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
@@ -496,6 +497,38 @@ def _group_lines(definition: DefinitionGroup) -> list[_OutlineLine]:
     return lines
 
 
+def _translation(transform: str) -> tuple[float, float]:
+    pairs = re.findall(r"translate\(([-\d.e]+)[ ,]+([-\d.e]+)\)", transform)
+    return sum(float(x) for x, _ in pairs), sum(float(y) for _, y in pairs)
+
+
+def _drawn_definition_reach(svg_text: str) -> float:
+    """The farthest outline point of the drawn centre definition from the record's centre (its axis group)."""
+
+    root = ET.fromstring(svg_text)
+    axis = root.find(".//svg:g[@id='Axis_0']", SVG_NS)
+    group = root.find(".//svg:g[@data-gbdraw-role='record-definition']", SVG_NS)
+    assert axis is not None and group is not None
+    (cx, cy), (gx, gy) = _translation(axis.attrib["transform"]), _translation(group.attrib["transform"])
+    lines: list[_OutlineLine] = []
+    for text in group.findall("svg:text", SVG_NS):
+        style = text.attrib.get("font-style", "normal")
+        runs = [(text.text, style)] if text.text else []
+        runs += [(span.text or "", span.attrib.get("font-style", style)) for span in text.findall("svg:tspan", SVG_NS)]
+        lines.append((float(text.attrib["x"]), float(text.attrib["y"]), dict(text.attrib), tuple(runs)))
+    return _outline_reach(lines, gx - cx, gy - cy)
+
+
+def _innermost_band_inner_px(drawing) -> float:
+    record = drawing._gbdraw_track_slot_geometry["records"][0]
+    axis = float(record["axisRadiusPx"])
+    return min(
+        float(slot["radiusFactor"]) * axis - 0.5 * float(slot["widthPx"])
+        for slot in record["slots"]
+        if slot["side"] != "overlay"
+    )
+
+
 @pytest.mark.circular
 @pytest.mark.parametrize(
     ("organism", "species"),
@@ -524,5 +557,20 @@ def test_the_definition_band_holds_the_farthest_ink_of_every_line(organism: str,
         _group_lines(definition), -0.5 * (bounds.min_x + bounds.max_x), -0.5 * (bounds.min_y + bounds.max_y)
     )
     held = band - max(8.0, 0.02 * float(geometry.radius))
-    # The box corner lies past the outline by at most about 3 px (a slanted italic run leaves its corner empty).
+    # For these names the box corner lies past the outline by under 3 px (a slanted italic run leaves its corner
+    # empty). That is not a general bound: AP027131's name gives 3.1 px.
     assert reach - 1e-6 <= held <= reach + 3.0, (reach, held)
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("organism", [HEPATOPLASMA, ESCHERICHIA])
+def test_the_definition_ink_stays_off_the_innermost_track(organism: str) -> None:
+    """OV-1824: at the Web defaults these names clear the innermost track band: rule L narrows the tracks around the
+    painted letters, so no glyph of the drawn definition enters the band and no notice is printed."""
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        drawing = _web_default_grid(_record_with_organism(organism))
+
+    assert _drawn_definition_reach(drawing.tostring()) <= _innermost_band_inner_px(drawing)
+    assert not [warning for warning in caught if "definition line" in str(warning.message)]

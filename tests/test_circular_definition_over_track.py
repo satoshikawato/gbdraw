@@ -707,11 +707,10 @@ WEB_DEFAULT_ARGS = ("--multi_record_canvas", "--track_type", "tuckin", "--gc", "
 @pytest.mark.parametrize(
     ("gbk", "args"),
     [
-        (MERS_COV, ()),
-        (MERS_COV, WEB_DEFAULT_ARGS),
         (TEST_INPUTS / "BGC0000712.gbk", WEB_DEFAULT_ARGS),
+        (TEST_INPUTS / "NC_002745.gb", WEB_DEFAULT_ARGS),
     ],
-    ids=["mers-cli", "mers-web", "bgc0000712-web"],
+    ids=["bgc0000712-web", "nc002745-web"],
 )
 def test_tracks_narrowed_around_the_definition_leave_no_notice(
     gbk: Path,
@@ -721,12 +720,13 @@ def test_tracks_narrowed_around_the_definition_leave_no_notice(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """OV-1854: the band the inside tracks narrow around and the notice read the same painted letters, so a figure
-    whose tracks were narrowed (rule L) has no definition line on a track."""
+    whose tracks were narrowed (rule L) has no definition line on a track. Both figures were narrowed with the
+    notice while the band read the line boxes."""
 
     import gbdraw.diagrams.circular.assemble as circular_assemble_module
     from gbdraw import cli
 
-    fits: list[object] = []
+    fits: list[circular_assemble_module._CentreDefinitionFit] = []
     fit = circular_assemble_module._resolve_radial_layout_fitting_definition
 
     def capture(*fit_args, **fit_kwargs):
@@ -740,7 +740,6 @@ def test_tracks_narrowed_around_the_definition_leave_no_notice(
     monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", "--gbk", str(gbk), *args, "-o", str(output), "-f", "svg"])
     cli.main()
 
-    drawn = fits[0].layout  # type: ignore[attr-defined]
-    narrowed = any(track.compressed for track in drawn.tracks)
+    narrowed = any(track.compressed for track in fits[0].layout.tracks)
     notice = "definition line does not fit" in capsys.readouterr().err
-    assert not (narrowed and notice), (narrowed, notice)
+    assert narrowed and not notice, (narrowed, notice)
