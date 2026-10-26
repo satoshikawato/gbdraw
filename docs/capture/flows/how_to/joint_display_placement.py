@@ -7,6 +7,8 @@ from pathlib import Path
 
 from playwright.sync_api import expect
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+
 from flows.tutorials.gui_annotated_chloroplast import (
     GUI_ANNOTATION_GENBANK_PATH, GUI_ANNOTATION_GENBANK_SHA256,
     GUI_ANNOTATION_GENBANK_SIZE, GUI_ANNOTATION_TABLE_PATH,
@@ -118,11 +120,14 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        assert saved['version'] == 48 and saved['renderRequest']['schema'] == 9
-        assert saved['renderRequest']['records'][0]['display']['startCoordinate'] == 5500
-        assert saved['renderRequest']['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
-        assert len(saved['renderRequest']['diagramOptions']['featurePlacements']) == 1
-        values['request'] = saved['renderRequest']
+        # Session 49 keeps the request in the drawing the Session opens.
+        (opened,) = [drawing for drawing in saved['drawings'] if drawing['id'] == saved['ui']['activeDrawingId']]
+        request = opened['renderRequest']
+        assert saved['version'] == CURRENT_SESSION_VERSION and request['schema'] == 9
+        assert request['records'][0]['display']['startCoordinate'] == 5500
+        assert request['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
+        assert len(request['diagramOptions']['featurePlacements']) == 1
+        values['request'] = request
         (download_dir / 'joint-controls.json').write_text(json.dumps({'source': report, 'feature': feature, 'values': values}, indent=2))
         capture.assert_clean()
         return CaptureResult(
