@@ -9,7 +9,12 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { evaluateWithRetainedPromise, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const {
+  CURRENT_REQUEST_SCHEMA: CURRENT_RENDER_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
+  evaluateWithRetainedPromise,
+  expectSessionLoadedWithoutWarnings
+} = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -21,8 +26,6 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 48;
-const CURRENT_RENDER_REQUEST_SCHEMA = 9;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
 
@@ -36,6 +39,14 @@ const expandedSessionBytes = (path) => {
 };
 
 const readSession = (path) => JSON.parse(expandedSessionBytes(path).toString('utf8'));
+
+// The drawing a saved Session opens (its `ui.activeDrawingId`): the Session 49
+// keeps the request and the LOSAT artifacts per drawing.
+const shownDrawing = (session) => {
+  const drawing = session.drawings.find((entry) => entry.id === session.ui.activeDrawingId);
+  expect(drawing).toBeTruthy();
+  return drawing;
+};
 
 const importSession = async (page, path) => {
   await page.locator('input[accept^=".json,"]').first().setInputFiles(path);
@@ -210,11 +221,12 @@ const readFirstUploadedTsv = async (page) => page.evaluate(async () => {
 });
 
 const assertCurrentSessionBoundary = (session) => {
-  const rawEntries = session.losatCache?.entries || [];
-  const derivedEntries = session.losatDerivedCache?.entries || [];
+  const drawing = shownDrawing(session);
+  const rawEntries = drawing.losatCache.entries;
+  const derivedEntries = drawing.losatDerivedCache?.entries || [];
   expect(session.format).toBe('gbdraw-session');
   expect(session.version).toBe(CURRENT_SESSION_VERSION);
-  expect(session.renderRequest?.schema).toBe(CURRENT_RENDER_REQUEST_SCHEMA);
+  expect(drawing.renderRequest.schema).toBe(CURRENT_RENDER_REQUEST_SCHEMA);
   expect(rawEntries.every((entry) => (
     entry?.identityKind !== 'protein' ||
     entry?.schema === CURRENT_PROTEIN_RAW_SCHEMA
@@ -245,9 +257,10 @@ const assertRenamedZeroMtimeResources = (session) => {
 
 const assertCurrentProteinArtifacts = (session) => {
   assertCurrentSessionBoundary(session);
-  const manifest = session.proteinIdentityManifest;
-  const entries = session.losatCache?.entries || [];
-  const derivedEntries = session.losatDerivedCache?.entries || [];
+  const drawing = shownDrawing(session);
+  const manifest = drawing.proteinIdentityManifest;
+  const entries = drawing.losatCache.entries;
+  const derivedEntries = drawing.losatDerivedCache?.entries || [];
   expect(manifest?.schema).toBe(2);
   expect(entries).toHaveLength(expected.totalPairs);
   expect(entries.every((entry) => (
@@ -769,7 +782,7 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
 
   const expectedUploadBytes = await installUserUploadedTsv(page);
   const uploadedSessionPath = await saveSession(page);
-  expect(readSession(uploadedSessionPath).losatDerivedCache?.entries || []).toEqual([]);
+  expect(shownDrawing(readSession(uploadedSessionPath)).losatDerivedCache?.entries || []).toEqual([]);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, uploadedSessionPath);
