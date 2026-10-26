@@ -293,7 +293,7 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { firstDrawingOfMode, inputTypeKeyOf, sessionInputTypes } from './drawing-view.js';
+import { firstDrawingOfMode } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -5274,7 +5274,6 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
     generatedCircularPlotTitlePosition,
     layoutPreferences: cloneJsonData(drawing.layoutPreferences),
     featurePanelTab,
-    ...sessionInputTypes(state.drawingList()),
     losatProgram: drawing.losatProgram.value,
     downloadDpi,
     autoLabelReflow,
@@ -5321,9 +5320,6 @@ export const applySessionUiData = (ui) => {
  */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true, artifact = true } = {}) => {
   applySessionUiData(ui);
-  // The drawing's own input type (OIC-030); the Load rollback restores each drawing's.
-  const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
     SETTINGS_SLICE.install(drawing.slices.settings, { losatProgram: ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn' });
@@ -6991,7 +6987,7 @@ const importSessionDocument = async (e, options = {}) => {
     committed.forEach((drawing) => {
       INPUTS_SLICE.install(drawing.slices.inputs, {
         // A Session 49 drawing's own; else the field of its mode.
-        inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[inputTypeKeyOf(drawing)])
+        inputType: /** @type {InputType} */ (storedDrawingInputs.get(drawing.id)?.inputType ?? inputTypes[SESSION_DRAWINGS_LAYOUT.inputTypeFields[drawing.mode]])
       });
     });
     state.downloadDpi.value = readDownloadDpi(ui.downloadDpi).value;

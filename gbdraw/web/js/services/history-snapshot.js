@@ -12,7 +12,6 @@ import { isInputFileRef } from './history-files.js';
 import { FILE_IMPORT_CARDS } from './file-imports.js';
 /** @import { BoundFileValue, InputBindings, InputType, LoadedFileValue } from './drawing/inputs.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { inputTypeKeyOf, sessionInputTypes } from './drawing-view.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { logicalResultsOf } from './result-normalization.js';
 import { cloneJsonData } from './json-clone.js';
@@ -155,6 +154,7 @@ const editedIntentPartOf = (path, value) => (
  * @property {OrthogroupIntentData & GroupNameIntentData} orthogroupState
  * @property {unknown} alignmentState
  * @property {PresentationData} presentation
+ * @property {InputType} [inputType] The drawing's input type (its inputs slice).
  */
 /**
  * One Linear record row of an intent's files: the File descriptors and the metadata the row keeps.
@@ -174,7 +174,8 @@ const editedIntentPartOf = (path, value) => (
  *   d_color?: unknown, t_color?: unknown, blacklist?: unknown, whitelist?: unknown, qualifier_priority?: unknown,
  *   linearSeqs?: FilesDataSequence[],
  *   linearComparisons?: { id?: unknown, file?: unknown }[],
- *   linearCanonicalComparisons?: ResourceBackedComparison[]
+ *   linearCanonicalComparisons?: ResourceBackedComparison[],
+ *   inputType?: InputType
  * }} FilesData
  */
 /**
@@ -302,15 +303,13 @@ const withoutSessionUi = (ui) => {
 // an edit, so neither is intent; composition offsets are recorded per Result
 // in `compositionUserDeltas` (B17).
 // A drawing switch is no step (PD-OI-090), so the intent holds no `mode`; a
-// drawing's intent holds the input type of its own slots.
+// drawing's input type is in its `files` (its inputs slice), not in `ui`.
 /**
  * @param {Record<string, unknown>} ui
- * @param {DrawingIdentity} drawing
  */
-const buildUiIntentData = (ui, drawing) => {
+const buildUiIntentData = (ui) => {
   const intent = withoutSessionUi(clonePlainObject(ui));
   delete intent.mode;
-  delete intent[drawing.mode === 'linear' ? 'cInputType' : 'lInputType'];
   delete intent.generatedLegendPosition;
   delete intent.generatedDrawingId;
   delete intent.generatedMultiRecordCanvas;
@@ -566,7 +565,6 @@ const closeTransientState = (state) => {
 const buildFallbackUiStateData = (state, drawing) => ({
   title: getRef(state.sessionTitle, ''),
   mode: getRef(state.mode, 'circular'),
-  ...sessionInputTypes(state.drawingList()),
   ...SETTINGS_SLICE.capture(drawing.slices.settings, ['losatProgram', 'layoutPreferences']),
   selectedResultIndex: getRef(state.selectedResultIndex, 0),
   downloadDpi: getRef(state.downloadDpi, 300),
@@ -607,8 +605,6 @@ const applyFallbackSessionUiData = (state, ui) => {
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   applyFallbackSessionUiData(state, ui);
-  const inputType = inputTypeKeyOf(drawing);
-  if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
   SETTINGS_SLICE.install(drawing.slices.settings, {
     losatProgram: ui.losatProgram || undefined, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences)
   });
@@ -750,11 +746,13 @@ const buildIntentFilesData = (state, drawing) => {
         : null,
       c_conservation_fastas: refsOf(files.c_conservation_fastas),
       c_conservation_sequence_sources: refsOf(files.c_conservation_sequence_sources),
+      inputType: drawing.inputType.value,
       ...shared
     };
   }
   return {
     ...shared,
+    inputType: drawing.inputType.value,
     linearSeqs: drawing.linearSeqs.map((seq) => ({
       uid: seq.uid,
       gb: refsOf(seq.gb),
@@ -825,8 +823,10 @@ const applyFilesData = (state, drawing, filesData, fileStore) => {
   FILE_IMPORT_CARDS.forEach((key) => {
     state.cardFiles[key] = restoreOne(filesData?.[/** @type {keyof FilesData} */ (key)]);
   });
-  // The drawing's own fields go through its inputs slice's writers.
+  // The drawing's own fields go through its inputs slice's writers, its
+  // input type first (it names the fields its files fill; OIC-030).
   const slice = drawing.slices.inputs;
+  if (filesData?.inputType) INPUTS_SLICE.install(slice, { inputType: filesData.inputType });
   /** @param {unknown} value @returns {LoadedFileValue[]} */
   const listOf = (value) => (Array.isArray(value) ? value : []);
   if (drawing.mode !== 'linear') {
@@ -1462,6 +1462,7 @@ export const createHistorySnapshotService = ({
     };
     const mutableIntent = Object.freeze({
       ui,
+      inputType: drawing.inputType.value,
       features,
       editorState,
       orthogroupState,
@@ -1552,8 +1553,7 @@ export const createHistorySnapshotService = ({
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
       const drawing = state.drawingOf(drawingId);
-      const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
+      if (mutableIntent.inputType) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: mutableIntent.inputType });
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
@@ -1797,7 +1797,7 @@ export const createHistorySnapshotService = ({
     const ui = typeof buildUiStateData === 'function'
       ? buildUiStateData(drawing, { includePreviewNavigation: false })
       : buildFallbackUiStateData(state, drawing);
-    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) }, drawing);
+    const uiIntent = buildUiIntentData({ ...ui, ...readSlotValues(drawingId, UI_SLOT_KEYS) });
     uiIntent.selectedFeatureRecordIdx = getRef(state.selectedFeatureRecordIdx, 0);
     // B17, D-15-50: the composition offsets of this drawing's Results.
     const compositionDeltas = captures.composition ? cloneJsonData(captures.composition(drawingId)) : null;
@@ -1880,12 +1880,6 @@ export const createHistorySnapshotService = ({
       const { appliedPaletteName, appliedPaletteColors, ...drawingUi } = intent.ui || {};
       const shown = isShown(drawingId);
       const ui = shown ? intent.ui || {} : drawingUi;
-      if (domains.has('ui')) {
-        const inputType = inputTypeKeyOf(drawing);
-        if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
-        await nextTick();
-      }
-
       if (domains.has('config')) {
         const config = intent.config;
         if (typeof applyConfigData === 'function' && config) {
@@ -1973,13 +1967,9 @@ export const createHistorySnapshotService = ({
     try {
       closeTransientState(state);
 
-      // A3 review M1: the checkpoint restores what its drawing owns and its
-      // own input type (it holds no Session-level value, R15-23).
+      // A3 review M1: the checkpoint restores what its drawing owns (it holds
+      // no Session-level value, R15-23); its input type is in its files.
       const ui = { ...(snapshot.ui || {}) };
-      delete ui[inputTypeKeyOf(drawing) === 'lInputType' ? 'cInputType' : 'lInputType'];
-      const inputType = inputTypeKeyOf(drawing);
-      if (ui[inputType]) INPUTS_SLICE.install(drawing.slices.inputs, { inputType: /** @type {InputType} */ (ui[inputType]) });
-      await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {
         applyConfigData(drawing, snapshot.config, { resolveTrackPlacements: false });
