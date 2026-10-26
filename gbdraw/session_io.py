@@ -84,7 +84,7 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 48
+CURRENT_SESSION_VERSION = 49
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
@@ -101,9 +101,12 @@ ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # table only as its file card's file: the Web reads every row as that file's.
 FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
 # From version 49 a Session lists its drawings in ``drawings``
-# (gbdraw.session_drawings owns the layout). Python reads it; the Web reads
-# it from the flip on (tools/generate_web_contracts.py).
+# (gbdraw.session_drawings owns the layout).
 DRAWINGS_SESSION_MIN_VERSION = 49
+# The newest mode-scoped (46-48) layout: a Session 46-48 moves from it to
+# drawings, and Python's writers build a new document in it before that move
+# (gbdraw.session_drawings.drawings_document_from_mode_scoped).
+MODE_SCOPED_SESSION_MAX_VERSION = DRAWINGS_SESSION_MIN_VERSION - 1
 # From version 41 the record display and feature placement drafts of a flat draft are checked.
 DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
@@ -5459,7 +5462,8 @@ def build_session_json(
         payload = {}
 
     payload["format"] = SESSION_FORMAT
-    payload["version"] = CURRENT_SESSION_VERSION
+    # The payload is built in the mode-scoped layout and moved to drawings last.
+    payload["version"] = MODE_SCOPED_SESSION_MAX_VERSION
     payload["createdAt"] = generated_at.isoformat()
     if context.output_prefix:
         payload["title"] = Path(str(context.output_prefix)).name
@@ -5472,7 +5476,7 @@ def build_session_json(
         # The migrations read the version of the Session they migrate.
         migration = migrate_session_flat_draft({**payload, "version": source_version})
         log_session_draft_migration(migration, source_version)
-        payload = {**migration.session, "version": CURRENT_SESSION_VERSION}
+        payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
     config = payload.get("config")
     if not isinstance(config, dict):
         config = dict(config) if isinstance(config, Mapping) else {}
@@ -5535,21 +5539,13 @@ def build_session_json(
         "generatedBy": "gbdraw",
     }
     if canonical_request is not None:
-        from .session import (
-            _build_session_document_from_resolved_request,
-            build_session_document,
-        )
+        from .session import _mode_scoped_document_of_request
 
-        build_document = (
-            _build_session_document_from_resolved_request
-            if _canonical_request_is_resolved
-            else build_session_document
-        )
-        canonical_document = build_document(
+        canonical = _mode_scoped_document_of_request(
             canonical_request,
+            resolved=_canonical_request_is_resolved,
             created_at=generated_at,
-        )
-        canonical = canonical_document.to_dict()
+        ).to_dict()
         payload["renderRequest"] = canonical["renderRequest"]
         payload["resources"] = canonical["resources"]
     else:
@@ -5593,7 +5589,11 @@ def build_session_json(
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
     )
     validate_session(payload)
-    return payload
+    from .session_drawings import drawings_document_from_mode_scoped
+
+    drawings, _source_facts = drawings_document_from_mode_scoped(payload)
+    validate_session(drawings)
+    return dict(drawings)
 
 
 def write_session_json(
@@ -7251,6 +7251,7 @@ __all__ = [
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
     "FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION",
+    "MODE_SCOPED_SESSION_MAX_VERSION",
     "MODE_SCOPED_SESSION_MIN_VERSION",
     "ROW_KEYED_LEGEND_SESSION_MIN_VERSION",
     "SESSION_FORMAT",

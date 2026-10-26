@@ -48,6 +48,7 @@ from gbdraw.api.session_compat import (
     rewrite_protein_artifact_references,
 )
 from gbdraw.exceptions import ValidationError
+from tests.utils.session_drawing_view import build_mode_scoped_session_document, build_mode_scoped_session_json, drawing_view
 from gbdraw.session import (
     SessionConversionError,
     SessionDocument,
@@ -302,7 +303,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
         save_session_document(current_path, request)
 
     current = load_session_document(current_path)
-    payload = current.to_dict()
+    payload = drawing_view(current.to_dict(), mode="linear")
     serialized = json.dumps(payload)
     assert current.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
@@ -362,7 +363,7 @@ def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    payload = drawing_view(saved.to_dict(), mode="linear")
     serialized = json.dumps(payload)
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
@@ -438,7 +439,7 @@ def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
 
     saved = load_session_document(tmp_path / "replay.gbdraw-session.json")
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        replayed = session_to_request(materialized)
+        replayed = session_to_request(materialized, drawing="linear")
     with materialize_session(
         load_session_document(_VERSION_39_SESSION), output_directory=tmp_path
     ) as materialized:
@@ -537,9 +538,9 @@ def _released_canonical_session(
     version: int,
     request_schema: int,
 ) -> dict[str, object]:
-    data = build_session_document(
+    data = build_mode_scoped_session_document(
         _linear_request(tmp_path, output_prefix=f"released-v{version}")
-    ).to_dict()
+    )
     data["version"] = version
     payload = data["renderRequest"]
     assert isinstance(payload, dict)
@@ -775,7 +776,7 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
             RecordInput(source=InMemoryRecordSource(second), record_key="record-2"),
         ),
     )
-    session = build_session_document(base_request).to_dict()
+    session = build_mode_scoped_session_document(base_request)
     session["version"] = 33
     feature_analysis_id = f"f_{'a' * 64}"
     value = (
@@ -887,7 +888,7 @@ def test_released_session_versions_write_current_reloadable_sidecars(
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
     assert saved.version == CURRENT_SESSION_VERSION
-    assert saved.to_dict()["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert drawing_view(saved.to_dict(), mode="linear")["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
 
     replay_directory = tmp_path / "replay"
     with materialize_session(saved, output_directory=replay_directory) as materialized:
@@ -920,7 +921,7 @@ def test_supported_v32_session_replays_through_compatibility_adapter(
         "mode": "orthogroup",
         "payload": {"groups": []},
     }
-    data = build_session_document(_linear_request(tmp_path)).to_dict()
+    data = build_mode_scoped_session_document(_linear_request(tmp_path))
     data["version"] = 32
     data["losatCache"] = {"entries": [legacy_raw]}
     data["losatDerivedCache"] = {"entries": [legacy_derived]}
@@ -1002,12 +1003,15 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    # The drawings that the move lists: the Linear one, and a Circular one only
+    # when its settings differ from the defaults.
+    views = {drawing["mode"]: drawing_view(saved.to_dict(), drawing["id"]) for drawing in saved.to_dict()["drawings"]}
+    payload = views["linear"]
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "config" not in payload
-    for mode in ("circular", "linear"):
-        adv = payload["modes"][mode]["config"]["adv"]
+    for mode, view in views.items():
+        adv = view["modes"][mode]["config"]["adv"]
         assert "depth_tick_interval" not in adv
         assert all("tick_interval" not in track for track in adv["depth_tracks"])
     assert (
@@ -1088,6 +1092,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
+    rewritten = drawing_view(rewritten, mode="linear")
     assert rewritten["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"] == [
         {
             "id": "dormant-v39-upload",
@@ -1140,6 +1145,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
+    rewritten = drawing_view(rewritten, mode="circular")
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
     assert rewritten["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
@@ -1187,7 +1193,7 @@ def test_released_schema_v2_fixture_sidecar_collision_is_atomic(
 
 def test_session_adapter_reads_only_drawings_of_validated_sessions(tmp_path: Path) -> None:
     request = _linear_request(tmp_path)
-    data: Any = build_session_document(request).to_dict()
+    data: Any = build_mode_scoped_session_document(request)
 
     with pytest.raises(ValidationError, match="drawing of a loaded SessionDocument"):
         adapt_session_request(request, data)
@@ -1299,20 +1305,21 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
 
     assert output_prefix.with_suffix(".svg").is_file()
     saved = load_session_document(sidecar_path)
-    payload = saved.to_dict()
+    views = {drawing["mode"]: drawing_view(saved.to_dict(), drawing["id"]) for drawing in saved.to_dict()["drawings"]}
+    payload = views["linear"]
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
     assert "config" not in payload
-    for mode in ("circular", "linear"):
-        adv = payload["modes"][mode]["config"]["adv"]
+    for mode, view in views.items():
+        adv = view["modes"][mode]["config"]["adv"]
         assert "depth_tick_interval" not in adv
         assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
-        assert payload["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
+        assert view["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
     blastp = payload["modes"]["linear"]["config"]["losat"]["blastp"]
     assert blastp["collinearMaxUnitGap"] == 2
     assert "collinearMaxGeneGap" not in blastp
-    assert "losat" not in payload["modes"]["circular"]["config"]
+    assert "losat" not in views.get("circular", {"modes": {"circular": {"config": {}}}})["modes"]["circular"]["config"]
 
     rerendered_prefix = tmp_path / "legacy-rerender"
     linear_main(
@@ -1446,15 +1453,15 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
         "biologicalFeatureId": "fbe3a7c0c",
         "placement": {"kind": "main"},
     }
-    # A lane keeps only its own mode's slice; Main reaches both.
-    other = "linear" if mode == "circular" else "circular"
-    modes = saved.to_dict()["modes"]
-    assert modes[mode]["config"]["featurePlacementOverrides"] == {
+    # A lane keeps only its own mode's slice. The other mode's slice holds only
+    # the Main row, which its mode settings do not make a drawing (PD-OI-090).
+    document = saved.to_dict()
+    assert [drawing["mode"] for drawing in document["drawings"]] == [mode]
+    assert drawing_view(document, mode=mode)["modes"][mode]["config"]["featurePlacementOverrides"] == {
         key("f406d90f1"): lane,
         key("fbe3a7c0c"): main_row,
     }
-    assert modes[other]["config"]["featurePlacementOverrides"] == {key("fbe3a7c0c"): main_row}
-    assert saved.to_dict()["renderRequest"]["diagramOptions"]["featurePlacements"] == [
+    assert drawing_view(document, mode=mode)["renderRequest"]["diagramOptions"]["featurePlacements"] == [
         lane,
         main_row,
     ]
@@ -1491,7 +1498,7 @@ def _python_session_with_renamed_ids(tmp_path: Path) -> dict[str, Any]:
         ),
         output=RenderOutputRequest(output_prefix="stored"),
     )
-    session = build_session_document(request).to_dict()
+    session = build_mode_scoped_session_document(request)
     _rename_resource(session, "record-1-genbank", "genbank-1")
     return session
 
@@ -1532,7 +1539,7 @@ def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
+    saved = drawing_view(load_session_document(sidecar).to_dict())
     # Every input's bytes are unchanged, so every resource keeps its ID,
     # file name and metadata, and the request names the same resources.
     assert saved["resources"] == source["resources"]
@@ -1711,7 +1718,7 @@ def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_pa
 
     upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
 
-    assert list(upgraded["modes"]["linear"]["features"]["featureOverrides"]) == [
+    assert list(drawing_view(upgraded, mode="linear")["modes"]["linear"]["features"]["featureOverrides"]) == [
         json.dumps([f"{card}:2", "f8d05c32c"], separators=(",", ":"))
     ]
 
@@ -1769,9 +1776,9 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     # The edits become identity drafts in the slice of the Session diagram's
     # mode (R1-3), as the Web app moves them on Load; shared edits reach both.
     expected = case["expected"]["features"]
-    mode = saved.to_dict()["renderRequest"]["mode"]
-    other = "linear" if mode == "circular" else "circular"
-    modes = saved.to_dict()["modes"]
+    document = saved.to_dict()
+    [mode] = [drawing["mode"] for drawing in document["drawings"] if drawing.get("renderRequest")]
+    modes = {drawing["mode"]: drawing_view(document, drawing["id"])["modes"][drawing["mode"]] for drawing in document["drawings"]}
     assert modes[mode]["features"]["featureOverrides"] == {
         json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
             field: value for field, value in row.items() if field != "scope"
@@ -1780,9 +1787,14 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     }
     assert modes[mode]["features"]["featureOverrides"]
     assert modes[mode]["features"]["featureColorOverrides"] == expected["featureColorOverrides"]
-    assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(modes[other].get("features", {}))
+    # The other mode is a drawing only when its settings differ from the defaults.
+    for other_mode, other_slice in modes.items():
+        if other_mode != mode:
+            assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(other_slice.get("features", {}))
     for shared in ("featureVisibilityManualRules", "labelOverrideRows", "labelTextBulkOverrides"):
-        assert modes[mode]["features"][shared] == modes[other]["features"][shared] == expected[shared]
+        assert all(
+            slice_["features"][shared] == expected[shared] for slice_ in modes.values()
+        )
     narrowed = case["expected"]["narrowedVisibilityCount"]
     assert [
         record.getMessage()
@@ -1823,8 +1835,9 @@ def test_session_33_rendered_id_feature_edits_survive_the_cli_sidecar(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
-    mode = saved["renderRequest"]["mode"]
+    document = load_session_document(sidecar).to_dict()
+    [mode] = [drawing["mode"] for drawing in document["drawings"] if drawing.get("renderRequest")]
+    saved = drawing_view(document, mode=mode)
     expected = case["expected"]["features"]["featureOverrides"]
     assert expected and case["expected"]["droppedCount"] == 0
     assert saved["modes"][mode]["features"]["featureOverrides"] == {
@@ -1915,8 +1928,14 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     )
 
     assert (tmp_path / "replay.svg").is_file()
-    saved = load_session_document(sidecar).to_dict()
-    assert saved["version"] == CURRENT_SESSION_VERSION
+    document = load_session_document(sidecar).to_dict()
+    assert document["version"] == CURRENT_SESSION_VERSION
+    saved = {
+        "modes": {
+            drawing["mode"]: drawing_view(document, drawing["id"])["modes"][drawing["mode"]]
+            for drawing in document["drawings"]
+        }
+    }
     # The draft names the certain feature by its source identity, as the Web
     # app moves it on Load; the other two targets stay as saved. Each target is
     # bound to a Linear record, so the annotations stay in the Linear slice,
@@ -1932,7 +1951,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     # The request is the one that drew the saved figure. As after a Web Load,
     # it keeps the hash= targets until the next Generate sends the draft.
     assert (
-        saved["renderRequest"]["diagramOptions"]["annotations"]
+        drawing_view(document, mode="linear")["renderRequest"]["diagramOptions"]["annotations"]
         == source["renderRequest"]["diagramOptions"]["annotations"]
     )
     assert [
@@ -2065,7 +2084,7 @@ def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
         ]
     )
 
-    saved = load_session_document(sidecar).to_dict()
+    saved = drawing_view(load_session_document(sidecar).to_dict(), mode="linear")
     assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
     assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
 
@@ -2165,9 +2184,9 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
     resaved = tmp_path / "resaved.gbdraw-session.json"
     assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 48
+    assert saved.version == CURRENT_SESSION_VERSION == 49
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        written = session_to_request(materialized)
+        written = session_to_request(materialized, drawing="linear")
         assert _protein_results(written.options) == _protein_results(converted.options)
     # The re-save is read as F: no second conversion, the same drawing.
     assert _replay(resaved, tmp_path, "resaved") == expected
@@ -2236,9 +2255,9 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     resaved = tmp_path / "resaved.gbdraw-session.json"
     first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 48
+    assert saved.version == CURRENT_SESSION_VERSION == 49
     with materialize_session(saved, output_directory=tmp_path) as materialized:
-        [written] = session_to_request(materialized).options.linear_comparisons
+        [written] = session_to_request(materialized, drawing="linear").options.linear_comparisons
         assert not written.drawn_feature_ids
         assert list(written.matches["sstart"]) == list(converted.matches["sstart"])
     # The re-save is read as F: no second conversion, the same drawing.
@@ -2484,7 +2503,7 @@ def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> Non
 
 def test_two_mode_session_48_linear_drawing_replays_as_the_old_session(tmp_path: Path) -> None:
     # OIC-030: the first drawing renders as the old Session replays.
-    upgraded = upgrade_session_document(_TWO_MODE_V48_SESSION, temporary_directory=tmp_path, version=49).document
+    upgraded = upgrade_session_document(_TWO_MODE_V48_SESSION, temporary_directory=tmp_path).document
     assert upgraded.version == 49
     with materialize_session(_TWO_MODE_V48_SESSION, output_directory=tmp_path / "v48") as materialized:
         old = render_session(materialized)
@@ -2498,11 +2517,9 @@ def test_upgrade_to_session_49_moves_a_session_47_after_its_current_upgrade(tmp_
     source = Path(__file__).parent / "fixtures" / "sessions" / "cli-linear-blacklist-file.v47.gbdraw-session.json.gz"
     current = upgrade_session_document(source, temporary_directory=tmp_path).document
     assert current.version == CURRENT_SESSION_VERSION
-    upgraded = upgrade_session_document(source, temporary_directory=tmp_path, version=49).document
+    upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
     data = upgraded.to_dict()
     assert data["version"] == 49
     assert [drawing["id"] for drawing in data["drawings"]] == ["linear"]
-    assert data["drawings"][0]["renderRequest"] == current.to_dict()["renderRequest"]
-    assert upgrade_session_document(upgraded, version=49).document.to_dict() == data
-    with pytest.raises(SessionVersionError):
-        upgrade_session_document(source, version=47)
+    assert data["drawings"][0]["renderRequest"] == drawing_view(current.to_dict())["renderRequest"]
+    assert upgrade_session_document(upgraded).document.to_dict() == data

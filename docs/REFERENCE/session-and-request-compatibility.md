@@ -2,21 +2,24 @@
 
 # Session and request compatibility
 
-Current writers emit session version 48 and canonical `renderRequest` schema 9.
+Current writers emit session version 49 and canonical `renderRequest` schema 9.
+Session 49 lists the drawings of a project in `drawings`. The Web app and Python
+read a Session 46–48 into drawings themselves; a Session 27–44 is converted by
+Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 48 | 27–33, 39–42, 44, and 46–49 |
+| gbdraw session | 49 | 27–33, 39–42, 44, and 46–49 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
 | Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
 
-Session 48 stores the saved protein results (LOSATP tables, Similarity groups,
+Sessions 48 and 49 store the saved protein results (LOSATP tables, Similarity groups,
 Collinear blocks) of a reverse-complemented Linear record in the record's
 search frame, as it stores comparison tables. Sessions 46 and 47 stored them
 after the reverse complement. A replay of an older Session draws as before,
-and a re-save or `upgrade_session_document()` writes Session 48. A saved result
+and a re-save or `upgrade_session_document()` writes Session 49. A saved result
 that matches neither strand of its record is still drawn, but the Session
-cannot be saved as 48 (`SessionConversionError`); generate the comparison
+cannot be saved again (`SessionConversionError`); generate the comparison
 again.
 
 Session 48 also records which rows, colors, and Blacklist words each file card

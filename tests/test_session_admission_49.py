@@ -25,7 +25,12 @@ from gbdraw.session import (
     upgrade_session_document,
 )
 from gbdraw.session_drawings import read_session_drawings, write_session_drawings
-from gbdraw.session_io import CURRENT_SESSION_VERSION, SUPPORTED_SESSION_VERSIONS, validate_session
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    DRAWINGS_SESSION_MIN_VERSION,
+    SUPPORTED_SESSION_VERSIONS,
+    validate_session,
+)
 
 # The flip (B2d-3) moves them up to fixtures/sessions/, which the Web fixture walks list.
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions" / "drawings-v49"
@@ -38,9 +43,8 @@ def _load(name: str) -> Document:
         return json.load(handle)
 
 
-def test_python_reads_49_and_the_current_version_stays_48() -> None:
-    assert 49 in SUPPORTED_SESSION_VERSIONS
-    assert CURRENT_SESSION_VERSION == 48
+def test_python_reads_and_writes_49() -> None:
+    assert CURRENT_SESSION_VERSION == DRAWINGS_SESSION_MIN_VERSION == max(SUPPORTED_SESSION_VERSIONS)
     assert len(V49) == 4
 
 

@@ -26,6 +26,7 @@ from gbdraw.session_io import (
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
     DRAWINGS_SESSION_MIN_VERSION,
+    MODE_SCOPED_SESSION_MAX_VERSION,
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
@@ -828,7 +829,13 @@ def _build_session_document_from_drawings(
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument:
-    """Build a current document from already-resolved drawings (:func:`_session_data_from_drawings`, checked)."""
+    """Build a current (Session 49) document from already-resolved drawings.
+
+    With a Session 49 ``base`` the drawings replace its drawings of their
+    IDs; otherwise :func:`_session_data_from_drawings` builds the mode-scoped
+    document, checked, and it moves to drawings as a Session 48 does at Load
+    (:func:`_drawings_of_current`).
+    """
 
     built = _session_data_from_drawings(
         drawings,
@@ -839,7 +846,42 @@ def _build_session_document_from_drawings(
         web_file_inventory=web_file_inventory,
         resources=resources,
     )
-    return built if isinstance(built, SessionDocument) else SessionDocument(built)
+    if isinstance(built, SessionDocument):
+        return built
+    return SessionDocument(cast(Mapping[str, Any], _drawings_of_current(SessionDocument(built)._data)))
+
+
+def _mode_scoped_document(
+    drawings: Sequence[_DrawingBuild],
+    *,
+    created_at: datetime | None = None,
+    web_file_inventory: Mapping[str, Any] | None = None,
+    resources: Mapping[str, Mapping[str, Any]] | None = None,
+) -> SessionDocument:
+    """The checked mode-scoped (Session 48) document of new drawings, before their move to drawings."""
+
+    built = _session_data_from_drawings(
+        drawings, created_at=created_at, web_file_inventory=web_file_inventory, resources=resources,
+    )
+    assert not isinstance(built, SessionDocument)  # no Session 49 base
+    return SessionDocument(built)
+
+
+def _mode_scoped_document_of_request(
+    request: DiagramRequest,
+    *,
+    resolved: bool,
+    created_at: datetime | None,
+) -> SessionDocument:
+    """:func:`_mode_scoped_document` of one request, resolved here unless ``resolved``
+    (:func:`gbdraw.session_io.build_session_json` builds on it)."""
+
+    builds = (
+        (_DrawingBuild(mode=_diagram_request_mode(request), request=request, state={}),)
+        if resolved
+        else _drawing_builds(request, None)
+    )
+    return _mode_scoped_document(builds, created_at=created_at)
 
 
 def _session_data_from_drawings(
@@ -852,8 +894,9 @@ def _session_data_from_drawings(
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument | dict[str, Any]:
-    """The current document of already-resolved drawings; with a ``base`` of
-    Session 49 the checked document, otherwise its data, not yet checked.
+    """The document of already-resolved drawings; with a ``base`` of
+    Session 49 the checked Session 49, otherwise the data of the mode-scoped
+    (Session 48) document, not yet checked.
 
     Every request is encoded through one resource table. With ``base``, each
     drawing replaces the base drawing of its ID and the other drawings stay. ``resources`` are the resources of the Session
@@ -963,7 +1006,7 @@ def _session_data_from_drawings(
     timestamp = created_at or datetime.now(timezone.utc)
     data: dict[str, Any] = {
         "format": SESSION_FORMAT,
-        "version": CURRENT_SESSION_VERSION,
+        "version": MODE_SCOPED_SESSION_MAX_VERSION,
         "createdAt": timestamp.isoformat(),
         "renderRequest": fields.pop("renderRequest"),
         "resources": descriptors,
@@ -1147,8 +1190,9 @@ def build_session_document(
     ``active_drawing`` names the drawing the Web app opens. A drawing's
     ``state`` may contain Web/editor fields such as ``ui`` or ``results``; it
     cannot replace canonical envelope fields. The current Session version
-    holds at most one drawing of each mode, and a second drawing only with
-    its Results.
+    is 49; Python writes it from the mode-scoped Session 48 of the drawings,
+    which holds at most one drawing of each mode, and a second drawing only
+    with its Results.
     """
 
     return _build_session_document_from_drawings(
@@ -1332,22 +1376,21 @@ def _upgrade_mode_scoped_session(
             **resources,
             **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
         }
-    return SessionDocument({**data, "version": CURRENT_SESSION_VERSION})
+    return SessionDocument({**data, "version": MODE_SCOPED_SESSION_MAX_VERSION})
 
 
 def upgrade_session_document(
     document: SessionDocument | Mapping[str, Any] | str | Path,
     *,
     temporary_directory: str | Path | None = None,
-    version: int = CURRENT_SESSION_VERSION,
 ) -> SessionUpgrade:
-    """Return a Session in the current version, or in ``version`` 49, without rendering it.
+    """Return a Session in the current version (49) without rendering it.
 
-    With ``version=49`` the Session is upgraded to the current version as
-    below and then moved to drawings
+    A Session 27-47 is upgraded to the mode-scoped Session 48 as below, and a
+    Session 46-48 then moves to drawings
     (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`).
 
-    A current document, or a Session 49, is returned unchanged. A Session 46 or 47 keeps its
+    A current document is returned unchanged. A Session 46 or 47 keeps its
     drawings; a Session 46 gets its Legend color and stroke edits keyed by
     row key (:func:`gbdraw.session_io.legend_edits_by_row_key`), and the
     stored protein results of a reverse-complemented Linear record are
@@ -1369,13 +1412,8 @@ def upgrade_session_document(
     27-30 have no canonical request and raise :class:`SessionVersionError`.
     """
 
-    if version not in (CURRENT_SESSION_VERSION, DRAWINGS_SESSION_MIN_VERSION):
-        raise SessionVersionError(
-            f"A Session upgrades to version {CURRENT_SESSION_VERSION} or "
-            f"{DRAWINGS_SESSION_MIN_VERSION}, not {version}."
-        )
     upgrade = _upgrade_to_current(load_session_document(document), temporary_directory)
-    if version < DRAWINGS_SESSION_MIN_VERSION or upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
+    if upgrade.document.version >= DRAWINGS_SESSION_MIN_VERSION:
         return upgrade
     drawings = _drawings_of_current(upgrade.document.to_dict())
     return SessionUpgrade(SessionDocument(cast(Mapping[str, Any], drawings)), upgrade.warnings)
@@ -1386,7 +1424,7 @@ def _drawings_of_current(
     *,
     stored_results: StoredResults | None = None,
 ) -> GbdrawSession49:
-    """A current (46-48) document's data moved to drawings, the drawings of
+    """A mode-scoped (46-48) document's data moved to drawings, the drawings of
     ``stored_results`` counting as drawings with a Result; a refusal is a
     :class:`SessionConversionError`."""
 
@@ -1517,12 +1555,11 @@ def _upgrade_to_current(
     stored_results: StoredResults | None = None,
     repairs: list[DraftMigrationRepair] | None = None,
 ) -> SessionUpgrade:
-    """``loaded`` in the current version. With ``stored_results`` (Web
-    Load's reading), Results without a feature catalog go there instead of
-    being dropped (OV-1659)."""
+    """``loaded`` in the newest mode-scoped version (48), or a Session 48 or
+    49 unchanged. With ``stored_results`` (Web Load's reading), Results
+    without a feature catalog go there instead of being dropped (OV-1659)."""
 
-    # A Session 49 is newer than the current version until the flip.
-    if loaded.version >= CURRENT_SESSION_VERSION:
+    if loaded.version >= MODE_SCOPED_SESSION_MAX_VERSION:
         return SessionUpgrade(loaded)
     if loaded.version >= MODE_SCOPED_SESSION_MIN_VERSION:
         return SessionUpgrade(_upgrade_mode_scoped_session(loaded, temporary_directory))
@@ -1599,7 +1636,7 @@ def _upgrade_to_current(
             state["results"] = []
             state.pop("runMetadata", None)
         replace_current_derived_feature_state(state, catalog)
-        upgraded = _build_session_document_from_drawings(
+        upgraded = _mode_scoped_document(
             (
                 _DrawingBuild(
                     mode=drawing.mode,

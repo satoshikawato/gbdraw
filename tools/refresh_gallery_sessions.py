@@ -719,6 +719,13 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
+    # A staged Session is a Session 49 with one drawing; read that drawing
+    # through the production reader as the one-drawing view.
+    drawings = session.get("drawings")
+    if isinstance(drawings, list) and len(drawings) == 1:
+        from gbdraw.session_drawings import _drawing_view
+
+        session = _drawing_view(session, drawings[0])
     expected_session_version = CURRENT_SESSION_VERSION
     expected_request_schema = CANONICAL_REQUEST_SCHEMA
     if session.get("version") != expected_session_version:

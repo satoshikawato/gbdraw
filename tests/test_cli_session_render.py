@@ -45,8 +45,13 @@ from gbdraw.cli_utils.session import render_main
 from gbdraw.exceptions import ValidationError
 from gbdraw.linear import linear_main
 from gbdraw.session import session_drawing_artifacts
-from gbdraw.session_io import CURRENT_SESSION_VERSION, write_session_json
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    DRAWINGS_SESSION_MIN_VERSION,
+    write_session_json,
+)
 from gbdraw.web_support.request_render import render_canonical_web_request
+from tests.utils.session_drawing_view import drawing_view, without_drawings_move
 from tests.utils.two_mode_session import two_mode_session
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -150,9 +155,9 @@ def test_save_session_replaces_the_rendered_drawings(two_drawings: Path, tmp_pat
     render_main(["--session", str(two_drawings), "-o", str(tmp_path / "fig"), "--save_session"])
     resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
     assert [drawing.id for drawing in resaved.drawings] == ["circular", "linear"]
-    assert resaved.to_dict()["ui"]["mode"] == source["ui"]["mode"]
-    assert [result["name"] for result in resaved.to_dict()["results"]] == ["fig_circular"]
-    assert [result["name"] for result in resaved.to_dict()["otherModeResult"]["results"]] == ["fig_linear"]
+    assert resaved.to_dict()["ui"]["activeDrawingId"] == source["ui"]["mode"]
+    for drawing_id, name in (("circular", "fig_circular"), ("linear", "fig_linear")):
+        assert [result["name"] for result in session_drawing_artifacts(resaved, drawing_id).fields["results"]] == [name]
 
     # Only the named drawing is replaced; the other keeps its saved set.
     output = tmp_path / "linear-only.gbdraw-session.json.gz"
@@ -183,7 +188,7 @@ def test_a_circular_batch_drawing_still_numbers_its_diagrams(tmp_path: Path) -> 
     linear_document = build_session_document(linear)
     with materialize_session(linear_document, output_directory=tmp_path / "web") as materialized:
         web = render_canonical_web_request(
-            linear_document.to_dict()["renderRequest"],
+            drawing_view(linear_document.to_dict())["renderRequest"],
             resource_paths=materialized.resource_paths,
             output_directory=tmp_path / "web-output",
         )
@@ -362,6 +367,46 @@ def test_the_resaved_session_is_current(two_drawings: Path, tmp_path: Path) -> N
     assert load_session_document(tmp_path / "frame.gbdraw-session.json").version == CURRENT_SESSION_VERSION
 
 
+@pytest.mark.parametrize(
+    "source",
+    ["two-mode-session-46", "two-mode-linear-shown.v48.gbdraw-session.json.gz"],
+)
+def test_a_cli_resave_of_a_two_mode_project_writes_its_drawings(
+    source: str, two_drawings: Path, tmp_path: Path
+) -> None:
+    path = two_drawings if source == "two-mode-session-46" else SESSION_FIXTURES / source
+    render_main(["--session", str(path), "-o", str(tmp_path / "fig"), "--save_session"])
+
+    written = json.loads((tmp_path / "fig.gbdraw-session.json").read_text(encoding="utf-8"))
+    assert written["version"] == DRAWINGS_SESSION_MIN_VERSION == CURRENT_SESSION_VERSION
+    assert "modes" not in written and "otherModeResult" not in written
+    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json")
+    assert sorted(drawing.mode for drawing in resaved.drawings) == ["circular", "linear"]
+
+
+def test_a_fresh_cli_save_and_a_python_api_save_write_drawings(tmp_path: Path) -> None:
+    source = tmp_path / "one.gb"
+    SeqIO.write(
+        [SeqRecord(Seq("ATGCGCAT" * 40), id="one", annotations={"molecule_type": "DNA"})],
+        source,
+        "genbank",
+    )
+    circular_main(["--gbk", str(source), "-o", str(tmp_path / "cli"), "--save_session"])
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(source)),),
+        output=RenderOutputRequest(output_prefix="api"),
+    )
+    save_session_document(tmp_path / "api.gbdraw-session.json", request)
+
+    for name, mode in (("cli", "circular"), ("api", "linear")):
+        written = json.loads((tmp_path / f"{name}.gbdraw-session.json").read_text(encoding="utf-8"))
+        assert written["version"] == DRAWINGS_SESSION_MIN_VERSION == CURRENT_SESSION_VERSION
+        assert [drawing["id"] for drawing in written["drawings"]] == [mode]
+        assert "renderRequest" not in written and "modes" not in written
+        document = load_session_document(tmp_path / f"{name}.gbdraw-session.json")
+        assert [drawing.mode for drawing in document.drawings] == [mode]
+
+
 def test_a_resave_prints_the_results_the_upgrade_drops(tmp_path: Path) -> None:
     # Session 33 saved no feature catalog: the upgrade drops its Result and
     # names it, and the re-save holds the Result this render writes.
@@ -384,7 +429,7 @@ def test_a_resave_prints_the_results_the_upgrade_drops(tmp_path: Path) -> None:
         "1 Result(s) 'out.svg': Session 33 saved no feature catalog for them. "
         "Render the drawing and save the Session to write new Results."
     ) in result.stdout.splitlines()
-    resaved = load_session_document(tmp_path / "crop.gbdraw-session.json").to_dict()
+    resaved = drawing_view(load_session_document(tmp_path / "crop.gbdraw-session.json").to_dict(), mode="linear")
     assert [entry["name"] for entry in resaved["results"]] == ["crop"]
 
 
@@ -496,7 +541,7 @@ def test_a_cli_protein_session_stores_the_results_the_web_stores(
     from tests.test_render_stage_protein_analysis import _no_search
 
     sidecar = _fresh_protein_session(tmp_path, monkeypatch, mode)
-    session = json.loads(sidecar.read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(sidecar.read_text(encoding="utf-8")), mode="linear")
     assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS[mode]
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}
@@ -508,7 +553,7 @@ def test_a_cli_protein_session_stores_the_results_the_web_stores(
     assert (tmp_path / "replayed.svg").read_text(encoding="utf-8") == (
         tmp_path / "fresh.svg"
     ).read_text(encoding="utf-8")
-    replayed = json.loads(resaved.read_text(encoding="utf-8"))
+    replayed = drawing_view(json.loads(resaved.read_text(encoding="utf-8")), mode="linear")
     assert _protein_comparison_kinds(replayed) == _STORED_PROTEIN_FORMS[mode]
 
 
@@ -524,10 +569,13 @@ def test_a_cli_protein_session_stores_the_tables_a_gallery_rebuild_stores(
         _resource_bytes,
     )
 
-    sidecar = _fresh_protein_session(
-        tmp_path, monkeypatch, "similarity_groups",
-        "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
-    )
+    # The Gallery tool reads the mode-scoped layout (its Sessions stay Session 48),
+    # so the CLI save is read before its move to drawings.
+    with without_drawings_move():
+        sidecar = _fresh_protein_session(
+            tmp_path, monkeypatch, "similarity_groups",
+            "--reverse_complement", "0", "--reverse_complement", "1", "--reverse_complement", "0",
+        )
     session = json.loads(sidecar.read_text(encoding="utf-8"))
     assert _protein_comparison_kinds(session) == _STORED_PROTEIN_FORMS["similarity_groups"]
     rebuild = json.loads(json.dumps(session))
@@ -561,7 +609,7 @@ def test_a_fresh_cli_render_builds_no_derived_protein_entries(
         raise AssertionError("the CLI built derived entries nobody reads")
 
     monkeypatch.setattr(request_render_module, "derived_losatp_identity", not_built)
-    session = json.loads(_fresh_protein_session(tmp_path, monkeypatch).read_text(encoding="utf-8"))
+    session = drawing_view(json.loads(_fresh_protein_session(tmp_path, monkeypatch).read_text(encoding="utf-8")), mode="linear")
     assert session["losatCache"]["entries"]
     assert session["losatDerivedCache"] == {"entries": []}
 
@@ -580,7 +628,8 @@ def _session_with_derived_entries(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     pairs = [pair for entry in built for pair in entry["payload"]["pairs"]]
     assert pairs and all(isinstance(pair["canonicalTsv"], str) for pair in pairs)
     session = json.loads(sidecar.read_text(encoding="utf-8"))
-    session["losatDerivedCache"] = {"entries": built}
+    (linear,) = (drawing for drawing in session["drawings"] if drawing["mode"] == "linear")
+    linear["losatDerivedCache"] = {"entries": built}
     source = tmp_path / "with-derived.gbdraw-session.json"
     source.write_text(json.dumps(session), encoding="utf-8")
     return source, built
@@ -595,7 +644,7 @@ def test_a_python_api_replay_that_builds_derived_entries_drops_the_legacy_eviden
 
     sidecar = _fresh_protein_session(tmp_path, monkeypatch)
     session = json.loads(sidecar.read_text(encoding="utf-8"))
-    assert session["losatDerivedCache"] == {"entries": []}
+    assert drawing_view(session, mode="linear")["losatDerivedCache"] == {"entries": []}
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
     session["legacyArtifacts"] = {"proteinDerivedEvidence": {"schema": 1, "entries": [legacy_derived]}}
     source = tmp_path / "with-evidence.gbdraw-session.json"
@@ -608,7 +657,7 @@ def test_a_python_api_replay_that_builds_derived_entries_drops_the_legacy_eviden
 
 
 def _derived(path: Path) -> list[dict[str, Any]]:
-    return load_session_document(path).to_dict()["losatDerivedCache"]["entries"]
+    return drawing_view(load_session_document(path).to_dict(), mode="linear")["losatDerivedCache"]["entries"]
 
 
 def test_a_cli_replay_keeps_the_derived_entries_of_its_session(
@@ -637,7 +686,7 @@ def _circular_batch_session_with_protein_artifacts(
     """
 
     linear_source, _built = _session_with_derived_entries(tmp_path, monkeypatch)
-    linear = json.loads(linear_source.read_text(encoding="utf-8"))
+    linear = drawing_view(json.loads(linear_source.read_text(encoding="utf-8")), mode="linear")
     records = tuple(
         RecordInput(source=GenBankInputSource(tmp_path / f"rec{index}.gbk"))
         for index in range(3)
@@ -648,17 +697,18 @@ def _circular_batch_session_with_protein_artifacts(
         else CircularDiagramRequest(records=records[:1])
     )
     session = build_session_document(request).to_dict()
+    (circular,) = session["drawings"]
     for key in _PROTEIN_ARTIFACTS:
-        session[key] = linear[key]
+        circular[key] = linear[key]
     if not raw_entries:
-        session["losatCache"] = {"entries": []}
+        circular["losatCache"] = {"entries": []}
     source = tmp_path / "batch-protein.gbdraw-session.json"
     write_session_json(source, session)
     return source
 
 
 def _protein_artifacts(path: Path) -> dict[str, str]:
-    session = load_session_document(path).to_dict()
+    session = drawing_view(load_session_document(path).to_dict(), mode="circular")
     return {key: json.dumps(session[key], sort_keys=True) for key in _PROTEIN_ARTIFACTS}
 
 
@@ -741,7 +791,9 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
         )
     )
     session = json.loads(source.read_text(encoding="utf-8"))
-    assert session["losatDerivedCache"]["entries"]
+    mode = "linear" if shape == "linear" else "circular"
+    derived_entries = drawing_view(session, mode=mode)["losatDerivedCache"]["entries"]
+    assert derived_entries
     legacy_derived = {"schema": 1, "kind": "derived-losatp-payload", "key": "legacy-derived", "payload": {"pairs": []}}
     legacy_raw = {"schema": 2, "kind": "raw-losat", "key": "legacy-key", "text": "p_r_old\tp_r_other\n", "program": "blastp"}
     # A writer that quarantined both kinds; read them back in the on-disk shape.
@@ -771,7 +823,7 @@ def test_a_replay_drops_only_the_legacy_derived_evidence_that_current_derived_en
          "-f", "svg", "--session_output", str(replayed))
     resaved_session = load_session_document(replayed).to_dict()
     # The evidence goes only because the re-save writes current derived entries.
-    assert resaved_session["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+    assert drawing_view(resaved_session, mode=mode)["losatDerivedCache"]["entries"] == derived_entries
     resaved = resaved_session.get("legacyArtifacts")
     assert resaved is not None and set(resaved) == {"proteinRawCandidates"}
 

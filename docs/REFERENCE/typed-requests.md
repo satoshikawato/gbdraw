@@ -201,11 +201,12 @@ output path of every selected drawing is checked before the first file is
 written, and each embedded resource is parsed once for all drawings. The
 result maps drawing IDs to render results in document order.
 
-The current Session version, 48, holds at most one drawing of each mode: a
-Circular drawing with ID `circular` and name `Circular`, and a Linear drawing
-with ID `linear` and name `Linear`. The Web app writes the second drawing's
-Result set in `otherModeResult`. Each drawing keeps its settings and Legend
-edits in its mode's slice of `modes`; both drawings share the LOSAT caches.
+The current Session version, 49, holds its drawings in `drawings`: each has
+an ID from its mode (`circular`, `linear`, `linear-2`, …), a name, its request
+and Results, and its settings and Legend edits; the drawings share the
+resources. Python builds a new Session as the mode-scoped Session 48 that holds
+the drawings and moves it to drawings as Load moves a Session 48: a Circular
+drawing with ID `circular` and a Linear drawing with ID `linear`.
 `build_session_document(drawings=[...])` takes typed requests or
 `SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
 holds Web-owned drawing fields such as `results`, `editorState`, or the

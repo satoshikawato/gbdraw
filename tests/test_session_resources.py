@@ -23,6 +23,7 @@ from gbdraw.api.requests import (
 from gbdraw.session import (
     SessionResourceError,
     _build_session_document_from_resolved_request,
+    _mode_scoped_document_of_request,
     build_session_document,
     load_session_document,
     materialize_session,
@@ -231,8 +232,10 @@ def test_a_single_request_session_is_byte_identical(fixture: str, tmp_path: Path
             # A file resource stores its modification time.
             os.utime(path, (1_700_000_000, 1_700_000_000))
         request = session_to_request(materialized)
-        document = build_session_document(
+        # The checked mode-scoped Session 48, before the move to drawings.
+        document = _mode_scoped_document_of_request(
             request,
+            resolved=False,
             created_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         ).to_dict()
     text = json.dumps(document, sort_keys=True, separators=(",", ":"))
