@@ -16,7 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
+from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind, content_leaves
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -588,6 +588,10 @@ def _catalog_reads_text(reads: _CatalogElementReads) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+# The text of a content the catalog reads nothing from.
+_NO_READS_TEXT = _catalog_reads_text(_CatalogElementReads((), (), (), ()))
 
 
 def _catalog_reads_from_text(text: str) -> _CatalogElementReads:
@@ -2185,7 +2189,7 @@ def _reference_reconstructible_nucleotide_sequences(
 # groups, with the record source span), comparison ribbons and annotations.
 # The Circular axis circle (AXIS_CIRCLE) holds neither.
 # A Circular conservation ring carries the hits the catalog binds to features.
-# RECORD: a Multi-Record Circular record, all its groups merged into one content.
+# RECORD: a Multi-Record Circular record, whose parts (its placed groups) are read.
 _CATALOG_GROUP_KINDS = frozenset(
     {
         GroupKind.AXIS,
@@ -2217,7 +2221,8 @@ def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
         if not isinstance(element, ContentGroup) or not element.holds_content_children():
             return None
         if element.key.kind in _CATALOG_GROUP_KINDS:
-            contents.append(element.content)
+            # A record group adds no reads of its own: its parts are read.
+            contents.extend(content_leaves(element.content))
     return tuple(contents)
 
 
@@ -2293,9 +2298,14 @@ def build_feature_catalog_item(
         else None
     )
     if contents is not None:
+        # A content the catalog reads nothing from adds nothing to the item, so it does not key it.
         snapshots = tuple(
-            render_stage("catalog_snapshot", catalog_content_snapshot, content)
-            for content in contents
+            snapshot
+            for snapshot in (
+                render_stage("catalog_snapshot", catalog_content_snapshot, content)
+                for content in contents
+            )
+            if snapshot != _NO_READS_TEXT
         )
         return render_stage(
             "catalog_item",

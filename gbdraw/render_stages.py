@@ -88,6 +88,7 @@ RenderStageName = Literal[
     "conservation_content",
     "label_leaders_content",
     "label_text_content",
+    "record_part",
     "record_merge",
     "record_gc_percent",
 ]
@@ -176,6 +177,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "label_text_content": frozenset(
         {"labels.circular", "labels.font_size", "labels.length_threshold", "labels.stroke_color", "objects.text"}
     ),
+    "record_part": frozenset(),
     "record_merge": frozenset(),
     "record_gc_percent": frozenset(),
 }
