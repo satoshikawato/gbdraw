@@ -1,5 +1,6 @@
 // @ts-check
 import { downloadSafeName } from '../utils/download-names.js';
+import { CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR } from '../contracts/schema.generated.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
@@ -87,16 +88,60 @@ export const circularRecordsToDraw = (entries, recordsOff) => {
  * batch): its file position, so it keeps its key while others go OFF.
  * @param {number} sourceIndex 0-based position in the input file.
  */
-export const circularRecordRequestKey = (sourceIndex) => `record-${sourceIndex + 1}`;
+export const circularRecordRequestKey = (sourceIndex) => `${CLI_RECORD_KEY_PREFIX}${sourceIndex + 1}`;
+
+/**
+ * The record key of the `k`-th record (1-based) of a record input keyed
+ * `baseKey` that expands to several records, as Python names it
+ * (`resolve_record_inputs` in gbdraw/api/record_planning.py): `<baseKey>:<k>`;
+ * `baseKey` itself when `k` is null (the input draws one record). The one
+ * JavaScript composer of that form (a twin, tools/twins.json
+ * `concern:feature-instance-record-key`).
+ * @param {string} baseKey
+ * @param {number | null} k
+ */
+export const expandedRecordKey = (baseKey, k) => (k === null ? baseKey : `${baseKey}${EXPANDED_RECORD_KEY_SEPARATOR}${k}`);
+
+/**
+ * The `k` of a record key `expandedRecordKey(baseKey, k)` composes, or null
+ * when `recordKey` is not one of `baseKey`'s expansions.
+ * @param {string} recordKey
+ * @param {string} baseKey
+ * @returns {number | null}
+ */
+export const recordKeyExpansion = (recordKey, baseKey) => {
+  const prefix = `${baseKey}${EXPANDED_RECORD_KEY_SEPARATOR}`;
+  const k = recordKey.startsWith(prefix) ? recordKey.slice(prefix.length) : '';
+  return /^[1-9]\d*$/.test(k) ? Number(k) : null;
+};
+
+/**
+ * A record's identity: the name its feature edits use in every view, from its
+ * input and its position in the input's file (Owner D-02, D-04). Circular: the
+ * canvas key `record-<k>`. Linear: the key the record has when its card draws
+ * every record of its file, `<card uid>:<k>`, or the card uid for a file of one
+ * record. A record's rows live under its request key while it is drawn and
+ * under its identity while it is not (R2).
+ * @param {{ mode: string, uid: string, sourceIndex: number, recordCount: number }} record
+ *   `sourceIndex`: 0-based position in the file; `recordCount`: the file's records.
+ */
+export const recordIdentity = ({ mode, uid, sourceIndex, recordCount }) => (mode === 'circular'
+  ? circularRecordRequestKey(sourceIndex)
+  : expandedRecordKey(uid, recordCount > 1 ? sourceIndex + 1 : null));
 
 /**
  * The request key of a Circular record drawn alone (a single presentation):
- * its preserved key, or one built from its record ID and selector.
- * @param {{ recordKey?: unknown, recordId?: unknown, selector?: unknown } | null | undefined} record
+ * its preserved key, or one built from its record ID and selector. A preserved
+ * canvas key that names another record (`record-<n>` of a CLI or Python
+ * Session) is not kept: it is that record's identity (DESIGN A3).
+ * @param {{ recordKey?: unknown, recordId?: unknown, selector?: unknown, sourceIndex?: unknown } | null | undefined} record
  */
 export const circularSingleRecordKey = (record) => {
   const preserved = String(record?.recordKey || '').trim();
-  if (preserved) return preserved;
+  const position = preserved.startsWith(CLI_RECORD_KEY_PREFIX) ? preserved.slice(CLI_RECORD_KEY_PREFIX.length) : '';
+  const namesAnotherRecord = /^[1-9]\d*$/.test(position) && Number.isInteger(record?.sourceIndex)
+    && Number(position) !== Number(record?.sourceIndex) + 1;
+  if (preserved && !namesAnotherRecord) return preserved;
   const recordId = downloadSafeName(record?.recordId, 'record');
   const selector = downloadSafeName(record?.selector, '1');
   return `circular-${recordId}-${selector}`;
@@ -113,16 +158,151 @@ export const circularRecordRequestKeys = (record) => [
 ];
 
 /**
- * The request record keys of a drawing's OFF records: a Linear card's uid, or
- * a Circular record's `record-N`.
+ * The records a drawing's OFF records keep their rows under, as request
+ * records a row is matched against (`rowBelongsToRequest`): a Linear card's
+ * uid with its `<uid>:<k>` identities, or a Circular record's `record-N`.
  * @param {string} mode 'circular', or a Linear mode.
  * @param {Iterable<unknown> | null | undefined} recordsOff
- * @returns {string[]}
+ * @returns {{ recordKey: string, cardinality: 'all' | 'exactly_one' }[]}
  */
-export const offRecordRequestKeys = (mode, recordsOff) => [...offSet(recordsOff)]
-  .map((key) => (mode !== 'circular' ? key
-    : CIRCULAR_RECORD_KEY.test(key) ? circularRecordRequestKey(Number(key.slice(1)) - 1) : ''))
-  .filter(Boolean);
+export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsOff)]
+  .map((key) => (mode !== 'circular' ? { recordKey: key, cardinality: /** @type {const} */ ('all') }
+    : { recordKey: CIRCULAR_RECORD_KEY.test(key) ? circularRecordRequestKey(Number(key.slice(1)) - 1) : '',
+      cardinality: /** @type {const} */ ('exactly_one') }))
+  .filter(({ recordKey }) => recordKey);
+
+/**
+ * A record of a source file as a record list names it.
+ * @typedef {{ sourceIndex?: unknown, selector?: unknown, recordId?: unknown, record_id?: unknown }} RecordSourceEntry
+ * The record lists the identities of a request's records are read from: a
+ * Linear card's records by card uid, the Circular input's records; each list
+ * in file order, as `buildDisambiguatedRecordEntries` (services/record-options.js)
+ * gives it, so `selector` and `recordId` are those a request key is built from.
+ * @typedef {{ mode: string, linear?: ReadonlyMap<string, readonly RecordSourceEntry[]>,
+ *   circular?: readonly RecordSourceEntry[] }} RecordIdentitySources
+ * A record selector or region of a request record.
+ * @typedef {{ kind?: string, index?: number, value?: string } | null | undefined} RequestRecordSelector
+ * A record of a render request, as its identities are read from it.
+ * @typedef {{ recordKey: string, cardinality?: string, selector?: RequestRecordSelector,
+ *   region?: { selector?: RequestRecordSelector } | null }} IdentityRequestRecord
+ * One drawn record of a request: the record key its features have in that
+ * request, its identity, and (Circular) the other keys a 0.14.2 view switch
+ * may have left its rows under.
+ * @typedef {{ requestKey: string, identity: string, aliases: readonly string[] }} DrawnRecordIdentity
+ */
+
+/**
+ * The 0-based positions of a source's records, by record ID (a duplicated ID names none).
+ * @param {readonly RecordSourceEntry[]} entries
+ */
+const positionsOf = (entries) => {
+  const byId = new Map();
+  entries.forEach((entry, index) => {
+    const recordId = cleanKey(entry?.recordId ?? entry?.record_id);
+    const sourceIndex = Number.isInteger(entry?.sourceIndex) ? Number(entry.sourceIndex) : index;
+    byId.set(recordId, byId.has(recordId) ? null : sourceIndex);
+  });
+  return byId;
+};
+
+/**
+ * The 0-based position in its file of the one record a request record selects,
+ * or null when the selection does not name one record of `entries`.
+ * @param {IdentityRequestRecord} record
+ * @param {readonly RecordSourceEntry[]} entries
+ */
+const selectedPosition = (record, entries) => {
+  const selector = record.region?.selector || record.selector;
+  if (selector?.kind === 'recordIndex' && Number.isInteger(selector.index)) {
+    return Number(selector.index) < entries.length ? Number(selector.index) : null;
+  }
+  if (selector?.kind === 'recordId') return positionsOf(entries).get(cleanKey(selector.value)) ?? null;
+  return entries.length === 1 ? 0 : null;
+};
+
+/**
+ * The drawn records of a request with their identities (DESIGN 3, A1): each
+ * record's position comes from the request's own selector, read against the
+ * record lists of that request's sources, never from a card's current
+ * selection. A record whose source list is unknown has no identity, so its
+ * rows keep their key. A Linear card that draws every record of a file of
+ * several records draws each one under its identity.
+ * @param {readonly IdentityRequestRecord[]} records
+ * @param {RecordIdentitySources} sources
+ * @returns {DrawnRecordIdentity[]}
+ */
+export const drawnRecordIdentities = (records, sources) => records.flatMap((record) => {
+  const recordKey = cleanKey(record?.recordKey);
+  if (sources.mode === 'circular') {
+    const entries = sources.circular || [];
+    const position = selectedPosition(record, entries);
+    if (position === null) return [];
+    const entry = entries[position] || {};
+    return [{
+      requestKey: recordKey,
+      identity: recordIdentity({ mode: 'circular', uid: '', sourceIndex: position, recordCount: entries.length }),
+      aliases: circularRecordRequestKeys({
+        sourceIndex: position, recordId: entry.recordId ?? entry.record_id, selector: entry.selector
+      })
+    }];
+  }
+  const linear = sources.linear || new Map();
+  const base = linear.has(recordKey) ? recordKey
+    : [...linear.keys()].find((uid) => recordKeyExpansion(recordKey, uid) !== null);
+  const entries = base === undefined ? undefined : linear.get(base);
+  if (base === undefined || !entries || entries.length === 0) return [];
+  const identityOf = (/** @type {number} */ sourceIndex) => recordIdentity({
+    mode: 'linear', uid: base, sourceIndex, recordCount: entries.length
+  });
+  if (record.cardinality === 'all' && !record.selector && !record.region) {
+    return entries.map((/** @type {RecordSourceEntry} */ _entry, /** @type {number} */ sourceIndex) => {
+      const identity = identityOf(sourceIndex);
+      return { requestKey: identity, identity, aliases: [identity] };
+    });
+  }
+  const expansion = recordKeyExpansion(recordKey, base);
+  const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
+  if (position === null || position >= entries.length) return [];
+  const identity = identityOf(position);
+  return [{ requestKey: recordKey, identity, aliases: [identity] }];
+});
+
+/**
+ * The record key changes of one Generate (DESIGN 2-3, A3): `from` key ->
+ * `to` key, in priority order. A record's rows move from its key in the
+ * previous request (its identity when it was not drawn) to its key in the new
+ * request (its identity when it is not drawn). Then the aliases of each record
+ * the new request draws bring the rows a 0.14.2 view switch left under its
+ * other keys, after its own rows. A key that names another record in either
+ * request is never taken as an alias, and a record does not wait under an
+ * identity another record uses as its request key. The moves apply together
+ * from one snapshot, so a permutation is safe.
+ * @param {readonly DrawnRecordIdentity[]} previousDrawn
+ * @param {readonly DrawnRecordIdentity[]} nextDrawn
+ * @returns {Map<string, string>}
+ */
+export const recordKeyMoves = (previousDrawn, nextDrawn) => {
+  const previousKeyOf = new Map(previousDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
+  const nextKeyOf = new Map(nextDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
+  const previousKeys = new Set(previousKeyOf.values());
+  const nextKeys = new Set(nextKeyOf.values());
+  /** @type {Map<string, string>} */
+  const moves = new Map();
+  new Set([...previousKeyOf.keys(), ...nextKeyOf.keys()]).forEach((identity) => {
+    const from = previousKeyOf.get(identity) ?? identity;
+    const to = nextKeyOf.get(identity) ?? identity;
+    if (from === to) return;
+    // A row under another record's request key belongs to that record.
+    if (!previousKeyOf.has(identity) && previousKeys.has(from)) return;
+    if (!nextKeyOf.has(identity) && nextKeys.has(to)) return;
+    moves.set(from, to);
+  });
+  nextDrawn.forEach(({ requestKey, aliases }) => aliases.forEach((alias) => {
+    if (alias === requestKey || moves.has(alias) || nextKeys.has(alias) || previousKeys.has(alias)) return;
+    moves.set(alias, requestKey);
+  }));
+  return moves;
+};
 
 /**
  * Whether a key has the shape of its mode's record key.
@@ -306,8 +486,8 @@ const recordEditMatcher = (owners) => {
     const recordKey = cleanKey(value);
     const direct = byRequestKey.get(recordKey);
     if (direct !== undefined) return direct;
-    const match = /^(.*):[1-9]\d*$/.exec(recordKey);
-    return match && expanding.has(match[1]) ? byRequestKey.get(match[1]) : undefined;
+    const base = [...expanding].find((key) => recordKeyExpansion(recordKey, key) !== null);
+    return base === undefined ? undefined : byRequestKey.get(base);
   };
   return {
     ofRequestKey,

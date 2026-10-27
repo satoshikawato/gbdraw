@@ -2,6 +2,7 @@
 import { getFeatureCaption } from './feature-utils.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { featureEditsOf, setFeatureOverrideRow } from './drawing/feature-edits.js';
+import { recordKeyExpansion } from './record-draw-selection.js';
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
@@ -157,8 +158,8 @@ const canonicalIdentityRows = (overrides, projectRow) => {
  */
 export const recordKeyBelongsToRequest = (recordKey, records = []) => (
   typeof recordKey === 'string' && records.some((record) => (
-    record.recordKey === recordKey || (record.cardinality === 'all'
-      && recordKey.startsWith(`${record.recordKey}:`) && /^[1-9]\d*$/.test(recordKey.slice(record.recordKey.length + 1)))))
+    record.recordKey === recordKey
+    || (record.cardinality === 'all' && recordKeyExpansion(recordKey, record.recordKey) !== null)))
 );
 
 /**

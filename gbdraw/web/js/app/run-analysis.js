@@ -31,7 +31,9 @@ import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js
 import {
   losatRecordGencode, losatSearchSequences, prepareLosatSourceBatches, splitLosatSourceResult
 } from '../services/linear-sources.js';
-import { offRecordRequestKeys } from '../services/record-draw-selection.js';
+import { drawnRecordIdentities, offRecordRequestRecords, recordKeyMoves } from '../services/record-draw-selection.js';
+/** @import { DrawnRecordIdentity, RecordIdentitySources } from '../services/record-draw-selection.js' */
+import { moveInstanceRuleRecords } from '../services/feature-selector.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -45,6 +47,7 @@ import {
 import {
   projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
+  requestRecordPlan,
   bindCanonicalTypedResource,
   isCanonicalTypedResourceBound,
   committedFeatureVisibilityMatches,
@@ -99,6 +102,8 @@ import {
   resolveLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import {
+  movedIdentityValues,
+  movedRecordEdits,
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from '../services/feature-visibility.js';
@@ -194,6 +199,7 @@ import {
 import { GROUP_NAMES_SLICE } from '../services/drawing/group-names.js';
 import { FEATURE_EDITS_SLICE } from '../services/drawing/feature-edits.js';
 import { replaceDormantLegendRows, replaceFeatureFills } from '../services/drawing/paint.js';
+import { ANNOTATION_SETS_SLICE } from '../services/drawing/annotation-sets.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
   createImportedComparisonIntentState,
@@ -214,7 +220,14 @@ import {
 /** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
-/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
+/** @import { FeatureEditsData } from '../services/drawing/feature-edits.js' */
+/** @import { AnnotationSetsData } from '../services/drawing/annotation-sets.js' */
+/**
+ * What a Generate's History step restores of the drawing's intent (DESIGN A2).
+ * The moved feature strokes are not restored: that needs a History writer of
+ * the paint slice here (OV-1982, an authority-only registry entry).
+ * @typedef {FeatureEditsData & AnnotationSetsData & { removed: number }} GenerateIntentCheckpoint
+ */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
 /** @import { CircularConservationLike } from '../services/conservation-series.js' */
@@ -1502,6 +1515,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {((discovered: { primaryFile: File | null, pairedFile: File | null, recordCount: number }) => void) | null}
  *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {((mode: 'circular' | 'linear') => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
+ *   The record discovery owner's record lists of the shown mode's inputs, awaited (DESIGN A4): the
+ *   sources a Generate reads its requests' record identities from (`drawnRecordIdentities`).
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settlePendingInputs] The input reads Generate waits for before it reads the drawing:
@@ -1553,6 +1569,7 @@ export const createRunAnalysis = ({
   omittedAnnotationRecordKeys = null,
   onCircularRecordsDiscovered = null,
   prepareLinearRecordCatalog = null,
+  readRecordIdentitySources = null,
   // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
   recordDisplayRows = null,
   // D12, OV-1193: the input reads still applying settle before Generate reads the drawing.
@@ -1721,6 +1738,10 @@ export const createRunAnalysis = ({
   let activeReflowRun = null;
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
+  // The record identities of each committed request, by the request's resources, which every
+  // replacement of a committed Session that keeps its records keeps (a live setting commit, History).
+  /** @type {WeakMap<object, DrawnRecordIdentity[]>} */
+  const committedRecordIdentities = new WeakMap();
   let latestOperationId = 0;
   let circularRecordRefreshGeneration = 0;
   /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
@@ -2570,6 +2591,11 @@ export const createRunAnalysis = ({
     let requestDrawing = drawing;
     /** @type {ReturnType<typeof requestLabelProjection> | null} */
     let generatedLabelProjection = null;
+    // The record key moves of this run (OV-1949), and the record lists its identities are read from.
+    /** @type {ReadonlyMap<string, string>} */
+    let recordMoves = new Map();
+    /** @type {RecordIdentitySources | null} */
+    let identitySources = null;
     let failureStage = 'request-validation';
     recordSessionLifecycleEvent('generate-start');
     recordSessionLifecycleEvent('generation-input-resolution-start');
@@ -2642,6 +2668,9 @@ export const createRunAnalysis = ({
       ? getCommittedCanonicalSession()?.renderRequest : null;
     const previousRequestRecords = previousCommittedRequest && previousCommittedRequest.mode === mode.value
       ? previousCommittedRequest.records || [] : [];
+    // The identities of the committed request's records, kept with it when a Generate committed it.
+    const previousRecordIdentities = previousRequestRecords.length > 0
+      ? committedRecordIdentities.get(getCommittedCanonicalSession?.()?.resources ?? {}) ?? null : null;
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -2814,6 +2843,39 @@ export const createRunAnalysis = ({
       }
       candidateRules = colorCandidate.rules;
       requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
+      // OV-1949 (DESIGN 2-3, A1, A4): the records this run draws are matched by identity with the
+      // committed request's records, and the rows of each record whose key changes move to its new key.
+      // The request reads the moved rows; the drawing takes them when the run succeeds
+      // (`pruneUnmatchedFeatureOverrides`). Feature fills are rebuilt from the moved rules.
+      identitySources = typeof readRecordIdentitySources === 'function'
+        ? await readRecordIdentitySources(mode.value === 'circular' ? 'circular' : 'linear') : null;
+      throwIfGenerationCanceled();
+      if (generationToken !== latestGenerationToken) return { status: 'stale' };
+      const nextRecordPlan = identitySources ? requestRecordPlan({
+        state,
+        drawing: requestDrawing,
+        filesData: { linearSeqs: [...linearSeqs], c_gb: files.c_gb, c_gff: files.c_gff, c_fasta: files.c_fasta }
+      }) : null;
+      if (identitySources && nextRecordPlan) {
+        recordMoves = recordKeyMoves(
+          previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, identitySources),
+          drawnRecordIdentities(nextRecordPlan, identitySources)
+        );
+      }
+      if (recordMoves.size > 0) {
+        candidateRules = moveInstanceRuleRecords(candidateRules, recordMoves);
+        requestDrawing = {
+          ...requestDrawing,
+          ...movedRecordEdits({
+            featureOverrides: drawing.featureOverrides,
+            featurePlacementOverrides: drawing.featurePlacementOverrides || {},
+            featureStrokeOverrides: drawing.featureStrokeOverrides,
+            featureColorOverrides: drawing.featureColorOverrides,
+            annotationSets: drawing.annotationSets
+          }, recordMoves),
+          manualSpecificRules: candidateRules
+        };
+      }
       if (mode.value === 'linear') {
         requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
@@ -2894,12 +2956,16 @@ export const createRunAnalysis = ({
       // The request's label table holds label rules only; per-feature label
       // edits travel as featureOverrides rows (design Q4). One projection per
       // Generate serves the request (CW-02).
-      generatedLabelProjection = requestLabelProjection(state, requestDrawing);
+      // The bulk label projection reads the displayed Result's labels, under the keys before the moves.
+      const labelProjection = requestLabelProjection(state, drawing);
+      generatedLabelProjection = recordMoves.size > 0
+        ? { ...labelProjection, bulkLabelText: movedIdentityValues(labelProjection.bulkLabelText, recordMoves) }
+        : labelProjection;
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       /** @param {string[]} recordKeys */
       const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
-        drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
+        requestDrawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
       const featureVisibilityTsv = serializeFeatureVisibilityRules(drawing.featureVisibilityRules?.value || []);
@@ -5023,9 +5089,9 @@ export const createRunAnalysis = ({
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced,
-          featureColorOverrides: drawing.featureColorOverrides,
-          featureStrokeOverrides: drawing.featureStrokeOverrides,
-          featureOverrides: drawing.featureOverrides,
+          featureColorOverrides: requestDrawing.featureColorOverrides,
+          featureStrokeOverrides: requestDrawing.featureStrokeOverrides,
+          featureOverrides: requestDrawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
           deletedLegendEntries: drawing.deletedLegendEntries.value,
           dormantLegendEntries: drawing.dormantLegendEntries.value,
@@ -5289,18 +5355,24 @@ export const createRunAnalysis = ({
       }
       // Owner decision Q3 = A (design Q4 3.4, 6.3): a Generate that replaced a
       // source removes only the edits whose feature that source no longer has,
-      // and the edits of records the request dropped; Python names them.
-      featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
+      // and the edits of records the request dropped; Python names them. Then
+      // the rows of the records whose key changed move to their new keys (OV-1949).
+      featureEditRemovalCount.value = pruneUnmatchedFeatureOverrides({
         featureEdits: drawing.slices.featureEdits,
         paint: drawing.slices.paint,
-        notices: canonicalExecution.featureIdentityNotices,
-        replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
-          .map((feature) => String(feature.record_key)),
-        previousRecords: previousRequestRecords,
+        annotationSets: drawing.slices.annotationSets,
+        annotationSetRows: drawing.annotationSets,
+        notices: sourceReplaced ? canonicalExecution.featureIdentityNotices : [],
+        replacedRecordKeys: sourceReplaced
+          ? replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
+            .map((feature) => String(feature.record_key))
+          : [],
+        previousRecords: sourceReplaced ? previousRequestRecords : [],
         currentRecords: canonical.renderRequest.records || [],
-        retainedRecordKeys: offRecordRequestKeys(canonical.renderRequest.mode, drawing.recordsOff),
-        biologicalFeatures: candidateBiologicalFeatures
-      }) : 0;
+        retainedRecords: offRecordRequestRecords(canonical.renderRequest.mode, drawing.recordsOff),
+        biologicalFeatures: candidateBiologicalFeatures,
+        moves: recordMoves
+      });
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
       if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);
@@ -5313,6 +5385,10 @@ export const createRunAnalysis = ({
         // The committed request keeps the computed typed analysis resource, so
         // target-only renders and Similarity alignment use it without LOSATP.
         adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      // The identities of this request's records stay with it (DESIGN A1); History restores them with it.
+      if (identitySources) {
+        committedRecordIdentities.set(canonical.resources, drawnRecordIdentities(canonical.renderRequest.records, identitySources));
       }
       settlePendingLiveSettings(drawing);
       if (!useCommittedComparison && drawing.importedComparisonIntent) {
@@ -5457,17 +5533,23 @@ export const createRunAnalysis = ({
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
-              // A Generate that replaced a source removes the feature placements
-              // it no longer resolves (Q3 = A). Placements are draft intent, not
-              // part of the Result, so Undo and Redo restore them, and the
-              // removal count, with this step.
+              // A Generate that replaced a source removes the per-feature edits
+              // it no longer resolves (Q3 = A), and every Generate moves the rows
+              // of the records whose key changed (OV-1949, DESIGN A2). They are
+              // draft intent, not part of the Result, so Undo and Redo restore
+              // them, and the removal count, with this step; the rules travel
+              // with the artifact.
               captureIntentCheckpoint: () => ({
-                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
+                ...FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits),
+                ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
-              restoreIntentCheckpoint: (/** @type {{ placements: FeaturePlacementDraft, removed: number }} */ { placements, removed }) => {
-                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
+              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ {
+                featureOverrides, featurePlacementOverrides, annotationSets, removed
+              }) => {
+                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides, featurePlacementOverrides });
+                ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
                 featureEditRemovalCount.value = removed;
               },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,

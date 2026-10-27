@@ -72,7 +72,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
+import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -1493,6 +1493,26 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     circularSourceCount: recordSelectors.length || records.length,
     circularPresentedCount: recordSet.presentedCount || records.length
   };
+};
+
+/**
+ * The records the next Generate's request names for a drawing (its keys,
+ * cardinalities, selectors, and regions), before the request is built: the
+ * record plan of `buildCanonicalRenderRequest`, whose descriptors hold no
+ * bytes. A Generate matches them with the committed request's records by
+ * identity before it projects the per-feature rows (`recordKeyMoves`). An
+ * ALL card of several records keeps its one record here; the request may
+ * split it into its `<uid>:<k>` records, whose features have those keys either
+ * way. Null when the drafts name no complete request (Generate then reports why).
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData }} input
+ * @returns {RequestDraftRecord[] | null}
+ */
+export const requestRecordPlan = ({ state, drawing, filesData }) => {
+  try {
+    return buildRecords({ state, drawing, filesData, resources: createResourceBuilder({ encode: false }) }).records;
+  } catch {
+    return null;
+  }
 };
 
 // The label rendering a Generate draws (OV-159): Auto while the mode shows no
@@ -3184,7 +3204,7 @@ const projectCanonicalRenderInput = ({
       if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((/** @type {RecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
-          recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
+          recordKey: expandedRecordKey(record.recordKey, Number(row.selector.slice(1))),
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
             reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,

@@ -41,24 +41,67 @@ export const literalPatternText = (pattern) => exactRegexLiteral(pattern) ?? (es
 /**
  * A feature instance a `hash` rule names: `<biological feature ID>` and
  * `<record key>` joined by `FEATURE_INSTANCE_SEPARATOR` (Python's
- * `feature_instance`, gbdraw/features/ids.py).
- * @typedef {{ featureId: string, recordKey: string }} NamedFeatureInstance
+ * `feature_instance`, gbdraw/features/ids.py). `renamed(recordKey, form)` is
+ * the rule value that names the same feature in the record keyed `recordKey`:
+ * an exact pattern when `form` is 'exact' or the rule was written as one,
+ * otherwise the text as written.
+ * @typedef {{ featureId: string, recordKey: string,
+ *   renamed: (recordKey: string, form?: 'exact' | 'as-written') => string }} NamedFeatureInstance
  */
 /**
  * The feature instance a `hash` rule names: its value is one literal text (as
  * written or as an exact pattern) with the separator, and Python's matcher
  * matches it to the whole instance only (gbdraw/features/selector_values.py).
- * Null for any other rule, a `hash` rule naming a stable hash included.
+ * Null for any other rule, a `hash` rule naming a stable hash included. The
+ * one JavaScript function that reads and composes an instance (a twin,
+ * tools/twins.json `concern:feature-instance-record-key`).
  * @param {{ qual?: unknown, val?: unknown } | null | undefined} rule
  * @returns {NamedFeatureInstance | null}
  */
 export const namedFeatureInstance = (rule) => {
   if (String(rule?.qual ?? '').trim().toLowerCase() !== 'hash') return null;
-  const text = literalPatternText(String(rule?.val ?? '').trim());
+  const value = String(rule?.val ?? '').trim();
+  const text = literalPatternText(value);
   const at = text === null ? -1 : text.indexOf(FEATURE_INSTANCE_SEPARATOR);
-  return text !== null && at > 0 && at < text.length - 1
-    ? { featureId: text.slice(0, at), recordKey: text.slice(at + FEATURE_INSTANCE_SEPARATOR.length) }
-    : null;
+  if (text === null || at <= 0 || at >= text.length - 1) return null;
+  const featureId = text.slice(0, at);
+  const exact = exactRegexLiteral(value) !== null;
+  return {
+    featureId,
+    recordKey: text.slice(at + FEATURE_INSTANCE_SEPARATOR.length),
+    renamed: (recordKey, form = 'as-written') => {
+      const instance = `${featureId}${FEATURE_INSTANCE_SEPARATOR}${recordKey}`;
+      return form === 'exact' || exact ? exactRegexValue(instance) : instance;
+    }
+  };
+};
+
+/**
+ * The rules after a Generate moved records' rows to new keys (`recordKeyMoves`,
+ * services/record-draw-selection.js): each `hash` rule that names a feature
+ * instance of a moved key names it under the new key. Python compares an
+ * instance without letter case (gbdraw/features/colors.py), so the keys are
+ * compared that way; any other rule, a pattern included, is kept. The same
+ * list when nothing moved.
+ * @template {{ qual?: unknown, val?: unknown }} R
+ * @param {readonly R[]} rules
+ * @param {ReadonlyMap<string, string>} moves
+ * @returns {readonly R[]}
+ */
+export const moveInstanceRuleRecords = (rules, moves) => {
+  if (moves.size === 0) return rules;
+  /** @type {Map<string, string>} */
+  const byFoldedKey = new Map();
+  moves.forEach((to, from) => { if (!byFoldedKey.has(from.toLowerCase())) byFoldedKey.set(from.toLowerCase(), to); });
+  let changed = false;
+  const next = rules.map((rule) => {
+    const named = namedFeatureInstance(rule);
+    const to = named ? byFoldedKey.get(named.recordKey.toLowerCase()) : undefined;
+    if (!named || to === undefined) return rule;
+    changed = true;
+    return { ...rule, val: named.renamed(to) };
+  });
+  return changed ? next : rules;
 };
 
 /** @param {unknown} value */
