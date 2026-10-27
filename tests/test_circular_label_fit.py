@@ -786,12 +786,13 @@ LAMBDA_ARGS = [
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_cli_draws_crossing_leaders_and_prints_the_warning(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """LP-D46 CROSS-WARN: lambda at 15 pt has 2 crossing leader pairs and no overlaps (with the repair off).
+    """LP-D46 CROSS-WARN: lambda at 15 pt has 2 crossing leader pairs and no overlaps (with the repair and packer off).
 
     14 pt had them while labels were laid out in point-mode boxes; in their drawn boxes 14 pt fits (OV-165)."""
 
@@ -817,10 +818,12 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Web reads the report from the success result and asks for one row at a time.
 
-    The local repair (LP-D57) clears lambda's 2 crossings; it is off here, as for crossings it cannot clear.
+    The local repair (LP-D57) and the packer clear lambda's 2 crossings; both are off here, as for crossings
+    they cannot clear.
     Lambda at 15 pt (14 pt while labels were laid out in point-mode boxes; OV-165).
     """
 

@@ -230,3 +230,16 @@ def stub_typed_request_export(monkeypatch: pytest.MonkeyPatch) -> None:
             str(Path(output_dir or ".") / f"{output_prefix}.svg")
         ],
     )
+
+
+@pytest.fixture
+def todays_label_placement_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Circular horizontal labels as placed before the order-preserving packer: its looks are off.
+
+    For tests of what a figure that does not fit carries (its report, rows and warning) on small records
+    the packer now fits, as the repair is turned off for crossings it would clear.
+    """
+
+    import gbdraw.labels.circular_packer as packer_module
+
+    monkeypatch.setattr(packer_module, "PACKER_LOOKS", ())

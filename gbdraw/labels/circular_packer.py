@@ -14,12 +14,15 @@ side by side. The packing minimises the squared distance of each label from its
 target: pool-adjacent-violators on ``psi - D`` with the neighbour steps ``D``
 measured again a few times, then bounded sweeps.
 
-Two looks, tried in this order:
+Two looks, named by what the reader sees, tried in this order (CP-D05):
 
-- ``"half"`` (look 2): each label stays on its feature's genome half, as today;
-  whole runs at the ends of a half may pass 12 or 6 o'clock to the other side.
-- ``"pole"`` (look 1): one cycle of labels; each label moves only inside the cone
-  of angles at which its straight leader from the elbow still runs outward.
+- ``"half"`` (look 2): every label stays on its feature's genome half, as today
+  (no label passes 12 or 6 o'clock).
+- ``"pole"`` (look 1), only when no ``"half"`` placement fits: first whole runs at
+  the ends of a genome half pass 12 or 6 o'clock to the other side (the splits
+  of least displacement first); when no such split packs under the crossing
+  limit, one cycle of labels, each moving only inside the cone of angles at
+  which its straight leader from the elbow still runs outward.
 
 A packing's crossing leaders are counted with the fit check's own test
 (:func:`~gbdraw.labels.circular_leaders.leader_crossing_count`).
@@ -38,7 +41,7 @@ from .circular_leaders import leader_crossing_count
 from .circular_types import CircularLabel
 
 PackerLook: TypeAlias = Literal["half", "pole"]
-# CP-D05: look 2 (genome halves) first, look 1 (a run may pass a pole) only when look 2 gives nothing.
+# CP-D05: look 2 (every label on its genome half) first, look 1 (runs pass a pole) only when look 2 does not fit.
 PACKER_LOOKS: tuple[PackerLook, ...] = ("half", "pole")
 
 # Side by side, two boxes stay this far apart (LP-D37).
@@ -47,7 +50,7 @@ SIDE_GAP_PX = 1.0
 CONE_MARGIN_DEG = 1.0
 CONE_SCALES = (1.0, 1.25, 1.5, 2.0, 3.0, 5.0)
 _CONE_STEP_RAD = math.radians(0.25)
-# "half": the end runs that may pass a pole hold at most this many labels.
+# "pole": the end runs that may pass a pole hold at most this many labels.
 MAX_RUN_SHIFT = 20
 _STEP_START_RAD = 0.002
 _STEP_BISECTIONS = 18
@@ -87,8 +90,7 @@ class _Ring:
         left, right = item.right_text if x > 0 else item.left_text
         return x + left, y + item.rows[0], x + right, y + item.rows[1]
 
-    def apart(self, first: _PackItem, first_psi: float, second: _PackItem, second_psi: float) -> bool:
-        a, b = self.box(first, first_psi), self.box(second, second_psi)
+    def boxes_apart(self, a: Box, b: Box) -> bool:
         return (
             b[1] - a[3] >= self.row_gap
             or a[1] - b[3] >= self.row_gap
@@ -96,13 +98,18 @@ class _Ring:
             or a[0] - b[2] >= SIDE_GAP_PX
         )
 
+    def apart(self, first: _PackItem, first_psi: float, second: _PackItem, second_psi: float) -> bool:
+        return self.boxes_apart(self.box(first, first_psi), self.box(second, second_psi))
+
     def step(self, fixed: _PackItem, fixed_psi: float, moving: _PackItem, *, forward: bool = True) -> float:
         """The least angle ``moving`` keeps from ``fixed`` (after it when ``forward``, else before it)."""
 
+        fixed_box = self.box(fixed, fixed_psi)
+
         def clear(delta: float) -> bool:
             if forward:
-                return self.apart(fixed, fixed_psi, moving, fixed_psi + delta)
-            return self.apart(moving, fixed_psi - delta, fixed, fixed_psi)
+                return self.boxes_apart(fixed_box, self.box(moving, fixed_psi + delta))
+            return self.boxes_apart(self.box(moving, fixed_psi - delta), fixed_box)
 
         if clear(0.0):
             return 0.0
@@ -247,7 +254,10 @@ def _side_limits(arc: LabelArc) -> tuple[Span, Span]:
 
 
 class _HalfLook:
-    """Look 2: two sides; end runs of a genome half pass a pole only as wholes (shifts ``top``, ``bottom``)."""
+    """Two sides split at the genome halves; end runs pass a pole only as wholes (shifts ``top``, ``bottom``).
+
+    The split (0, 0) is look 2; any other split is look 1's first family.
+    """
 
     def __init__(self, items: Sequence[_PackItem], arc: LabelArc, total_length: int) -> None:
         self.items = items
@@ -321,18 +331,41 @@ class _HalfLook:
             current, state = best
         return state
 
+    def _prefix_excess(self, ring: _Ring, indices: Sequence[int], limits: Span) -> list[float]:
+        """The overflow of every prefix of ``indices`` stacked from the side's start (``excess`` of each prefix)."""
+
+        if not indices:
+            return []
+        seq, _ = self.side(indices, limits)
+        start = [limits[0]] * len(seq)
+        return [psi - limits[1] for psi in ring.sweep_forward(seq, start, start)]
+
     def states(self, ring: _Ring) -> list[tuple[int, int]]:
-        """Per top shift up to ``MAX_RUN_SHIFT``, the smallest bottom shift that fits; fewest moved first."""
+        """Per top shift up to ``MAX_RUN_SHIFT``, the smallest bottom shift that fits; fewest moved first.
+
+        The values equal ``excess`` per state: for one top shift the right sides of all bottom shifts are
+        prefixes of one sequence, and for one bottom shift the left sides of all top shifts are, so one
+        sweep per shift replaces one per state.
+        """
+
+        shifts = [shift for shift in range(-MAX_RUN_SHIFT, MAX_RUN_SHIFT + 1) if self.valid(shift)]
+        if not shifts:
+            return []
+        right_limits, left_limits = self.sides
+        right = {top: self._prefix_excess(ring, self.split(top, shifts[0])[0], right_limits) for top in shifts}
+        left = {bottom: self._prefix_excess(ring, self.split(shifts[-1], bottom)[1], left_limits) for bottom in shifts}
+
+        def fits(top: int, bottom: int) -> bool:
+            right_side, left_side = self.split(top, bottom)
+            return (not right_side or right[top][len(right_side) - 1] <= 0) and (
+                not left_side or left[bottom][len(left_side) - 1] <= 0
+            )
 
         found: list[tuple[int, int]] = []
-        shifts = range(-MAX_RUN_SHIFT, MAX_RUN_SHIFT + 1)
         for top in shifts:
-            if not self.valid(top):
-                continue
-            for bottom in sorted(shifts, key=abs):
-                if self.valid(bottom) and self.excess(ring, top, bottom) <= 0:
-                    found.append((top, bottom))
-                    break
+            bottom = next((bottom for bottom in sorted(shifts, key=abs) if fits(top, bottom)), None)
+            if bottom is not None:
+                found.append((top, bottom))
         found.sort(key=lambda state: abs(state[0]) + abs(state[1]))
         return found
 
@@ -353,7 +386,6 @@ class _HalfLook:
         return seq_all, psis_all, targets_all
 
 
-
 def _fewest_crossings(placements: Iterable[list[CircularLabel]], max_crossings: int) -> list[CircularLabel] | None:
     """The first placement with the fewest crossing leader pairs, at most ``max_crossings``; one without ends it."""
 
@@ -368,10 +400,26 @@ def _fewest_crossings(placements: Iterable[list[CircularLabel]], max_crossings: 
     return best
 
 
+_ON_HALVES = (0, 0)
+
+
 def _half_placements(
     items: Sequence[_PackItem], arc: LabelArc, row_gaps: Sequence[float], total_length: int
 ) -> Iterator[list[CircularLabel]]:
-    """Look 2: per row gap, the splits that fit, by least squared displacement (ties: fewest labels moved)."""
+    """Look 2: per row gap, the split at the genome halves (no label passes a pole), when it packs."""
+
+    look = _HalfLook(items, arc, total_length)
+    for row_gap in row_gaps:
+        ring = _Ring(arc, row_gap)
+        packing = look.packed(ring, _ON_HALVES)
+        if packing is not None:
+            yield _placed(ring, packing[0], packing[1], total_length)
+
+
+def _run_placements(
+    items: Sequence[_PackItem], arc: LabelArc, row_gaps: Sequence[float], total_length: int
+) -> Iterator[list[CircularLabel]]:
+    """Look 1, first family: per row gap, the splits whose end runs pass a pole, by least squared displacement."""
 
     look = _HalfLook(items, arc, total_length)
     for row_gap in row_gaps:
@@ -379,10 +427,10 @@ def _half_placements(
         fallback = look.greedy(ring)
         if fallback is None:
             continue
-        packings = [packing for state in look.states(ring) if (packing := look.packed(ring, state)) is not None]
-        if not packings:
-            only = look.packed(ring, fallback)
-            packings = [only] if only else []
+        states = [state for state in look.states(ring) if state != _ON_HALVES]
+        if not states and fallback != _ON_HALVES:
+            states = [fallback]
+        packings = [packing for state in states if (packing := look.packed(ring, state)) is not None]
         packings.sort(key=lambda packing: sum((psi - t) ** 2 for psi, t in zip(packing[1], packing[2])))
         for seq, psis, _targets in packings:
             yield _placed(ring, seq, psis, total_length)
@@ -411,10 +459,10 @@ def _cone(arc: LabelArc, item: _PackItem, target: float, scale: float) -> Span:
     return low, high
 
 
-def _pole_placements(
+def _cycle_placements(
     items: Sequence[_PackItem], arc: LabelArc, row_gaps: Sequence[float], total_length: int
 ) -> Iterator[list[CircularLabel]]:
-    """Look 1: one cycle cut at the widest gap between targets, packed per cone widening and row gap."""
+    """Look 1, second family: one cycle cut at the widest gap between targets, per cone widening and row gap."""
 
     count = len(items)
     raw = [item.target % _TWO_PI for item in items]
@@ -449,9 +497,10 @@ def pack_side(
     """One side's labels packed in genome order on ``arc`` in ``look``, or None when the look finds no placement.
 
     The row gaps tried are the circular label spacing, then the 0.1 px of the dense rows (LP-D45 order).
-    The result is the look's first packing of fewest crossing leader pairs, at most ``max_crossings``
-    (one without crossings ends the search). Returns copies in genome order with ``start_x``/``start_y``
-    and leader starts; the input is not changed.
+    The result is a family's first packing of fewest crossing leader pairs, at most ``max_crossings``
+    (one without crossings ends the search); look 1 tries its cycle family only when its run family
+    has none. Returns copies in genome order with ``start_x``/``start_y`` and leader starts; the input
+    is not changed.
     """
 
     ordered = sorted(labels, key=lambda label: float(label["middle"]))
@@ -459,12 +508,12 @@ def pack_side(
         return []
     items = [_item(label, arc, total_length, is_outer) for label in ordered]
     row_gaps = sorted({max(float(spacing_px), LEGACY_MIN_ROW_GAP_PX), LEGACY_MIN_ROW_GAP_PX}, reverse=True)
-    placements = (
-        _half_placements(items, arc, row_gaps, total_length)
-        if look == "half"
-        else _pole_placements(items, arc, row_gaps, total_length)
-    )
-    return _fewest_crossings(placements, max_crossings)
+    families = (_half_placements,) if look == "half" else (_run_placements, _cycle_placements)
+    for family in families:
+        packed = _fewest_crossings(family(items, arc, row_gaps, total_length), max_crossings)
+        if packed is not None:
+            return packed
+    return None
 
 
 __all__ = ["PACKER_LOOKS", "PackerLook", "pack_side"]

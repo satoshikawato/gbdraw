@@ -9,7 +9,7 @@ import heapq
 import math
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from functools import cached_property, lru_cache
-from typing import Any, Literal, NamedTuple, TypeAlias, get_args
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias, get_args
 
 from ..features.coordinates import get_strand
 from .filtering import label_filter_maps
@@ -17,10 +17,12 @@ from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
 from .circular_capacity import (
+    CircularLabelCapacity,
     LabelArc,
     check_label_capacity,
     circular_label_capacity,
     label_capacity_checked,
+    sides_packable,
 )
 from .circular_types import (
     LABEL_FIT_X_MARGIN_PX,
@@ -63,6 +65,9 @@ from ..svg.ids import instance_svg_id
 
 # Keep dense large-font labels from being pushed excessively far from features.
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+
+if TYPE_CHECKING:
+    from .circular_packer import PackerLook
 
 MIN_BBOX_GAP_RATIO = 0.01
 MIN_BBOX_GAP_FLOOR_PX = 1.2
@@ -5557,44 +5562,68 @@ def prepare_label_list(
             )
         return embedded_labels + external_labels
 
-    if record_id is not None and not probe and label_capacity_checked():
-        outer_offsets = cfg.labels.unified_adjustment.outer_labels
-        check_label_capacity(
-            record_id,
-            circular_label_capacity(
-                outer_labels,
-                inner_labels if inner_labels_enabled else (),
-                outer_arc=label_arc(
-                    radius,
-                    length_param,
-                    cfg,
-                    strands,
-                    True,
-                    float(outer_arena[1]) if outer_arena is not None else None,
-                    track_type,
-                ),
-                inner_arc=label_arc(radius, length_param, cfg, strands, False, None, track_type),
-                outer_offsets=(float(outer_offsets.x_radius_offset), float(outer_offsets.y_radius_offset)),
-                font_size=font_size,
-            ),
-        )
+    from .circular_packer import PACKER_LOOKS, pack_side
+    from .circular_repair import MAX_DEFECTS, defect_count, repair_circular_labels
 
-    def place_external_labels(dense_outer_rows: DenseOuterRows) -> list[CircularLabel]:
-        outer_labels_rearranged = rearrange_labels_fc(
-            [label.copy() for label in outer_labels],
-            radius,
-            total_length,
-            length_param,
-            cfg,
-            strands,
-            is_outer=True,
-            inner_labels_enabled=inner_labels_enabled,
-            arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
-            spacing_px=label_spacing_px,
-            track_preset=track_type,
-            dense_outer_rows=dense_outer_rows,
-            probe=probe,
+    # The ellipses both the capacity check and the packer read (one derivation per record).
+    outer_arc = label_arc(
+        radius,
+        length_param,
+        cfg,
+        strands,
+        True,
+        float(outer_arena[1]) if outer_arena is not None else None,
+        track_type,
+    )
+    inner_arc = label_arc(radius, length_param, cfg, strands, False, None, track_type)
+    capacities: tuple[CircularLabelCapacity, ...] = ()
+    if not probe:
+        outer_offsets = cfg.labels.unified_adjustment.outer_labels
+        capacities = circular_label_capacity(
+            outer_labels,
+            inner_labels if inner_labels_enabled else (),
+            outer_arc=outer_arc,
+            inner_arc=inner_arc,
+            outer_offsets=(float(outer_offsets.x_radius_offset), float(outer_offsets.y_radius_offset)),
+            font_size=font_size,
         )
+        if record_id is not None and label_capacity_checked():
+            check_label_capacity(record_id, capacities)
+
+    def place_external_labels(
+        dense_outer_rows: DenseOuterRows,
+        look: PackerLook | None = None,
+    ) -> list[CircularLabel] | None:
+        """One horizontal placement of the external labels; with a packer ``look`` (CP-D04), None when it has none."""
+        if look is None:
+            outer_labels_rearranged = rearrange_labels_fc(
+                [label.copy() for label in outer_labels],
+                radius,
+                total_length,
+                length_param,
+                cfg,
+                strands,
+                is_outer=True,
+                inner_labels_enabled=inner_labels_enabled,
+                arena_outer_radius=(float(outer_arena[1]) if outer_arena is not None else None),
+                spacing_px=label_spacing_px,
+                track_preset=track_type,
+                dense_outer_rows=dense_outer_rows,
+                probe=probe,
+            )
+        else:
+            outer_packed = pack_side(
+                outer_labels,
+                outer_arc,
+                look,
+                total_length=total_length,
+                is_outer=True,
+                spacing_px=label_spacing_px,
+                max_crossings=MAX_DEFECTS,
+            )
+            if outer_packed is None:
+                return None
+            outer_labels_rearranged = outer_packed
         feature_outer_radius_intervals: list[tuple[float, float, float]] | None = None
         feature_inner_radius_intervals: list[tuple[float, float, float]] | None = None
         if lane_clearance:
@@ -5694,18 +5723,32 @@ def prepare_label_list(
             )
         inner_labels_rearranged = []
         if inner_labels_enabled:
-            inner_labels_rearranged = rearrange_labels_fc(
-                [label.copy() for label in inner_labels],
-                radius,
-                total_length,
-                length_param,
-                cfg,
-                strands,
-                is_outer=False,
-                inner_labels_enabled=inner_labels_enabled,
-                spacing_px=label_spacing_px,
-                track_preset=track_type,
-            )
+            if look is None:
+                inner_labels_rearranged = rearrange_labels_fc(
+                    [label.copy() for label in inner_labels],
+                    radius,
+                    total_length,
+                    length_param,
+                    cfg,
+                    strands,
+                    is_outer=False,
+                    inner_labels_enabled=inner_labels_enabled,
+                    spacing_px=label_spacing_px,
+                    track_preset=track_type,
+                )
+            else:
+                inner_packed = pack_side(
+                    inner_labels,
+                    inner_arc,
+                    look,
+                    total_length=total_length,
+                    is_outer=False,
+                    spacing_px=label_spacing_px,
+                    max_crossings=MAX_DEFECTS,
+                )
+                if inner_packed is None:
+                    return None
+                inner_labels_rearranged = inner_packed
             if (not resolve_overlaps) and len(inner_labels_rearranged) >= 2:
                 inner_labels_rearranged = _rebalance_inner_labels_strict_order(
                     inner_labels_rearranged,
@@ -5725,15 +5768,16 @@ def prepare_label_list(
             # Collision optimization assumes angularly ordered neighbors.
             external_labels_sorted = sorted(external_labels, key=lambda label: float(label["middle"]))
             assign_leader_start_points(external_labels_sorted, total_length)
-            _resolve_label_leader_line_collisions(
-                external_labels_sorted,
-                total_length,
-                margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
-                step_deg=LEADER_LABEL_SHIFT_STEP_DEG,
-                max_shift_deg=LEADER_LABEL_MAX_SHIFT_DEG,
-                max_passes=LEADER_LABEL_MAX_PASSES,
-                min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
-            )
+            if look is None:  # a packed side keeps its order and its leaders as packed
+                _resolve_label_leader_line_collisions(
+                    external_labels_sorted,
+                    total_length,
+                    margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
+                    step_deg=LEADER_LABEL_SHIFT_STEP_DEG,
+                    max_shift_deg=LEADER_LABEL_MAX_SHIFT_DEG,
+                    max_passes=LEADER_LABEL_MAX_PASSES,
+                    min_order_gap_deg=LEADER_LABEL_MIN_ORDER_GAP_DEG,
+                )
             reanchor_required = False
             if feature_outer_radius_intervals is not None and outer_labels_rearranged:
                 outer_labels_rearranged = _update_outer_label_minimum_radii_against_features(
@@ -5801,7 +5845,7 @@ def prepare_label_list(
         len(outer_labels) >= LEGACY_PLACEMENT_LABEL_THRESHOLD
         and max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX) > LEGACY_MIN_ROW_GAP_PX
     ):
-        final_labels = embedded_labels + place_external_labels("legacy")
+        final_labels = embedded_labels + _always_placed(place_external_labels("legacy"))
     else:
         # A probe asks only whether either layout fits. It tries today's layout first
         # and stops when its dense rows overlap: wider spaced rows overlap as well.
@@ -5809,7 +5853,7 @@ def prepare_label_list(
         final_labels = []
         for dense_outer_rows in attempts:
             try:
-                attempt_labels = place_external_labels(dense_outer_rows)
+                attempt_labels = _always_placed(place_external_labels(dense_outer_rows))
             except CircularLabelProbeStopped:
                 if dense_outer_rows == "legacy":
                     raise
@@ -5822,10 +5866,33 @@ def prepare_label_list(
     if probe:
         return final_labels
     # LP-D57: repair slight defects of the final layout (Q7: not in probes; Q2: not the spaced attempt).
-    from .circular_repair import repair_circular_labels
+    defects = defect_count(final_labels, total_length, definition_text)
+    repaired = repair_circular_labels(final_labels, total_length, definition_text=definition_text, defects=defects)
+    today = final_labels if repaired is None else repaired
+    if defects == 0 or repaired is not None or not sides_packable(capacities):
+        return today
+    # CP-D04: a record that still does not fit tries the order-preserving packer, look 2 first (CP-D05); its
+    # placement is drawn only when the fit check then finds no defect, else today's placement stays.
+    for look in PACKER_LOOKS:
+        external = place_external_labels("legacy", look)
+        if external is None:
+            continue
+        packed = embedded_labels + external
+        packed_defects = defect_count(packed, total_length, definition_text)
+        if packed_defects == 0:
+            return packed
+        packed_repaired = repair_circular_labels(
+            packed, total_length, definition_text=definition_text, defects=packed_defects
+        )
+        if packed_repaired is not None:
+            return packed_repaired
+    return today
 
-    repaired = repair_circular_labels(final_labels, total_length, definition_text=definition_text)
-    return final_labels if repaired is None else repaired
+
+def _always_placed(labels: list[CircularLabel] | None) -> list[CircularLabel]:
+    """Today's external placement, which always places (only a packer look may find none)."""
+    assert labels is not None
+    return labels
 
 
 __all__ = [

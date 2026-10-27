@@ -906,6 +906,7 @@ def repair_circular_labels(
     total_length: int,
     *,
     definition_text: Sequence[Aabb] = (),
+    defects: int | None = None,
 ) -> list[CircularLabel] | None:
     """The record's labels with their slight defects repaired, or None to keep them as they are.
 
@@ -913,14 +914,15 @@ def repair_circular_labels(
     external labels); the result keeps their order. None when the record has
     no defect, more than ``MAX_DEFECTS``, radial labels, or defects the repair
     cannot clear completely. A repaired record then yields room around its
-    repaired defects (LP-D59).
+    repaired defects (LP-D59). ``defects``: the caller's :func:`defect_count`
+    of ``labels``, when it has one.
     """
 
     if any(label.get("placement") == "radial" or label.get("oriented_corners") for label in labels):
         return None
     if all(label.get("is_embedded") for label in labels):
         return None  # nothing to move; one label can still cover the definition text
-    count = defect_count(labels, total_length, definition_text)
+    count = defect_count(labels, total_length, definition_text) if defects is None else defects
     if not 0 < count <= MAX_DEFECTS:
         return None
     repair = _Repair(labels, total_length, definition_text)

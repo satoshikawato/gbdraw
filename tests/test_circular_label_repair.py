@@ -329,8 +329,11 @@ def test_the_same_run_draws_the_same_bytes(tmp_path: Path, lambda_14_svg: Path) 
 
 
 @pytest.mark.circular
+@pytest.mark.usefixtures("todays_label_placement_only")
 def test_fit_probes_do_not_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Q7: the fit search's probes place labels without the repair; the drawn placement repairs."""
+    """Q7: the fit search's probes place labels without the repair; the drawn placement repairs.
+
+    The packer is off: it would draw P1 at 14 pt and repair its own placements."""
 
     import gbdraw.labels.circular as circular_labels
 
@@ -342,7 +345,7 @@ def test_fit_probes_do_not_repair(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         probes.append(probe)
         return original(*args, probe=probe, **kwargs)
 
-    def repair(labels, total_length, *, definition_text=()):
+    def repair(labels, total_length, *, definition_text=(), defects=None):
         calls.append(len(labels))
         return None
 

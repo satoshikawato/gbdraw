@@ -44,6 +44,9 @@ from .fit import LabelCapacityRecord, LabelCapacityRemedy, label_capacity_senten
 CAPACITY_WARN_RATIO = 0.8
 CAPACITY_STOP_RATIO = 1.5
 CAPACITY_LEVER_RATIO = 1.0
+# The ratio is a lower bound of the room any placement with its anchors on the ellipse needs, so a side over
+# this cannot be packed on it (the order-preserving packer is not tried, CP-D04).
+PACKABLE_RATIO = 1.0
 
 CapacityLevel: TypeAlias = Literal["fits", "near", "over"]
 HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
@@ -191,6 +194,12 @@ def circular_label_capacity(
     return tuple(capacities)
 
 
+def sides_packable(capacities: Sequence[CircularLabelCapacity]) -> bool:
+    """Whether every side's labels may fit on their ellipse (ratio at most ``PACKABLE_RATIO``)."""
+
+    return all(capacity.record.ratio <= PACKABLE_RATIO for capacity in capacities)
+
+
 def check_label_capacity(record_id: str, capacities: Sequence[CircularLabelCapacity]) -> None:
     """Stop a record whose labels need much more room than the map has, or warn for the sides near the limit.
 
@@ -222,8 +231,10 @@ __all__ = [
     "CircularLabelCapacityExceeded",
     "HorizontalLabelKind",
     "LabelArc",
+    "PACKABLE_RATIO",
     "check_label_capacity",
     "circular_label_capacity",
     "label_capacity_checked",
     "label_capacity_unchecked",
+    "sides_packable",
 ]
