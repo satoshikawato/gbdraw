@@ -2458,9 +2458,8 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
     """The request records of the Linear cards of a Session before 31.
 
     Such a Session (release 0.13.0) has no request: each card gives its record
-    key, crop, and orientation, as the hash readers read them. The twin of
-    ``legacyLinearRequestRecords`` in the Web ``feature-edit-migration.js``.
-    For the source read of
+    key, crop, and orientation, as the hash readers read them. For the source
+    read of
     :func:`gbdraw.session_migration.read_request_less_source_features`, which
     the Web does not run, a card also gives its GenBank ``source`` (named by
     its slot path) and its record ``selector``.

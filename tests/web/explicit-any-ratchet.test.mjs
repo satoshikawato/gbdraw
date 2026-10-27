@@ -76,7 +76,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/watchers.js': 19,
   'services/annotation-state.js': 1,
   'services/artifact-slot.js': 7,
-  'services/config.js': 78,
+  'services/config.js': 67,
   'services/depth-track-state.js': 1,
   'services/diagram-generation.js': 1,
   'services/feature-catalog.js': 3,
