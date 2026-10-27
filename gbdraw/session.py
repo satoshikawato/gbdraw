@@ -33,6 +33,7 @@ from gbdraw.session_io import (
     _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
+    _option_all_values,
     CLI_SESSION_ADMISSION,
     WEB_READ_SESSION_ADMISSION,
     SessionAdmission,
@@ -581,8 +582,14 @@ def _with_saved_rule_captions(request: DiagramRequest) -> DiagramRequest:
 def _decode_drawing(
     materialized: MaterializedSession,
     drawing: SessionDrawingParts,
+    *,
+    stored_request_schema: int | None = None,
 ) -> DiagramRequest:
-    """Decode one drawing's committed request within its resource lifetime."""
+    """Decode one drawing's committed request within its resource lifetime.
+
+    ``stored_request_schema`` is the schema of the request the file stored
+    (None: the request's own); a schema-2 request takes its record labels
+    from the Session's CLI arguments."""
 
     version = drawing.artifacts.version
     if drawing.request is None:
@@ -601,7 +608,11 @@ def _decode_drawing(
     try:
         request = decode_session_request(
             version,
-            drawing.request,
+            _with_cli_record_presentations(
+                materialized.document._data,
+                drawing.request,
+                drawing.request.get("schema") if stored_request_schema is None else stored_request_schema,
+            ),
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )
@@ -1614,6 +1625,7 @@ def drawings_document_from_legacy(
     data: SessionDocument | Mapping[str, Any],
     *,
     temporary_directory: str | Path | None = None,
+    stored_request_schema: int | None = None,
 ) -> LegacyDrawings:
     """A Session 27-44 as a Session 49, as Web Load reads it, with its stored
     Results, where each drawing's Result set was in the file, and Load repairs.
@@ -1637,7 +1649,9 @@ def drawings_document_from_legacy(
     sources while Session 49 admits an undrawn drawing with its bindings.
     The returned document is checked as a Session 49. The repairs are what
     the draft migrations could not keep, as Web Load reports them. Other
-    versions raise :class:`SessionVersionError`.
+    versions raise :class:`SessionVersionError`. ``stored_request_schema``
+    is the schema of the request the file stored, which Web Load's reader
+    read before sending it; None reads it from the request.
     """
 
     loaded = data if isinstance(data, SessionDocument) else _web_read_document(data)
@@ -1656,6 +1670,7 @@ def drawings_document_from_legacy(
         if loaded._drawing_parts().request is None
         else _upgrade_to_current(
             loaded, temporary_directory, stored_results=stored_results, repairs=repairs,
+            stored_request_schema=stored_request_schema,
         ).document.to_dict()
     )
     drawings = _drawings_of_current(current, stored_results=stored_results)
@@ -1758,16 +1773,66 @@ def _request_less_data(
     )
 
 
+# The CLI options of a record's label and subtitle, by presentation field.
+_CLI_RECORD_PRESENTATION_OPTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("label", ("--record_label", "--record-label")),
+    ("subtitle", ("--record_subtitle", "--record-subtitle")),
+)
+
+
+def _with_cli_record_presentations(
+    source: Mapping[str, Any],
+    request: Mapping[str, Any],
+    stored_schema: object,
+) -> Mapping[str, Any]:
+    """``request`` with the record labels and subtitles of the Session's CLI
+    arguments, when the file stored a schema-2 request (OV-2052).
+
+    A CLI-written Session 31-33 with a schema-2 request kept its records'
+    labels and subtitles only in ``cliInvocation.args`` (or
+    ``config.cliOptions.rawArgs``); the Web's Gallery promotion gave them to
+    its records, the n-th value to the n-th record, trimmed, an empty one
+    as none. More values than records raise :class:`SessionConversionError`.
+    """
+
+    if stored_schema != 2:
+        return request
+    invocation = source.get("cliInvocation")
+    config = source.get("config")
+    cli_options = config.get("cliOptions") if isinstance(config, Mapping) else None
+    raw_args = (
+        invocation.get("args") if isinstance(invocation, Mapping) and isinstance(invocation.get("args"), list)
+        else cli_options.get("rawArgs") if isinstance(cli_options, Mapping) else None
+    )
+    args = [str(value) for value in raw_args] if isinstance(raw_args, list) else []
+    stored_records = request.get("records")
+    records = [dict(record) for record in stored_records] if isinstance(stored_records, list) else []
+    for field_name, names in _CLI_RECORD_PRESENTATION_OPTIONS:
+        values = _option_all_values(args, *names)
+        if len(values) > len(records):
+            raise SessionConversionError("CLI record presentation count exceeds the canonical record count.")
+        for record, value in zip(records, values):
+            presentation = record.get("presentation")
+            record["presentation"] = {
+                **(presentation if isinstance(presentation, Mapping) else {}),
+                field_name: value.strip() or None,
+            }
+    return {**request, "records": records} if records else request
+
+
 def _upgrade_to_current(
     loaded: SessionDocument,
     temporary_directory: str | Path | None,
     *,
     stored_results: StoredResults | None = None,
     repairs: list[DraftMigrationRepair] | None = None,
+    stored_request_schema: int | None = None,
 ) -> SessionUpgrade:
     """``loaded`` in the newest mode-scoped version (48), or a Session 48 or
     49 unchanged. With ``stored_results`` (Web Load's reading), Results
-    without a feature catalog go there instead of being dropped (OV-1659)."""
+    without a feature catalog go there instead of being dropped (OV-1659).
+    ``stored_request_schema`` is the schema of the request the file stored
+    (None: the request's own)."""
 
     if loaded.version >= MODE_SCOPED_SESSION_MAX_VERSION:
         return SessionUpgrade(loaded)
@@ -1810,7 +1875,7 @@ def _upgrade_to_current(
             repairs=repairs,
             source_features=read_legacy_source_features(source, materialized.resource_paths),
         )
-        request = _decode_drawing(materialized, drawing)
+        request = _decode_drawing(materialized, drawing, stored_request_schema=stored_request_schema)
         try:
             adapted = adapt_session_request(request, drawing.artifacts)
         except SessionError:

@@ -6529,7 +6529,9 @@ const importSessionDocument = async (e, options = {}) => {
         }, fileRepairs);
       }
       if (isPlainObject(readData.config)) readData.config = withStoredComparisonPlan(readData.config, readFiles);
-      const upgrade = await upgradeLegacySession(readData);
+      // Python's conversion reads the schema of the request the file stored
+      // (its schema-2 records take their CLI labels, OV-2052).
+      const upgrade = await upgradeLegacySession(readData, { storedRequestSchema: fileParts.requestRead.storedSchemas[''] });
       if (!options.isCurrent()) return { status: 'canceled' };
       // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
       // A Session 27-30's Result has no request: what it was drawn with
