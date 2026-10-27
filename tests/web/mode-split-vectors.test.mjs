@@ -176,8 +176,12 @@ const loadedOf = async (vector) => {
   return { converted, convertedModes, modes };
 };
 
-/** The mismatches of `expect` pointers read on `view` (all, or those `pointers` keeps). */
-const expectMismatches = (vector, view, keep = () => true) => Object.entries(vector.expect || {})
+/**
+ * The mismatches of `expect` pointers read on `view` (all, or those `keep`
+ * keeps). `expected` defaults to the case's `expect`; a whole-Session case
+ * passes `loadExpectOf(vector)`.
+ */
+const expectMismatches = (vector, view, keep = () => true, expected = vector.expect || {}) => Object.entries(expected)
   .filter(([pointer]) => keep(pointer)).flatMap(([pointer, expected]) => {
     const actual = resolve(view, pointer);
     return actual !== ABSENT && canonical(actual) === canonical(expected) ? [] : [`${pointer}: expected ${
@@ -196,6 +200,14 @@ const defaultMismatches = (vector, loaded) => (vector.loadDefaults || []).flatMa
   return canonical(actual) === canonical(value) ? [] : [`${pointer}: expected ${canonical(value)}, got ${canonical(actual)}`];
 });
 const isModePointer = (pointer) => pointer.startsWith('/modes/');
+/**
+ * The `expect` values of a whole-Session case as Web Load sends them to
+ * Python: Load's first pass carries a field each drawing reads differently
+ * from the stored draft as the read value (D-15-148 (A)), so `loadExpect`
+ * holds the read value for such a carried field (e.g. "20" read as 20). The
+ * pytest vector converts the stored draft and keeps `expect`.
+ */
+const loadExpectOf = (vector) => ({ ...(vector.expect || {}), ...(vector.loadExpect || {}) });
 
 for (const vector of VECTORS.cases) {
   const wholeSession = Boolean(vector.fixture) || vector.input?.format === 'gbdraw-session';
@@ -208,7 +220,8 @@ for (const vector of VECTORS.cases) {
         // that mode. A one-mode Session composes to one drawing (DESIGN 3.2):
         // the split's slice of the other mode is pinned in Python only.
         ...expectMismatches(vector, { modes: convertedModes },
-          (pointer) => isModePointer(pointer) && Object.hasOwn(convertedModes, pointer.split('/')[2])),
+          (pointer) => isModePointer(pointer) && Object.hasOwn(convertedModes, pointer.split('/')[2]),
+          loadExpectOf(vector)),
         // The flat draft does not outlive the conversion.
         ...absentMismatches(vector, converted, (pointer) => !isModePointer(pointer)),
         // Load fills what the split left absent.
