@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
 import hashlib
 import json
 import subprocess
@@ -18,18 +17,15 @@ from Bio import SeqIO
 from gbdraw.comparisons.losat_runtime import (
     LosatRuntime,
     LosatSearchArgs,
-    bundled_losat_runtime,
-    losat_runtime_record,
     run_losat_search,
 )
 from gbdraw.exceptions import GbdrawError
+from gbdraw.losat_setup import managed_losat
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = REPO_ROOT / "gbdraw" / "web" / "tutorial-data"
 OUTPUT_ROOT = FIXTURE_ROOT / "metazoan-mitochondria-comparison"
-LOSAT_PATH = REPO_ROOT / "gbdraw" / "bin" / "linux-x86_64" / "losat"
-LOSAT_SHA256 = "3d357ae9062d5ed4b2fa591e0316c2dd67fb7b3b986a079902bfa078ee18d3dd"
 THRESHOLDS = {
     "evalue": 1e-5,
     "bitscore": 50.0,
@@ -189,7 +185,7 @@ def _summarize(data: bytes, spec: ComparisonSpec) -> dict[str, Any]:
 
 
 def _run_once(spec: ComparisonSpec, runtime: LosatRuntime) -> bytes:
-    """Run TLOSATX through the shared LOSAT runtime owner (argv and dialect)."""
+    """Run TLOSATX through the shared LOSAT runtime owner."""
 
     return run_losat_search(
         "tlosatx",
@@ -206,27 +202,24 @@ def _run_once(spec: ComparisonSpec, runtime: LosatRuntime) -> bytes:
 
 def build(*, write: bool) -> dict[str, dict[str, Any]]:
     summaries: dict[str, dict[str, Any]] = {}
-    with ExitStack() as stack:
-        runtime = bundled_losat_runtime(stack=stack)
-        if runtime is None or Path(runtime.executable).resolve() != LOSAT_PATH.resolve():
-            raise ValueError(f"bundled LOSAT executable not found: {LOSAT_PATH}")
-        if _sha256(LOSAT_PATH.read_bytes()) != LOSAT_SHA256:
-            raise ValueError("pinned LOSAT executable checksum changed")
-        version = losat_runtime_record(runtime, "tlosatx")["version"]
-        if version != "0.1.0":
-            raise ValueError(f"pinned LOSAT version changed: {version}")
-        for spec in COMPARISONS:
-            first = _run_once(spec, runtime)
-            second = _run_once(spec, runtime)
-            if first != second:
-                raise ValueError(f"non-deterministic LOSAT output: {spec.filename}")
-            summaries[spec.filename] = _summarize(first, spec)
-            destination = OUTPUT_ROOT / spec.filename
-            if write:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_bytes(first)
-            elif destination.read_bytes() != first:
-                raise ValueError(f"frozen output differs: {spec.filename}")
+    # The managed install is verified against the packaged release lock
+    # (binary SHA-256 and `--version`).
+    managed = managed_losat()
+    if managed is None:
+        raise ValueError("managed LOSAT is not installed; run gbdraw setup-losat")
+    runtime = LosatRuntime("losat", str(managed), "managed")
+    for spec in COMPARISONS:
+        first = _run_once(spec, runtime)
+        second = _run_once(spec, runtime)
+        if first != second:
+            raise ValueError(f"non-deterministic LOSAT output: {spec.filename}")
+        summaries[spec.filename] = _summarize(first, spec)
+        destination = OUTPUT_ROOT / spec.filename
+        if write:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(first)
+        elif destination.read_bytes() != first:
+            raise ValueError(f"frozen output differs: {spec.filename}")
     for spec in COMPARISONS:
         filename = COMPARISON_FASTA_FILENAMES[spec.query.record_id]
         payload = _render_fasta(spec.query)

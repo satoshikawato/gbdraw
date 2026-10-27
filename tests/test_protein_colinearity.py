@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -2037,7 +2036,7 @@ def _write_conda_losat(prefix: Path, *, executable: bool = True) -> Path:
 
 
 @pytest.mark.linear
-def test_conda_losat_precedes_cache_bundled_and_path_without_side_effects(
+def test_conda_losat_precedes_cache_and_path_without_side_effects(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -2054,17 +2053,11 @@ def test_conda_losat_precedes_cache_bundled_and_path_without_side_effects(
     )
     monkeypatch.setattr(
         losat_runtime_module,
-        "_bundled_losat_resource",
-        lambda: (_ for _ in ()).throw(AssertionError("bundled discovery ran")),
-    )
-    monkeypatch.setattr(
-        losat_runtime_module,
         "_path_executable",
         lambda _name: (_ for _ in ()).throw(AssertionError("PATH discovery ran")),
     )
 
-    with ExitStack() as stack:
-        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+    runtime = losat_runtime_module.resolve_losat_runtime("losatp")
 
     assert runtime.source == "conda"
     assert runtime.executable == str(candidate)
@@ -2086,8 +2079,7 @@ def test_conda_losat_identity_uses_sys_prefix_not_environment_or_path(
     monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
     monkeypatch.setenv("PATH", f"{candidate_a.parent}{os.pathsep}{os.environ.get('PATH', '')}")
 
-    with ExitStack() as stack:
-        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+    runtime = losat_runtime_module.resolve_losat_runtime("losatp")
 
     assert runtime.source == "conda"
     assert runtime.executable == str(candidate_b)
@@ -2105,15 +2097,13 @@ def test_conda_prefix_without_losat_uses_normal_path_fallback(
     monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix_b))
     monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(
         losat_runtime_module,
         "_path_executable",
         lambda name: str(candidate_a) if name == "losat" else None,
     )
 
-    with ExitStack() as stack:
-        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+    runtime = losat_runtime_module.resolve_losat_runtime("losatp")
 
     assert runtime.source == "path"
     assert runtime.executable == str(candidate_a)
@@ -2139,15 +2129,13 @@ def test_non_conda_or_venv_prefix_ignores_base_conda_binary(
     monkeypatch.setattr(losat_runtime_module.sys, "base_prefix", str(base_prefix))
     monkeypatch.setenv("CONDA_PREFIX", str(base_prefix))
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(
         losat_runtime_module,
         "_path_executable",
         lambda name: str(path_candidate) if name == "losat" else None,
     )
 
-    with ExitStack() as stack:
-        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+    runtime = losat_runtime_module.resolve_losat_runtime("losatp")
 
     assert runtime.source == "path"
     assert runtime.executable == str(path_candidate)
@@ -2192,8 +2180,8 @@ def test_invalid_conda_losat_stops_at_its_path_without_fallback(
         lambda _name: (_ for _ in ()).throw(AssertionError("PATH fallback ran")),
     )
 
-    with ExitStack() as stack, pytest.raises(ValidationError, match=message) as exc_info:
-        losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+    with pytest.raises(ValidationError, match=message) as exc_info:
+        losat_runtime_module.resolve_losat_runtime("losatp")
 
     assert str(candidate.absolute()) in str(exc_info.value)
 
@@ -2252,12 +2240,12 @@ def test_conda_losat_nonzero_exit_reports_selected_path(
 
 
 @pytest.mark.linear
-def test_run_losatp_blastp_uses_bundled_binary_by_default(
+def test_run_losatp_blastp_uses_managed_binary_by_default(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    bundled_losat = tmp_path / "losat"
-    bundled_losat.write_text("#!/bin/sh\n", encoding="utf-8")
+    managed_losat = tmp_path / "LOSAT"
+    managed_losat.write_text("#!/bin/sh\n", encoding="utf-8")
     captured: dict[str, object] = {}
 
     def fake_run(command, **kwargs):
@@ -2265,13 +2253,8 @@ def test_run_losatp_blastp_uses_bundled_binary_by_default(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(
-        losat_runtime_module,
-        "_bundled_losat_resource",
-        lambda: bundled_losat,
-    )
     monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
-    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: managed_losat)
     monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
@@ -2280,7 +2263,7 @@ def test_run_losatp_blastp_uses_bundled_binary_by_default(
     )
 
     command = captured["command"]
-    assert command[0:2] == [str(bundled_losat), "blastp"]
+    assert command[0:2] == [str(managed_losat), "blastp"]
 
 
 @pytest.mark.linear
@@ -2297,7 +2280,6 @@ def test_run_losatp_blastp_uses_path_losat_before_blastp(
     def fake_path_executable(name: str) -> str | None:
         return {"losat": "/usr/local/bin/losat", "blastp": "/usr/local/bin/blastp"}.get(name)
 
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
@@ -2326,7 +2308,6 @@ def test_run_losatp_blastp_falls_back_to_path_ncbi_blastp(
     def fake_path_executable(name: str) -> str | None:
         return "/usr/local/bin/blastp" if name == "blastp" else None
 
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
@@ -2357,9 +2338,6 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fail_bundled():
-        raise AssertionError("bundled LOSAT discovery should not run")
-
     def fail_path(_name: str):
         raise AssertionError("PATH discovery should not run")
 
@@ -2368,7 +2346,6 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
     monkeypatch.setattr(
         losat_runtime_module,
         "_conda_losat_runtime",
@@ -2408,9 +2385,6 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def fail_bundled():
-        raise AssertionError("bundled LOSAT discovery should not run")
-
     def fail_path(_name: str):
         raise AssertionError("PATH discovery should not run")
 
@@ -2419,7 +2393,6 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
     monkeypatch.setattr(
         losat_runtime_module,
         "_conda_losat_runtime",
@@ -2441,15 +2414,9 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
 def test_run_losatp_blastp_missing_runtime_error_is_actionable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
     monkeypatch.setattr(losat_runtime_module, "_path_executable", lambda _name: None)
-    monkeypatch.setattr(
-        losat_runtime_module,
-        "_bundled_platform_dir",
-        lambda: "macos-arm64",
-    )
 
     with pytest.raises(ValidationError) as exc_info:
         protein_colinearity_module.run_losatp_blastp(
@@ -2459,23 +2426,10 @@ def test_run_losatp_blastp_missing_runtime_error_is_actionable(
 
     message = str(exc_info.value)
     assert "Protein BLASTP comparison needs LOSAT or NCBI BLAST+" in message
-    assert "macos-arm64" in message
+    assert "gbdraw setup-losat" in message
     assert "`losat` was not found on PATH" in message
     assert "`blastp` was not found on PATH" in message
     assert "--ncbi_blast_bin" in message
-
-
-@pytest.mark.linear
-def test_bundled_losatp_platform_dir_is_platform_specific(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(losat_runtime_module.sys, "platform", "linux")
-    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "x86_64")
-    assert losat_runtime_module._bundled_platform_dir() == "linux-x86_64"
-
-    monkeypatch.setattr(losat_runtime_module.sys, "platform", "darwin")
-    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "arm64")
-    assert losat_runtime_module._bundled_platform_dir() == "macos-arm64"
 
 
 @pytest.mark.linear

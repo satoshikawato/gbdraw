@@ -42,6 +42,7 @@ from gbdraw.comparisons.losat_jobs import (
 from gbdraw.comparisons.losat_runtime import (
     LOSAT_PROGRAMS,
     LosatRawCache,
+    LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
     require_losat_task_support,
@@ -343,7 +344,7 @@ def resolve_circular_conservation_losat(
                 search.program.upper(), index + 1, len(comparison_files),
                 os.path.basename(comparison.path), len(subject_ids),
             )
-            runtime_records: list[dict[str, object]] = []
+            runtime_records: list[LosatRuntimeRecord] = []
             text = _validated_rows(
                 run_losat_search(
                     spec,

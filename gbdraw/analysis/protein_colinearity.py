@@ -56,6 +56,7 @@ from gbdraw.comparisons.losat_runtime import (
     LosatCacheWrite,
     LosatRawCache,
     LosatRuntimeCallback,
+    LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
     run_losat_search,
@@ -6125,7 +6126,7 @@ def _search_losatp_record_pairs(
         if not missing:
             continue
         raw_text: list[str] = []
-        runtime_records: list[dict[str, object]] = []
+        runtime_records: list[LosatRuntimeRecord] = []
         if runner is not None:
             batch_hits = runner(batch.query.fasta, batch.subject.fasta)
         else:

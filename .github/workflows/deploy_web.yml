@@ -37,6 +37,8 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
       - name: Run all public Gallery parity owners
         run: |
           npm run test:web:gallery-publication

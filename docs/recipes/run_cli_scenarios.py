@@ -1192,28 +1192,18 @@ def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
         )
     if "--losat_bin" in command or "--ncbi_blast_bin" in command:
         raise RecipeContractError(
-            f"{scenario_id} must exercise automatic bundled-runtime selection."
+            f"{scenario_id} must exercise automatic runtime selection."
         )
 
     from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
 
-    with ExitStack() as stack:
-        runtime = resolve_losat_runtime("losatp", stack=stack)
-        if runtime.kind != "losat" or runtime.source != "bundled":
-            raise RecipeContractError(
-                f"{scenario_id} did not resolve the bundled LOSAT runtime."
-            )
-        result = subprocess.run(
-            [runtime.executable, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    if result.returncode != 0 or result.stdout.strip() != "losat 0.1.0":
+    # The managed runtime is the pinned release, verified against the packaged
+    # lock (binary SHA-256 and `--version`) whenever it resolves.
+    runtime = resolve_losat_runtime("losatp")
+    if runtime.kind != "losat" or runtime.source != "managed":
         raise RecipeContractError(
-            f"{scenario_id} expected bundled LOSAT 0.1.0, got "
-            f"{result.stdout.strip() or result.stderr.strip()!r}."
+            f"{scenario_id} did not resolve the managed LOSAT runtime "
+            "(run gbdraw setup-losat first)."
         )
 
 

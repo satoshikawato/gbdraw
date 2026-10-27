@@ -82,6 +82,8 @@ jobs:
           npm ci
           npx playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
       - name: Verify first-Generate parity
         run: npm run test:web:gallery-publication
 
@@ -107,6 +109,8 @@ jobs:
           node-version-file: .node-version
       - name: Install performance dependencies
         run: python -m pip install -e ".[export]" Pillow
+      - name: Install the managed LOSAT runtime
+        uses: ./.github/actions/managed-losat
       - name: Enforce three-trial projection gate
         run: >-
           python tools/measure_gallery_publication_performance.py projection
