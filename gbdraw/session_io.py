@@ -2460,25 +2460,34 @@ def _legacy_linear_request_records(files: object) -> list[dict[str, Any]]:
     Such a Session (release 0.13.0) has no request: each card gives its record
     key, crop, and orientation, as the hash readers read them. The twin of
     ``legacyLinearRequestRecords`` in the Web ``feature-edit-migration.js``.
+    For the source read of
+    :func:`gbdraw.session_migration.read_request_less_source_features`, which
+    the Web does not run, a card also gives its GenBank ``source`` (named by
+    its slot path) and its record ``selector``.
     """
 
     linear_seqs = files.get("linearSeqs") if isinstance(files, Mapping) else None
     records: list[dict[str, Any]] = []
-    for seq in _mapping_list(linear_seqs):
+    for index, seq in enumerate(_mapping_list(linear_seqs)):
         start = _nonnegative_integer(seq.get("region_start"))
         end = _nonnegative_integer(seq.get("region_end"))
         cropped = start is not None or end is not None
         reverse = bool(seq.get("region_reverse"))
+        record_id = _js_text(seq.get("region_record_id")).strip()
         records.append(
             {
                 "recordKey": _js_text(seq.get("uid")),
-                "cardinality": (
-                    "exactly_one" if cropped or _js_text(seq.get("region_record_id")) else "all"
-                ),
+                "cardinality": "exactly_one" if cropped or record_id else "all",
                 "region": (
                     {"start": start, "end": end, "reverseComplement": reverse} if cropped else None
                 ),
                 "presentation": {"reverseComplement": not cropped and reverse},
+                "source": (
+                    {"kind": "genbank", "resourceId": f"files.linearSeqs[{index}].gb"}
+                    if isinstance(seq.get("gb"), Mapping)
+                    else None
+                ),
+                "selector": {"kind": "recordId", "value": record_id} if record_id else None,
             }
         )
     return records
@@ -2512,6 +2521,40 @@ def has_hash_color_rules(rules: object) -> bool:
 
     return isinstance(rules, list) and any(
         isinstance(rule, Mapping) and _js_text(rule.get("qual")).lower() == "hash" for rule in rules
+    )
+
+
+def _drawn_hashes_unknown(records: object, features: object) -> bool:
+    """Whether ``features`` cannot name what a ``hash`` value of a request
+    record in ``records`` drew: a record is drawn cropped or
+    reverse-complemented and no feature carries its drawn hash (they are not
+    the sources read again)."""
+
+    return any(_hash_frame_changed(record) for record in _mapping_list(records)) and not any(
+        isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
+        for feature in _mapping_list(features)
+    )
+
+
+def request_less_hash_rules_need_drawn_hashes(session: Mapping[str, Any]) -> bool:
+    """Whether the ``hash`` color rules of a Session without a request and
+    without a saved catalog need its sources read again: one of its Linear
+    cards is drawn cropped or reverse-complemented and its saved feature
+    metadata holds no drawn hashes, so :func:`migrate_session_hash_rules`
+    would count a value it cannot name as unmapped."""
+
+    editor_state = session.get("editorState")
+    config = session.get("config")
+    features = session.get("features")
+    return (
+        session.get("renderRequest") is None
+        and not (isinstance(editor_state, Mapping) and isinstance(editor_state.get("featureCatalog"), Mapping))
+        and isinstance(config, Mapping)
+        and has_hash_color_rules(config.get("rules"))
+        and _drawn_hashes_unknown(
+            _legacy_linear_request_records(session.get("files")),
+            _legacy_draft_features({}, features if isinstance(features, Mapping) else {}),
+        )
     )
 
 
@@ -2558,12 +2601,8 @@ def migrate_session_hash_rules(
         drawn_hashes_unknown = False
     else:
         drawn = _drawn_features_of_index(_legacy_feature_index(legacy, mode))
-        legacy_features = legacy.get("features") if isinstance(legacy, Mapping) else None
-        drawn_hashes_unknown = any(
-            _hash_frame_changed(record) for record in _mapping_list(records)
-        ) and not any(
-            isinstance(feature.get("drawn_selector") or feature.get("drawnSelector"), Mapping)
-            for feature in _mapping_list(legacy_features)
+        drawn_hashes_unknown = _drawn_hashes_unknown(
+            records, legacy.get("features") if isinstance(legacy, Mapping) else None
         )
     unmapped_count = 0
     changed = False
@@ -4183,6 +4222,25 @@ class SessionDraftMigration:
     unmapped_hash_selector_count: int = 0
 
 
+def _legacy_draft_features(read_again: Mapping[str, Any], saved_features: Mapping[str, Any]) -> list[Any]:
+    """The features that name a catalog-less Session's edits and ``hash``
+    rules: the first non-empty of the sources read again and the saved
+    feature metadata."""
+
+    return next(
+        (
+            candidates
+            for candidates in (
+                read_again.get("extractedFeatures"),
+                saved_features.get("biologicalFeatures"),
+                saved_features.get("extractedFeatures"),
+            )
+            if isinstance(candidates, list) and candidates
+        ),
+        [],
+    )
+
+
 def migrate_session_flat_draft(
     session: Mapping[str, Any], *, source_features: Mapping[str, Any] | None = None
 ) -> SessionDraftMigration:
@@ -4195,8 +4253,10 @@ def migrate_session_flat_draft(
     then per-feature edits (``migrate_session_feature_edits``) through the
     saved catalog or, without one, through the request records and the first
     non-empty of ``source_features["extractedFeatures"]`` (the sources read
-    again, see :func:`gbdraw.session_migration.read_legacy_source_features`)
-    and the saved feature metadata, then the ``hash`` color rules of a Session
+    again, see :func:`gbdraw.session_migration.read_legacy_source_features`
+    and, for a Session before 31,
+    :func:`gbdraw.session_migration.read_request_less_source_features`) and
+    the saved feature metadata, then the ``hash`` color rules of a Session
     44 or older through the same catalog or sources
     (``migrate_session_hash_rules``), then the ``hash=`` annotation targets of
     a Session 40-44 (``migrate_session_annotation_targets``). A Session 40-44
@@ -4225,18 +4285,7 @@ def migrate_session_flat_draft(
     saved_features = features if isinstance(features, Mapping) else {}
     legacy = None if has_catalog else {
         "records": _promoted_request_records(request),
-        "features": next(
-            (
-                candidates
-                for candidates in (
-                    read_again.get("extractedFeatures"),
-                    saved_features.get("biologicalFeatures"),
-                    saved_features.get("extractedFeatures"),
-                )
-                if isinstance(candidates, list) and candidates
-            ),
-            [],
-        ),
+        "features": _legacy_draft_features(read_again, saved_features),
         "biologicalFeatures": read_again.get("biologicalFeatures") or [],
     }
     if isinstance(features, Mapping):
@@ -5606,10 +5655,17 @@ def build_session_json(
         payload.setdefault("title", "gbdraw")
 
     if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        from .session_migration import log_session_draft_migration
+        from .session_migration import (
+            log_session_draft_migration,
+            read_request_less_source_features,
+        )
 
-        # The migrations read the version of the Session they migrate.
-        migration = migrate_session_flat_draft({**payload, "version": source_version})
+        # The migrations read the version of the Session they migrate; the
+        # hash rules of a Session 27-30 read its sources again (OV-2043).
+        source = {**payload, "version": source_version}
+        migration = migrate_session_flat_draft(
+            source, source_features=read_request_less_source_features(source)
+        )
         log_session_draft_migration(migration, source_version)
         payload = {**migration.session, "version": MODE_SCOPED_SESSION_MAX_VERSION}
     config = payload.get("config")
@@ -7413,6 +7469,7 @@ __all__ = [
     "migrate_session_draft_values",
     "migrate_session_annotation_targets",
     "migrate_session_hash_rules",
+    "request_less_hash_rules_need_drawn_hashes",
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",

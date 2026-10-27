@@ -1650,7 +1650,9 @@ def drawings_document_from_legacy(
     repairs: list[DraftMigrationRepair] = []
     stored_results: StoredResults = {}
     current = (
-        _request_less_data(loaded, repairs=repairs, stored_results=stored_results)
+        _request_less_data(
+            loaded, temporary_directory, repairs=repairs, stored_results=stored_results
+        )
         if loaded._drawing_parts().request is None
         else _upgrade_to_current(
             loaded, temporary_directory, stored_results=stored_results, repairs=repairs,
@@ -1716,6 +1718,7 @@ def _project_adjunct(
 
 def _request_less_data(
     loaded: SessionDocument,
+    temporary_directory: str | Path | None,
     *,
     repairs: list[DraftMigrationRepair] | None = None,
     stored_results: StoredResults | None = None,
@@ -1726,13 +1729,22 @@ def _request_less_data(
     its Results go to ``stored_results`` when given (Web Load), by the ID of
     the drawing, else stay for the check to refuse. The document keeps the
     mode shown at Save (``ui.mode``), which is a use of that mode,
-    so the drawing of a set-aside Result may be another mode.
+    so the drawing of a set-aside Result may be another mode. The ``hash``
+    color rules of a Session 27-30 are named through its sources read again
+    when they need drawn hashes (OV-2043).
     """
 
-    from gbdraw.session_migration import replace_current_derived_feature_state
+    from gbdraw.session_migration import (
+        read_request_less_source_features,
+        replace_current_derived_feature_state,
+    )
 
     drawing = loaded._drawing_parts()
-    state, web_file_inventory = _project_adjunct(loaded, repairs=repairs)
+    state, web_file_inventory = _project_adjunct(
+        loaded,
+        repairs=repairs,
+        source_features=read_request_less_source_features(loaded._data, temporary_directory),
+    )
     if stored_results is not None:
         _set_aside_results(stored_results, drawing.id, state)
     replace_current_derived_feature_state(state, None)
@@ -1777,7 +1789,9 @@ def _upgrade_to_current(
     # A Session before the current version holds one drawing.
     drawing = loaded._drawing_parts()
     if drawing.request is None:
-        return SessionUpgrade(SessionDocument(_request_less_data(loaded, repairs=repairs)))
+        return SessionUpgrade(
+            SessionDocument(_request_less_data(loaded, temporary_directory, repairs=repairs))
+        )
     from gbdraw.api.session_compat import (
         adapt_session_request,
         project_legacy_similarity_alignment_for_current_write,
