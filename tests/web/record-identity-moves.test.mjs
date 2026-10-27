@@ -156,6 +156,23 @@ test('duplicates stay separate: the same file in two cards, and records with one
   assert.deepEqual(pairs(drawnRecordIdentities([{ recordKey: 'W', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 } }], twins)), [['W', 'W:2']]);
 });
 
+// #494: a replaced source no longer binds its records; the prune decides
+// their rows, so no row leaves or enters a key whose source the Generate replaces.
+test('no row moves out of or into a record key whose source the Generate replaces', () => {
+  // A Session drew the Circular file's record as `record-1`; the replacement file is drawn alone.
+  const loaded = drawnRecordIdentities([{ recordKey: 'record-1', selector: { kind: 'recordIndex', index: 0 } }], circular('A'));
+  const replacement = drawnRecordIdentities([{ recordKey: 'circular-A-#1', selector: { kind: 'recordId', value: 'A' } }], circular('A'));
+  assert.deepEqual(moves(loaded, replacement), { 'record-1': 'circular-A-#1' });
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(loaded, replacement, new Set(['record-1']))), {});
+  // A Linear card keeps its uid: a row moves neither out of its replaced key nor into it.
+  const sources = linear({ U: ['r1', 'r2'] });
+  const all = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all' }], sources);
+  const one = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 1 } }], sources);
+  assert.deepEqual(moves(all, one), { 'U:2': 'U' });
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all, one, new Set(['U:2']))), {});
+  assert.deepEqual(Object.fromEntries(recordKeyMoves(all, one, new Set(['U']))), {});
+});
+
 test('aliases bring rows a 0.14.2 view switch left dormant, after the record\'s own rows', () => {
   const sources = circular('A', 'B');
   // A 0.14.2 Session saved record 2 drawn alone; its canvas rows still wait under `record-2`.

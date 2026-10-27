@@ -2668,6 +2668,10 @@ export const createRunAnalysis = ({
         .filter((/** @type {FeatureCatalogRow} */ feature) => !isCurrentFeature(feature))
       : [];
     const sourceReplaced = replacedFeatures.length > 0;
+    // Their record keys in this mode: the prune decides their rows, and no row moves out of them or into them.
+    const replacedRecordKeys = new Set(replacedFeatures
+      .filter((/** @type {FeatureCatalogRow} */ feature) => feature.scope === mode.value)
+      .map((/** @type {FeatureCatalogRow} */ feature) => String(feature.record_key)));
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
       ? getCommittedCanonicalSession()?.renderRequest : null;
     const previousRequestRecords = previousCommittedRequest && previousCommittedRequest.mode === mode.value
@@ -2863,7 +2867,8 @@ export const createRunAnalysis = ({
       if (identitySources && nextRecordPlan) {
         recordMoves = recordKeyMoves(
           previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, identitySources),
-          drawnRecordIdentities(nextRecordPlan, identitySources)
+          drawnRecordIdentities(nextRecordPlan, identitySources),
+          replacedRecordKeys
         );
       }
       if (recordMoves.size > 0) {
@@ -5367,10 +5372,7 @@ export const createRunAnalysis = ({
         annotationSets: drawing.slices.annotationSets,
         annotationSetRows: drawing.annotationSets,
         notices: sourceReplaced ? canonicalExecution.featureIdentityNotices : [],
-        replacedRecordKeys: sourceReplaced
-          ? replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
-            .map((feature) => String(feature.record_key))
-          : [],
+        replacedRecordKeys: [...replacedRecordKeys],
         previousRecords: sourceReplaced ? previousRequestRecords : [],
         currentRecords: canonical.renderRequest.records || [],
         retainedRecords: offRecordRequestRecords(canonical.renderRequest.mode, drawing.recordsOff),

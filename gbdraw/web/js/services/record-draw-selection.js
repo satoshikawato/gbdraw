@@ -287,12 +287,15 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
  * field; a row left under the new key by an earlier view comes last. A key that names another record in either
  * request is never taken as an alias, and a record does not wait under an
  * identity another record uses as its request key. The moves apply together
- * from one snapshot, so a permutation is safe.
+ * from one snapshot, so a permutation is safe. A row never leaves or enters a
+ * key whose source the Generate replaces (`unbound`): the replaced source no
+ * longer binds that record (#494), and the prune decides its rows.
  * @param {readonly DrawnRecordIdentity[]} previousDrawn
  * @param {readonly DrawnRecordIdentity[]} nextDrawn
+ * @param {ReadonlySet<string>} [unbound]
  * @returns {Map<string, string>}
  */
-export const recordKeyMoves = (previousDrawn, nextDrawn) => {
+export const recordKeyMoves = (previousDrawn, nextDrawn, unbound = new Set()) => {
   const previousKeyOf = new Map(previousDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
   const nextKeyOf = new Map(nextDrawn.map(({ identity, requestKey }) => [identity, requestKey]));
   const previousKeys = new Set(previousKeyOf.values());
@@ -302,7 +305,7 @@ export const recordKeyMoves = (previousDrawn, nextDrawn) => {
   new Set([...previousKeyOf.keys(), ...nextKeyOf.keys()]).forEach((identity) => {
     const from = previousKeyOf.get(identity) ?? identity;
     const to = nextKeyOf.get(identity) ?? identity;
-    if (from === to) return;
+    if (from === to || unbound.has(from) || unbound.has(to)) return;
     // A row under another record's request key belongs to that record.
     if (!previousKeyOf.has(identity) && previousKeys.has(from)) return;
     if (!nextKeyOf.has(identity) && nextKeys.has(to)) return;
@@ -310,7 +313,8 @@ export const recordKeyMoves = (previousDrawn, nextDrawn) => {
   });
   const movedInto = new Set(moves.values());
   nextDrawn.forEach(({ requestKey, aliases }) => aliases.forEach((alias) => {
-    if (alias === requestKey || moves.has(alias) || nextKeys.has(alias) || previousKeys.has(alias)) return;
+    if (alias === requestKey || moves.has(alias) || nextKeys.has(alias) || previousKeys.has(alias)
+      || unbound.has(alias) || unbound.has(requestKey)) return;
     // The rows already under the record's key, which no move brings there,
     // are its own: they come first (`requestKey` -> `requestKey`).
     if (!movedInto.has(requestKey) && !moves.has(requestKey)) moves.set(requestKey, requestKey);
