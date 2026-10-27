@@ -4182,9 +4182,26 @@ export const serializeActiveRenderFiles = async (
 /** A generated comparison as the request describes it. */
 const GENERATED_COMPARISON_SHAPE = /** @type {const} */ ({ kind: 'ref', name: 'CanonicalGeneratedProteinComparison' });
 /**
- * The saved comparisons of a draft. With `repairs` (Load), an entry that is
- * neither resource-backed nor a generated comparison as the request describes
- * it is dropped and listed (OV-750); Generate passes none.
+ * The saved comparison entries Load keeps: an entry that is neither
+ * resource-backed nor a generated comparison as the request describes it is
+ * dropped and listed at `path` (OV-750). Load's first reading of a Session
+ * 27-44 reads them at the file's own path (`readStoredFiles`).
+ * @param {unknown} comparisons The stored list (none when it is not one).
+ * @param {string} path
+ * @param {LoadRepair[] | null} repairs
+ */
+const readCanonicalComparisonEntries = (comparisons, path, repairs) => {
+  if (!Array.isArray(comparisons)) return [];
+  const read = comparisons.filter((comparison) => isResourceBackedCanonicalComparison(comparison)
+    || shapeViolations(comparison, GENERATED_COMPARISON_SHAPE, CANONICAL_REQUEST_DESCRIPTION.types, '').length === 0);
+  if (read.length < comparisons.length) {
+    repairs?.push(loadRepair({ code: 'setting-entries-dropped', path, effect: 'dropped', count: comparisons.length - read.length }));
+  }
+  return read;
+};
+/**
+ * The saved comparisons of a draft. With `repairs` (Load), the entries Load
+ * keeps (`readCanonicalComparisonEntries`); Generate passes none.
  * @param {unknown} comparisons
  * @param {{ adoptCanonicalPayloads?: boolean, repairs?: LoadRepair[] | null }} [options]
  */
@@ -4193,15 +4210,7 @@ const deserializeCanonicalComparisons = (
   { adoptCanonicalPayloads = false, repairs = null } = {}
 ) => {
   if (!Array.isArray(comparisons)) return [];
-  const read = repairs ? comparisons.filter((comparison) => isResourceBackedCanonicalComparison(comparison)
-    || shapeViolations(comparison, GENERATED_COMPARISON_SHAPE, CANONICAL_REQUEST_DESCRIPTION.types, '').length === 0)
-    : comparisons;
-  if (repairs && read.length < comparisons.length) {
-    repairs.push(loadRepair({
-      code: 'setting-entries-dropped', path: 'files.linearCanonicalComparisons', effect: 'dropped',
-      count: comparisons.length - read.length
-    }));
-  }
+  const read = repairs ? readCanonicalComparisonEntries(comparisons, 'files.linearCanonicalComparisons', repairs) : comparisons;
   return read.map((comparison) => (
     isResourceBackedCanonicalComparison(comparison)
       // A resource-backed entry maps to an entry, never null.
@@ -4662,6 +4671,10 @@ const readStoredFiles = (filesData, at, readable, repairs) => {
       if (Object.hasOwn(seq, 'depth')) kept.depth = readDepthValue(seq.depth, readable);
       return kept;
     });
+  }
+  if (Array.isArray(filesData.linearCanonicalComparisons)) {
+    read.linearCanonicalComparisons = readCanonicalComparisonEntries(filesData.linearCanonicalComparisons,
+      `${at}.linearCanonicalComparisons`, repairs);
   }
   if (Array.isArray(filesData.linearComparisons)) {
     read.linearComparisons = filesData.linearComparisons.filter((/** @type {UnvalidatedFields<'file'>} */ comparison) => (
