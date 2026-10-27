@@ -188,13 +188,7 @@ export const offRecordRequestRecords = (mode, recordsOff) => [...offSet(recordsO
  * in file order, as `buildDisambiguatedRecordEntries` (services/record-options.js)
  * gives it, so `selector` and `recordId` are those a request key is built from.
  * @typedef {{ mode: string, linear?: ReadonlyMap<string, readonly RecordSourceEntry[]>,
- *   linearOrigins?: ReadonlyMap<string, LinearRecordOrigin>,
  *   circular?: readonly RecordSourceEntry[] }} RecordIdentitySources
- * The Linear card that drew every record of a file before Generate split its
- * records into cards of their own (`expandDiscoveredLinearRecords` in
- * app/app-setup.js), and the 0-based position of the split card's record in
- * that file, by the split card's uid.
- * @typedef {{ uid: string, sourceIndex: number }} LinearRecordOrigin
  * A record selector or region of a request record.
  * @typedef {{ kind?: string, index?: number, value?: string } | null | undefined} RequestRecordSelector
  * A record of a render request, as its identities are read from it.
@@ -279,13 +273,7 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
   const position = expansion !== null ? expansion - 1 : selectedPosition(record, entries);
   if (position === null || position >= entries.length) return [];
   const identity = identityOf(position);
-  // A card split from a card that drew every record also takes the rows its
-  // record had there.
-  const origin = sources.linearOrigins?.get(base);
-  const originKey = origin && origin.sourceIndex === position
-    ? recordIdentity({ mode: 'linear', uid: origin.uid, sourceIndex: position, recordCount: entries.length })
-    : null;
-  return [{ requestKey: recordKey, identity, aliases: originKey ? [identity, originKey] : [identity] }];
+  return [{ requestKey: recordKey, identity, aliases: [identity] }];
 });
 
 /**
@@ -297,9 +285,7 @@ export const drawnRecordIdentities = (records, sources) => records.flatMap((reco
  * other keys, after its own rows: a row moved from its previous key, or else
  * the row already under its key (listed as a move to itself), wins field by
  * field; a row left under the new key by an earlier view comes last. A key that names another record in either
- * request is never taken as an alias (the identity under which an undrawn
- * record of the previous request would wait is its own only when a split card
- * names it as its origin), and a record does not wait under an
+ * request is never taken as an alias, and a record does not wait under an
  * identity another record uses as its request key. The moves apply together
  * from one snapshot, so a permutation is safe.
  * @param {readonly DrawnRecordIdentity[]} previousDrawn
@@ -324,8 +310,7 @@ export const recordKeyMoves = (previousDrawn, nextDrawn) => {
   });
   const movedInto = new Set(moves.values());
   nextDrawn.forEach(({ requestKey, aliases }) => aliases.forEach((alias) => {
-    const waits = previousKeyOf.get(alias) === alias && !nextKeyOf.has(alias);
-    if (alias === requestKey || moves.has(alias) || nextKeys.has(alias) || (previousKeys.has(alias) && !waits)) return;
+    if (alias === requestKey || moves.has(alias) || nextKeys.has(alias) || previousKeys.has(alias)) return;
     // The rows already under the record's key, which no move brings there,
     // are its own: they come first (`requestKey` -> `requestKey`).
     if (!movedInto.has(requestKey) && !moves.has(requestKey)) moves.set(requestKey, requestKey);

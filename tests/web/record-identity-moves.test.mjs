@@ -124,31 +124,24 @@ test('Linear ALL <-> one record <-> region, a file of one record, and a record 2
   assert.deepEqual(drawnRecordIdentities([{ recordKey: 'gone', cardinality: 'all' }], sources), []);
 });
 
-test('Linear: a Generate that splits a card drawing every record moves each record to its own card', () => {
-  // A loaded Session drew U's two records as U:1 and U:2; Generate gives
-  // record 2 the new card X (`expandDiscoveredLinearRecords`).
-  const before = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', selector: null, region: null }],
-    linear({ U: ['r1', 'r2'] }));
-  const split = { ...linear({ U: ['r1', 'r2'], X: ['r1', 'r2'] }), linearOrigins: new Map([['X', { uid: 'U', sourceIndex: 1 }]]) };
-  const after = drawnRecordIdentities([
-    { recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } },
+// R2-H1: the cards of one uploaded file (U record 1, X record 2) are two
+// cards; one card's rows never move onto the other card, also while the
+// first card's record 2 waits under its identity.
+test('Linear: the rows of one card of a file never move onto another card of that file', () => {
+  // A split origin (removed) named U's record 2 as X's; the sources may carry it.
+  const sources = { ...linear({ U: ['r1', 'r2'], X: ['r1', 'r2'] }), linearOrigins: new Map([['X', { uid: 'U', sourceIndex: 1 }]]) };
+  const draw = (uRecord) => drawnRecordIdentities([
+    { recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: uRecord } },
     { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
-  ], split);
-  assert.deepEqual(moves(before, after), { 'U:1': 'U', 'X:2': 'X', 'U:2': 'X' });
-  // Without the origin, record 2's rows wait under U:2.
-  assert.deepEqual(moves(before, drawnRecordIdentities([
-    { recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } },
-    { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
-  ], linear({ U: ['r1', 'r2'], X: ['r1', 'r2'] }))), { 'U:1': 'U', 'X:2': 'X' });
-  // The origin names X's record only while X draws that record, and never a
-  // key that U draws again.
-  const otherRecord = drawnRecordIdentities([{ recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } }], split);
-  assert.deepEqual(otherRecord[0].aliases, ['X:1']);
-  const uAllAgain = drawnRecordIdentities([
-    { recordKey: 'U', cardinality: 'all', selector: null, region: null },
-    { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
-  ], split);
-  assert.equal(recordKeyMoves(after, uAllAgain).get('U:2'), undefined);
+  ], sources);
+  // U on record 2 (its feature edited), Generate; U back on record 1, Generate; Generate again.
+  const onRecord2 = draw('r2');
+  const backOnRecord1 = draw('r1');
+  assert.deepEqual(moves(onRecord2, backOnRecord1), { U: 'U:2', 'U:1': 'U', X: 'X', 'X:2': 'X' });
+  assert.equal(recordKeyMoves(backOnRecord1, backOnRecord1).get('U:2'), undefined);
+  [moves(onRecord2, backOnRecord1), moves(backOnRecord1, backOnRecord1)].forEach((step) => {
+    assert.equal(Object.entries(step).some(([from, to]) => from.startsWith('U') && to === 'X'), false);
+  });
 });
 
 test('duplicates stay separate: the same file in two cards, and records with one ID', () => {

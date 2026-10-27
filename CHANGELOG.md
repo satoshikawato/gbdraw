@@ -52,7 +52,8 @@ write-up of a release.
   a Linear File card that draws all of its records or one of them. Before,
   they stopped applying after a Generate that drew the record under another
   key. Undo of that Generate puts them back; Session files are unchanged
-  (OV-1949).
+  (OV-1949). Edits made on an "all records" card of a 0.13.0 Session do not
+  follow its records after the first Generate splits the card.
 - Fixed: label text and Label visibility typed in the Web feature popup and
   not yet applied stay when the labels are placed again while the popup is
   open (OV-1984).

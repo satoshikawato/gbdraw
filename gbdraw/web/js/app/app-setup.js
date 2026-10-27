@@ -21,7 +21,7 @@
 /** @import { LinearComparisonEdge, LinearComparisonIssue, LinearComparisonPair, LinearComparisonPlan, LinearComparisonResolvedEdge, LinearComparisonSource } from '../services/linear-comparisons.js' */
 /** @import { LinearComparisonUiIssue } from './comparison-ui.js' */
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
-/** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData, LinearRecordOrigin } from '../services/record-draw-selection.js' */
+/** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
@@ -1397,11 +1397,6 @@ export const createAppSetup = () => {
   // were not when the file replaced another: those names belong to that file.
   /** @type {Map<string, boolean>} */
   const pendingLinearRecordExpansions = new Map();
-  // The card each record split from a card that drew every record of its file
-  // came from, by the new card's uid: Generate moves the rows the record had
-  // under the earlier card to the new one (OV-1949).
-  /** @type {Map<string, LinearRecordOrigin>} */
-  const linearRecordOrigins = new Map();
   // The Linear Files and the Circular input just uploaded: their first record
   // discovery infers record definitions (Linear GenBank) and opens the record
   // list of a file with many records (D-04). A Session load, a rollback, and a
@@ -1454,9 +1449,6 @@ export const createAppSetup = () => {
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
     ], { alignmentMutation: msg('record selector changed.') });
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
-    expanded.forEach((seq, sourceIndex) => {
-      if (seq.uid !== uid) linearRecordOrigins.set(seq.uid, { uid, sourceIndex });
-    });
     return true;
   };
   /** @param {{ uid: string, records: SequenceRecord[] }} discovered */
@@ -3469,8 +3461,7 @@ export const createAppSetup = () => {
       }
       return {
         mode: sourceMode,
-        linear: new Map(linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))])),
-        linearOrigins: linearRecordOrigins
+        linear: new Map(linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))]))
       };
     },
     recordDisplayRows: recordDisplayControls.allRows,

@@ -22,7 +22,7 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-waste-'));
 // The slice editors and svg-serialization resolve a drawing's ID by its mode.
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'drawing-view.js'), join(tempDir, 'services', 'drawing-view.js'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-for (const folder of ['app/feature-editor', 'services/drawing', 'utils']) {
+for (const folder of ['app/feature-editor', 'services/drawing', 'utils', 'contracts']) {
   await mkdir(join(tempDir, folder), { recursive: true });
 }
 const copyModule = async (source, destination = source) => writeFile(
@@ -35,7 +35,9 @@ for (const source of [
   'app/feature-editor/svg-actions.js', 'utils/popup-bounds.js', 'services/runtime-test-hooks.js',
   'services/feature-placement.js', 'services/json-clone.js', 'app/feature-selection.js',
   'services/svg-serialization.js', 'services/preview-affordances.js', 'services/settings-sections.js', 'services/drawn-groups.js',
-  'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js', 'utils/i18n.js'
+  'services/drawing/feature-edits.js', 'services/drawing/paint.js', 'services/drawing/slice-handle.js', 'utils/reactivity.js', 'utils/i18n.js',
+  // feature-placement.js reads the record keys of a drawing from their owner.
+  'services/record-draw-selection.js', 'utils/download-names.js', 'contracts/schema.generated.js'
 ]) await copyModule(source);
 // The identity owner, with its rendered-identity reads counted.
 await copyModule('services/feature-identity.js', 'services/feature-identity-owner.js');

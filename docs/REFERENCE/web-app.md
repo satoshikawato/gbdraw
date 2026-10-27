@@ -1261,7 +1261,9 @@ record under another key (a Circular record drawn alone or on the
 one of them) moves the rule, the label, visibility, and stroke edits, the
 Feature placements, and the annotation targets of that record to its new key,
 and a record that the Generate does not draw keeps them until it is drawn
-again. **Undo** of that Generate puts them back. Resetting **This feature only** on
+again. **Undo** of that Generate puts them back. Edits made on an "all
+records" card of a gbdraw 0.13.0 Session do not follow its records after the
+first Generate splits the card. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared
 hash is narrowed to the copies it still colors. **Delete settings** of a record
 that is turned off removes the `hash` rules that name its feature instances;
