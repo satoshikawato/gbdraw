@@ -9,9 +9,9 @@ from svgwrite import Drawing
 from svgwrite.base import BaseElement
 
 from gbdraw.render.group_content import (
-    ContentGroup,
     GroupContent,
     element_text,
+    placed_content,
     require_element_markup,
     start_tag,
 )
@@ -118,15 +118,12 @@ def _piece_texts(pieces: tuple[Piece, ...]) -> Iterator[str]:
 
 
 def _piece(element: BaseElement) -> Piece:
-    if (
-        isinstance(element, ContentGroup)
-        and element.content.children
-        and element.holds_content_children()
-    ):
+    content = placed_content(element)
+    if content is not None:
         return ContentPiece(
             start=require_element_markup(start_tag(element)),
-            children=element.content.children_text,
-            content=element.content,
+            children=content.children_text,
+            content=content,
         )
     # defs, a group without content, and an empty group (``<g ... />``).
     return RawPiece(require_element_markup(element_text(element)))

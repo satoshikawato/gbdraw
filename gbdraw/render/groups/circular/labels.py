@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Sequence
+from typing import TYPE_CHECKING, Literal, Sequence
 
 from gbdraw.svg.elements import Group, Line
 
@@ -13,11 +13,13 @@ from ....canvas import CircularCanvasGeometry
 from ....labels.circular_types import CircularLabel
 from ....labels.label_ink import FeatureLabelInk, circular_label_ink
 from ....labels.label_style import label_leader_width_px
-from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import stable_svg_id
 from ...drawers.circular.labels import LabelDrawer
 from ...drawers.label_backing import feature_label_box, label_halo
 from ...label_binding import bind_label_part
+
+if TYPE_CHECKING:
+    from ....config.models import CircularRenderProfile
 
 Point = tuple[float, float]
 
@@ -34,17 +36,18 @@ class LabelsGroup:
         self,
         record_length: int,
         geometry: CircularCanvasGeometry,
-        render_context: CircularRecordRenderContext,
+        profile: CircularRenderProfile,
         *,
         precalculated_labels: Sequence[CircularLabel] | None = None,
         phase: Literal["leaders", "text"],
     ) -> None:
         self.record_length = int(record_length)
         self.geometry = geometry
-        self.render_context = render_context
+        # The labels read the profile alone of the record render context (its layout does not reach them).
+        self.profile = profile
         self.precalculated_labels: Sequence[CircularLabel] | None = precalculated_labels
         self.phase = phase
-        self.show_labels = render_context.profile.labels_enabled
+        self.show_labels = profile.labels_enabled
         self.labels_group: Group = self.setup_labels_group()
 
     def _part(self, start: Point, end: Point, label: CircularLabel) -> Line:
@@ -53,7 +56,7 @@ class LabelsGroup:
         part = Line(
             start=start,
             end=end,
-            stroke=self.render_context.profile.config.labels.stroke_color.label_stroke_color,
+            stroke=self.profile.config.labels.stroke_color.label_stroke_color,
             stroke_width=label_leader_width_px(label),
             stroke_linecap="round",
         )
@@ -67,7 +70,7 @@ class LabelsGroup:
 
         # The record assembly places every drawn label (and checks their fit) once.
         labels = [label for label in self.precalculated_labels or [] if not label.get("is_embedded")]
-        style = self.render_context.profile.label_style
+        style = self.profile.label_style
         drawn: list[tuple[CircularLabel, FeatureLabelInk | None, Point, tuple[Point, Point, Point] | None]] = []
         for label in labels:
             contact: Point = (label.get("leader_start_x", label["start_x"]), label.get("leader_start_y", label["start_y"]))
@@ -90,7 +93,7 @@ class LabelsGroup:
         for label, ink, _contact, _line in drawn:
             if ink is not None and ink.draws_box(style):
                 group.add(feature_label_box(ink, label["feature_id"]))
-        drawer = LabelDrawer(profile=self.render_context.profile)
+        drawer = LabelDrawer(profile=self.profile)
         feature_anchor_radius = float(self.geometry.radius)
         letters = Group()
         for label, _ink, _contact, _line in drawn:

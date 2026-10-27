@@ -15,7 +15,7 @@ from svgwrite import Drawing
 from ...canvas import LinearCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...labels.linear_types import LinearLabel
-from ...layout.linear_multi_record import LinearRecordPlacement
+from ...layout.linear_multi_record import LinearComparisonEndpoint, LinearRecordPlacement
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
 from ...configurators import (
@@ -439,8 +439,8 @@ def linear_comparison_content(
     records: tuple[SeqRecord, ...],
     *,
     height: float,
-    query_placement: LinearRecordPlacement,
-    subject_placement: LinearRecordPlacement,
+    query_placement: LinearComparisonEndpoint,
+    subject_placement: LinearComparisonEndpoint,
     query_y: float,
     subject_y: float,
     feature_dom_index: LinearFeatureDomIndex | None,
@@ -506,8 +506,8 @@ def add_explicit_comparisons_on_linear_canvas(
             blast_config,
             tuple(records),
             height=abs(subject_anchor - query_anchor),
-            query_placement=query,
-            subject_placement=subject,
+            query_placement=query.comparison_endpoint,
+            subject_placement=subject.comparison_endpoint,
             query_y=query_anchor - top_y,
             subject_y=subject_anchor - top_y,
             feature_dom_index=feature_dom_index,

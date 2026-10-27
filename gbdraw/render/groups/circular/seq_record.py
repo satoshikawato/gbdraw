@@ -10,7 +10,7 @@ from ....canvas import CircularCanvasGeometry
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
 from ....labels.circular_types import CircularLabel
-from ....layout.circular import CircularRecordRenderContext
+from ....layout.circular import CircularFeatureRenderContext
 from ....svg.ids import record_group_svg_id
 from ...drawers.circular.labels import LabelDrawer
 from ...drawers.circular.features import FeatureDrawer
@@ -28,7 +28,7 @@ class SeqRecordGroup:
         geometry: CircularCanvasGeometry,
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
-        render_context: CircularRecordRenderContext,
+        render_context: CircularFeatureRenderContext,
         precalculated_labels: Sequence[CircularLabel] | None = None,
         feature_track_ratio_factor_override: float | None = None,
         feature_anchor_radius_px: float | None = None,

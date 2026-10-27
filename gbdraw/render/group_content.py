@@ -277,12 +277,19 @@ class GroupContent:
     def children_text(self) -> str:
         """The serialized children, computed when first asked for.
 
-        Each child is one whole element and the text holds no ``<!`` or ``<?``
-        (precondition P, ``require_element_markup``); otherwise this raises.
+        A placed content child (``placed_content``) is written as the document
+        writes a top-level one: its start tag, its content's stored children
+        text and ``</g>``. Each other child is one whole element. The text
+        holds no ``<!`` or ``<?`` (precondition P, ``require_element_markup``);
+        otherwise this raises.
         """
 
         texts = []
         for child in self.children:
+            content = placed_content(child)
+            if content is not None:
+                texts.append(start_tag(child) + content.children_text + "</g>")
+                continue
             text = element_text(child)
             name = child.elementname
             if not text.startswith(f"<{name}") or not (
@@ -343,6 +350,41 @@ class ContentGroup(Group):
         return len(self.elements) == len(children) and all(
             element is child for element, child in zip(self.elements, children)
         )
+
+
+def held_group(element: BaseElement) -> ContentGroup | None:
+    """``element`` when it is a placed content group that still holds exactly
+    its content's children (none is allowed); ``None`` otherwise."""
+
+    if isinstance(element, ContentGroup) and element.holds_content_children():
+        return element
+    return None
+
+
+def placed_content(element: BaseElement) -> GroupContent | None:
+    """The stored content ``element`` is written by: a held group
+    (``held_group``) whose content has children. ``None`` for any other
+    element, which is serialized as it is."""
+
+    group = held_group(element)
+    if group is not None and group.content.children:
+        return group.content
+    return None
+
+
+def content_leaves(content: GroupContent) -> tuple[GroupContent, ...]:
+    """``content``, or, when every child is a content group that still holds
+    its content's children, the leaves of those contents in document order.
+
+    A leaf's text holds its own group's start tag, so the leaves hold every
+    element of ``content`` but its own group.
+    """
+
+    groups = [held_group(child) for child in content.children]
+    parts = [group.content for group in groups if group is not None]
+    if not groups or len(parts) < len(groups):
+        return (content,)
+    return tuple(leaf for part in parts for leaf in content_leaves(part))
 
 
 class BuildsGroup(Protocol):
@@ -442,11 +484,14 @@ __all__ = [
     "RenderedGroup",
     "add_content_definitions",
     "build_group_content",
+    "content_leaves",
     "copy_element_tree",
     "element_text",
     "empty_element_markup",
     "group_manifest",
+    "held_group",
     "place_content",
+    "placed_content",
     "require_element_markup",
     "start_tag",
 ]

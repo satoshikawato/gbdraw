@@ -20,7 +20,7 @@ from ....core.color import (
     interpolate_default_colors,
 )
 from ....features.ids import DrawnFeatureHash, make_linear_rendered_feature_id
-from ....layout.linear_multi_record import LinearRecordPlacement
+from ....layout.linear_multi_record import LinearComparisonEndpoint
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
 from .feature_identity import LinearFeatureDomIndex
@@ -184,8 +184,8 @@ class PairWiseMatchGroup:
         subject_y: float,
         feature_dom_index: LinearFeatureDomIndex | None,
         record_transforms: Sequence[RecordDisplayTransform] | None,
-        query_placement: LinearRecordPlacement,
-        subject_placement: LinearRecordPlacement,
+        query_placement: LinearComparisonEndpoint,
+        subject_placement: LinearComparisonEndpoint,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -257,7 +257,7 @@ class PairWiseMatchGroup:
     def subject_record_index(self) -> int:
         return self.subject_placement.record_index
 
-    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearRecordPlacement, LinearRecordPlacement]:
+    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearComparisonEndpoint, LinearComparisonEndpoint]:
         """The ``role`` record's placement and the other record's."""
 
         if role == "query":

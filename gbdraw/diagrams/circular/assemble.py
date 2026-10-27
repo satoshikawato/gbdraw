@@ -3116,7 +3116,7 @@ def add_record_on_circular_canvas(
             gb_record,
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_LEADERS),
-            render_context=render_context,
+            profile=render_context.profile,
             precalculated_labels=placed_labels,
             phase="leaders",
         )
@@ -3163,7 +3163,7 @@ def add_record_on_circular_canvas(
             gb_record,
             canvas_config,
             group_key=GroupKey(record_key, GroupKind.LABEL_TEXT),
-            render_context=render_context,
+            profile=render_context.profile,
             precalculated_labels=placed_labels,
             phase="text",
         )
