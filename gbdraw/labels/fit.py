@@ -274,6 +274,12 @@ _CROSSING_BUCKET_PX = 64.0
 def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
     """Index pairs of polylines that cross (touching does not count); empty polylines never cross."""
 
+    return list(iter_crossing_pairs(polylines))
+
+
+def iter_crossing_pairs(polylines: Sequence[Polyline]) -> Iterator[tuple[int, int]]:
+    """:func:`crossing_pairs` one pair at a time, in the same order, so a caller can stop at the first."""
+
     indexed = [index for index, polyline in enumerate(polylines) if len(polyline) >= 2]
 
     def covers() -> Iterator[set[GridCell]]:
@@ -285,12 +291,12 @@ def crossing_pairs(polylines: Sequence[Polyline]) -> list[tuple[int, int]]:
                 *(segment_cells(start, end, _CROSSING_BUCKET_PX) for start, end in zip(polyline, polyline[1:]))
             )
 
-    return [
+    return (
         (indexed[left], indexed[right])
         for left, partners in enumerate(cell_partners(covers(), covers()))
         for right in sorted(partners)
         if polylines_cross(polylines[indexed[left]], polylines[indexed[right]])
-    ]
+    )
 
 
 def polylines_cross(first: Polyline, second: Polyline) -> bool:
@@ -912,6 +918,7 @@ __all__ = [
     "Polyline",
     "covers_definition_text",
     "crossing_pairs",
+    "iter_crossing_pairs",
     "fit_counts",
     "format_label_fit_report",
     "label_fit_error_counts",

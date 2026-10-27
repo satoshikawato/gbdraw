@@ -11,6 +11,7 @@ LP-D25), 2.5 px short of it, and the point follows where the leader arrives
 from __future__ import annotations
 
 import math
+from itertools import islice
 from collections.abc import Mapping, Sequence
 from typing import Literal, TypeAlias
 
@@ -18,7 +19,7 @@ from ..core.text import dominant_baseline_shift_em, get_font_vertical_metrics, t
 from ..layout.spatial import Aabb
 from ..layout.text_geometry import Point
 from .circular_types import CircularLabel
-from .fit import polyline_crossing_count
+from .fit import iter_crossing_pairs, polyline_crossing_count
 
 LeaderSegment: TypeAlias = tuple[Point, Point]
 TextAnchor: TypeAlias = Literal["middle", "start", "end"]
@@ -187,10 +188,13 @@ def leader_segments(label: CircularLabel) -> tuple[LeaderSegment, LeaderSegment]
     return ((feature, elbow), (elbow, contact))
 
 
-def leader_crossing_count(labels: Sequence[CircularLabel]) -> int:
-    """Count label pairs whose leader polylines cross (touching does not count)."""
+def leader_crossing_count(labels: Sequence[CircularLabel], *, limit: int | None = None) -> int:
+    """Count label pairs whose leader polylines cross (touching does not count), stopping at ``limit`` pairs."""
 
-    return polyline_crossing_count([leader_polyline(label) for label in labels])
+    polylines = [leader_polyline(label) for label in labels]
+    if limit is None:
+        return polyline_crossing_count(polylines)
+    return sum(1 for _ in islice(iter_crossing_pairs(polylines), limit))
 
 
 def rim_text_placement(label: CircularLabel, record_length: int) -> tuple[Point, str, str, float]:
