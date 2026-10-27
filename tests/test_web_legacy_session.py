@@ -22,6 +22,7 @@ from gbdraw.session_io import (
     SessionDraftMigration,
 )
 from gbdraw.session_migration import session_draft_migration_repairs
+from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 
 SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
@@ -216,3 +217,34 @@ def test_a_session_27_30_inline_file_takes_its_decoded_size() -> None:
     (binding,) = drawing["webFiles"]["bindings"]["linearSeqs"]
     resource = payload["document"]["resources"][binding["gb"]["resourceId"]]
     assert (resource["size"], base64.b64decode(resource["data"])) == (len(replaced), replaced)
+
+
+def test_a_session_40_legacy_alignment_reads_the_catalog_the_web_reader_promoted() -> None:
+    # OV-1995: the Web reader sends Python a Session 40's feature catalog
+    # promoted to the current schema; the legacy alignment target (a similarity
+    # group of that catalog) is found as in the stored schema-3 catalog.
+    document = json.loads(
+        (SESSIONS / "BGC0000708-BGC0000713.v40-schema5.json").read_text(encoding="utf-8")
+    )
+    stored = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    editor_state = document["editorState"]
+    editor_state["featureCatalog"] = promote_legacy_feature_catalog(editor_state["featureCatalog"])
+    promoted = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(promoted) == REPLY_FIELDS, promoted.get("error")
+    (drawing, _) = promoted["document"]["drawings"]
+    alignment = drawing["renderRequest"]["layout"]["similarityAlignment"]
+    assert alignment["groupId"] == "og_1"
+    assert promoted["document"]["drawings"] == stored["document"]["drawings"]
+    # Each anchor carries the stable feature ID the Web's legacy promotion
+    # writes (the catalog's stableFeatureId, else the biological ID), so the
+    # promoted request the Web sends agrees with Python's plan.
+    (item,) = editor_state["featureCatalog"]["items"]
+    stable = {
+        (feature["recordKey"], feature["biologicalFeatureId"]): feature.get("stableFeatureId")
+        or feature["biologicalFeatureId"]
+        for feature in item["biologicalFeatures"]
+    }
+    anchors = [alignment["reference"], *(r["anchor"] for r in alignment["records"] if r["anchor"])]
+    assert [a["stableFeatureSvgId"] for a in anchors] == [
+        stable[(a["recordKey"], a["biologicalFeatureId"])] for a in anchors
+    ]
