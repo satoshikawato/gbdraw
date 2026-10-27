@@ -136,11 +136,12 @@ libraries. On Ubuntu, the tested system packages are `libcairo2-dev` and
 
 ## Supported and verified environments
 
-The supported Python versions are 3.10, 3.11, and 3.12. The 0.14.0
-package has passed isolated wheel/sdist installation, CLI, Python API, session
-replay, and export checks on Linux across those versions. The installed local
-GUI has also been checked with Chromium. These checks do not establish
-Windows/macOS installation, Edge, or later-Python validation.
+The supported Python versions are 3.10, 3.11, and 3.12. Continuous
+integration runs the test suite on Linux with each of them, and the web app's
+browser tests use Chromium. Each release also installs its wheel into a clean
+Linux environment, then draws a diagram and replays its Session with the
+installed `gbdraw` command. Windows, macOS, and browsers other than Chromium
+are not tested.
 
 ## Related commands
 

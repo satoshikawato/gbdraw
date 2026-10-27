@@ -10,6 +10,7 @@
 // shown Result was drawn with (`appliedPaletteName`) is app state, not here.
 import { ref } from '../../utils/reactivity.js';
 import { createSliceHandle, sliceMembers } from './slice-handle.js';
+import { currentPaletteName } from '../../utils/color-utils.js';
 /** @import { ReadonlyRef, Ref } from '../../utils/reactivity.js' */
 /** @import { SliceHandle } from './slice-handle.js' */
 
@@ -71,16 +72,18 @@ const capture = (slice) => {
   };
 };
 
-// Each member `data` holds becomes a copy of it; the others are kept.
+// Each member `data` holds becomes a copy of it; the others are kept. A
+// palette name is stored by its current name: a Session or History entry that
+// names a former one (`PALETTE_NAME_ALIASES`) keeps the current one.
 /**
  * @param {PaletteSlice} slice
  * @param {Partial<Readonly<PaletteData>>} data
  */
 const install = (slice, { selectedPalette, currentColors, pendingPaletteName, pendingPaletteColors }) => {
   const members = membersOf(slice);
-  if (selectedPalette !== undefined) members.selectedPalette.value = String(selectedPalette);
+  if (selectedPalette !== undefined) members.selectedPalette.value = currentPaletteName(String(selectedPalette));
   if (currentColors) members.currentColors.value = { ...currentColors };
-  if (pendingPaletteName !== undefined) members.pendingPaletteName.value = String(pendingPaletteName);
+  if (pendingPaletteName !== undefined) members.pendingPaletteName.value = currentPaletteName(String(pendingPaletteName));
   if (pendingPaletteColors) members.pendingPaletteColors.value = { ...pendingPaletteColors };
 };
 
@@ -160,7 +163,7 @@ export const queuePalette = (slice, name, colors) => install(slice, { pendingPal
  */
 export const restoreArtifactQueuedPalette = (slice, name, colors) => {
   const members = membersOf(slice);
-  members.pendingPaletteName.value = name;
+  members.pendingPaletteName.value = currentPaletteName(name);
   members.pendingPaletteColors.value = colors;
 };
 

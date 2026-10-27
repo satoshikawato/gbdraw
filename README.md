@@ -88,6 +88,39 @@ platform notes, and the PyPI route. The source version is `0.14.2`; check
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) for publication
 dates. If the desired package is unavailable, use a source install.
 
+## Draw your first figures
+
+A source checkout ships small inputs in `gbdraw/web/tutorial-data/`: the
+human mitochondrial genome (NCBI `NC_012920.1`), the phage Lambda
+(`NC_001416.1`) and DE3 (`NC_042057.1`) genomes, and a LOSATN comparison table
+of the two phages. Run these commands in the directory that holds the `gbdraw`
+checkout made by `git clone` above:
+
+```bash
+data=gbdraw/gbdraw/web/tutorial-data
+gbdraw circular \
+  --gbk "$data/human-mitochondrion/HmmtDNA.gbk" \
+  --separate_strands \
+  --track_type middle \
+  --labels out \
+  --species "<i>Homo sapiens</i>" \
+  -o human_mitochondrion \
+  -f svg
+gbdraw linear \
+  --gbk "$data/lambda/NC_001416.gb" "$data/de3/NC_042057.1.gb" \
+  --blast "$data/lambda-de3-comparison/lambda-de3.losatn.tsv" \
+  --separate_strands \
+  --show_labels first \
+  -o lambda_de3 \
+  -f svg
+```
+
+gbdraw writes `human_mitochondrion.svg`, a labeled circular map, and
+`lambda_de3.svg`, the two phage genomes joined by six comparison ribbons. The
+[Quickstart](https://github.com/satoshikawato/gbdraw/blob/main/docs/QUICKSTART.md)
+links the first Tutorials, which download the same records from NCBI and build
+each figure step by step.
+
 ## Bug reports and suggestions
 
 Please open an issue if you find a bug or want to propose an improvement:

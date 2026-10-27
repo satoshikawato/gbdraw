@@ -45,6 +45,7 @@ from gbdraw.config.models.objects import (
 )
 from gbdraw.config.modify import validate_config_overrides
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import current_palette_name
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
@@ -154,6 +155,11 @@ class ColorOptions:
     default_colors: DataFrame | None = None
     default_colors_palette: str = "default"
     default_colors_file: str | None = None
+
+    def __post_init__(self) -> None:
+        # Every request reaches its palette here (CLI, Python API, a decoded
+        # Session or request), so it draws and saves the current name.
+        object.__setattr__(self, "default_colors_palette", current_palette_name(self.default_colors_palette))
 
 
 _DepthTrackSource: TypeAlias = str | Path | DataFrame

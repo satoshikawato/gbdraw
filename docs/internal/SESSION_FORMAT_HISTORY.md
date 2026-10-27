@@ -28,6 +28,36 @@ whose 12 records are `{source: "bundled", path: "gbdraw/bin/linux-x86_64/losat",
 cli: "v1"}`; `tests/web/run-info.test.mjs` and `tests/web/losat-cache.test.mjs`
 pin how the Web reads them.
 
+## Unreleased: the palette `hearbal_garden` reads as `herbal_garden`
+
+No Session or request version changes. Releases through v0.14.2 shipped the
+packaged palette as `hearbal_garden` (`gbdraw/data/color_palettes.toml`). A
+Session names a palette in `config.palette` (Web), `ui.appliedPaletteName` and
+`ui.pendingPaletteName` (Web), and
+`renderRequest.diagramOptions.colors.defaultColorsPalette`. The table is now
+`herbal_garden`; `PALETTE_NAME_ALIASES` (`gbdraw/io/colors.py`, written to
+`js/contracts/schema.generated.js` by `tools/generate_web_contracts.py`) maps
+the former name to it, through `current_palette_name` in Python and
+`currentPaletteName` in the Web.
+
+- Python: `packaged_color_palettes()` looks a former name up and lists only
+  current names (render, `require_palette_name`, the Session mode split).
+  `ColorOptions` stores the current name, so every request (CLI, Python API, a
+  decoded Session or request) draws it and a Session written from it names it.
+  A CLI Session's `cliInvocation.args` keeps the command line as typed.
+- Web: the palette slice (`services/drawing/palette.js`) stores the current
+  name of the drawing's palette and of a queued palette, from Load, History,
+  and every switch. `normalizePaletteDefinitions` adds the former name as a
+  non-enumerable lookup key, so the raw-name lookups of Load (the mode split)
+  find it and the palette list shows only `herbal_garden`. Load copies
+  `ui.appliedPaletteName` and passes `renderRequest` through as saved
+  (`services/config.js`), so a Web Save keeps the former name there until the
+  next Generate; `app/results.js` compares the applied palette by its current
+  name, and Python reads the request through `ColorOptions`.
+
+Fixture: `tests/fixtures/sessions/HmmtDNA-hearbal-garden-cli.v48`, written by
+v0.14.2.
+
 ## Unreleased: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,

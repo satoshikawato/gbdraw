@@ -160,6 +160,12 @@ export const LEGACY_SVG_ATTRIBUTE_RENAMES = Object.freeze({
   "data-gbdraw-pairwise-match-id": 'data-gbdraw-match-id'
 });
 
+// gbdraw/io/colors.py: PALETTE_NAME_ALIASES
+/** @type {Readonly<Record<'hearbal_garden', string>>} */
+export const PALETTE_NAME_ALIASES = Object.freeze({
+  hearbal_garden: 'herbal_garden'
+});
+
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()
 export const EXPECTED_WEB_RUNTIME_CAPABILITIES = Object.freeze({
   schema: 1,

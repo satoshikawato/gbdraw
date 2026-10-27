@@ -345,3 +345,9 @@ Circular holds no genome, the five file cards, and hand edits made before and
 after each load. It pins the rows each card marks, the Default colors and
 Blacklist words in `config.fileImports`, and the rows a hand edit made the
 user's. The steps and inputs are in `file-card-imports.provenance.json`.
+
+`HmmtDNA-hearbal-garden-cli.v48.gbdraw-session.json.gz` is the CLI sidecar that
+release v0.14.2 wrote for `-p hearbal_garden`, the former name of the palette
+`herbal_garden`, compressed with `gzip -n -9`. Its command, input hash, and
+decompressed SHA-256 are in `HmmtDNA-hearbal-garden-cli.v48.provenance.json`;
+`tests/test_palette_name_alias.py` replays it.
