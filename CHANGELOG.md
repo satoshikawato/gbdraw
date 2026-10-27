@@ -53,6 +53,9 @@ write-up of a release.
   they stopped applying after a Generate that drew the record under another
   key. Undo of that Generate puts them back; Session files are unchanged
   (OV-1949).
+- Fixed: label text and Label visibility typed in the Web feature popup and
+  not yet applied stay when the labels are placed again while the popup is
+  open (OV-1984).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
