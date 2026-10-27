@@ -1810,6 +1810,51 @@ def test_upgrade_keeps_the_group_names_a_session_39_held_in_orthogroup_state(
     assert linear["config"]["webEdits"]["orthogroupDescriptionOverrides"] == {"og_2": "about"}
 
 
+def test_upgrade_keeps_the_current_derived_losat_entries_a_session_39_held(
+    tmp_path: Path,
+) -> None:
+    # OV-1966 (D-15-146): the old Web Load kept a Session 27-44's current
+    # derived LOSATP entries (the newest 16; the Web reader caps them), so
+    # Python's conversion keeps every one the replay's validation admits.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    [derived] = session["losatDerivedCache"]["entries"]
+    assert derived["schema"] == 3 and derived["idEncoding"] == "runtime-handle-v1"
+    session["losatDerivedCache"]["entries"] = [
+        derived,
+        *({**derived, "key": f"{derived['key']}-{index}"} for index in range(16)),
+    ]
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+
+
+def test_kept_derived_losat_entries_take_the_rewritten_protein_ids() -> None:
+    # A legacy protein ID the migration resolved is rewritten in the derived
+    # entries the drawing keeps, as in every other artifact (D-15-146).
+    entry = {
+        "schema": 3,
+        "kind": "derived-losatp-payload",
+        "idEncoding": "runtime-handle-v1",
+        "key": "derived-key",
+        "mode": "orthogroup",
+        "payload": {"members": ["p_r_0_1"]},
+    }
+
+    state = session_migration.with_current_artifacts(
+        {},
+        losat_cache_entries=(),
+        protein_identity_manifest=None,
+        losat_derived_cache_entries=(entry,),
+        protein_id_map={"p_r_0_1": "handle-1"},
+    )
+
+    assert state["losatDerivedCache"]["entries"] == [
+        {**entry, "payload": {"members": ["handle-1"]}}
+    ]
+
+
 @pytest.mark.parametrize("index", ["x", None, "missing"])
 def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
     index: object, tmp_path: Path

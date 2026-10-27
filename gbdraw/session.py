@@ -1807,6 +1807,9 @@ def _upgrade_to_current(
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,
+            # The Session's own current entries, as the old Web Load kept them
+            # (OV-1966); the legacy evidence they supersede is not written.
+            losat_derived_cache_entries=adapted.artifacts.losat_derived_cache_entries,
             protein_identity_manifest=adapted.artifacts.protein_identity_manifest,
             legacy_protein_raw_candidates=adapted.migration_report.protein_raw_candidates,
             legacy_protein_derived_evidence=adapted.migration_report.protein_derived_evidence,
