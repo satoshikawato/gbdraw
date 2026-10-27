@@ -2125,6 +2125,12 @@
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <!-- CAPACITY-WARN: Python's sentences about labels that may not fit, as sent, while the render goes on -->
+        <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
+             class="mt-3 mx-4 max-w-md rounded border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-900">
+            <p class="font-semibold">{{ t('Labels may not fit') }}</p>
+            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ notice }}</p>
+        </div>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
@@ -8576,14 +8582,17 @@
                 <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">{{ t('Generate') }}</button>
             </div>
         </choice-dialog>
-        <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order -->
+        <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order; labels not placed for
+             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only -->
         <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing"
              :busy-status="labelFitDialog.finishing ? t('Finishing the choice being computed…') : null" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
              @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ t('Labels do not fit') }}</h2>
-            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
+            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.capacity
+                ? t('Nothing was drawn. These labels need much more room than the map has, so placing them was not tried.')
+                : labelFitDialog.drawn
                 ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
@@ -8591,7 +8600,13 @@
                     <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
                 </li>
             </ul>
-            <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
+            <div v-if="labelFitDialog.capacity" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
+                <p class="font-semibold">{{ t('To make room:') }}</p>
+                <ul class="mt-1 list-disc pl-5 space-y-1">
+                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
+                </ul>
+            </div>
+            <p v-else-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
             <fieldset v-else class="mt-3">
                 <legend class="sr-only">{{ t('Fix') }}</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
@@ -8621,8 +8636,8 @@
                         :data-label-fit-edit-record="record.recordIndex" @click="editLabelFitRecordText(record.recordIndex)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecords.length > 1"> ({{ record.recordId }}, #{{ record.recordIndex + 1 }})</template></button>
             </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
-                <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
+                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.capacity ? t('Close') : labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
+                <button v-if="!labelFitDialog.capacity" type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->

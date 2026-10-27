@@ -13,8 +13,10 @@
 // writes nothing. A Circular centre definition over a track of a drawn figure
 // also offers "Edit Species / Strain…" (PD-OI-097): it closes the dialog as
 // Cancel does and shows the field that writes that record's name lines, found
-// by the record's drawn index; it applies nothing.
-import { labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
+// by the record's drawn index; it applies nothing. Labels that need much more
+// room than the map has were not placed (CAPACITY-STOP): the dialog has no rows
+// and lists the ways to make room Python names, with Close only.
+import { LABEL_CAPACITY_REMEDY_WORDS, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
 /**
@@ -39,6 +41,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @typedef {object} LabelFitDialogState
  * @property {boolean} show
  * @property {boolean} drawn True over a drawn figure (crossing leaders or labels over the definition text).
+ * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
+ * @property {string[]} remedies The ways to make room, as the Web words them (i18n keys), in Python's order.
  * @property {{ recordId: string, recordIndex: number | null, labelKindTitle: string, labelCount: number,
  *   fontSize: number, counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
  * @property {LabelFitDialogRow[]} rows
@@ -96,7 +100,8 @@ export const createLabelFitDialog = ({
   showRecordText
 }) => {
   const dialog = reactive({
-    show: false, drawn: false, records: [], rows: [], selectedKind: '', finishing: false, definitionRecords: []
+    show: false, drawn: false, capacity: false, remedies: [], records: [], rows: [], selectedKind: '', finishing: false,
+    definitionRecords: []
   });
   // The rows' values stay with the report, out of the reactive display state.
   /** @type {Map<LabelFitRowKind, LabelFitRow>} */
@@ -163,6 +168,8 @@ export const createLabelFitDialog = ({
     dialogRowToken = rowToken;
     rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
     dialog.drawn = report.drawn;
+    dialog.capacity = report.records.some((record) => record.capacityRatio !== null);
+    dialog.remedies = report.remedies.map((remedy) => LABEL_CAPACITY_REMEDY_WORDS[remedy]);
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
       recordIndex: record.recordIndex,

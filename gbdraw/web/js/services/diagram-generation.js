@@ -99,8 +99,9 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 /**
- * A progress report of a request.
- * @typedef {{ requestId: number, stage: string } & Partial<RuntimePreparationStep>} RequestProgress
+ * A progress report of a request. `notice` is Python's sentence about labels
+ * that may not fit (CAPACITY-WARN), sent while it renders, before it places them.
+ * @typedef {{ requestId: number, stage: string, notice?: string } & Partial<RuntimePreparationStep>} RequestProgress
  */
 
 /**
@@ -881,10 +882,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
     reject: rejectRequest
   };
   activeRequest = request;
-  /** @param {string} stage @param {RuntimePreparationStep | null} [step] */
-  const reportProgress = (stage, step = null) => {
+  /** @param {string} stage @param {RuntimePreparationStep | { notice: string } | null} [detail] */
+  const reportProgress = (stage, detail = null) => {
     if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
-      onProgress({ requestId, stage, ...(step || {}) });
+      onProgress({ requestId, stage, ...(detail || {}) });
     }
   };
 
@@ -949,7 +950,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
           return;
         }
         if (data.type === 'progress' && data.requestId === requestId) {
-          reportProgress(data.stage);
+          reportProgress(data.stage, typeof data.notice === 'string' && data.notice ? { notice: data.notice } : null);
           return;
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;
