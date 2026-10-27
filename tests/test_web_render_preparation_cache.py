@@ -2025,23 +2025,55 @@ class _UnreadableLocation:
     end = start
 
 
-def test_a_check_reports_a_write_in_an_earlier_part_before_a_stamp_it_cannot_build(tmp_path: Path) -> None:
-    """The checks compare part by part in order: record count, then each record (its head, features and
+class _UnsizedValue:
+    """An annotation or provenance item whose length cannot be read: its entry stamp cannot be built."""
+
+    def __len__(self) -> int:
+        raise RuntimeError("length cannot be read")
+
+
+def _unreadable_feature_after_an_earlier_record(value: _GuardedRecords) -> None:
+    value.records[0].annotations["topology"] = "linear"
+    value.records[1].features[3].location = _UnreadableLocation()
+
+
+def _unsized_annotation_after_a_feature(value: _GuardedRecords) -> None:
+    value.records[0].features[0].type = "gene"
+    value.records[0].annotations["refs"] = _UnsizedValue()
+
+
+def _unsized_provenance_after_a_feature(value: _GuardedRecords) -> None:
+    _guarded_feature(value).type = "gene"
+    value.provenance = (value.provenance[0], _UnsizedValue())
+
+
+@pytest.mark.parametrize(
+    ("write", "detail"),
+    [
+        pytest.param(_unreadable_feature_after_an_earlier_record, "record 0 annotations", id="feature"),
+        pytest.param(_unsized_annotation_after_a_feature, "record 0 feature 0 type", id="annotations"),
+        pytest.param(_unsized_provenance_after_a_feature, "record 1 feature 2 type", id="provenance"),
+    ],
+)
+def test_a_check_reports_a_write_in_an_earlier_part_before_a_stamp_it_cannot_build(
+    tmp_path: Path, write: Callable[[_GuardedRecords], None], detail: str,
+) -> None:
+    """The checks compare part by part in stamp order: record count, then each record (its head, features and
     annotations), then the provenance.
 
-    A write in an earlier part is reported, and the entry evicted, also when a
-    later feature's stamp cannot be built; the next request builds the entry
-    again. (A check that built the whole stamp first raised the builder's error
-    instead, kept the entry, and every later request raised it again.)
+    When a part's stamp cannot be built (a feature, a record's annotations or
+    the provenance) and a part before it differs, that part is reported and
+    the entry evicted; the next request builds the entry again. (A check that
+    built the whole stamp first raised the builder's error instead, kept the
+    entry, and every later request raised it again.)
     """
 
     value = _guarded_records()
     cache, path, identity = _guarded_cache(tmp_path, {"source": value})
-    value.records[0].annotations["topology"] = "linear"
-    value.records[1].features[3].location = _UnreadableLocation()
+    write(value)
     cache._previous_transaction_failed = True
     key = ("source", identity)
-    with pytest.raises(ValidationError, match=r"ownership was mutated \(record 0 annotations\)"):
+    with pytest.raises(ValidationError, match=rf"ownership was mutated \({detail}\)"):
         with cache.transaction(resource_paths={path: identity}, diagnostics=None):
             get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
     assert key not in cache._layers["parsed"]
@@ -2050,7 +2082,9 @@ def test_a_check_reports_a_write_in_an_earlier_part_before_a_stamp_it_cannot_bui
         assert get_or_build_parsed_source(key, frozenset({identity}), lambda: rebuilt) is rebuilt
 
 
-def test_a_check_raises_the_error_of_a_stamp_it_cannot_build_when_no_earlier_part_changed(tmp_path: Path) -> None:
+def test_a_check_raises_the_error_of_a_feature_stamp_it_cannot_build_after_an_earlier_feature_of_its_record_changed(
+    tmp_path: Path,
+) -> None:
     """A record's features are compared together: an unreadable feature raises its builder's error, also when
     an earlier feature of that record changed, and the entry stays."""
 
@@ -2064,6 +2098,23 @@ def test_a_check_raises_the_error_of_a_stamp_it_cannot_build_when_no_earlier_par
         with cache.transaction(resource_paths={path: identity}, diagnostics=None):
             get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
     assert key in cache._layers["parsed"]
+
+
+def test_a_failed_request_keeps_the_unchanged_inputs_it_built_besides_one_it_changed(tmp_path: Path) -> None:
+    """OV-1350: the failed request's own error surfaces, the input it changed is dropped, and the other is kept."""
+
+    cache, path, identity = _guarded_cache(tmp_path, {})
+    identities = frozenset({identity})
+    first = (_record("first"),)
+    second = (_record("second"),)
+    with pytest.raises(RuntimeError, match="render failed"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(("first", identity), identities, lambda: first)
+            get_or_build_parsed_source(("second", identity), identities, lambda: second)
+            _replace_first_feature(first)
+            raise RuntimeError("render failed")
+    assert ("first", identity) not in cache._layers["parsed"]
+    assert cache._layers["parsed"][("second", identity)].value is second
 
 
 # Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data

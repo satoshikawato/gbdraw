@@ -61,6 +61,9 @@ write-up of a release.
 - Fixed: label text and Label visibility typed in the Web feature popup and
   not yet applied stay when the labels are placed again while the popup is
   open (OV-1984).
+- Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
+  and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
+  warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 

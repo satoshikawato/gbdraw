@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, Sized, cast
+from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sized, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -386,9 +386,18 @@ def _changed_feature_field(before: bytes, after: bytes) -> str:
     return "features"
 
 
-# A record stamp is its head, then its feature hashes (None in a structure
-# stamp), then its annotations; the mutation message names the head fields.
-_RECORD_HEAD_FIELDS = (
+class _RecordHead(NamedTuple):
+    owner: int
+    id: str
+    name: str
+    sequence_owner: int
+    sequence_length: int
+    feature_list_owner: int
+    feature_count: int
+
+
+# The mutation message's name of each head field, in field order.
+_RECORD_HEAD_LABELS = (
     "owner",
     "id",
     "name",
@@ -397,13 +406,18 @@ _RECORD_HEAD_FIELDS = (
     "feature-list owner",
     "feature count",
 )
-_RECORD_FEATURES = len(_RECORD_HEAD_FIELDS)
-_RECORD_ANNOTATIONS = _RECORD_FEATURES + 1
 
 
-def _record_head(record: SeqRecord) -> tuple[Hashable, ...]:
+class _RecordStamp(NamedTuple):
+    head: _RecordHead
+    # None in a structure stamp.
+    feature_hashes: bytes | None
+    annotations: Hashable
+
+
+def _record_head(record: SeqRecord) -> _RecordHead:
     features = getattr(record, "features", ())
-    return (
+    return _RecordHead(
         id(record),
         str(record.id),
         str(record.name),
@@ -414,9 +428,9 @@ def _record_head(record: SeqRecord) -> tuple[Hashable, ...]:
     )
 
 
-def _record_stamp(record: SeqRecord, *, walk_features: bool, memo: dict[int, bytes]) -> Hashable:
-    return (
-        *_record_head(record),
+def _record_stamp(record: SeqRecord, *, walk_features: bool, memo: dict[int, bytes]) -> _RecordStamp:
+    return _RecordStamp(
+        _record_head(record),
         _feature_field_hashes(getattr(record, "features", ()), memo) if walk_features else None,
         _shallow_value_stamp(getattr(record, "annotations", None)),
     )
@@ -435,10 +449,11 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     return None
 
 
-# The owner stamp of a value that holds records is (tag, record stamps,
-# provenance stamp); any other value's is its opaque stamp.
-_RECORDS_TAG = "records"
-_OWNER_RECORDS, _OWNER_PROVENANCE = 1, 2
+class _OwnerStamp(NamedTuple):
+    """The stamp of a value that holds records; any other value's is its opaque stamp."""
+
+    records: tuple[_RecordStamp, ...]
+    provenance: Hashable
 
 
 def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
@@ -453,8 +468,7 @@ def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
     if records is None:
         return _opaque_stamp(value)
     memo: dict[int, bytes] = {}
-    return (
-        _RECORDS_TAG,
+    return _OwnerStamp(
         tuple(_record_stamp(record, walk_features=walk_features, memo=memo) for record in records),
         _shallow_value_stamp(getattr(value, "provenance", None)),
     )
@@ -469,29 +483,32 @@ def _owner_mismatch(
     its order: the record count; per record its head, its feature hashes
     (``walk_features``) and its annotations; the provenance. Returns None when
     the value is unchanged, else the first part that differs. No whole stamp
-    is built, and a stamp builder that raises is reached only when no earlier
-    part differs.
+    is built: a part whose builder raises is reached only when no part
+    before it differs (the features of one record are compared together).
     """
 
     records = _records_from_value(value)
     if records is None:
         return None if stamp == _opaque_stamp(value) else "owner structure"
-    if not (isinstance(stamp, tuple) and stamp[0] == _RECORDS_TAG):
+    if not isinstance(stamp, _OwnerStamp):
         return "owner structure"
-    stored_records = stamp[_OWNER_RECORDS]
-    if len(stored_records) != len(records):
+    if len(stamp.records) != len(records):
         return "record count"
-    for index, (record, stored) in enumerate(zip(records, stored_records)):
-        for position, current in enumerate(_record_head(record)):
-            if current != stored[position]:
-                return f"record {index} {_RECORD_HEAD_FIELDS[position]}"
+    for index, (record, stored) in enumerate(zip(records, stamp.records)):
+        head = _record_head(record)
+        if head != stored.head:
+            return f"record {index} " + next(
+                label
+                for label, current, kept in zip(_RECORD_HEAD_LABELS, head, stored.head)
+                if current != kept
+            )
         if walk_features:
             hashes = _feature_field_hashes(getattr(record, "features", ()), memo)
-            if hashes != stored[_RECORD_FEATURES]:
-                return f"record {index} {_changed_feature_field(stored[_RECORD_FEATURES], hashes)}"
-        if not _same_stamp(_shallow_value_stamp(getattr(record, "annotations", None)), stored[_RECORD_ANNOTATIONS]):
+            if hashes != stored.feature_hashes:
+                return f"record {index} {_changed_feature_field(stored.feature_hashes or b'', hashes)}"
+        if not _same_stamp(_shallow_value_stamp(getattr(record, "annotations", None)), stored.annotations):
             return f"record {index} annotations"
-    if not _same_stamp(_shallow_value_stamp(getattr(value, "provenance", None)), stamp[_OWNER_PROVENANCE]):
+    if not _same_stamp(_shallow_value_stamp(getattr(value, "provenance", None)), stamp.provenance):
         return "record provenance"
     return None
 
@@ -985,7 +1002,8 @@ class PreparedBiologicalInputCache:
         memo: dict[int, bytes] = {}
         for layer in _INPUT_LAYERS:
             current = self._layers[layer]
-            for key, entry in transaction.pending[layer].items():
+            # A changed entry is evicted, and so leaves ``pending``, while this walks it (OV-1350).
+            for key, entry in tuple(transaction.pending[layer].items()):
                 if not verified:
                     try:
                         self._verify_owner(layer, key, entry, transaction, walk_features=True, memo=memo)
