@@ -55,6 +55,7 @@ from gbdraw.session import (
     SessionDrawingSpec,
     SessionVersionError,
     build_session_document,
+    drawings_document_from_legacy,
     load_session_document,
     materialize_session,
     render_session,
@@ -1828,6 +1829,24 @@ def test_upgrade_keeps_the_current_derived_losat_entries_a_session_39_held(
 
     linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
     assert linear["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+
+
+def test_a_request_less_session_30_keeps_its_alignment_target_in_its_drawings(
+    tmp_path: Path,
+) -> None:
+    # OV-2006 (D-15-147): with no request, the target has no typed request
+    # to move into; the old Web Load kept it ("og_1"), so the drawings keep it
+    # in ``orthogroupState``. A Session with a request still moves it.
+    session = json.loads(gzip.decompress(_RELEASE_0_13_0_SESSION.read_bytes()))
+    assert "renderRequest" not in session
+    assert session["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "og_1"
+
+    converted = drawings_document_from_legacy(session, temporary_directory=tmp_path).document
+
+    assert {
+        drawing["id"]: drawing["orthogroupState"].get("selectedOrthogroupAlignmentFeature")
+        for drawing in converted["drawings"]
+    } == {"linear": "og_1", "circular": "og_1"}
 
 
 def test_kept_derived_losat_entries_take_the_rewritten_protein_ids() -> None:
