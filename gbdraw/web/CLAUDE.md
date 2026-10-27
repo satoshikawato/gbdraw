@@ -308,14 +308,27 @@ Guards:
 
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
 Import, Undo or Redo, a Session replacement, the owner reconcile inside a
-successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
+successful Generate (`pruneUnmatchedFeatureOverrides` in
 `services/feature-visibility.js`), **Remove N unmatched feature edits**
 (`removeUnresolvedFeatureEdits`), or **Delete settings** of a record whose
 drawing is turned off, which deletes that record's per-feature edits, Feature
 placements, and the annotations that target that record. Result selection,
 mount, record selection (including turning a record's drawing on or off), a
 drawing switch, hiding, and reflow never touch them. A source-replacing Generate keeps
-the rows of records that are turned off. Per-feature edits
+the rows of records that are turned off. The owner reconcile prunes only in a
+source-replacing Generate; in every successful Generate it moves the rows of a
+record whose request key changed with its view (a Circular record drawn alone or
+on the Multi-Record Canvas, a Linear File card that draws all of its records or
+one of them) to its new key, and keeps the rows of a record that the request does
+not draw under that record's identity (`recordKeyMoves` in
+`services/record-draw-selection.js`): its per-feature edits, Feature placements,
+feature strokes, and annotation targets. It also brings the rows a drawn
+record has under its other keys (its key drawn alone or on the Multi-Record
+Canvas, or its identity) into its key, field by field: the row moved from its previous key, or else the
+row already under its key, wins. The `hash` color rules of those records move
+with the specific rules the Generate commits (`moveInstanceRuleRecords` in
+`services/feature-selector.js`); of two rules that then name one feature
+instance, the record's own stays and the other is dropped. Per-feature edits
 (`featureOverrides`) and Feature placements live in the drawing they were made
 in (R15) and are keyed by
 `JSON.stringify([recordKey, biologicalFeatureId])`. Two drawings can use the
@@ -360,7 +373,8 @@ change through `showEditorIntent` (R3):
 
 Undo and Redo, a Session load or replacement, Reset Settings, Generate, and the
 binding of a Result install or rebuild it outside these steps (Python's Legend
-rows and colors, and the edits a source-replacing Generate prunes). The Legend
+rows and colors, the edits a source-replacing Generate prunes, and the feature
+strokes a Generate moves to a record's new key). The Legend
 name input also writes an unchanged copy of the list outside a step, so that it
 shows the row's name again after a refused or cancelled rename. No other code
 calls the paint slice's writers; a new caller, or a caller that moves to
@@ -541,7 +555,7 @@ that number, and anything else is a typed `INPUT_INVALID`
 thresholds before LOSAT) evaluates the domains generated from
 `gbdraw/mode_profiles.py` into `js/mode-profiles.generated.js`
 (`resolveComparisonThresholds` in `js/mode-profiles.js`). Generate never rewrites
-the draft.
+the draft settings; the editor edits it moves to a record's new key are R2's.
 
 Guards: `tests/web/option-input-integrity.test.mjs` (every projected numeric
 draft field either rejects `NaN`, `1e-50x`, `-5`, `0`, and `12.5` with a typed
