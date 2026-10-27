@@ -36,7 +36,7 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { MODE_SCOPED_ROWS, MODE_SLICE_CONTAINERS, unscopedDraftRows } from './mode-scoped-migration.js';
+import { MODE_SLICE_CONTAINERS, OTHER_MODE_OWN_FIELDS, unscopedDraftRows } from './mode-scoped-migration.js';
 import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isUnsafeObjectKey } from './safe-object-keys.js';
@@ -1379,19 +1379,8 @@ const withFieldAt = (value, at, leaf) => {
  * @param {unknown} value @param {readonly string[]} ats
  * @returns {unknown}
  */
-const withoutFieldsAt = (value, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === undefined
+export const withoutFieldsAt = (value, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === undefined
   ? draft : withFieldAt(draft, at, undefined)), value);
-/**
- * The draft fields (dotted, under `config`) of the other mode's `own`
- * registry rows: Python's split gives such a row to its mode's drawing alone
- * (`_split_setting`), so `mode`'s drawing reads a flat draft without them.
- * @param {'circular' | 'linear'} mode
- * @returns {readonly string[]}
- */
-const otherModeOwnFields = (mode) => Object.freeze(MODE_SCOPED_ROWS
-  .filter((row) => row.migrate === 'own' && row.modes !== mode && (row.domain === 'config' || row.domain.startsWith('config.')))
-  .map((row) => [row.domain.slice('config.'.length), row.path].filter(Boolean).join('.')));
-const OTHER_MODE_OWN_FIELDS = Object.freeze({ circular: otherModeOwnFields('circular'), linear: otherModeOwnFields('linear') });
 
 /**
  * A Session 27-44's one draft (`config`, at `path`) as the draft field
