@@ -13,12 +13,14 @@ from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.session_io import (
+    CANONICAL_SESSION_MIN_VERSION,
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     FLAT_DRAFT_TOP_LEVEL_FIELDS,
     MODE_SCOPED_SESSION_MIN_VERSION,
     RETIRED_RENDERED_ID_FEATURE_FIELDS,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
+    _embedded_entry_bytes,
     _project_web_file_binding,
     empty_protein_identity_manifest,
     has_hash_color_rules,
@@ -379,6 +381,26 @@ def log_session_draft_migration(migration: SessionDraftMigration, source_version
         )
 
 
+def _inline_files_at_decoded_size(value: Any) -> Any:
+    """A Session 27-30 ``files`` value whose inline files declare the size of
+    their decoded bytes.
+
+    The Web reader of these versions read an inline file's bytes and ignored
+    its stored ``size`` (OV-1993, D-15-144); the resource it becomes is checked
+    against this size. Bytes that do not decode keep the stored size, and
+    Sessions 31 and later keep their declared sizes.
+    """
+
+    if isinstance(value, list):
+        return [_inline_files_at_decoded_size(item) for item in value]
+    if not isinstance(value, Mapping):
+        return value
+    if "data" in value:
+        data = _embedded_entry_bytes(value)
+        return dict(value) if data is None else {**value, "size": len(data)}
+    return {key: _inline_files_at_decoded_size(item) for key, item in value.items()}
+
+
 def project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
@@ -491,7 +513,11 @@ def project_session_adjunct_for_current_write(
     config = adjunct.get("config")
 
     if isinstance(config, Mapping):
-        source_files = session.get("files")
+        source_files = (
+            session.get("files")
+            if source_version >= CANONICAL_SESSION_MIN_VERSION
+            else _inline_files_at_decoded_size(session.get("files"))
+        )
         has_source_file_inventory = (
             isinstance(source_files, Mapping) and bool(source_files)
         ) or web_file_inventory is not None

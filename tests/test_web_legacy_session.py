@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 from pathlib import Path
@@ -197,3 +198,21 @@ def test_draft_migration_repairs_are_the_web_load_repairs() -> None:
         {"code": "hash-selector-unmapped", "path": "config.rules", "effect": "changed", "count": 3},
     )
     assert session_draft_migration_repairs(SessionDraftMigration(session={})) == ()
+
+
+def test_a_session_27_30_inline_file_takes_its_decoded_size() -> None:
+    # OV-1993 (D-15-144 A): the Web reader of a Session 27-30 ignored an inline
+    # file's stored `size`; Python's projection of that `files` takes the
+    # decoded bytes' size, so the file converts (OV-712's shape: bytes
+    # replaced, `size` unchanged). The bytes become the drawing's resource.
+    document = json.loads(_text("scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz"))
+    replaced = b"LOCUS broken\nORIGIN\n 1 zzzz\n"
+    entry = document["files"]["linearSeqs"][0]["gb"]
+    assert entry["size"] != len(replaced)
+    entry["data"] = base64.b64encode(replaced).decode("ascii")
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    (drawing,) = payload["document"]["drawings"]
+    (binding,) = drawing["webFiles"]["bindings"]["linearSeqs"]
+    resource = payload["document"]["resources"][binding["gb"]["resourceId"]]
+    assert (resource["size"], base64.b64decode(resource["data"])) == (len(replaced), replaced)
