@@ -211,11 +211,13 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  * @param {number} version The file's Session version.
  * @param {boolean} hasDraft The file holds a Web draft (a Session 49 holds
  *   each drawing's own, which the drawing's projection reads: pass false).
+ *   A Session 27-44's protein Results are in the search frame of the
+ *   Session 49 Load reads: Python's conversion moves them (OV-1969).
  * @returns {SourceFacts}
  */
 export const sessionSourceFactsOf = (version, hasDraft) => ({
   cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
-  proteinResultsInDrawnFrame: version < FILE_IMPORT_ORIGIN_SESSION_VERSION
+  proteinResultsInDrawnFrame: version >= MODE_SCOPED_SESSION_VERSION && version < FILE_IMPORT_ORIGIN_SESSION_VERSION
 });
 /**
  * One drawing of a Session 49 (`SessionDrawing`, gbdraw/session_contract.py).

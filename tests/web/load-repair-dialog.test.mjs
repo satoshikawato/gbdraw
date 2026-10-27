@@ -1721,7 +1721,8 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
   };
   // The protein result conversion answers "nothing changed"; it is asked for
-  // exactly the Sessions that stored protein results of a reversed record.
+  // exactly the Sessions 46-47 that stored protein results of a reversed
+  // record (Python's conversion of a Session 27-44 moves its own, OV-1969).
   const askedProteinConversion = new Set();
   let current = '';
   setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
@@ -1749,34 +1750,37 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
   globalThis.Worker = ImportWorker;
   setStoredProteinResultFrameConverter(null);
   assert.deepEqual([...askedProteinConversion].sort(), [
-    'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz', 'BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz',
     'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
   ]);
 });
 
-// OV-1181: a Session 39 converts too. Its Load commits a detached copy of the
-// stored document, which takes the returned bytes, and the Linear draft's
-// comparisons are projected again from them.
-test('a Session 39 with a protein table of a reversed record installs the converted bytes Python returns at Load', async () => {
+// OV-1181: a Session 39 stores the protein table of its reversed record in
+// the drawn frame. Python's conversion of the Session 27-44 moves it into the
+// search frame (`drawn_frame_protein_results_to_search_frame`), so Load asks
+// no second conversion (OV-1969); what Load commits and the Linear draft hold
+// those bytes, under the ID Python's Session 49 gives the table (OV-1959).
+test('a Session 39 with a protein table of a reversed record installs the bytes Python converted at Load', async () => {
   const session = fixture('BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
-  const tableId = 'comparison-resolved-1';
-  const converted = `${resourceText(session.resources[tableId])}# converted\n`;
+  const rows = (text) => text.trimEnd().split('\n').map((line) => line.split('\t'));
+  const [header, ...stored] = rows(resourceText(session.resources['comparison-resolved-1']));
+  const column = (name) => header.indexOf(name);
+  // BGC0000709 (50,466 bp) is drawn reversed: its search frame mirrors the drawn one.
+  const searchFrame = (row) => [row[column('qstart')], row[column('qend')],
+    String(50467 - Number(row[column('sstart')])), String(50467 - Number(row[column('send')]))];
   const calls = [];
-  setStoredProteinResultFrameConverter(async (payload) => {
-    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
-    return { result: { resources: { [tableId]: {
-      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
-    } } } };
-  });
+  setStoredProteinResultFrameConverter(async (payload) => { calls.push(payload.version); return { result: { resources: {} } }; });
   try {
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-    assert.deepEqual(calls, [{ version: 39, resources: Object.keys(session.resources).sort() }]);
-    const committed = getCommittedCanonicalSession();
-    assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
-    assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
+    assert.deepEqual(calls, [], 'Python converted the table: Load asks no second conversion');
     const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
-    assert.equal(await state.inputFiles.fileOf(draft.file).text(), converted, 'the Linear draft holds the converted bytes');
+    const text = await readSessionResourceText(state.inputFiles.fileOf(draft.file));
+    const [, ...converted] = rows(text);
+    assert.deepEqual(converted.map((row) => row.slice(column('qstart'), column('send') + 1)), stored.map(searchFrame),
+      'the Linear draft holds the table in the search frame');
+    const committed = getCommittedCanonicalSession();
+    const ids = Object.keys(committed.resources).filter((id) => resourceText(committed.resources[id]) === text);
+    assert.equal(ids.length, 1, 'the committed copy holds the same bytes under one ID');
   } finally {
     setStoredProteinResultFrameConverter(null);
   }
