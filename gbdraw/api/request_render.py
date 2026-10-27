@@ -123,7 +123,8 @@ from gbdraw.layout.similarity_alignment import (
 )
 from gbdraw.render.formats import resolve_output_paths
 from gbdraw.render.interactive_context import (
-    build_interactive_svg_context,
+    interactive_annotation_rows,
+    interactive_svg_context,
     require_interactive_svg_metadata,
 )
 from gbdraw.render.interactive_svg import InteractiveSvgContext
@@ -3069,9 +3070,11 @@ def build_prepared_interactive_context(
             collinearity_search_scope = str(
                 options.collinearity_search_scope
             )
+        # Keyed by the annotation rows the context reads, by value: a Region
+        # Annotation style change keeps the context and the catalog.
         return render_stage(
             "interactive_context",
-            build_interactive_svg_context,
+            interactive_svg_context,
             tuple(prepared.records),
             selected_features_set=options.selected_features_set,
             feature_visibility_rules=inputs.features.feature_visibility_rules,
@@ -3079,7 +3082,7 @@ def build_prepared_interactive_context(
             specific_color_rules=inputs.features.specific_color_rules,
             orthogroups=computed_orthogroups,
             linear_rendered_feature_ids=prepared.mode == "linear",
-            annotations=prepared.resolved_annotations,
+            annotation_rows=interactive_annotation_rows(prepared.resolved_annotations),
             mode=prepared.mode,
             comparison_sequence_records=tuple(tuple(items) for items in comparison_sequence_records),
             collinearity_search_scope=collinearity_search_scope,
