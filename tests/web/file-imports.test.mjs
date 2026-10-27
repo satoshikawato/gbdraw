@@ -42,6 +42,13 @@ await writeFile(
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'color-utils.js'), 'utf8'),
   'utf8'
 );
+// color-utils.js reads the generated palette name aliases.
+await mkdir(join(tempRoot, 'contracts'), { recursive: true });
+await writeFile(
+  join(tempRoot, 'contracts', 'schema.generated.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempRoot, 'utils', 'named-colors.js'),
   await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'named-colors.js'), 'utf8'),
