@@ -11,14 +11,17 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * Python's reply: the Session 49, the stored Results a Session 49 cannot
  * hold (Sessions 27-39), by drawing ID, where the file held the Result set
  * each drawing took (`resultSetSources`, by drawing ID: the file's one set is
- * at its top level, `''`), and the Load repairs of the draft migrations
- * (`LegacySessionDrawings`, gbdraw/web_support/legacy_session.py). The
- * document is read by Load's band-49 reader, as a file's would be.
+ * at its top level, `''`), the Load repairs of the draft migrations, and how
+ * many `hash=` annotation targets moved to their source feature, which the
+ * notice after Load names (`LegacySessionDrawings`,
+ * gbdraw/web_support/legacy_session.py). The document is read by Load's
+ * band-49 reader, as a file's would be.
  * @typedef {object} LegacySessionUpgrade
  * @property {Record<string, unknown>} document
  * @property {ReadonlyMap<string, readonly unknown[]>} storedResults
  * @property {ReadonlyMap<string, ''>} resultSetSources
  * @property {readonly LoadRepair[]} warnings
+ * @property {number} movedAnnotationTargets
  */
 
 /**
@@ -78,7 +81,8 @@ export const upgradeLegacySession = async (document, { storedRequestSchema = nul
   const reply = isRecord(response) ? response.result : null;
   const invalid = () => diagnosticError('RESULT_INVALID', {}, LEGACY_SESSION_UPGRADE);
   if (!isRecord(reply) || !isRecord(reply.document) || !isRecord(reply.storedResults)
-    || !isRecord(reply.resultSetSources) || !Array.isArray(reply.warnings)) {
+    || !isRecord(reply.resultSetSources) || !Array.isArray(reply.warnings)
+    || !Number.isSafeInteger(reply.movedAnnotationTargets) || Number(reply.movedAnnotationTargets) < 0) {
     throw invalid();
   }
   /** @type {Map<string, readonly unknown[]>} */
@@ -99,6 +103,7 @@ export const upgradeLegacySession = async (document, { storedRequestSchema = nul
     document: reply.document,
     storedResults,
     resultSetSources,
-    warnings: /** @type {LoadRepair[]} */ (warnings)
+    warnings: /** @type {LoadRepair[]} */ (warnings),
+    movedAnnotationTargets: Number(reply.movedAnnotationTargets)
   };
 };

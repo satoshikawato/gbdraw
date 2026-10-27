@@ -541,7 +541,12 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
         for annotation in annotation_set["annotations"]
     ]
     assert [kind for _, kind in targets] == ["featureIdentity", "featureSpan", "featureSpan"]
-    assert set(saved["modes"]["linear"]["config"]) == {"annotationSets"}
+    # The group names its orthogroupState holds (none) go to the Linear
+    # drawing's webEdits, as every Session 27-44 conversion moves them.
+    assert saved["modes"]["linear"]["config"] == {
+        "annotationSets": saved["modes"]["linear"]["config"]["annotationSets"],
+        "webEdits": {"orthogroupNameOverrides": {}, "orthogroupDescriptionOverrides": {}},
+    }
     # Every target is bound to a Linear record.
     circular = drawing_view(written, mode="circular")["modes"]["circular"]["config"]["annotationSets"]
     assert all(not annotation_set["annotations"] for annotation_set in circular)

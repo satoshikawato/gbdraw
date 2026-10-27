@@ -26,7 +26,7 @@ from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
 from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
 
 SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
-REPLY_FIELDS = {"document", "storedResults", "resultSetSources", "warnings"}
+REPLY_FIELDS = {"document", "storedResults", "resultSetSources", "warnings", "movedAnnotationTargets"}
 
 
 def _text(name: str) -> str:
@@ -48,6 +48,7 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
     payload = json.loads(legacy_session_to_drawings_json(_text(name)))
     assert set(payload) == REPLY_FIELDS
     assert payload["warnings"] == []
+    assert payload["movedAnnotationTargets"] == 0
     # A Session 40-44 keeps its Results with their catalog in the document.
     assert payload["storedResults"] == {}
     document = payload["document"]
@@ -326,3 +327,13 @@ def test_a_cli_written_schema_2_session_keeps_its_cli_record_labels_and_subtitle
 def cast_document(value: Any) -> dict[str, Any]:
     assert isinstance(value, dict)
     return value
+
+
+def test_the_reply_counts_the_hash_annotation_targets_the_conversion_moved() -> None:
+    """OV-2072: of the three hash= targets of the Session 44 main saved, the
+    conversion moves the one certain target (feature_1) to its source feature,
+    and the reply counts it for Load's notice."""
+
+    payload = json.loads(legacy_session_to_drawings_json(_text("selected-feature-annotations.v44.gbdraw-session.json.gz")))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    assert payload["movedAnnotationTargets"] == 1

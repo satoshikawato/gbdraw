@@ -6,7 +6,9 @@ stored Results a Session 49 cannot hold (Sessions 27-39) come back beside
 the document, by drawing ID; the Web shows them in memory and, as before,
 saves none of them until one Generate (PD-OI-079). The reply also names the
 file Result set each drawing took (``resultSetSources``), so Load keeps a
-set's repair paths the file's own (D-15-130).
+set's repair paths the file's own (D-15-130), and how many ``hash=``
+annotation targets moved to their source feature, which Load's notice names
+(``movedAnnotationTargets``, OV-2072).
 """
 
 from __future__ import annotations
@@ -27,18 +29,20 @@ UPGRADE_LEGACY_SESSION_OPERATION = "upgradeLegacySession"
 
 class LegacySessionDrawings(TypedDict):
     """The Session 49 of a Session 27-44, the stored Results it cannot hold,
-    the file Result set each drawing took, and the Load repairs."""
+    the file Result set each drawing took, the Load repairs, and the count of
+    moved annotation targets."""
 
     document: GbdrawSession49
     storedResults: StoredResults
     resultSetSources: LegacyResultSetSources
     warnings: list[DraftMigrationRepair]
+    movedAnnotationTargets: int
 
 
 def legacy_session_to_drawings_json(document_json: str, stored_request_schema_json: str = "null") -> str:
     """``{"document": <Session 49>, "storedResults": {<drawing ID>: [...]},
-    "resultSetSources": {<drawing ID>: ""}, "warnings": [...]}`` for a Session
-    27-44 as JSON.
+    "resultSetSources": {<drawing ID>: ""}, "warnings": [...],
+    "movedAnnotationTargets": <count>}`` for a Session 27-44 as JSON.
 
     ``stored_request_schema_json`` is the schema of the request the file
     stored (an integer, or ``null`` to read it from the document's request):
@@ -64,6 +68,7 @@ def legacy_session_to_drawings_json(document_json: str, stored_request_schema_js
         "storedResults": legacy.stored_results,
         "resultSetSources": legacy.result_set_sources,
         "warnings": list(legacy.repairs),
+        "movedAnnotationTargets": legacy.moved_annotation_targets,
     }
     return json.dumps(payload)
 
