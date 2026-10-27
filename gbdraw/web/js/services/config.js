@@ -6178,13 +6178,21 @@ class UncomposedResultSet extends Error {
   }
 }
 
+// The fields of a Session's `features` that describe its Results' drawn
+// features (a catalog's, from Session 40); the others are edits.
+const RESULT_FEATURE_METADATA_FIELDS = Object.freeze([
+  'extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope', 'featureRecordIds'
+]);
 /**
  * A Session 27-44 read by Load's readers at the file's own paths, with their
  * rows and Python's, and Python's conversion of the read document.
  * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts,
- *   orthogroups: readonly unknown[], layoutRepairs: readonly LoadRepair[], drawnWith: ResultDrawnWith | null }}
+ *   orthogroups: readonly unknown[], featureMetadata: Readonly<Record<string, unknown>>,
+ *   layoutRepairs: readonly LoadRepair[], drawnWith: ResultDrawnWith | null }}
  *   LegacySessionRead `orthogroups`: the similarity groups of the file's `orthogroupState` (a Session 27-39's,
- *   members by record key), which its set-aside Results draw; `layoutRepairs`: the rows of the file's `ui`
+ *   members by record key), which its set-aside Results draw; `featureMetadata`: the file's feature metadata
+ *   of those Results (`RESULT_FEATURE_METADATA_FIELDS` of a Session 27-39's `features`), which Load checks
+ *   against them (OV-1958); `layoutRepairs`: the rows of the file's `ui`
  *   layout (`readStoredLayoutUi`), listed where Load lists the drawings' layouts; `drawnWith`: what a Session
  *   27-30's Result was drawn with (OV-1953), else null
  */
@@ -6361,6 +6369,13 @@ const importSessionDocument = async (e, options = {}) => {
       const orthogroups = groupState
         ? migrateLegacyOrthogroupMembers(Array.isArray(groupState.groups) ? groupState.groups : [],
           Array.isArray(storedRequest?.records) ? storedRequest.records : null) : [];
+      // So is the feature metadata of its Results, which Python's Session 49
+      // does not hold (OV-1958).
+      const { features: storedFeatures } = /** @type {{ features?: unknown }} */ (fileParts.data);
+      const featureMetadata = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedFeatures)
+        ? Object.fromEntries(RESULT_FEATURE_METADATA_FIELDS.filter((field) => Object.hasOwn(storedFeatures, field))
+          .map((field) => [field, storedFeatures[field]]))
+        : {};
       // Its layout and editor state are read here, at the file's own paths
       // (OV-652, TB8/TB9), and Python receives the read values (OV-1955).
       const { ui: storedUi } = /** @type {{ ui?: unknown }} */ (fileParts.data);
@@ -6423,6 +6438,7 @@ const importSessionDocument = async (e, options = {}) => {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
         sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
         orthogroups,
+        featureMetadata,
         layoutRepairs: layoutRead ? layoutRead.repairs : [],
         drawnWith: fileDocument.version < CANONICAL_SESSION_MIN_VERSION
           ? {
@@ -6728,13 +6744,10 @@ const importSessionDocument = async (e, options = {}) => {
         : cloneJsonData(projectionResult.artifactState.features)
       : {};
     if (currentSchemaSession) {
-      [
-        'extractedFeatures',
-        'biologicalFeatures',
-        'featureSelectorSafetyScope',
-        'featureRecordIds'
-      ].forEach((field) => delete artifactFeatureState[field]);
+      RESULT_FEATURE_METADATA_FIELDS.forEach((field) => delete artifactFeatureState[field]);
     }
+    // The Results Python set aside keep the file's feature metadata (OV-1958).
+    if (legacyStoredResults !== undefined && legacyRead) Object.assign(artifactFeatureState, legacyRead.featureMetadata);
     let features = splitLegacyFeatureVisibilityRules(canonicalSession
       ? featureEditsOverProjection({ ...(currentCatalogFeatureState || {}), ...artifactFeatureState },
         projectionResult.renderState)
@@ -6954,7 +6967,10 @@ const importSessionDocument = async (e, options = {}) => {
       selectedResultIndex: ui.selectedResultIndex || 0,
       featureState: features, editorState: restoredEditorState
     };
-    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
+    // A Session 27-39's Results have no catalog: their features are read
+    // again from the file's sources (B50). They are the Results Python sets
+    // aside for the drawing that opens (OV-1958).
+    if (legacyStoredResults !== undefined) {
       try {
         legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan(/** @type {any} */ ({
           snapshot: legacyFeatureSnapshot,
