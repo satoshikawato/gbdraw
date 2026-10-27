@@ -4,7 +4,7 @@
 /** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride, movedIdentityValues } from '../../services/feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
@@ -880,6 +880,16 @@ export const createFeatureLabelActions = ({
     const drawn = drawnLabelVisibility.get(svg);
     if (!drawn) drawnLabelVisibility.set(svg, intent);
     return Array.from(drawn?.keys() || []).some((key) => !intent.has(key));
+  };
+  // A Generate that moves a record's rows to its new key (OV-1949) moves them
+  // after its Result was bound: the visibility that Result was drawn with
+  // follows them, so the moved rows ask for no rerender (OV-1983).
+  /** @param {ReadonlyMap<string, string>} moves */
+  const moveDrawnLabelVisibility = (moves) => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    const drawn = svg ? drawnLabelVisibility.get(svg) : null;
+    if (!svg || !drawn || moves.size === 0) return;
+    drawnLabelVisibility.set(svg, new Map(Object.entries(movedIdentityValues(Object.fromEntries(drawn), moves))));
   };
 
   /** @param {DrawingState} drawing @param {Element} svg */
@@ -1838,6 +1848,7 @@ export const createFeatureLabelActions = ({
     closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
+    moveDrawnLabelVisibility,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,

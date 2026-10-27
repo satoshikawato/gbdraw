@@ -224,8 +224,8 @@ import {
 /** @import { AnnotationSetsData } from '../services/drawing/annotation-sets.js' */
 /**
  * What a Generate's History step restores of the drawing's intent (DESIGN A2).
- * The moved feature strokes are not restored: that needs a History writer of
- * the paint slice here (OV-1982, an authority-only registry entry).
+ * The feature strokes travel with the artifact handle (its editor state), which
+ * Undo and Redo of the step install.
  * @typedef {FeatureEditsData & AnnotationSetsData & { removed: number }} GenerateIntentCheckpoint
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -1532,6 +1532,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   `adoptDrawnWrite`: a label rerender replaces the shown Results through it (OV-873).
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {(moves: ReadonlyMap<string, string>) => void} moveDrawnLabelVisibility The label owner's port:
+ *   the label visibility the mounted Result was drawn with follows the rows a Generate moved.
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  * @property {AskChoice} [askChoice] The root's choice dialog: a large download asks first.
  * @property {ShowNotice} [showNotice] The root's notice banner.
@@ -1582,6 +1584,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
+  moveDrawnLabelVisibility,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   askChoice = async () => 'cancel',
   showNotice = () => {}
@@ -5373,6 +5376,7 @@ export const createRunAnalysis = ({
         biologicalFeatures: candidateBiologicalFeatures,
         moves: recordMoves
       });
+      moveDrawnLabelVisibility(recordMoves);
       // OV-120: a source replacement also retires the renames of the Legend
       // rows the new Result does not draw (as the OV-84 strokes).
       if (sourceReplaced) replaceDormantLegendRows(drawing.slices.paint, []);

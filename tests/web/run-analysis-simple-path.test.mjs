@@ -363,6 +363,7 @@ const generatedArtifactHandleOptions = {
   // The label owner's ports (R13); these tests do not open the label dialog.
   closeLabelTextScopeDialog: () => {},
   clearLabelBuildNotices: () => {},
+  moveDrawnLabelVisibility: () => {},
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}
 };

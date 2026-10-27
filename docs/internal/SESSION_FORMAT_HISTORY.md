@@ -58,6 +58,25 @@ the former name to it, through `current_palette_name` in Python and
 Fixture: `tests/fixtures/sessions/HmmtDNA-hearbal-garden-cli.v48`, written by
 v0.14.2.
 
+## Unreleased: per-feature rows follow their record to a new key
+
+No Session or request version changes, and no reader changes. A per-feature
+row (`featureOverrides`, `featurePlacementOverrides`, `featureStrokeOverrides`,
+an annotation's `featureIdentity`, and a `hash` color rule
+`<feature id>@<record key>`) is still keyed by the request record key of the
+view it was last drawn in: Circular `record-<k>` on the Multi-Record Canvas and
+`circular-<record id>-#<k>` for a record drawn alone, Linear `<uid>:<k>` for a
+File card that draws several records and `<uid>` for one record. Each
+successful Web Generate moves the rows of a record whose key changed to its new
+key (`recordKeyMoves` in `js/services/record-draw-selection.js`, written by
+`pruneUnmatchedFeatureOverrides`), and the rows of a record that the request
+does not draw wait under its identity (`record-<k>`, or `<uid>:<k>` in a
+multi-record File). A Session of 48 or earlier is read as before; its rows move
+at its first Generate. The only request-key change: a Circular record drawn
+alone no longer keeps a stored `record-<n>` key that names another record.
+Fixture: `tests/fixtures/sessions/record-identity-circular-single.v48`, written
+by `v0.14.2`.
+
 ## Unreleased: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,

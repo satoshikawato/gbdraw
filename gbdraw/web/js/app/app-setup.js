@@ -3471,6 +3471,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
