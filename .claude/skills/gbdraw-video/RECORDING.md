@@ -108,6 +108,21 @@ Journey rules:
       frames change.
     - Give the journey the same marks and skims in the same change, so the
       next take needs no entry.
+  - **Scenes (Owner 2026-10-27).** `render` encodes each scene on its own and
+    joins the segments without re-encoding them, so a fix re-encodes only the
+    scenes it changes. A scene starts at each piece and at each caption cue;
+    the opening clips are one scene.
+    - A scene is reused when its key matches. The key covers the plan of
+      every frame (what it draws, found without drawing), the output's
+      layout, language, and fonts, and the digests of every 15th composed
+      frame and the last.
+    - Segments stay in `<out>/../segments/<stem>/`, or in
+      `render --segments <dir>`, never inside the take. Give each re-render a
+      new `--out` folder next to the last one, so it finds the segments.
+    - The render prints "<stem>: n of m scenes reused" and lists the scenes
+      in its report; `check` fails when they do not cover the frames.
+    - The sampled frames can miss a renderer change that alters only a few
+      frames. After such a change, delete the stem's segment folder.
   - Record a new take only for app operations that the take never captured.
     First collect every such fix from one review, and tell the Owner why an
     edit cannot make it. Then record one take for all of them.
