@@ -360,7 +360,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { DrawingSetPath, ResultSetPath, StoredRequestSchemas, StoredResultSet, StoredSetProject, UnvalidatedFields } from './session-authority.js' */
 /** @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileView } from './session-resource-backing.js' */
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
-/** @import { RawConservationSeriesEntry } from './conservation-series.js' */
+/** @import { ConservationFile, RawConservationSeriesEntry } from './conservation-series.js' */
 /** @import { DepthFileSlots, DepthSlotFile } from './depth-track-state.js' */
 
 /** @import { FallbackUiData, FeatureEditsData, OffsetData } from './history-snapshot.js' */
@@ -4484,9 +4484,13 @@ const convertDetachedProteinResultFrames = async (source, committed, projectionI
  * leaves out its label, and the rings after it keep theirs. Such a place is
  * listed at its table's place when it had a label or an entry Load cannot
  * read; an empty place with neither is no row. Writes the file lists of
- * `files`; returns the draft with the series and labels left.
+ * `files`; returns the draft with the series and labels left. A Session
+ * 27-44's first reading runs it on the stored entries `readStoredFiles`
+ * kept, so its files and series reach Python aligned (D-15-139); the
+ * drawings of Python's Session 49 then hold no empty place.
  * @param {Record<string, unknown>} config The Circular draft Load installs.
- * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`).
+ * @param {Record<string, unknown>} files The candidate's file slots (`applyFiles`),
+ *   or the stored entries a first reading kept.
  * @param {{ seriesAt: string, filesAt: string, stored: unknown }} where Where the
  *   draft's series and the input files are in the file, and the stored table
  *   list there (`files.c_conservation_blasts` of a Session 27-30; a dropped
@@ -4495,12 +4499,12 @@ const convertDetachedProteinResultFrames = async (source, committed, projectionI
  * @returns {Record<string, unknown>}
  */
 const withoutUnreadConservationSeries = (config, files, { seriesAt, filesAt, stored }, repairs) => {
-  /** @param {unknown} list @returns {(FileLike | null)[]} */
+  /** @param {unknown} list @returns {(ConservationFile | null)[]} */
   const placed = (list) => (Array.isArray(list) ? list : []);
   if (!placed(files.c_conservation_blasts).some((file) => !file)) return config;
   const conservation = isPlainObject(config.circularConservation) ? config.circularConservation : {};
   const series = /** @type {RawConservationSeriesEntry[]} */ (Array.isArray(conservation.series) ? conservation.series : []);
-  /** @template {FileLike} T @param {(T | null)[]} list */
+  /** @template {ConservationFile} T @param {(T | null)[]} list */
   const inSeriesOrder = (list) => orderedOptionalConservationFiles(list, { series });
   // Where each table, in series order, is in the stored list.
   const storedPlaces = inSeriesOrder(placed(files.c_conservation_blasts).map((file, place) => ({ name: file?.name, place })))
@@ -6341,12 +6345,26 @@ const importSessionDocument = async (e, options = {}) => {
       const { files: storedFiles, webFiles: storedWebFiles } = readData;
       /** @type {Record<string, unknown> | null} */
       let readFiles = null;
+      // Where they are, and the stored table list (a dropped binding is already listed).
+      let filesAt = 'files';
+      /** @type {unknown} */
+      let storedTables = null;
       if (isPlainObject(storedWebFiles) && isPlainObject(storedWebFiles.bindings)) {
-        readFiles = readStoredFiles(storedWebFiles.bindings, 'webFiles.bindings', isKeptBinding, fileRepairs);
+        filesAt = 'webFiles.bindings';
+        readFiles = readStoredFiles(storedWebFiles.bindings, filesAt, isKeptBinding, fileRepairs);
         readData.webFiles = { ...storedWebFiles, bindings: readFiles };
       } else if (isPlainObject(storedFiles)) {
-        readFiles = readStoredFiles(storedFiles, 'files', isReadableStoredFile, fileRepairs);
+        storedTables = storedFiles.c_conservation_blasts;
+        readFiles = readStoredFiles(storedFiles, filesAt, isReadableStoredFile, fileRepairs);
         readData.files = readFiles;
+      }
+      // A comparison series whose table was not kept is left out with its
+      // files here, at the file's own paths (OV-893, OV-898). A Session 31-44
+      // without a draft holds no series to read; Python projects them.
+      if (readFiles && isPlainObject(readData.config)) {
+        readData.config = withoutUnreadConservationSeries(readData.config, readFiles, {
+          seriesAt: 'config.circularConservation.series', filesAt, stored: storedTables
+        }, fileRepairs);
       }
       if (isPlainObject(readData.config)) readData.config = withStoredComparisonPlan(readData.config, readFiles);
       const upgrade = await upgradeLegacySession(readData);
