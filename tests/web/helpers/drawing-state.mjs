@@ -99,7 +99,7 @@ export const UI_KEYS = Object.freeze([
 // Never saved: progress and operation flags, input drafts, selection, search,
 // dialogs, popups, drag and view state, and views derived from the others.
 export const TRANSIENT_KEYS = Object.freeze([
-  'loadedFonts', 'processing', 'processingStatus', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
+  'loadedFonts', 'processing', 'processingStatus', 'labelCapacityNotices', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
   'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',
