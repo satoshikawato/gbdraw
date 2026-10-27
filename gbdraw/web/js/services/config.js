@@ -6409,12 +6409,16 @@ const importSessionDocument = async (e, options = {}) => {
       // 27-33's repeat-region shape is read before the readers, as the old
       // Load read it (OV-1964). A Session 31-39's draft is read over its
       // committed request's projection, as the old Load read it (OV-2011);
-      // the read repeats no row of the readers above.
+      // of its rows it lists only those of the request's tables it read
+      // (OV-2042), the others repeat rows of the readers above.
       const committedRead = isPlainObject(storedDraft) && fileDocument.version >= CANONICAL_SESSION_MIN_VERSION
         && fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION
         ? readCommittedRequestProjection(fileParts, fileRead.value, []) : null;
-      const draft = committedRead?.canonicalProjection && !committedRead.settingsOnly
-        ? readDraftOverCommittedRequest(committedRead.canonicalProjection, committedRead.runtimeStoredConfig)
+      const requestProjection = committedRead?.canonicalProjection && !committedRead.settingsOnly
+        ? committedRead.canonicalProjection : null;
+      if (requestProjection) fileRepairs.push(...(requestProjection.legacyTableRepairs || []));
+      const draft = requestProjection && committedRead
+        ? readDraftOverCommittedRequest(requestProjection, committedRead.runtimeStoredConfig)
         : migrateSessionFeatureRenderingConfig(isPlainObject(storedDraft)
         && fileDocument.version < TYPED_DRAFT_SESSION_VERSION && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
         ? { ...storedDraft, recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(storedDraft.recordDisplayDrafts) }
