@@ -4,7 +4,9 @@ import base64
 import copy
 import hashlib
 import json
+from collections import OrderedDict
 from pathlib import Path
+from typing import Callable
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -1568,7 +1570,7 @@ def test_request_after_a_failed_render_checks_owners_in_full_at_entry(
     assert reached_render is True
 
 
-def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_builds(
+def test_a_request_compares_each_cached_feature_once_only_when_a_record_stage_builds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1585,7 +1587,12 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
         walked.append(id(feature))
         return original(feature)
 
+    def whole_stamp(value: object, *, walk_features: bool) -> object:
+        pytest.fail("a check of a cached entry built its whole stamp")
+
     monkeypatch.setattr(prepared_module, "_feature_stamp", counting)
+    # The checks compare each part with the stored stamp; only a build stamps a value whole.
+    monkeypatch.setattr(prepared_module, "_owner_stamp", whole_stamp)
     # O-2: a warm repeat builds no record entry and no stage that takes a record.
     _result, diagnostics = _render(tmp_path, cache, document, request_id=2)
     metrics = _metrics(diagnostics)
@@ -1596,7 +1603,9 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     assert walked == []
 
     # A feature selection change builds the feature layers, which take the
-    # record: one full walk per cached entry that holds records, at commit.
+    # record: one full check per cached entry that holds records, at commit.
+    # The parsed and resolved entries hold the same feature objects, and the
+    # commit compares each feature object once.
     _result, diagnostics = _render(
         tmp_path, cache, _document(source, title="Walk count", selected_features=("CDS",)), request_id=3
     )
@@ -1610,13 +1619,14 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
         if prepared_module._records_from_value(entry.value) is not None
     ]
     assert metrics["preparedInputCacheFullCheckCount"] == len(record_entries) > 0
-    cached_features = sum(
-        len(record.features)
+    cached_features = [
+        id(feature)
         for entry in record_entries
         for record in prepared_module._records_from_value(entry.value) or ()
-    )
-    assert cached_features > 0
-    assert len(walked) == cached_features
+        for feature in record.features
+    ]
+    assert len(cached_features) > len(set(cached_features)) > 0
+    assert sorted(walked) == sorted(set(cached_features))
 
 
 def test_the_full_owner_stamp_keeps_a_fixed_size_per_feature() -> None:
@@ -1673,6 +1683,387 @@ def test_a_full_check_names_the_changed_feature_and_field(
                 ("source", identity), frozenset({identity}), lambda: pytest.fail("the entry check is structural"),
             )
             _read_in_a_record_stage(records[0], "named")
+
+
+class _NoSourceFeatures:
+    captured = ()
+
+
+class _GuardedOrigin:
+    """One record's provenance item; the guard stamps it by identity."""
+
+    source_features = _NoSourceFeatures()
+
+
+class _GuardedRecords:
+    """A cached value that holds records and their provenance, as a resolved record collection does."""
+
+    def __init__(self, records: tuple[SeqRecord, ...], provenance: object) -> None:
+        self.records = records
+        self.provenance = provenance
+
+
+def _guarded_records(qualifiers: Callable[[], dict[object, object]] | None = None) -> _GuardedRecords:
+    def feature(index: int) -> SeqFeature:
+        return SeqFeature(
+            FeatureLocation(10 * index, 10 * index + 9, strand=1 if index % 2 else -1),
+            type="CDS",
+            qualifiers=(
+                qualifiers()
+                if qualifiers is not None
+                else {"locus_tag": [f"T{index}"], "product": ["p"], "note": ["a", "b"]}
+            ),
+        )
+
+    records = tuple(
+        SeqRecord(
+            Seq("ACGT" * 50),
+            id=f"r{number}",
+            name=f"R{number}",
+            annotations={"molecule_type": "DNA", "refs": [1, 2]},
+            features=[feature(index) for index in range(4)],
+        )
+        for number in range(2)
+    )
+    return _GuardedRecords(records, (_GuardedOrigin(), _GuardedOrigin()))
+
+
+def _guarded_feature(value: _GuardedRecords) -> SeqFeature:
+    return value.records[1].features[2]
+
+
+def _feature_listed_twice() -> _GuardedRecords:
+    value = _guarded_records()
+    value.records[1].features[3] = value.records[1].features[2]
+    return value
+
+
+def _nan_atoms() -> _GuardedRecords:
+    value = _guarded_records(lambda: {"locus_tag": ["T"], "score": float("nan")})
+    value.records[1].annotations["score"] = float("nan")
+    return value
+
+
+def _swap_int_key_for_its_str(value: _GuardedRecords) -> None:
+    qualifiers = _guarded_feature(value).qualifiers
+    qualifiers.pop("1")
+    qualifiers["1"] = qualifiers.pop(1)
+
+
+def _shift_location(value: _GuardedRecords, end: str, by: int) -> None:
+    location = _guarded_feature(value).location
+    position = getattr(location, end)
+    setattr(location, end, type(position)(int(position) + by))
+
+
+_QUALIFIERS = "record 1 feature 2 qualifiers"
+# (fixture, write, detail of the full check, detail of the structure check);
+# None: the check passes.
+_OWNER_WRITES = [
+    pytest.param(_guarded_records, lambda v: None, None, None, id="none"),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers["note"].append("c"), _QUALIFIERS, None,
+        id="append to a qualifier value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.__setitem__("note", ["a", "b"]), _QUALIFIERS, None,
+        id="replace a qualifier value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.__setitem__("gene", ["g"]), _QUALIFIERS, None,
+        id="add a qualifier",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.pop("product"), _QUALIFIERS, None,
+        id="delete a qualifier",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: setattr(_guarded_feature(v), "qualifiers", dict(_guarded_feature(v).qualifiers)),
+        _QUALIFIERS, None, id="replace the qualifier dict by a copy",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "qualifiers", None), _QUALIFIERS, None,
+        id="qualifiers to None",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "location", _guarded_feature(v).location + 1),
+        "record 1 feature 2 location owner", None, id="move the location",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _shift_location(v, "_start", 1), "record 1 feature 2 start", None,
+        id="in-place location start",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _shift_location(v, "_end", 1), "record 1 feature 2 end", None,
+        id="in-place location end",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v).location, "strand", 1), "record 1 feature 2 strand",
+        None, id="in-place location strand",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "type", "gene"), "record 1 feature 2 type", None,
+        id="change the type",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: v.records[1].features.append(SeqFeature(FeatureLocation(0, 5), type="misc")),
+        "record 1 feature count", "record 1 feature count", id="append a feature",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: v.records[1].features.__setitem__(2, copy.copy(_guarded_feature(v))),
+        "record 1 feature 2 owner", None, id="replace a feature",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "features", list(v.records[1].features)),
+        "record 1 feature-list owner", "record 1 feature-list owner", id="replace the feature list by a copy",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "id", "zz"), "record 1 id", "record 1 id",
+        id="change the record id",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "name", "ZZ"), "record 1 name", "record 1 name",
+        id="change the record name",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "seq", Seq("ACGT" * 50)),
+        "record 1 sequence owner", "record 1 sequence owner", id="replace the sequence",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", v.records[:1] + (copy.copy(v.records[1]),)),
+        "record 1 owner", "record 1 owner", id="replace a record object",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.__setitem__("topology", "circular"),
+        "record 1 annotations", "record 1 annotations", id="add an annotation",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations["refs"].append(3),
+        "record 1 annotations", "record 1 annotations", id="append to an annotation list",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.__setitem__("refs", [1, 2]),
+        "record 1 annotations", "record 1 annotations", id="replace an annotation value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.pop("molecule_type"),
+        "record 1 annotations", "record 1 annotations", id="delete an annotation",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", (v.provenance[0], _GuardedOrigin())),
+        "record provenance", "record provenance", id="replace a provenance item",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", v.provenance[:1]),
+        "record provenance", "record provenance", id="drop a provenance item",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", None),
+        "record provenance", "record provenance", id="provenance to None",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", v.records[:1]), "record count", "record count",
+        id="drop a record",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", ("a", "b")), "owner structure", "owner structure",
+        id="replace the records by a non-record",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: (
+            v.records[0].annotations.__setitem__("topology", "linear"),
+            setattr(_guarded_feature(v), "type", "gene"),
+        ),
+        "record 0 annotations", "record 0 annotations", id="two writes: an earlier record's annotations first",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: (
+            setattr(_guarded_feature(v), "type", "gene"),
+            v.records[1].annotations.__setitem__("topology", "linear"),
+        ),
+        "record 1 feature 2 type", "record 1 annotations", id="two writes in one record: features before annotations",
+    ),
+    pytest.param(_feature_listed_twice, lambda v: None, None, None, id="a feature listed twice: none"),
+    pytest.param(
+        _feature_listed_twice, lambda v: _guarded_feature(v).qualifiers["note"].append("c"), _QUALIFIERS, None,
+        id="a feature listed twice: append to its qualifier",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: OrderedDict([("locus_tag", ["T"]), ("product", ["p"])])),
+        lambda v: _guarded_feature(v).qualifiers["product"].append("q"), _QUALIFIERS, None,
+        id="OrderedDict qualifiers: append to a value",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        lambda v: None, None, None, id="two keys with one str(): none",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        lambda v: _guarded_feature(v).qualifiers.__setitem__(1, ["b"]), _QUALIFIERS, None,
+        id="two keys with one str(): replace the int key's value",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        _swap_int_key_for_its_str, _QUALIFIERS, None, id="two keys with one str(): swap the int key for its str",
+    ),
+    pytest.param(_nan_atoms, lambda v: None, None, None, id="NaN atoms: none"),
+    pytest.param(
+        _nan_atoms, lambda v: v.records[1].annotations.__setitem__("score", float("nan")),
+        "record 1 annotations", "record 1 annotations", id="NaN atoms: another NaN in an annotation",
+    ),
+    pytest.param(
+        _nan_atoms, lambda v: _guarded_feature(v).qualifiers.__setitem__("score", float("nan")), _QUALIFIERS, None,
+        id="NaN atoms: another NaN in a qualifier",
+    ),
+]
+
+
+def _guarded_cache(
+    tmp_path: Path, values: dict[str, object],
+) -> tuple[PreparedBiologicalInputCache, Path, PreparedResourceIdentity]:
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        for name, value in values.items():
+            get_or_build_parsed_source(
+                (name, identity), frozenset({identity}), lambda value=value: value,
+            )
+    return cache, path, identity
+
+
+@pytest.mark.parametrize("full_check", [True, False], ids=["full", "structure"])
+@pytest.mark.parametrize(("make", "write", "full_detail", "structure_detail"), _OWNER_WRITES)
+def test_the_owner_guard_names_the_first_changed_part_of_a_cached_entry(
+    tmp_path: Path,
+    make: Callable[[], _GuardedRecords],
+    write: Callable[[_GuardedRecords], object],
+    full_detail: str | None,
+    structure_detail: str | None,
+    full_check: bool,
+) -> None:
+    """D-05: the verdict and the message of each check, for every kind of write to a cached value."""
+
+    value = make()
+    stored = prepared_module._owner_stamp(value, walk_features=full_check)
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    write(value)
+    detail = full_detail if full_check else structure_detail
+    # The verdict is the stamp's: the check passes exactly when a new stamp equals the stored one.
+    assert (detail is None) == (prepared_module._owner_stamp(value, walk_features=full_check) == stored)
+    # After a transaction that did not commit, the entry check is the full one.
+    cache._previous_transaction_failed = full_check
+    diagnostics: dict[str, object] = {"metrics": {}}
+    key = ("source", identity)
+    if detail is None:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            assert get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("rebuilt")) is value
+        assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 0
+        return
+    with pytest.raises(ValidationError) as raised:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert str(raised.value) == f"Cached parsed biological input ownership was mutated ({detail})."
+    assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+    assert key not in cache._layers["parsed"]
+
+
+@pytest.mark.parametrize("stale_layer", ["parsed", "resolved"])
+def test_a_commit_finds_a_write_in_either_entry_that_shares_the_feature_objects(
+    tmp_path: Path, stale_layer: str,
+) -> None:
+    """Two entries hold the same feature objects, as the parsed and resolved layers do.
+
+    The one stamped before a write fails at commit whichever layer is checked
+    first, also after the other entry compared the same features unchanged.
+    """
+
+    first = _guarded_records()
+    second = _GuardedRecords(first.records, (_GuardedOrigin(),))
+    layer_values = {"parsed": first, "resolved": second}
+    fresh_layer = "resolved" if stale_layer == "parsed" else "parsed"
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    identities = frozenset({identity})
+    key = ("source", identity)
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        cache.get_or_build(stale_layer, key, identities, lambda: layer_values[stale_layer])
+    _guarded_feature(first).qualifiers["note"].append("c")
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with pytest.raises(ValidationError) as raised:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            # Built after the write: stamped as it is now; it takes records, so the commit checks in full.
+            cache.get_or_build(fresh_layer, key, identities, lambda: layer_values[fresh_layer])
+            assert cache.get_or_build(stale_layer, key, identities, lambda: pytest.fail("rebuilt")) is (
+                layer_values[stale_layer]
+            )
+    assert str(raised.value) == (
+        f"Cached {stale_layer} biological input ownership was mutated (record 1 feature 2 qualifiers)."
+    )
+    # The commit checks each entry up to the first failure; a failed request then
+    # checks the parsed entry it built before it keeps it.
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == (3 if stale_layer == "resolved" else 1)
+
+
+class _UnreadableLocation:
+    """A location whose start cannot be read: the feature's stamp cannot be built."""
+
+    strand = 1
+
+    @property
+    def start(self) -> int:
+        raise RuntimeError("location start cannot be read")
+
+    end = start
+
+
+def test_a_check_reports_a_write_in_an_earlier_part_before_a_stamp_it_cannot_build(tmp_path: Path) -> None:
+    """The checks compare part by part in order: record count, then each record (its head, features and
+    annotations), then the provenance.
+
+    A write in an earlier part is reported, and the entry evicted, also when a
+    later feature's stamp cannot be built; the next request builds the entry
+    again. (A check that built the whole stamp first raised the builder's error
+    instead, kept the entry, and every later request raised it again.)
+    """
+
+    value = _guarded_records()
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    value.records[0].annotations["topology"] = "linear"
+    value.records[1].features[3].location = _UnreadableLocation()
+    cache._previous_transaction_failed = True
+    key = ("source", identity)
+    with pytest.raises(ValidationError, match=r"ownership was mutated \(record 0 annotations\)"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert key not in cache._layers["parsed"]
+    rebuilt = _guarded_records()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        assert get_or_build_parsed_source(key, frozenset({identity}), lambda: rebuilt) is rebuilt
+
+
+def test_a_check_raises_the_error_of_a_stamp_it_cannot_build_when_no_earlier_part_changed(tmp_path: Path) -> None:
+    """A record's features are compared together: an unreadable feature raises its builder's error, also when
+    an earlier feature of that record changed, and the entry stays."""
+
+    value = _guarded_records()
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    value.records[1].features[1].type = "gene"
+    value.records[1].features[3].location = _UnreadableLocation()
+    cache._previous_transaction_failed = True
+    key = ("source", identity)
+    with pytest.raises(RuntimeError, match="location start cannot be read"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert key in cache._layers["parsed"]
 
 
 # Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data
