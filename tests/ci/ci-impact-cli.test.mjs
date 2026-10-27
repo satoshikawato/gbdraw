@@ -906,7 +906,9 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
 
   const workflowsDir = resolve(REPOSITORY_ROOT, '.github/workflows');
   const install = /\n      - name: [^\n]+\n(?:        (?!uses:)[^\n]*\n|\n(?=        ))*?[^\n]*pip install -e[^\n]*\n(?:        [^\n]*\n)*/;
-  const managed = /^\n(?:      #[^\n]*\n)*      - name: Install the managed LOSAT runtime\n(?:        id: [^\n]+\n)?        uses: \.\/\.github\/actions\/managed-losat\n/;
+  const managed = /^\n(?:      #[^\n]*\n)*      - name: Install the managed LOSAT runtime\n(?:        (?:id|if): [^\n]+\n)*        uses: \.\/\.github\/actions\/managed-losat\n/;
+  // The step's own `if:`, '' when it has none.
+  const condition = (step) => step.match(/\n        if: ([^\n]+)\n/)?.[1] || '';
   const users = [];
   for (const name of readdirSync(workflowsDir).filter((file) => file.endsWith('.yml')).sort()) {
     const workflow = readFileSync(resolve(workflowsDir, name), 'utf8');
@@ -925,6 +927,9 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
       assert.equal(uses, 1, `${name}:${id} runs the action once`);
       const after = source.slice(step.index + step[0].length).replace(/^(?=      )/, '\n');
       assert.match(after, managed, `${name}:${id} runs the action right after installing gbdraw`);
+      // A job that skips its install (an empty Playwright shard) skips the action too.
+      assert.equal(condition(after.match(managed)[0]), condition(step[0]),
+        `${name}:${id} runs the action under the condition of its gbdraw install`);
     }
   }
   assert.deepEqual(users, [

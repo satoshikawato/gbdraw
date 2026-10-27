@@ -775,6 +775,7 @@ jobs:
           npm ci
 
       - name: Install the managed LOSAT runtime
+        if: steps.shard.outputs.files != ''
         uses: ./.github/actions/managed-losat
 
       - name: Restore Playwright system packages
