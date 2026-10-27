@@ -42,6 +42,7 @@ from tests.utils.render_stage_equivalence import (
     assert_same_outcome,
     declaration_failures,
     equivalence_failures,
+    first_difference,
     full_chain_chunks,
     matrix_steps,
     matrix_variants,
@@ -423,13 +424,27 @@ def records_table(path: Path, rows: Sequence[tuple[str, int]]) -> list[str]:
 _C4_PARTS = ("--labels", "out", "--gc", "--skew")
 
 
+def hatch_table(path: Path, second_color: str) -> list[str]:
+    """One hatched highlight per record (``#1``, ``#2``); record 1's hatch is red."""
+
+    path.write_text(
+        "set_id\tid\tmark\trecord\tstart\tend\tlabel\thatch_color\n"
+        "s1\ta1\thighlight\t#1\t1000\t5000\tA\t#cc0000\n"
+        f"s1\ta2\thighlight\t#2\t2000\t6000\tB\t{second_color}\n"
+    )
+    return ["--annotation_table", str(path)]
+
+
 def test_record_parts_of_two_records_whose_ids_collide_warm_equal_cold(tmp_path: Path) -> None:
     """C4: HmmtDNA whole and HmmtDNA 1-9000, so the second record renames the ids it
     shares with the first. Rows swap and change, one record is reverse-complemented,
     then each input of the record parts and of the projected drawer keys changes
     (label rendering, track preset, feature lanes, definition font, scale interval,
-    stroke, custom stack, GC toggle, window). A part whose key misses an input it
-    reads would be a stale hit: warm would differ from cold."""
+    stroke, custom stack, GC toggle, window). A hatch table gives both records the
+    same hatch pattern, which record 2 renames, until record 2's hatch color
+    changes. Last, HmmtDNA and lambda share no record id, so feature identities are
+    not bound to records. A part whose key misses an input it reads would be a
+    stale hit: warm would differ from cold. Each step draws new bytes."""
 
     whole_region = records_table(tmp_path / "a.tsv", (("1-16569", 0), ("1-9000", 0)))
     base = [*whole_region, *_C4_PARTS]
@@ -451,13 +466,29 @@ def test_record_parts_of_two_records_whose_ids_collide_warm_equal_cold(tmp_path:
         ("custom stack", [*base, "--center_reserved_radius", "150"]),
         ("GC toggle", [*whole_region, "--labels", "out", "--no-gc", "--skew"]),
         ("window", [*base, "-w", "500"]),
+        ("hatch shared by both records", [*base, *hatch_table(tmp_path / "h1.tsv", "#cc0000")]),
+        ("record 2 hatch color", [*base, *hatch_table(tmp_path / "h2.tsv", "#0000cc")]),
         ("back to the base", base),
+        (
+            "HmmtDNA and lambda, identities not bound",
+            [
+                "--gbk",
+                str(render_stage_equivalence.TEST_INPUTS / "HmmtDNA.gbk"),
+                str(render_stage_equivalence.TEST_INPUTS / "NC_001416.gb"),
+                "--multi_record_canvas",
+                *_C4_PARTS,
+            ],
+        ),
     ]
     harness = EquivalenceHarness("circular", tmp_path / "out")
     failures = []
+    previous = None
     for label, arguments in steps:
         warm, cold = harness.warm(arguments), harness.cold(arguments)
         assert cold.error is None, f"{label}: {cold.error}"
+        if previous is not None and first_difference(previous.reply, warm.reply) is None:
+            failures.append(f"{label}: draws the bytes of the step before it")
+        previous = warm
         uncacheable = sorted(name for name, count in warm.stages.uncacheable.items() if count)
         if uncacheable:
             failures.append(f"{label}: uncacheable {uncacheable}")

@@ -16,7 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind, content_leaves
+from gbdraw.render.group_content import GroupContent, GroupKind, content_leaves, held_group
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -2218,11 +2218,12 @@ def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
     for element in drawing.elements:
         if element is drawing.defs:
             continue
-        if not isinstance(element, ContentGroup) or not element.holds_content_children():
+        group = held_group(element)
+        if group is None:
             return None
-        if element.key.kind in _CATALOG_GROUP_KINDS:
+        if group.key.kind in _CATALOG_GROUP_KINDS:
             # A record group adds no reads of its own: its parts are read.
-            contents.extend(content_leaves(element.content))
+            contents.extend(content_leaves(group.content))
     return tuple(contents)
 
 

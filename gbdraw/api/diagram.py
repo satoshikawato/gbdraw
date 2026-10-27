@@ -1061,10 +1061,8 @@ def _pack_circular_record_bounds(
 
 def _strip_nested_composition_roles(element: object) -> None:
     """Remove single-record role markers before nesting them in a grid."""
-    for child in _walk_svgwrite_elements(element):
-        attribs = getattr(child, "attribs", None)
-        if isinstance(attribs, dict):
-            attribs.pop(COMPOSITION_ROLE_ATTRIBUTE, None)
+    for attribs in _walk_attributes(element):
+        attribs.pop(COMPOSITION_ROLE_ATTRIBUTE, None)
 
 
 def _require_circular_assembly_result(drawing: Drawing) -> CircularAssemblyResult:
@@ -1110,14 +1108,26 @@ def _walk_svgwrite_elements(element: object) -> Iterator[object]:
         yield from _walk_svgwrite_elements(child)
 
 
-def _record_element_ids(element: object) -> Iterator[str]:
-    """The ids a record's merge names, in walk order: each non-empty string ``id``."""
+def _walk_attributes(element: object) -> Iterator[dict[str, object]]:
+    """The attribute dicts of ``element`` and its descendants, in walk order."""
     for child in _walk_svgwrite_elements(element):
         attribs = getattr(child, "attribs", None)
         if isinstance(attribs, dict):
-            raw_id = attribs.get("id")
-            if isinstance(raw_id, str) and raw_id:
-                yield raw_id
+            yield attribs
+
+
+def _element_id(attribs: dict[str, object]) -> str | None:
+    """The id a record's merge names: a non-empty string ``id``, else ``None``."""
+    raw_id = attribs.get("id")
+    return raw_id if isinstance(raw_id, str) and raw_id else None
+
+
+def _record_element_ids(element: object) -> Iterator[str]:
+    """The ids a record's merge names, in walk order (the order ``_apply_record_ids`` counts)."""
+    for attribs in _walk_attributes(element):
+        element_id = _element_id(attribs)
+        if element_id is not None:
+            yield element_id
 
 
 def _placed_record_ids(
@@ -1232,10 +1242,7 @@ def _apply_record_ids(
 
     new_ids = dict(renames)
     ordinal = 0
-    for child in _walk_svgwrite_elements(element):
-        attribs = getattr(child, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
+    for attribs in _walk_attributes(element):
         if bind_record_identity and attribs.get("data-gbdraw-feature-id"):
             stable_id = attribs["data-gbdraw-feature-id"]
             rendered_id = attribs.get("data-gbdraw-rendered-feature-id") or stable_id
@@ -1246,8 +1253,7 @@ def _apply_record_ids(
             attribs["data-label-feature-id"] = instance_svg_id(
                 attribs["data-label-feature-id"], f"record_{record_index + 1}"
             )
-        raw_id = attribs.get("id")
-        if not isinstance(raw_id, str) or not raw_id:
+        if _element_id(attribs) is None:
             continue
         if ordinal in new_ids:
             attribs["id"] = new_ids[ordinal]
@@ -1261,10 +1267,7 @@ def _apply_record_ids(
         referenced_id = match.group(1)
         return f"url(#{names.get(referenced_id, referenced_id)})"
 
-    for child in _walk_svgwrite_elements(element):
-        attribs = getattr(child, "attribs", None)
-        if not isinstance(attribs, dict):
-            continue
+    for attribs in _walk_attributes(element):
         for name, value in tuple(attribs.items()):
             if not isinstance(value, str):
                 continue

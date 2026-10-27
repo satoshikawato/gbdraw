@@ -352,17 +352,23 @@ class ContentGroup(Group):
         )
 
 
-def placed_content(element: BaseElement) -> GroupContent | None:
-    """The stored content ``element`` is written by: a placed content group
-    that still holds its content's children, and has some. ``None`` for any
-    other element, which is serialized as it is."""
+def held_group(element: BaseElement) -> ContentGroup | None:
+    """``element`` when it is a placed content group that still holds exactly
+    its content's children (none is allowed); ``None`` otherwise."""
 
-    if (
-        isinstance(element, ContentGroup)
-        and element.content.children
-        and element.holds_content_children()
-    ):
-        return element.content
+    if isinstance(element, ContentGroup) and element.holds_content_children():
+        return element
+    return None
+
+
+def placed_content(element: BaseElement) -> GroupContent | None:
+    """The stored content ``element`` is written by: a held group
+    (``held_group``) whose content has children. ``None`` for any other
+    element, which is serialized as it is."""
+
+    group = held_group(element)
+    if group is not None and group.content.children:
+        return group.content
     return None
 
 
@@ -374,10 +380,11 @@ def content_leaves(content: GroupContent) -> tuple[GroupContent, ...]:
     element of ``content`` but its own group.
     """
 
-    children = content.children
-    if children and all(isinstance(child, ContentGroup) and child.holds_content_children() for child in children):
-        return tuple(leaf for child in children for leaf in content_leaves(cast(ContentGroup, child).content))
-    return (content,)
+    groups = [held_group(child) for child in content.children]
+    parts = [group.content for group in groups if group is not None]
+    if not groups or len(parts) < len(groups):
+        return (content,)
+    return tuple(leaf for part in parts for leaf in content_leaves(part))
 
 
 class BuildsGroup(Protocol):
@@ -482,6 +489,7 @@ __all__ = [
     "element_text",
     "empty_element_markup",
     "group_manifest",
+    "held_group",
     "place_content",
     "placed_content",
     "require_element_markup",
