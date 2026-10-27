@@ -72,6 +72,14 @@ resources and parsed sources they built for the files they staged, unless they
 changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
 reply.
 
+While a drawing's draft holds an input file that its request omits (a hidden
+Depth file), the page keeps the file's bytes staged until the draft no longer
+holds the file. The cache may also keep, for that drawing only, the file's
+parsed source and the stage results of the last render that used it; these are
+released when the draft no longer holds the file, when a render of that drawing
+uses the file again, or when another drawing renders. Held files never enter
+the request or the Session.
+
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
 sanitizes each children text once per revision, keeps the sanitized text on the
