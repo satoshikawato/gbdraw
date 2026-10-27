@@ -1481,7 +1481,9 @@
         .app-gallery-link-label { display: inline-flex; align-items: center; gap: 0.375rem; }
         /* The states of the one-row header (app/header-fit.js): the Gallery link shows its cap alone, the file
            buttons show their icons alone as they do below 1280 px, and with both, the toolbar's groups close up
-           (vi and th at 1024 px keep the Session title and the mode names on one line). The wrapped header below
+           (vi and th at 1024 px keep the Session title and the mode names on one line); where even that narrows the
+           Session title, its "Session" caption hides, as in the wrapped header, and the groups close up to 2 px (TL-D06:
+           from 769 px no language then narrows the title or widens an overflow beyond dev's). The wrapped header below
            769 px shows the cap alone at the end of the logo's row, which has room, so the toolbar's rows stay as
            they are without the link (with its words, or in the toolbar's row, it would add a row). */
         @media (min-width: 769px) {
@@ -1493,6 +1495,9 @@
             .app-header[data-file-icons] .app-file-actions .app-config-button i { font-size: 0.95rem !important; }
             .app-header[data-file-icons][data-gallery-icon] .app-toolbar { gap: 0.25rem; }
             .app-header[data-file-icons][data-gallery-icon] .app-file-actions { margin-left: 0.25rem; padding-left: 0.25rem; }
+            .app-header[data-session-title-alone] .app-session-label { display: none; }
+            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
+            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
         }
         @media (max-width: 768px) {
             .app-header-inner { position: relative; }
