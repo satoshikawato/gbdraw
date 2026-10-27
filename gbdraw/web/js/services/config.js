@@ -61,6 +61,7 @@ import {
   readDrawnLegendSideOfMode,
   readLegendPositionOfMode,
   readStoredLayoutUi,
+  requestLayoutPreferences,
   storedLegendPositionRepairs,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
@@ -6214,7 +6215,7 @@ const RESULT_FEATURE_METADATA_FIELDS = Object.freeze([
  * a Generate the CLI can replay; without it the Result reads as the shown
  * mode (PD-OI-096). A Session 27-30 saved after a mode switch keeps the shown
  * mode's form; a request's form is its Result's.
- * @param {ResultDrawnWith} drawnWith
+ * @param {Pick<ResultDrawnWith, 'ui' | 'committedMode' | 'invocationMode' | 'canonical'>} drawnWith
  * @returns {{ candidateMode: 'circular' | 'linear', generatedMode: 'circular' | 'linear', formIsResultMode: boolean }}
  */
 const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
@@ -6363,7 +6364,8 @@ const importSessionDocument = async (e, options = {}) => {
       // aside, and the kept names go to Python (D-15-137). A Session 40-44's
       // groups are its catalog's, read on Python's Session 49.
       const { orthogroupState: storedGroupState, renderRequest: storedRequest } = /** @type {{ orthogroupState?: unknown,
-        renderRequest?: { records?: unknown } }} */ (fileParts.data);
+        renderRequest?: { records?: unknown, mode?: unknown, grouping?: unknown,
+          diagramOptions?: { output?: { legend?: unknown, plotTitlePosition?: unknown } | null } | null } }} */ (fileParts.data);
       const groupState = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedGroupState)
         ? storedGroupState : null;
       const orthogroups = groupState
@@ -6378,8 +6380,24 @@ const importSessionDocument = async (e, options = {}) => {
         : {};
       // Its layout and editor state are read here, at the file's own paths
       // (OV-652, TB8/TB9), and Python receives the read values (OV-1955).
-      const { ui: storedUi } = /** @type {{ ui?: unknown }} */ (fileParts.data);
-      const layoutRead = isPlainObject(storedUi) ? readStoredLayoutUi(storedUi, 'ui') : null;
+      // The layout is restored as the Load before the Worker route restored
+      // it (OV-1967): with the mode of the drawing that opens, the read
+      // draft's sides, and a canonical Session's committed request layout.
+      // A settings-only Session's request is not its committed request.
+      const { ui: storedUi, cliInvocation: storedInvocation } = /** @type {{ ui?: unknown,
+        cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
+      const committedRequest = fileParts.requestRead.settingsOnly || projectsWithoutRequest(fileParts.data, fileDocument.version)
+        ? null : storedRequest ?? null;
+      const { form: readForm, adv: readAdv } = /** @type {{ form?: { legend?: unknown, multi_record_canvas?: unknown },
+        adv?: { plot_title_position?: unknown } }} */ (draftRead ? draftRead.value : {});
+      const layoutRead = isPlainObject(storedUi) ? readStoredLayoutUi(storedUi, 'ui', {
+        mode: drawnResultModes({
+          ui: storedUi, committedMode: committedRequest?.mode, invocationMode: storedInvocation?.mode, canonical: committedRequest !== null
+        }).generatedMode,
+        multiRecord: Boolean(readForm?.multi_record_canvas),
+        projected: committedRequest ? requestLayoutPreferences(committedRequest) : null,
+        active: { legend: readForm?.legend, plotTitlePosition: readAdv?.plot_title_position }
+      }) : null;
       /** @type {Record<string, unknown>} */
       const readData = {
         ...fileParts.data,
@@ -6431,7 +6449,6 @@ const importSessionDocument = async (e, options = {}) => {
       // the file's `ui`, `cliInvocation` and draft, read at the file's own
       // paths; it travels with the Results Python sets aside (OV-1953). A
       // Session 31-39's is its request's, which Python's Session 49 holds.
-      const { cliInvocation: storedInvocation } = /** @type {{ cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
       const { form: storedForm, adv: storedAdv } = /** @type {{ form?: { legend?: unknown },
         adv?: { plot_title_position?: unknown } }} */ (isPlainObject(storedDraft) ? storedDraft : {});
       legacyRead = {
@@ -7467,19 +7484,15 @@ const importSessionDocument = async (e, options = {}) => {
         : null;
     }
     restoreAppliedPaletteFromSession(shownDrawing, ui);
-    // Layout preferences: a Session 46 slice holds its mode's slot (the
+    // Layout preferences: a drawing's slice holds its mode's slot (the
     // committed mode's request sets it when the slice has none); a Session
-    // 27-44 keeps one set, read once, which both drawings take.
-    if (modeScopedSession) {
-      if (projectedLayout && !isPlainObject(draftPartOf(committedSetDrawingId).slice.ui?.layoutPreferences)) {
-        const drawingOfCommit = committedDrawing;
-        SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
-          ...cloneJsonData(drawingOfCommit.layoutPreferences),
-          [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
-        }) });
-      }
-    } else {
-      committed.forEach((drawing) => restoreLayoutPreferences(drawing, ui, { projected: projectedLayout }));
+    // 27-44's layout was read before Python converted it (OV-1967).
+    if (projectedLayout && !isPlainObject(draftPartOf(committedSetDrawingId).slice.ui?.layoutPreferences)) {
+      const drawingOfCommit = committedDrawing;
+      SETTINGS_SLICE.install(drawingOfCommit.slices.settings, { layoutPreferences: normalizeLayoutPreferences({
+        ...cloneJsonData(drawingOfCommit.layoutPreferences),
+        [generatedMode]: normalizeLayoutPreferences(projectedLayout)[generatedMode]
+      }) });
     }
 
     /** @type {Map<ReturnType<typeof loadFiles>, LiveFileState>} One state per set of files, so each binds once. */

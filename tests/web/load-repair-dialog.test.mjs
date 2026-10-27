@@ -150,6 +150,24 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
   assert.equal(modeDrawing(state, 'circular').layoutPreferences.circular.single.legend, 'upper_left');
 });
 
+// OV-1967: a Session 27-43 keeps its layout in the legacy `ui` fields. Load
+// reads them as the Load before the Worker route did
+// (`restoredLayoutPreferences`): `ui.legend` gives the Linear legend when
+// `ui.linearLegendPosition` holds no Linear position, which is listed.
+test('a Session 27-44 layout kept in legacy ui fields reaches its drawings (OV-1967)', async () => {
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  delete session.ui.layoutPreferences;
+  session.ui.legend = 'top';
+  session.ui.linearLegendPosition = 'banana';
+  const dialogs = [];
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [[
+    'Legend: the position "banana" (ui.linearLegendPosition) is not one of its mode\'s positions; it is not used.'
+  ]]);
+  assert.equal(modeDrawing(state, 'linear').layoutPreferences.linear.legend, 'top');
+});
+
 // G2: what Load applies after the dialog is what the dialog listed. Each
 // stored leaf of a Session 46 is set to a value of another kind (and, for
 // text and numbers, to an unknown value of its kind; for an unset leaf, to a
