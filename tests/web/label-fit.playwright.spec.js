@@ -268,7 +268,7 @@ test('labels far over the room around the map: Generate stops at once with the w
   await expect(dialog.locator('#label-fit-description')).toHaveText(
     'Nothing was drawn. These labels need much more room than the map has, so placing them was not tried.');
   await expect(dialog.locator('[data-label-fit-records]')).toHaveText(
-    /^capacity: 600 outer labels at 14 pt \(they need about \d\.\d times the room around the map\)\s*$/);
+    /^capacity: 600 outer labels at 14 pt need about \d\.\d times the room around the map\s*$/);
   await expect(dialog.locator('[data-label-fit-remedies] li')).toHaveText([
     'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
     'Shorten the label text: a priority rule, for example gene before product.',

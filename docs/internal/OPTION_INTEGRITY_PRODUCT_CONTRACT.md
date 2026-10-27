@@ -3356,10 +3356,17 @@ Status: active Product authority
   `bigdata-perf-20261026` (decisions D-03 and D-12), given to questions the
   session relayed because the choices are the Product Decision Owner's. Each
   reply is quoted as written.
-  - D-03 (`2026-10-27`). Before the question, the Owner wrote:
-    「明らかに収まらないラベルなら、すぐ打ち切ってエラーを返すようにするかどうか ラベルが200個とかを超えそうなとき？は「やめたほうがいいですよ」って警告出すとか？」
-    Shown the options A (capacity-based, two levels; recommended), B
-    (count-based, warning only), and C (count-based error), the Owner
+  - D-03 (`2026-10-27`). The session asked whether to stop at once and
+    return an error when labels clearly cannot fit:
+    「明らかに収まらないラベルなら、すぐ打ち切ってエラーを返すようにするかどうか」.
+    The Owner replied in two messages. The first, whose first line quotes
+    the session's question:
+    「>明らかに収まらないラベルなら、すぐ打ち切ってエラーを返すようにするかどうか
+    ラベルが200個とか」. The second:
+    「を超えそうなとき？は「やめたほうがいいですよ」って警告出すとか？」.
+    The session then asked 「明らかに収まらないラベルをどう扱いますか？」
+    with the options A (capacity-based, two levels; recommended), B
+    (count-based, warning only), and C (count-based error). The Owner
     replied: 「A: 容量で判定・2段階 (推奨)」
   - D-12 (`2026-10-27`). The session showed the PR-C page with the stop rule,
     the warning threshold, when the Web warns, and the receipt below. Reply:

@@ -691,6 +691,8 @@ def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: Lab
     labels = _counted(capacity.label_count, f"{words} label", f"{words} labels")
     outcome = "may not fit. Placing them can take minutes." if placed else "were not placed."
     return f"{record_id}: {labels} at {capacity.font_size:g} pt {_room_needed(capacity)}, so they {outcome}"
+
+
 # What else shortens a centre definition that overlaps a track: its text (an abbreviation typed as the species).
 DEFINITION_TEXT_REMEDY = "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
 
@@ -723,7 +725,8 @@ def label_fit_record_counts(record: LabelFitRecord) -> str:
     if record.refused:
         return f"they {_RADIAL_REFUSAL}"
     if record.capacity is not None:
-        return f"they {_room_needed(record.capacity)}"
+        # Shown after "<n> outer labels at <size> pt", without brackets: a sentence, not counts.
+        return _room_needed(record.capacity)
     return fit_counts(record.fit)
 
 

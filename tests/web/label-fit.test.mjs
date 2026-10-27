@@ -413,13 +413,13 @@ const capacityReport = (remedies = CAPACITY_REMEDIES, capacityRatio = 2.5) => {
   const value = report([]);
   return { ...value, overlapPairs: 0, crossingPairs: 0, remedies,
     records: [{ ...value.records[0], recordId: 'AP027078.1', labelCount: 562, fontSize: 8, overlapPairs: 0,
-      crossingPairs: 0, capacityRatio, counts: 'they need about 2.5 times the room around the map' }] };
+      crossingPairs: 0, capacityRatio, counts: 'need about 2.5 times the room around the map' }] };
 };
 
 test('a capacity stop carries each record\'s ratio and Python\'s remedies; an unknown remedy is RESULT_INVALID', () => {
   const parsed = normalizeReport(capacityReport());
   assert.equal(parsed.records[0].capacityRatio, 2.5);
-  assert.equal(parsed.records[0].counts, 'they need about 2.5 times the room around the map');
+  assert.equal(parsed.records[0].counts, 'need about 2.5 times the room around the map');
   assert.deepEqual(parsed.remedies, CAPACITY_REMEDIES);
   assert.ok(Object.isFrozen(parsed.remedies));
   assert.deepEqual(parsed.rows, []);
@@ -461,7 +461,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   ]);
   assert.deepEqual(state.rows, []);
   assert.deepEqual(state.records.map((record) => [record.recordId, record.labelCount, record.labelKindTitle, record.fontSize,
-    record.counts]), [['AP027078.1', 562, 'outer labels', 8, 'they need about 2.5 times the room around the map']]);
+    record.counts, record.capacity]), [['AP027078.1', 562, 'outer labels', 8, 'need about 2.5 times the room around the map', true]]);
   assert.equal(state.selectedKind, '');
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(state.show, false);
@@ -470,6 +470,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
   assert.equal(state.capacity, false);
   assert.deepEqual(state.remedies, []);
+  assert.deepEqual(state.records.map((record) => record.capacity), [false]);
 
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
@@ -480,6 +481,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, /<p v-else-if="!labelFitDialog\.rows\.length"/);
   assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
+  // A record not placed for lack of room reads as Python's sentence; other records keep their counts in brackets.
+  assert.match(markup, / pt <template v-if="record\.capacity">\{\{ record\.counts \}\}<\/template><template v-else>\(\{\{ record\.counts \}\}\)<\/template>/);
 });
 
 // The status line the shared choice dialog shows, from the label fit dialog's

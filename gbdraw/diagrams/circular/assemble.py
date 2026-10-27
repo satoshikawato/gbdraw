@@ -2929,6 +2929,10 @@ def add_record_on_circular_canvas(
     # Text measurements per label font size, shared by the drawn placement and fit probes.
     label_candidate_caches: dict[float, CircularLabelCandidateCache] = {}
     if show_external_labels:
+        # The stage key leaves out whether the capacity check runs (off only while a fit row is verified). A result
+        # reused across that flag is still right: a verified row's settings differ from the drawn ones, so only a
+        # later Generate with a found row's settings can reuse it, and those labels fit (no figure with a found row
+        # reaches the stop level in the calibration); reusing it can skip a warning, nothing more.
         placement = render_stage(
             "circular_radial_labels" if profile.label_placement == "radial" else "circular_labels",
             circular_labels,

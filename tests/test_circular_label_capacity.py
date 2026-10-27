@@ -234,7 +234,8 @@ def test_t5_warns_before_placement_and_is_then_placed(
 
 @pytest.mark.circular
 def test_the_check_and_the_placement_read_one_ellipse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``label_arc`` is the one owner of the ellipse: the check's outer ellipse is the one placement uses."""
+    """``label_arc`` is the one owner of the ellipse: the check's outer ellipse is the one placement uses, with the
+    same outer label arena (a drawn CLI figure always has one)."""
 
     arcs: list[tuple[tuple[object, ...], LabelArc]] = []
     owner = circular_module.label_arc
@@ -254,6 +255,7 @@ def test_the_check_and_the_placement_read_one_ellipse(tmp_path: Path, monkeypatc
 
     (check_outer_args, check_outer), (_inner_args, _inner), (placed_args, placed) = arcs
     assert check_outer_args[4] is True and placed_args[4] is True
+    assert check_outer_args[5] is not None and placed_args[5] == check_outer_args[5]
     assert placed == check_outer
 
 
@@ -263,6 +265,50 @@ def test_a_row_verification_places_labels_without_the_check(tmp_path: Path, monk
     with label_capacity_unchecked(), pytest.raises(_Placed):
         circular_main([*AP027078_ARGS, "-o", str(tmp_path / "ap"), "-f", "svg"])
     assert reached
+
+
+def _crowded_map(path: Path) -> Path:
+    """A 20 kb map with 100 CDS labels: at 16 pt they need about the room around the map (CAPACITY-WARN)."""
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+    from Bio.SeqFeature import FeatureLocation, SeqFeature
+    from Bio.SeqRecord import SeqRecord
+
+    record = SeqRecord(Seq("ATGC" * 5000), id="SYN1", name="SYN1", description="crowded map")
+    record.annotations.update(molecule_type="DNA", topology="circular")
+    for index in range(100):
+        start = index * 200
+        record.features.append(SeqFeature(
+            FeatureLocation(start, start + 150, strand=1 if index % 2 else -1), type="CDS",
+            qualifiers={"product": [f"conserved hypothetical protein {index:03d}"]},
+        ))
+    SeqIO.write(record, path, "genbank")
+    return path
+
+
+@pytest.mark.circular
+def test_fit_probes_and_row_verification_never_run_the_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A crowded map warns once, then stops with a row found: the row search's probes and the verification of the
+    found row place the labels again, and none of them reads or warns the capacity."""
+
+    import gbdraw.labels.circular_fit as fit_module
+
+    # One row keeps the search short; it still probes, then verifies the row it finds.
+    monkeypatch.setattr(fit_module, "_OUTER_ROWS", frozenset({"smaller_font"}))
+    seen = _capacities(monkeypatch)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", LabelsMayNotFitWarning)
+        with pytest.raises(LabelsDoNotFitError) as stopped:
+            circular_main([
+                "--gbk", str(_crowded_map(tmp_path / "crowded.gb")), "--labels", "out", "--label_font_size", "16",
+                "-o", str(tmp_path / "crowded"), "-f", "svg",
+            ])
+
+    assert [[capacity.label_kind for capacity in capacities] for capacities in seen] == [["circular_outer"]]
+    assert CAPACITY_WARN_RATIO <= seen[0][0].record.ratio < CAPACITY_STOP_RATIO
+    assert len([item for item in caught if issubclass(item.category, LabelsMayNotFitWarning)]) == 1
+    assert [row.kind for row in stopped.value.report.rows if row.status == "found"] == ["smaller_font"]
 
 
 # --- the CLI ---------------------------------------------------------------------------------------
