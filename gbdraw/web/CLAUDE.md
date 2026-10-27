@@ -324,8 +324,7 @@ not draw under that record's identity (`recordKeyMoves` in
 `services/record-draw-selection.js`): its per-feature edits, Feature placements,
 feature strokes, and annotation targets. It also brings the rows a drawn
 record has under its other keys (its key drawn alone or on the Multi-Record
-Canvas, its identity, or the record key of the Linear card it was split from)
-into its key, field by field: the row moved from its previous key, or else the
+Canvas, or its identity) into its key, field by field: the row moved from its previous key, or else the
 row already under its key, wins. The `hash` color rules of those records move
 with the specific rules the Generate commits (`moveInstanceRuleRecords` in
 `services/feature-selector.js`); of two rules that then name one feature
