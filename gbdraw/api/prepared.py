@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
+from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sized, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -287,47 +287,43 @@ def prepared_resource_value_identity(value: Any) -> PreparedResourceIdentity | N
     return identity if isinstance(identity, PreparedResourceIdentity) else None
 
 
+_STAMP_ATOMS = (bool, int, float, str, bytes, Enum)
+
+
+def _opaque_stamp(value: object) -> tuple[str, int]:
+    return (type(value).__name__, id(value))
+
+
+def _entry_stamp(entry: object) -> Hashable:
+    """One entry of a shallow stamp; a list (every GenBank qualifier value) first."""
+
+    if type(entry) is list:
+        return ("list", id(entry), len(entry))
+    if entry is None or isinstance(entry, _STAMP_ATOMS):
+        return entry
+    if hasattr(entry, "__len__"):
+        return (type(entry).__name__, id(entry), len(cast(Sized, entry)))
+    return _opaque_stamp(entry)
+
+
 def _shallow_value_stamp(value: Any) -> Hashable:
-    if value is None or isinstance(value, (bool, int, float, str, bytes, Enum)):
+    if value is None or isinstance(value, _STAMP_ATOMS):
         return value
     if isinstance(value, Mapping):
         return (
             "mapping",
             id(value),
             len(value),
-            tuple(
-                sorted(
-                    (
-                        str(key),
-                        (
-                            entry
-                            if entry is None
-                            or isinstance(entry, (bool, int, float, str, bytes, Enum))
-                            else (type(entry).__name__, id(entry), len(entry))
-                            if hasattr(entry, "__len__")
-                            else (type(entry).__name__, id(entry))
-                        ),
-                    )
-                    for key, entry in value.items()
-                )
-            ),
+            tuple(sorted([(str(key), _entry_stamp(entry)) for key, entry in value.items()])),
         )
     if isinstance(value, (list, tuple)):
         return (
             type(value).__name__,
             id(value),
             len(value),
-            tuple(
-                entry
-                if entry is None
-                or isinstance(entry, (bool, int, float, str, bytes, Enum))
-                else (type(entry).__name__, id(entry), len(entry))
-                if hasattr(entry, "__len__")
-                else (type(entry).__name__, id(entry))
-                for entry in value
-            ),
+            tuple([_entry_stamp(entry) for entry in value]),
         )
-    return (type(value).__name__, id(value))
+    return _opaque_stamp(value)
 
 
 # The fields of a feature stamp, in order; the mutation message names them.
@@ -356,18 +352,26 @@ def _feature_stamp(feature: Any) -> tuple[Hashable, ...]:
     )
 
 
-def _feature_field_hashes(features: Any) -> bytes:
+def _feature_field_hashes(features: Iterable[object], memo: dict[int, bytes]) -> bytes:
     """Hash each field of each feature stamp, in order; the full stamp keeps these.
 
     Equal stamps give equal hashes. CPython's tuple hash changes whenever one
     element's hash changes, so a change of one value in a field always changes
     that field's hash; any other change is missed only by a hash collision.
+
+    ``memo`` keeps each feature object's hashes, so one check stamps a feature
+    once although the parsed and resolved entries both hold it. It lives for
+    one check: nothing runs between the comparisons, and the checked entries
+    keep the feature objects, so no id is reused.
     """
 
-    hashes = array("q")
+    parts = []
     for feature in features:
-        hashes.extend(map(hash, _feature_stamp(feature)))
-    return hashes.tobytes()
+        hashes = memo.get(id(feature))
+        if hashes is None:
+            hashes = memo[id(feature)] = array("q", map(hash, _feature_stamp(feature))).tobytes()
+        parts.append(hashes)
+    return b"".join(parts)
 
 
 def _changed_feature_field(before: bytes, after: bytes) -> str:
@@ -382,10 +386,38 @@ def _changed_feature_field(before: bytes, after: bytes) -> str:
     return "features"
 
 
-def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
+class _RecordHead(NamedTuple):
+    owner: int
+    id: str
+    name: str
+    sequence_owner: int
+    sequence_length: int
+    feature_list_owner: int
+    feature_count: int
+
+
+# The mutation message's name of each head field, in field order.
+_RECORD_HEAD_LABELS = (
+    "owner",
+    "id",
+    "name",
+    "sequence owner",
+    "sequence length",
+    "feature-list owner",
+    "feature count",
+)
+
+
+class _RecordStamp(NamedTuple):
+    head: _RecordHead
+    # None in a structure stamp.
+    feature_hashes: bytes | None
+    annotations: Hashable
+
+
+def _record_head(record: SeqRecord) -> _RecordHead:
     features = getattr(record, "features", ())
-    annotations = getattr(record, "annotations", None)
-    return (
+    return _RecordHead(
         id(record),
         str(record.id),
         str(record.name),
@@ -393,8 +425,14 @@ def _record_stamp(record: SeqRecord, *, walk_features: bool) -> Hashable:
         len(record.seq),
         id(features),
         len(features),
-        _feature_field_hashes(features) if walk_features else None,
-        _shallow_value_stamp(annotations),
+    )
+
+
+def _record_stamp(record: SeqRecord, *, walk_features: bool, memo: dict[int, bytes]) -> _RecordStamp:
+    return _RecordStamp(
+        _record_head(record),
+        _feature_field_hashes(getattr(record, "features", ()), memo) if walk_features else None,
+        _shallow_value_stamp(getattr(record, "annotations", None)),
     )
 
 
@@ -411,8 +449,15 @@ def _records_from_value(value: Any) -> tuple[SeqRecord, ...] | None:
     return None
 
 
+class _OwnerStamp(NamedTuple):
+    """The stamp of a value that holds records; any other value's is its opaque stamp."""
+
+    records: tuple[_RecordStamp, ...]
+    provenance: Hashable
+
+
 def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
-    """Stamp a cached value; ``walk_features=False`` gives the structure stamp.
+    """Stamp a cached value when it is built; ``walk_features=False`` gives the structure stamp.
 
     The structure stamp keeps every record field but the per-feature walk:
     record object, id, name, sequence and feature-list identity and length,
@@ -420,72 +465,57 @@ def _owner_stamp(value: Any, *, walk_features: bool) -> Hashable:
     """
 
     records = _records_from_value(value)
-    if records is not None:
-        provenance = getattr(value, "provenance", None)
-        return (
-            "records",
-            tuple(
-                _record_stamp(record, walk_features=walk_features)
-                for record in records
-            ),
-            _shallow_value_stamp(provenance),
-        )
-    return (type(value).__name__, id(value))
-
-
-def _owner_mutation_detail(before: Hashable, after: Hashable) -> str:
-    if not (
-        isinstance(before, tuple)
-        and isinstance(after, tuple)
-        and before
-        and after
-        and before[0] == after[0] == "records"
-    ):
-        return "owner structure"
-    before_records = before[1]
-    after_records = after[1]
-    if not isinstance(before_records, tuple) or not isinstance(after_records, tuple):
-        return "record collection"
-    if len(before_records) != len(after_records):
-        return "record count"
-    record_fields = (
-        "owner",
-        "id",
-        "name",
-        "sequence owner",
-        "sequence length",
-        "feature-list owner",
-        "feature count",
-        "features",
-        "annotations",
+    if records is None:
+        return _opaque_stamp(value)
+    memo: dict[int, bytes] = {}
+    return _OwnerStamp(
+        tuple(_record_stamp(record, walk_features=walk_features, memo=memo) for record in records),
+        _shallow_value_stamp(getattr(value, "provenance", None)),
     )
-    for record_index, (before_record, after_record) in enumerate(
-        zip(before_records, after_records, strict=True)
-    ):
-        if before_record == after_record:
-            continue
-        if not isinstance(before_record, tuple) or not isinstance(after_record, tuple):
-            return f"record {record_index}"
-        for field_index, (before_field, after_field) in enumerate(
-            zip(before_record, after_record, strict=False)
-        ):
-            if before_field != after_field:
-                if (
-                    field_index == 7
-                    and isinstance(before_field, bytes)
-                    and isinstance(after_field, bytes)
-                ):
-                    return (
-                        f"record {record_index} "
-                        f"{_changed_feature_field(before_field, after_field)}"
-                    )
-                field_name = (
-                    record_fields[field_index]
-                    if field_index < len(record_fields)
-                    else f"field {field_index}"
-                )
-                return f"record {record_index} {field_name}"
-    return "record provenance"
+
+
+def _owner_mismatch(
+    value: object, stamp: Hashable, *, walk_features: bool, memo: dict[int, bytes],
+) -> str | None:
+    """Compare a cached value with its stored stamp part by part (D-05).
+
+    The parts are built by the builders that made ``stamp`` and compared in
+    its order: the record count; per record its head, its feature hashes
+    (``walk_features``) and its annotations; the provenance. Returns None when
+    the value is unchanged, else the first part that differs. No whole stamp
+    is built: a part whose builder raises is reached only when no part
+    before it differs (the features of one record are compared together).
+    """
+
+    records = _records_from_value(value)
+    if records is None:
+        return None if stamp == _opaque_stamp(value) else "owner structure"
+    if not isinstance(stamp, _OwnerStamp):
+        return "owner structure"
+    if len(stamp.records) != len(records):
+        return "record count"
+    for index, (record, stored) in enumerate(zip(records, stamp.records)):
+        head = _record_head(record)
+        if head != stored.head:
+            return f"record {index} " + next(
+                label
+                for label, current, kept in zip(_RECORD_HEAD_LABELS, head, stored.head)
+                if current != kept
+            )
+        if walk_features:
+            hashes = _feature_field_hashes(getattr(record, "features", ()), memo)
+            if hashes != stored.feature_hashes:
+                return f"record {index} {_changed_feature_field(stored.feature_hashes or b'', hashes)}"
+        if not _same_stamp(_shallow_value_stamp(getattr(record, "annotations", None)), stored.annotations):
+            return f"record {index} annotations"
+    if not _same_stamp(_shallow_value_stamp(getattr(value, "provenance", None)), stamp.provenance):
+        return "record provenance"
+    return None
+
+
+def _same_stamp(current: Hashable, stored: Hashable) -> bool:
+    # As a tuple compares its items: identity first, so a NaN atom equals itself.
+    return current is stored or current == stored
 
 
 # The smallest str object: each object cell of a frame points to one beside its characters.
@@ -568,7 +598,9 @@ class PreparedBiologicalInputCache:
     when the request built an entry that holds records or ran a render stage
     that takes a record (O-2, D-07); otherwise a change is found by the next
     request that does. After a transaction that did not commit, the next one
-    checks in full when it reads, too.
+    checks in full when it reads, too. A check compares each entry with the
+    stamp taken when it was built, part by part, and stamps each feature
+    object once, also when several entries hold it.
 
     A Worker helper that plans the request the Worker staged (alignment
     projection, Feature Edits TSV, stored protein frames) reads the cache in a
@@ -753,6 +785,7 @@ class PreparedBiologicalInputCache:
                 entry,
                 transaction,
                 walk_features=self._previous_transaction_failed,
+                memo={},
             )
         if not transaction.read_only:
             self._layers[layer].move_to_end(key)
@@ -766,12 +799,22 @@ class PreparedBiologicalInputCache:
         transaction: _PreparedCacheTransaction,
         *,
         walk_features: bool,
+        memo: dict[int, bytes],
     ) -> None:
-        expected = entry.owner_stamp if walk_features else entry.structure_stamp
+        """Check one entry against the stamp taken when it was built (D-05).
+
+        ``memo`` is shared by the entries one check compares (``_feature_field_hashes``).
+        """
+
         if walk_features and _records_from_value(entry.value) is not None:
             _record_metric(transaction, "preparedInputCacheFullCheckCount")
-        current_stamp = _owner_stamp(entry.value, walk_features=walk_features)
-        if current_stamp == expected:
+        detail = _owner_mismatch(
+            entry.value,
+            entry.owner_stamp if walk_features else entry.structure_stamp,
+            walk_features=walk_features,
+            memo=memo,
+        )
+        if detail is None:
             return
         _record_metric(
             transaction,
@@ -779,8 +822,7 @@ class PreparedBiologicalInputCache:
         )
         self._evict(layer, key, transaction)
         raise ValidationError(
-            f"Cached {layer} biological input ownership was mutated "
-            f"({_owner_mutation_detail(expected, current_stamp)})."
+            f"Cached {layer} biological input ownership was mutated ({detail})."
         )
 
     def check_cancel(self) -> None:
@@ -796,6 +838,7 @@ class PreparedBiologicalInputCache:
         instead of failing on a change the user did not cause.
         """
 
+        memo: dict[int, bytes] = {}
         for layer, current in self._layers.items():
             # A render-stage entry has no owner to check (one constant stamp).
             if layer == _RENDER_STAGE_LAYER:
@@ -805,7 +848,7 @@ class PreparedBiologicalInputCache:
                 if entry is None or key in transaction.pending[layer]:
                     continue
                 try:
-                    self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                    self._verify_owner(layer, key, entry, transaction, walk_features=True, memo=memo)
                 except Exception:
                     # Evicted and counted by the check.
                     continue
@@ -930,6 +973,7 @@ class PreparedBiologicalInputCache:
         # O-2: without a record built or read by a stage, the structure check
         # (made when each entry was read) is repeated, not the feature walk.
         walk_features = transaction.record_touched
+        memo: dict[int, bytes] = {}
         for layer in self._layers:
             # A render-stage entry has no owner to check (one constant stamp).
             if layer == _RENDER_STAGE_LAYER:
@@ -941,6 +985,7 @@ class PreparedBiologicalInputCache:
                     entry,
                     transaction,
                     walk_features=walk_features,
+                    memo=memo,
                 )
 
     def _publish_inputs(
@@ -954,12 +999,14 @@ class PreparedBiologicalInputCache:
         checked it). Nothing is pruned: neither is the one-project bound.
         """
 
+        memo: dict[int, bytes] = {}
         for layer in _INPUT_LAYERS:
             current = self._layers[layer]
-            for key, entry in transaction.pending[layer].items():
+            # A changed entry is evicted, and so leaves ``pending``, while this walks it (OV-1350).
+            for key, entry in tuple(transaction.pending[layer].items()):
                 if not verified:
                     try:
-                        self._verify_owner(layer, key, entry, transaction, walk_features=True)
+                        self._verify_owner(layer, key, entry, transaction, walk_features=True, memo=memo)
                     except Exception:
                         # Changed, or its stamp cannot be built: the request's own
                         # error stays the one it raises.
