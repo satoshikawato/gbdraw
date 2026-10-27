@@ -1698,11 +1698,16 @@ test('a Session 27-44 Linear Depth height draws the Linear series and leaves the
   // The drawings read the stored `depth_tracks: []` differently (Linear 10,
   // Circular auto), so Python receives it as stored and the Linear drawing
   // reads its `depth_height` series again (OV-2059). Its Circular drawing
-  // takes the Linear rows of its Circular request's projection (OV-2049).
+  // takes no Linear-own row from its Circular request's projection: its Depth
+  // series stays at auto and those rows keep their defaults, as the old Load
+  // (OV-2049).
   const loaded = await importSession(input(fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz')),
     { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.equal(modeDrawing(state, 'linear').adv.depth_tracks[0].height, 10);
+  assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null]);
+  const circular = modeDrawing(state, 'circular').adv;
+  assert.deepEqual(['depth_height', 'gc_height', 'scale_stroke_width', 'scale_stroke_color', 'ruler_label_color']
+    .map((field) => circular[field]), [null, null, null, null, null]);
 });
 
 test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {

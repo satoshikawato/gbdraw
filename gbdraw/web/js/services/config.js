@@ -50,7 +50,7 @@ import {
   readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
-  readSessionInputType, readSimilarityAlignment, readSingleDraftValues
+  readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withoutFieldsAt
 } from './config-field-readers.js';
 import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -279,6 +279,7 @@ import {
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 import {
+  OTHER_MODE_OWN_FIELDS,
   SLICE_MODES,
   modeSliceFieldsOf,
   sessionDepthSourceWidths,
@@ -1405,15 +1406,24 @@ const CONFIG_SLICE_ROWS = MODE_SCOPED_SETTINGS.rows.filter((/** @type {{ domain:
 ));
 // A drawing's settings on Load (plan 4.1): the projection of its mode's
 // committed request, then each registry row its slice holds. A slice may
-// omit any row; the drawing's defaults fill what neither holds.
+// omit any row; the drawing's defaults fill what neither holds. The
+// projection fills no row the other mode owns (`OTHER_MODE_OWN_FIELDS`, as
+// Python's split gives it): a Circular request's Linear depth height is no
+// Circular Depth series height (OV-2049).
 /**
- * @param {Record<string, any> | null | undefined} projectedConfig
+ * The projection of a drawing's committed request: the drawing's mode and the
+ * projected config (not an object: none).
+ * @typedef {Readonly<{ mode: DiagramMode, config: unknown }>} DrawingRequestProjection
+ */
+/**
+ * @param {DrawingRequestProjection | null} projection Null: the drawing holds no request.
  * @param {Record<string, any> | null | undefined} sliceConfig
  * @returns {Record<string, any>}
  */
-const overlayModeSliceConfig = (projectedConfig, sliceConfig) => {
+const overlayModeSliceConfig = (projection, sliceConfig) => {
   /** @type {Record<string, any>} */
-  const config = isPlainObject(projectedConfig) ? cloneJsonData(projectedConfig) : {};
+  const config = projection && isPlainObject(projection.config)
+    ? /** @type {Record<string, any>} */ (withoutFieldsAt(cloneJsonData(projection.config), OTHER_MODE_OWN_FIELDS[projection.mode])) : {};
   const slice = isPlainObject(sliceConfig) ? sliceConfig : {};
   CONFIG_SLICE_ROWS.forEach((/** @type {{ domain: string, path: string }} */ row) => {
     const container = row.domain === 'config' ? slice : slice[row.domain.slice('config.'.length)];
@@ -1478,7 +1488,7 @@ const unmanagedConfigValidationOf = (mode, storedConfig, storedRequest) => (
 const applyModeSliceData = (drawing, mode, slice, {
   projectedConfig = null, resolveTrackPlacements = true, applyCanvasPadding = true
 } = {}) => {
-  const config = overlayModeSliceConfig(projectedConfig, slice.config);
+  const config = overlayModeSliceConfig(projectedConfig ? { mode, config: projectedConfig } : null, slice.config);
   if (Object.keys(config).length) applyConfigData(drawing, config, { resolveTrackPlacements });
   const features = isPlainObject(slice.features) ? slice.features : {};
   applyDrawingFeatureData(drawing, { ...features, featureColorOverrides: savedFeatureColorEdits(features.featureColorOverrides) });
@@ -2514,7 +2524,7 @@ const storedDrawingInputsOf = (document, drawing, sessionResourceTable, sourceFa
     /** @type {UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (request));
   return {
     files: projection.files, comparisonClassification, inputType,
-    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig(projection.config, storedConfig)),
+    restoredConfig: withSavedDefinitionAlignment(overlayModeSliceConfig({ mode, config: projection.config }, storedConfig)),
     requestOverrides: overrides.source === 'storedRequest' ? overrides : null,
     requestFeatureEdits: { semanticFeatureState: projection.semanticFeatureState },
     cliOptions: cliOptionsOf(view.cliOptions)
@@ -2866,7 +2876,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   if (modeScopedSession) {
     recordSessionLifecycleEvent('current-draft-validation-start');
     restoredConfig = canonicalProjection && !settingsOnly
-      ? overlayModeSliceConfig(canonicalProjection.config, runtimeStoredConfig)
+      ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig)
       : null;
     if (restoredConfig) {
       // As for Sessions 40-44: the stored draft owns the active controls and the
@@ -7294,7 +7304,7 @@ const importSessionDocument = async (e, options = {}) => {
       /** @type {Record<string, any>} */
       let config = modeScopedSession
         ? sliceDraftConfigOf(id)
-        : overlayModeSliceConfig(committed && !hasFlatDraft ? restoredConfig : null, slice.config);
+        : overlayModeSliceConfig(committed && !hasFlatDraft ? { mode, config: restoredConfig } : null, slice.config);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
       // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
