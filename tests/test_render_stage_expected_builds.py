@@ -84,7 +84,7 @@ _TITLE = frozenset({"plot_title_content", "circular_plot_title_content"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
-_DEPTH_DATA = frozenset({"depth_track_data", "depth_content"})
+_DEPTH_DATA = frozenset({"depth_track_config", "depth_content"})
 _DEPTH_FRAME = _DEPTH_DATA | {"depth_frame"}
 
 # The stages that hold the content each option changes. An option not named builds nothing.
@@ -126,7 +126,8 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
         _DEPTH_DATA,
     ),
     **dict.fromkeys(("depth_track_tick_font_size", "depth_tick_font_size"), _DEPTH_DATA | _LEGEND_LAYOUT),
-    "depth_track_label": _DEPTH_DATA | _LEGEND,
+    # The Depth config is keyed by the style fields it reads, not the label (OV-1229).
+    "depth_track_label": _LEGEND,
     "conservation_labels": _LEGEND,
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
@@ -465,3 +466,18 @@ def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definit
     assert outcome.error is None
     assert "circular_plot_title_content" in outcome.stages.builds
     assert "circular_definition_content" not in outcome.stages.builds
+
+
+@pytest.mark.parametrize("case_id", ["C3", "L2"])
+def test_a_depth_label_change_rebuilds_no_depth_path(case_id: str, tables: Path, tmp_path: Path) -> None:
+    """OV-1229: the label is a legend input; the Depth config and path do not read it."""
+
+    case = CASES[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["depth_track_label"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "depth_content" not in outcome.stages.builds
+    assert set(outcome.stages.builds) <= allowed_builds("depth_track_label", case.mode)

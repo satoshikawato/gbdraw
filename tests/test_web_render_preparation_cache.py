@@ -16,11 +16,14 @@ import pandas as pd
 import pytest
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.analysis.depth import DEPTH_COLUMNS, _read_depth_tsv_cached, clear_depth_tsv_cache
+import gbdraw.analysis.depth as depth_module
 from gbdraw.api import (
     CircularBatchRequest,
     CircularDiagramOptions,
     CircularDiagramRequest,
     CircularOutputOptions,
+    DepthTrackInput,
     GenBankInputSource,
     GffFastaInputSource,
     LinearDiagramOptions,
@@ -2783,3 +2786,167 @@ def test_an_annotation_metadata_order_change_rebuilds_the_context_and_sends_the_
     assert _metrics(diagnostics)["renderStageBuild:interactive_context"] == 1
     assert reply["featureCatalog"] is not None
     assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+# Depth part 1 (OV-1226..OV-1228): in the Worker, the decoded layer owns a
+# Depth file's parsed table, one per resource identity, shared read-only by
+# every record; each record selects its rows without copying the table.
+
+_DEPTH_RESOURCE = "depth-tracks-1-source"
+# Two records with no crop and no reverse complement.
+_PLAIN_PRESENTATIONS: tuple[tuple[str | None, bool], ...] = ((None, False), (None, False))
+
+
+def _depth_documents(
+    tmp_path: Path,
+    presentations: tuple[tuple[str | None, bool], ...] = _PLAIN_PRESENTATIONS,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """A Circular document of one record per (region, reverse) with Show Depth on, and the request the page sends with it off.
+
+    One Depth file holds the rows of every record.
+    """
+
+    inputs = []
+    rows = []
+    for index, (region, reverse) in enumerate(presentations, start=1):
+        record_id = f"record-{index}"
+        source = tmp_path / f"depth-source-{index}.gb"
+        _write_genbank(source, (_record(record_id),))
+        inputs.append(
+            RecordInput(
+                source=GenBankInputSource(source),
+                region=parse_region_spec(region) if region else None,
+                presentation=RecordPresentation(reverse_complement=reverse),
+                record_key=record_id,
+            )
+        )
+        rows += [f"{record_id}\t{position}\t{(position * index) % 17}\n" for position in range(1, 721)]
+    depth_path = tmp_path / "depth.tsv"
+    depth_path.write_text("".join(rows), encoding="utf-8")
+    request = CircularDiagramRequest(
+        records=tuple(inputs),
+        options=CircularDiagramOptions(
+            depth_tracks=(DepthTrackInput(source=str(depth_path), label="Depth"),),
+        ),
+        output=RenderOutputRequest(output_prefix="prepared-depth", formats=("svg",)),
+    )
+    shown = build_session_document(request).to_dict()
+    assert _DEPTH_RESOURCE in shown["resources"]
+    hidden = copy.deepcopy(shown)
+    del hidden["resources"][_DEPTH_RESOURCE]
+    del hidden["renderRequest"]["diagramOptions"]["depthTracks"]
+    return shown, hidden
+
+
+def _depth_entries(cache: PreparedBiologicalInputCache) -> list[object]:
+    return [
+        entry.value
+        for key, entry in cache._layers["decoded"].items()
+        if any(identity.resource_id == _DEPTH_RESOURCE for identity in entry.resource_identities)
+    ]
+
+
+def test_worker_depth_table_skips_the_process_cache(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    _render(tmp_path, cache, shown, request_id=1)
+    _render(tmp_path, cache, hidden, request_id=2)
+    # The page sends the file again under a new token after a hide.
+    _render(tmp_path, cache, shown, request_id=3, token_numbers={_DEPTH_RESOURCE: 900})
+
+    info = _read_depth_tsv_cached.cache_info()
+    assert (info.currsize, info.misses) == (0, 0)
+    assert len(_depth_entries(cache)) == 1
+
+
+def test_hiding_depth_releases_its_parsed_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    import gc
+    import weakref
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    parsed: list[weakref.ref[pd.DataFrame]] = []
+    real_read_csv = depth_module.pd.read_csv
+
+    def recording_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        table = real_read_csv(*args, **kwargs)
+        if list(table.columns) == DEPTH_COLUMNS:
+            parsed.append(weakref.ref(table))
+        return table
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", recording_read_csv)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    _render(tmp_path, cache, shown, request_id=1)
+    assert len(parsed) == 1 and parsed[0]() is not None
+    _render(tmp_path, cache, hidden, request_id=2)
+    gc.collect()
+
+    assert parsed[0]() is None
+
+
+def test_a_shown_depth_render_copies_no_depth_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """The first render parses once and copies nothing; a repeat neither parses nor copies.
+
+    Before, the first render copied the table once from the process cache and
+    once more for each record (OV-1227, OV-1228), and a repeat copied it again.
+    """
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, _hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    counts = {"parse": 0, "copy": 0}
+    real_read_csv = depth_module.pd.read_csv
+    real_copy = pd.DataFrame.copy
+
+    def counting_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        counts["parse"] += 1
+        return real_read_csv(*args, **kwargs)
+
+    def counting_copy(self: pd.DataFrame, *args: object, **kwargs: object) -> pd.DataFrame:
+        if len(self) > 1 and list(self.columns) == DEPTH_COLUMNS:
+            counts["copy"] += 1
+        return real_copy(self, *args, **kwargs)
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", counting_read_csv)
+    monkeypatch.setattr(pd.DataFrame, "copy", counting_copy)
+
+    _render(tmp_path, cache, shown, request_id=1)
+    assert counts == {"parse": 1, "copy": 0}
+    _render(tmp_path, cache, shown, request_id=2)
+    assert counts == {"parse": 1, "copy": 0}
+
+
+def test_the_shared_depth_table_is_unchanged_by_the_renders_that_select_from_it(tmp_path: Path) -> None:
+    """A crop and a reverse complement select from the one table; it stays equal to a fresh parse."""
+
+    from gbdraw.analysis.depth import parse_depth_tsv
+
+    plain, _hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    depth_token = {_DEPTH_RESOURCE: 900}
+    _render(tmp_path, cache, plain, request_id=1, token_numbers=depth_token)
+    [table] = _depth_entries(cache)
+    # The Session holds each cropped record's own GenBank bytes; the Depth file is the same resource.
+    transformed, _hidden = _depth_documents(tmp_path, (("101-600", True), ("201-500", False)))
+
+    _, diagnostics = _render(
+        tmp_path, cache, transformed, request_id=2, token_generation=2, token_numbers=depth_token
+    )
+
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageBuild:depth_frame"] == 2
+    assert _depth_entries(cache) == [table]
+    assert isinstance(table, pd.DataFrame)
+    pd.testing.assert_frame_equal(table, parse_depth_tsv(str(tmp_path / "depth.tsv")))

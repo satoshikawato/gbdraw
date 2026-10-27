@@ -2035,14 +2035,14 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     read_count = 0
     from gbdraw.analysis import depth_tracks as depth_tracks_module
 
-    real_read_depth_tsv = depth_tracks_module.read_depth_tsv
+    real_read_cached_depth_table = depth_tracks_module.read_cached_depth_table
 
-    def counting_read_depth_tsv(path: str) -> pd.DataFrame:
+    def counting_read_cached_depth_table(path: str) -> pd.DataFrame:
         nonlocal read_count
         read_count += 1
-        return real_read_depth_tsv(path)
+        return real_read_cached_depth_table(path)
 
-    monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
+    monkeypatch.setattr(depth_tracks_module, "read_cached_depth_table", counting_read_cached_depth_table)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
@@ -2637,3 +2637,95 @@ def test_depth_tsv_reads_each_value_as_the_nearest_double(tmp_path: Path) -> Non
     clear_depth_tsv_cache()
 
     assert [repr(value) for value in read_depth_tsv(str(depth_path))["depth"]] == ["2.41e-73", "6.69e-59"]
+
+
+# Depth part 1 (OV-1226..OV-1228): a parsed file is one categorical table that
+# every record selects from without a copy; any other table is converted as before.
+
+
+def _two_record_depth_text() -> str:
+    rows = [f"chr\t{position}\t{position % 13}" for position in range(1, _FRAME_LENGTH + 1)]
+    rows += [f"plasmid\t{position}\t{(position * 7) % 11}" for position in range(1, 401)]
+    return "\n".join(rows) + "\n"
+
+
+def test_read_depth_tsv_returns_string_names_and_renders_read_categorical_ones(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """The public reader keeps its ``string`` names, which a user may rename; renders read categorical ones."""
+
+    from gbdraw.analysis.depth import read_cached_depth_table
+
+    depth_path = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec2\t2\t12\n")
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+
+    table = read_depth_tsv(str(depth_path))
+    internal = read_cached_depth_table(str(depth_path))
+
+    assert table["reference_name"].dtype == pd.StringDtype()
+    table.loc[table["reference_name"] == "rec1", "reference_name"] = "NC_000913.3"
+    assert table["reference_name"].tolist() == ["NC_000913.3", "rec2"]
+    assert isinstance(internal["reference_name"].dtype, pd.CategoricalDtype)
+    assert all(type(category) is str for category in internal["reference_name"].cat.categories)
+    assert internal.to_dict("list") == {
+        "reference_name": ["rec1", "rec2"],
+        "position": [1, 2],
+        "depth": [10.0, 12.0],
+    }
+
+
+def test_parsed_depth_table_is_canonical_and_passes_through(tmp_path: Path) -> None:
+    from gbdraw.analysis.depth import _normalize_depth_table, parse_depth_tsv
+
+    parsed = parse_depth_tsv(str(_write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec1\t2\t12\n")))
+    string_table = parsed.astype({"reference_name": "string"})
+
+    assert _normalize_depth_table(parsed) is parsed
+    converted = _normalize_depth_table(string_table)
+    assert converted is not string_table
+    assert converted["reference_name"].tolist() == ["rec1", "rec1"]
+
+
+@pytest.mark.parametrize("case", ["crop", "reverse", "forward_control"])
+def test_depth_df_bins_equal_for_categorical_and_string_tables(case: str, tmp_path: Path) -> None:
+    from gbdraw.analysis.depth import parse_depth_tsv
+
+    region, reverse, _spans, _expected = _RECORD_FRAME_CASES[case]
+    parsed = parse_depth_tsv(str(_write_depth_file(tmp_path / "depth.tsv", _two_record_depth_text())))
+    string_table = parsed.astype({"reference_name": "string"})
+    # A categorical table whose categories hold a name no row uses.
+    unused = parsed.astype(
+        {"reference_name": pd.CategoricalDtype(["absent", "chr", "plasmid"])}
+    )
+    record = _transformed_frame_record(region, reverse)
+
+    expected = depth_df(record, string_table, window=50, step=25)
+    for table in (parsed, unused):
+        pd.testing.assert_frame_equal(depth_df(record, table, window=50, step=25), expected)
+
+
+def test_depth_df_matches_an_integer_categorical_api_table_as_text() -> None:
+    record = _make_record("1", length=40)
+    table = pd.DataFrame(
+        {
+            "reference_name": pd.Categorical([1, 1, 2]),
+            "position": [1, 2, 3],
+            "depth": [4.0, 6.0, 100.0],
+        }
+    )
+
+    binned = depth_df(record, table, window=10, step=10)
+
+    assert binned["depth"].tolist() == pytest.approx([1.0, 0.0, 0.0, 0.0])
+
+
+def test_categorical_multi_reference_mismatch_names_the_references(tmp_path: Path) -> None:
+    from gbdraw.analysis.depth import parse_depth_tsv
+
+    parsed = parse_depth_tsv(
+        str(_write_depth_file(tmp_path / "depth.tsv", "b\t1\t1\na\t1\t2\nb\t2\t3\n"))
+    )
+
+    with pytest.raises(ValidationError, match=r"Available references: b, a$"):
+        depth_df(_make_record("rec1"), parsed, window=10, step=10)
