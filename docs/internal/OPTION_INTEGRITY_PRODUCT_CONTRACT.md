@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `94`
+- Contract revision: `95`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -3420,6 +3420,43 @@ Status: active Product authority
     additional terms.
   - New receipt SHA-256: `PD-OI-108` scenario revision `1`
     `8ca90c1d8e7e066eb6a815384b4bff208c92e25e941addba14f92ee31874eefe`.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 95 changes: `PD-OI-108` gains scenario revision `2` (concern
+  `web.gallery-tutorial-discoverability`; the outcome `A3 + B1`, with Q6 `B`).
+  Where the one-row header still narrows the Session title once the file
+  buttons and the Gallery button show their icons alone, the toolbar's gaps
+  close up and the "Session" caption hides; in the two-row header the Gallery
+  button shows its icon alone at the end of the logo's row. The sentence of
+  the scenario revision `1` Accepted residual risk about 1024 px is replaced.
+  The replies come from the Product Decision Owner `satoshikawato` of
+  `2026-10-27` (decision TL-D06 of the campaign `tutorial-link-20261027`),
+  given to a question the session of that campaign asked because the choice
+  is the Product Decision Owner's. They were given in another Claude Code
+  session, which relayed them as written.
+  - TL-D06 (`2026-10-27`). The session reported that the Accepted residual
+    risk added by TL-D05 understated the measured narrowing of the Session
+    title (from 769 to 1000 px, in every language), and asked whether to keep
+    the implementation and correct that text (A) or also hide the "Session"
+    caption where the title still narrows (B), showing for each the corrected
+    Choice and Accepted residual risk, the sentence they replace, and images
+    of the same states. Replies: the link to the decision page followed by
+    「これ誰？承認します」, then, asked whether that meant A or B,
+    「B（ページのおすすめ）」
+  - The Choice and Accepted residual risk reproduce the corrected texts of B
+    without translation or additional terms. Scenario revision and May retire
+    name this revision and the sentence that the decision page said the
+    correction replaces; the other fields are those of scenario revision `1`.
+    The scenario revision `1` receipt and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-108` scenario revision `2`
+    `8677ecb36f753f6983de3ae1f7e690a7cc6148a1562d02b8ce0889eaad48b273`.
+  - `PD-OI-108` scenario revision `2` supersedes scenario revision `1`; its
+    May retire names the part of scenario revision `1` that is retired. Every
+    term of scenario revision `1` that its May retire does not name stays in
+    force. The record title keeps its wording (no link targets its anchor
+    text).
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -9716,19 +9753,31 @@ Decision date: 2026-10-25
 ### PD-OI-108: Tutorials of the Interactive Gallery from the app
 
 - Concern key: `web.gallery-tutorial-discoverability`
-- Scenario revision: `1`
-- Supersedes: none.
+- Scenario revision: `2`
+- Supersedes: `PD-OI-108`, scenario revision `1`. Scenario revision `2`
+  retires the sentence of the scenario revision `1` Accepted residual risk
+  that its May retire names; the Owner replies of `2026-10-27` quoted in the
+  Revision 95 entry above approve it. Every term of scenario revision `1`
+  that its May retire does not name stays in force.
 - Status: `ACCEPTED`
-- Selected outcome: `A3 + B1`
-- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
-  and its nine-field JSON representation below.
-- Decision source: the Owner replies of `2026-10-27` quoted in the Revision 94
+- Selected outcome: `A3 + B1` (scenario revision `1`) and `A3 + B1` with Q6
+  `B` (scenario revision `2`)
+- Normative outcome: exactly the approved scenario revision `1` and `2`
+  `PRODUCT_DECISION` receipts and their nine-field JSON representations
+  below, scenario revision `2` replacing the term its May retire names.
+- Decision source (scenario revision `1`): the Owner replies of `2026-10-27` quoted in the Revision 94
   entry above (TL-D01 to TL-D05). The receipt and JSON below reproduce all nine
   fields of the approved receipt without translation or additional terms. The
   runtime that implements it merges with it (static Product Contract
   co-change); this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (UTF-8, excluding the final newline):
+- Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `8ca90c1d8e7e066eb6a815384b4bff208c92e25e941addba14f92ee31874eefe`.
+- Decision source (scenario revision `2`): the Owner replies of `2026-10-27`
+  quoted in the Revision 95 entry above (TL-D06). The runtime, tests, and
+  documentation that implement it merge with it (static Product Contract
+  co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (scenario revision `2`; UTF-8, excluding the final newline):
+  `8677ecb36f753f6983de3ae1f7e690a7cc6148a1562d02b8ce0889eaad48b273`.
 
 ```text
 PRODUCT_DECISION
@@ -9752,6 +9801,36 @@ Decision date: 2026-10-27
   "mustPreserve": "Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。",
   "mayRetire": "なし",
   "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。4 つのボタンがもともとアイコンだけの 1024 px 前後では、仏語・ベトナム語・タイ語で Session 名が 10 px ほど縮む。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-27"
+}
+```
+
+Scenario revision `2` receipt (approved by `satoshikawato` on `2026-10-27`;
+TL-D06 of the Revision 95 entry above):
+
+```text
+PRODUCT_DECISION
+Concern: web.gallery-tutorial-discoverability
+Scenario revision: 2
+Choice: A3 + B1（Q3 英語の印あり、Q4 pip 版にも表示）。ヘッダーに「Gallery & tutorials」ボタン（幅が足りないときは文字を隠してアイコンだけにする。それでも Session 名が縮む幅では、設定のリセット、Session の保存、Session の読み込み、例の読み込みの 4 つのボタンも 1279 px 以下と同じアイコンだけにし、ツールバーの間隔を詰める。それでも Session 名が縮む幅では「Session」の小見出しも隠す。768 px 以下の 2 段のヘッダーでは、アイコンだけをロゴの行の右端に置く）、Result が無い画面に「Learn with tutorials」カード、例の選択の各行に「Tutorial」リンク。Load example で読み込んだ例にチュートリアルがあれば「Session loaded」通知の中に「この図を描くチュートリアルがあります。チュートリアルを開く（英語）」を出し、その例の Gallery の Tutorial タブを新しいタブで開く。通知は × 、別の Session / 例の読み込み、Reset Settings、Circular / Linear の切り替えで消え、Generate や編集では消えない。
+Rationale: Gallery のチュートリアルへの入口がフッターの小さい文字リンクだけで見つけにくい（#1383）。最初の画面、ヘッダー、例の選択、例を読み込んだ直後にチュートリアルを示す。
+Must preserve: Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。
+May retire: scenario revision 1 の Accepted residual risk のうち「4 つのボタンがもともとアイコンだけの 1024 px 前後では、仏語・ベトナム語・タイ語で Session 名が 10 px ほど縮む。」（この版の Accepted residual risk の最後の 2 文と置き換える）
+Accepted residual risk: Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。
+Owner: satoshikawato
+Decision date: 2026-10-27
+```
+
+```json
+{
+  "concern": "web.gallery-tutorial-discoverability",
+  "scenarioRevision": 2,
+  "choice": "A3 + B1（Q3 英語の印あり、Q4 pip 版にも表示）。ヘッダーに「Gallery & tutorials」ボタン（幅が足りないときは文字を隠してアイコンだけにする。それでも Session 名が縮む幅では、設定のリセット、Session の保存、Session の読み込み、例の読み込みの 4 つのボタンも 1279 px 以下と同じアイコンだけにし、ツールバーの間隔を詰める。それでも Session 名が縮む幅では「Session」の小見出しも隠す。768 px 以下の 2 段のヘッダーでは、アイコンだけをロゴの行の右端に置く）、Result が無い画面に「Learn with tutorials」カード、例の選択の各行に「Tutorial」リンク。Load example で読み込んだ例にチュートリアルがあれば「Session loaded」通知の中に「この図を描くチュートリアルがあります。チュートリアルを開く（英語）」を出し、その例の Gallery の Tutorial タブを新しいタブで開く。通知は × 、別の Session / 例の読み込み、Reset Settings、Circular / Linear の切り替えで消え、Generate や編集では消えない。",
+  "rationale": "Gallery のチュートリアルへの入口がフッターの小さい文字リンクだけで見つけにくい（#1383）。最初の画面、ヘッダー、例の選択、例を読み込んだ直後にチュートリアルを示す。",
+  "mustPreserve": "Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。",
+  "mayRetire": "scenario revision 1 の Accepted residual risk のうち「4 つのボタンがもともとアイコンだけの 1024 px 前後では、仏語・ベトナム語・タイ語で Session 名が 10 px ほど縮む。」（この版の Accepted residual risk の最後の 2 文と置き換える）",
+  "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-27"
 }

@@ -690,12 +690,13 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   const header = page.locator('header.app-header');
   const words = page.locator('[data-gallery-link] .app-gallery-link-label');
   const titleWidth = () => page.locator('.app-session-button').evaluate((node) => node.getBoundingClientRect().width);
-  const fitOf = () => header.evaluate((node) => [node.hasAttribute('data-file-icons'), node.hasAttribute('data-gallery-icon')]);
-  await expect.poll(fitOf).toEqual([false, false]);
+  const fitOf = () => header.evaluate((node) => ['data-file-icons', 'data-gallery-icon', 'data-session-title-alone']
+    .map((name) => node.hasAttribute(name)));
+  await expect.poll(fitOf).toEqual([false, false, false]);
   await expect(words).toBeVisible();
   const roomyTitle = await titleWidth();
   await page.setViewportSize({ width: 1366, height: 900 });
-  await expect.poll(fitOf).toEqual([false, true]);
+  await expect.poll(fitOf).toEqual([false, true, false]);
   await expect(words).toBeHidden();
   await expect(page.getByRole('link', { name: 'Gallery & tutorials', exact: true })).toBeVisible();
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
@@ -703,7 +704,7 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   // French at 1280 px: the cap alone left the Session block no width.
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.locator('[data-ui-language]').selectOption('fr');
-  await expect.poll(fitOf).toEqual([true, false]);
+  await expect.poll(fitOf).toEqual([true, false, false]);
   await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
 
@@ -711,9 +712,16 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   // wrapped the mode names until the toolbar's groups closed up.
   await page.locator('[data-ui-language]').selectOption('vi');
   await page.setViewportSize({ width: 1024, height: 768 });
-  await expect.poll(fitOf).toEqual([true, true]);
+  await expect.poll(fitOf).toEqual([true, true, false]);
   await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
+
+  // TL-D06: where the icons and the closed-up gaps still narrow the title, its
+  // "Session" caption hides, so the title takes that width.
+  await page.setViewportSize({ width: 900, height: 768 });
+  await expect.poll(fitOf).toEqual([true, true, true]);
+  await expect(header.locator('.app-session-label')).toBeHidden();
+  await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '2px');
 
   // The two-row header shows the cap alone in the logo's row, so the toolbar's
   // rows keep their height.
@@ -726,8 +734,9 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   expect(cap.bottom).toBeLessThanOrEqual(logo.bottom + 1);
   expect(cap.left).toBeGreaterThan(logo.right);
   await page.setViewportSize({ width: 1920, height: 900 });
-  await expect.poll(fitOf).toEqual([false, false]);
+  await expect.poll(fitOf).toEqual([false, false, false]);
   await expect(words).toBeVisible();
+  await expect(header.locator('.app-session-label')).toBeVisible();
 });
 
 // D-07 (Owner 2026-10-10): the header keeps Load example once a Result exists,
