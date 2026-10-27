@@ -87,13 +87,15 @@ const liftSparseDefaults = (options, mode) => {
   if (!isUnset(options.config)) return;
   const explicit = options.configOverrides ?? {};
   if (!isObject(explicit)) return;
-  const overrides = Object.fromEntries(Object.entries(explicit).filter(([, value]) => !isUnset(value)));
+  // A stored null stays: Python's flat migration reads it, as it reads the
+  // stored request (a null `label_blacklist` is no blacklist, OV-2046).
+  const overrides = { ...explicit };
   /** @type {Readonly<Record<string, readonly string[]>>} */
   const flatPaths = LEGACY_REQUEST_TABLES.configOverridePaths;
   for (const [path, value] of Object.entries(LEGACY_REQUEST_TABLES.configOverrides[mode])) {
     // A flat name of the same leaf holds its value (OV-799).
     const named = [path, ...Object.keys(flatPaths).filter((name) => flatPaths[name].includes(path))];
-    if (!named.some((name) => Object.hasOwn(overrides, name))) overrides[path] = value;
+    if (!named.some((name) => !isUnset(overrides[name]))) overrides[path] = value;
   }
   options.configOverrides = overrides;
 };
