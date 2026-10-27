@@ -5250,9 +5250,18 @@ def prepare_label_list(*args, **kwargs) -> list[CircularLabel]:
     if mode == "A" and today_fits:
         _clp.LAST.update(variant="A", used="today")
         return today
+    if kwargs.get("probe") and _clp.opts().get("probe", "0") != "1":
+        # Fit-search probes stay today's (opts probe=1 packs them too): the packer on every probe cost
+        # T5 12 pt 557 cpu-s instead of 46; a probe that fits today still fits, so suggestions stay valid.
+        _clp.LAST.update(variant=mode, used="today-probe")
+        if stopped is not None:
+            raise stopped
+        assert today is not None
+        return today
     _clp.ACTIVE = True
     try:
-        packed = _prepare_label_list_today(*args, **kwargs)
+        # record_id=None: today's call above already ran the capacity check (and its warning) once.
+        packed = _prepare_label_list_today(*args, **{**kwargs, "record_id": None})
     finally:
         _clp.ACTIVE = False
     packer_fits, packer_counts = fit_counts(packed)
