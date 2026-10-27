@@ -36,7 +36,7 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { MODE_SLICE_CONTAINERS, unscopedDraftRows } from './mode-scoped-migration.js';
+import { MODE_SCOPED_ROWS, MODE_SLICE_CONTAINERS, unscopedDraftRows } from './mode-scoped-migration.js';
 import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isUnsafeObjectKey } from './safe-object-keys.js';
@@ -1374,22 +1374,46 @@ const withFieldAt = (value, at, leaf) => {
   else parent[field] = leaf;
   return withContainerAt(value, parentAt, parent);
 };
+/**
+ * `value` without the fields at `ats` (dotted); a field it does not hold is no copy.
+ * @param {unknown} value @param {readonly string[]} ats
+ * @returns {unknown}
+ */
+const withoutFieldsAt = (value, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === undefined
+  ? draft : withFieldAt(draft, at, undefined)), value);
+/**
+ * The draft fields (dotted, under `config`) of the other mode's `own`
+ * registry rows: Python's split gives such a row to its mode's drawing alone
+ * (`_split_setting`), so `mode`'s drawing reads a flat draft without them.
+ * @param {'circular' | 'linear'} mode
+ * @returns {readonly string[]}
+ */
+const otherModeOwnFields = (mode) => Object.freeze(MODE_SCOPED_ROWS
+  .filter((row) => row.migrate === 'own' && row.modes !== mode && (row.domain === 'config' || row.domain.startsWith('config.')))
+  .map((row) => [row.domain.slice('config.'.length), row.path].filter(Boolean).join('.')));
+const OTHER_MODE_OWN_FIELDS = Object.freeze({ circular: otherModeOwnFields('circular'), linear: otherModeOwnFields('linear') });
 
 /**
  * A Session 27-44's one draft (`config`, at `path`) as the draft field
  * readers read it before Python splits it into drawings (D-15-129): the read
  * value Python receives, and what the readers could not restore. A field
  * any mode draws is read once. Each mode's drawing reads the settings
- * containers and its own fields of the whole draft, as `configFieldRepairs`
+ * containers of the whole draft without the other mode's `own` registry
+ * rows, as Python's split gives that drawing its slice (D-15-155; a
+ * Linear `depth_height` fills no Circular Depth series), and its own fields,
+ * as `configFieldRepairs`
  * and `unreadFieldRepairs` read a drawing's (D-15-138): its rows are listed
  * for the fields it draws (`advRows(mode)` gives a blank its mode's
  * default), a row both drawings list once. A field a reader replaced, or
  * read as another value than the draft holds (a schema 1 track stack as the
  * current one, without a loss; D-15-144), takes the value the drawings that
  * draw it read (the arrow ratios as
- * `applyConfigData` writes them), or is left out when they read it
- * differently (each drawing of the split then takes its own default) or
- * dropped it, so Python receives no value the readers did not use. The
+ * `applyConfigData` writes them). When they read it differently, Python
+ * receives it as stored if every drawing read it without a loss (each
+ * drawing of the split reads it again as here: a stored `depth_tracks: []`
+ * gives the Linear drawing its `depth_height` series, the Circular one an
+ * auto series, OV-2059), else it is left out (each drawing then takes its
+ * own default), so Python receives no value a reader could not use. The
  * comparison source fields of an older draft are Python's migration's to
  * read (`LEGACY_COMPARISON_SOURCE_FIELDS`): no settings reader reads them,
  * and Python receives them as stored. The drawing of `openedMode` reads
@@ -1421,28 +1445,29 @@ export const readSingleDraftValues = (config, path, { resolveTrackPlacements, op
   };
   /** @type {Map<string, unknown[]>} The values the drawings that draw a replaced field read. */
   const replaced = new Map();
-  /** @type {unknown} */
-  const settings = LEGACY_COMPARISON_SOURCE_FIELDS.reduce((draft, at) => (valueAt(draft, at) === undefined
-    ? draft : withFieldAt(draft, at, undefined)), /** @type {unknown} */ (config));
-  const settingsDraft = /** @type {Record<string, unknown>} */ (settings);
+  /** @type {Set<string>} The replaced fields a drawing could not restore. */
+  const lost = new Set();
+  const settingsDraft = /** @type {Record<string, unknown>} */ (withoutFieldsAt(config, LEGACY_COMPARISON_SOURCE_FIELDS));
   /** @type {readonly ('circular' | 'linear')[]} */
   const modes = openedMode === 'linear' ? ['linear', 'circular'] : ['circular', 'linear'];
   const scopedPlacements = migrateSessionFeaturePlacements(settingsDraft.featurePlacementOverrides);
   /** @type {Map<'circular' | 'linear', unknown>} The placement rows each drawing read. */
   const placementReads = new Map();
   modes.forEach((mode) => {
+    const modeSettings = /** @type {Record<string, unknown>} */ (withoutFieldsAt(settingsDraft, OTHER_MODE_OWN_FIELDS[mode]));
     const targets = defaultSettingsContainers(mode);
-    const { losses, arrowRatios } = installStoredSettings(targets, settingsDraft, mode);
+    const { losses, arrowRatios } = installStoredSettings(targets, modeSettings, mode);
     if (arrowRatios) Object.assign(targets.adv, arrowRatios);
     if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
-    const modeDraft = holds(settingsDraft, 'featurePlacementOverrides')
-      ? { ...settingsDraft, featurePlacementOverrides: unscopedDraftRows(scopedPlacements, mode) } : settingsDraft;
+    const modeDraft = holds(modeSettings, 'featurePlacementOverrides')
+      ? { ...modeSettings, featurePlacementOverrides: unscopedDraftRows(scopedPlacements, mode) } : modeSettings;
     const drawing = readValueTablesOf(DRAWING_TABLES[mode], modeDraft);
     losses.push(...drawing.losses);
-    [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(settingsDraft, path, mode)]
+    [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(modeSettings, path, mode)]
       .forEach(list);
     const view = { ...(isPlainObject(drawing.value) ? drawing.value : {}), ...targets };
     placementReads.set(mode, valueAt(view, 'featurePlacementOverrides'));
+    losses.forEach(({ at }) => lost.add(lostFieldOf(at)));
     new Set([...losses.map(({ at }) => lostFieldOf(at)), ...changedFieldsOf(modeDraft, view, mode)])
       .forEach((field) => {
         if (drawnByMode(mode, 'config', field)) replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
@@ -1464,7 +1489,8 @@ export const readSingleDraftValues = (config, path, { resolveTrackPlacements, op
   replaced.forEach((values, field) => {
     const [first] = values;
     const agreed = values.every((entry) => JSON.stringify(entry) === JSON.stringify(first));
-    value = withFieldAt(value, field, agreed ? copied(first) : undefined);
+    if (agreed) value = withFieldAt(value, field, copied(first));
+    else if (lost.has(field)) value = withFieldAt(value, field, undefined);
   });
   return { value: /** @type {Record<string, unknown>} */ (value), repairs };
 };

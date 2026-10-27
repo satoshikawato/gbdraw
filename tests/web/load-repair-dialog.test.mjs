@@ -1686,6 +1686,25 @@ test('a Session 31-39 CLI draft loads with no comparison and a Web draft keeps i
   }
 });
 
+// Each drawing of a Session 27-44 reads the draft without the other mode's
+// own rows, as Python's split gives it its slice: a Linear `depth_height`
+// fills no Circular Depth series (auto height, as the old Load; OV-2059).
+test('a Session 27-44 Linear Depth height draws the Linear series and leaves the Circular one at auto (OV-2059)', async () => {
+  for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']) {
+    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null], name);
+  }
+  // The drawings read the stored `depth_tracks: []` differently (Linear 10,
+  // Circular auto), so Python receives it as stored and the Linear drawing
+  // reads its `depth_height` series again (OV-2059). Its Circular drawing
+  // takes the Linear rows of its Circular request's projection (OV-2049).
+  const loaded = await importSession(input(fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz')),
+    { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(modeDrawing(state, 'linear').adv.depth_tracks[0].height, 10);
+});
+
 test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {
   const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
   delete session.renderRequest.diagramOptions.config;
