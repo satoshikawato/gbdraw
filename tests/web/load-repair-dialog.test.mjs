@@ -1345,7 +1345,11 @@ test('a Session 44 font override adopted into an adv that is no object lists the
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [['Settings: the value "5" (config.adv) cannot be used; its default is used.']]);
-  assert.deepEqual(['circular', 'linear'].map((mode) => modeDrawing(state, mode).adv.font_family), ["'Pres Font'", "'Pres Font'"]);
+  // Only the Linear drawing (the request mode's) carries the font: the
+  // Contract's migration rule d keeps the other mode's drawing only when a
+  // registry row differs from its default, and the font override is no
+  // registry row, so the Circular drawing is the default (D-15-144, OV-1994).
+  assert.equal(modeDrawing(state, 'linear').adv.font_family, "'Pres Font'");
   // An object `adv` takes the font with no row.
   const kept = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   kept.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
