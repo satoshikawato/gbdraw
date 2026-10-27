@@ -41,6 +41,7 @@ from gbdraw.layout.similarity_alignment import (
 from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_config
 from gbdraw.session_io import (
     DRAWN_HASH_RULE_SESSION_MAX_VERSION,
+    FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
     DrawnFeature,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
@@ -679,6 +680,13 @@ def _legacy_display_frame_feature_id(
     return feature_id
 
 
+# A Session 40-44's feature catalog as stored (schema 3) or as the Web reader
+# sends it, promoted to a later schema (fields added; ids and groups kept).
+_LEGACY_ALIGNMENT_CATALOG_SCHEMAS = frozenset(
+    {3, *FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.values()}
+)
+
+
 def _legacy_alignment_groups(
     request: LinearDiagramRequest,
     session_artifacts: Mapping[str, Any],
@@ -694,7 +702,8 @@ def _legacy_alignment_groups(
     catalog = editor_state.get("featureCatalog") if isinstance(editor_state, Mapping) else None
     items = (
         _mapping_items(catalog.get("items"))
-        if isinstance(catalog, Mapping) and catalog.get("schema") == 3
+        if isinstance(catalog, Mapping)
+        and catalog.get("schema") in _LEGACY_ALIGNMENT_CATALOG_SCHEMAS
         else ()
     )
     biological = tuple(
@@ -776,10 +785,16 @@ def _legacy_alignment_groups(
                         "Legacy similarity alignment member lacks unique biological identity metadata."
                     )
                 source_index = matches[0].get("sourceFeatureIndex")
+                stable_feature_id = matches[0].get("stableFeatureId")
                 anchor = AlignmentAnchorIdentity(
                     record_key,
                     biological_id,
                     source_index if isinstance(source_index, int) and not isinstance(source_index, bool) and source_index >= 0 else None,
+                    # The catalog's stable feature ID, else the biological ID: the
+                    # anchor the Web's legacy promotion wrote before Python converted.
+                    stable_feature_id
+                    if isinstance(stable_feature_id, str) and stable_feature_id.strip()
+                    else biological_id,
                 )
             rendered_ids = {
                 str(feature.get("svgId")).strip()
