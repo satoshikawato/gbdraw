@@ -4,10 +4,11 @@
 // not fit, it shows its cap alone; where even the cap narrows the title, the
 // file buttons (Reset Settings, Save Session, Load Session, Load example) show
 // their icons alone too, as they do below 1280 px, and the link shows its
-// words again if they fit then. The room is the tagline room
-// (`.app-tagline-room`), which takes the width the rest of the header leaves.
-// The stylesheet applies these states only while the header is one row (above
-// 768 px); the buttons and the link keep their names in `aria-label`.
+// words again if they fit then; with neither words, the toolbar's groups close
+// up. The room is the tagline room (`.app-tagline-room`), which takes the width
+// the rest of the header leaves. The stylesheet applies these states only while
+// the header is one row (above 768 px), and the wrapped header shows the cap
+// alone; the buttons and the link keep their names in `aria-label`.
 import { uiLocale } from '../utils/i18n.js';
 
 /**

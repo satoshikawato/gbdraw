@@ -447,13 +447,16 @@ def test_index_links_to_hosted_interactive_gallery() -> None:
     assert "Interactive Gallery" in index_html
     assert "./gallery/" not in index_html
 
+    # #1383: the links bind the one Gallery URL of js/utils/gallery-routes.js.
     match = re.search(
-        r'<a href="https://gbdraw\.app/gallery/"(?P<attrs>[^>]*)>Interactive Gallery</a>',
+        r'<a :href="INTERACTIVE_GALLERY_URL"(?P<attrs>[^>]*)>Interactive Gallery</a>',
         index_html,
     )
     assert match is not None
     assert 'target="_blank"' in match.group("attrs")
     assert 'rel="noopener noreferrer"' in match.group("attrs")
+    routes = (WEB_ROOT / "js" / "utils" / "gallery-routes.js").read_text(encoding="utf-8")
+    assert "export const INTERACTIVE_GALLERY_URL = 'https://gbdraw.app/gallery/';" in routes
 
 
 def test_public_web_html_entrypoints_are_not_gitignored() -> None:

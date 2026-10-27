@@ -706,6 +706,25 @@ test('the header gives way by icons, never by narrowing the Session title', asyn
   await expect.poll(fitOf).toEqual([true, false]);
   await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
   expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
+
+  // Vietnamese at 1024 px: the cap and the icons still narrowed the title and
+  // wrapped the mode names until the toolbar's groups closed up.
+  await page.locator('[data-ui-language]').selectOption('vi');
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await expect.poll(fitOf).toEqual([true, true]);
+  await expect(header.locator('.app-toolbar')).toHaveCSS('column-gap', '4px');
+  expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
+
+  // The two-row header shows the cap alone in the logo's row, so the toolbar's
+  // rows keep their height.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(words).toBeHidden();
+  await expect(page.locator('[data-gallery-link]')).toBeVisible();
+  const [logo, cap] = await Promise.all(['.app-logo-title', '[data-gallery-link]']
+    .map((selector) => page.locator(selector).evaluate((node) => node.getBoundingClientRect().toJSON())));
+  expect(cap.top).toBeGreaterThanOrEqual(logo.top - 1);
+  expect(cap.bottom).toBeLessThanOrEqual(logo.bottom + 1);
+  expect(cap.left).toBeGreaterThan(logo.right);
   await page.setViewportSize({ width: 1920, height: 900 });
   await expect.poll(fitOf).toEqual([false, false]);
   await expect(words).toBeVisible();

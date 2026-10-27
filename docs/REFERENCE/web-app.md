@@ -238,7 +238,9 @@ opens the Interactive Gallery's tutorial, which is in English, in a new tab.
 gbdraw.app in every build, the local `gbdraw gui` included. Where the one-row
 header lacks room, the button shows only its icon, and where even that would
 narrow the Session title, **Reset Settings**, **Save Session**, **Load
-Session**, and **Load example** show only their icons too.
+Session**, and **Load example** show only their icons too and the header's
+groups move closer together. In the two-row header of a window 768 px wide or
+narrower, the button shows only its icon, at the end of the logo's row.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,
