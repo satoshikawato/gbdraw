@@ -35,17 +35,26 @@ class LegacySessionDrawings(TypedDict):
     warnings: list[DraftMigrationRepair]
 
 
-def legacy_session_to_drawings_json(document_json: str) -> str:
+def legacy_session_to_drawings_json(document_json: str, stored_request_schema_json: str = "null") -> str:
     """``{"document": <Session 49>, "storedResults": {<drawing ID>: [...]},
     "resultSetSources": {<drawing ID>: ""}, "warnings": [...]}`` for a Session
     27-44 as JSON.
+
+    ``stored_request_schema_json`` is the schema of the request the file
+    stored (an integer, or ``null`` to read it from the document's request):
+    Web Load's reader read the request it sends.
 
     A Session this step cannot move returns ``{"error": ...}`` in the shape
     of :func:`gbdraw.web_support.error_adapter.serialize_web_error`.
     """
 
     try:
-        legacy = drawings_document_from_legacy(json.loads(document_json))
+        stored_request_schema = json.loads(stored_request_schema_json)
+        if stored_request_schema is not None and type(stored_request_schema) is not int:
+            raise ValueError("The stored request schema must be an integer or null.")
+        legacy = drawings_document_from_legacy(
+            json.loads(document_json), stored_request_schema=stored_request_schema
+        )
     except Exception as exc:
         return json.dumps(
             {"error": serialize_web_error(exc, operation=UPGRADE_LEGACY_SESSION_OPERATION, stage="helper")}

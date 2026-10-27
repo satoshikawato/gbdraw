@@ -280,3 +280,49 @@ def test_a_session_40_legacy_alignment_reads_the_catalog_the_web_reader_promoted
     assert [a["stableFeatureSvgId"] for a in anchors] == [
         stable[(a["recordKey"], a["biologicalFeatureId"])] for a in anchors
     ]
+
+
+BGC_RECORD_PRESENTATIONS = [
+    ("<i>Streptomyces lividus</i> CBS 844.73", "Lividomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces fradiae</i> ATCC 10745", "Neomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces fradiae</i> MCIMB 8233", "Neomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455", "Paromomycin biosynthetic gene cluster"),
+    ("<i>Streptomyces ribosidificus</i> ATCC 21294", "Ribostamycin biosynthetic gene"),
+]
+
+
+def _linear_record_presentations(document: dict[str, Any]) -> list[tuple[Any, Any]]:
+    (linear,) = [drawing for drawing in document["drawings"] if drawing["mode"] == "linear"]
+    return [
+        (record["presentation"]["label"], record["presentation"]["subtitle"])
+        for record in linear["renderRequest"]["records"]
+    ]
+
+
+def test_a_cli_written_schema_2_session_keeps_its_cli_record_labels_and_subtitles(tmp_path: Path) -> None:
+    """OV-2052: a Session 31-44 that stored a schema-2 request takes the record
+    labels and subtitles of its ``cliInvocation.args``, as the old Web Load's
+    Gallery promotion gave them; Web Load, the CLI upgrade and the CLI replay
+    share the decoder that gives them (OV-2044)."""
+
+    from gbdraw.session import session_to_request, upgrade_session_document
+
+    text = _text("BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz")
+    web = json.loads(legacy_session_to_drawings_json(text))
+    assert _linear_record_presentations(web["document"]) == BGC_RECORD_PRESENTATIONS
+    cli = upgrade_session_document(json.loads(text)).document.to_dict()
+    assert _linear_record_presentations(cast_document(cli)) == BGC_RECORD_PRESENTATIONS
+    with materialize_session(load_session_document(json.loads(text)), output_directory=tmp_path) as materialized:
+        replayed = session_to_request(materialized)
+    assert [
+        (record.presentation.label, record.presentation.subtitle) for record in replayed.records
+    ] == BGC_RECORD_PRESENTATIONS
+    # The Web reader read the request it sends (schema 9 here) and names the
+    # schema the file stored; a schema-1 request is not rebuilt.
+    unhydrated = json.loads(legacy_session_to_drawings_json(text, json.dumps(1)))
+    assert _linear_record_presentations(unhydrated["document"]) == [(None, None)] * 5
+
+
+def cast_document(value: Any) -> dict[str, Any]:
+    assert isinstance(value, dict)
+    return value

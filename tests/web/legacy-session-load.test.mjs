@@ -87,6 +87,22 @@ test('a Session 33 Load keeps the feature edits of the drawing that opens throug
   assert.equal(rows(state.activeDrawing().featureOverrides).length, 3);
 });
 
+// OV-2052: a CLI-written Session 33 with a schema-2 request keeps the record
+// labels and subtitles of its `cliInvocation.args`, which Python's conversion
+// gives its request, as Load before the Worker route (2d71b1611^) showed them.
+test('a Session 33 schema-2 Load shows the CLI record labels and subtitles on the Linear records', async () => {
+  const loaded = await load(fixture('BGC0000708-BGC0000713.schema-v2'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const linear = state.drawingList().find(({ mode }) => mode === 'linear');
+  assert.deepEqual(linear.linearSeqs.map(({ definition, record_subtitle }) => [definition, record_subtitle]), [
+    ['<i>Streptomyces lividus</i> CBS 844.73', 'Lividomycin biosynthetic gene cluster'],
+    ['<i>Streptomyces fradiae</i> ATCC 10745', 'Neomycin biosynthetic gene cluster'],
+    ['<i>Streptomyces fradiae</i> MCIMB 8233', 'Neomycin biosynthetic gene cluster'],
+    ['<i>Streptomyces rimosus</i> subsp. <i>paromomycinus</i> NRRL 2455', 'Paromomycin biosynthetic gene cluster'],
+    ['<i>Streptomyces ribosidificus</i> ATCC 21294', 'Ribostamycin biosynthetic gene']
+  ]);
+});
+
 // OV-2001: a Linear Session 30's fills and Legend stay on the Linear drawing
 // that opens, as Load before the Worker route (2d71b1611^) left them: the four
 // caption rules color the features, the 66 saved per-feature fills are not

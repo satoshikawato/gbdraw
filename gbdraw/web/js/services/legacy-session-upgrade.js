@@ -21,7 +21,13 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {readonly LoadRepair[]} warnings
  */
 
-/** @typedef {(request: { document: unknown }) => Promise<unknown>} LegacySessionUpgrader */
+/**
+ * What Load sends Python: the file's document as its readers read it, and
+ * the schema of the request the file stored (the reader sends it read), or
+ * null for the document's own.
+ * @typedef {{ document: unknown, storedRequestSchema: number | null }} LegacySessionUpgradeRequest
+ */
+/** @typedef {(request: LegacySessionUpgradeRequest) => Promise<unknown>} LegacySessionUpgrader */
 
 /** @type {LegacySessionUpgrader | null} */
 let legacySessionUpgrader = null;
@@ -59,12 +65,16 @@ const readDraftMigrationRepair = (value) => {
  * throws its own diagnostic; a reply of another shape throws RESULT_INVALID
  * of this operation; without the port, HELPER_PROTOCOL.
  * @param {unknown} document The file's document as the Session input reader admitted it.
- * @param {{ upgrade?: LegacySessionUpgrader | null }} [options]
+ * @param {{ storedRequestSchema?: unknown, upgrade?: LegacySessionUpgrader | null }} [options]
+ *   `storedRequestSchema`: the schema of the request the file stored (OV-2052).
  * @returns {Promise<LegacySessionUpgrade>}
  */
-export const upgradeLegacySession = async (document, { upgrade = legacySessionUpgrader } = {}) => {
+export const upgradeLegacySession = async (document, { storedRequestSchema = null, upgrade = legacySessionUpgrader } = {}) => {
   if (!upgrade) throw diagnosticError('HELPER_PROTOCOL', {}, LEGACY_SESSION_UPGRADE);
-  const response = await upgrade({ document });
+  const response = await upgrade({
+    document,
+    storedRequestSchema: Number.isSafeInteger(storedRequestSchema) ? Number(storedRequestSchema) : null
+  });
   const reply = isRecord(response) ? response.result : null;
   const invalid = () => diagnosticError('RESULT_INVALID', {}, LEGACY_SESSION_UPGRADE);
   if (!isRecord(reply) || !isRecord(reply.document) || !isRecord(reply.storedResults)
