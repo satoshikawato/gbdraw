@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from gbdraw.analysis.depth import depth_df, parse_depth_tsv, read_depth_tsv
+from gbdraw.analysis.depth import depth_df, parse_depth_tsv, read_cached_depth_table
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
@@ -178,14 +178,14 @@ def _read_depth_table(path: str) -> DataFrame:
 
     There the decoded-resource layer owns the parsed table, one per resource,
     shared read-only by every record and render, so callers must not modify
-    it. Elsewhere (CLI, Python API) the process cache of ``read_depth_tsv`` does.
+    it. Elsewhere (CLI, Python API) it is a copy of the process cache's table.
     """
 
     # Deferred: gbdraw.api imports this module.
     from gbdraw.api.prepared import get_or_build_decoded_resource, prepared_resource_identity
 
     if prepared_resource_identity(path) is None:
-        return read_depth_tsv(path)
+        return read_cached_depth_table(path)
     return get_or_build_decoded_resource(path, ("depth-table-v1",), lambda: parse_depth_tsv(path))
 
 

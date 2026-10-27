@@ -2035,14 +2035,14 @@ def test_circular_cli_reads_depth_file_once_for_multiple_records(
     read_count = 0
     from gbdraw.analysis import depth_tracks as depth_tracks_module
 
-    real_read_depth_tsv = depth_tracks_module.read_depth_tsv
+    real_read_cached_depth_table = depth_tracks_module.read_cached_depth_table
 
-    def counting_read_depth_tsv(path: str) -> pd.DataFrame:
+    def counting_read_cached_depth_table(path: str) -> pd.DataFrame:
         nonlocal read_count
         read_count += 1
-        return real_read_depth_tsv(path)
+        return real_read_cached_depth_table(path)
 
-    monkeypatch.setattr(depth_tracks_module, "read_depth_tsv", counting_read_depth_tsv)
+    monkeypatch.setattr(depth_tracks_module, "read_cached_depth_table", counting_read_cached_depth_table)
     monkeypatch.setattr(request_render_module, "load_gbks", lambda paths, **_kwargs: records)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
 
@@ -2649,15 +2649,26 @@ def _two_record_depth_text() -> str:
     return "\n".join(rows) + "\n"
 
 
-def test_read_depth_tsv_returns_categorical_names(tmp_path: Path) -> None:
+def test_read_depth_tsv_returns_string_names_and_renders_read_categorical_ones(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    """The public reader keeps its ``string`` names, which a user may rename; renders read categorical ones."""
+
+    from gbdraw.analysis.depth import read_cached_depth_table
+
     depth_path = _write_depth_file(tmp_path / "depth.tsv", "rec1\t1\t10\nrec2\t2\t12\n")
     clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
 
     table = read_depth_tsv(str(depth_path))
+    internal = read_cached_depth_table(str(depth_path))
 
-    assert isinstance(table["reference_name"].dtype, pd.CategoricalDtype)
-    assert all(type(category) is str for category in table["reference_name"].cat.categories)
-    assert table.to_dict("list") == {
+    assert table["reference_name"].dtype == pd.StringDtype()
+    table.loc[table["reference_name"] == "rec1", "reference_name"] = "NC_000913.3"
+    assert table["reference_name"].tolist() == ["NC_000913.3", "rec2"]
+    assert isinstance(internal["reference_name"].dtype, pd.CategoricalDtype)
+    assert all(type(category) is str for category in internal["reference_name"].cat.categories)
+    assert internal.to_dict("list") == {
         "reference_name": ["rec1", "rec2"],
         "position": [1, 2],
         "depth": [10.0, 12.0],

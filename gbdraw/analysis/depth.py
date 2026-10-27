@@ -135,18 +135,30 @@ def parse_depth_tsv(path: str) -> DataFrame:
     return _parse_depth_file(resolved_path)
 
 
+def read_cached_depth_table(path: str) -> DataFrame:
+    """A copy of the process cache's canonical table for one file (CLI and Python API renders).
+
+    The table has the parser's shape (categorical names), so each record selects
+    its rows from it without another copy.
+    """
+
+    resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
+    return _read_depth_tsv_cached(resolved_path, mtime_ns, size).copy(deep=True)
+
+
 def read_depth_tsv(path: str) -> DataFrame:
     """Read a samtools-depth-like TSV file.
 
     The expected columns are reference name, 1-based position, and non-negative
     depth. Headerless files are expected; a single header line is tolerated when
     the position/depth fields on the first line are non-numeric. Reference names
-    are a categorical column. Parsed files are cached per process and
-    invalidated when file mtime or size changes; each call returns a copy.
+    are a ``string`` column. Parsed files are cached per process and invalidated
+    when file mtime or size changes; each call returns a copy.
     """
 
-    resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
-    return _read_depth_tsv_cached(resolved_path, mtime_ns, size).copy(deep=True)
+    table = read_cached_depth_table(path)
+    table["reference_name"] = table["reference_name"].astype("string")
+    return table
 
 
 def _is_canonical_depth_table(depth_table: DataFrame) -> bool:
@@ -340,4 +352,4 @@ def depth_df(
     )
 
 
-__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "parse_depth_tsv", "read_depth_tsv"]
+__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "parse_depth_tsv", "read_cached_depth_table", "read_depth_tsv"]
