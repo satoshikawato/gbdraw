@@ -68,10 +68,16 @@ view it was last drawn in: Circular `record-<k>` on the Multi-Record Canvas and
 `circular-<record id>-#<k>` for a record drawn alone, Linear `<uid>:<k>` for a
 File card that draws several records and `<uid>` for one record. Each
 successful Web Generate moves the rows of a record whose key changed to its new
-key (`recordKeyMoves` in `js/services/record-draw-selection.js`, written by
-`pruneUnmatchedFeatureOverrides`), and the rows of a record that the request
-does not draw wait under its identity (`record-<k>`, or `<uid>:<k>` in a
-multi-record File). A Session of 48 or earlier is read as before; its rows move
+key (`recordKeyMoves` in `js/services/record-draw-selection.js`; the rows are
+written by `pruneUnmatchedFeatureOverrides`, the `hash` rules by the
+Generate's rule commit), and the rows of a record that the request does not
+draw wait under its identity (`record-<k>`, or `<uid>:<k>` in a multi-record
+File). Each Generate also brings the rows a drawn record has under its other
+keys (Circular: its key drawn alone or on the canvas; Linear: its
+identity, and the `<uid>:<k>` of the card it was split from) into its key,
+field by field: the row moved from its previous key, or else the row already
+under its key, wins; of two `hash` rules that then name one feature instance,
+that record's own rule stays and the other is dropped. A Session of 48 or earlier is read as before; its rows move
 at its first Generate. The only request-key change: a Circular record drawn
 alone no longer keeps a stored `record-<n>` key that names another record.
 Fixture: `tests/fixtures/sessions/record-identity-circular-single.v48`, written

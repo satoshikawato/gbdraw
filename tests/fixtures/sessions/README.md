@@ -360,5 +360,5 @@ label edit, Feature visibility Off and a stroke, all keyed by the record key
 0.14.2 gave a record drawn alone (`circular-BGC0000709-#2`). It is the positive
 fixture of the Generate that moves a record's rows to the key of its new view
 (OV-1949): `record-identity-moves.playwright.spec.js` loads it, turns the canvas
-on, and expects the four edits on record 2. The steps, script, edited features
+on, and expects the four edits on record 2. The steps, edited features
 and hashes are in `record-identity-circular-single.provenance.json`.

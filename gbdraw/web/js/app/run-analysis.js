@@ -220,13 +220,14 @@ import {
 /** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
-/** @import { FeatureEditsData } from '../services/drawing/feature-edits.js' */
+/** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
 /** @import { AnnotationSetsData } from '../services/drawing/annotation-sets.js' */
 /**
- * What a Generate's History step restores of the drawing's intent (DESIGN A2).
- * The feature strokes travel with the artifact handle (its editor state), which
- * Undo and Redo of the step install.
- * @typedef {FeatureEditsData & AnnotationSetsData & { removed: number }} GenerateIntentCheckpoint
+ * What a Generate's History step restores of the drawing's intent that its
+ * artifact handle does not hold (DESIGN A2): the Feature placements and the
+ * annotation sets. The per-feature edits and strokes travel with the artifact
+ * handle, which Undo and Redo of the step install.
+ * @typedef {AnnotationSetsData & { placements: FeaturePlacementDraft, removed: number }} GenerateIntentCheckpoint
  */
 /** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { OrthogroupGroup } from '../services/orthogroup-feature-metadata.js' */
@@ -5541,18 +5542,17 @@ export const createRunAnalysis = ({
               // it no longer resolves (Q3 = A), and every Generate moves the rows
               // of the records whose key changed (OV-1949, DESIGN A2). They are
               // draft intent, not part of the Result, so Undo and Redo restore
-              // them, and the removal count, with this step; the rules travel
-              // with the artifact.
+              // them, and the removal count, with this step: the per-feature
+              // edits, strokes, and rules through the artifact handle, the
+              // placements and annotation sets through this checkpoint.
               captureIntentCheckpoint: () => ({
-                ...FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits),
+                placements: FEATURE_EDITS_SLICE.capture(drawing.slices.featureEdits).featurePlacementOverrides,
                 ...ANNOTATION_SETS_SLICE.capture(drawing.slices.annotationSets),
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               // The checkpoint is what `captureIntentCheckpoint` above returned.
-              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ {
-                featureOverrides, featurePlacementOverrides, annotationSets, removed
-              }) => {
-                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides, featurePlacementOverrides });
+              restoreIntentCheckpoint: (/** @type {GenerateIntentCheckpoint} */ { placements, annotationSets, removed }) => {
+                FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featurePlacementOverrides: placements });
                 ANNOTATION_SETS_SLICE.install(drawing.slices.annotationSets, { annotationSets });
                 featureEditRemovalCount.value = removed;
               },

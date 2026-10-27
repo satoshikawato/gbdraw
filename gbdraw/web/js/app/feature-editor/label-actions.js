@@ -958,6 +958,11 @@ export const createFeatureLabelActions = ({
     );
   };
 
+  // The label text and visibility each popup was last given by the sync below.
+  // A value the user changed since, and has not applied, stays when a label
+  // rerender or another projection syncs the popup again (OV-1984).
+  /** @type {WeakMap<object, { featureId: string, labelText: string, labelVisibility: string }>} */
+  const syncedPopupLabels = new WeakMap();
   const syncClickedFeatureLabelState = () => {
     const drawing = state.activeDrawing();
     if (!clickedFeature.value) return;
@@ -970,10 +975,21 @@ export const createFeatureLabelActions = ({
     // Per-feature edits name the feature by source identity, which a Result
     // committed before feature catalogs existed does not carry.
     const editable = Boolean(featureId && featureIdentityKeyOf(clickedFeature.value.feat));
+    const shown = { featureId, labelText: entry?.text ?? fallbackText, labelVisibility: normalizeVisibilityMode(row?.labelVisibility) };
+    const synced = syncedPopupLabels.get(clickedFeature.value);
+    /** @param {'labelText' | 'labelVisibility'} field */
+    const typed = (field) => Boolean(synced && synced.featureId === featureId
+      && clickedFeature.value[field] !== synced[field] && clickedFeature.value[field] !== shown[field]);
+    const keep = { labelText: typed('labelText'), labelVisibility: typed('labelVisibility') };
     clickedFeature.value.labelKey = entry?.key || '';
-    clickedFeature.value.labelText = entry?.text ?? fallbackText;
+    if (!keep.labelText) clickedFeature.value.labelText = shown.labelText;
     clickedFeature.value.labelSourceText = entry?.sourceText ?? fallbackSource;
-    clickedFeature.value.labelVisibility = normalizeVisibilityMode(row?.labelVisibility);
+    if (!keep.labelVisibility) clickedFeature.value.labelVisibility = shown.labelVisibility;
+    syncedPopupLabels.set(clickedFeature.value, {
+      featureId,
+      labelText: keep.labelText && synced ? synced.labelText : shown.labelText,
+      labelVisibility: keep.labelVisibility && synced ? synced.labelVisibility : shown.labelVisibility
+    });
     clickedFeature.value.hasEditableLabel = editable;
     clickedFeature.value.labelUnavailableReason = editable
       ? ''

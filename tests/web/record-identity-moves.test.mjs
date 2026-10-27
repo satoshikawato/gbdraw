@@ -75,9 +75,13 @@ test('Circular canvas <-> one record <-> batch moves the record rows both ways',
   assert.deepEqual(moves(canvas, single), { 'record-2': 'circular-B-#2' });
   // Back to the canvas (a batch has the same keys).
   // Back on the canvas, each record's alias is its key drawn alone, where
-  // 0.14.2 may have left rows.
-  assert.deepEqual(moves(single, canvas), { 'circular-B-#2': 'record-2', 'circular-A-#1': 'record-1' });
-  assert.deepEqual(moves(canvas, canvas), { 'circular-A-#1': 'record-1', 'circular-B-#2': 'record-2' });
+  // 0.14.2 may have left rows; a record's rows already under its key come
+  // before them (a move to itself).
+  assert.deepEqual([...recordKeyMoves(single, canvas)],
+    [['circular-B-#2', 'record-2'], ['record-1', 'record-1'], ['circular-A-#1', 'record-1']]);
+  assert.deepEqual([...recordKeyMoves(canvas, canvas)], [
+    ['record-1', 'record-1'], ['circular-A-#1', 'record-1'], ['record-2', 'record-2'], ['circular-B-#2', 'record-2']
+  ]);
 });
 
 test('A3: preserved CLI keys of another record are permuted together; aliases never take another record\'s key', () => {
@@ -120,6 +124,33 @@ test('Linear ALL <-> one record <-> region, a file of one record, and a record 2
   assert.deepEqual(drawnRecordIdentities([{ recordKey: 'gone', cardinality: 'all' }], sources), []);
 });
 
+test('Linear: a Generate that splits a card drawing every record moves each record to its own card', () => {
+  // A loaded Session drew U's two records as U:1 and U:2; Generate gives
+  // record 2 the new card X (`expandDiscoveredLinearRecords`).
+  const before = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all', selector: null, region: null }],
+    linear({ U: ['r1', 'r2'] }));
+  const split = { ...linear({ U: ['r1', 'r2'], X: ['r1', 'r2'] }), linearOrigins: new Map([['X', { uid: 'U', sourceIndex: 1 }]]) };
+  const after = drawnRecordIdentities([
+    { recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } },
+    { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
+  ], split);
+  assert.deepEqual(moves(before, after), { 'U:1': 'U', 'X:2': 'X', 'U:2': 'X' });
+  // Without the origin, record 2's rows wait under U:2.
+  assert.deepEqual(moves(before, drawnRecordIdentities([
+    { recordKey: 'U', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } },
+    { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
+  ], linear({ U: ['r1', 'r2'], X: ['r1', 'r2'] }))), { 'U:1': 'U', 'X:2': 'X' });
+  // The origin names X's record only while X draws that record, and never a
+  // key that U draws again.
+  const otherRecord = drawnRecordIdentities([{ recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r1' } }], split);
+  assert.deepEqual(otherRecord[0].aliases, ['X:1']);
+  const uAllAgain = drawnRecordIdentities([
+    { recordKey: 'U', cardinality: 'all', selector: null, region: null },
+    { recordKey: 'X', cardinality: 'exactly_one', selector: { kind: 'recordId', value: 'r2' } }
+  ], split);
+  assert.equal(recordKeyMoves(after, uAllAgain).get('U:2'), undefined);
+});
+
 test('duplicates stay separate: the same file in two cards, and records with one ID', () => {
   const sources = linear({ U: ['r1', 'r2'], V: ['r1', 'r2'] });
   const previous = drawnRecordIdentities([{ recordKey: 'U', cardinality: 'all' }, { recordKey: 'V', cardinality: 'all' }], sources);
@@ -136,8 +167,9 @@ test('aliases bring rows a 0.14.2 view switch left dormant, after the record\'s 
   const sources = circular('A', 'B');
   // A 0.14.2 Session saved record 2 drawn alone; its canvas rows still wait under `record-2`.
   const single = drawnRecordIdentities([{ recordKey: 'circular-B-#2', selector: { kind: 'recordId', value: 'B' } }], sources);
-  // Generated alone again: the alias `record-2` joins the record's own key.
-  assert.deepEqual(moves(single, single), { 'record-2': 'circular-B-#2' });
+  // Generated alone again: the alias `record-2` joins the record's own key,
+  // whose rows win field by field.
+  assert.deepEqual([...recordKeyMoves(single, single)], [['circular-B-#2', 'circular-B-#2'], ['record-2', 'circular-B-#2']]);
   // Generated on the canvas: the record's own key moves first, the alias is the target itself.
   const canvas = drawnRecordIdentities([{ recordKey: 'record-2', selector: { kind: 'recordIndex', index: 1 } }], sources);
   assert.deepEqual([...recordKeyMoves(single, canvas)], [['circular-B-#2', 'record-2']]);
@@ -165,6 +197,51 @@ test('moveInstanceRuleRecords renames the instance rules of moved record keys on
   assert.equal(moveInstanceRuleRecords(rules, new Map([['other', 'x']])), rules);
   // The composer writes an exact pattern on request.
   assert.equal(named(rules[0])?.renamed('record-1:2', 'exact'), '^f1@record-1:2$');
+});
+
+test('two rules that name one feature instance after a move keep the rule of the record\'s own key', () => {
+  const sources = circular('A', 'B');
+  const single = drawnRecordIdentities([{ recordKey: 'circular-B-#2', selector: { kind: 'recordId', value: 'B' } }], sources);
+  const canvas = drawnRecordIdentities([{ recordKey: 'record-1', selector: { kind: 'recordIndex', index: 0 } },
+    { recordKey: 'record-2', selector: { kind: 'recordIndex', index: 1 } }], sources);
+  // A 0.14.2 Session colored f on the canvas (red) and drawn alone (blue).
+  const rules = [
+    { qual: 'hash', val: '^f@record-2$', color: '#f00' },
+    { qual: 'hash', val: '^f@circular-B-#2$', color: '#00f' },
+    { qual: 'hash', val: '^g@record-2$', color: '#0f0' },
+    { qual: 'hash', val: '^h@record-1$', color: '#111' },
+    { qual: 'hash', val: '^h@record-1$', color: '#222' }
+  ];
+  // On the canvas the canvas key is the record's own: red stays, blue goes;
+  // two rules that already named one instance both stay.
+  assert.deepEqual(moveInstanceRuleRecords(rules, recordKeyMoves(canvas, canvas)).map((rule) => [rule.val, rule.color]), [
+    ['^f@record-2$', '#f00'], ['^g@record-2$', '#0f0'], ['^h@record-1$', '#111'], ['^h@record-1$', '#222']
+  ]);
+  // Drawn alone again the single key is its own: blue stays, red goes.
+  assert.deepEqual(moveInstanceRuleRecords(rules, recordKeyMoves(single, single)).map((rule) => [rule.val, rule.color]), [
+    ['^f@circular-B-#2$', '#00f'], ['^g@circular-B-#2$', '#0f0'], ['^h@record-1$', '#111'], ['^h@record-1$', '#222']
+  ]);
+  // Moved from its key drawn alone to the canvas, blue wins over a row the canvas left.
+  assert.deepEqual(moveInstanceRuleRecords(rules, recordKeyMoves(single, canvas)).map((rule) => [rule.val, rule.color]), [
+    ['^f@record-2$', '#00f'], ['^g@record-2$', '#0f0'], ['^h@record-1$', '#111'], ['^h@record-1$', '#222']
+  ]);
+});
+
+test('a row under a record\'s own key wins over an alias row field by field', () => {
+  const sources = circular('A', 'B');
+  const canvas = drawnRecordIdentities([{ recordKey: 'record-2', selector: { kind: 'recordIndex', index: 1 } }], sources);
+  const key = (recordKey) => JSON.stringify([recordKey, 'f']);
+  const row = (recordKey, fields) => ({ recordKey, biologicalFeatureId: 'f', featureVisibility: null,
+    labelVisibility: null, labelText: null, labelSourceText: null, ...fields });
+  const edits = {
+    featureOverrides: {
+      [key('record-2')]: row('record-2', { labelText: 'own' }),
+      [key('circular-B-#2')]: row('circular-B-#2', { labelText: 'alias', featureVisibility: 'off' })
+    },
+    featurePlacementOverrides: {}, featureStrokeOverrides: {}, featureColorOverrides: {}, annotationSets: []
+  };
+  assert.deepEqual(movedRecordEdits(edits, recordKeyMoves(canvas, canvas)).featureOverrides,
+    { [key('record-2')]: row('record-2', { labelText: 'own', featureVisibility: 'off' }) });
 });
 
 test('the request of a view-switch Generate reads the moved rows; the drawing keeps its own until commit', () => {

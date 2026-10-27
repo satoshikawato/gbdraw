@@ -81,8 +81,11 @@ export const namedFeatureInstance = (rule) => {
  * services/record-draw-selection.js): each `hash` rule that names a feature
  * instance of a moved key names it under the new key. Python compares an
  * instance without letter case (gbdraw/features/colors.py), so the keys are
- * compared that way; any other rule, a pattern included, is kept. The same
- * list when nothing moved.
+ * compared that way; any other rule, a pattern included, is kept. When the
+ * move makes two rules name one instance, the rule of the earlier move (the
+ * record's own key, `recordKeyMoves`) is kept and the other dropped, as the
+ * rows of one feature merge; rules that named one instance before the move
+ * stay. The same list when nothing changes.
  * @template {{ qual?: unknown, val?: unknown }} R
  * @param {readonly R[]} rules
  * @param {ReadonlyMap<string, string>} moves
@@ -90,18 +93,32 @@ export const namedFeatureInstance = (rule) => {
  */
 export const moveInstanceRuleRecords = (rules, moves) => {
   if (moves.size === 0) return rules;
-  /** @type {Map<string, string>} */
+  /** @type {Map<string, { to: string, priority: number }>} */
   const byFoldedKey = new Map();
-  moves.forEach((to, from) => { if (!byFoldedKey.has(from.toLowerCase())) byFoldedKey.set(from.toLowerCase(), to); });
-  let changed = false;
-  const next = rules.map((rule) => {
-    const named = namedFeatureInstance(rule);
-    const to = named ? byFoldedKey.get(named.recordKey.toLowerCase()) : undefined;
-    if (!named || to === undefined) return rule;
-    changed = true;
-    return { ...rule, val: named.renamed(to) };
+  [...moves].forEach(([from, to], priority) => {
+    if (!byFoldedKey.has(from.toLowerCase())) byFoldedKey.set(from.toLowerCase(), { to, priority });
   });
-  return changed ? next : rules;
+  const placed = rules.map((rule) => {
+    const named = namedFeatureInstance(rule);
+    const move = named ? byFoldedKey.get(named.recordKey.toLowerCase()) : undefined;
+    if (!named) return { rule, instance: '', priority: Infinity, renamed: false };
+    const renamed = move !== undefined && move.to !== named.recordKey;
+    return {
+      rule: renamed ? { ...rule, val: named.renamed(move.to) } : rule,
+      instance: `${named.featureId}${FEATURE_INSTANCE_SEPARATOR}${move?.to ?? named.recordKey}`.toLowerCase(),
+      priority: move?.priority ?? Infinity,
+      renamed
+    };
+  });
+  /** @type {Map<string, number>} The kept rule of each instance a renamed rule names. */
+  const kept = new Map();
+  placed.forEach(({ instance, renamed }) => { if (renamed) kept.set(instance, -1); });
+  placed.forEach(({ instance, priority }, index) => {
+    const best = kept.get(instance);
+    if (best !== undefined && (best < 0 || priority < placed[best].priority)) kept.set(instance, index);
+  });
+  const next = placed.filter(({ instance }, index) => !kept.has(instance) || kept.get(instance) === index);
+  return next.length === rules.length && !placed.some(({ renamed }) => renamed) ? rules : next.map(({ rule }) => rule);
 };
 
 /** @param {unknown} value */

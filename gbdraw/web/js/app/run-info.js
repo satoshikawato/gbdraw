@@ -18,7 +18,7 @@ import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
 import { namedFeatureInstance } from '../services/feature-selector.js';
-import { circularRecordRequestKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
+import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
 import { FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -328,7 +328,7 @@ const identityTableCells = (renderRequest, row, kind) => {
 // written bare or as an exact pattern (`namedFeatureInstance`, which also
 // composes the new value). The CLI keys its n-th record input
 // CLI_RECORD_KEY_PREFIX n, and `<that key>:<k>` for the k-th record of an input
-// that expands (gbdraw/api/record_planning.py), as the canvas key and
+// that expands (gbdraw/api/record_planning.py), as `cliRecordKey` and
 // `expandedRecordKey` compose them, so the recipe's table names that key. A row
 // whose record this render does not draw colors nothing and stays out of the
 // table. The order of the parts copies Python's (a twin: feature_instance,
@@ -357,7 +357,7 @@ const cliSpecificColorTable = (renderRequest, text) => {
     changed = true;
     return records.map(({ position, expansion }) => ({
       ...rule,
-      val: named.renamed(expandedRecordKey(circularRecordRequestKey(position - 1), expansion), 'exact')
+      val: named.renamed(expandedRecordKey(cliRecordKey(position), expansion), 'exact')
     }));
   });
   return changed ? serializeSpecificRules(rules) : null;

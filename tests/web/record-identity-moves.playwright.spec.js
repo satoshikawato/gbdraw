@@ -19,6 +19,14 @@ const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const twoRecords = ['BGC0000708', 'BGC0000709']
   .map((name) => readFileSync(join(repoRoot, `tests/test_inputs/${name}.gbk`), 'utf8')).join('\n');
 const session0142 = join(repoRoot, 'tests/fixtures/sessions/record-identity-circular-single.v48.gbdraw-session.json.gz');
+// Records 1 and 2 of the batch fixture; record 2 gets a second CDS at the
+// coordinates of its first, so the two have one hash (IDs `<hash>~<n>`).
+const batchRecords = readFileSync(join(repoRoot, 'tests/fixtures/web_batch_two_records.gb'), 'utf8')
+  .split(/^\/\/\s*$/m).map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
+const identicalTwins = [batchRecords[0], batchRecords[1].replace(
+  '     CDS             301..600\n',
+  '     CDS             301..600\n                     /locus_tag="TWIN_A"\n     CDS             301..600\n'
+)].join('');
 
 const FILL = '#c026d3';
 const STROKE = '#00aa00';
@@ -40,25 +48,23 @@ const historySettled = (page) => expect.poll(() => page.evaluate(() => {
   return !history.restoring.value && !history.traversalPending() && !history.mutationPending();
 }), { timeout: 120_000 }).toBe(true);
 
-const startCircular = async (page) => {
+const startCircular = async (page, content = twoRecords, form = {}) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
-  await page.evaluate((content) => {
+  await page.evaluate(({ content, form }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([content], 'two-records.gbk', { type: 'text/plain', lastModified: 1 });
-    Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out' });
+    Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out' }, form);
     app.sessionTitle = 'record-identity-moves';
-  }, twoRecords);
+  }, { content, form });
   await page.waitForFunction(() => window.__GBDRAW_APP__?.circularRecordList?.length === 2, null, { timeout: 180_000 });
 };
 
 // The two-record file chosen in `files` Linear cards: each choice expands into
 // one card per record (record 1 keeps the card, record 2 gets a card of its
-// own). A card drawing every record of a file (`<uid>:<k>` keys) is not
-// reachable in an editable drawing: Generate expands it the same way. Returns
-// the card uids, in card order.
+// own). Returns the card uids, in card order.
 const startLinear = async (page, files = 1) => {
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page);
@@ -348,6 +354,36 @@ test.describe('record identity moves (OV-1949)', () => {
     await generate(page);
     expect(await shown(page, targets, uid), 'record 2 again').toEqual(allShown(['BGC0000708', 'BGC0000709']));
     expect(await drafts(page, targets)).toEqual(keyedUnder(uid));
+
+    // Live: the moved label row takes a popup edit at once.
+    await editLabel(page, uid, targets.label, LABEL_LIVE);
+    await expect.poll(async () => (await shown(page, targets, uid)).label, 'the live label edit shows').toEqual([LABEL_LIVE]);
+  });
+
+  test('identical features: a "This feature only" fill stays on its own copy in every view', async ({ page }) => {
+    // No labels: the twin CDS share one place, so their labels would overlap.
+    await startCircular(page, identicalTwins, { labels_mode: 'none' });
+    await generate(page);
+    const twins = await page.evaluate(() => {
+      const features = window.__GBDRAW_APP__.extractedFeatures
+        .filter((feature) => feature.recordKey === 'record-2' && /~\d+$/.test(feature.biologicalFeatureId));
+      return features.map((feature) => feature.biologicalFeatureId).sort();
+    });
+    expect(twins).toHaveLength(2);
+    expect(new Set(twins.map((id) => id.split('~')[0])).size).toBe(1);
+    await editFill(page, 'record-2', twins[1]);
+    const fills = async (recordKey) => ({ edited: await fillOf(page, recordKey, twins[1]), other: (await fillOf(page, recordKey, twins[0])).includes(FILL) });
+    expect(await fills('record-2')).toEqual({ edited: [FILL], other: false });
+
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+    await page.getByLabel('Circular record', { exact: true }).selectOption('TESTB');
+    await generate(page);
+    expect(await fills('circular-TESTB-#2'), 'record 2 drawn alone').toEqual({ edited: [FILL], other: false });
+    expect((await drafts(page, { fill: twins[1] })).fill).toEqual(['circular-TESTB-#2']);
+
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+    await generate(page);
+    expect(await fills('record-2'), 'back on the canvas').toEqual({ edited: [FILL], other: false });
   });
 
   test('Linear duplicates: the same file in two cards keeps a "This feature only" fill on its own card', async ({ page }) => {
