@@ -422,7 +422,14 @@ const guardPaths = new Set([
   '.github/workflows/test.yml',
   '.github/workflows/web-base-policy.yml'
 ]);
-const changedGuards = [...changed.keys()].filter((path) => guardPaths.has(path)).sort();
+// Local composite actions (.github/actions/<name>/action.yml) run as steps of
+// the workflows above, so every path under this prefix is guard and authority,
+// a new action included (WEB_CHANGE_POLICY.md "Authority and evidence producers").
+const localActionPrefix = '.github/actions/';
+const isLocalActionPath = (path) => path.startsWith(localActionPrefix);
+const changedGuards = [...changed.keys()]
+  .filter((path) => guardPaths.has(path) || isLocalActionPath(path))
+  .sort();
 const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -457,14 +464,14 @@ const changedCheckerImplementations = [...changed.keys()]
   .filter((path) => checkerImplementationPaths.has(path))
   .sort();
 const changedAuthorities = [...changed.keys()]
-  .filter((path) => authorityPaths.has(path))
+  .filter((path) => authorityPaths.has(path) || isLocalActionPath(path))
   .sort();
 const governancePaths = new Set([
   ...authorityPaths,
   '.github/pull_request_template.md'
 ]);
 const changedGovernancePaths = [...changed.keys()]
-  .filter((path) => governancePaths.has(path))
+  .filter((path) => governancePaths.has(path) || isLocalActionPath(path))
   .sort();
 const narrowAuthorityBundlePaths = new Set([
   architectureRulesPath,
