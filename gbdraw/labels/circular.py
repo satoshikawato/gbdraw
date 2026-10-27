@@ -243,6 +243,10 @@ def _all_label_pairs(label_count: int) -> Iterator[tuple[int, int]]:
 def _label_pair_index_padding(labels: list[CircularLabel], *, use_min_gap: bool) -> float:
     if not use_min_gap:
         return 1.0
+    import os  # STUDY ONLY: GBDRAW_OV730=1 pads by the largest pair gap (OV-730)
+
+    if os.environ.get("GBDRAW_OV730") == "1":
+        return _PairGaps(labels).largest
     return max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
 
 
