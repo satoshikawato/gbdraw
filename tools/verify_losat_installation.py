@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack, redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 import ctypes
 import errno
 import hashlib
@@ -109,8 +109,7 @@ def prepare_runtime(installation_mode: str, launcher: list[str]) -> losat_runtim
             raise ValueError("Acceptance requires a fresh target cache for the first download")
         subprocess.run([*launcher, "-m", "gbdraw.cli", "setup-losat"], check=True)
 
-    with ExitStack() as stack:
-        runtime = losat_runtime.resolve_losat_runtime("losatp", stack=stack)
+    runtime = losat_runtime.resolve_losat_runtime("losatp")
 
     if installation_mode == "managed":
         installed = setup.managed_losat()

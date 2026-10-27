@@ -145,7 +145,7 @@ def managed_losat() -> Path | None:
     try:
         target = runtime_target()
     except ValidationError:
-        return None  # No managed target; existing explicit/bundled/PATH policy applies.
+        return None  # No managed target; resolution continues with PATH.
     identity = _identity(lock, target)
     return _verify_cache(cache_root() / lock["version"] / target, identity)
 

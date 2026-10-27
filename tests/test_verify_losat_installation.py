@@ -112,7 +112,6 @@ def test_conda_prepare_rejects_normal_path_fallback(
     path_binary = tmp_path / "other-environment" / "losat"
     monkeypatch.setattr(acceptance.sys, "prefix", str(prefix))
     monkeypatch.setattr(acceptance.setup, "managed_losat", lambda: None)
-    monkeypatch.setattr(acceptance.losat_runtime, "_bundled_losat_resource", lambda: None)
     monkeypatch.setattr(
         acceptance.losat_runtime,
         "_path_executable",

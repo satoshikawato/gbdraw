@@ -24,7 +24,7 @@ test('an artifact counts failed tests, failed recipes, and parity replay differe
     'recipes/recipes-status.tsv': 'cli\tT-CLI-01\tpass\ncli\tH-CLI-02\tfail\npython\tT-PY-01\tpass\n'
       + 'cli\tH-CLI-06\tskipped-run-locally\npython\tT-PY-05\tskipped-run-locally\n',
     'parity/linear-MJNV/replay-report.json': [{ outcome: 'DIFF' }, { outcome: 'MATCH' }, { outcome: 'NO_EFFECT' }],
-    'losat.txt': 'unavailable: no bundled LOSAT\n',
+    'losat.txt': 'unavailable: no managed LOSAT\n',
     'seed.txt': '1234\n'
   });
   const read = readArtifact(dir);
@@ -86,10 +86,9 @@ test('promotion audit jobs run only on the release-tier dispatch and stay outsid
   assert.match(job('promotion-audit-journeys'), /journey: \[J1, J2, J3, J4, J5, J6, J7\]/);
   assert.match(job('promotion-audit-random-walk'), /- name: Print the random walk seed\n[\s\S]*GBDRAW_RANDOM_WALK_SEED=\$GITHUB_RUN_ID/);
   assert.ok(job('promotion-audit-random-walk').indexOf('Print the random walk seed') < job('promotion-audit-random-walk').indexOf('- name: Checkout'));
-  // The LOSATP recipes require the bundled runtime: a managed install would outrank it, and the probe only
-  // resolves the runtime and accepts the bundled one.
-  assert.doesNotMatch(job('promotion-audit-recipes'), /run: gbdraw setup-losat/);
-  assert.match(job('promotion-audit-recipes'), /&& \[\[ "\$found" == "bundled "\* \]\]; then/);
+  // The LOSATP recipes require the managed runtime: the job installs it and accepts only a managed resolution.
+  assert.match(job('promotion-audit-recipes'), /if found="\$\(python -m gbdraw\.cli setup-losat 2>&1\)" && /);
+  assert.match(job('promotion-audit-recipes'), /&& \[\[ "\$found" == "managed "\* \]\]; then/);
   assert.doesNotMatch(job('promotion-audit-recipes'), /--version/);
   assert.match(job('promotion-audit-recipes'), /skipped-run-locally/);
   // The summary keeps a failed table write visible and still publishes the contact sheet.

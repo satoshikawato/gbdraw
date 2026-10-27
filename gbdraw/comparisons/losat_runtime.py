@@ -13,12 +13,9 @@ managed cache stay in ``gbdraw.losat_setup``.
 from __future__ import annotations
 
 import copy
-from contextlib import ExitStack
 from dataclasses import dataclass
-from importlib import resources
 import logging
 import os
-import platform
 from pathlib import Path
 import re
 import shutil
@@ -27,7 +24,7 @@ import subprocess
 import sys
 import tempfile
 from types import MappingProxyType
-from typing import Callable, Literal, Mapping, Sequence, cast
+from typing import Callable, Literal, Mapping, Sequence, TypedDict, cast
 
 from gbdraw.comparisons.losat_jobs import losat_entry_filename
 from gbdraw.exceptions import ValidationError
@@ -39,7 +36,6 @@ AUTOMATIC_LOSAT_BIN = "losat"
 # Current CLI spellings of the runtime overrides, used in diagnostics.
 LOSAT_BIN_OPTION = "--losat_bin"
 NCBI_BLAST_BIN_OPTION = "--ncbi_blast_bin"
-_BUNDLED_LOSAT_DIR = "bin"
 _PROBE_TIMEOUT_SECONDS = 30
 _UNAVAILABLE: Mapping[str, str] = MappingProxyType(
     {"code": "LOSAT_RUNTIME", "reason": "UNAVAILABLE"}
@@ -47,39 +43,49 @@ _UNAVAILABLE: Mapping[str, str] = MappingProxyType(
 
 LosatProgramName = Literal["losatn", "tlosatx", "losatp"]
 LosatRuntimeKind = Literal["losat", "ncbi-blast"]
-LosatRuntimeSource = Literal["explicit", "conda", "managed", "bundled", "path"]
-LosatCliDialect = Literal["v1", "v2"]
-LosatRuntimeCallback = Callable[[dict[str, object]], None]
+# Sessions written by gbdraw 0.14.2 or earlier may also record "bundled" (a
+# development build once tracked in the source tree). Python never reads the
+# record back; the Web shows its source and path as stored.
+LosatRuntimeSource = Literal["explicit", "conda", "managed", "path"]
+
+
+class LosatRuntimeRecord(TypedDict):
+    """The ``runtime`` record a Session stores beside a raw LOSAT entry.
+
+    It is not part of the raw key. Python copies stored records as they are;
+    the Web run information reads ``source`` and ``path``.
+    """
+
+    kind: LosatRuntimeKind
+    # None when the ``--version`` probe failed.
+    version: str | None
+    source: LosatRuntimeSource
+    # The executable's file name only (a shared Session carries no directories).
+    path: str
+    # The LOSAT subcommand or NCBI BLAST+ executable name.
+    program: str
+
+
+LosatRuntimeCallback = Callable[[LosatRuntimeRecord], None]
 
 
 @dataclass(frozen=True)
 class LosatOptionFlags:
-    """One search option spelled for each runtime CLI and for the raw-cache key."""
+    """One search option spelled for the runtime CLIs and for the raw-cache key."""
 
-    losat_v2: str
-    losat_v1: str
-    ncbi: str
+    # LOSAT CLI v2 (released v0.1.0) and NCBI BLAST+ share this spelling.
+    search: str
     cache: str
 
 
-# LOSAT CLI v2 is the released v0.1.0 spelling. CLI v1 is the tracked
-# gbdraw/bin development build, which spells genetic codes with double dashes.
 # Cache args keep the Web v1 form so CLI and Web raw keys match.
 LOSAT_OPTION_FLAGS: Mapping[str, LosatOptionFlags] = MappingProxyType(
     {
-        "task": LosatOptionFlags("-task", "-task", "-task", "--task"),
-        "query_gencode": LosatOptionFlags(
-            "-query_gencode", "--query-gencode", "-query_gencode", "--query-gencode"
-        ),
-        "db_gencode": LosatOptionFlags(
-            "-db_gencode", "--db-gencode", "-db_gencode", "--db-gencode"
-        ),
-        "max_hsps": LosatOptionFlags(
-            "-max_hsps", "-max_hsps", "-max_hsps", "--max-hsps-per-subject"
-        ),
-        "max_target_seqs": LosatOptionFlags(
-            "-max_target_seqs", "-max_target_seqs", "-max_target_seqs", "--max-target-seqs"
-        ),
+        "task": LosatOptionFlags("-task", "--task"),
+        "query_gencode": LosatOptionFlags("-query_gencode", "--query-gencode"),
+        "db_gencode": LosatOptionFlags("-db_gencode", "--db-gencode"),
+        "max_hsps": LosatOptionFlags("-max_hsps", "--max-hsps-per-subject"),
+        "max_target_seqs": LosatOptionFlags("-max_target_seqs", "--max-target-seqs"),
     }
 )
 
@@ -199,86 +205,7 @@ def losat_cache_args(
     return args
 
 
-# Platform detection and runtime resolution.
-
-
-def _normalize_machine(machine: str | None = None) -> str:
-    normalized = str(machine or platform.machine()).strip().lower()
-    aliases = {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "arm64": "aarch64",
-    }
-    return aliases.get(normalized, normalized)
-
-
-def _bundled_platform_dir() -> str | None:
-    machine = _normalize_machine()
-    if sys.platform.startswith("linux"):
-        if machine == "x86_64":
-            return "linux-x86_64"
-        if machine == "aarch64":
-            return "linux-aarch64"
-    if sys.platform == "darwin":
-        if machine == "x86_64":
-            return "macos-x86_64"
-        if machine == "aarch64":
-            return "macos-arm64"
-    if os.name == "nt":
-        if machine == "x86_64":
-            return "windows-x86_64"
-        if machine == "aarch64":
-            return "windows-arm64"
-    return None
-
-
-def _bundled_filename() -> str:
-    return "losat.exe" if os.name == "nt" else "losat"
-
-
-def _bundled_losat_resource():
-    platform_dir = _bundled_platform_dir()
-    if platform_dir is None:
-        return None
-    try:
-        package_root = resources.files("gbdraw")
-    except (ModuleNotFoundError, FileNotFoundError):
-        return None
-    candidate = (
-        package_root
-        .joinpath(_BUNDLED_LOSAT_DIR)
-        .joinpath(platform_dir)
-        .joinpath(_bundled_filename())
-    )
-    if not candidate.is_file():
-        return None
-    return candidate
-
-
-def _ensure_executable(path: Path) -> None:
-    if os.name == "nt":
-        return
-    try:
-        mode = path.stat().st_mode
-    except OSError:
-        return
-    if mode & stat.S_IXUSR:
-        return
-    try:
-        path.chmod(mode | stat.S_IXUSR)
-    except OSError:
-        logger.debug("Could not mark bundled LOSAT binary executable: %s", path)
-
-
-def bundled_losat_runtime(*, stack: ExitStack) -> LosatRuntime | None:
-    """Return the source-checkout LOSAT for this platform, marked executable."""
-
-    bundled_resource = _bundled_losat_resource()
-    if bundled_resource is None:
-        return None
-    bundled_path = stack.enter_context(resources.as_file(bundled_resource))
-    _ensure_executable(bundled_path)
-    return LosatRuntime("losat", str(bundled_path), "bundled")
+# Runtime resolution.
 
 
 def _path_executable(name: str) -> str | None:
@@ -317,9 +244,7 @@ def _conda_losat_runtime() -> LosatRuntime | None:
             diagnostic=_UNAVAILABLE,
         )
 
-    runtime = LosatRuntime("losat", str(candidate), "conda")
-    logger.debug("Using conda LOSAT runtime: %s", runtime.executable)
-    return runtime
+    return LosatRuntime("losat", str(candidate), "conda")
 
 
 def _runtime_label(runtime: LosatRuntime, spec: LosatProgram) -> str:
@@ -328,21 +253,14 @@ def _runtime_label(runtime: LosatRuntime, spec: LosatProgram) -> str:
     return f"LOSAT {spec.search}"
 
 
-def _runtime_unavailable_error(spec: LosatProgram, *, platform_dir: str | None) -> ValidationError:
-    platform_name = platform_dir or "this platform"
-    platform_note = ""
-    if platform_dir and (platform_dir.startswith("macos-") or platform_dir.startswith("windows-")):
-        platform_note = (
-            " gbdraw does not currently include a LOSAT binary for this platform."
-        )
+def _runtime_unavailable_error(spec: LosatProgram) -> ValidationError:
     return ValidationError(
         f"{spec.description[:1].upper()}{spec.description[1:]} comparison needs "
         "LOSAT or NCBI BLAST+. "
-        f"no bundled LOSAT binary was found for {platform_name}, "
+        "No managed LOSAT is installed, "
         "`losat` was not found on PATH, and "
         f"`{spec.search}` was not found on PATH. "
-        "Run gbdraw setup-losat to install the pinned release when available."
-        f"{platform_note} "
+        "Run gbdraw setup-losat to install the pinned release where it is supported. "
         f"Install NCBI BLAST+ and make `{spec.search}` available on PATH, or pass a "
         f"native LOSAT executable with {LOSAT_BIN_OPTION}, or pass an NCBI BLAST+ "
         f"executable with {NCBI_BLAST_BIN_OPTION}.",
@@ -355,12 +273,12 @@ def resolve_losat_runtime(
     *,
     losat_bin: str | None = None,
     ncbi_blast_bin: str | None = None,
-    stack: ExitStack,
 ) -> LosatRuntime:
     """Resolve the runtime for one program in the shared order.
 
-    Explicit LOSAT, explicit NCBI BLAST+, conda LOSAT, managed LOSAT, bundled
-    LOSAT (source checkout), PATH ``losat``, then PATH NCBI ``<program>``.
+    Explicit LOSAT, explicit NCBI BLAST+, conda LOSAT, managed LOSAT, PATH
+    ``losat``, then PATH NCBI ``<program>``. ``run_losat_search`` logs the
+    chosen runtime.
     """
 
     spec = losat_program(program)
@@ -373,13 +291,9 @@ def resolve_losat_runtime(
             diagnostic={"code": "COMPARISON_INPUT"},
         )
     if requested_bin != AUTOMATIC_LOSAT_BIN:
-        runtime = LosatRuntime("losat", requested_bin, "explicit")
-        logger.debug("Using explicit LOSAT runtime: %s", runtime.executable)
-        return runtime
+        return LosatRuntime("losat", requested_bin, "explicit")
     if requested_ncbi_bin is not None:
-        runtime = LosatRuntime("ncbi-blast", requested_ncbi_bin, "explicit")
-        logger.debug("Using explicit NCBI BLAST+ runtime: %s", runtime.executable)
-        return runtime
+        return LosatRuntime("ncbi-blast", requested_ncbi_bin, "explicit")
 
     conda_runtime = _conda_losat_runtime()
     if conda_runtime is not None:
@@ -391,29 +305,19 @@ def resolve_losat_runtime(
     if managed_path is not None:
         return LosatRuntime("losat", str(managed_path), "managed")
 
-    bundled = bundled_losat_runtime(stack=stack)
-    if bundled is not None:
-        logger.debug("Using bundled LOSAT runtime: %s", bundled.executable)
-        return bundled
-
     path_losat = _path_executable(AUTOMATIC_LOSAT_BIN)
     if path_losat is not None:
-        runtime = LosatRuntime("losat", path_losat, "path")
-        logger.debug("Using PATH LOSAT runtime: %s", runtime.executable)
-        return runtime
+        return LosatRuntime("losat", path_losat, "path")
 
     path_ncbi = _path_executable(spec.search)
     if path_ncbi is not None:
-        runtime = LosatRuntime("ncbi-blast", path_ncbi, "path")
-        logger.debug("Using PATH NCBI BLAST+ %s runtime: %s", spec.search, runtime.executable)
-        return runtime
+        return LosatRuntime("ncbi-blast", path_ncbi, "path")
 
-    raise _runtime_unavailable_error(spec, platform_dir=_bundled_platform_dir())
+    raise _runtime_unavailable_error(spec)
 
 
-# Runtime identity: CLI dialect and version, probed once per executable.
+# Runtime identity: version, probed once per executable.
 
-_CLI_DIALECTS: dict[str, LosatCliDialect] = {}
 _RUNTIME_VERSIONS: dict[tuple[str, str], str | None] = {}
 
 
@@ -430,26 +334,6 @@ def _probe(command: list[str]) -> subprocess.CompletedProcess[str] | None:
         return None
 
 
-def detect_losat_cli_dialect(executable: str) -> LosatCliDialect:
-    """Return ``v1`` (double-dash gencode flags) or ``v2`` (released v0.1.0)."""
-
-    key = str(executable)
-    cached = _CLI_DIALECTS.get(key)
-    if cached is not None:
-        return cached
-    completed = _probe([key, "tblastx", "--help"])
-    if completed is None:
-        # The search reports the start failure with its own diagnostic.
-        return "v2"
-    help_text = f"{completed.stdout}\n{completed.stderr}"
-    flags = LOSAT_OPTION_FLAGS["query_gencode"]
-    dialect: LosatCliDialect = (
-        "v1" if flags.losat_v1 in help_text and flags.losat_v2 not in help_text else "v2"
-    )
-    _CLI_DIALECTS[key] = dialect
-    return dialect
-
-
 _TASK_VALUES: dict[str, frozenset[str] | None] = {}
 _POSSIBLE_VALUES = re.compile(r"\[possible values:\s*([^\]]+)\]")
 
@@ -458,8 +342,8 @@ def losat_task_values(executable: str) -> frozenset[str] | None:
     """Return the ``blastn`` task values a LOSAT runtime lists, or ``None``.
 
     Released LOSAT v0.1.0 lists ``[possible values: megablast, blastn]`` under
-    its task option; the tracked development build lists none and accepts any
-    task name. Probed once per executable.
+    its task option; a runtime that lists none is not checked. Probed once per
+    executable.
     """
 
     key = str(executable)
@@ -494,28 +378,25 @@ def require_losat_task_support(
     """
 
     spec = losat_program("losatn")
-    with ExitStack() as stack:
-        runtime = resolve_losat_runtime(
-            spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin, stack=stack
-        )
-        if runtime.kind != "losat":
-            return
-        values = losat_task_values(runtime.executable)
-        if values is None or task in values:
-            return
-        version = _runtime_version(runtime) or "unknown version"
-        raise ValidationError(
-            f"LOSATN task {task!r} is not supported by the LOSAT runtime at "
-            f"{runtime.executable} ({version}; supported: "
-            f"{', '.join(sorted(values))}). Choose another --losatn_task, or pass a "
-            f"runtime that supports it with {LOSAT_BIN_OPTION} or {NCBI_BLAST_BIN_OPTION}.",
-            diagnostic={
-                "code": "COMPARISON_INPUT",
-                "reason": "LOSAT_TASK",
-                "field": "losatn_task",
-                "program": spec.name,
-            },
-        )
+    runtime = resolve_losat_runtime(spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin)
+    if runtime.kind != "losat":
+        return
+    values = losat_task_values(runtime.executable)
+    if values is None or task in values:
+        return
+    version = _runtime_version(runtime) or "unknown version"
+    raise ValidationError(
+        f"LOSATN task {task!r} is not supported by the LOSAT runtime at "
+        f"{runtime.executable} ({version}; supported: "
+        f"{', '.join(sorted(values))}). Choose another --losatn_task, or pass a "
+        f"runtime that supports it with {LOSAT_BIN_OPTION} or {NCBI_BLAST_BIN_OPTION}.",
+        diagnostic={
+            "code": "COMPARISON_INPUT",
+            "reason": "LOSAT_TASK",
+            "field": "losatn_task",
+            "program": spec.name,
+        },
+    )
 
 
 def _runtime_version(runtime: LosatRuntime) -> str | None:
@@ -540,32 +421,29 @@ def _runtime_version(runtime: LosatRuntime) -> str | None:
 
 
 def _recorded_runtime_path(runtime: LosatRuntime) -> str:
-    # Sessions are shared, so a runtime outside the package records only its
-    # executable's name; source and version identify it.
-    if runtime.source == "bundled":
-        platform_dir = _bundled_platform_dir()
-        if platform_dir is not None:
-            return "/".join(("gbdraw", _BUNDLED_LOSAT_DIR, platform_dir, _bundled_filename()))
+    # Sessions are shared, so a runtime records only its executable's name;
+    # source and version identify it.
     return Path(runtime.executable).name or runtime.executable
 
 
 def losat_runtime_record(
     runtime: LosatRuntime,
     program: str | LosatProgram,
-) -> dict[str, object]:
-    """Return the non-key runtime identity stored beside a raw cache entry."""
+) -> LosatRuntimeRecord:
+    """Return the non-key runtime identity stored beside a raw cache entry.
+
+    Records written by gbdraw 0.14.2 or earlier may carry a ``cli`` dialect
+    field; it is kept as stored and nothing reads it.
+    """
 
     spec = losat_program(program)
-    record: dict[str, object] = {
+    return {
         "kind": runtime.kind,
         "version": _runtime_version(runtime),
         "source": runtime.source,
         "path": _recorded_runtime_path(runtime),
         "program": spec.search,
     }
-    if runtime.kind == "losat":
-        record["cli"] = detect_losat_cli_dialect(runtime.executable)
-    return record
 
 
 # Argv and execution.
@@ -579,27 +457,15 @@ def build_losat_command(
     subject_path: Path,
     options: LosatSearchArgs = LosatSearchArgs(),
     threads: int | None = None,
-    dialect: LosatCliDialect | None = None,
 ) -> list[str]:
-    """Build the outfmt 6 argv for one search.
-
-    LOSAT CLI dialects differ only in flags whose spellings differ; the dialect
-    is probed only when such a flag is present.
-    """
+    """Build the outfmt 6 argv for one search."""
 
     spec = losat_program(program)
     values = _option_values(spec, options)
     if runtime.kind == "ncbi-blast":
         command = [str(runtime.executable)]
-        spelling = "ncbi"
     else:
         command = [str(runtime.executable), spec.search]
-        if dialect is None and any(
-            LOSAT_OPTION_FLAGS[name].losat_v1 != LOSAT_OPTION_FLAGS[name].losat_v2
-            for name, _value in values
-        ):
-            dialect = detect_losat_cli_dialect(runtime.executable)
-        spelling = "losat_v1" if dialect == "v1" else "losat_v2"
     command.extend(
         [
             "-query",
@@ -611,7 +477,7 @@ def build_losat_command(
         ]
     )
     for name, value in values:
-        command.extend([getattr(LOSAT_OPTION_FLAGS[name], spelling), value])
+        command.extend([LOSAT_OPTION_FLAGS[name].search, value])
     if threads is not None:
         command.extend(["-num_threads", str(int(threads))])
     return command
@@ -663,15 +529,9 @@ def run_losat_search(
     """
 
     spec = losat_program(program)
-    runtime_record: dict[str, object] | None = None
-    with ExitStack() as stack:
-        runtime = resolve_losat_runtime(
-            spec,
-            losat_bin=losat_bin,
-            ncbi_blast_bin=ncbi_blast_bin,
-            stack=stack,
-        )
-        temp_dir = stack.enter_context(tempfile.TemporaryDirectory(prefix="gbdraw_losat_"))
+    runtime_record: LosatRuntimeRecord | None = None
+    runtime = resolve_losat_runtime(spec, losat_bin=losat_bin, ncbi_blast_bin=ncbi_blast_bin)
+    with tempfile.TemporaryDirectory(prefix="gbdraw_losat_") as temp_dir:
         temp_path = Path(temp_dir)
         query_path = temp_path / f"query{spec.fasta_suffix}"
         subject_path = temp_path / f"subject{spec.fasta_suffix}"
@@ -687,7 +547,18 @@ def run_losat_search(
             threads=threads,
         )
         runtime_label = _runtime_label(runtime, spec)
-        logger.info("INFO: Running %s for %s.", runtime_label, spec.activity)
+        # The one log line that names the backend. The version probe runs
+        # once per executable; the runtime record reuses it.
+        version = _runtime_version(runtime)
+        logger.info(
+            "INFO: Running %s for %s (backend %s, source %s, executable %s%s).",
+            runtime_label,
+            spec.activity,
+            runtime.kind,
+            runtime.source,
+            runtime.executable,
+            f", version {version}" if version else "",
+        )
         completed = _run_losat_subprocess(command, runtime_label=runtime_label)
         if completed.returncode == 0 and runtime_callback is not None:
             runtime_record = losat_runtime_record(runtime, spec)
@@ -895,17 +766,16 @@ __all__ = [
     "LOSAT_BIN_OPTION",
     "LOSAT_OPTION_FLAGS",
     "LOSAT_PROGRAMS",
-    "LosatCliDialect",
     "LosatCacheWrite",
     "LosatCacheWriteKind",
     "LosatProgram",
     "LosatRawCache",
     "LosatRuntime",
+    "LosatRuntimeCallback",
+    "LosatRuntimeRecord",
     "LosatSearchArgs",
     "NCBI_BLAST_BIN_OPTION",
     "build_losat_command",
-    "bundled_losat_runtime",
-    "detect_losat_cli_dialect",
     "losat_cache_args",
     "losat_program",
     "losat_runtime_record",

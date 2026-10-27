@@ -209,6 +209,18 @@ jobs:
       - name: Install core test dependencies
         run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist Pillow
 
+      # Tests that run native LOSAT use the verified release that
+      # `gbdraw setup-losat` installs. The cache, keyed by the release lock,
+      # downloads it only when the lock changes.
+      - name: Restore the managed LOSAT runtime
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gbdraw/losat
+          key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+      - name: Install the managed LOSAT runtime
+        run: python -m gbdraw.cli setup-losat
+
       - name: Run core tests
         run: >-
           python -m pytest tests/
@@ -242,6 +254,18 @@ jobs:
 
       - name: Install core test dependencies
         run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist Pillow
+
+      # Tests that run native LOSAT use the verified release that
+      # `gbdraw setup-losat` installs. The cache, keyed by the release lock,
+      # downloads it only when the lock changes.
+      - name: Restore the managed LOSAT runtime
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gbdraw/losat
+          key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+      - name: Install the managed LOSAT runtime
+        run: python -m gbdraw.cli setup-losat
 
       - name: Run core tests
         run: >-
@@ -297,6 +321,18 @@ jobs:
 
       - name: Install recipe test dependencies
         run: python -m pip install -e ".[dev]"
+
+      # Tests that run native LOSAT use the verified release that
+      # `gbdraw setup-losat` installs. The cache, keyed by the release lock,
+      # downloads it only when the lock changes.
+      - name: Restore the managed LOSAT runtime
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gbdraw/losat
+          key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+      - name: Install the managed LOSAT runtime
+        run: python -m gbdraw.cli setup-losat
 
       - name: Run standard recipe tests
         run: >-
@@ -935,6 +971,20 @@ jobs:
       - name: Install acceptance dependencies
         run: python -m pip install -e ".[dev]"
 
+      # Tests that run native LOSAT use the verified release that
+      # `gbdraw setup-losat` installs. The cache, keyed by the release lock,
+      # downloads it only when the lock changes.
+      - name: Restore the managed LOSAT runtime
+        if: matrix.surface == 'recipe'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gbdraw/losat
+          key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+      - name: Install the managed LOSAT runtime
+        if: matrix.surface == 'recipe'
+        run: python -m gbdraw.cli setup-losat
+
       - name: Install browser runtime
         if: matrix.surface == 'browser'
         run: |
@@ -1228,18 +1278,20 @@ jobs:
       - name: Set the audit evidence folder
         run: echo "GBDRAW_AUDIT_OUT=$RUNNER_TEMP/promotion-audit" >> "$GITHUB_ENV"
 
-      # The LOSATP recipes check the LOSAT runtime bundled in the source
-      # checkout (gbdraw/bin/<platform>/losat). The job installs no managed
-      # runtime: `gbdraw setup-losat` would take precedence over the bundled
-      # one. Without it, the LOSATP recipes are listed to run locally.
-      - name: Check the bundled LOSAT runtime
+      # The LOSATP recipes check the managed LOSAT runtime. When it cannot be
+      # installed, the LOSATP recipes are listed to run locally.
+      - name: Restore the managed LOSAT runtime
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/gbdraw/losat
+          key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+      - name: Check the managed LOSAT runtime
         run: |
           mkdir -p "$GBDRAW_AUDIT_OUT"
-          if found="$(python -c 'import contextlib
-          from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
-          with contextlib.ExitStack() as stack:
-              runtime = resolve_losat_runtime("losatp", stack=stack)
-              print(runtime.source, runtime.executable)' 2>&1)" && [[ "$found" == "bundled "* ]]; then
+          if found="$(python -m gbdraw.cli setup-losat 2>&1)" && found="$(python -c 'from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
+          runtime = resolve_losat_runtime("losatp")
+          print(runtime.source, runtime.executable)' 2>&1)" && [[ "$found" == "managed "* ]]; then
             echo "available: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
           else
             echo "unavailable: $found" > "$GBDRAW_AUDIT_OUT/losat.txt"
@@ -1248,7 +1300,7 @@ jobs:
 
       # Every CLI and Python recipe, one at a time, so one failure does not hide
       # the rest (run_*_scenarios.py --all stops at the first). Without the
-      # bundled LOSAT runtime, the scenarios with a comparison.losatp-* capability in
+      # managed LOSAT runtime, the scenarios with a comparison.losatp-* capability in
       # docs/scenarios/manifest.json are listed as skipped-run-locally.
       - name: Run every recipe check
         env:

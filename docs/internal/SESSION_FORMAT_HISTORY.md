@@ -12,6 +12,22 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: LOSAT runtime records without `cli` or `bundled`
+
+No Session or request version changes. The source tree no longer holds a LOSAT
+build, so new CLI and Python writers no longer write the `cli` dialect field in
+a `losatCache` entry's `runtime` record and cannot write `source: "bundled"`.
+A new record is `{kind, version, source, path, program}` with `source` one of
+`explicit`, `conda`, `managed`, or `path` (`LosatRuntimeRecord` in
+`gbdraw/comparisons/losat_runtime.py`). Older records still load unchanged:
+Python copies `runtime` as stored (`LosatRawCache._add_loaded_entry` and
+`_add_search_entry`), and the Web run information reads only `source` and
+`path` (`gbdraw/web/js/app/run-info.js`). The positive fixture is
+`gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz`,
+whose 12 records are `{source: "bundled", path: "gbdraw/bin/linux-x86_64/losat",
+cli: "v1"}`; `tests/web/run-info.test.mjs` and `tests/web/losat-cache.test.mjs`
+pin how the Web reads them.
+
 ## Unreleased: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,
@@ -483,9 +499,11 @@ compared record pair with the raw search-frame rows, and one schema 2
 `losatCache` entry per pair with the web raw key and the non-key `runtime`
 record. Entries that the web app searches carry `runtime` too, as
 `{kind: "losat", source: "wasm", version: null, program}`. A CLI or Python
-runtime outside the package records only its executable's name as `path` (for
-example `losat` or `blastn`), so the runtime record carries no local directory;
-the bundled runtime records `gbdraw/bin/<platform>/losat`. A CLI Session's
+runtime records only its executable's name as `path` (for example `losat`,
+`LOSAT`, or `blastn`), so the runtime record carries no local directory. The
+runtime once bundled in a source checkout recorded
+`gbdraw/bin/<platform>/losat` (see "LOSAT runtime records without `cli` or
+`bundled`" above). A CLI Session's
 `cliInvocation.args` still hold `--losat_bin` and the input and output paths
 as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the

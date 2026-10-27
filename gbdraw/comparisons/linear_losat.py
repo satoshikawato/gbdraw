@@ -35,6 +35,7 @@ from gbdraw.comparisons.losat_jobs import (
 from gbdraw.comparisons.losat_runtime import (
     LOSAT_PROGRAMS,
     LosatRawCache,
+    LosatRuntimeRecord,
     LosatSearchArgs,
     losat_cache_args,
     require_losat_task_support,
@@ -208,7 +209,7 @@ def resolve_linear_nucleotide_losat(
                 search.program.upper(), job_number, len(batches),
                 len(batch.query.indexes), len(batch.subject.indexes),
             )
-            runtime_records: list[dict[str, object]] = []
+            runtime_records: list[LosatRuntimeRecord] = []
             first_query, first_subject = batch.job.specs[0]
             raw_text = run_losat_search(
                 spec,

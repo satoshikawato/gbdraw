@@ -887,6 +887,34 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   assert.match(smoke, /Upload Playwright PR smoke traces/);
 });
 
+test('jobs that run native LOSAT install the managed release from one cache', () => {
+  // gbdraw/bin no longer holds a LOSAT build; these jobs run native-LOSAT tests or recipes.
+  const workflow = readTestsWorkflow();
+  const job = (id) => workflowJobOf(workflow, id);
+  const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)]
+    .map(([, id]) => id);
+  const restoreName = '\n      - name: Restore the managed LOSAT runtime\n';
+  const losatJobs = jobIds.filter((id) => job(id).includes(restoreName));
+  assert.deepEqual(losatJobs, [
+    'core',
+    'core-pr',
+    'recipes-standard',
+    'acceptance-supported-main',
+    'promotion-audit-recipes'
+  ]);
+  const key = "key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}\n";
+  for (const id of losatJobs) {
+    const source = job(id);
+    const restore = source.indexOf(restoreName);
+    const install = source.indexOf('python -m gbdraw.cli setup-losat', restore);
+    assert.ok(source.indexOf('pip install -e') < restore, `${id} installs gbdraw before setup-losat`);
+    assert.ok(source.slice(restore).includes('uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0\n        with:\n          path: ~/.cache/gbdraw/losat\n'), id);
+    assert.ok(source.includes(key), id);
+    assert.ok(restore < install, `${id} runs setup-losat after the cache`);
+    assert.ok(install < source.search(/python -m pytest tests\/|run_\$\{surface\}_scenarios/), `${id} sets up LOSAT before its tests`);
+  }
+});
+
 test('browser jobs seed apt from one verified cache and bound their test steps', () => {
   const workflow = readTestsWorkflow();
   const job = (id) => workflowJobOf(workflow, id);
