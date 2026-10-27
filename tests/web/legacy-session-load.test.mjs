@@ -87,6 +87,35 @@ test('a Session 33 Load keeps the feature edits of the drawing that opens throug
   assert.equal(rows(state.activeDrawing().featureOverrides).length, 3);
 });
 
+// OV-2001: a Linear Session 30's fills and Legend stay on the Linear drawing
+// that opens, as Load before the Worker route (2d71b1611^) left them: the four
+// caption rules color the features, the 66 saved per-feature fills are not
+// restored, and the Circular drawing has the rules but no Legend entries.
+test('a Linear Session 30 Load keeps its fills and Legend entries on the drawing that opens', async () => {
+  const loaded = await load(fixture('BGC0000708-BGC0000713.v30'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.equal(state.featureExtractionPending.value, false);
+  const shown = Object.fromEntries(state.drawingList().map((drawing) => [drawing.mode, {
+    active: drawing.id === state.activeDrawingId.value,
+    fills: drawing.featureColorOverrides,
+    rules: drawing.manualSpecificRules.map(({ cap, color, qual, val }) => [cap, color, qual, val]),
+    legend: drawing.legendEntries.value.map(({ caption, color }) => [caption, color])
+  }]));
+  const rules = [
+    ['Core biosynthetic genes', '#d03535', 'gene_kind', 'biosynthetic$'],
+    ['Additional biosynthetic genes', '#f787a9', 'gene_kind', 'biosynthetic-additional'],
+    ['Transport-related genes', '#577edb', 'gene_kind', 'transport'],
+    ['Regulatory genes', '#57b767', 'gene_kind', 'regulatory']
+  ];
+  assert.deepEqual(shown, {
+    linear: {
+      active: true, fills: {}, rules,
+      legend: [...rules.map(([caption, color]) => [caption, color]), ['other proteins', '#dddddd']]
+    },
+    circular: { active: false, fills: {}, rules, legend: [] }
+  });
+});
+
 test('a Worker failure of a Session 27-44 Load installs nothing, withdraws the stored figure and reports one diagnostic', async () => {
   const before = await load(fixture('HmmtDNA_basic_circular.v44-schema8'));
   assert.equal(before.status, 'ok');
