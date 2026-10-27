@@ -4362,6 +4362,9 @@
         "/ui/richFeaturePopup": true,
         "/modes/linear/ui/selectedFeatureRecordIdx": 0
       },
+      "loadExpect": {
+        "/modes/circular/config/adv/plot_title_font_size": 20
+      },
       "expectAbsent": [
         "/config",
         "/features",

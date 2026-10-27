@@ -365,27 +365,6 @@ export const sourceHashSelectorValue = (value, drawn) => {
   return { value: anchored ? `^${source}$` : source, sourceCount: 1 };
 };
 
-/**
- * The request records of the Linear cards of a Session before 31, which has no
- * request (release 0.13.0): each card's record key, crop, and orientation, as
- * the hash readers read them. The twin of `_legacy_linear_request_records` in
- * gbdraw/session_io.py.
- * @param {unknown} linearSeqs
- */
-export const legacyLinearRequestRecords = (linearSeqs) => (Array.isArray(linearSeqs) ? linearSeqs : [])
-  .map((seq) => {
-    const start = nonnegativeInteger(seq?.region_start);
-    const end = nonnegativeInteger(seq?.region_end);
-    const cropped = start !== null || end !== null;
-    const reverse = Boolean(seq?.region_reverse);
-    return {
-      recordKey: text(seq?.uid),
-      cardinality: cropped || text(seq?.region_record_id) ? 'exactly_one' : 'all',
-      region: cropped ? { start, end, reverseComplement: reverse } : null,
-      presentation: { reverseComplement: !cropped && reverse }
-    };
-  });
-
 // Whether a request record is drawn cropped or reverse-complemented, so the
 // drawn hashes of its features differ from their source hashes (a rotation or
 // a region that only selects a record changes no hash). The twin of
@@ -403,7 +382,7 @@ const hashFrameChanged = (record) => {
  * of `has_hash_color_rules` in gbdraw/session_io.py.
  * @param {unknown} rules
  */
-export const hasHashColorRules = (rules) => Array.isArray(rules)
+const hasHashColorRules = (rules) => Array.isArray(rules)
   && rules.some((rule) => text(rule?.qual).toLowerCase() === 'hash');
 
 /**
@@ -509,7 +488,7 @@ const FEATURE_VISIBILITY_MODES = new Map([
  * @param {unknown} features
  * @returns {boolean}
  */
-export const hasRenderedIdFeatureEdits = (features) => isObject(features)
+const hasRenderedIdFeatureEdits = (features) => isObject(features)
   && RENDERED_ID_FEATURE_EDIT_FIELDS.some((field) => isObject(features[field]) && Object.keys(features[field]).length > 0);
 
 /**

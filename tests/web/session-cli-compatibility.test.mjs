@@ -1,5 +1,5 @@
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -39,6 +39,10 @@ globalThis.File = class File extends Blob {
 globalThis.alert = () => {};
 
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
@@ -574,18 +578,22 @@ await test('a main v33 Web Session with Scale Interval 0 loads into the current 
 // Sessions that store a Scale Interval of 0 or less (main fe6861f0 CLI and typed API,
 // main b05a6bb8 Web; scale-interval.provenance.json) load, and Load Feature Edits TSV
 // reads against their committed request.
+// D-15-136 (A): Python promotes a schema-2 request (Session 33) and reads its
+// interval <= 0 as automatic (D-04), so the committed request holds none; the
+// figure is the same. Every case still pins that no positive interval is committed.
 await test('a Session with a Scale Interval of 0 or less loads and reads a Feature Edits TSV', async () => {
-  for (const [name, stored] of [
-    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval],
-    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval']],
-    // Load rebuilds a schema 2 request from the loaded fields (current path, literal 0).
-    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides['objects.scale.interval']]
+  for (const [name, stored, absentWhenPromoted] of [
+    ['scale-interval-zero-circular-cli.v44', (request) => request.diagramOptions.config.objects.scale.interval, false],
+    ['scale-interval-negative-linear-api.v44', (request) => request.diagramOptions.configOverrides['objects.scale.interval'], false],
+    // A promoted schema 2 request: automatic (absent) or the literal value.
+    ['scale-interval-zero-circular-web.v33', (request) => request.diagramOptions.configOverrides?.['objects.scale.interval'], true]
   ]) {
     const fixture = path.join(root, `tests/fixtures/sessions/${name}.gbdraw-session.json.gz`);
     const result = await load(gunzipSync(await readFile(fixture)));
     assert.equal(result.status, 'ok', `${name}: ${JSON.stringify(result.error?.context ?? result.error)}`);
     const committed = getCommittedCanonicalRenderRequest();
-    assert.ok(stored(committed) <= 0, name);
+    const interval = stored(committed);
+    assert.ok((absentWhenPromoted && interval === undefined) || interval <= 0, `${name}: ${interval}`);
     const directory = await mkdtemp(path.join(tmpdir(), 'gbdraw-scale-interval-'));
     try {
       await writeFile(path.join(directory, 'request.json'), JSON.stringify(committed));
@@ -750,8 +758,10 @@ await test('only a Result without composition metadata takes the legacy composit
     const early = gunzipSync(await readFile('tests/fixtures/sessions/cli-linear-tables.v40-early.gbdraw-session.json.gz'));
     assert.equal(early.toString().includes('data-gbdraw-composition-schema='), false);
     // The fake DOM serializes the parsed text unchanged; the Playwright
-    // OV-273 case checks the composition the transform writes.
-    assert.deepEqual(await admission(early), { plan: ['MUTATING'], parses: 1, normalized: 1 });
+    // OV-273 case checks the composition the transform writes. The Session
+    // 40's stored figure is admitted with its catalog as written (`EMPTY`, no
+    // parse, OV-1932) before Load admits the committed set (`MUTATING`).
+    assert.deepEqual(await admission(early), { plan: ['EMPTY', 'MUTATING'], parses: 1, normalized: 1 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

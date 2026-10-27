@@ -5812,8 +5812,11 @@
     }
    ],
    "python": "refuse",
-   "web": "loaded",
-   "note": "Known difference, hand-made input only: the Web zero-hit check reads only the result envelope, so a typed result whose fields are empty loads; Python decodes the member and refuses the Session.",
+   "web": "repaired",
+   "webRepairs": [
+    "cache-entry-dropped@losatDerivedCache.entries[0]"
+   ],
+   "note": "Hand-made input only: a typed result whose fields are empty does not decode as the mode's result, so the entry is no zero-hit result and its unresolved references are refused. The Web zero-hit check reads Python's typed-result shape, so both sides apply one rule (OV-1926; the difference OV-1149 recorded is closed).",
    "pythonMessage": "contains unresolved protein references"
   },
   {

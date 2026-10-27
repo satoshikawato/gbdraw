@@ -13,7 +13,7 @@ import { gunzipSync } from 'node:zlib';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 
 // R4 has one owner (E-OD22): an R4 vector passes only when `restoresNothing`
 // decided the refusal, not another producer of the same diagnostic.
@@ -38,6 +38,10 @@ const { state } = await import('../../gbdraw/web/js/state.js');
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // A saved unmanaged override is checked as the browser's Load checks it (PD-OI-009).
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 
@@ -91,3 +95,24 @@ for (const vector of FIXTURE.vectors) {
     assert.equal(verdicts.at(-1) === true, vector.webClass === 'R4', `${vector.id}: restoresNothing verdicts ${JSON.stringify(verdicts)}`);
   });
 }
+
+// A Session 41-43 record display row lacks the two fields Session 44 added;
+// Load reads the file's flat draft before Python converts it, so the row is
+// read as its Session wrote it (OV-1928), not dropped.
+test('a Session 40-43 display row without the fields Session 44 added loads into its drawing', async () => {
+  const vector = FIXTURE.vectors.find(({ id }) => id === 'ov575-session-40-display-draft');
+  const document = edited(vector);
+  const [row] = document.config.recordDisplayDrafts;
+  delete row.reverseComplementOverride;
+  delete row.anchorIntent;
+  const outcome = await importSession({
+    target: { files: [new Blob([JSON.stringify(document)], { type: 'application/json' })], value: 'selected' }
+  }, { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
+  assert.deepEqual((outcome.repairs ?? []).filter((repair) => !nodeOnly(repair)).map(({ code, path }) => `${code}@${path}`), []);
+  // The drawing that opens is the file's Circular one (its `ui.mode`).
+  const opened = state.activeDrawing();
+  assert.equal(opened.mode, 'circular');
+  assert.deepEqual(opened.recordDisplayDrafts.map(({ sourceUid, selector, startCoordinate }) => ({ sourceUid, selector, startCoordinate })),
+    [{ sourceUid: 'circular', selector: '#1', startCoordinate: 25 }]);
+});

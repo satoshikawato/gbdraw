@@ -200,7 +200,10 @@ split context, and the JSON pointers the split writes (`expect`) or leaves to
 Load (`expectAbsent`). `expectedModes` are the slices of the JavaScript split as
 Web Load makes it (`tests/web/mode-split-vectors.test.mjs`); the Python split
 (`tests/test_mode_split_vectors.py`) must equal them. `loadDefaults` are the
-values Session 46 Load gives the pointers the split leaves absent. A Session
+values Session 46 Load gives the pointers the split leaves absent. `loadExpect`
+(node only) replaces an `expect` value where Web Load sends Python the value a
+drawing read rather than the stored one (a carried field, such as `"20"` read
+as `20`); the Python split of the stored draft keeps `expect`. A Session
 27–39 case has no `expectedModes`: Web Load reads such a Session's settings from
 its request, which the Python split does not.
 

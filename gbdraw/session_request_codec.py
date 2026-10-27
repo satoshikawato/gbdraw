@@ -587,6 +587,8 @@ _TYPED_TREE_CLASSES = {
         OrthologPath,
     )
 }
+# The resource schemas a typed JSON resource may name; a class may need one of them.
+_TYPED_RESOURCE_SCHEMAS = (1, 2, 3)
 _SCHEMA1_TYPED_OPTIONAL_FIELDS = {
     "CollinearityAnchor": frozenset(
         {
@@ -2237,6 +2239,10 @@ def migrate_flat_config_overrides(
             continue
         consumed.add(legacy_name)
         value = overrides[legacy_name]
+        # The Web writer stored a null blacklist for a filter mode other than
+        # Blacklist: no blacklist, not the packaged one.
+        if value is None and legacy_name == "label_blacklist":
+            value = []
         if value is None:
             continue
         if legacy_name == "label_blacklist" and isinstance(value, str):
@@ -4574,7 +4580,8 @@ def decode_canonical_typed_resource(
         raw, path=f"{path} resource", required={"schema", "kind", "value"}
     )
     resource_schema = payload["schema"]
-    if resource_schema not in {1, 2, 3} or payload["kind"] != value_kind:
+    # `True == 1` and `1.0 == 1`: only an integer names a schema (OV-1930).
+    if type(resource_schema) is not int or resource_schema not in _TYPED_RESOURCE_SCHEMAS or payload["kind"] != value_kind:
         raise CanonicalRequestDecodingError(
             f"Canonical JSON resource metadata does not match {path}."
         )
@@ -4584,6 +4591,111 @@ def decode_canonical_typed_resource(
         path=f"{path}.value",
         resource_schema=resource_schema,
     )
+
+
+def describe_canonical_typed_resources(resources: Mapping[str, tuple[str, type]]) -> dict[str, Any]:
+    """Describe the JSON that :func:`decode_canonical_typed_resource` decodes,
+    for each ``key: (value_kind, expected)`` of ``resources``.
+
+    Returns ``{"roots": {key: name}, "types": {name: shape}}`` with the shapes
+    of :mod:`gbdraw.contract_shapes`: per key the resource object, one option
+    per resource schema whose tree decoder can accept ``expected``, and each
+    dataclass as the ``{"type", "fields"}`` object its decoder requires,
+    named ``<class>Schema<n>`` after the schema it is first described for. The description is structural: a value inside
+    it is still refused where a class checks its values (``__post_init__``)
+    or where an ``OrthologPathCollection`` reads its own fields
+    (``from_payload``); the shape of a path collection holds only the tagged
+    object its decoder requires before that read.
+    """
+
+    from .contract_shapes import (
+        BOOLEAN, INTEGER, NULL, NUMBER, STRING, UNKNOWN, Shape, array, literal, obj, record, ref, union,
+    )
+
+    scalars: dict[object, Shape] = {str: STRING, int: INTEGER, float: NUMBER, bool: BOOLEAN, type(None): NULL}
+    named: dict[str, Shape] = {}
+
+    def tree(hint: object, schema: int) -> Shape | None:
+        """The shape of a value of ``hint`` under ``schema``; ``None`` where
+        its decoder refuses every value (as :func:`_build_typed_tree_decoder`)."""
+
+        if hint is OrthologPathCollection:
+            if schema != 3:
+                return None
+            return obj({"type": literal("OrthologPathCollection"), "fields": record(UNKNOWN)})
+        if hint is Any or hint is object:
+            return UNKNOWN
+        origin = get_origin(hint)
+        args = get_args(hint)
+        if origin in {types.UnionType, Union}:
+            options = [shape for shape in (tree(branch, schema) for branch in args) if shape is not None]
+            return union(*options) if options else None
+        if (hint is OrthogroupGraphResult and schema != 3) or (hint is OrthogroupResult and schema == 3):
+            return None
+        if isinstance(hint, type) and is_dataclass(hint):
+            return dataclass_shape(hint, schema)
+        if origin in {tuple, list, Sequence, SequenceABC} or hint in {tuple, list}:
+            return array(required_tree(args[0] if args else Any, schema, hint))
+        if origin in {dict, Mapping, MappingABC} or hint is dict:
+            key_hint, value_hint = args if len(args) == 2 else (str, Any)
+            return record(required_tree(value_hint, schema, hint)) if key_hint is str else None
+        if origin is Literal:
+            return literal(*args)
+        if hint in scalars:
+            return scalars[hint]
+        raise TypeError(f"No typed resource shape is defined for the type {hint!r}.")
+
+    def required_tree(hint: object, schema: int, owner: object) -> Shape:
+        shape = tree(hint, schema)
+        if shape is None:
+            raise TypeError(f"An item of {owner!r} has no value its decoder accepts.")
+        return shape
+
+    def dataclass_shape(hint: type, schema: int) -> Shape | None:
+        name = f"{hint.__name__}Schema{schema}"
+        if name in named:
+            return ref(name)
+        if hint.__name__ not in _TYPED_TREE_CLASSES:
+            return None
+        optional = _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset()) if schema == 1 else frozenset()
+        hints = _class_type_hints(hint)
+        named[name] = UNKNOWN  # a class that holds itself refers to its name
+        fields_: dict[str, Shape] = {}
+        for key, item in _class_field_defs(hint).items():
+            shape = tree(hints[item.name], schema)
+            if shape is not None:
+                fields_[key] = shape
+            elif key not in optional:
+                del named[name]
+                return None
+        shape = obj({
+            "type": literal(hint.__name__),
+            "fields": obj(fields_, optional=sorted(optional.intersection(fields_))),
+        })
+        # An equal shape described for another schema keeps its name, so each shape is written once.
+        same = next(
+            (f"{hint.__name__}Schema{n}" for n in _TYPED_RESOURCE_SCHEMAS
+             if n != schema and named.get(f"{hint.__name__}Schema{n}") == shape),
+            None,
+        )
+        if same is not None:
+            del named[name]
+            return ref(same)
+        named[name] = shape
+        return ref(name)
+
+    roots: dict[str, str] = {}
+    for key, (value_kind, expected) in resources.items():
+        options = [
+            obj({"schema": literal(schema), "kind": literal(value_kind), "value": value})
+            for schema in _TYPED_RESOURCE_SCHEMAS
+            if (value := tree(expected, schema)) is not None
+        ]
+        if not options:
+            raise TypeError(f"No typed resource schema decodes {expected!r}.")
+        roots[key] = f"{expected.__name__}Resource"
+        named[roots[key]] = union(*options)
+    return {"roots": roots, "types": named}
 
 
 def _read_typed_json_resource(
@@ -5734,6 +5846,7 @@ __all__ = [
     "decode_canonical_typed_resource",
     "decode_canonical_request",
     "describe_canonical_request",
+    "describe_canonical_typed_resources",
     "describe_legacy_request_tables",
     "encode_canonical_table",
     "encode_canonical_typed_resource",

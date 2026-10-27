@@ -55,6 +55,7 @@ from gbdraw.session import (
     SessionDrawingSpec,
     SessionVersionError,
     build_session_document,
+    drawings_document_from_legacy,
     load_session_document,
     materialize_session,
     render_session,
@@ -1792,6 +1793,87 @@ def test_a_schema_2_linear_card_with_two_records_keys_its_edits_by_record(tmp_pa
     ]
 
 
+def test_upgrade_keeps_the_group_names_a_session_39_held_in_orthogroup_state(
+    tmp_path: Path,
+) -> None:
+    # A Session 27-44 holds its group names in ``orthogroupState`` (as Web
+    # Load read them, OV-1929 d); Session 46 keeps them in the Linear
+    # drawing's ``config.webEdits``, so the upgrade moves them there.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    session["orthogroupState"]["orthogroupNameOverrides"] = {"og_1": "renamed"}
+    session["orthogroupState"]["orthogroupDescriptionOverrides"] = {"og_2": "about"}
+    assert session["config"]["webEdits"]["orthogroupNameOverrides"] == {}
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["config"]["webEdits"]["orthogroupNameOverrides"] == {"og_1": "renamed"}
+    assert linear["config"]["webEdits"]["orthogroupDescriptionOverrides"] == {"og_2": "about"}
+
+
+def test_upgrade_keeps_the_current_derived_losat_entries_a_session_39_held(
+    tmp_path: Path,
+) -> None:
+    # OV-1966 (D-15-146): the old Web Load kept a Session 27-44's current
+    # derived LOSATP entries (the newest 16; the Web reader caps them), so
+    # Python's conversion keeps every one the replay's validation admits.
+    session = json.loads(gzip.decompress(_VERSION_39_SESSION.read_bytes()))
+    [derived] = session["losatDerivedCache"]["entries"]
+    assert derived["schema"] == 3 and derived["idEncoding"] == "runtime-handle-v1"
+    session["losatDerivedCache"]["entries"] = [
+        derived,
+        *({**derived, "key": f"{derived['key']}-{index}"} for index in range(16)),
+    ]
+
+    upgraded = upgrade_session_document(session, temporary_directory=tmp_path).document.to_dict()
+
+    linear = next(entry for entry in upgraded["drawings"] if entry["id"] == "linear")
+    assert linear["losatDerivedCache"]["entries"] == session["losatDerivedCache"]["entries"]
+
+
+def test_a_request_less_session_30_keeps_its_alignment_target_in_its_drawings(
+    tmp_path: Path,
+) -> None:
+    # OV-2006 (D-15-147): with no request, the target has no typed request
+    # to move into; the old Web Load kept it ("og_1"), so the drawings keep it
+    # in ``orthogroupState``. A Session with a request still moves it.
+    session = json.loads(gzip.decompress(_RELEASE_0_13_0_SESSION.read_bytes()))
+    assert "renderRequest" not in session
+    assert session["orthogroupState"]["selectedOrthogroupAlignmentFeature"] == "og_1"
+
+    converted = drawings_document_from_legacy(session, temporary_directory=tmp_path).document
+
+    assert {
+        drawing["id"]: drawing["orthogroupState"].get("selectedOrthogroupAlignmentFeature")
+        for drawing in converted["drawings"]
+    } == {"linear": "og_1", "circular": "og_1"}
+
+
+def test_kept_derived_losat_entries_take_the_rewritten_protein_ids() -> None:
+    # A legacy protein ID the migration resolved is rewritten in the derived
+    # entries the drawing keeps, as in every other artifact (D-15-146).
+    entry = {
+        "schema": 3,
+        "kind": "derived-losatp-payload",
+        "idEncoding": "runtime-handle-v1",
+        "key": "derived-key",
+        "mode": "orthogroup",
+        "payload": {"members": ["p_r_0_1"]},
+    }
+
+    state = session_migration.with_current_artifacts(
+        {},
+        losat_cache_entries=(),
+        protein_identity_manifest=None,
+        losat_derived_cache_entries=(entry,),
+        protein_id_map={"p_r_0_1": "handle-1"},
+    )
+
+    assert state["losatDerivedCache"]["entries"] == [
+        {**entry, "payload": {"members": ["handle-1"]}}
+    ]
+
+
 @pytest.mark.parametrize("index", ["x", None, "missing"])
 def test_a_malformed_record_index_fails_the_upgrade_as_without_edits(
     index: object, tmp_path: Path
@@ -2130,15 +2212,14 @@ def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path:
     assert adapted.migration_report.warnings == ()
 
 
-def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
+def test_session_30_rendered_id_color_rule_is_named_in_the_cli_sidecar(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Release 0.13.0 wrote a "This feature only" color rule with the rendered
     # ID of the reverse-complemented TESTB_0006 (f2869b912_record_2,
-    # hash-color-rule-linear-rc.provenance.json). Web Load reads the sources
-    # again and names it by its source hash fbc76b20f (OV-416). The CLI does not
-    # read the sources of a Session before 31 again, so the written Session
-    # keeps the rule as saved and the replay reports it.
+    # hash-color-rule-linear-rc.provenance.json). The conversion reads the
+    # cards' sources again, as Web Load does, so the written Session names it
+    # by its source hash fbc76b20f (OV-416, OV-2043) and nothing is reported.
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
     source = json.loads(gzip.decompress(fixture.read_bytes()))
     sidecar = tmp_path / "replay.gbdraw-session.json"
@@ -2154,8 +2235,8 @@ def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
     )
 
     saved = drawing_view(load_session_document(sidecar).to_dict(), mode="linear")
-    assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
-    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
+    assert saved["modes"]["linear"]["config"]["rules"] == [{**source["config"]["rules"][0], "val": "fbc76b20f"}]
+    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) not in caplog.messages
 
 
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:

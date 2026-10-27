@@ -231,6 +231,24 @@ export const updateActiveLayoutPreference = (
 };
 
 /**
+ * The layout a committed request sets: the slot of its mode and grouping
+ * holds its output's legend and title sides; the other slots keep their
+ * defaults. The request projection and Load's read of a Session 27-44
+ * (OV-1967) read it here.
+ * @param {{ mode?: unknown, grouping?: unknown, diagramOptions?: { output?: StoredLayoutSides | null } | null }} renderRequest
+ * @returns {LayoutPreferences}
+ */
+export const requestLayoutPreferences = ({ mode, grouping, diagramOptions }) => {
+  const layoutPreferences = createDefaultLayoutPreferences();
+  const output = diagramOptions?.output;
+  updateActiveLayoutPreference(layoutPreferences, String(mode), mode === 'circular' && grouping === 'grid', {
+    legend: output?.legend || 'right',
+    plotTitlePosition: output?.plotTitlePosition || (mode === 'linear' ? 'bottom' : 'none')
+  });
+  return layoutPreferences;
+};
+
+/**
  * Whether a circular multi-record side is stored (a null side follows the
  * single-record side).
  * @param {LayoutPreferences} preferences
@@ -284,7 +302,8 @@ export const normalizeLayoutPreferences = (source) => {
 
 /**
  * @param {Record<string, unknown> | null | undefined} ui
- * @param {{ mode?: string, multiRecord?: boolean, activeLegend?: string, activePlotTitlePosition?: string }} [context]
+ * @param {{ mode?: string, multiRecord?: boolean, activeLegend?: unknown, activePlotTitlePosition?: unknown }} [context]
+ *   An unset active side reads as the mode's default.
  * @returns {LayoutPreferences}
  */
 export const migrateLegacyLayoutPreferences = (
@@ -436,14 +455,39 @@ export const storedLegendPositionRepairs = (ui, path, { slotOf = null, projected
 };
 
 /**
+ * What a Session 27-44's layout is restored with: the mode of the drawing
+ * that opens, whether its draft draws a Circular multi-record canvas, the
+ * layout of its committed request (a canonical Session's; else null), and
+ * its draft's legend and title sides (`active`, an unset side reads as the
+ * mode's default).
+ * @typedef {{ mode: string, multiRecord: boolean, projected?: StoredLayoutPreferences | null,
+ *   active: StoredLayoutSides }} RestoredLayoutContext
+ */
+/**
+ * A Session 27-44's `ui` as Load reads its layout, at the file's own path,
+ * before Python converts the file (D-15-129): what it does not use as stored
+ * (`storedLegendPositionRepairs`), and its layout as Load restores it
+ * (`restoredLayoutPreferences`: the stored `ui.layoutPreferences`, else the
+ * legacy `ui` fields, else the committed request's layout), in
+ * `ui.layoutPreferences`, so Python receives the read value (OV-1967).
+ * @param {Record<string, unknown>} ui
+ * @param {string} path Where `ui` is in the file.
+ * @param {RestoredLayoutContext} context
+ * @returns {{ value: Record<string, unknown>, repairs: LoadRepair[] }}
+ */
+export const readStoredLayoutUi = (ui, path, context) => ({
+  value: { ...ui, layoutPreferences: normalizeLayoutPreferences(restoredLayoutPreferences(ui, context)) },
+  repairs: storedLegendPositionRepairs(ui, path)
+});
+
+/**
  * The layout preferences a Session 27-44 restores (Session Load and Gallery
  * publication). A saved layout owner (current or legacy `ui` fields) wins.
  * Without one, a canonical Session takes the layout projected from its
  * committed request (`projected`). Legacy fields migrate with the committed
  * values (canonical) or `active` (other payloads) as their fallback.
  * @param {Record<string, unknown> | null | undefined} ui
- * @param {{ mode: string, multiRecord: boolean, projected?: StoredLayoutPreferences | null,
- *   active: ActiveLayoutPreference }} context
+ * @param {RestoredLayoutContext} context
  * @returns {LayoutPreferences}
  */
 export const restoredLayoutPreferences = (ui, { mode, multiRecord, projected = null, active }) => {

@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
@@ -27,6 +27,10 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
@@ -426,8 +430,9 @@ test('OV-899: a dropped comparison file binding loads as a removed file; Save an
     const removed = q42();
     delete removed.resources['comparison-nucleotide-1'];
     for (const [name, session, rows, comparisons] of [
+      // The request's table, in the search frame, is the one Python's conversion frames as a new resource (D-15-129).
       ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
-        ['comparison-nucleotide-1']],
+        ['comparison-losat-1']],
       ['resource removed', removed, [
         'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
         'request-reference-dropped renderRequest.comparisons[0]'

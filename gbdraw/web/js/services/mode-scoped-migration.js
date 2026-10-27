@@ -25,6 +25,19 @@ import { ANNOTATION_RECORD_BINDING_KEY } from './annotation-state.js';
 export const SLICE_MODES = Object.freeze(['circular', 'linear']);
 /** @type {readonly ModeScopedRow[]} */
 export const MODE_SCOPED_ROWS = MODE_SCOPED_SETTINGS.rows;
+/**
+ * The draft fields (dotted, under `config`) of the other mode's `own`
+ * registry rows: Python's split gives such a row to its mode's drawing alone
+ * (`_split_setting`), so `mode`'s drawing reads a flat draft, and takes its
+ * request's projection, without them.
+ * @param {SliceMode} mode
+ * @returns {readonly string[]}
+ */
+const otherModeOwnFields = (mode) => Object.freeze(MODE_SCOPED_ROWS
+  .filter((row) => row.migrate === 'own' && row.modes !== mode && (row.domain === 'config' || row.domain.startsWith('config.')))
+  .map((row) => [row.domain.slice('config.'.length), row.path].filter(Boolean).join('.')));
+/** @type {Readonly<Record<SliceMode, readonly string[]>>} */
+export const OTHER_MODE_OWN_FIELDS = Object.freeze({ circular: otherModeOwnFields('circular'), linear: otherModeOwnFields('linear') });
 /** @type {readonly string[]} */
 export const LOSAT_EXECUTION_FIELDS = MODE_SCOPED_SETTINGS.losatExecutionFields;
 
@@ -121,7 +134,7 @@ const depthSlots = (value) => (Array.isArray(value) ? [...value] : jsTruthy(valu
  * @param {unknown} bindings
  * @returns {Record<SliceMode, number>}
  */
-export const sessionDepthSourceWidths = (bindings) => {
+const sessionDepthSourceWidths = (bindings) => {
   const source = isObject(bindings) ? /** @type {Record<string, any>} */ (bindings) : {};
   const circular = source.c_depth;
   const circularRows = Array.isArray(circular) && circular.every(Array.isArray)
@@ -141,7 +154,7 @@ export const sessionDepthSourceWidths = (bindings) => {
  * @param {unknown} modeProfiles
  * @returns {SliceMode | null}
  */
-export const profileActiveMode = (draft, modeProfiles) => (
+const profileActiveMode = (draft, modeProfiles) => (
   sliceMode(draft?.ui?.mode)
   || sliceMode(draft?.renderRequest?.mode)
   || sliceMode(isObject(modeProfiles) ? /** @type {Record<string, any>} */ (modeProfiles).activeMode : null)

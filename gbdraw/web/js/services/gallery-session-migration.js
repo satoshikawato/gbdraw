@@ -20,6 +20,7 @@ import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js
 import { resolveActiveLayoutPreference } from './layout-preferences.js';
 import {
   createLinearComparisonEdge,
+  LEGACY_COMPARISON_SOURCE_FIELDS,
   normalizeLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
@@ -323,11 +324,13 @@ const stableMigratedComparisonId = (prefix, index, queryUid, subjectUid) => {
 
 /** @param {Partial<ActiveWebConfig> & { blastSource?: unknown }} config The legacy draft: `blastSource` is the pre-plan comparison source. */
 const stripLegacyComparisonConfig = (config) => {
-  delete config.blastSource;
-  if (isPlainObject(config.adv)) delete config.adv.blastSource;
-  if (isPlainObject(config.linearRecordLayout)) {
-    delete config.linearRecordLayout.comparisons;
-  }
+  LEGACY_COMPARISON_SOURCE_FIELDS.forEach((at) => {
+    const [head, field] = at.split('.');
+    /** @type {Record<string, unknown>} */
+    const holder = config;
+    const container = field === undefined ? holder : holder[head];
+    if (isPlainObject(container)) delete container[field ?? head];
+  });
 };
 
 /** @param {{ file?: unknown } | null | undefined} comparison */

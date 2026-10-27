@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { File } from 'node:buffer';
 import { installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import { savedDrawingView, savedModesView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
@@ -31,6 +31,10 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { getCommittedCanonicalSession, setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConfig;
@@ -62,11 +66,12 @@ const input = (session) => ({
   target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
 });
 // What a Load replaces: the settings and edits of both drawings, the shown
-// mode and Results, the title, the input files.
-const loadedState = () => JSON.stringify({
+// mode and Results, the title, the input files. `shownResults: false` leaves
+// the shown Results out.
+const loadedState = ({ shownResults = true } = {}) => JSON.stringify({
   mode: state.mode.value,
   title: state.sessionTitle.value,
-  results: state.results.value.map((result) => result.content),
+  ...(shownResults ? { results: state.results.value.map((result) => result.content) } : {}),
   files: [...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
   drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
     const drawing = modeDrawing(state, mode);
@@ -91,6 +96,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   });
   assert.equal(before.status, 'ok', JSON.stringify(before.error));
   const snapshot = loadedState();
+  const snapshotWithoutResults = loadedState({ shownResults: false });
 
   const dialogs = [];
   const reached = [];
@@ -98,8 +104,10 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   const canceled = await importSession(event, {
     confirmLoadRepairs: async (dialog) => {
       dialogs.push(dialog);
-      // Nothing is applied while the question is open.
-      assert.equal(loadedState(), snapshot);
+      // Nothing is applied while the question is open. A Session 27-44 shows
+      // its stored figure while Python upgrades it (DESIGN 4.3, D-15-145): the
+      // shown Results are left out here, and Cancel restores them (below).
+      assert.equal(loadedState({ shownResults: false }), snapshotWithoutResults);
       return false;
     },
     rollbackState: spyOnPort(() => reached.push('snapshot'), () => reached.push('restore')),
@@ -144,6 +152,24 @@ test('a legend position outside its mode is listed at Load (OV-652)', async () =
   assert.equal(state.generatedLegendPosition.value, 'bottom');
   assert.equal(modeDrawing(state, 'linear').form.legend, 'bottom');
   assert.equal(modeDrawing(state, 'circular').layoutPreferences.circular.single.legend, 'upper_left');
+});
+
+// OV-1967: a Session 27-43 keeps its layout in the legacy `ui` fields. Load
+// reads them as the Load before the Worker route did
+// (`restoredLayoutPreferences`): `ui.legend` gives the Linear legend when
+// `ui.linearLegendPosition` holds no Linear position, which is listed.
+test('a Session 27-44 layout kept in legacy ui fields reaches its drawings (OV-1967)', async () => {
+  const session = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+  delete session.ui.layoutPreferences;
+  session.ui.legend = 'top';
+  session.ui.linearLegendPosition = 'banana';
+  const dialogs = [];
+  const loaded = await importSession(input(session), { confirmLoadRepairs: async ({ items }) => { dialogs.push(items); return true; } });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(dialogs, [[
+    'Legend: the position "banana" (ui.linearLegendPosition) is not one of its mode\'s positions; it is not used.'
+  ]]);
+  assert.equal(modeDrawing(state, 'linear').layoutPreferences.linear.legend, 'top');
 });
 
 // G2: what Load applies after the dialog is what the dialog listed. Each
@@ -1341,7 +1367,11 @@ test('a Session 44 font override adopted into an adv that is no object lists the
   });
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
   assert.deepEqual(dialogs, [['Settings: the value "5" (config.adv) cannot be used; its default is used.']]);
-  assert.deepEqual(['circular', 'linear'].map((mode) => modeDrawing(state, mode).adv.font_family), ["'Pres Font'", "'Pres Font'"]);
+  // Only the Linear drawing (the request mode's) carries the font: the
+  // Contract's migration rule d keeps the other mode's drawing only when a
+  // registry row differs from its default, and the font override is no
+  // registry row, so the Circular drawing is the default (D-15-144, OV-1994).
+  assert.equal(modeDrawing(state, 'linear').adv.font_family, "'Pres Font'");
   // An object `adv` takes the font with no row.
   const kept = fixture('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
   kept.config.unmanagedConfigOverrides = { 'objects.text.font_family': "'Pres Font'" };
@@ -1640,6 +1670,46 @@ test('a schema 1/2 request lists an invalid comparison height of its full config
   }
 });
 
+// A Session 31-39 draft the CLI wrote (no record layout, CLI options) gains no
+// Web comparison; a Web draft without a stored layout keeps its adjacent plan
+// and its request's alignment, as the old Load read them (OV-2048).
+test('a Session 31-39 CLI draft loads with no comparison and a Web draft keeps its plan (OV-2048)', async () => {
+  for (const [name, mode, translations, groupId] of [
+    ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'none', 0, null],
+    ['BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'adjacent', 5, 'og_1']
+  ]) {
+    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.equal(modeDrawing(state, 'linear').linearComparisonPlan.mode, mode, name);
+    assert.deepEqual([state.linearRecordTranslations.value.length, state.similarityAlignmentPlan.value?.groupId ?? null],
+      [translations, groupId], name);
+  }
+});
+
+// Each drawing of a Session 27-44 reads the draft without the other mode's
+// own rows, as Python's split gives it its slice: a Linear `depth_height`
+// fills no Circular Depth series (auto height, as the old Load; OV-2059).
+test('a Session 27-44 Linear Depth height draws the Linear series and leaves the Circular one at auto (OV-2059)', async () => {
+  for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz']) {
+    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null], name);
+  }
+  // The drawings read the stored `depth_tracks: []` differently (Linear 10,
+  // Circular auto), so Python receives it as stored and the Linear drawing
+  // reads its `depth_height` series again (OV-2059). Its Circular drawing
+  // takes no Linear-own row from its Circular request's projection: its Depth
+  // series stays at auto and those rows keep their defaults, as the old Load
+  // (OV-2049).
+  const loaded = await importSession(input(fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz')),
+    { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(['linear', 'circular'].map((mode) => modeDrawing(state, mode).adv.depth_tracks[0].height), [10, null]);
+  const circular = modeDrawing(state, 'circular').adv;
+  assert.deepEqual(['depth_height', 'gc_height', 'scale_stroke_width', 'scale_stroke_color', 'ruler_label_color']
+    .map((field) => circular[field]), [null, null, null, null, null]);
+});
+
 test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {
   const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
   delete session.renderRequest.diagramOptions.config;
@@ -1679,8 +1749,11 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
 // gui-audit-20260930-inputs and live-generate-parity assert no dialog for
 // seven; session-loading-feedback answers the one table row of
 // whitelist-tab-keyword.v39 and loads the two mode-switch v30 fixtures without
-// a dialog: their recovery reads the inputs of the Result's mode (OV-677). Five fixtures need a Worker service to load at
-// all; feature-identity-overrides and gui-audit-20260930-comparisons load them.
+// a dialog: their recovery reads the inputs of the Result's mode (OV-677). Five
+// fixtures needed a Worker service to load at all until Python converted a
+// Session 27-44 (OV-1958, D-15-140); they load in node now, the cropped or
+// reversed ones asking the diagram Worker for their features. The browser
+// specs feature-identity-overrides and gui-audit-20260930-comparisons load them.
 const LOSSY_FIXTURES = {
   'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
   'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']
@@ -1692,13 +1765,9 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   'scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz',
   'mode-switch-circular-result-linear-shown.v30.gbdraw-session.json.gz', 'mode-switch-linear-result-circular-shown.v30.gbdraw-session.json.gz',
   'legacy-font-size-zero-circular-cli.v30.gbdraw-session.json.gz', 'legacy-font-size-zero-linear-cli.v30.gbdraw-session.json.gz',
+  'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz', 'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz',
   // gui-audit-20260930-comparisons loads it in the browser (OV-1181).
   'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
-]);
-const NEEDS_DIAGRAM_WORKER = new Set([
-  'feature-edits-circular.v33.gbdraw-session.json.gz', 'feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz',
-  'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'q-frame-main-web-losatn.v42.gbdraw-session.json.gz',
-  'q-frame-main-web-upload.v42.gbdraw-session.json.gz'
 ]);
 // G2b (E-OD02): the document Save writes after each of those Loads reads
 // again with no repair of the document reader (`readSessionDocument`); the
@@ -1717,7 +1786,8 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     constructor(url) { askedDiagramWorker ||= !String(url).endsWith('/session-import-worker.js'); super(url); }
   };
   // The protein result conversion answers "nothing changed"; it is asked for
-  // exactly the Sessions that stored protein results of a reversed record.
+  // exactly the Sessions 46-47 that stored protein results of a reversed
+  // record (Python's conversion of a Session 27-44 moves its own, OV-1969).
   const askedProteinConversion = new Set();
   let current = '';
   setStoredProteinResultFrameConverter(async () => { askedProteinConversion.add(current); return { result: { resources: {} } }; });
@@ -1727,10 +1797,6 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     askedDiagramWorker = false;
     current = name;
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
-    if (NEEDS_DIAGRAM_WORKER.has(name)) {
-      assert.equal(loaded.status, 'error', `${name} loads in node now: check it here`);
-      continue;
-    }
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
     assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
@@ -1745,34 +1811,37 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
   globalThis.Worker = ImportWorker;
   setStoredProteinResultFrameConverter(null);
   assert.deepEqual([...askedProteinConversion].sort(), [
-    'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz', 'BGC0000708-BGC0000709-rc.v40-early.gbdraw-session.json.gz',
     'BGC0000708-BGC0000713.v47.gbdraw-session.json.gz', 'majanivirus_collinear-rc.v47.gbdraw-session.json.gz'
   ]);
 });
 
-// OV-1181: a Session 39 converts too. Its Load commits a detached copy of the
-// stored document, which takes the returned bytes, and the Linear draft's
-// comparisons are projected again from them.
-test('a Session 39 with a protein table of a reversed record installs the converted bytes Python returns at Load', async () => {
+// OV-1181: a Session 39 stores the protein table of its reversed record in
+// the drawn frame. Python's conversion of the Session 27-44 moves it into the
+// search frame (`drawn_frame_protein_results_to_search_frame`), so Load asks
+// no second conversion (OV-1969); what Load commits and the Linear draft hold
+// those bytes, under the ID Python's Session 49 gives the table (OV-1959).
+test('a Session 39 with a protein table of a reversed record installs the bytes Python converted at Load', async () => {
   const session = fixture('BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz');
-  const tableId = 'comparison-resolved-1';
-  const converted = `${resourceText(session.resources[tableId])}# converted\n`;
+  const rows = (text) => text.trimEnd().split('\n').map((line) => line.split('\t'));
+  const [header, ...stored] = rows(resourceText(session.resources['comparison-resolved-1']));
+  const column = (name) => header.indexOf(name);
+  // BGC0000709 (50,466 bp) is drawn reversed: its search frame mirrors the drawn one.
+  const searchFrame = (row) => [row[column('qstart')], row[column('qend')],
+    String(50467 - Number(row[column('sstart')])), String(50467 - Number(row[column('send')]))];
   const calls = [];
-  setStoredProteinResultFrameConverter(async (payload) => {
-    calls.push({ version: payload.version, resources: Object.keys(payload.resources).sort() });
-    return { result: { resources: { [tableId]: {
-      data: Buffer.from(converted, 'utf8').toString('base64'), size: Buffer.byteLength(converted)
-    } } } };
-  });
+  setStoredProteinResultFrameConverter(async (payload) => { calls.push(payload.version); return { result: { resources: {} } }; });
   try {
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-    assert.deepEqual(calls, [{ version: 39, resources: Object.keys(session.resources).sort() }]);
-    const committed = getCommittedCanonicalSession();
-    assert.equal(resourceText(committed.resources[tableId]), converted, 'the committed copy holds the converted bytes');
-    assert.equal(committed.resources[tableId].size, Buffer.byteLength(converted));
+    assert.deepEqual(calls, [], 'Python converted the table: Load asks no second conversion');
     const draft = modeDrawing(state, 'linear').files.linearCanonicalComparisons.find((item) => item.kind === 'precomputedProteinComparison');
-    assert.equal(await state.inputFiles.fileOf(draft.file).text(), converted, 'the Linear draft holds the converted bytes');
+    const text = await readSessionResourceText(state.inputFiles.fileOf(draft.file));
+    const [, ...converted] = rows(text);
+    assert.deepEqual(converted.map((row) => row.slice(column('qstart'), column('send') + 1)), stored.map(searchFrame),
+      'the Linear draft holds the table in the search frame');
+    const committed = getCommittedCanonicalSession();
+    const ids = Object.keys(committed.resources).filter((id) => resourceText(committed.resources[id]) === text);
+    assert.equal(ids.length, 1, 'the committed copy holds the same bytes under one ID');
   } finally {
     setStoredProteinResultFrameConverter(null);
   }

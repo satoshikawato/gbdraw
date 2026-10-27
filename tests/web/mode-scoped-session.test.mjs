@@ -13,7 +13,7 @@ import { callerSession } from './helpers/session-caller.mjs';
 import { SESSION_DRAWINGS_LAYOUT } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import { savedDrawingView, withSavedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
-import { evaluatePython, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { evaluatePython, validateWebConfigOverrides, pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { createHash } from 'node:crypto';
 
 globalThis.window = {
@@ -31,6 +31,10 @@ globalThis.document = {
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
@@ -921,6 +925,8 @@ const BAND_READERS = {
   'services/session-authority.js BINDING_SCHEMA_2_VERSIONS': 'band list: the versions whose bindings may be schema 2',
   'services/session-drawings-upgrade.js sessionLegendEditsByRowKey': 'before the upgrade: rekeys a Session 46\'s Legend edits',
   'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-48, writes sourceFacts',
+  'services/session-drawings-upgrade.js sessionSourceFactsOf':
+    'the source facts by version (one owner, shared by the 46-48 upgrade and the 27-44 Load)',
   'services/svg-result-ingestion.js createSavedResultPlan':
     'a Session 27-44 saved no paint records with its Results (B2d-4: Python supplies them, else one sourceFacts fact)',
   'services/main-session-comparison-frame.js storesDrawnFrameProteinResults':

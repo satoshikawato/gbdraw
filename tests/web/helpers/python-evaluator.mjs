@@ -138,3 +138,18 @@ export const groupColorRulesOver = (preparation, labelsOf = () => []) => (featur
   const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption }, current);
   return table.map((row) => (typeof row === 'number' ? current[row] : row));
 };
+
+// Load of a Session 27-44 (DESIGN 4.3): the Worker port as the composition
+// root sets it, with Python's upgrade evaluated here; a helper error is
+// thrown as the Worker client throws it. `calls` collects each document sent.
+export const pythonLegacySessionUpgrader = (calls = []) => async ({ document, storedRequestSchema }) => {
+  calls.push(document);
+  const reply = JSON.parse(await evaluatePython(`
+import json
+from gbdraw.web_support.legacy_session import legacy_session_to_drawings_json
+request = json.loads(payload)
+result = legacy_session_to_drawings_json(json.dumps(request["document"]), json.dumps(request["storedRequestSchema"]))
+`, JSON.stringify({ document, storedRequestSchema: storedRequestSchema ?? null })));
+  if (reply.error) throw reply.error;
+  return { result: reply };
+};

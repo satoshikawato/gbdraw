@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Literal, Optional, get_type_hints
+from typing import Any, Callable, Literal, Optional, get_type_hints
 
 import pytest
 
@@ -48,7 +48,7 @@ def test_the_contracts_directory_holds_only_the_generated_modules() -> None:
     generator = _generator()
     targets = {
         generator.TARGET, generator.REQUEST_TARGET, generator.SESSION_TARGET, generator.REQUEST_SHAPE_TARGET,
-        generator.SESSION_SHAPE_TARGET, generator.RULE_SYNTHESIS_TARGET,
+        generator.SESSION_SHAPE_TARGET, generator.RULE_SYNTHESIS_TARGET, generator.DERIVED_RESULT_SHAPE_TARGET,
     }
 
     assert set(generator.TARGET.parent.rglob("*")) == targets
@@ -450,3 +450,111 @@ def test_the_gallery_drawn_drawing_count_has_one_python_owner() -> None:
     assert f"export const GALLERY_SESSION_DRAWN_DRAWINGS = {GALLERY_SESSION_DRAWN_DRAWINGS};" in generated
     publication = (REPO_ROOT / "gbdraw/web/js/services/gallery-session-publication.js").read_text(encoding="utf-8")
     assert "drawn.length !== GALLERY_SESSION_DRAWN_DRAWINGS" in publication
+
+
+def test_the_derived_result_shape_module_is_the_description_as_frozen_data() -> None:
+    source = _generator().render_derived_result_shape_module()
+
+    # A leaf imports a leaf (R13): only the type the checker declares.
+    assert re.findall(r"\bimport\b.*|\bfrom\s+['\"].*", source) == [
+        "import { RootedContractDescription } from '../utils/contract-shape.js' */"
+    ]
+    assert re.search(r"\bany\b", source) is None
+
+
+def _typed_results() -> dict[str, list[tuple[str, object]]]:
+    """Per derived mode, typed result resources: written ones, empty ones and near misses."""
+
+    import copy
+    import json
+
+    from gbdraw.analysis.collinearity import CollinearityAnchor, CollinearityBlock, CollinearityResult
+    from gbdraw.analysis.protein_colinearity import OrthogroupGraphResult, OrthogroupMember
+    from gbdraw.session_request_codec import encode_canonical_typed_resource
+
+    anchor = CollinearityAnchor(
+        query_protein_id="q", subject_protein_id="s", query_record_index=0, subject_record_index=1,
+        query_order=0, subject_order=0, query_start=10, query_end=20, subject_start=30, subject_end=40,
+        identity=95.0, evalue=1e-10, bitscore=100.0, alignment_length=10, query_feature_svg_id="qf",
+        subject_feature_svg_id="sf", source="test", query_unit_id="qu", subject_unit_id="su",
+        query_unit_kind="cds", subject_unit_kind="cds", query_locus_id=None, subject_locus_id=None,
+        query_display_name="Q", subject_display_name="S",
+    )
+    member = OrthogroupMember(
+        orthogroup_id="og1", protein_id="p1", record_index=0, feature_index=0, record_id="r", label="L",
+        start=1, end=9, strand=1, feature_svg_id=None, source_protein_id=None,
+    )
+    graph = OrthogroupGraphResult(orthogroups={"og1": [member]}, member_by_protein_id={"p1": member})
+    block = CollinearityBlock(
+        block_id="b1", query_record_index=0, subject_record_index=1, orientation="plus", score=1.0, anchors=(anchor,),
+    )
+
+    def encoded(kind: str, value: object) -> dict[str, Any]:
+        return json.loads(encode_canonical_typed_resource(kind, value))
+
+    def changed(resource: dict[str, Any], change: Callable[[dict[str, Any]], object]) -> dict[str, Any]:
+        result = copy.deepcopy(resource)
+        change(result)
+        return result
+
+    empty_graph = encoded("orthogroupResult", OrthogroupGraphResult(orthogroups={}, member_by_protein_id={}))
+    empty_collinear = encoded("result", CollinearityResult(
+        blocks=(), orthogroups=OrthogroupGraphResult(orthogroups={}, member_by_protein_id={}),
+    ))
+    return {
+        "orthogroup": [
+            ("written", encoded("orthogroupResult", graph)),
+            ("empty", empty_graph),
+            ("no fields", changed(empty_graph, lambda r: r["value"].update(fields={}))),
+            ("an unknown field", changed(empty_graph, lambda r: r["value"]["fields"].update(extra={}))),
+            ("another key", changed(empty_graph, lambda r: r.update(extra=1))),
+            ("an older schema", changed(empty_graph, lambda r: r.update(schema=2))),
+            ("a fractional schema", changed(empty_graph, lambda r: r.update(schema=3.0))),
+            ("another kind", changed(empty_graph, lambda r: r.update(kind="result"))),
+            ("an array mapping", changed(empty_graph, lambda r: r["value"]["fields"].update(orthogroups=[]))),
+            ("a member without its fields", changed(
+                encoded("orthogroupResult", graph), lambda r: r["value"]["fields"]["orthogroups"]["og1"][0].update(fields={})
+            )),
+        ],
+        "collinear": [
+            ("written", encoded("result", CollinearityResult(blocks=(block,), unblocked_anchors=(anchor,)))),
+            ("empty", empty_collinear),
+            ("no orthogroups", changed(empty_collinear, lambda r: r["value"]["fields"].update(orthogroups=None))),
+            ("an older schema without orthogroups", changed(empty_collinear, lambda r: (
+                r.update(schema=2), r["value"]["fields"].update(orthogroups=None)
+            ))),
+            ("an older schema with graph orthogroups", changed(empty_collinear, lambda r: r.update(schema=2))),
+            ("a boolean schema", changed(empty_collinear, lambda r: (
+                r.update(schema=True), r["value"]["fields"].update(orthogroups=None)
+            ))),
+            ("nested no fields", changed(empty_collinear, lambda r: r["value"]["fields"]["orthogroups"].update(fields={}))),
+            ("nested legacy type", changed(
+                empty_collinear, lambda r: r["value"]["fields"]["orthogroups"].update(type="OrthogroupResult")
+            )),
+            ("a missing field", changed(empty_collinear, lambda r: r["value"]["fields"].pop("unblockedAnchors"))),
+        ],
+    }
+
+
+def test_the_derived_result_shape_accepts_what_python_decodes() -> None:
+    # OV-1926: the Web's zero-hit check reads this shape in place of Python's decode, so both accept the same results.
+    from gbdraw.analysis.protein_artifacts import _decodes_as_derived_result, describe_derived_analysis_results
+    from gbdraw.contract_shapes import ref, shape_violations
+
+    description = describe_derived_analysis_results()
+    verdicts = {
+        (mode, label): (
+            not shape_violations(resource, ref(description["roots"][mode]), description["types"], "result"),
+            _decodes_as_derived_result(mode, resource),
+        )
+        for mode, cases in _typed_results().items()
+        for label, resource in cases
+    }
+
+    assert {case: shape for case, (shape, _decoded) in verdicts.items()} == {
+        case: decoded for case, (_shape, decoded) in verdicts.items()
+    }
+    assert {case for case, (_shape, decoded) in verdicts.items() if decoded} == {
+        ("orthogroup", "written"), ("orthogroup", "empty"), ("collinear", "written"), ("collinear", "empty"),
+        ("collinear", "no orthogroups"), ("collinear", "an older schema without orthogroups"),
+    }

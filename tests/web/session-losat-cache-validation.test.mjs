@@ -1,3 +1,4 @@
+import { pythonLegacySessionUpgrader } from './helpers/python-evaluator.mjs';
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 import assert from 'node:assert/strict';
@@ -66,6 +67,10 @@ const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
 installSessionImportWorker();
+// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// Worker port does it (DESIGN 4.3).
+const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
@@ -148,6 +153,8 @@ ORIGIN
 //
 `;
   const comparisonFasta = '>comparison\naaaacccc\n';
+  /** @param {string} resourceId @param {string} name */
+  const binding = (resourceId, name) => ({ resourceId, name, type: 'text/plain', lastModified: 0 });
   const renderRequest = {
     schema: 5,
     mode: 'circular',
@@ -254,7 +261,28 @@ ORIGIN
           }
         : {})
     },
-    webFiles: { bindings: { schema: 1 } },
+    // Every slot, as the Session 40 Web writer wrote its bindings
+    // (`session-resources.js` at that version); a slot holds its file or null.
+    webFiles: {
+      bindings: {
+        schema: 1,
+        c_gb: binding('reference-record', 'reference.gbk'),
+        c_gff: null,
+        c_fasta: null,
+        c_depth: null,
+        c_conservation_blasts: [binding('comparison-blast', 'comparison.tsv')],
+        c_conservation_blasts_source: null,
+        c_conservation_fastas: [],
+        c_conservation_sequence_sources: includeComparisonFasta ? [binding('comparison-fasta', 'comparison.fna')] : [],
+        d_color: null,
+        t_color: null,
+        blacklist: null,
+        whitelist: null,
+        qualifier_priority: null,
+        linearSeqs: [],
+        linearComparisons: []
+      }
+    },
     config: {
       form: { legend: 'left' },
       adv: {
@@ -329,23 +357,32 @@ const importSessionPayload = async (payload) => importSession({
 
 test('decision-required protein comparisons stay committed without projecting a partial draft', async () => {
   alerts.length = 0;
-  const genbank = `LOCUS       TEST                        4 bp    DNA     linear   UNK 01-JAN-1980
+  // The resolved protein table's rows lie inside each record, as a writer
+  // that resolved them against the records wrote them (PD-OI-073).
+  const genbank = `LOCUS       TEST                       80 bp    DNA     linear   UNK 01-JAN-1980
 FEATURES             Location/Qualifiers
 ORIGIN
-        1 atgc
+        1 atgcatgcat gcatgcatgc atgcatgcat gcatgcatgc atgcatgcat gcatgcatgc
+       61 atgcatgcat gcatgcatgc
 //
 `;
   const proteinTable = `query\tsubject\tidentity\talignment_length\tmismatches\tgap_opens\tqstart\tqend\tsstart\tsend\tevalue\tbitscore
 protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 `;
+  // The typed resources as Python's encoder writes them (schema 1, the
+  // schema of a Session 39 writer): `kind` names the value kind and the value
+  // is a typed tree (`encode_canonical_typed_resource`).
+  const emptyGroupFields = ['orthogroups', 'memberByProteinId', 'confidenceByOrthogroupId', 'descriptionsByOrthogroupId',
+    'nameCandidatesByOrthogroupId', 'namesByOrthogroupId', 'orthologEdgesByOrthogroupId', 'orthologPathsByOrthogroupId',
+    'rbhOrthogroups', 'relatedEdgesByOrthogroupId', 'scopeByOrthogroupId', 'sourceRecordIndexByOrthogroupId'];
   const orthogroupsJson = JSON.stringify({
     schema: 1,
-    valueKind: 'orthogroupResult',
-    value: { orthogroups: {} }
+    kind: 'orthogroupResult',
+    value: { type: 'OrthogroupResult', fields: Object.fromEntries(emptyGroupFields.map((field) => [field, {}])) }
   });
   const collinearityJson = JSON.stringify({
     schema: 1,
-    valueKind: 'blocks',
+    kind: 'blocks',
     value: []
   });
   const generatedProteinComparison = {
@@ -368,7 +405,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
       collinearitySearchScope: 'all',
       collinearityColorMode: 'average_identity',
       losatpBin: '/custom/losat',
-      ncbiBlastpBin: '/custom/blastp',
+      ncbiBlastpBin: null,
       losatpThreads: 2,
       proteinBlastpMaxHits: 9,
       proteinBlastpCandidateLimit: 17,
@@ -506,7 +543,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     confirmLoadRepairs: async (dialog) => { listed.push(...dialog.items); return true; }
   });
 
-  assert.equal(result.status, 'ok');
+  assert.equal(result.status, 'ok', JSON.stringify(result, (key, value) => (value instanceof Error ? value.message : value)));
   assert.deepEqual(result.repairs.map(({ code, path }) => ({ code, path })), [
     { code: 'request-part-dropped', path: 'renderRequest.layout.similarityAlignment' }
   ]);
@@ -516,12 +553,28 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
   assert.equal(state.activeDrawing().importedComparisonIntent.action, null);
   assert.deepEqual(modeDrawing(state, 'linear').files.linearCanonicalComparisons, []);
   assert.equal(state.activeDrawing().linearComparisonPlan.edges.length, 0);
-  // The held comparisons are kept; the promotion moves only the alignment target.
-  const { alignOrthogroupFeature: _target, ...promotedSettings } = generatedProteinComparison.settings;
-  assert.equal(getCommittedCanonicalSession().renderRequest.schema, 9);
+  // The held comparisons are kept; the promotion moves only the alignment
+  // target. Python's encoder writes the promoted request: it names the result
+  // resources and writes the optional setting's default.
+  const { alignOrthogroupFeature: _target, ...heldSettings } = generatedProteinComparison.settings;
+  const promotedSettings = { ...heldSettings, collinearInferOrthogroups: true };
+  const committed = getCommittedCanonicalSession();
+  assert.equal(committed.renderRequest.schema, 9);
+  const committedComparisons = committed.renderRequest.comparisons;
   assert.deepEqual(
-    getCommittedCanonicalSession().renderRequest.comparisons,
-    [...renderRequest.comparisons.slice(0, 3), { ...generatedProteinComparison, settings: promotedSettings }]
+    committedComparisons.map(({ resourceId: _id, ...comparison }) => comparison),
+    [
+      ...renderRequest.comparisons.slice(0, 3).map(({ resourceId: _id, ...comparison }) => comparison),
+      { ...generatedProteinComparison, settings: promotedSettings }
+    ]
+  );
+  // The table keeps its bytes; the typed results are in Python's current
+  // schema, of the same kind.
+  const committedData = committedComparisons.slice(0, 3).map(({ resourceId }) => committed.resources[resourceId].data);
+  assert.equal(committedData[0], btoa(proteinTable));
+  assert.deepEqual(
+    committedData.slice(1).map((data) => JSON.parse(atob(data)).kind),
+    ['orthogroupResult', 'blocks']
   );
   assert.equal(state.activeDrawing().losatProgram.value, 'blastn');
   assert.equal(state.losatExecution.executionMode, 'threaded');
@@ -534,8 +587,9 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 
   modeDrawing(state, 'linear').files.linearCanonicalComparisons = [];
   // Generate adopts what Load committed: the request of schema 9.
-  adoptCanonicalRenderArtifacts({ renderRequest: getCommittedCanonicalSession().renderRequest, resources }, { drawing: modeDrawing(state, 'linear') });
-  const collinearityReencodesBefore = resourceReencodesByName.get('collinearity.json') || 0;
+  adoptCanonicalRenderArtifacts({ renderRequest: committed.renderRequest, resources: committed.resources }, { drawing: modeDrawing(state, 'linear') });
+  const collinearityName = committed.resources[committedComparisons[2].resourceId].name;
+  const collinearityReencodesBefore = resourceReencodesByName.get(collinearityName) || 0;
   assert.deepEqual(
     modeDrawing(state, 'linear').files.linearCanonicalComparisons.map((comparison) => comparison.kind),
     [
@@ -548,16 +602,10 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
 
   const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
   assert.equal(serialized.linearCanonicalComparisons[0].file.data, btoa(proteinTable));
+  assert.equal(serialized.linearCanonicalComparisons[1].file.data, committedData[1]);
+  assert.equal(serialized.linearCanonicalComparisons[2].file.data, committedData[2]);
   assert.equal(
-    serialized.linearCanonicalComparisons[1].file.data,
-    btoa(orthogroupsJson)
-  );
-  assert.equal(
-    serialized.linearCanonicalComparisons[2].file.data,
-    btoa(collinearityJson)
-  );
-  assert.equal(
-    resourceReencodesByName.get('collinearity.json') || 0,
+    resourceReencodesByName.get(collinearityName) || 0,
     collinearityReencodesBefore
   );
   assert.equal(serialized.linearCanonicalComparisons[2].valueKind, 'blocks');
