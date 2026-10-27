@@ -6138,11 +6138,11 @@ const exportSessionDocument = async (
         // The shown drawing's selected Similarity group: transient UI that a
         // drawing switch clears (`resetModeTransientUi`), so no other drawing
         // holds one. The group names are each drawing's draft's (`config.webEdits`).
+        // A drawing's alignment is its request's typed `similarityAlignment`
+        // (`buildLayout`, as Generate writes it); a legacy target beside it is
+        // not written, since Python reads none in a Session 44+ (D-15-149; OV-2047).
         ...(shown ? {
-          orthogroupState: {
-            selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-            selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || '')
-          }
+          orthogroupState: { selectedOrthogroupId: String(state.selectedOrthogroupId.value || '') }
         } : {}),
         modes: { [saved.mode]: slice },
         ...(preservedCliOptions.has(saved.id) ? { cliOptions: cloneJsonData(preservedCliOptions.get(saved.id)) } : {}),

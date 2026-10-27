@@ -29,7 +29,7 @@ const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { state } = await import('../../gbdraw/web/js/state.js');
-const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
+const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.gbdraw-session.json.gz`, import.meta.url))));
 const pythonUpgrade = async (document) => JSON.parse(await evaluatePython(`
@@ -114,6 +114,35 @@ test('a Linear Session 30 Load keeps its fills and Legend entries on the drawing
     },
     circular: { active: false, fills: {}, rules, legend: [] }
   });
+});
+
+test('a request-less Session 30 shows its alignment target and saves a file Python reads (OV-2006, OV-2047)', async () => {
+  // The stored figure is left out: a figure without a catalog is not saved
+  // before a Generate (D-25).
+  const session = { ...fixture('BGC0000708-BGC0000713.v30'), results: [] };
+  assert.equal(session.orthogroupState.selectedOrthogroupAlignmentFeature, 'og_1');
+  assert.equal((await load(session)).status, 'ok');
+  assert.equal(state.selectedOrthogroupAlignmentFeature.value, 'og_1');
+
+  const saved = await exportSession('alignment target', { askChoice: async () => 'download' });
+  assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
+  const written = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
+  // A Session 49 drawing's target is its typed request's (D-15-149): a drawing
+  // that holds none writes none beside the request it is saved with.
+  assert.deepEqual(written.drawings.map(({ id, renderRequest, orthogroupState }) => [
+    id, renderRequest && (renderRequest.layout.similarityAlignment ?? null), orthogroupState ?? null
+  ]), [['linear', null, { selectedOrthogroupId: '' }], ['circular', null, null]]);
+  assert.deepEqual(JSON.parse(await evaluatePython(`
+import json, tempfile
+from gbdraw.session import load_session_document, materialize_session, session_to_request
+document = load_session_document(payload)
+with tempfile.TemporaryDirectory() as tmp, materialize_session(document, output_directory=tmp) as materialized:
+    result = json.dumps([[spec.id, type(session_to_request(materialized, drawing=spec.id)).__name__]
+                         for spec in document.drawings if spec.has_canonical_request])
+`, written)), [['linear', 'LinearDiagramRequest']]);
+  // The reloaded drawing has no target: the saved file holds none.
+  assert.equal((await load(written)).status, 'ok');
+  assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 });
 
 test('a Worker failure of a Session 27-44 Load installs nothing, withdraws the stored figure and reports one diagnostic', async () => {

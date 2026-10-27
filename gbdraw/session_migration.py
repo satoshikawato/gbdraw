@@ -446,7 +446,9 @@ def project_session_adjunct_for_current_write(
         if repairs is not None:
             repairs.extend(session_draft_migration_repairs(migration))
     orthogroup_state = adjunct.get("orthogroupState")
-    if isinstance(orthogroup_state, Mapping):
+    # The alignment target moves into the typed request; with no request it
+    # has nowhere to move, so the drawing keeps it, as Web Load did (D-15-147).
+    if isinstance(orthogroup_state, Mapping) and isinstance(session.get("renderRequest"), Mapping):
         projected_orthogroup_state = dict(orthogroup_state)
         projected_orthogroup_state.pop(
             "selectedOrthogroupAlignmentFeature",
