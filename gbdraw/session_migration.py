@@ -647,9 +647,11 @@ def with_current_artifacts(
 ) -> dict[str, Any]:
     """``fields`` with the LOSAT artifacts of a fresh render or migration.
 
-    The legacy protein IDs that the migration resolved are rewritten first.
-    The derived cache holds ``losat_derived_cache_entries``: a replay passes
-    its Session's own, and a fresh render or migration passes none.
+    The legacy protein IDs that the migration resolved are rewritten first,
+    in ``fields`` and in the derived entries. The derived cache holds
+    ``losat_derived_cache_entries``: a replay and an upgrade of an older
+    Session pass the Session's own (validated by ``CurrentRequestArtifacts``),
+    and a fresh render passes the ones it built, or none.
     """
 
     updated = dict(fields)
@@ -657,6 +659,9 @@ def with_current_artifacts(
         from gbdraw.api.session_compat import rewrite_protein_artifact_references
 
         updated = rewrite_protein_artifact_references(updated, protein_id_map)
+        losat_derived_cache_entries = rewrite_protein_artifact_references(
+            list(losat_derived_cache_entries), protein_id_map
+        )
     for artifact_key in (
         "losatCache",
         "losatDerivedCache",
