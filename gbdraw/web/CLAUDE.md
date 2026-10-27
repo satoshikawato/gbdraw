@@ -322,9 +322,14 @@ on the Multi-Record Canvas, a Linear File card that draws all of its records or
 one of them) to its new key, and keeps the rows of a record that the request does
 not draw under that record's identity (`recordKeyMoves` in
 `services/record-draw-selection.js`): its per-feature edits, Feature placements,
-feature strokes, and annotation targets. The `hash` color rules of those
-records move with the specific rules the Generate commits
-(`moveInstanceRuleRecords` in `services/feature-selector.js`). Per-feature edits
+feature strokes, and annotation targets. It also brings the rows a drawn
+record has under its other keys (its key drawn alone or on the Multi-Record
+Canvas, its identity, or the record key of the Linear card it was split from)
+into its key, field by field: the row moved from its previous key, or else the
+row already under its key, wins. The `hash` color rules of those records move
+with the specific rules the Generate commits (`moveInstanceRuleRecords` in
+`services/feature-selector.js`); of two rules that then name one feature
+instance, the record's own stays and the other is dropped. Per-feature edits
 (`featureOverrides`) and Feature placements live in the drawing they were made
 in (R15) and are keyed by
 `JSON.stringify([recordKey, biologicalFeatureId])`. Two drawings can use the
