@@ -758,7 +758,11 @@ def _validate_prepared_input_retention(
     *,
     cache_requested: bool,
 ) -> PreparedInputRetention | None:
-    """Read the drawing a staged render renders and the tokens the page retains (A4b)."""
+    """Read the drawing a staged render renders and the tokens the page retains (A4b).
+
+    ``heldTokens`` name the files the drawing's draft holds while its request
+    omits them; the page retains each, so they are a subset of ``resourceTokens``.
+    """
 
     if value is None:
         return None
@@ -769,9 +773,10 @@ def _validate_prepared_input_retention(
         )
     drawing = value.get("drawing") if isinstance(value, Mapping) else None
     tokens = value.get("resourceTokens") if isinstance(value, Mapping) else None
+    held_tokens = value.get("heldTokens") if isinstance(value, Mapping) else None
     if (
         not isinstance(value, Mapping)
-        or set(value) != {"drawing", "resourceTokens"}
+        or set(value) != {"drawing", "resourceTokens", "heldTokens"}
         or not isinstance(drawing, str)
         or not _RESOURCE_ID_RE.fullmatch(drawing)
         or not isinstance(tokens, list)
@@ -779,11 +784,17 @@ def _validate_prepared_input_retention(
             isinstance(token, str) and _RESOURCE_CACHE_TOKEN_RE.fullmatch(token)
             for token in tokens
         )
+        or not isinstance(held_tokens, list)
+        or not all(token in tokens for token in held_tokens)
     ):
         raise ValidationError(
             "Invalid prepared input retention.", diagnostic={"code": "HELPER_PROTOCOL"}
         )
-    return PreparedInputRetention(drawing=drawing, resource_tokens=frozenset(tokens))
+    return PreparedInputRetention(
+        drawing=drawing,
+        resource_tokens=frozenset(tokens),
+        held_tokens=frozenset(held_tokens),
+    )
 
 
 __all__ = [

@@ -271,3 +271,85 @@ test('a File a helper staged is held for the render that encodes it (OV-1595)', 
   });
   assert.equal(other.stagedResources.length, 1);
 });
+
+// Show Depth off: the drawing's draft holds the Depth file while its request omits it
+// (gbdraw/web/CLAUDE.md, Runtime data flow). The committed sets carry what the draft held.
+const depthText = 'record-1\t1\t5\nrecord-1\t2\t7\n';
+const depthDescriptor = () => ({ ...descriptor(depthText, 'reads.depth.tsv'), kind: 'depth-track-file' });
+const shownDepth = (depth = depthDescriptor()) => ({
+  request: {
+    ...genbankRequest('record-1-genbank'),
+    diagramOptions: { depthTracks: [{ source: { resourceId: 'depth-tracks-1-source', representation: 'file' } }] }
+  },
+  resources: { 'record-1-genbank': descriptor('LOCUS depth\nORIGIN\n//\n'), 'depth-tracks-1-source': depth },
+  heldResources: {}
+});
+const hiddenDepth = (shown, held) => ({
+  request: genbankRequest('record-1-genbank'),
+  resources: { 'record-1-genbank': shown.resources['record-1-genbank'] },
+  heldResources: held ? { 'held-depth-1': held } : {}
+});
+
+test('a held resource stays across hidden commits and is not staged again', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const shown = shownDepth();
+  const depthToken = sha256Hex(depthText);
+  const first = await transport.prepare(shown);
+  assert.ok(stagedTokens(first).includes(depthToken));
+  assert.equal(first.commit(), true);
+  committed[0] = shown;
+
+  // A hide, then an edit while hidden: each keeps the file and names it as held.
+  for (let render = 0; render < 2; render += 1) {
+    const hidden = hiddenDepth(shown, shown.resources['depth-tracks-1-source']);
+    const prepared = await transport.prepare(hidden);
+    assert.deepEqual(prepared.retainedResourceTokens, [depthToken]);
+    assert.deepEqual(prepared.heldResourceTokens, [depthToken]);
+    assert.equal(prepared.commit(), true);
+    committed[0] = hidden;
+  }
+
+  const again = await transport.prepare(shown);
+  assert.deepEqual(again.stagedResources, [], 'the show stages nothing');
+  assert.ok(again.resourceManifest.some(({ cacheToken }) => cacheToken === depthToken));
+  assert.deepEqual(again.heldResourceTokens, []);
+});
+
+test('a resource the draft no longer holds is released', async () => {
+  const committed = [];
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => committed });
+  const shown = shownDepth();
+  const depthToken = sha256Hex(depthText);
+  (await transport.prepare(shown)).commit();
+  committed[0] = shown;
+  const hidden = hiddenDepth(shown, shown.resources['depth-tracks-1-source']);
+  (await transport.prepare(hidden)).commit();
+  committed[0] = hidden;
+
+  // The file is removed while Depth is hidden: the render names no held file, so
+  // Python drops its entries; the committed request it replaces still retains the bytes.
+  const removed = hiddenDepth(shown, null);
+  const dropping = await transport.prepare(removed);
+  assert.deepEqual(dropping.heldResourceTokens, []);
+  assert.equal(dropping.commit(), true);
+  committed[0] = removed;
+
+  const next = await transport.prepare(removed);
+  assert.deepEqual(next.retainedResourceTokens, [], 'no committed set holds the file');
+  assert.equal(next.commit(), true);
+  assert.deepEqual(stagedTokens(await transport.prepare(shown)), [depthToken], 'a show stages it again');
+});
+
+test('a held file that was never staged is not held', async () => {
+  const transport = createDiagramResourceTransport({ readCommittedResourceSets: () => [] });
+  const shown = shownDepth();
+  const unread = setResourcePayloadOwner(
+    { ...depthDescriptor(), data: undefined },
+    { arrayBuffer: async () => { throw new Error('a held file is never read'); } }
+  );
+  const prepared = await transport.prepare(hiddenDepth(shown, unread));
+  assert.deepEqual(prepared.heldResourceTokens, []);
+  assert.deepEqual(prepared.retainedResourceTokens, []);
+  assert.deepEqual(prepared.resourceManifest.map(({ resourceId }) => resourceId), ['record-1-genbank']);
+});

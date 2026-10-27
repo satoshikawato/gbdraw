@@ -295,6 +295,8 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
  * @property {RequestCircularFileRecord[]} [circularRecords]
  * @property {{ id?: unknown, file?: ResourceEntry | null }[]} [linearComparisons]
  * @property {RequestCanonicalComparison[]} [linearCanonicalComparisons]
+ * @property {readonly ResourceEntry[]} [heldDepthFiles] The Depth files the draft holds while its
+ *   request omits them, as earlier requests carried them (`serializeActiveRenderFiles`).
  */
 /**
  * A Circular record the draft keeps with its canonical request pieces.
@@ -393,6 +395,13 @@ export { CANONICAL_REQUEST_SCHEMA };
  * @property {CanonicalRenderRequest} renderRequest
  * @property {Record<string, any>} resources
  * @property {Record<string, any>} webFiles
+ * @property {HeldResources} heldResources
+ */
+/**
+ * The files a drawing's draft holds while its request omits them (a hidden
+ * Depth file), by an id of their own: transport data, never part of the
+ * request or the Session (gbdraw/web/CLAUDE.md, Runtime data flow).
+ * @typedef {Readonly<Record<string, RawSessionResourceDescriptor>>} HeldResources
  */
 const SUPPORTED_CANONICAL_REQUEST_SCHEMA_SET = new Set(SUPPORTED_CANONICAL_REQUEST_SCHEMAS);
 
@@ -2139,6 +2148,24 @@ const logicalDepthTrackCountForRequest = ({ state, filesData, recordCount }) => 
 };
 
 /**
+ * The Depth files of the draft, for a request with Show Depth off: the page
+ * keeps their staged bytes, and the Worker their parsed table and stages, for
+ * the next show. A cache hint, so it checks nothing and never throws: a file
+ * it cannot describe is not held, and a show stages it as a first show does.
+ * @param {RequestFilesData} filesData
+ * @returns {HeldResources}
+ */
+const collectHeldDepthResources = (filesData) => {
+  const held = createResourceBuilder();
+  (filesData.heldDepthFiles ?? []).forEach((entry, index) => {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      held.addFile(`held-depth-${index + 1}`, 'depth-track-file', entry);
+    }
+  });
+  return held.resources;
+};
+
+/**
  * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData,
  *   resources: ResourceBuilder, diagramOptions: Record<string, any>, recordCount: number }} input
  */
@@ -3468,6 +3495,7 @@ const projectCanonicalRenderInput = ({
       recordCount: records.length
     });
   }
+  const heldResources = trackPlan.depthRequested ? {} : collectHeldDepthResources(filesData);
 
   [
     ['colors-default-colors-file', filesData.d_color],
@@ -3530,7 +3558,8 @@ const projectCanonicalRenderInput = ({
       output
     }),
     resources: resources.resources,
-    webFiles
+    webFiles,
+    heldResources
   });
 };
 
@@ -6180,6 +6209,8 @@ const promoteRenderRequestToSchema8 = (promoted, promotion) => {
  * @property {CanonicalRenderRequest} renderRequest
  * @property {Readonly<Record<string, unknown>>} resources
  * @property {Readonly<Record<string, unknown>>} webFiles
+ * @property {HeldResources} [heldResources] What the draft held when Generate
+ *   built the request (`CanonicalRenderEnvelope`); a loaded request has none.
  */
 /**
  * A stored request that cannot be read at all (K22): its Session loads as

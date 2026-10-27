@@ -3004,6 +3004,23 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
 };
 
 /**
+ * The descriptor of a Session resource view, under the name the view shows; null for any other value.
+ * @param {unknown} file
+ * @returns {RawSessionResourceDescriptor | null}
+ */
+const sessionViewDescriptor = (file) => {
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
+  if (!source?.descriptor) return null;
+  // A view: its name is read as an unvalidated value.
+  const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
+  const descriptor = visibleName && visibleName !== source.descriptor.name
+    ? { ...source.descriptor, name: visibleName }
+    : source.descriptor;
+  setResourcePayloadOwner(descriptor, file);
+  return descriptor;
+};
+
+/**
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
  *   (a list included) is rejected by `readFileBytes`.
  * @returns {Promise<RawSessionResourceDescriptor | null>}
@@ -3012,15 +3029,8 @@ const serializeFile = async (file) => {
   if (!file) return null;
   // A view: each member is read as an unvalidated value.
   const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);
-  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-  if (source?.descriptor) {
-    const visibleName = String(view?.name || '').trim();
-    const descriptor = visibleName && visibleName !== source.descriptor.name
-      ? { ...source.descriptor, name: visibleName }
-      : source.descriptor;
-    setResourcePayloadOwner(descriptor, file);
-    return descriptor;
-  }
+  const viewDescriptor = sessionViewDescriptor(file);
+  if (viewDescriptor) return viewDescriptor;
   const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
@@ -3615,6 +3625,20 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
+ * The Depth files of a draft whose request omits them, as the descriptors a Session loaded or an
+ * earlier Generate encoded. Nothing is read: a file no request carried is not held
+ * (`heldDepthFiles`; gbdraw/web/CLAUDE.md, Runtime data flow).
+ * @param {unknown} value A Depth slot value, a row of them, or a matrix of rows.
+ * @returns {RawSessionResourceDescriptor[]}
+ */
+const knownDepthFileDescriptors = (value) => (Array.isArray(value) ? value : [value])
+  .flat(Infinity)
+  .flatMap((/** @type {unknown} */ file) => {
+    const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
+    return descriptor ? [descriptor] : [];
+  });
+
+/**
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project inputs (`state`).
  * @param {DrawingState} drawing The drawing whose settings choose the inputs.
@@ -3745,7 +3769,10 @@ export const serializeActiveRenderFiles = async (
     qualifier_priority: null,
     linearSeqs,
     linearComparisons,
-    linearCanonicalComparisons
+    linearCanonicalComparisons,
+    heldDepthFiles: depthRequested ? [] : knownDepthFileDescriptors(
+      mode === 'linear' ? normalizedLinearSeqs.map((seq) => seq.depth) : sourceFiles.c_depth
+    )
   };
 };
 

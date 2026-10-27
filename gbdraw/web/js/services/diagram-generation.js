@@ -23,7 +23,7 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { HeldResourceDescriptors, ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
@@ -487,6 +487,7 @@ let activeRequest = null;
  * @property {unknown[]} resourceManifest
  * @property {TransferFile[]} stagedResources
  * @property {readonly string[]} retainedResourceTokens The tokens the Worker keeps besides the manifest's.
+ * @property {readonly string[]} heldResourceTokens Those of them that the request's held resources name.
  * @property {() => boolean} commit Acknowledges the staging; false when a reset
  *   or another acknowledged request superseded it.
  */
@@ -848,14 +849,16 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null, heldResources?: HeldResourceDescriptors }} [options]
  *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
  *   catalog's revision and each segment's revision and byte count are posted.
  *   `drawingId`: the drawing it renders; the Worker keeps each drawing's prepared inputs
  *   while the retain set names their resources (A4b).
+ *   `heldResources`: the files the drawing's draft holds while the request omits them; the
+ *   Worker keeps them (`createDiagramResourceTransport`).
  * @returns {Promise<GenerationResponse>}
  */
-export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD, drawingId = null } = {}) => {
+export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD, drawingId = null, heldResources = {} } = {}) => {
   if (activeRequest) {
     return Promise.reject(new Error('A diagram generation request is already running.'));
   }
@@ -912,13 +915,14 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
       if (request.settled || activeRequest !== request) return;
       reportProgress('preparing-resources');
       failureStage = 'resource-staging';
-      const preparedResources = await resourceTransport.prepare(payload);
+      const preparedResources = await resourceTransport.prepare({ ...payload, heldResources });
       if (request.settled || activeRequest !== request) return;
       const workerPayload = {
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
         retainedResourceTokens: preparedResources.retainedResourceTokens,
+        heldResourceTokens: preparedResources.heldResourceTokens,
         drawingId,
         fontIdentities: requestFontIdentities(payload.request),
         heldFeatureCatalogRevision: held.catalog?.revision ?? null,

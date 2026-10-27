@@ -308,3 +308,23 @@ assert.deepEqual(noneSerialized.linearComparisons, []);
 assert.deepEqual(noneSerialized.linearCanonicalComparisons, []);
 assert.equal(inactiveComparison.reads(), 0);
 assert.equal(inactiveCanonical.reads(), 0);
+
+// Show Depth off: the Depth files the draft holds travel as `heldDepthFiles`, the descriptors an
+// earlier Generate encoded, and no file is read; a file no Generate encoded is not held.
+{
+  const heldDepth = readableFile('held-depth.tsv', 'record-1\t1\t5\n');
+  const neverShown = unreadableFile('never-shown-depth.tsv');
+  const depthState = (showDepth, cDepth) => ({
+    ...sourceState,
+    form: { show_depth: showDepth },
+    files: { ...sourceState.files, d_color: null, c_depth: cDepth }
+  });
+  const shown = await serializeActiveRenderFiles('circular', depthState(true, [heldDepth]));
+  assert.equal(heldDepth.reads(), 1);
+  assert.deepEqual(shown.heldDepthFiles, []);
+  const hidden = await serializeActiveRenderFiles('circular', depthState(false, [[heldDepth, null], [neverShown, heldDepth]]));
+  assert.equal(hidden.c_depth, null);
+  assert.deepEqual(hidden.heldDepthFiles, [shown.c_depth[0], shown.c_depth[0]]);
+  assert.equal(heldDepth.reads(), 1);
+  assert.equal(neverShown.reads(), 0);
+}

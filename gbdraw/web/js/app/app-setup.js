@@ -3169,12 +3169,15 @@ export const createAppSetup = () => {
   // History snapshot service; only its named operations change it.
   const { artifactSlots } = historySnapshots;
   // The diagram Worker keeps the resources of every drawing's committed
-  // request: the shown drawing's and each kept slot's.
+  // request, the shown drawing's and each kept slot's, and the files each
+  // drawing's draft held then while its request omitted them.
   setDiagramResourceRetainSource(() => [
     getCommittedCanonicalSession(),
     ...artifactSlots.kept().map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
       slot.runtimeState?.canonical?.committedCanonicalSession))
-  ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])));
+  ].flatMap((committed) => (committed
+    ? [{ request: committed.renderRequest, resources: committed.resources, heldResources: committed.heldResources }]
+    : [])));
   // The Results of all drawings: the shown one's and every kept one's. The
   // per-Result caches (Legend inventories, retired Legend entries, projected
   // editor state) keep a kept Result's entries while another drawing is shown.

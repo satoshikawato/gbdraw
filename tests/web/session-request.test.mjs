@@ -6004,3 +6004,51 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     })), sourceReads, name);
   }
 }
+
+// Show Depth off projects the Depth files the draft holds (as earlier requests carried them,
+// `heldDepthFiles`) as held resources, not request resources: the Worker keeps them for the
+// next show (gbdraw/web/CLAUDE.md, Runtime data flow).
+{
+  const heldDepthFile = { ...genbank, name: 'held-depth.tsv', data: btoa('record-1\t1\t5\n') };
+  const hidden = buildCanonicalRenderRequest({
+    state: circularRequestState({ form: { show_depth: false } }),
+    filesData: { ...filesData, heldDepthFiles: [heldDepthFile] }
+  });
+  assert.equal(hidden.renderRequest.diagramOptions.depthTracks, undefined);
+  assert.ok(!Object.values(hidden.resources).some((resource) => resource.kind === 'depth-track-file'));
+  assert.deepEqual(Object.values(hidden.heldResources).map(({ kind, data }) => [kind, data]), [
+    ['depth-track-file', heldDepthFile.data]
+  ]);
+  assert.equal(JSON.stringify(hidden.renderRequest).includes('held-depth'), false);
+  const shown = buildCanonicalRenderRequest({
+    state: circularRequestState({ form: { show_depth: true } }),
+    filesData: { ...filesData, c_depth: [heldDepthFile] }
+  });
+  assert.equal(shown.renderRequest.diagramOptions.depthTracks.length, 1);
+  assert.deepEqual(shown.heldResources, {});
+}
+
+// An invalid Depth setup with Show Depth off still projects a request: a Circular matrix
+// with the wrong row count and a track with no source; each held file is held once.
+{
+  const depthA = { ...genbank, name: 'a.depth.tsv', data: btoa('record-1\t1\t1\n') };
+  const depthB = { ...genbank, name: 'b.depth.tsv', data: btoa('record-1\t1\t2\n') };
+  const invalidDepth = {
+    ...filesData,
+    c_depth: [[depthA, null], [depthB, depthA], [null, null]],
+    heldDepthFiles: [depthA, depthB, depthA, null]
+  };
+  const hidden = buildCanonicalRenderRequest({
+    state: circularRequestState({
+      form: { show_depth: false },
+      adv: { depth_tracks: [{ label: 'A' }, { label: 'B' }, { label: 'unsourced' }] }
+    }),
+    filesData: invalidDepth
+  });
+  assert.equal(hidden.renderRequest.diagramOptions.depthTracks, undefined);
+  assert.deepEqual(Object.values(hidden.heldResources).map(({ data }) => data).sort(), [depthA.data, depthB.data].sort());
+  assert.throws(() => buildCanonicalRenderRequest({
+    state: circularRequestState({ form: { show_depth: true } }),
+    filesData: invalidDepth
+  }), /Circular Depth matrix has 3 record rows/);
+}

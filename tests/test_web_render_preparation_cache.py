@@ -918,7 +918,7 @@ def test_each_drawing_keeps_the_prepared_inputs_of_its_last_request(tmp_path: Pa
             request_id=request_id,
             # The first drawing's file has token 101, the second's 201.
             token_generation=1 if drawing == "circular" else 2,
-            retention={"drawing": drawing, "resourceTokens": list(retained)},
+            retention={"drawing": drawing, "resourceTokens": list(retained), "heldTokens": []},
         )
         return _metrics(diagnostics)
 
@@ -2950,3 +2950,205 @@ def test_the_shared_depth_table_is_unchanged_by_the_renders_that_select_from_it(
     assert _depth_entries(cache) == [table]
     assert isinstance(table, pd.DataFrame)
     pd.testing.assert_frame_equal(table, parse_depth_tsv(str(tmp_path / "depth.tsv")))
+
+
+# The Depth file's token in the held-resource tests; the GenBank files keep theirs.
+_HELD_DEPTH = {_DEPTH_RESOURCE: 900}
+_HELD_DEPTH_TOKEN = _token(900)
+# The Depth stages whose keys name the file. ``depth_track_config`` (style, window and
+# step) names none, so it is no held entry; it builds once per style on the show.
+_DEPTH_STAGES = ("depth_frame", "depth_content")
+
+
+def _drawing_retention(
+    drawing: str = "circular",
+    *,
+    retained: tuple[str, ...] = (),
+    held: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """The retention the Worker sends: ``held`` are the drawing's hidden files, also retained."""
+
+    return {"drawing": drawing, "resourceTokens": list(retained + held), "heldTokens": list(held)}
+
+
+def _depth_parse_counter(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    counts = {"parse": 0}
+    real_read_csv = depth_module.pd.read_csv
+
+    def counting_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        table = real_read_csv(*args, **kwargs)
+        if list(table.columns) == DEPTH_COLUMNS:
+            counts["parse"] += 1
+        return table
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", counting_read_csv)
+    return counts
+
+
+def _entries_naming(cache: PreparedBiologicalInputCache, token: str) -> set[tuple[str, object]]:
+    return {
+        (layer, key)
+        for layer, entries in cache._layers.items()
+        for key, entry in entries.items()
+        if any(identity.cache_token == token for identity in entry.resource_identities)
+    }
+
+
+def _svg(reply: dict[str, object]) -> str:
+    (result,) = reply["results"]
+    return str(result["content"])
+
+
+def _with_block_stroke(document: dict[str, object]) -> dict[str, object]:
+    edited = copy.deepcopy(document)
+    edited["renderRequest"]["diagramOptions"]["configOverrides"]["objects.features.block_stroke_width.short"] = 1.0
+    return edited
+
+
+def test_a_held_depth_resource_keeps_its_table_and_stages_across_a_hidden_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Show Depth after a hide reuses the parsed table and every Depth stage of the last show."""
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    counts = _depth_parse_counter(monkeypatch)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    first, _ = _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    again, diagnostics = _render(
+        tmp_path, cache, shown, request_id=3, token_numbers=_HELD_DEPTH, retention=_drawing_retention()
+    )
+
+    metrics = _metrics(diagnostics)
+    assert counts["parse"] == 1
+    assert {stage: metrics.get(f"renderStageBuild:{stage}", 0) for stage in _DEPTH_STAGES} == dict.fromkeys(
+        _DEPTH_STAGES, 0
+    )
+    assert metrics["renderStageHit:depth_frame"] == 2
+    assert _svg(again) == _svg(first)
+
+
+def test_show_depth_after_a_hidden_edit_matches_a_fresh_generate(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    held = _drawing_retention(held=(_HELD_DEPTH_TOKEN,))
+
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=held)
+    _render(tmp_path, cache, _with_block_stroke(hidden), request_id=3, retention=held)
+    reply, diagnostics = _render(
+        tmp_path, cache, _with_block_stroke(shown), request_id=4, token_numbers=_HELD_DEPTH,
+        retention=_drawing_retention(),
+    )
+    fresh, _ = _render(
+        tmp_path, PreparedBiologicalInputCache(), _with_block_stroke(shown), request_id=5,
+        token_numbers=_HELD_DEPTH, retention=_drawing_retention(),
+    )
+
+    assert _metrics(diagnostics).get("renderStageBuild:depth_frame", 0) == 0
+    assert hashlib.sha256(_svg(reply).encode()).hexdigest() == hashlib.sha256(_svg(fresh).encode()).hexdigest()
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+def test_held_entries_are_bounded_by_the_last_render_that_used_them(tmp_path: Path) -> None:
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    held = _drawing_retention(held=(_HELD_DEPTH_TOKEN,))
+    shown_entries: list[set[tuple[str, object]]] = []
+    hidden_entries: list[set[tuple[str, object]]] = []
+    retained_bytes: dict[str, list[int]] = {"shown": [], "hidden": []}
+
+    request_id = 0
+    for _cycle in range(4):
+        request_id += 1
+        _, diagnostics = _render(
+            tmp_path, cache, shown, request_id=request_id, token_numbers=_HELD_DEPTH, retention=_drawing_retention()
+        )
+        shown_entries.append(_entries_naming(cache, _HELD_DEPTH_TOKEN))
+        retained_bytes["shown"].append(_metrics(diagnostics)["preparedInputCacheRetainedBytes"])
+        request_id += 1
+        _, diagnostics = _render(tmp_path, cache, hidden, request_id=request_id, retention=held)
+        hidden_entries.append(_entries_naming(cache, _HELD_DEPTH_TOKEN))
+        retained_bytes["hidden"].append(_metrics(diagnostics)["preparedInputCacheRetainedBytes"])
+    _render(tmp_path, cache, _with_block_stroke(hidden), request_id=request_id + 1, retention=held)
+
+    assert shown_entries[0]
+    # Every entry naming the file is one the last show used, and each later cycle holds the same ones.
+    assert shown_entries == [shown_entries[0]] * 4
+    assert hidden_entries == [shown_entries[0]] * 4
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == shown_entries[0]
+    assert len(set(retained_bytes["shown"])) == 1
+    assert len(set(retained_bytes["hidden"])) == 1
+
+
+def test_dropping_a_held_token_releases_its_entries(tmp_path: Path) -> None:
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN)
+
+    _, diagnostics = _render(tmp_path, cache, hidden, request_id=3, retention=_drawing_retention())
+    _, fresh = _render(tmp_path, PreparedBiologicalInputCache(), hidden, request_id=4, retention=_drawing_retention())
+
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == set()
+    assert (
+        _metrics(diagnostics)["preparedInputCacheRetainedBytes"]
+        == _metrics(fresh)["preparedInputCacheRetainedBytes"]
+    )
+
+
+@pytest.mark.parametrize(
+    "retention",
+    [
+        {"drawing": "circular", "resourceTokens": [], "heldTokens": [_HELD_DEPTH_TOKEN]},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN], "heldTokens": _HELD_DEPTH_TOKEN},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN], "heldTokens": [[_HELD_DEPTH_TOKEN]]},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN]},
+    ],
+)
+def test_a_held_token_outside_the_retained_set_is_rejected(
+    tmp_path: Path,
+    retention: dict[str, object],
+) -> None:
+    _shown, hidden = _depth_documents(tmp_path)
+    with pytest.raises(ValidationError, match="retention"):
+        _render(tmp_path, PreparedBiologicalInputCache(), hidden, request_id=1, retention=retention)
+
+
+def test_another_drawings_render_releases_held_tables_and_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Held entries are the rendering drawing's: another drawing's render keeps the file's bytes only."""
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    counts = _depth_parse_counter(monkeypatch)
+    shown, hidden = _depth_documents(tmp_path)
+    other = tmp_path / "other.gbk"
+    _write_genbank(other, (_record("other-record"),))
+    cache = PreparedBiologicalInputCache()
+    circular_tokens = (_token(101), _token(102))
+
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    # The page retains the circular drawing's files and its held Depth file for the other drawing's render.
+    _render(
+        tmp_path, cache, _document(other), request_id=3, token_generation=2,
+        retention=_drawing_retention("linear", retained=circular_tokens + (_HELD_DEPTH_TOKEN,)),
+    )
+
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == set()
+    _, diagnostics = _render(
+        tmp_path, cache, shown, request_id=4, token_numbers=_HELD_DEPTH,
+        retention=_drawing_retention(retained=(_token(201),)),
+    )
+    assert counts["parse"] == 2
+    assert _metrics(diagnostics)["renderStageBuild:depth_frame"] == 2
