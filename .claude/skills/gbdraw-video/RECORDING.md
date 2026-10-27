@@ -90,6 +90,22 @@ Journey rules:
   - When the renderer cannot make such a fix from what the take logged,
     change the renderer. If the take lacks the geometry for it, make the
     recorder log that geometry for the next video. Do not record again for it.
+  - **Take edits.** A take is read-only. Add what it lacks to `TAKE_EDITS` in
+    `docs/capture/video/walkthrough_render.py`: one `TakeEdits` entry per
+    take, keyed by the journey and the SHA-256 of its `walkthrough.json`, with
+    each edit anchored on the take's own events (`At(mark=...)`, or
+    `At(title=...)` for a caption, `press=n` for the n-th press after it).
+    - `AddMark` adds a mark (with `view`, the rows a clip at it shows).
+    - `AddSkim` and `Retime` add or change a fast-forward.
+    - `CloseRead` reads a still result hold closely: it plays the hold longer
+      under camera stops.
+    - `ShowOnly` makes recorded camera stops show only their rect, cut to
+      `within` when an app control overlaps it.
+    - `render` applies them and counts them in its report. It fails when an
+      anchor is missing or ambiguous, a span overlaps another, or a still's
+      frames change.
+    - Give the journey the same marks and skims in the same change, so the
+      next take needs no entry.
   - Record a new take only for app operations that the take never captured.
     First collect every such fix from one review, and tell the Owner why an
     edit cannot make it. Then record one take for all of them.
