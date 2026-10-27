@@ -113,7 +113,10 @@ per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
 in the request. Feature placement drafts and the `featureIdentity` targets of
 annotations made from selected features are kept per mode the same way. Both
 modes can use the same record key, so a request carries only the rows and
-targets of its own mode. The feature catalog is schema 5. It records the
+targets of its own mode. A row keeps the record key of the view it was last
+drawn in; the next Generate that draws the record under another key moves the
+row to it, so a Session saved by 0.14.2 or earlier keeps its edits when the
+view changes. The feature catalog is schema 5. It records the
 selector values each drawn feature had (`drawnSelector`).
 
 When you load an older Session, the Web app moves its per-feature edits onto

@@ -45,6 +45,18 @@ write-up of a release.
   only `herbal_garden`, and new requests name it (#1407).
 - Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
   and Windows have no LOSAT binary (#1406).
+- Fixed: per-feature edits in the Web app (a "This feature only" color, label
+  text and visibility, Feature visibility, stroke, Feature placements, and
+  annotations of selected features) keep applying when the view of their
+  record changes: a Circular record drawn alone or on the Multi-record canvas,
+  a Linear File card that draws all of its records or one of them. Before,
+  they stopped applying after a Generate that drew the record under another
+  key. Undo of that Generate puts them back; Session files are unchanged
+  (OV-1949). Edits made on an "all records" card of a 0.13.0 Session do not
+  follow its records after the first Generate splits the card.
+- Fixed: label text and Label visibility typed in the Web feature popup and
+  not yet applied stay when the labels are placed again while the popup is
+  open (OV-1984).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 

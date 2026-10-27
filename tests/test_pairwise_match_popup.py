@@ -96,6 +96,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
         .read_text(encoding="utf-8")
         .replace("../utils/download-names.js", "./download-names.mjs")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
         .replace("./drawing/feature-edits.js", "./drawing-feature-edits.mjs")
         .replace("./drawing/paint.js", "./drawing-paint.mjs"),
         encoding="utf-8",

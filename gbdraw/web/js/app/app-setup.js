@@ -3450,6 +3450,20 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
+    // DESIGN A4: Generate reads its requests' record identities from the
+    // discovered record lists, awaited here (a Linear card whose list is still
+    // deferred after a Load); the Circular list is the one Generate awaited.
+    readRecordIdentitySources: async (sourceMode) => {
+      if (sourceMode === 'circular') return { mode: sourceMode, circular: circularRecordEntries() };
+      if (linearSeqs.some((seq) => linearRecordSelector.statusFor(seq) === 'deferred')) {
+        const outcome = linearRecordSelector.refresh();
+        if (outcome instanceof Promise) await outcome;
+      }
+      return {
+        mode: sourceMode,
+        linear: new Map(linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))]))
+      };
+    },
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -3457,6 +3471,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,

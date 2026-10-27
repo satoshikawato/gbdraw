@@ -10,7 +10,7 @@ import {
   isRecordDrawKey,
   nextRecordsOff,
   offChangeLeavesSourceEmpty,
-  offRecordRequestKeys,
+  offRecordRequestRecords,
   omittedLinearUids,
   pruneRecordsOff,
   recordListRows
@@ -45,8 +45,11 @@ test('turning records ON or OFF and pruning keep one entry per key', () => {
 });
 
 test('the request keys of OFF records follow the request builder', () => {
-  assert.deepEqual(offRecordRequestKeys('linear', ['uid-2', 'uid-2']), ['uid-2']);
-  assert.deepEqual(offRecordRequestKeys('circular', ['#2', '#10', 'bad']), ['record-2', 'record-10']);
+  // A Linear OFF card keeps its rows under its uid and its `<uid>:<k>` identities.
+  assert.deepEqual(offRecordRequestRecords('linear', ['uid-2', 'uid-2']), [{ recordKey: 'uid-2', cardinality: 'all' }]);
+  assert.deepEqual(offRecordRequestRecords('circular', ['#2', '#10', 'bad']), [
+    { recordKey: 'record-2', cardinality: 'exactly_one' }, { recordKey: 'record-10', cardinality: 'exactly_one' }
+  ]);
 });
 
 test('the last ON record of a source cannot go OFF without asking (D-06)', () => {

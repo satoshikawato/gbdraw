@@ -1,0 +1,51 @@
+{
+  "purpose": "Positive fixture of the record-key move for a Session written by 0.14.2 (OV-1949): per-feature edits made on a Circular record drawn alone are keyed circular-<recordId>-#<k>, and must still apply when the same record is drawn on the Multi-Record Canvas (record-<k>).",
+  "history": "release tag v0.14.2",
+  "sourceCommit": "676ff36bb23523664bc2413d874a01eec9170e1c",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web) of v0.14.2, bytes kept unchanged (the download is gzip already)",
+  "checkout": "git worktree add --detach <dir> v0.14.2; from <dir>: python tools/prepare_browser_wheel.py; serve <dir> as the Playwright config of v0.14.2 does (python3 -m http.server) and open gbdraw/web/index.html in Chromium (Playwright 1.61.1)",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "python": "3.13.3"
+  },
+  "wheel": "gbdraw-0.14.2-py3-none-any.whl",
+  "sessionVersion": 48,
+  "requestSchema": 9,
+  "records": "tests/test_inputs/BGC0000708.gbk (sha256 9a5f971c5ed8c406b20574fb50aac567609deb787eb1e8d4635050aa264a04b0) and tests/test_inputs/BGC0000709.gbk (sha256 4b66b7e4b78d429d12176e1e36d0e48178c562a9d128d4308b38753af9995255) joined by a newline as one Circular GenBank File two-records.gbk",
+  "steps": [
+    "Open the app; accept every dialog",
+    "Show the Circular drawing; GenBank input; GenBank File = two-records.gbk (the two files below joined by a newline, lastModified 1)",
+    "Settings: Multi-Record Canvas off; Hide GC Content and Hide GC Skew on; Label mode Out; Session title record-identity-circular-single",
+    "Wait for the record list (2 records); Circular record = BGC0000709 (record 2 drawn alone)",
+    "Generate Diagram; wait for the Result",
+    "The drawn CDS of the Result in catalog order: the 1st, 2nd, 3rd and 4th take the fill, label, hide and stroke edits",
+    "Feature popup of f01147906 (1st): Feature fill color #c026d3; Color Change Scope: This feature only; close the popup",
+    "Feature popup of fa83c667d (2nd): Label text RI_V0142_LABEL; Label visibility On (always show); Apply Label; close the popup",
+    "Feature popup of fa38a34c5 (3rd): Feature visibility Off; Feature Visibility Scope: This feature (One rule); close the popup",
+    "Feature popup of fa03509e2 (4th): Feature stroke color mode Color; Feature stroke color #00aa00; Stroke Change Scope: This feature only; close the popup",
+    "Header Save Session; keep the download unchanged as record-identity-circular-single.v48.gbdraw-session.json.gz"
+  ],
+  "recordKey": "circular-BGC0000709-#2",
+  "edits": {
+    "fill": {
+      "featureId": "f01147906",
+      "color": "#c026d3",
+      "rule": "^f01147906@circular-BGC0000709-#2$"
+    },
+    "label": {
+      "featureId": "fa83c667d",
+      "text": "RI_V0142_LABEL"
+    },
+    "hide": {
+      "featureId": "fa38a34c5"
+    },
+    "stroke": {
+      "featureId": "fa03509e2",
+      "color": "#00aa00"
+    }
+  },
+  "sha256": "a95a340b97a8a40e2b37096e73a6a3526fd9c09ce8e6d31c1a0d18112fd2ea93",
+  "decompressedSha256": "158162cc56489365a17b0464b25f32890e17ef5b553773c227b9a5cc7718db00",
+  "popupOpenedBy": "window.__GBDRAW_APP__.openFeatureEditorFromList(feature, { clientX: 220, clientY: 220 }) for the extractedFeatures entry with recordKey circular-BGC0000709-#2 and the biologicalFeatureId above"
+}

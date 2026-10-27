@@ -1255,10 +1255,16 @@ record only, also when two records share a record ID or the same file is drawn
 twice, live and after Generate. The feature ID comes from the feature's hash in
 its source record, so the rule keeps matching the feature when the region or
 orientation of its Linear record changes. Like the other per-feature edits,
-the rule belongs to the record key: it does not apply while the record is
-drawn under another key (a Circular record drawn alone or on the
+the rule follows the record when the view changes: a Generate that draws the
+record under another key (a Circular record drawn alone or on the
 **Multi-record canvas**, a Linear File card that draws all of its records or
-one of them), and it applies again when that key returns. Resetting **This feature only** on
+one of them) moves the rule, the label, visibility, and stroke edits, the
+Feature placements, and the annotation targets of that record to its new key,
+and a record that the Generate does not draw keeps them until it is drawn
+again. A Generate that also replaces or removes the record's file moves none of
+its edits. **Undo** of that Generate puts them back. Edits made on an "all
+records" card of a gbdraw 0.13.0 Session do not follow its records after the
+first Generate splits the card. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared
 hash is narrowed to the copies it still colors. **Delete settings** of a record
 that is turned off removes the `hash` rules that name its feature instances;
