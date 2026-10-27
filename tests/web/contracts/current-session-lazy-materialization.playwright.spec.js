@@ -1345,10 +1345,13 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     resolvedRecordBuildCount: 0,
     'renderStageHit:interactive_context': 1,
     interactiveFeatureTraversalCount: 0,
-    preparedInputCacheMutationViolationCount: 0,
-    featureCatalogSvgParseCount: 1,
-    featureCatalogFullDomTraversalCount: 1
+    preparedInputCacheMutationViolationCount: 0
   });
+  // The catalog parses only the contents this render rebuilt: one parse and one
+  // traversal per catalog snapshot build, none when every content is kept.
+  const catalogSnapshotBuilds = Number(secondPython?.metrics?.['renderStageBuild:catalog_snapshot'] || 0);
+  expect(Number(secondPython?.metrics?.featureCatalogSvgParseCount || 0)).toBe(catalogSnapshotBuilds);
+  expect(Number(secondPython?.metrics?.featureCatalogFullDomTraversalCount || 0)).toBe(catalogSnapshotBuilds);
   expect(Number(secondPython?.metrics?.preparedInputCacheRetainedBytes || 0))
     .toBeGreaterThan(0);
   expect(Number(secondPython?.timingsMs?.drawing || 0)).toBeGreaterThan(0);
