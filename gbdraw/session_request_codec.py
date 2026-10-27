@@ -2239,6 +2239,10 @@ def migrate_flat_config_overrides(
             continue
         consumed.add(legacy_name)
         value = overrides[legacy_name]
+        # The Web writer stored a null blacklist for a filter mode other than
+        # Blacklist: no blacklist, not the packaged one.
+        if value is None and legacy_name == "label_blacklist":
+            value = []
         if value is None:
             continue
         if legacy_name == "label_blacklist" and isinstance(value, str):
