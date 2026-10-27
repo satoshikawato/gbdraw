@@ -1730,7 +1730,6 @@ test('a flat override name in a draft is not read: Load drops it with a row and 
 // Session 27-44 (OV-1958, D-15-140); they load in node now, the cropped or
 // reversed ones asking the diagram Worker for their features. The browser
 // specs feature-identity-overrides and gui-audit-20260930-comparisons load them.
-// OPEN_ROWS are rows of an open bug, listed so the rest of the corpus is checked.
 const LOSSY_FIXTURES = {
   'feature-edits-circular-copies.v44.gbdraw-session.json.gz': ['feature-visibility-narrowed'],
   'whitelist-tab-keyword.v39.gbdraw-session.json.gz': ['table-row-joined']
@@ -1746,12 +1745,6 @@ const FEATURES_NEED_DIAGRAM_WORKER = new Set([
   // gui-audit-20260930-comparisons loads it in the browser (OV-1181).
   'BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz'
 ]);
-// OV-2043: Python's conversion reads a Session 27-30's hash color rules
-// against the file's features, not the source features the old Load extracted
-// first, so a reversed record's rule stays unmapped (in the browser too).
-const OPEN_ROWS = {
-  'hash-color-rule-linear-rc.v30.gbdraw-session.json.gz': ['hash-selector-unmapped']
-};
 // G2b (E-OD02): the document Save writes after each of those Loads reads
 // again with no repair of the document reader (`readSessionDocument`); the
 // settings readers' rows are G3's, checked on the stored file above.
@@ -1782,7 +1775,7 @@ test('every Gallery Session and Session fixture loads without a repair (G3), and
     const loaded = await importSession(input(session), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
     assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
     const nodeOnly = FEATURES_NEED_DIAGRAM_WORKER.has(name) ? ['feature-recovery-failed'] : [];
-    assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...(OPEN_ROWS[name] ?? []), ...nodeOnly], name);
+    assert.deepEqual(loaded.repairs.map(({ code }) => code), [...(LOSSY_FIXTURES[name] ?? []), ...nodeOnly], name);
     assert.equal(askedDiagramWorker, nodeOnly.length > 0, `${name}: the Features row comes from the missing diagram Worker`);
     // A Session 27-39 with a Result is saved only after Generate.
     const saved = await savedSession(`G2b ${name}`).catch((error) => {

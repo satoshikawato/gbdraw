@@ -8,6 +8,7 @@ functions migrate the fields around it.
 from __future__ import annotations
 
 import logging
+import tempfile
 from pathlib import Path
 from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
@@ -21,12 +22,15 @@ from gbdraw.session_io import (
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SessionDraftMigration,
     _embedded_entry_bytes,
+    _legacy_linear_request_records,
     _project_web_file_binding,
     empty_protein_identity_manifest,
+    get_session_slot,
     has_hash_color_rules,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_session_flat_draft,
     mode_split_palette_colors,
+    request_less_hash_rules_need_drawn_hashes,
     session_depth_source_widths,
     session_legend_edits_by_row_key,
     session_mode,
@@ -255,8 +259,6 @@ def read_legacy_source_features(
     fallback, the features of the saved SVG (its recovery plan), is not read.
     """
 
-    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
-
     features = session.get("features")
     config = session.get("config")
     editor_state = session.get("editorState")
@@ -274,7 +276,68 @@ def read_legacy_source_features(
     reads = legacy_source_reads(request) if isinstance(request, Mapping) else None
     if reads is None:
         return None
-    linear = cast(Mapping[str, Any], request).get("mode") == "linear"
+    return _read_sources_again(
+        reads, resource_paths, linear=cast(Mapping[str, Any], request).get("mode") == "linear"
+    )
+
+
+def read_request_less_source_features(
+    session: Mapping[str, Any], temporary_directory: str | Path | None = None
+) -> dict[str, list[dict[str, Any]]] | None:
+    """Read a Session 27-30's Linear sources again for its ``hash`` color rules.
+
+    Such a Session (release 0.13.0) has no request: its Linear cards give the
+    records (``_legacy_linear_request_records``) and embed their GenBank
+    files. Web Load before the Worker route read them again with the cards'
+    crops and orientations (``extractSessionSourceFeatures``), so a rule saved
+    with a drawn hash took its source hash (OV-2043, D-15-152). They are read
+    with the reads of :func:`legacy_source_reads`, in a temporary directory
+    under ``temporary_directory``, only when a rule needs a drawn hash
+    (:func:`gbdraw.session_io.request_less_hash_rules_need_drawn_hashes`), the
+    Session shows Linear and every card is a GenBank one, as the Web read them. None otherwise, or when
+    a source cannot be read; the migration then uses the saved feature
+    metadata.
+    """
+
+    version = session.get("version")
+    ui_value = session.get("ui")
+    ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
+    if not (
+        isinstance(version, int)
+        and version < CANONICAL_SESSION_MIN_VERSION
+        and ui.get("mode") == "linear"
+        and (ui.get("lInputType") or "gb") == "gb"
+        and request_less_hash_rules_need_drawn_hashes(session)
+    ):
+        return None
+    reads = legacy_source_reads(
+        {"mode": "linear", "records": _legacy_linear_request_records(session.get("files"))}
+    )
+    if reads is None:
+        return None
+    with tempfile.TemporaryDirectory(dir=temporary_directory) as directory:
+        resource_paths: dict[str, Path] = {}
+        for index, read in enumerate(reads):
+            entry = get_session_slot(session, read.resource_id)
+            data = _embedded_entry_bytes(entry) if isinstance(entry, Mapping) else None
+            if data is None:
+                return None
+            path = Path(directory) / f"seq_{index}.gb"
+            path.write_bytes(data)
+            resource_paths[read.resource_id] = path
+        return _read_sources_again(reads, resource_paths, linear=True)
+
+
+def _read_sources_again(
+    reads: Sequence[LegacySourceRead], resource_paths: Mapping[str, Path], *, linear: bool
+) -> dict[str, list[dict[str, Any]]] | None:
+    """The features of ``reads`` through the diagram Worker's extraction
+    (``extract_features_from_genbank_payload``), each named by its source
+    hash and, for Linear, its input (``fileIdx``). None when a source cannot
+    be read."""
+
+    from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
+
     read_again: dict[str, list[dict[str, Any]]] = {"extractedFeatures": [], "biologicalFeatures": []}
     for input_index, read in enumerate(reads):
         path = resource_paths.get(read.resource_id)
@@ -702,6 +765,7 @@ __all__ = [
     "log_session_draft_migration",
     "project_session_adjunct_for_current_write",
     "read_legacy_source_features",
+    "read_request_less_source_features",
     "replace_current_derived_feature_state",
     "session_draft_migration_repairs",
     "with_current_artifacts",

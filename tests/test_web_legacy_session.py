@@ -219,6 +219,38 @@ def test_a_session_27_30_inline_file_takes_its_decoded_size() -> None:
     assert (resource["size"], base64.b64decode(resource["data"])) == (len(replaced), replaced)
 
 
+def test_a_session_30_hash_rule_is_named_through_its_cards_read_again() -> None:
+    # OV-2043 (D-15-152 A): release 0.13.0 wrote the "This feature only" rule
+    # of the reverse-complemented TESTB_0006 with its rendered ID
+    # f2869b912_record_2 (hash-color-rule-linear-rc.provenance.json). The old
+    # Web Load read the cards' sources again, so the rule took the source hash
+    # fbc76b20f and no repair was listed; the conversion now reads them too.
+    payload = json.loads(legacy_session_to_drawings_json(_text("hash-color-rule-linear-rc.v30.gbdraw-session.json.gz")))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+    assert [warning["code"] for warning in payload["warnings"]] == []
+    for drawing in payload["document"]["drawings"]:
+        assert [rule["val"] for rule in drawing["config"]["rules"]] == ["fbc76b20f"], drawing["mode"]
+
+
+def test_a_session_30_reads_its_sources_again_only_when_a_hash_rule_needs_drawn_hashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The extra parse is for a hash rule on a cropped or reverse-complemented
+    # card only: with every card drawn untransformed, the drawn hash is the
+    # source hash and no source is read again.
+    from gbdraw.web_support import feature_metadata
+
+    def refuse(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("the sources were read again")
+
+    monkeypatch.setattr(feature_metadata, "extract_features_from_genbank_payload", refuse)
+    document = json.loads(_text("hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"))
+    for card in document["files"]["linearSeqs"]:
+        card["region_reverse"] = False
+    payload = json.loads(legacy_session_to_drawings_json(json.dumps(document)))
+    assert set(payload) == REPLY_FIELDS, payload.get("error")
+
+
 def test_a_session_40_legacy_alignment_reads_the_catalog_the_web_reader_promoted() -> None:
     # OV-1995: the Web reader sends Python a Session 40's feature catalog
     # promoted to the current schema; the legacy alignment target (a similarity

@@ -2212,15 +2212,14 @@ def test_session_44_request_tables_name_drawn_hash_rows_by_source_hash(tmp_path:
     assert adapted.migration_report.warnings == ()
 
 
-def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
+def test_session_30_rendered_id_color_rule_is_named_in_the_cli_sidecar(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     # Release 0.13.0 wrote a "This feature only" color rule with the rendered
     # ID of the reverse-complemented TESTB_0006 (f2869b912_record_2,
-    # hash-color-rule-linear-rc.provenance.json). Web Load reads the sources
-    # again and names it by its source hash fbc76b20f (OV-416). The CLI does not
-    # read the sources of a Session before 31 again, so the written Session
-    # keeps the rule as saved and the replay reports it.
+    # hash-color-rule-linear-rc.provenance.json). The conversion reads the
+    # cards' sources again, as Web Load does, so the written Session names it
+    # by its source hash fbc76b20f (OV-416, OV-2043) and nothing is reported.
     fixture = Path(__file__).parent / "fixtures" / "sessions" / "hash-color-rule-linear-rc.v30.gbdraw-session.json.gz"
     source = json.loads(gzip.decompress(fixture.read_bytes()))
     sidecar = tmp_path / "replay.gbdraw-session.json"
@@ -2236,8 +2235,8 @@ def test_session_30_rendered_id_color_rule_is_reported_in_the_cli_sidecar(
     )
 
     saved = drawing_view(load_session_document(sidecar).to_dict(), mode="linear")
-    assert saved["modes"]["linear"]["config"]["rules"] == source["config"]["rules"]
-    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) in caplog.messages
+    assert saved["modes"]["linear"]["config"]["rules"] == [{**source["config"]["rules"][0], "val": "fbc76b20f"}]
+    assert _UNMAPPED_HASH_WARNING.format(count=1, version=30) not in caplog.messages
 
 
 def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
