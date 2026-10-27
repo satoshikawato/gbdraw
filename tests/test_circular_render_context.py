@@ -104,9 +104,10 @@ def test_circular_record_render_context_deep_freezes_layout_collections() -> Non
     assert context.radial_layout.slots[0].params["nested"]["values"] == (1, 2)
 
 
-@pytest.mark.parametrize("group_type", [SeqRecordGroup, LabelsGroup])
-def test_circular_record_render_groups_require_explicit_context(group_type: type) -> None:
-    render_context = signature(group_type).parameters["render_context"]
+# The feature group reads the feature projection of the render context; the labels read its profile.
+@pytest.mark.parametrize(("group_type", "name"), [(SeqRecordGroup, "render_context"), (LabelsGroup, "profile")])
+def test_circular_record_render_groups_require_explicit_context(group_type: type, name: str) -> None:
+    render_context = signature(group_type).parameters[name]
 
     assert render_context.default is Parameter.empty
 
