@@ -23,10 +23,9 @@ from gbdraw.features.visibility import resolve_candidate_feature_types
 from gbdraw.io.cli_tables import RecordsTable
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.mode_profiles import CIRCULAR_MODE_PROFILE, DEFAULT_FEATURE_TYPES
-from gbdraw.render.export import has_cairosvg
+from gbdraw.render.export import require_cairosvg
 from gbdraw.io.colors import require_palette_name
 from gbdraw.render.formats import (
-    CAIROSVG_FORMATS,
     SVG_FORMAT,
     is_cairosvg_format,
     normalize_format_token,
@@ -689,21 +688,19 @@ def parse_arrow_shaft_width_ratio_arg(value: str) -> float:
 
 
 def handle_output_formats(out_formats: list[str]) -> list[str]:
-    """Handle WebAssembly and CairoSVG availability for output formats."""
+    """The output formats this run writes, checked before anything is drawn.
+
+    Under WebAssembly the browser converts PNG, PDF, EPS and PS, so they are
+    left out. Elsewhere a format CairoSVG cannot make raises
+    ``ValidationError`` (``require_cairosvg``), as the Python API does.
+    """
     out_formats = [normalize_format_token(fmt) for fmt in out_formats]
-    cairo_formats = [f for f in out_formats if is_cairosvg_format(f)]
     if "pyodide" in sys.modules:
-        if cairo_formats:
+        if any(is_cairosvg_format(f) for f in out_formats):
             logger.info("Running in WebAssembly mode: Image conversion is handled by the browser.")
             return [f for f in out_formats if not is_cairosvg_format(f)] or [SVG_FORMAT]
-    else:
-        if cairo_formats and not has_cairosvg():
-            logger.warning(
-                f"CairoSVG is not installed. Cannot generate: {', '.join(cairo_formats).upper()}\n"
-                f"   Output restricted to SVG-compatible formats only.\n"
-                f"   (To enable PNG/PDF, run: pip install gbdraw[export])"
-            )
-            return [f for f in out_formats if f not in CAIROSVG_FORMATS] or [SVG_FORMAT]
+        return out_formats
+    require_cairosvg(out_formats)
     return out_formats
 
 

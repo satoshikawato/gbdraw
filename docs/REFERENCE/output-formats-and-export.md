@@ -38,9 +38,11 @@ written, so when a conversion fails, no existing file changes and no new file
 is left, with or without overwrite. If the filesystem fails while the outputs
 are being written, the error names the files already written. A Circular batch
 writes record by record: when one record fails, the records before it stay
-written. Without CairoSVG, the command line skips PNG, PDF, EPS, and PS with a
-warning and still writes the SVG formats; Python `save_figure_to()`,
-`Diagram.save()`, and typed requests fail before writing anything.
+written. Without CairoSVG, a requested PNG, PDF, EPS, or PS fails before
+anything is written, with one error that names those formats and the install
+command: the command line prints it and exits with status 1, and Python
+`save_figure_to()`, `render_to_bytes()`, `Diagram.save()`, and typed requests
+raise it as `ValidationError`.
 
 ## Static, interactive, and raster output
 

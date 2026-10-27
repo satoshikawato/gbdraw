@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -758,8 +759,19 @@ def test_format_classification_and_filename_resolution() -> None:
     assert resolve_format_output_path("out", "interactive_svg") == "out.interactive.svg"
 
 
-def test_handle_output_formats_keeps_interactive_when_cairosvg_missing(monkeypatch) -> None:
-    monkeypatch.setattr(cli_common, "has_cairosvg", lambda: False)
+def test_handle_output_formats_refuses_formats_cairosvg_cannot_make(monkeypatch) -> None:
+    monkeypatch.setattr(export_module, "_load_cairosvg", lambda: None)
+
+    with pytest.raises(ValidationError, match=r"^Cannot generate PNG, PDF: CairoSVG is not installed\."):
+        cli_common.handle_output_formats(["interactive-svg", "png", "pdf"])
+
+
+def test_handle_output_formats_leaves_browser_conversion_to_webassembly(monkeypatch) -> None:
+    def unexpected_lookup():
+        raise AssertionError("WebAssembly output should not look for CairoSVG.")
+
+    monkeypatch.setattr(export_module, "_load_cairosvg", unexpected_lookup)
+    monkeypatch.setitem(sys.modules, "pyodide", SimpleNamespace())
 
     assert cli_common.handle_output_formats(["interactive-svg", "png", "pdf"]) == [
         "interactive_svg"

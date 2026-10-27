@@ -223,9 +223,9 @@ def test_save_figure_to_svg_only_skips_cairosvg_lookup(
 def test_handle_output_formats_svg_only_skips_cairosvg_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def unexpected_has_cairosvg():
+    def unexpected_lookup():
         raise AssertionError("SVG-only CLI output should not check CairoSVG availability.")
 
-    monkeypatch.setattr(cli_common_module, "has_cairosvg", unexpected_has_cairosvg)
+    monkeypatch.setattr(export_module, "_load_cairosvg", unexpected_lookup)
 
-    assert cli_common_module.handle_output_formats(["svg"]) == ["svg"]
+    assert cli_common_module.handle_output_formats(["svg", "interactive-svg"]) == ["svg", "interactive_svg"]
