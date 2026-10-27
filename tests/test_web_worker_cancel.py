@@ -172,7 +172,7 @@ def test_a_cold_render_checks_inside_the_long_builds(tmp_path: Path) -> None:
     assert {
         "_build_feature_layers",
         "extract_features_from_records_payload",
-        "build_interactive_svg_context",
+        "interactive_svg_context",
         "_normalized_biological_features",
         "_feature_catalog_item",
     } <= sites.sites

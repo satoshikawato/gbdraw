@@ -2112,3 +2112,232 @@ def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_ne
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
         assert metrics.get("renderStageUncacheableCount", 0) == 0
         assert metrics.get("renderStageUndeclaredReadCount", 0) == 0
+
+
+# The catalog is kept while what it reads is unchanged: a change that rebuilds
+# a content without changing a catalog read (ids and fills) keeps the
+# ``catalog_item`` build, so the page keeps the catalog it holds, and that
+# catalog equals an empty cache's. A changed read still sends the catalog.
+
+
+def _catalog_bytes(reply: dict[str, object]) -> str:
+    return json.dumps(reply["featureCatalog"], ensure_ascii=False, separators=(",", ":"))
+
+
+def _assert_the_held_catalog_is_kept(
+    reply: dict[str, object],
+    diagnostics: dict[str, object],
+    *,
+    held: dict[str, object],
+    fresh: dict[str, object],
+) -> None:
+    """The reply keeps the held catalog, which equals an empty cache's catalog."""
+
+    assert reply["featureCatalog"] is None
+    assert reply["featureCatalogRevision"] == held["featureCatalogRevision"]
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageHit:catalog_item"] == 1
+    assert "renderStageBuild:catalog_item" not in metrics
+    assert _catalog_bytes(held) == _catalog_bytes(fresh)
+
+
+def _comparison_document(
+    sources: tuple[Path, Path, Path],
+    *,
+    overrides: dict[str, object],
+    record_gap_px: float = 24.0,
+) -> dict[str, object]:
+    """Three Linear records, the second and third in one row, one comparison from the first to the second."""
+
+    from gbdraw.api import LinearComparison, LinearMultiRecordOptions
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    hits = pd.DataFrame(
+        [["kept-a", "kept-b", 99.0, 150, 0, 0, 31, 180, 31, 180, 1e-50, 300.0]],
+        columns=COMPARISON_COLUMNS,
+    )
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=GenBankInputSource(source), record_key=f"record-{index}")
+            for index, source in enumerate(sources, start=1)
+        ),
+        options=LinearDiagramOptions(
+            linear_comparisons=(LinearComparison(0, 1, hits),), config_overrides=overrides
+        ),
+        layout=LinearMultiRecordOptions(
+            record_gap_px=record_gap_px, multi_record_positions=("#1@1", "#2@2", "#3@2")
+        ),
+        output=RenderOutputRequest(output_prefix="catalog-kept", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_change_that_keeps_every_catalog_read_keeps_the_catalog_build(tmp_path: Path) -> None:
+    """A feature stroke, a comparison height and a record gap rebuild contents, never a catalog read."""
+
+    sources = (tmp_path / "a.gbk", tmp_path / "b.gbk", tmp_path / "c.gbk")
+    for source, record_id in zip(sources, ("kept-a", "kept-b", "kept-c")):
+        _write_genbank(source, (_record(record_id),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _comparison_document(sources, overrides={}), request_id=1)
+    assert held["featureCatalog"] is not None
+    steps: tuple[tuple[str, dict[str, object], float, str], ...] = (
+        ("stroke", {"objects.features.block_stroke_width.short": 4.0}, 24.0, "record_content"),
+        (
+            "comparison height",
+            {"objects.features.block_stroke_width.short": 4.0, "canvas.linear.comparison_height": 90},
+            24.0,
+            "comparison_content",
+        ),
+        (
+            "record gap",
+            {"objects.features.block_stroke_width.short": 4.0, "canvas.linear.comparison_height": 90},
+            80.0,
+            "comparison_content",
+        ),
+    )
+    previous = held
+    for index, (name, overrides, gap, rebuilt) in enumerate(steps, start=2):
+        document = _comparison_document(sources, overrides=overrides, record_gap_px=gap)
+        reply, diagnostics = _render(
+            tmp_path, cache, document, request_id=index, held_revision=str(held["featureCatalogRevision"])
+        )
+        fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=10 + index)
+        assert reply["results"] != previous["results"], name
+        assert _metrics(diagnostics)[f"renderStageBuild:{rebuilt}"] >= 1, name
+        _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+        previous = reply
+
+
+def _merged_record_document(source: Path, *, radius: int) -> dict[str, object]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(source), record_key="records-1", cardinality=RecordCardinality.ALL
+            ),
+        ),
+        options=CircularDiagramOptions(config_overrides={"canvas.circular.radius": radius}),
+        output=RenderOutputRequest(output_prefix="catalog-kept-merged", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_circular_radius_change_keeps_the_merged_record_catalog_build(tmp_path: Path) -> None:
+    """A radius change rebuilds every merged Multi-Record Circular record, not what the catalog reads."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("merged-a"), _record("merged-b")))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _merged_record_document(source, radius=390), request_id=1)
+    document = _merged_record_document(source, radius=300)
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert reply["results"] != held["results"]
+    assert _metrics(diagnostics)["renderStageBuild:record_merge"] == 2
+    _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+
+
+def _styled_annotations(fill: str) -> AnnotationOptions:
+    from gbdraw.annotations.models import RegionAnnotationStyle
+
+    return AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "focus",
+                        CoordinateSpan(None, 20, 80),
+                        label="Focus",
+                        mark="band",
+                        style=RegionAnnotationStyle(fill=fill),
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def test_an_annotation_style_change_keeps_the_interactive_context_and_the_catalog(tmp_path: Path) -> None:
+    """The context reads no annotation style: a fill change rebuilds only what draws it."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("styled-annotation"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _document(source, annotations=_styled_annotations("#ff0000")), request_id=1)
+    document = _document(source, annotations=_styled_annotations("#00ff00"))
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert reply["results"] != held["results"]
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageHit:interactive_context"] == 1
+    assert "renderStageBuild:interactive_context" not in metrics
+    assert "renderStageBuild:catalog_normalization" not in metrics
+    _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+
+
+def test_a_feature_fill_change_sends_the_catalog(tmp_path: Path) -> None:
+    """A changed read (the drawn feature fill) sends the catalog, equal to an empty cache's."""
+
+    from gbdraw.api import ColorOptions
+
+    def document(palette: str) -> dict[str, object]:
+        request = LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
+            options=LinearDiagramOptions(colors=ColorOptions(default_colors_palette=palette)),
+            output=RenderOutputRequest(output_prefix="catalog-fill", formats=("svg",)),
+        )
+        return build_session_document(request).to_dict()
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("fill-change"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, document("default"), request_id=1)
+    reply, diagnostics = _render(
+        tmp_path, cache, document("mint"), request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document("mint"), request_id=3)
+
+    assert _metrics(diagnostics)["renderStageBuild:catalog_item"] == 1
+    assert reply["featureCatalogRevision"] not in (None, held["featureCatalogRevision"])
+    assert reply["featureCatalog"] is not None
+    assert reply["featureCatalog"] != held["featureCatalog"]
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+def _metadata_annotations(metadata: dict[str, str]) -> AnnotationOptions:
+    return AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (RegionAnnotation("focus", CoordinateSpan(None, 20, 80), label="Focus", metadata=metadata),),
+            ),
+        )
+    )
+
+
+def test_an_annotation_metadata_order_change_rebuilds_the_context_and_sends_the_catalog(tmp_path: Path) -> None:
+    """OV-1346: the context payload keeps the metadata key order, so another order is another context."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("metadata-order"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(
+        tmp_path, cache, _document(source, annotations=_metadata_annotations({"a": "2", "b": "1"})), request_id=1
+    )
+    document = _document(source, annotations=_metadata_annotations({"b": "1", "a": "2"}))
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert _catalog_bytes(fresh) != _catalog_bytes(held)
+    assert _metrics(diagnostics)["renderStageBuild:interactive_context"] == 1
+    assert reply["featureCatalog"] is not None
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)

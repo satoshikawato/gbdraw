@@ -1637,7 +1637,7 @@ def test_render_request_fails_when_interactive_metadata_generation_fails(
 
     monkeypatch.setattr(
         request_render_module,
-        "build_interactive_svg_context",
+        "interactive_svg_context",
         fail_context,
     )
 

@@ -273,6 +273,25 @@ _CATALOG_INPUTS = frozenset(
         "interactive_context", "conservation_content", "record_merge",
     }
 )
+# The catalog contents: each rebuilt one builds its ``catalog_snapshot`` (the
+# reads the item is keyed by); an ``interactive_context`` rebuild alone builds none.
+_CATALOG_CONTENTS = _CATALOG_INPUTS - {"interactive_context"}
+# Options that change no catalog read (feature and match ids and fills): the
+# catalog item must be a hit even when a content it reads rebuilds, so the page
+# keeps its catalog. Options a case does not have are skipped.
+_CATALOG_KEPT_OPTIONS = frozenset(
+    {
+        # Strokes.
+        "axis_stroke_color", "axis_stroke_width", "line_stroke_color", "line_stroke_width",
+        "scale_stroke_color", "scale_stroke_width",
+        # Fonts.
+        "definition_font_size", "scale_font_size", "ruler_label_font_size",
+        # Scale, comparison height, track heights and radii.
+        "scale_interval", "comparison_height", "feature_height", "track_axis_gap",
+        # GC toggles.
+        "gc_content_mode", "show_gc_content_axis", "show_gc_content_ticks",
+    }
+)
 
 
 # The composition plan is keyed by the bounds of the primary content, the
@@ -324,7 +343,11 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
         allowed |= {"record_merge"}
     if _moves_bounds(option_id, allowed):
         allowed |= {"composition_plan"}
-    return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
+    if allowed & _CATALOG_CONTENTS:
+        allowed |= {"catalog_snapshot"}
+    if allowed & _CATALOG_INPUTS and option_id not in _CATALOG_KEPT_OPTIONS:
+        allowed |= {"catalog_item"}
+    return allowed
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:

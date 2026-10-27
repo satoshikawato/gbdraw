@@ -1941,3 +1941,46 @@ def test_a_reused_catalog_normalization_starts_from_its_stored_features() -> Non
     ]
     assert items[0]["biologicalFeatures"][0]["sequenceSourceIndex"] == 0
     assert items[1]["biologicalFeatures"] == expected["biologicalFeatures"]
+
+
+def _catalog_reads_fixture() -> str:
+    svg, _ = _combined_catalog_fixture()
+    # A record source span (PD-OI-076) and a non-ASCII label, so every read kind is present.
+    return svg.replace(
+        '<g id="features">',
+        '<g id="features" data-gbdraw-record-index="1" data-gbdraw-record-source-start="3"'
+        ' data-gbdraw-record-source-end="12" data-gbdraw-record-source-step="-1">',
+    ).replace('data-gbdraw-annotation-label="DOM label"', 'data-gbdraw-annotation-label="DOM ラベル é"')
+
+
+def test_catalog_reads_text_round_trips() -> None:
+    """The ``catalog_item`` key text names the reads exactly: decoding it gives the same reads."""
+
+    reads = feature_catalog_module._catalog_element_reads(ET.fromstring(_catalog_reads_fixture())).reads
+    assert reads.record_source_spans == ((1, (3, 12, -1)),)
+    assert len(reads.feature_entries) == 4
+    assert len(reads.match_attributes) == 2
+    assert len(reads.annotation_attributes) == 1
+
+    text = feature_catalog_module._catalog_reads_text(reads)
+    decoded = feature_catalog_module._catalog_reads_from_text(text)
+
+    assert decoded == reads
+    assert feature_catalog_module._catalog_reads_text(decoded) == text
+
+
+def test_the_reads_of_sibling_trees_join_to_the_index_of_one_traversal() -> None:
+    """Reading each content alone and joining the reads in document order gives one traversal's index."""
+
+    root = ET.fromstring(_catalog_reads_fixture())
+    whole = feature_catalog_module._rendered_svg_catalog_index(
+        (feature_catalog_module._catalog_element_reads(root).reads,)
+    )
+    parts = []
+    for child in root:
+        tree = ET.Element(root.tag)
+        tree.append(child)
+        parts.append(feature_catalog_module._catalog_element_reads(tree).reads)
+
+    assert len(parts) == 4
+    assert feature_catalog_module._rendered_svg_catalog_index(parts) == whole
