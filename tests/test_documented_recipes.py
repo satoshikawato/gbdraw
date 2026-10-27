@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -68,12 +69,21 @@ def test_readme_and_quickstart_first_figures_run_from_a_clean_directory(tmp_path
     """The README and the Quickstart give one block; it runs as written beside a checkout."""
 
     block = _first_figures_block(REPO_ROOT / "README.md")
-    assert _first_figures_block(DOCS_ROOT / "QUICKSTART.md") == block
+    # The Quickstart's only code block is this one, so no unexecuted command slips in.
+    quickstart = (DOCS_ROOT / "QUICKSTART.md").read_text(encoding="utf-8")
+    assert re.findall(r"```([^\n]*)\n(.*?)```", quickstart, re.S) == [("bash", block)]
     (tmp_path / "gbdraw").symlink_to(REPO_ROOT, target_is_directory=True)
-    # The documented `gbdraw` command, run from this checkout.
-    shim = f"gbdraw() {{ {shlex.quote(sys.executable)} -c 'from gbdraw.cli import main; main()' \"$@\"; }}\n"
+    # The documented `gbdraw` command, run from this checkout, not an installed gbdraw.
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
+    python = shlex.quote(sys.executable)
+    shim = f"gbdraw() {{ {python} -c 'from gbdraw.cli import main; main()' \"$@\"; }}\n"
+    imported = subprocess.run(
+        ["bash", "-e", "-c", f"{python} -c 'import gbdraw; print(gbdraw.__file__)'"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert Path(imported) == REPO_ROOT / "gbdraw" / "__init__.py"
     result = subprocess.run(
-        ["bash", "-e", "-c", shim + block], cwd=tmp_path, capture_output=True, text=True, check=False
+        ["bash", "-e", "-c", shim + block], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr[-2000:]
     assert sorted(path.name for path in tmp_path.iterdir()) == [

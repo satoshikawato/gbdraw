@@ -339,6 +339,12 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
 PALETTE_NAME_ALIASES: Mapping[str, str] = MappingProxyType({"hearbal_garden": "herbal_garden"})
 
 
+def current_palette_name(name: str) -> str:
+    """The current name of the palette ``name`` names (a former name reads as it)."""
+
+    return PALETTE_NAME_ALIASES.get(name, name)
+
+
 class _PaletteCatalog(Mapping[str, Mapping[str, str]]):
     """The packaged palettes by current name; a former name looks one up too."""
 
@@ -346,7 +352,7 @@ class _PaletteCatalog(Mapping[str, Mapping[str, str]]):
         self._palettes = palettes
 
     def __getitem__(self, name: str) -> Mapping[str, str]:
-        return self._palettes[PALETTE_NAME_ALIASES.get(name, name)]
+        return self._palettes[current_palette_name(name)]
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._palettes)
@@ -376,7 +382,7 @@ def packaged_color_palettes() -> Mapping[str, Mapping[str, str]]:
 
 
 def require_palette_name(palette: str) -> str:
-    """The current name of the packaged palette ``palette`` names; refuse others.
+    """Return ``palette`` when it names a packaged palette; refuse it otherwise.
 
     The CLI ``-p/--palette`` and ``FeatureOptions(palette=...)`` read a palette
     name here. A stored request keeps the render-time fallback of
@@ -390,7 +396,7 @@ def require_palette_name(palette: str) -> str:
             f"Unknown palette {palette!r}; choose from: {', '.join(palettes)}.",
             diagnostic={"code": "INPUT_INVALID"},
         )
-    return PALETTE_NAME_ALIASES.get(palette, palette)
+    return palette
 
 
 def merge_default_colors(
@@ -546,6 +552,7 @@ __all__ = [
     "PALETTE_NAME_ALIASES",
     "USER_COLOR_FORMS",
     "check_user_color",
+    "current_palette_name",
     "is_user_color",
     "load_default_colors",
     "merge_default_colors",

@@ -110,8 +110,7 @@ class FeatureOptions:
 
     def __post_init__(self) -> None:
         validate_feature_type_names(self.types, field_name="types")
-        # A former palette name reads as the current one (``PALETTE_NAME_ALIASES``).
-        object.__setattr__(self, "palette", require_palette_name(self.palette))
+        require_palette_name(self.palette)
 
 
 @dataclass(frozen=True)

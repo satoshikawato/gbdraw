@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { PaletteColorsDialog } from '../state.js' */
-import { buildPaletteColorOverrideRows, normalizePaletteColors } from '../utils/color-utils.js';
+import { buildPaletteColorOverrideRows, currentPaletteName, normalizePaletteColors } from '../utils/color-utils.js';
 import {
   clearQueuedPalette, editDefaultColor as editDefaultColorField, queuePalette, replaceDefaultColors, selectPalette as selectDrawingPalette,
   setDefaultColors
@@ -56,6 +56,9 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
   } = state;
   /** @param {Record<string, string> | null | undefined} colors */
   const cloneColors = (colors) => ({ ...(colors || {}) });
+  // The current name of the palette the shown Result was drawn with: Load
+  // copies a saved `ui.appliedPaletteName` as written, which may be a former name.
+  const appliedPalette = () => currentPaletteName(appliedPaletteName.value);
   const getPaletteMap = () => {
     if (paletteDefinitions.value && Object.keys(paletteDefinitions.value).length > 0) {
       return paletteDefinitions.value;
@@ -160,7 +163,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     const queued = String(drawing.pendingPaletteName.value || '').trim();
     Object.assign(paletteColorsDialog, {
       show: true, kind, fromPalette: paletteNameOf(drawing), toPalette,
-      droppedPalette: kind === 'switch' && queued && toPalette === appliedPaletteName.value ? queued : '',
+      droppedPalette: kind === 'switch' && queued && toPalette === appliedPalette() ? queued : '',
       count: rows.length, keysText: describeKeys(rows.map(([key]) => key))
     });
   };
@@ -193,7 +196,7 @@ export const createResultsManager = ({ state, closeAfterDialogChoice = (close) =
     if (choice !== 'keep') delete drawing.fileImports.d_color;
     // The applied palette queues nothing: switching back to it while another
     // is queued applies its colors live (Q5 A, Owner 2026-10-09).
-    if (paletteInstantPreviewEnabled.value || paletteName === appliedPaletteName.value) {
+    if (paletteInstantPreviewEnabled.value || paletteName === appliedPalette()) {
       applyPaletteDraftToPreview();
       return undefined;
     }

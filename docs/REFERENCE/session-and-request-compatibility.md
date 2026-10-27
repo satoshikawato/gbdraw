@@ -39,8 +39,13 @@ comparison match by `data-gbdraw-pairwise-match-id`. The web app renames it to
 Session, so match popups and selection work as before.
 
 The palette `herbal_garden` was named `hearbal_garden` through gbdraw 0.14.2.
-A Session, a request, `-p/--palette`, or `FeatureOptions(palette=...)` that
-names `hearbal_garden` draws `herbal_garden`, and gbdraw saves the new name.
+`-p/--palette`, `FeatureOptions(palette=...)`, `ColorOptions`, and a Session or
+request that names `hearbal_garden` draw `herbal_garden`, and a Session that the
+CLI or the Python API saves names `herbal_garden`; a CLI Session keeps the
+command line as typed. The web app loads the drawing's palette and a queued
+palette as `herbal_garden`. Until the next **Generate**, a Session it saves
+keeps the former name in the palette of the shown Result and in its render
+request; both still draw `herbal_garden`.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 48,

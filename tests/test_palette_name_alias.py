@@ -12,6 +12,7 @@ import pytest
 
 import gbdraw.circular as circular_cli_module
 from gbdraw import FeatureOptions
+from gbdraw.api import ColorOptions
 from gbdraw.io.colors import PALETTE_NAME_ALIASES, packaged_color_palettes, require_palette_name
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +31,11 @@ def test_the_palette_is_listed_by_its_current_name_only() -> None:
     # A lookup by the former name finds the same palette.
     assert palettes[OLD] == palettes[NEW]
     assert palettes.get(OLD) == palettes[NEW]
-    assert require_palette_name(OLD) == NEW
-    assert FeatureOptions(palette=OLD).palette == NEW
+    assert require_palette_name(OLD) == OLD
+    assert FeatureOptions(palette=OLD).palette == OLD
+    # Every request reaches its palette through ColorOptions, which keeps the current name.
+    assert ColorOptions(default_colors_palette=OLD).default_colors_palette == NEW
+    assert ColorOptions(default_colors_palette="nope").default_colors_palette == "nope"
     with pytest.raises(Exception, match=r"choose from: .*herbal_garden") as excinfo:
         require_palette_name("nope")
     assert OLD not in str(excinfo.value)
@@ -88,7 +92,11 @@ def test_a_released_session_that_names_the_former_palette_replays_like_the_curre
         session = directory / "in.gbdraw-session.json"
         session.write_text(text.replace(f'"{OLD}"', f'"{palette}"'), encoding="utf-8")
         monkeypatch.chdir(directory)
-        circular_cli_module.circular_main(["--session", str(session), "-o", "replay", "-f", "svg"])
+        circular_cli_module.circular_main(
+            ["--session", str(session), "-o", "replay", "-f", "svg", "--session_output", "resaved.json"]
+        )
         svgs[palette] = (directory / "replay.svg").read_bytes()
     assert svgs[OLD] == svgs[NEW]
     assert svgs[NEW] != svgs["default"]
+    resaved = json.loads((tmp_path / OLD / "resaved.json").read_text(encoding="utf-8"))
+    assert resaved["renderRequest"]["diagramOptions"]["colors"]["defaultColorsPalette"] == NEW

@@ -9,9 +9,8 @@ import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
-import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
+import { normalizePaletteColors, normalizePaletteDefinitions } from '../../gbdraw/web/js/utils/color-utils.js';
 import { drawingStore } from './helpers/drawing-state.mjs';
-import { readPalette } from '../../gbdraw/web/js/services/config-field-readers.js';
 import { PALETTE_NAME_ALIASES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
   PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
@@ -422,13 +421,22 @@ test('a palette named like an inherited member falls back to the default palette
 });
 
 // `herbal_garden` was `hearbal_garden` through 0.14.2 (PALETTE_NAME_ALIASES of
-// gbdraw/io/colors.py): a Session that names the former palette loads the
-// current one, a lookup by the former name finds it, and the list shows only
-// the current name.
-test('a former palette name reads as the current palette and is not listed', () => {
+// gbdraw/io/colors.py). The palette slice stores the current name of every
+// palette it is given (Load, History, a queued palette); a lookup by the former
+// name finds the palette, and the list shows only the current name.
+test('a former palette name is stored, looked up, and listed by its current name', () => {
   assert.deepEqual(PALETTE_NAME_ALIASES, { hearbal_garden: 'herbal_garden' });
-  assert.equal(readPalette(' hearbal_garden ').value, 'herbal_garden');
-  assert.equal(readPalette('forest').value, 'forest');
+  const drawing = drawingOf({});
+  PALETTE_SLICE.install(drawing.slices.palette, { selectedPalette: 'hearbal_garden', pendingPaletteName: 'hearbal_garden' });
+  assert.equal(drawing.selectedPalette.value, 'herbal_garden');
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  queuePalette(drawing.slices.palette, 'hearbal_garden', { CDS: '#000000' });
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  restoreArtifactQueuedPalette(drawing.slices.palette, 'hearbal_garden', { CDS: '#000000' });
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  selectPalette(drawing.slices.palette, 'forest');
+  assert.equal(drawing.selectedPalette.value, 'forest');
+
   const circular = drawingOf();
   const state = {
     paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
@@ -440,6 +448,23 @@ test('a former palette name reads as the current palette and is not listed', () 
   assert.deepEqual(Object.keys(state.paletteDefinitions.value), ['default', 'forest', 'herbal_garden']);
   assert.equal(state.paletteDefinitions.value.hearbal_garden, state.paletteDefinitions.value.herbal_garden);
   assert.deepEqual(state.paletteDefinitions.value.herbal_garden, normalizePaletteColors(herbal));
+});
+
+// Load copies a saved `ui.appliedPaletteName` as written (services/config.js),
+// so a 0.14.2 Result drawn with `hearbal_garden` is the applied palette under
+// its former name: choosing `herbal_garden` is switching back to it, which
+// applies live and drops the queued palette (Q5 A).
+test('the current name of a Result drawn with a former palette name is the applied palette', () => {
+  const { drawing, state, manager } = setup({ colors: paletteOf('default'), instant: false });
+  const herbal = { CDS: '#addc7f', default: '#d3d3d3' };
+  state.paletteDefinitions.value = normalizePaletteDefinitions({ ...PALETTES, herbal_garden: herbal });
+  state.appliedPaletteName.value = 'hearbal_garden';
+  queuePalette(drawing.slices.palette, 'forest', paletteOf('forest'));
+  manager.selectPalette('herbal_garden');
+  assert.equal(drawing.selectedPalette.value, 'herbal_garden');
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'herbal_garden');
+  assert.deepEqual(state.appliedPaletteColors.value, normalizePaletteColors(herbal));
 });
 
 // An artifact owner set holds its queued palette colors by reference, and a

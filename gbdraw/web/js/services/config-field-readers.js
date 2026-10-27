@@ -2,7 +2,7 @@
 import { MODE_SCOPED_SETTINGS } from '../mode-scoped-settings.generated.js';
 import { LABEL_STYLE_CHOICES, labelStyleForMode } from '../mode-profiles.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
-import { currentPaletteName, readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
+import { readCommittedPaint, resolveColorToHex } from '../utils/color-utils.js';
 import { classifyOptionalNumber } from '../utils/optional-positive-number.js';
 import {
   changedLeaves, exactChoice, isNonNegativeInteger, isPositiveInteger, isUnsetValue, keepsMeaning, nonNegativeNumberOrNull, numberOr, onlyTrue,
@@ -744,8 +744,8 @@ export const readBlacklistText = (value) => (typeof value === 'string' || typeof
 /** Read as text. @type {FieldReader<string>} */
 export const readLosatProgram = (value) => readLosatProgramText(value ? String(value) : value);
 
-/** The palette's current name, else unset (the drawing's palette stays). @type {FieldReader<string>} */
-export const readPalette = (value) => (typeof value === 'string' ? { value: currentPaletteName(value.trim()), lost: false }
+/** Text, else unset (the drawing's palette stays). @type {FieldReader<string>} */
+export const readPalette = (value) => (typeof value === 'string' ? { value: value.trim(), lost: false }
   : { value: '', lost: !isUnsetValue(value) });
 /**
  * The records a drawing of `mode` turns OFF: each a record key of its mode,
