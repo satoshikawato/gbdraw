@@ -17,6 +17,28 @@ write-up of a release.
   (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed
   (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
+- Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
+  Security Advisories (#1403).
+- Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
+  inputs in `gbdraw/web/tutorial-data/` of a source checkout; the Quickstart also links the web app (#1407).
+- Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
+  the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
+  Before, they wrote only the SVG with a warning and exited 0 (#1404).
+- Changed: each LOSAT or BLAST+ search logs one `INFO: Running ...` line that names the backend, its source, the
+  executable, and its version. New Session runtime records no longer carry the `cli` field; older records still
+  load (#1406).
+- Changed: building gbdraw from source needs setuptools 77 or newer. The package lists Python 3.13, which the
+  `dev` CI tier tests. CI actions are pinned to commits, and Dependabot proposes grouped monthly updates (#1403).
+- Changed: the installation notes state what CI and each release check instead of a 0.14.0 claim (#1407).
+- Removed: the LOSAT development build tracked at `gbdraw/bin/linux-x86_64/losat`, and the resolver step that
+  preferred it over `losat` on `PATH`. In a source checkout, run `gbdraw setup-losat` or put `losat` on `PATH`.
+  The automatic order is now: the explicit option, conda, the managed install (`gbdraw setup-losat`), `losat` on
+  `PATH`, then NCBI BLAST+ on `PATH` (#1406).
+- Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
+  `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
+  only `herbal_garden`, and new requests name it (#1407).
+- Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
+  and Windows have no LOSAT binary (#1406).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
