@@ -419,7 +419,7 @@ pairwise_match = "#c2c2d6"
 pairwise_match_min = "#f0f0f0"
 pairwise_match_max = "#c2c2d6"
 
-[hearbal_garden]
+[herbal_garden]
 CDS = "#addc7f"
 rRNA = "#acb1e4"
 tRNA = "#e6c03a"

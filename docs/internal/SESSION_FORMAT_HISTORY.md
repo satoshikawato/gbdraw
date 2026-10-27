@@ -28,6 +28,23 @@ whose 12 records are `{source: "bundled", path: "gbdraw/bin/linux-x86_64/losat",
 cli: "v1"}`; `tests/web/run-info.test.mjs` and `tests/web/losat-cache.test.mjs`
 pin how the Web reads them.
 
+## Unreleased: the palette `hearbal_garden` reads as `herbal_garden`
+
+No Session or request version changes. Releases through v0.14.2 shipped the
+packaged palette as `hearbal_garden` (`gbdraw/data/color_palettes.toml`), and a
+Session stores the name in `config.palette` (Web) and
+`renderRequest.diagramOptions.colors.defaultColorsPalette`. The table is now
+`herbal_garden`; `PALETTE_NAME_ALIASES` (`gbdraw/io/colors.py`, written to
+`js/contracts/schema.generated.js` by `tools/generate_web_contracts.py`) maps
+the former name to it. Python looks palettes up through
+`packaged_color_palettes()`, whose lookup accepts the former name and whose
+iteration lists only current names; `require_palette_name` returns the current
+name, so the CLI and `FeatureOptions` write it. The Web `readPalette` loads the
+current name, and `normalizePaletteDefinitions` adds the former name as a
+non-enumerable lookup key, so the palette list shows only `herbal_garden`. A
+CLI Session's `cliInvocation.args` keeps the command line as typed. Fixture:
+`tests/fixtures/sessions/HmmtDNA-hearbal-garden-cli.v48`, written by v0.14.2.
+
 ## Unreleased: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,

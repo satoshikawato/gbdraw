@@ -11,6 +11,8 @@ import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
 import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
 import { drawingStore } from './helpers/drawing-state.mjs';
+import { readPalette } from '../../gbdraw/web/js/services/config-field-readers.js';
+import { PALETTE_NAME_ALIASES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
   PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
 } from '../../gbdraw/web/js/services/drawing/palette.js';
@@ -417,6 +419,27 @@ test('a palette named like an inherited member falls back to the default palette
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);
   }
+});
+
+// `herbal_garden` was `hearbal_garden` through 0.14.2 (PALETTE_NAME_ALIASES of
+// gbdraw/io/colors.py): a Session that names the former palette loads the
+// current one, a lookup by the former name finds it, and the list shows only
+// the current name.
+test('a former palette name reads as the current palette and is not listed', () => {
+  assert.deepEqual(PALETTE_NAME_ALIASES, { hearbal_garden: 'herbal_garden' });
+  assert.equal(readPalette(' hearbal_garden ').value, 'herbal_garden');
+  assert.equal(readPalette('forest').value, 'forest');
+  const circular = drawingOf();
+  const state = {
+    paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
+    ...drawingStore(circular, drawingOf()), activeDrawing: () => circular
+  };
+  const herbal = { CDS: '#addc7f', default: '#d3d3d3' };
+  assert.equal(createPaletteLoader({ state }).applyPalettes({ ...PALETTES, herbal_garden: herbal }), true);
+  assert.deepEqual(state.paletteNames.value, ['default', 'forest', 'herbal_garden']);
+  assert.deepEqual(Object.keys(state.paletteDefinitions.value), ['default', 'forest', 'herbal_garden']);
+  assert.equal(state.paletteDefinitions.value.hearbal_garden, state.paletteDefinitions.value.herbal_garden);
+  assert.deepEqual(state.paletteDefinitions.value.herbal_garden, normalizePaletteColors(herbal));
 });
 
 // An artifact owner set holds its queued palette colors by reference, and a

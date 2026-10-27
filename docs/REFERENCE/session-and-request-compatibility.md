@@ -38,6 +38,10 @@ comparison match by `data-gbdraw-pairwise-match-id`. The web app renames it to
 `data-gbdraw-match-id`, the only name gbdraw writes now, when it loads such a
 Session, so match popups and selection work as before.
 
+The palette `herbal_garden` was named `hearbal_garden` through gbdraw 0.14.2.
+A Session, a request, `-p/--palette`, or `FeatureOptions(palette=...)` that
+names `hearbal_garden` draws `herbal_garden`, and gbdraw saves the new name.
+
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 48,
 and keep the saved preview until the next Generate. Schema 9 adds

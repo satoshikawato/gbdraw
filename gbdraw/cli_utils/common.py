@@ -649,7 +649,7 @@ def validate_output_choice_args(args: argparse.Namespace) -> None:
     """
 
     parse_output_formats(args.format)
-    require_palette_name(args.palette)
+    args.palette = require_palette_name(args.palette)
 
 
 def validate_label_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
