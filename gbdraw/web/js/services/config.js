@@ -6177,9 +6177,39 @@ class UncomposedResultSet extends Error {
  * A Session 27-44 read by Load's readers at the file's own paths, with their
  * rows and Python's, and Python's conversion of the read document.
  * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts,
- *   orthogroups: readonly unknown[] }} LegacySessionRead `orthogroups`: the similarity groups of the
- *   file's `orthogroupState` (a Session 27-39's, members by record key), which its set-aside Results draw
+ *   orthogroups: readonly unknown[], drawnWith: ResultDrawnWith | null }} LegacySessionRead `orthogroups`: the
+ *   similarity groups of the file's `orthogroupState` (a Session 27-39's, members by record key), which its
+ *   set-aside Results draw; `drawnWith`: what a Session 27-30's Result was drawn with (OV-1953), else null
  */
+/**
+ * What a loaded Result set was drawn with, at the paths of the document Load
+ * reads them from: its `ui` (the shown mode, the drawn legend and title
+ * sides, the user offsets), its request's mode, a Session 27-30's last
+ * Generate's mode (`cliInvocation.mode`), and its draft's legend and title
+ * sides (`config.form.legend`, `config.adv.plot_title_position`).
+ * @typedef {{ ui: Record<string, unknown>, committedMode: unknown, invocationMode: unknown,
+ *   legend: unknown, plotTitlePosition: unknown, canonical: boolean }} ResultDrawnWith
+ */
+/**
+ * The mode of a loaded Result and of the shown drawing (OV-677): the
+ * Result's is its request's, else a Session 27-30's last Generate's, else
+ * `ui.mode`, as the CLI reads it (`session_io.session_mode`); 0.13.0 kept a
+ * Result across a mode switch and saved the shown mode in `ui.mode`.
+ * Sessions 29 (tag 0.12.0) and 30 (tag 0.13.0) write `cliInvocation` only for
+ * a Generate the CLI can replay; without it the Result reads as the shown
+ * mode (PD-OI-096). A Session 27-30 saved after a mode switch keeps the shown
+ * mode's form; a request's form is its Result's.
+ * @param {ResultDrawnWith} drawnWith
+ * @returns {{ candidateMode: 'circular' | 'linear', generatedMode: 'circular' | 'linear', formIsResultMode: boolean }}
+ */
+const drawnResultModes = ({ ui, committedMode, invocationMode, canonical }) => {
+  /** @type {'circular' | 'linear'} */
+  const candidateMode = readSessionUiMode(ui.mode).value === 'linear' ? 'linear' : 'circular';
+  /** @type {'circular' | 'linear'} */
+  const generatedMode = (committedMode || (invocationMode === 'linear' || invocationMode === 'circular' ? invocationMode : null)
+    || ui.mode) === 'linear' ? 'linear' : 'circular';
+  return { candidateMode, generatedMode, formIsResultMode: generatedMode === candidateMode || canonical };
+};
 /**
  * The Results a Session 27-44's stored figure replaced while Python upgrades
  * it (DESIGN 4.3); a Load that does not end ok puts them back.
@@ -6352,10 +6382,24 @@ const importSessionDocument = async (e, options = {}) => {
       const upgrade = await upgradeLegacySession(readData);
       if (!options.isCurrent()) return { status: 'canceled' };
       // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
+      // A Session 27-30's Result has no request: what it was drawn with is in
+      // the file's `ui`, `cliInvocation` and draft, read at the file's own
+      // paths; it travels with the Results Python sets aside (OV-1953). A
+      // Session 31-39's is its request's, which Python's Session 49 holds.
+      const { ui: storedUi, cliInvocation: storedInvocation } = /** @type {{ ui?: unknown,
+        cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
+      const { form: storedForm, adv: storedAdv } = /** @type {{ form?: { legend?: unknown },
+        adv?: { plot_title_position?: unknown } }} */ (isPlainObject(storedDraft) ? storedDraft : {});
       legacyRead = {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
         sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
-        orthogroups
+        orthogroups,
+        drawnWith: fileDocument.version < CANONICAL_SESSION_MIN_VERSION
+          ? {
+              ui: isPlainObject(storedUi) ? storedUi : {}, committedMode: null, invocationMode: storedInvocation?.mode,
+              legend: storedForm?.legend, plotTitlePosition: storedAdv?.plot_title_position, canonical: false
+            }
+          : null
       };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
@@ -6439,27 +6483,27 @@ const importSessionDocument = async (e, options = {}) => {
             : committedMode
         }
       : (data.ui || {});
-    /** @type {'circular' | 'linear'} */
-    const candidateMode = readSessionUiMode(ui.mode).value === 'linear' ? 'linear' : 'circular';
-    // The Result's mode: its request's. A Session 27-30 has no request; its
-    // last Generate's invocation names it, else `ui.mode`, as the CLI reads it
-    // (`session_io.session_mode`). 0.13.0 kept a Result across a mode switch,
-    // and its `ui.mode` is the shown mode (OV-677). Sessions 29 (tag 0.12.0)
-    // and 30 (tag 0.13.0) write `cliInvocation` only for a Generate the CLI
-    // can replay; without it the Result reads as the shown mode (PD-OI-096). The flat draft's settings
-    // stay with the shown mode (the split's profile mode); its Result edits
-    // and the Result's set go with the Result's mode.
-    const invocationMode = sourceSessionVersion < CANONICAL_SESSION_MIN_VERSION
-      ? /** @type {UnvalidatedFields<'mode'>} */ (data.cliInvocation)?.mode : null;
-    /** @type {'circular' | 'linear'} */
-    const generatedMode = (committedMode || (invocationMode === 'linear' || invocationMode === 'circular' ? invocationMode : null)
-      || ui.mode) === 'linear' ? 'linear' : 'circular';
-    // A Session 27-30 saved after a mode switch keeps the shown mode's form (OV-677).
-    const formIsResultMode = generatedMode === candidateMode || canonicalSession;
+    // The stored Results of a Session 27-39 a Session 49 cannot hold come
+    // beside Python's document, for the drawing it opens; they have no
+    // catalog, so Save refuses them until one Generate (PD-OI-079).
+    const legacyStoredResults = legacyRead && projectedDrawingId !== null
+      ? legacyRead.upgrade.storedResults.get(projectedDrawingId) : undefined;
+    // What the opened set's Results were drawn with: a Session 27-30's,
+    // which Python set aside, at the file's own paths (OV-1953); else the
+    // Session's own.
+    /** @type {ResultDrawnWith} */
+    const drawnWith = legacyStoredResults !== undefined && legacyRead && legacyRead.drawnWith
+      ? legacyRead.drawnWith
+      : {
+          ui, committedMode, invocationMode: null, legend: restoredConfig?.form?.legend,
+          plotTitlePosition: restoredConfig?.adv?.plot_title_position, canonical: canonicalSession
+        };
+    const drawnUi = /** @type {typeof ui} */ (drawnWith.ui);
+    const { candidateMode, generatedMode, formIsResultMode } = drawnResultModes(drawnWith);
     // The legend position the shown Result was drawn with (OV-652, BA-D11);
     // when the form is not the Result's, it is that Result's side (OV-964).
-    const generatedLegend = ui.generatedLegendPosition
-      ? readLegendPositionOfMode(ui.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition',
+    const generatedLegend = drawnUi.generatedLegendPosition
+      ? readLegendPositionOfMode(drawnUi.generatedLegendPosition, generatedMode, 'ui.generatedLegendPosition',
         formIsResultMode ? 'legend-position-defaulted' : 'legend-side-defaulted') : null;
     if (generatedLegend) repairs.push(...generatedLegend.repairs);
     // PD-OI-086: each mode's drawing gets its own draft. A Session 46 keeps it
@@ -6628,11 +6672,6 @@ const importSessionDocument = async (e, options = {}) => {
     const filesOf = (drawingId) => (projectedDrawingId === null || drawingId === projectedDrawingId
       ? projectedFiles : storedFiles.get(drawingId) ?? noFiles);
     recordSessionLifecycleEvent('session-candidate-files-end');
-    // The stored Results of a Session 27-39 a Session 49 cannot hold come
-    // beside Python's document, for the drawing it opens; they have no
-    // catalog, so Save refuses them until one Generate (PD-OI-079).
-    const legacyStoredResults = legacyRead && projectedDrawingId !== null
-      ? legacyRead.upgrade.storedResults.get(projectedDrawingId) : undefined;
     const importedResults = legacyStoredResults ?? (canonicalSession
       ? projectionResult.artifactState.results
       : data.results);
@@ -6738,28 +6777,29 @@ const importSessionDocument = async (e, options = {}) => {
     // drawn side (blank is none) and listed once, above, and its mode's title
     // side, which 0.13.0 saved in `ui` (OV-969).
     const legacyDrawnSide = formIsResultMode
-      ? readDrawnLegendSideOfMode(restoredConfig?.form?.legend, generatedMode, 'config.form.legend')
-      : { value: drawnLegendSideOfMode(ui.generatedLegendPosition, generatedMode), repairs: [] };
+      ? readDrawnLegendSideOfMode(drawnWith.legend, generatedMode, 'config.form.legend')
+      : { value: drawnLegendSideOfMode(drawnUi.generatedLegendPosition, generatedMode), repairs: [] };
     /** @type {string} */
     const savedTitleSideOfResultMode = generatedMode === 'circular'
-      ? readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value
-      : ui.linearPlotTitlePosition ? normalizeLinearPlotTitlePosition(ui.linearPlotTitlePosition) : 'none';
+      ? readGeneratedCircularPlotTitlePosition(drawnUi.generatedCircularPlotTitlePosition, drawnUi).value
+      : drawnUi.linearPlotTitlePosition ? normalizeLinearPlotTitlePosition(drawnUi.linearPlotTitlePosition) : 'none';
     if (!committedLayout && logicalImportedResults.length > 0) repairs.push(...legacyDrawnSide.repairs);
     /** @type {LegacyResultSvgData['composition']} */
     const committedLegacyComposition = {
       legendSide: committedLayout?.legend ?? legacyDrawnSide.value,
       titleSide: committedLayout?.plotTitlePosition
-        || (formIsResultMode ? restoredConfig?.adv?.plot_title_position : savedTitleSideOfResultMode) || 'none',
+        || (formIsResultMode ? (typeof drawnWith.plotTitlePosition === 'string' ? drawnWith.plotTitlePosition : null)
+          : savedTitleSideOfResultMode) || 'none',
       userDeltas: {
-        primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
-        legend: ui.legendCurrentOffset
-          ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+        primary: drawnUi.diagramOffset ? [drawnUi.diagramOffset.x, drawnUi.diagramOffset.y] : null,
+        legend: drawnUi.legendCurrentOffset
+          ? [drawnUi.legendCurrentOffset.x, drawnUi.legendCurrentOffset.y]
           : null,
-        lengthBar: ui.lengthBarUserOffset
-          ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+        lengthBar: drawnUi.lengthBarUserOffset
+          ? [drawnUi.lengthBarUserOffset.x, drawnUi.lengthBarUserOffset.y]
           : null,
-        title: ui.plotTitleUserOffset
-          ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+        title: drawnUi.plotTitleUserOffset
+          ? [drawnUi.plotTitleUserOffset.x, drawnUi.plotTitleUserOffset.y]
           : null
       }
     };
@@ -7340,8 +7380,8 @@ const importSessionDocument = async (e, options = {}) => {
     state.featurePanelTab.value = readFeaturePanelTab(ui.featurePanelTab).value;
     state.generatedDrawingId.value = committedSetDrawingId;
     if (generatedLegend) state.generatedLegendPosition.value = generatedLegend.value;
-    state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
-    state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition, ui).value;
+    state.generatedMultiRecordCanvas.value = Boolean(drawnUi.generatedMultiRecordCanvas);
+    state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(drawnUi.generatedCircularPlotTitlePosition, drawnUi).value;
 
     // Each loaded drawing over its mode's defaults (a new drawing state); the shown
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
