@@ -327,8 +327,9 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   assert.equal(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES)?.includes('stagedResources'), false);
   assert.equal(helperPayloadKeys('notAHelper'), null);
   // Load of a Session 27-44: the one Worker call takes the document, whose
-  // resources travel inside it, and stages no file (DESIGN 4.3).
-  assert.deepEqual(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), ['document']);
+  // resources travel inside it, and the schema of the request the file
+  // stored (OV-2052), and stages no file (DESIGN 4.3).
+  assert.deepEqual(helperPayloadKeys(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), ['document', 'storedRequestSchema']);
   assert.equal(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.UPGRADE_LEGACY_SESSION), false);
 }
 
