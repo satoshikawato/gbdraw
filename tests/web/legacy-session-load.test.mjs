@@ -171,6 +171,19 @@ with tempfile.TemporaryDirectory() as tmp, materialize_session(document, output_
   assert.equal(state.selectedOrthogroupAlignmentFeature.value, '');
 });
 
+// The reply's repairs are read against the codes Load words
+// (`readSentLoadRepair`); Python's conversion owns their paths.
+test('the conversion reply is refused when a repair names a code Load does not word', async () => {
+  const { upgradeLegacySession } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
+  const reply = (warnings) => async () => ({
+    result: { document: {}, storedResults: {}, resultSetSources: {}, warnings, movedAnnotationTargets: 0 }
+  });
+  const sent = { code: 'hash-selector-unmapped', path: 'config.rules', effect: 'changed', count: 2 };
+  assert.deepEqual((await upgradeLegacySession({}, { upgrade: reply([sent]) })).warnings, [sent]);
+  await assert.rejects(upgradeLegacySession({}, { upgrade: reply([{ ...sent, code: 'hash-rule-unread' }]) }),
+    { code: 'RESULT_INVALID' });
+});
+
 test('a Worker failure of a Session 27-44 Load installs nothing, withdraws the stored figure and reports one diagnostic', async () => {
   const before = await load(fixture('HmmtDNA_basic_circular.v44-schema8'));
   assert.equal(before.status, 'ok');

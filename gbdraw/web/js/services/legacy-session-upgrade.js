@@ -4,6 +4,7 @@
 // gbdraw/web_support/legacy_session.py); the Web has no converter of its own.
 // This module holds the port the composition root sets and reads the reply.
 import { diagnosticError } from '../utils/error-normalization.js';
+import { readSentLoadRepair } from '../utils/load-repairs.js';
 
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 
@@ -40,28 +41,9 @@ export const setLegacySessionUpgrader = (upgrader) => {
 };
 
 const LEGACY_SESSION_UPGRADE = /** @type {const} */ ({ stage: 'helper', operation: 'upgradeLegacySession' });
-// The three codes `DraftMigrationRepair` names (gbdraw/session_migration.py), with their paths.
-const DRAFT_MIGRATION_REPAIR_PATHS = Object.freeze({
-  'feature-edit-unmatched': 'features',
-  'feature-visibility-narrowed': 'features.featureVisibilityOverrides',
-  'hash-selector-unmapped': 'config.rules'
-});
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
-/**
- * @param {unknown} value
- * @returns {LoadRepair | null} null for an entry of another shape
- */
-const readDraftMigrationRepair = (value) => {
-  if (!isRecord(value)) return null;
-  const { code, path, effect, count } = value;
-  if (typeof code !== 'string' || !Object.hasOwn(DRAFT_MIGRATION_REPAIR_PATHS, code)
-    || path !== DRAFT_MIGRATION_REPAIR_PATHS[/** @type {keyof typeof DRAFT_MIGRATION_REPAIR_PATHS} */ (code)]
-    || (effect !== 'dropped' && effect !== 'changed') || !Number.isSafeInteger(count) || Number(count) < 1) return null;
-  return /** @type {LoadRepair} */ ({ code, path, effect, count: Number(count) });
-};
 
 /**
  * The Session 49 of a Session 27-44, from Python, once. A Worker failure
@@ -97,7 +79,7 @@ export const upgradeLegacySession = async (document, { storedRequestSchema = nul
     if (at !== '') throw invalid();
     resultSetSources.set(drawingId, at);
   }
-  const warnings = reply.warnings.map(readDraftMigrationRepair);
+  const warnings = reply.warnings.map(readSentLoadRepair);
   if (warnings.some((warning) => warning === null)) throw invalid();
   return {
     document: reply.document,
