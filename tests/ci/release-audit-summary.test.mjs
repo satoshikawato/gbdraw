@@ -86,8 +86,11 @@ test('promotion audit jobs run only on the release-tier dispatch and stay outsid
   assert.match(job('promotion-audit-journeys'), /journey: \[J1, J2, J3, J4, J5, J6, J7\]/);
   assert.match(job('promotion-audit-random-walk'), /- name: Print the random walk seed\n[\s\S]*GBDRAW_RANDOM_WALK_SEED=\$GITHUB_RUN_ID/);
   assert.ok(job('promotion-audit-random-walk').indexOf('Print the random walk seed') < job('promotion-audit-random-walk').indexOf('- name: Checkout'));
-  // The LOSATP recipes require the managed runtime: the job installs it and accepts only a managed resolution.
-  assert.match(job('promotion-audit-recipes'), /if found="\$\(python -m gbdraw\.cli setup-losat 2>&1\)" && /);
+  // The LOSATP recipes require the managed runtime: a failed install does not stop the job, and only a
+  // successful install that resolves to the managed runtime counts as available.
+  assert.match(job('promotion-audit-recipes'), /id: managed-losat\n        uses: \.\/\.github\/actions\/managed-losat\n        with:\n          optional: "true"\n/);
+  assert.match(job('promotion-audit-recipes'), /INSTALLED: \$\{\{ steps\.managed-losat\.outputs\.installed \}\}/);
+  assert.match(job('promotion-audit-recipes'), /if \[\[ "\$INSTALLED" == true \]\] && found="\$\(python -c /);
   assert.match(job('promotion-audit-recipes'), /&& \[\[ "\$found" == "managed "\* \]\]; then/);
   assert.doesNotMatch(job('promotion-audit-recipes'), /--version/);
   assert.match(job('promotion-audit-recipes'), /skipped-run-locally/);

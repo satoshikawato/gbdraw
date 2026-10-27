@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -887,32 +887,68 @@ test('Gallery alone owns PR parity without expanding dev or release execution', 
   assert.match(smoke, /Upload Playwright PR smoke traces/);
 });
 
-test('jobs that run native LOSAT install the managed release from one cache', () => {
-  // gbdraw/bin no longer holds a LOSAT build; these jobs run native-LOSAT tests or recipes.
-  const workflow = readTestsWorkflow();
-  const job = (id) => workflowJobOf(workflow, id);
-  const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)]
-    .map(([, id]) => id);
-  const restoreName = '\n      - name: Restore the managed LOSAT runtime\n';
-  const losatJobs = jobIds.filter((id) => job(id).includes(restoreName));
-  assert.deepEqual(losatJobs, [
-    'core',
-    'core-pr',
-    'recipes-standard',
-    'acceptance-supported-main',
-    'promotion-audit-recipes'
-  ]);
-  const key = "key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}\n";
-  for (const id of losatJobs) {
-    const source = job(id);
-    const restore = source.indexOf(restoreName);
-    const install = source.indexOf('python -m gbdraw.cli setup-losat', restore);
-    assert.ok(source.indexOf('pip install -e') < restore, `${id} installs gbdraw before setup-losat`);
-    assert.ok(source.slice(restore).includes('uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0\n        with:\n          path: ~/.cache/gbdraw/losat\n'), id);
-    assert.ok(source.includes(key), id);
-    assert.ok(restore < install, `${id} runs setup-losat after the cache`);
-    assert.ok(install < source.search(/python -m pytest tests\/|run_\$\{surface\}_scenarios/), `${id} sets up LOSAT before its tests`);
+test('every job that installs gbdraw from the checkout installs the managed LOSAT release through one action', () => {
+  // gbdraw/bin holds no LOSAT build. A test or tool reaches native LOSAT through the CLI or the
+  // Python API, also from a Node or Playwright test that spawns the CLI, so every job that
+  // installs gbdraw from the checkout runs the one composite action right after the install.
+  const action = readFileSync(resolve(REPOSITORY_ROOT, '.github/actions/managed-losat/action.yml'), 'utf8');
+  const restore = action.indexOf('uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0\n'
+    + '      with:\n        path: ~/.cache/gbdraw/losat\n'
+    + "        key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}\n");
+  assert.ok(restore > 0, 'the action restores the cache keyed by the release lock');
+  const setup = action.indexOf('if python -m gbdraw.cli setup-losat; then\n');
+  assert.ok(restore < setup, 'setup-losat runs after the cache');
+  // Only an explicit optional: "true" turns a failed install into installed=false.
+  assert.ok(action.slice(setup).includes('elif [[ "$OPTIONAL" == true ]]; then\n'), 'a failed install fails the job by default');
+  assert.match(action, /optional:\n[\s\S]*?default: "false"\n/);
+  // The action sets up every gbdraw job, so a change to it runs the full plan.
+  assert.equal(classifyPath('.github/actions/managed-losat/action.yml').impact, 'full');
+
+  const workflowsDir = resolve(REPOSITORY_ROOT, '.github/workflows');
+  const install = /\n      - name: [^\n]+\n(?:        (?!uses:)[^\n]*\n|\n(?=        ))*?[^\n]*pip install -e[^\n]*\n(?:        [^\n]*\n)*/;
+  const managed = /^\n(?:      #[^\n]*\n)*      - name: Install the managed LOSAT runtime\n(?:        id: [^\n]+\n)?        uses: \.\/\.github\/actions\/managed-losat\n/;
+  const users = [];
+  for (const name of readdirSync(workflowsDir).filter((file) => file.endsWith('.yml')).sort()) {
+    const workflow = readFileSync(resolve(workflowsDir, name), 'utf8');
+    assert.ok(!workflow.includes('gbdraw.cli setup-losat') && !workflow.includes('.cache/gbdraw/losat'),
+      `${name} installs LOSAT only through the action`);
+    const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)].map(([, id]) => id);
+    for (const id of jobIds) {
+      const source = workflowJobOf(workflow, id);
+      const uses = source.split('uses: ./.github/actions/managed-losat\n').length - 1;
+      const step = source.match(install);
+      if (!step) {
+        assert.equal(uses, 0, `${name}:${id} installs gbdraw before the action`);
+        continue;
+      }
+      users.push(`${name}:${id}`);
+      assert.equal(uses, 1, `${name}:${id} runs the action once`);
+      const after = source.slice(step.index + step[0].length).replace(/^(?=      )/, '\n');
+      assert.match(after, managed, `${name}:${id} runs the action right after installing gbdraw`);
+    }
   }
+  assert.deepEqual(users, [
+    'deploy_web.yml:gallery-publication-browser',
+    'gallery-publication.yml:browser',
+    'gallery-publication.yml:performance',
+    'test.yml:core',
+    'test.yml:core-pr',
+    'test.yml:recipes-standard',
+    'test.yml:gallery',
+    'test.yml:browser',
+    'test.yml:web-contracts-pr',
+    'test.yml:web-pr-smoke',
+    'test.yml:playwright-functional',
+    'test.yml:playwright-performance',
+    'test.yml:acceptance-supported-main',
+    'test.yml:slow-main',
+    'test.yml:vibrio-generate-release',
+    'test.yml:losat-cache-browser-acceptance',
+    'test.yml:promotion-audit-recipes',
+    'test.yml:promotion-audit-sweeps',
+    'test.yml:promotion-audit-journeys',
+    'test.yml:promotion-audit-random-walk'
+  ]);
 });
 
 test('browser jobs seed apt from one verified cache and bound their test steps', () => {
