@@ -36,11 +36,12 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
 import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
-import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
+import { MODE_SLICE_CONTAINERS, unscopedDraftRows } from './mode-scoped-migration.js';
+import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isUnsafeObjectKey } from './safe-object-keys.js';
 import { isRecordDrawKey } from './record-draw-selection.js';
-import { isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
+import { featureIdentityKeyOf, isFeatureOverrideDraftRow, isFeaturePlacementDraftRow } from './feature-placement.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   DEFAULT_FEATURE_RENDERINGS, FEATURE_RENDERING_VALUES, readPersistedArrowHeadLengthRatio, readPersistedArrowShaftWidthRatio
@@ -1394,6 +1395,11 @@ const withFieldAt = (value, at, leaf) => {
  * and Python receives them as stored. The drawing of `openedMode` reads
  * first, so its rows come first, as the drawing the Load opens; the value
  * tables' rows follow the drawings' (the old Load's order, D-15-143).
+ * A Session 41-44's Feature placement rows reached every mode: each drawing
+ * reads the rows `migrateSessionFeaturePlacements` gives its mode (Main rows
+ * both, a lane row its side's), as the old Load read them (D-15-148), and
+ * Python receives them as stored unless a drawing dropped one of its own
+ * rows: then the scoped rows the drawings kept.
  * @param {Record<string, unknown>} config
  * @param {string} path
  * @param {{ resolveTrackPlacements: boolean, openedMode: 'circular' | 'linear' }} options
@@ -1421,23 +1427,40 @@ export const readSingleDraftValues = (config, path, { resolveTrackPlacements, op
   const settingsDraft = /** @type {Record<string, unknown>} */ (settings);
   /** @type {readonly ('circular' | 'linear')[]} */
   const modes = openedMode === 'linear' ? ['linear', 'circular'] : ['circular', 'linear'];
+  const scopedPlacements = migrateSessionFeaturePlacements(settingsDraft.featurePlacementOverrides);
+  /** @type {Map<'circular' | 'linear', unknown>} The placement rows each drawing read. */
+  const placementReads = new Map();
   modes.forEach((mode) => {
     const targets = defaultSettingsContainers(mode);
     const { losses, arrowRatios } = installStoredSettings(targets, settingsDraft, mode);
     if (arrowRatios) Object.assign(targets.adv, arrowRatios);
     if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
-    const drawing = readValueTablesOf(DRAWING_TABLES[mode], settingsDraft);
+    const modeDraft = holds(settingsDraft, 'featurePlacementOverrides')
+      ? { ...settingsDraft, featurePlacementOverrides: unscopedDraftRows(scopedPlacements, mode) } : settingsDraft;
+    const drawing = readValueTablesOf(DRAWING_TABLES[mode], modeDraft);
     losses.push(...drawing.losses);
     [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(settingsDraft, path, mode)]
       .forEach(list);
     const view = { ...(isPlainObject(drawing.value) ? drawing.value : {}), ...targets };
-    new Set([...losses.map(({ at }) => lostFieldOf(at)), ...changedFieldsOf(settingsDraft, view, mode)])
+    placementReads.set(mode, valueAt(view, 'featurePlacementOverrides'));
+    new Set([...losses.map(({ at }) => lostFieldOf(at)), ...changedFieldsOf(modeDraft, view, mode)])
       .forEach((field) => {
         if (drawnByMode(mode, 'config', field)) replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
       });
   });
   lossRepairs(read.losses, path, config, { root: 'config' }).forEach(list);
   let value = read.value;
+  if (replaced.delete('featurePlacementOverrides') && isPlainObject(scopedPlacements)) {
+    /** @param {unknown} row */
+    const keptBy = (row) => (/** @type {('circular' | 'linear')[]} */ (isPlainObject(row) && Object.hasOwn(row, 'scope')
+      ? [row.scope] : modes)).every((mode) => {
+      const rows = placementReads.get(mode);
+      const key = isPlainObject(row) ? featureIdentityKeyOf(row) : '';
+      return isPlainObject(rows) && key !== '' && Object.hasOwn(rows, key);
+    });
+    value = withFieldAt(value, 'featurePlacementOverrides',
+      Object.fromEntries(Object.entries(scopedPlacements).filter(([, row]) => keptBy(row))));
+  }
   replaced.forEach((values, field) => {
     const [first] = values;
     const agreed = values.every((entry) => JSON.stringify(entry) === JSON.stringify(first));
