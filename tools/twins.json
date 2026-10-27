@@ -1228,6 +1228,20 @@
       "reason": "A \"This feature only\" hash rule names one feature instance, which Python composes and matches whole. The Web reads the record key out of a rule at the separator (Delete settings, Run Info) and rewrites it to the CLI record key of the render request for the Source recipe -t table. The separator and the record key prefix and expansion separator are generated constants (tools/generate_web_contracts.py: FEATURE_INSTANCE_SEPARATOR, CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR); the order of the parts is copied. tests/web/run-info.test.mjs runs the CLI on the rewritten table for a plain and an expanded record and checks that it colors one copy; no shared vector.",
       "retireWhen": "Python writes the CLI form of the specific color table for the Source recipe and names the record of an instance row, so the Web neither parses nor composes an instance",
       "source": "PR #1395 (feature-color-leak-20261026, REVIEW-2 item 1); the detector does not see it"
+    },
+    {
+      "id": "constant:LabelCapacityRemedy",
+      "concern": "Capacity remedy ids (filter, label_text, font, linear) and their order, in a capacity stop's report",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:LabelCapacityRemedy"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_REMEDY_WORDS"
+      ],
+      "vector": null,
+      "reason": "Python names the remedies of a capacity stop by id, in its order; the Web admits a report only with ids among the keys of its words map and lists them in Python's order. The keys copy the ids by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
+      "retireWhen": "the ids are generated into contracts/schema.generated.js and the Web words map is keyed by the generated ids, so the Web keeps no hand copy",
+      "source": "PR #1402 review S1 (bigdata-perf-20261026, D-16); the detector does not see it"
     }
   ]
 }
