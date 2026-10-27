@@ -84,6 +84,12 @@ def _depth_tsv_cache_key(path: str) -> tuple[str, int, int]:
 
 @lru_cache(maxsize=_DEPTH_TSV_CACHE_MAXSIZE)
 def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> DataFrame:
+    return _parse_depth_file(resolved_path)
+
+
+def _parse_depth_file(resolved_path: str) -> DataFrame:
+    """Parse and validate one depth file into a canonical table (see ``parse_depth_tsv``)."""
+
     depth_path = Path(resolved_path)
     skiprows = 1 if _first_line_has_header(depth_path) else 0
     try:
@@ -95,7 +101,8 @@ def _read_depth_tsv_cached(resolved_path: str, mtime_ns: int, size: int) -> Data
             usecols=[0, 1, 2],
             skiprows=skiprows,
             dtype={
-                "reference_name": "string",
+                # A few names repeat on every row: codes, not one string per row.
+                "reference_name": "category",
                 "position": "int64",
                 "depth": "float64",
             },
@@ -117,22 +124,58 @@ def clear_depth_tsv_cache() -> None:
     _read_depth_tsv_cached.cache_clear()
 
 
+def parse_depth_tsv(path: str) -> DataFrame:
+    """Parse one depth file without the process cache of ``read_depth_tsv``.
+
+    The Worker's decoded-resource layer owns the table it returns and shares it
+    read-only with every record and render: callers must not modify it.
+    """
+
+    resolved_path, _mtime_ns, _size = _depth_tsv_cache_key(path)
+    return _parse_depth_file(resolved_path)
+
+
 def read_depth_tsv(path: str) -> DataFrame:
     """Read a samtools-depth-like TSV file.
 
     The expected columns are reference name, 1-based position, and non-negative
     depth. Headerless files are expected; a single header line is tolerated when
-    the position/depth fields on the first line are non-numeric. Parsed files are
-    cached per process and invalidated when file mtime or size changes.
+    the position/depth fields on the first line are non-numeric. Reference names
+    are a categorical column. Parsed files are cached per process and
+    invalidated when file mtime or size changes; each call returns a copy.
     """
 
     resolved_path, mtime_ns, size = _depth_tsv_cache_key(path)
     return _read_depth_tsv_cached(resolved_path, mtime_ns, size).copy(deep=True)
 
 
-def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
-    """Return a DataFrame with canonical depth columns."""
+def _is_canonical_depth_table(depth_table: DataFrame) -> bool:
+    """Whether the table has the parser's shape: exact columns, ``str`` categories, int64 and float64.
 
+    Any other table, an API table with integer categories among them, is converted.
+    """
+
+    if list(depth_table.columns) != DEPTH_COLUMNS:
+        return False
+    names = depth_table["reference_name"].dtype
+    return (
+        isinstance(names, pd.CategoricalDtype)
+        and all(type(category) is str for category in names.categories)
+        and depth_table["position"].dtype == np.int64
+        and depth_table["depth"].dtype == np.float64
+    )
+
+
+def _normalize_depth_table(depth_table: DataFrame) -> DataFrame:
+    """Return a DataFrame with canonical depth columns.
+
+    A canonical table (a parsed file) is validated and returned itself, not a
+    copy: callers only select its rows.
+    """
+
+    if _is_canonical_depth_table(depth_table):
+        _validate_depth_table(depth_table)
+        return depth_table
     if set(DEPTH_COLUMNS).issubset(depth_table.columns):
         normalized = depth_table.loc[:, DEPTH_COLUMNS].copy()
     elif len(depth_table.columns) >= 3:
@@ -297,4 +340,4 @@ def depth_df(
     )
 
 
-__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "read_depth_tsv"]
+__all__ = ["DEPTH_COLUMNS", "clear_depth_tsv_cache", "depth_df", "parse_depth_tsv", "read_depth_tsv"]

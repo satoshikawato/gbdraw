@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Hashable, Iterable, Iterator, Mapping, MutableMapping, NamedTuple, Sized, cast
 
 from Bio.SeqRecord import SeqRecord
-from pandas import DataFrame
+from pandas import CategoricalDtype, DataFrame
 
 from gbdraw.core.fonts import registered_fonts
 from gbdraw.exceptions import ValidationError
@@ -526,12 +526,18 @@ def _retained_bytes(value: object, source_bytes: int) -> int:
     """Estimate the bytes ``value`` holds without walking its rows.
 
     ``source_bytes`` is the size of the resources it was built from: the text
-    in a decoded frame's cells, and the estimate of a decoded value of another
-    kind (an orthogroup or collinearity result).
+    in the string cells of a decoded frame, and the estimate of a decoded value
+    of another kind (an orthogroup or collinearity result).
     """
 
     if isinstance(value, DataFrame):
-        object_cells = len(value) * sum(1 for dtype in value.dtypes if dtype.kind == "O")
+        # A categorical column (a parsed depth table's names) holds codes and
+        # a few names, which the deep count reads without walking the rows.
+        object_cells = len(value) * sum(
+            1 for dtype in value.dtypes if dtype.kind == "O" and not isinstance(dtype, CategoricalDtype)
+        )
+        if not object_cells:
+            return int(value.memory_usage(index=True, deep=True).sum())
         return (
             int(value.memory_usage(index=True, deep=False).sum())
             + object_cells * _STR_OBJECT_BYTES
@@ -586,8 +592,9 @@ class PreparedBiologicalInputCache:
     nor retained evicts every entry that refers to it.
     The retained-byte diagnostic estimates what each entry holds without
     serializing it: sequence lengths, feature and qualifier counts of records;
-    the columns, string cells and text of a comparison frame; the text of a
-    nucleotide edge; the source size of another decoded value. Render-stage
+    the columns, string cells and text of a comparison frame; the columns and
+    names of a parsed depth table; the text of a nucleotide edge; the source
+    size of another decoded value. Render-stage
     results are not counted. The total is kept as entries are published and
     removed, so no transaction walks the entries it does not use. Worker
     termination releases the cache with the Python runtime.

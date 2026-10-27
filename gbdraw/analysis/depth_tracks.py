@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
-from gbdraw.analysis.depth import depth_df, read_depth_tsv
+from gbdraw.analysis.depth import depth_df, parse_depth_tsv, read_depth_tsv
 from gbdraw.configurators import DepthConfigurator
 from gbdraw.core.numeric import ascii_float
 from gbdraw.exceptions import GbdrawError, ValidationError
@@ -24,6 +24,16 @@ from gbdraw.tracks.parsing import parse_nonnegative_integer, slot_legend_label
 if TYPE_CHECKING:
     from gbdraw.api.options import DepthTrackInput
     from gbdraw.legend.table import LegendTable
+
+
+@dataclass(frozen=True)
+class DepthTrackStyle:
+    """The fields of a depth track spec its drawing config reads (not its id or label)."""
+
+    fill_color: str | None
+    large_tick_interval: float | None
+    small_tick_interval: float | None
+    tick_font_size: float | None
 
 
 @dataclass(frozen=True)
@@ -39,6 +49,15 @@ class DepthTrackSpec:
     large_tick_interval: float | None = None
     small_tick_interval: float | None = None
     tick_font_size: float | None = None
+
+    @property
+    def style(self) -> DepthTrackStyle:
+        return DepthTrackStyle(
+            fill_color=self.fill_color,
+            large_tick_interval=self.large_tick_interval,
+            small_tick_interval=self.small_tick_interval,
+            tick_font_size=self.tick_font_size,
+        )
 
 
 @dataclass(frozen=True)
@@ -155,12 +174,19 @@ def _record_major_sources(
 
 
 def _read_depth_table(path: str) -> DataFrame:
-    """Read one depth file and give the table its resource identity, if any."""
+    """Read one depth file; in a Worker transaction, give the table its resource identity.
+
+    There the decoded-resource layer owns the parsed table, one per resource,
+    shared read-only by every record and render, so callers must not modify
+    it. Elsewhere (CLI, Python API) the process cache of ``read_depth_tsv`` does.
+    """
 
     # Deferred: gbdraw.api imports this module.
-    from gbdraw.api.prepared import register_prepared_resource_value
+    from gbdraw.api.prepared import get_or_build_decoded_resource, prepared_resource_identity
 
-    return register_prepared_resource_value(read_depth_tsv(path), path)
+    if prepared_resource_identity(path) is None:
+        return read_depth_tsv(path)
+    return get_or_build_decoded_resource(path, ("depth-table-v1",), lambda: parse_depth_tsv(path))
 
 
 def _read_depth_series(path: str, series_index: int) -> DataFrame:
@@ -641,16 +667,17 @@ def clone_depth_config(
     return config
 
 
-def depth_track_data(
-    spec: DepthTrackSpec,
-    df: DataFrame,
+def depth_track_config(
+    style: DepthTrackStyle,
     base_config: DepthConfigurator,
     window: int,
     step: int,
     shared_max_depth: float | None,
-) -> DepthTrackData:
-    """Build one track's data and drawing config (render stage ``depth_track_data``).
+) -> DepthConfigurator:
+    """Build one track's drawing config (render stage ``depth_track_config``).
 
+    It reads the track's style, not its label, so a label change keeps the
+    config and the depth content drawn with it (OV-1229).
     ``shared_max_depth`` is the maximum over every record's frame of this
     logical track when the axis is shared; the config is complete when it is
     returned, so nothing writes into it afterwards (M5).
@@ -658,23 +685,16 @@ def depth_track_data(
 
     config = clone_depth_config(
         base_config,
-        fill_color=spec.fill_color,
+        fill_color=style.fill_color,
         window=window,
         step=step,
-        large_tick_interval=spec.large_tick_interval,
-        small_tick_interval=spec.small_tick_interval,
-        tick_font_size=spec.tick_font_size,
+        large_tick_interval=style.large_tick_interval,
+        small_tick_interval=style.small_tick_interval,
+        tick_font_size=style.tick_font_size,
     )
     if shared_max_depth is not None:
         config.max_depth = shared_max_depth
-    return DepthTrackData(
-        id=spec.id,
-        label=spec.label,
-        df=df,
-        config=config,
-        track_index=spec.track_index,
-        height=spec.height,
-    )
+    return config
 
 
 def _shared_max_depths(
@@ -704,8 +724,8 @@ def build_depth_track_dataframes(
     """Build depth dataframes once for each record/track pair.
 
     Two render stages per record and track: ``depth_frame`` (the binned
-    dataframe) and ``depth_track_data`` (the frame with its drawing config,
-    taking the shared axis maximum as an argument).
+    dataframe) and ``depth_track_config`` (its drawing config, taking the
+    shared axis maximum as an argument).
     """
 
     if base_config is None or not record_depth_tracks:
@@ -751,15 +771,21 @@ def build_depth_track_dataframes(
     )
     return [
         [
-            render_stage(
-                "depth_track_data",
-                depth_track_data,
-                spec,
-                frame,
-                base_config,
-                window,
-                step,
-                shared_max_depths.get(spec.track_index),
+            DepthTrackData(
+                id=spec.id,
+                label=spec.label,
+                df=frame,
+                config=render_stage(
+                    "depth_track_config",
+                    depth_track_config,
+                    spec.style,
+                    base_config,
+                    window,
+                    step,
+                    shared_max_depths.get(spec.track_index),
+                ),
+                track_index=spec.track_index,
+                height=spec.height,
             )
             for spec, frame in row
         ]
@@ -818,10 +844,11 @@ def sync_depth_track_legend_entries(
 __all__ = [
     "DepthTrackData",
     "DepthTrackSpec",
+    "DepthTrackStyle",
     "build_depth_track_dataframes",
     "clone_depth_config",
+    "depth_track_config",
     "depth_track_count",
-    "depth_track_data",
     "depth_track_data_count",
     "depth_track_heights",
     "depth_track_indices",
