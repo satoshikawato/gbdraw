@@ -2329,6 +2329,16 @@ const readStoredSetRequests = (rawData, stored, project, repairs) => {
 };
 
 /**
+ * Whether Load rebuilds a Session's projected request by its Gallery
+ * migration: a Session 31-44 that stored a schema-2 request.
+ * @param {{ sourceSessionVersion: number, currentSession: boolean,
+ *   requestRead: { storedSchemas: StoredRequestSchemas } }} read `readSessionImportParts`'s
+ * @returns {boolean}
+ */
+const rebuildsGalleryRequest = ({ sourceSessionVersion, currentSession, requestRead }) => !currentSession
+  && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION && Number(requestRead.storedSchemas['']) === 2;
+
+/**
  * A schema-2 Gallery Session's request, rebuilt by its migration, read like
  * any stored request: a row here is a defect of that migration.
  * @template {{ renderRequest?: unknown, editorState?: unknown, orthogroupState?: unknown, resources?: unknown }} T
@@ -2707,10 +2717,7 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
   const normalizedData = cacheData;
   // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
   // its promotion from the request its reader read.
-  const promotedData = !currentSession && (
-    sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION &&
-    Number(requestRead.storedSchemas['']) === 2
-  )
+  const promotedData = rebuildsGalleryRequest(read)
     ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
     : normalizedData;
   const data = adoptPromotedPreservedSettings(currentSession
@@ -6210,13 +6217,16 @@ const RESULT_FEATURE_METADATA_FIELDS = Object.freeze([
  * rows and Python's, and Python's conversion of the read document.
  * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts,
  *   orthogroups: readonly unknown[], featureMetadata: Readonly<Record<string, unknown>>,
- *   layoutRepairs: readonly LoadRepair[], drawnWith: ResultDrawnWith | null }}
+ *   layoutRepairs: readonly LoadRepair[], drawnWith: ResultDrawnWith | null,
+ *   comparisonClassification: ImportedComparisonIntent | null }}
  *   LegacySessionRead `orthogroups`: the similarity groups of the file's `orthogroupState` (a Session 27-39's,
  *   members by record key), which its set-aside Results draw; `featureMetadata`: the file's feature metadata
  *   of those Results (`RESULT_FEATURE_METADATA_FIELDS` of a Session 27-39's `features`), which Load checks
  *   against them (OV-1958); `layoutRepairs`: the rows of the file's `ui`
  *   layout (`readStoredLayoutUi`), listed where Load lists the drawings' layouts; `drawnWith`: what a Session
- *   27-30's Result was drawn with (OV-1953), else null
+ *   27-30's Result was drawn with (OV-1953), else null; `comparisonClassification`: the Comparisons
+ *   classification of the file's stored request (C-OD14), which its Linear drawings hold, as the Load before
+ *   the Worker route held it; null when Load reads no stored request or rebuilds it (`rebuildsGalleryRequest`)
  */
 /**
  * What a loaded Result set was drawn with, at the paths of the document Load
@@ -6496,7 +6506,8 @@ const importSessionDocument = async (e, options = {}) => {
         orthogroups,
         featureMetadata,
         layoutRepairs: layoutRead ? layoutRead.repairs : [],
-        drawnWith: legacyResult ? fileDrawnWith : null
+        drawnWith: legacyResult ? fileDrawnWith : null,
+        comparisonClassification: rebuildsGalleryRequest(fileParts) ? null : fileParts.requestRead.comparisonClassification
       };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
@@ -7573,11 +7584,14 @@ const importSessionDocument = async (e, options = {}) => {
       linearDrawing.inputType.value
     );
     // Each Linear drawing's comparisons, classified from its own request
-    // (a Session 27-48's one Linear part is its Linear drawing's).
+    // (a Session 27-48's one Linear part is its Linear drawing's), a Session
+    // 27-44's from the file's stored request, which Python's conversion
+    // leaves out of a Circular request's drawings (C-OD14).
+    const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
     committed.filter((drawing) => drawing.mode === 'linear').forEach((drawing) => restoreImportedComparisonIntent(
       drawing.importedComparisonIntent,
-      projectedDrawingId === null || drawing.id === projectedDrawingId
-        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null,
+      fileComparisonClassification ?? (projectedDrawingId === null || drawing.id === projectedDrawingId
+        ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null),
       draftConfigOf(drawing.id)?.importedComparisonResolution
     ));
     /**
