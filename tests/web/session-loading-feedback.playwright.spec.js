@@ -602,7 +602,113 @@ test('Load an example is absent where this origin serves no Gallery catalog', as
   await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
   await expect(exampleControls(page).example).toHaveCount(0);
   await expect(exampleControls(page).header).toHaveCount(0);
+  // #1383 (PD-OI-108): the header still opens gbdraw.app's Gallery; the card
+  // about the examples' tutorials goes with the examples.
+  await expect(page.locator('[data-gallery-link]')).toHaveAttribute('href', 'https://gbdraw.app/gallery/');
+  await expect(page.locator('[data-tutorial-card]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
+});
+
+// #1383 (PD-OI-108): the empty Preview, the header, and each chooser row lead to
+// the Gallery's tutorials, and the notice of a loaded example links to its own
+// tutorial, found by the example's Gallery id. A Session loaded from a file
+// offers none, and the link goes with the notice.
+const expectNewTab = async (link, href) => {
+  await expect(link).toHaveAttribute('href', href);
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+};
+const tutorialHref = (page, id) => new URL(`/gbdraw/web/gallery/${id}#Tutorial`, page.url()).href;
+
+test('a loaded example links to its Gallery tutorial, and a Session from a file does not', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const external = await blockExternalRequests(page);
+  await openApp(page);
+  await expectNewTab(page.locator('[data-gallery-link]'), 'https://gbdraw.app/gallery/');
+  await expectNewTab(
+    page.locator('[data-tutorial-card]').getByRole('link', { name: 'Open the Interactive Gallery', exact: true }),
+    'https://gbdraw.app/gallery/'
+  );
+  const { example, chooser } = exampleControls(page);
+  await example.click();
+  const tutorials = chooser.locator('[data-gallery-tutorial]');
+  await expect(tutorials).toHaveCount(galleryCatalog.length);
+  await expectNewTab(
+    chooser.locator('[data-gallery-example="lambda_basic_linear"]').locator('xpath=..').locator('[data-gallery-tutorial]'),
+    tutorialHref(page, 'lambda_basic_linear')
+  );
+
+  const loaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await loaded();
+  const notice = page.locator('[data-app-notice]');
+  const offer = notice.locator('[data-app-notice-link]');
+  await expect(offer).toContainText('This diagram has a step-by-step tutorial.');
+  await expectNewTab(offer.getByRole('link', { name: 'Open the tutorial', exact: true }), tutorialHref(page, 'HmmtDNA_basic_circular'));
+  await expect(page.locator('[data-app-notice-announcer]'))
+    .toHaveText(/^Session loaded.* This diagram has a step-by-step tutorial\.$/);
+  await notice.getByRole('button', { name: 'Dismiss notice', exact: true }).click();
+  await expect(notice).toHaveCount(0);
+
+  await page.locator(sessionInputSelector).setInputFiles(baselineSession);
+  await expectSessionLoadedWithoutWarnings(page);
+  await expect(offer).toHaveCount(0);
+  expect(external).toEqual([]);
+});
+
+test('an example whose Gallery tutorial is not published offers no tutorial', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.route('**/gallery/examples.json', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(galleryCatalog.map((entry) => (
+      entry.id === 'HmmtDNA_basic_circular' ? { ...entry, tutorialStatus: 'draft' } : entry
+    )))
+  }));
+  await openApp(page);
+  const { example, chooser } = exampleControls(page);
+  await example.click();
+  const row = (id) => chooser.locator(`[data-gallery-example="${id}"]`).locator('xpath=..');
+  await expect(row('lambda_basic_linear').locator('[data-gallery-tutorial]')).toHaveCount(1);
+  await expect(row('HmmtDNA_basic_circular').locator('[data-gallery-tutorial]')).toHaveCount(0);
+  const loaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await loaded();
+  await expect(page.locator('[data-app-notice-link]')).toHaveCount(0);
+});
+
+// #1383 (PD-OI-108): the one-row header gives way without narrowing the
+// Session title: where the Gallery link's words do not fit it shows its cap
+// alone, and where even the cap would narrow the title the file buttons show
+// their icons alone too. Every control keeps its name, and with room the
+// words return.
+test('the header gives way by icons, never by narrowing the Session title', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const header = page.locator('header.app-header');
+  const words = page.locator('[data-gallery-link] .app-gallery-link-label');
+  const titleWidth = () => page.locator('.app-session-button').evaluate((node) => node.getBoundingClientRect().width);
+  const fitOf = () => header.evaluate((node) => [node.hasAttribute('data-file-icons'), node.hasAttribute('data-gallery-icon')]);
+  await expect.poll(fitOf).toEqual([false, false]);
+  await expect(words).toBeVisible();
+  const roomyTitle = await titleWidth();
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await expect.poll(fitOf).toEqual([false, true]);
+  await expect(words).toBeHidden();
+  await expect(page.getByRole('link', { name: 'Gallery & tutorials', exact: true })).toBeVisible();
+  expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
+
+  // French at 1280 px: the cap alone left the Session block no width.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('[data-ui-language]').selectOption('fr');
+  await expect.poll(fitOf).toEqual([true, false]);
+  await expect(header.locator('.app-file-actions .app-config-button').first()).toHaveCSS('width', '32px');
+  expect(Math.abs(await titleWidth() - roomyTitle)).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await expect.poll(fitOf).toEqual([false, false]);
+  await expect(words).toBeVisible();
 });
 
 // D-07 (Owner 2026-10-10): the header keeps Load example once a Result exists,

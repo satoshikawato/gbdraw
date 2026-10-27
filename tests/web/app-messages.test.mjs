@@ -61,7 +61,7 @@ test('the notice banner shows warnings as a list and is cleared by dismiss', () 
   show({ text: 'Session loaded: a.gbdraw-session.json', items: ['', 'One warning'] });
   assert.deepEqual({ ...notice }, {
     text: 'Session loaded: a.gbdraw-session.json', items: ['One warning'], tone: 'warning',
-    announcement: 'Session loaded: a.gbdraw-session.json One warning'
+    announcement: 'Session loaded: a.gbdraw-session.json One warning', link: null
   });
   show({ text: 'Session saved: a.gbdraw-session.json.' });
   assert.equal(notice.tone, 'info');
@@ -81,6 +81,26 @@ test('a notice handle dismisses only the notice it showed', () => {
   later.dismiss();
   assert.equal(notice.text, '');
   assert.equal(notice.announcement, '');
+});
+
+// #1383 (PD-OI-108): the tutorial link of a loaded example joins the shown
+// notice, is spoken with it, and goes when the notice is replaced or dismissed;
+// with no notice shown there is nothing to join.
+test('a notice link joins the shown notice and goes with it', () => {
+  const { notice, show, dismiss, addLink } = createNoticeBanner({ reactive });
+  const link = { text: 'This diagram has a step-by-step tutorial.', label: 'Open the tutorial', href: 'https://gbdraw.app/gallery/a#Tutorial' };
+  addLink(link);
+  assert.equal(notice.link, null);
+  show({ text: 'Session loaded: a.gbdraw-session.json' });
+  addLink(link);
+  assert.deepEqual(notice.link, link);
+  assert.equal(notice.announcement, 'Session loaded: a.gbdraw-session.json This diagram has a step-by-step tutorial.');
+  show({ text: 'Session saved: a.gbdraw-session.json.' });
+  assert.equal(notice.link, null);
+  show({ text: 'Session loaded: a.gbdraw-session.json' });
+  addLink(link);
+  dismiss();
+  assert.equal(notice.link, null);
 });
 
 // A live region speaks only a change of its text, so a notice that repeats

@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `93`
+- Contract revision: `94`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -40,8 +40,8 @@ Status: active Product authority
   `PD-OI-086`, `PD-OI-087`, `PD-OI-088`, `PD-OI-089`, `PD-OI-090`, `PD-OI-091`,
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
-  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`, and
-  `PD-OI-107`
+  `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
+  `PD-OI-107`, and `PD-OI-108`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -3386,6 +3386,40 @@ Status: active Product authority
     the Choice, the Rationale, the Must preserve, the May retire, and the
     Accepted residual risk of scenario revision `19`, and replaces one sentence
     of its Accepted residual risk.
+  - No other record is amended or retired.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 94 changes: `PD-OI-108` is added (concern
+  `web.gallery-tutorial-discoverability`, scenario revision `1`; the outcome
+  `A3 + B1`). The app leads to the tutorials of the Interactive Gallery from
+  the header, the empty Preview, and each row of the example chooser, and the
+  "Session loaded" notice of an example loaded with Load example links to that
+  example's tutorial. The one-row header gives way by showing icons, not by
+  narrowing the Session title. The replies come from the Product Decision Owner
+  `satoshikawato` of `2026-10-27` in the Claude Code session of the campaign
+  `tutorial-link-20261027` (decisions TL-D01 to TL-D05), given to questions the
+  session relayed because the choices are the Product Decision Owner's. Each
+  reply is quoted as written.
+  - TL-D01 to TL-D04 (`2026-10-27`). The session showed a decision packet with
+    images of the same states before and after each option: the Gallery entry
+    (A1 a header button, A2 a card in the empty Preview and a link in each row
+    of the example chooser, A3 both), the display after an example loads (B1 a
+    line in the notice, B2 a floating card, B3 a link in the Result header),
+    an English marker on the tutorial links (Q3), and the header button in the
+    pip GUI (Q4), with the receipt below without the TL-D05 additions. Reply:
+    「Q1 A3、Q2 B1、Q3 示す、Q4 出す、おすすめのまま」
+  - TL-D05 (`2026-10-27`). The session reported that, measured on the branch,
+    the button's icon alone still narrowed the Session title where the header
+    is full (French at 1280 px left the Session block no width), and asked
+    whether the four file buttons then show their icons alone too (A), the
+    title narrows (B), or the header button is hidden there (C), showing A's
+    additions to the Choice and the Accepted residual risk. Reply:
+    「Q5 A、追記承認」
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-108` scenario revision `1`
+    `8ca90c1d8e7e066eb6a815384b4bff208c92e25e941addba14f92ee31874eefe`.
   - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
@@ -9676,6 +9710,50 @@ Decision date: 2026-10-25
   "acceptedResidualRisk": "英語の仮名（Marine alveolate L67-3）や /strain の無い小文字の株名を学名と読んで斜体にする誤り（実レコードで 0 件、NCBI Taxonomy の負荷試験で 0.010%）。分けられるのに分けない名前（GenBank の名前の 0.04%）。保存済みの図は作り直すまで古い表記のまま。系統に無い上位の名前や、語尾が決まっていない上位の名前（Gammaproteobacteria など）は、仮名の中でも立体のまま。動物（ICZN）の科の名前は立体。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-25"
+}
+```
+
+### PD-OI-108: Tutorials of the Interactive Gallery from the app
+
+- Concern key: `web.gallery-tutorial-discoverability`
+- Scenario revision: `1`
+- Supersedes: none.
+- Status: `ACCEPTED`
+- Selected outcome: `A3 + B1`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-27` quoted in the Revision 94
+  entry above (TL-D01 to TL-D05). The receipt and JSON below reproduce all nine
+  fields of the approved receipt without translation or additional terms. The
+  runtime that implements it merges with it (static Product Contract
+  co-change); this record supplies no runtime acceptance evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `8ca90c1d8e7e066eb6a815384b4bff208c92e25e941addba14f92ee31874eefe`.
+
+```text
+PRODUCT_DECISION
+Concern: web.gallery-tutorial-discoverability
+Scenario revision: 1
+Choice: A3 + B1（Q3 英語の印あり、Q4 pip 版にも表示）。ヘッダーに「Gallery & tutorials」ボタン（幅が足りないときは文字を隠してアイコンだけにする。それでも Session 名が縮む幅では、設定のリセット、Session の保存、Session の読み込み、例の読み込みの 4 つのボタンも 1279 px 以下と同じアイコンだけにする）、Result が無い画面に「Learn with tutorials」カード、例の選択の各行に「Tutorial」リンク。Load example で読み込んだ例にチュートリアルがあれば「Session loaded」通知の中に「この図を描くチュートリアルがあります。チュートリアルを開く（英語）」を出し、その例の Gallery の Tutorial タブを新しいタブで開く。通知は × 、別の Session / 例の読み込み、Reset Settings、Circular / Linear の切り替えで消え、Generate や編集では消えない。
+Rationale: Gallery のチュートリアルへの入口がフッターの小さい文字リンクだけで見つけにくい（#1383）。最初の画面、ヘッダー、例の選択、例を読み込んだ直後にチュートリアルを示す。
+Must preserve: Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。
+May retire: なし
+Accepted residual risk: Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。4 つのボタンがもともとアイコンだけの 1024 px 前後では、仏語・ベトナム語・タイ語で Session 名が 10 px ほど縮む。
+Owner: satoshikawato
+Decision date: 2026-10-27
+```
+
+```json
+{
+  "concern": "web.gallery-tutorial-discoverability",
+  "scenarioRevision": 1,
+  "choice": "A3 + B1（Q3 英語の印あり、Q4 pip 版にも表示）。ヘッダーに「Gallery & tutorials」ボタン（幅が足りないときは文字を隠してアイコンだけにする。それでも Session 名が縮む幅では、設定のリセット、Session の保存、Session の読み込み、例の読み込みの 4 つのボタンも 1279 px 以下と同じアイコンだけにする）、Result が無い画面に「Learn with tutorials」カード、例の選択の各行に「Tutorial」リンク。Load example で読み込んだ例にチュートリアルがあれば「Session loaded」通知の中に「この図を描くチュートリアルがあります。チュートリアルを開く（英語）」を出し、その例の Gallery の Tutorial タブを新しいタブで開く。通知は × 、別の Session / 例の読み込み、Reset Settings、Circular / Linear の切り替えで消え、Generate や編集では消えない。",
+  "rationale": "Gallery のチュートリアルへの入口がフッターの小さい文字リンクだけで見つけにくい（#1383）。最初の画面、ヘッダー、例の選択、例を読み込んだ直後にチュートリアルを示す。",
+  "mustPreserve": "Load example の動き（置き換えの確認、Session の読み込み、Fit）。「Session loaded」通知の文と閉じ方。フッターの Interactive Gallery リンク。自分の Session やファイルを読み込んだときは何も出ないこと。読み込んだ例はリンクを開いても残ること。",
+  "mayRetire": "なし",
+  "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。4 つのボタンがもともとアイコンだけの 1024 px 前後では、仏語・ベトナム語・タイ語で Session 名が 10 px ほど縮む。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-27"
 }
 ```
 

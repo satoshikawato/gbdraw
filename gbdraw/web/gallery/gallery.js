@@ -1,4 +1,10 @@
 import { copyTextToClipboard } from '../js/utils/clipboard.js';
+import {
+  GALLERY_TAB_HASHES as TAB_HASHES,
+  galleryExamplePath,
+  galleryTutorialPublished,
+  galleryTutorialStatus as getTutorialStatus
+} from '../js/utils/gallery-routes.js';
 
 const DEFAULT_SAMPLE_ID = 'Vnig_TUMSAT-TG-2018';
 const COMMON_COLOR_RULE_GUIDE_PATH = './tutorials/_common-color-rule-guide.json';
@@ -35,13 +41,6 @@ const tabPanels = {
 const tutorialContent = document.querySelector('#tutorial-content');
 const filesContent = document.querySelector('#files-content');
 const filesSummary = document.querySelector('#files-summary');
-
-const TAB_HASHES = {
-  preview: '',
-  tutorial: 'Tutorial',
-  command: 'Command',
-  files: 'Files'
-};
 
 const TAG_ORDER = [
   'Circular',
@@ -90,7 +89,7 @@ const getAbsoluteSampleUrl = (sample) => new URL(sample.svg, window.location.hre
 
 const getSampleRouteUrl = (sample, tabName = activeTab) => {
   const url = new URL(window.location.href);
-  url.pathname = `${getGalleryRootPath()}/${encodeURIComponent(sample.id)}`;
+  url.pathname = galleryExamplePath(getGalleryRootPath(), sample.id);
   url.hash = TAB_HASHES[tabName] || '';
   return url;
 };
@@ -137,22 +136,13 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 
 const asText = (value) => (typeof value === 'string' ? value.trim() : '');
 
-const getTutorialStatus = (sample) => {
-  const status = asText(sample?.tutorialStatus).toLowerCase();
-  if (['ready', 'draft', 'planned'].includes(status)) return status;
-  return sample?.tutorial ? 'ready' : 'planned';
-};
-
 const isDraftTutorialPreviewEnabled = () => {
   const params = new URLSearchParams(window.location.search);
   return params.get('showDraftTutorials') === '1' || params.get('draftTutorials') === '1';
 };
 
-const canLoadTutorial = (sample) => {
-  if (!sample?.tutorial) return false;
-  const status = getTutorialStatus(sample);
-  return status === 'ready' || (status === 'draft' && isDraftTutorialPreviewEnabled());
-};
+const canLoadTutorial = (sample) => galleryTutorialPublished(sample)
+  || (Boolean(sample?.tutorial) && getTutorialStatus(sample) === 'draft' && isDraftTutorialPreviewEnabled());
 
 const selectedSample = () => examples.find((entry) => entry.id === selectedId);
 const sampleIsInteractive = (sample) => asText(sample?.svgType).toLowerCase() !== 'static';

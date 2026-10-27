@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
+  button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
+  **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
+  loaded example links to that example's tutorial. Where the header lacks room, the button and then the four
+  file buttons show only their icons, so the Session title keeps its width (PD-OI-108, #1383).
 - Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
   fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
   (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed

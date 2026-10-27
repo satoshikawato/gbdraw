@@ -2,6 +2,11 @@
 // UJ-06 (Owner 2026-10-08): the Gallery catalog that this origin serves is the
 // one source of the empty state's examples. gbdraw.app serves it; the pip GUI
 // does not ship it, so there the list is empty and Load an example is absent.
+// #1383 (PD-OI-108): an example whose catalog entry has a published tutorial
+// carries the address of that tutorial, which the chooser and the notice after
+// Load example link to.
+
+import { GALLERY_TAB_HASHES, galleryExamplePath, galleryTutorialPublished } from '../utils/gallery-routes.js';
 
 /** @typedef {{ text: string, italic: boolean }} GalleryTitlePart */
 /**
@@ -12,7 +17,8 @@
  *   mode: 'Circular' | 'Linear' | '',
  *   sessionUrl: string,
  *   sessionName: string,
- *   thumbnailUrl: string
+ *   thumbnailUrl: string,
+ *   tutorialUrl: string
  * }} GalleryExample
  */
 
@@ -53,6 +59,20 @@ const sameOriginUrl = (reference, catalogUrl) => {
 };
 
 /**
+ * The Tutorial tab of the example's Gallery page, on the catalog's origin, when
+ * the Gallery publishes its tutorial; otherwise empty.
+ * @param {string} id
+ * @param {Record<string, unknown>} entry
+ * @param {URL} catalogUrl
+ * @returns {string}
+ */
+const tutorialUrlOf = (id, entry, catalogUrl) => {
+  if (!galleryTutorialPublished(entry)) return '';
+  const galleryRootPath = catalogUrl.pathname.replace(/\/[^/]*$/, '');
+  return new URL(`${galleryExamplePath(galleryRootPath, id)}#${GALLERY_TAB_HASHES.tutorial}`, catalogUrl).href;
+};
+
+/**
  * The usable entries of a catalog, in catalog order. An entry is usable when it
  * names an id, a title, and a same-origin `.json` or `.json.gz` Session.
  * @param {unknown} catalog
@@ -65,7 +85,8 @@ export const galleryExamplesFromCatalog = (catalog, catalogUrl = GALLERY_CATALOG
   const examples = [];
   for (const entry of catalog) {
     if (!entry || typeof entry !== 'object') continue;
-    const { id, title, session, thumbnail, tags, mode } = /** @type {Record<string, unknown>} */ (entry);
+    const record = /** @type {Record<string, unknown>} */ (entry);
+    const { id, title, session, thumbnail, tags, mode } = record;
     const sessionUrl = sameOriginUrl(session, catalogUrl);
     const sessionName = decodeURIComponent(sessionUrl?.pathname.split('/').pop() || '');
     if (typeof id !== 'string' || !id || typeof title !== 'string' || !title.trim()
@@ -79,7 +100,8 @@ export const galleryExamplesFromCatalog = (catalog, catalogUrl = GALLERY_CATALOG
       mode: MODES.find((name) => labels.includes(name.toLowerCase())) || '',
       sessionUrl: sessionUrl.href,
       sessionName,
-      thumbnailUrl: sameOriginUrl(thumbnail, catalogUrl)?.href || ''
+      thumbnailUrl: sameOriginUrl(thumbnail, catalogUrl)?.href || '',
+      tutorialUrl: tutorialUrlOf(id, record, catalogUrl)
     }));
   }
   return examples;
