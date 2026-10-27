@@ -1338,6 +1338,27 @@ const lostFieldOf = (at) => {
   return parts.slice(0, depth).join('.');
 };
 /**
+ * The draft fields a drawing of `mode` read as another value than the draft
+ * holds (D-15-144): each field of the merged containers (`losat.blastp`'s
+ * own) and each of the drawing's own fields, at the depth `lostFieldOf`
+ * gives a loss. A field the draft does not hold, or the reading leaves out,
+ * is none (its replacement is a loss's).
+ * @param {unknown} draft
+ * @param {unknown} view The drawing's read values, at the draft's paths.
+ * @param {'circular' | 'linear'} mode
+ * @returns {string[]}
+ */
+const changedFieldsOf = (draft, view, mode) => [
+  ...MERGED_CONTAINERS.flatMap((at) => Object.keys(containerAt(draft, at) ?? {})
+    .filter((field) => !(at === 'losat' && field === 'blastp')).map((field) => `${at}.${field}`)),
+  ...Object.keys(containerAt(draft, 'losat.blastp') ?? {}).map((field) => `losat.blastp.${field}`),
+  ...DRAWING_TABLES[mode].flatMap(({ rows }) => rows.map(({ field }) => field))
+].filter((at) => {
+  const stored = valueAt(draft, at);
+  const read = valueAt(view, at);
+  return stored !== undefined && read !== undefined && JSON.stringify(read) !== JSON.stringify(stored);
+});
+/**
  * `value` with the field at `at` (dotted) set to `leaf`, or left out when
  * `leaf` is undefined; the containers above it are copied.
  * @param {unknown} value @param {string} at @param {unknown} leaf
@@ -1361,8 +1382,10 @@ const withFieldAt = (value, at, leaf) => {
  * containers and its own fields of the whole draft, as `configFieldRepairs`
  * and `unreadFieldRepairs` read a drawing's (D-15-138): its rows are listed
  * for the fields it draws (`advRows(mode)` gives a blank its mode's
- * default), a row both drawings list once. A field a reader replaced takes
- * the value the drawings that draw it read (the arrow ratios as
+ * default), a row both drawings list once. A field a reader replaced, or
+ * read as another value than the draft holds (a schema 1 track stack as the
+ * current one, without a loss; D-15-144), takes the value the drawings that
+ * draw it read (the arrow ratios as
  * `applyConfigData` writes them), or is left out when they read it
  * differently (each drawing of the split then takes its own default) or
  * dropped it, so Python receives no value the readers did not use. The
@@ -1408,10 +1431,10 @@ export const readSingleDraftValues = (config, path, { resolveTrackPlacements, op
     [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(settingsDraft, path, mode)]
       .forEach(list);
     const view = { ...(isPlainObject(drawing.value) ? drawing.value : {}), ...targets };
-    losses.filter(({ at }) => drawnByMode(mode, 'config', at)).forEach(({ at }) => {
-      const field = lostFieldOf(at);
-      replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
-    });
+    new Set([...losses.map(({ at }) => lostFieldOf(at)), ...changedFieldsOf(settingsDraft, view, mode)])
+      .forEach((field) => {
+        if (drawnByMode(mode, 'config', field)) replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
+      });
   });
   lossRepairs(read.losses, path, config, { root: 'config' }).forEach(list);
   let value = read.value;
