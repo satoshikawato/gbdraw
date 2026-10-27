@@ -134,7 +134,7 @@ const depthSlots = (value) => (Array.isArray(value) ? [...value] : jsTruthy(valu
  * @param {unknown} bindings
  * @returns {Record<SliceMode, number>}
  */
-export const sessionDepthSourceWidths = (bindings) => {
+const sessionDepthSourceWidths = (bindings) => {
   const source = isObject(bindings) ? /** @type {Record<string, any>} */ (bindings) : {};
   const circular = source.c_depth;
   const circularRows = Array.isArray(circular) && circular.every(Array.isArray)
@@ -154,7 +154,7 @@ export const sessionDepthSourceWidths = (bindings) => {
  * @param {unknown} modeProfiles
  * @returns {SliceMode | null}
  */
-export const profileActiveMode = (draft, modeProfiles) => (
+const profileActiveMode = (draft, modeProfiles) => (
   sliceMode(draft?.ui?.mode)
   || sliceMode(draft?.renderRequest?.mode)
   || sliceMode(isObject(modeProfiles) ? /** @type {Record<string, any>} */ (modeProfiles).activeMode : null)

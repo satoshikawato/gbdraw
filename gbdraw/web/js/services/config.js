@@ -78,21 +78,8 @@ import {
   splitLegacyVisibilityRules
 } from './feature-visibility.js';
 import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
-import {
-  ANNOTATION_TARGET_MIGRATION_NOTICE,
-  RENDERED_ID_FEATURE_EDIT_FIELDS,
-  hasHashColorRules,
-  hasRenderedIdFeatureEdits,
-  legacyLinearRequestRecords,
-  migrateSessionAnnotationTargets,
-  migrateSessionFeatureEdits,
-  migrateSessionFeaturePlacements,
-  migrateSessionHashRules
-} from './feature-edit-migration.js';
-import {
-  buildSessionFeatureRecoveryPlan,
-  extractSessionSourceFeatures
-} from './session-feature-recovery.js';
+import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
+import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
@@ -270,7 +257,6 @@ import {
   CANONICAL_SESSION_MIN_VERSION,
   CURRENT_ARTIFACT_SESSION_MIN_VERSION,
   CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-  DRAWN_HASH_RULE_SESSION_MAX_VERSION,
   LEGACY_LOSAT_DERIVED_CACHE_SCHEMA,
   LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -282,9 +268,6 @@ import {
   OTHER_MODE_OWN_FIELDS,
   SLICE_MODES,
   modeSliceFieldsOf,
-  sessionDepthSourceWidths,
-  splitDraftIntoModes,
-  unscopedDraftRows,
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 import {
@@ -2855,39 +2838,28 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     upgrade, data, storedRequest, comparisonClassification, modeScopedSession, hasStoredDraft, runtimeStoredConfig,
     settingsOnly, canonicalProjectionInput, canonicalProjection
   } = readCommittedRequestProjection(read, sessionData, repairs);
+  // The preflight reads a Session 46-49: a Session 27-44 arrives as
+  // Python's Session 49 (its own file was read before the conversion, and a
+  // Session 31-39's draft over its request there).
+  if (!modeScopedSession || !upgrade) throw SESSION_FIELDS_ERROR();
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
-  // The preflight reads a Session 46-49 (a Session 27-44 is read before
-  // Python converts it, and a Session 31-39's draft over its request there).
-  let restoredConfig = canonicalProjection ? cloneJsonData(canonicalProjection.config) : data.config;
-  if (canonicalProjection && !modeScopedSession && sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
-    && hasStoredDraft) {
-    recordSessionLifecycleEvent('current-draft-validation-start');
-    restoredConfig = restoreCurrentWriterActiveConfig({
-      mode: canonicalProjection.mode,
-      projectedConfig: canonicalProjection.config,
-      storedConfig: runtimeStoredConfig
-    });
-    recordSessionLifecycleEvent('current-draft-validation-end');
-  }
-  // Session 46: each slice is a current-writer draft of its own mode; the
-  // committed mode's draft is its slice over its request's projection.
+  // Each slice is a current-writer draft of its own mode; the committed
+  // mode's draft is its slice over its request's projection.
   // `readSessionDocument` read each slice's keys and kinds; the reader table reads its settings.
-  if (modeScopedSession) {
-    recordSessionLifecycleEvent('current-draft-validation-start');
-    restoredConfig = canonicalProjection && !settingsOnly
-      ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig)
-      : null;
-    if (restoredConfig) {
-      // As for Sessions 40-44: the stored draft owns the active controls and the
-      // projection fills only what it omits.
-      const restoredDomains = CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
-        .filter((domain) => isPlainObject(runtimeStoredConfig) && Object.hasOwn(runtimeStoredConfig, domain));
-      recordStructuralMetric('currentWriterActiveConfigRestoreCount', 1, { domains: restoredDomains });
-      recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
-    }
-    recordSessionLifecycleEvent('current-draft-validation-end');
+  recordSessionLifecycleEvent('current-draft-validation-start');
+  let restoredConfig = canonicalProjection && !settingsOnly
+    ? overlayModeSliceConfig(canonicalProjection, runtimeStoredConfig)
+    : null;
+  if (restoredConfig) {
+    // As for Sessions 40-44: the stored draft owns the active controls and the
+    // projection fills only what it omits.
+    const restoredDomains = CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
+      .filter((domain) => isPlainObject(runtimeStoredConfig) && Object.hasOwn(runtimeStoredConfig, domain));
+    recordStructuralMetric('currentWriterActiveConfigRestoreCount', 1, { domains: restoredDomains });
+    recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
   }
+  recordSessionLifecycleEvent('current-draft-validation-end');
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, /** @type {UnvalidatedFields<'args'>} */ (data.cliInvocation));
   }
@@ -2916,16 +2888,15 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
       })()
     : null;
   if (currentSession) recordSessionLifecycleEvent('artifact-projection-end');
-  const document49 = drawingsBand && upgrade ? upgrade.document : null;
+  const document49 = drawingsBand ? upgrade.document : null;
   return {
     data,
     sourceSessionVersion,
-    modeScopedSession,
     // Sessions 27-47 keep protein results in the drawn frame (a Session 27-44
     // until Python converts it, B2d-4); a Session 49 holds none.
     /** @type {ProteinFrameSource} */
     proteinFrameSource: {
-      version: sourceSessionVersion, inDrawnFrame: upgrade ? upgrade.sourceFacts.proteinResultsInDrawnFrame : true
+      version: sourceSessionVersion, inDrawnFrame: upgrade.sourceFacts.proteinResultsInDrawnFrame
     },
     canonicalProjection,
     canonicalProjectionInput,
@@ -5308,18 +5279,6 @@ const drawingDraftPartOf = (entry) => {
   return slice;
 };
 /**
- * A Session 27-44 until the Worker gives its 49 document (B2d-4): a drawing
- * of each mode, the one that opens first (R17-7).
- * @param {DiagramMode} openingMode
- * @returns {LoadedDrawingPlan}
- */
-const legacyDrawingPlan = (openingMode) => {
-  const drawings = [openingMode, ...SLICE_MODES.filter((mode) => mode !== openingMode)]
-    .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))));
-  const [opening] = drawings;
-  return drawingPlanOf(drawings, opening.id);
-};
-/**
  * The Load commit's one store write (DESIGN §4.1): a new drawing state for
  * each drawing of the plan, then the plan's unused drawings (D-15-93). They
  * replace the store at once; the caller installs each committed drawing and
@@ -6565,7 +6524,6 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('current-session-preflight-end');
     const {
       sourceSessionVersion,
-      modeScopedSession,
       proteinFrameSource,
       canonicalProjection,
       canonicalProjectionInput,
@@ -6603,9 +6561,8 @@ const importSessionDocument = async (e, options = {}) => {
       // them; a request's are checked. The draft loop below reads every
       // other drawing's (OV-1791: one read, one row per fault).
       restoredConfig.unmanagedConfigOverrides = unmanagedConfigValidation.source === 'draft'
-        ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation, modeScopedSession
-          ? `${draftPartAt(unmanagedConfigValidation.mode, openedDrawingAt)}.config.unmanagedConfigOverrides`
-          : 'config.unmanagedConfigOverrides', repairs)
+        ? await readStoredUnmanagedConfigOverrides(unmanagedConfigValidation,
+          `${draftPartAt(unmanagedConfigValidation.mode, openedDrawingAt)}.config.unmanagedConfigOverrides`, repairs)
         : await validateUnmanagedConfigOverrides(unmanagedConfigValidation);
     }
     for (const inputs of storedDrawingInputs.values()) {
@@ -6644,7 +6601,7 @@ const importSessionDocument = async (e, options = {}) => {
           plotTitlePosition: restoredConfig?.adv?.plot_title_position, canonical: canonicalSession
         };
     const drawnUi = /** @type {typeof ui} */ (drawnWith.ui);
-    const { candidateMode, generatedMode, formIsResultMode } = drawnResultModes(drawnWith);
+    const { generatedMode, formIsResultMode } = drawnResultModes(drawnWith);
     // The legend position the shown Result was drawn with (OV-652, BA-D11);
     // when the form is not the Result's, it is that Result's side (OV-964).
     const generatedLegend = drawnUi.generatedLegendPosition
@@ -6657,7 +6614,7 @@ const importSessionDocument = async (e, options = {}) => {
     // draft, split below once its edits are migrated.
     // A Session 46 committed mode with a Result: its slice over its request's
     // projection (`restoredConfig`); any other slice over its mode's defaults.
-    const committedSliceProjected = modeScopedSession && canonicalSession && !settingsOnly && Boolean(restoredConfig);
+    const committedSliceProjected = canonicalSession && !settingsOnly && Boolean(restoredConfig);
     /**
      * The restored settings of a drawing Load projects, by drawing ID: the
      * committed set's (`restoredConfig`) and each other Session 49 drawing
@@ -6691,11 +6648,11 @@ const importSessionDocument = async (e, options = {}) => {
     };
     // Any other Session 46-48 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
-    const isStoredSlice = (drawingId) => modeScopedSession && projectedConfigOf(drawingId) === null;
+    const isStoredSlice = (drawingId) => projectedConfigOf(drawingId) === null;
     // The 49 document of a Session 46-49 (preflight read each drawing's part
     // of the file as its own entry, found by drawing ID, and where the file
     // holds its saved Result set, `setSources`).
-    const upgraded = upgrade ? upgrade.document : null;
+    const upgraded = upgrade.document;
     /**
      * The drawing that takes a Session's part of `mode` the projection reads:
      * a Session 49's opened drawing for its mode, else its 49 document's
@@ -6762,7 +6719,7 @@ const importSessionDocument = async (e, options = {}) => {
     const sliceDraftConfigOf = (drawingId) => projectedConfigOf(drawingId)
       ?? overlayModeSliceConfig(null, draftPartOf(drawingId).slice.config);
     /** @param {DrawingId} drawingId @returns {Record<string, any> | null} */
-    const draftConfigOf = (drawingId) => (modeScopedSession ? sliceDraftConfigOf(drawingId) : restoredConfig);
+    const draftConfigOf = (drawingId) => sliceDraftConfigOf(drawingId);
     // Each mode's input type (OV-594): the stored one, else its request's
     // (which wins without a row over a stored value of no type), else GenBank.
     // (A settings-only Session's projection holds its own `ui` type.)
@@ -6990,13 +6947,9 @@ const importSessionDocument = async (e, options = {}) => {
           { transformSvg: transformRestoredSessionSvg, selectedFeatureTypes }
         ));
     recordSessionLifecycleEvent('svg-admission-end');
-    // The drawings the Load makes and the one it opens: a Session 46-48's 49
-    // document's (the fast path, R17-1/R17-2/R17-7); a Session 27-44, which
-    // holds one Result set, opens on its shown mode unless only the Result's
-    // mode has a Result, until the Worker gives its 49 document (B2d-4).
-    const plan = upgraded
-      ? loadedDrawingPlan(upgraded)
-      : legacyDrawingPlan(committedImportedResults.length === 0 ? candidateMode : generatedMode);
+    // The drawings the Load makes and the one it opens: the 49 document's
+    // (R17-1/R17-2/R17-7; a Session 27-44's is Python's conversion of it).
+    const plan = loadedDrawingPlan(upgraded);
     /** @type {DiagramMode} The mode of the drawing the Load opens. */
     const shownMode = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.id === plan.activeDrawingId)).mode;
     // Every drawing whose draft the Load reads: the plan's, which it installs,
@@ -7008,8 +6961,7 @@ const importSessionDocument = async (e, options = {}) => {
     // (found by the drawing's ID); a set without one does not load.
     /** @type {{ drawing: DrawingIdentity, mode: DiagramMode, at: ResultSetPath, catalog: FeatureCatalog, set: LoadedResultSet, webFiles: unknown }[]} */
     const storedSets = [];
-    const upgradedDocument = upgrade ? upgrade.document : null;
-    if (upgrade && upgradedDocument) upgradedDocument.drawings.forEach((entry) => {
+    upgraded.drawings.forEach((entry) => {
       const { renderRequest } = entry;
       if (entry.id === committedSetDrawingId || !renderRequest || entry.results.length === 0) return;
       const at = upgrade.setSources.get(entry.id);
@@ -7020,7 +6972,7 @@ const importSessionDocument = async (e, options = {}) => {
       const set = { renderRequest, results, editorState: entry.editorState, ui: entry.ui, runMetadata: entry.runMetadata };
       // The set's request metadata is its own drawing's, read as the opened
       // drawing's is (`drawingViewOf`), never the opened drawing's (OV-1872).
-      const { webFiles } = drawingViewOf(upgradedDocument, entry);
+      const { webFiles } = drawingViewOf(upgraded, entry);
       storedSets.push({ drawing: { id: /** @type {DrawingId} */ (entry.id), mode: entry.mode }, mode: entry.mode, at, catalog, set, webFiles });
     });
     // Each set's History byte estimate: its share of the decompressed file,
@@ -7117,152 +7069,10 @@ const importSessionDocument = async (e, options = {}) => {
         repairs.push(loadRepair({ code: 'feature-recovery-failed', path: 'features', effect: 'dropped' }));
       }
     }
-    // Session 46 keys per-feature edits by source identity: an older Session's
-    // saved rendered-ID edits are mapped through its saved catalog, or without
-    // one through its sources read again with its crops and orientations (the
-    // saved metadata when they cannot be read), once (design Q4 4.3).
-    let migratedAnnotationTargetCount = 0;
-    if (!modeScopedSession) {
-      const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
-      const sessionMode = data.renderRequest?.mode || generatedMode;
-      const hashColorRules = sourceSessionVersion <= DRAWN_HASH_RULE_SESSION_MAX_VERSION
-        && hasHashColorRules(restoredConfig?.rules);
-      const sourceFeatures = !validatedSessionCatalog && (hasRenderedIdFeatureEdits(features) || hashColorRules)
-        ? await extractSessionSourceFeatures(/** @type {any} */ ({ snapshot: legacyFeatureSnapshot }))
-        : null;
-      const legacy = validatedSessionCatalog ? null : {
-        records: data.renderRequest?.records,
-        features: [
-          sourceFeatures?.extractedFeatures, recovered?.biologicalFeatures, recovered?.extractedFeatures,
-          features.biologicalFeatures, features.extractedFeatures
-        ].find((list) => Array.isArray(list) && list.length > 0) || [],
-        biologicalFeatures: sourceFeatures?.biologicalFeatures || []
-      };
-      const migration = migrateSessionFeatureEdits({
-        features, mode: sessionMode, catalog: validatedSessionCatalog, legacy
-      });
-      features = migration.features;
-      if (migration.droppedCount > 0) {
-        repairs.push(loadRepair({ code: 'feature-edit-unmatched', path: 'features', effect: 'dropped', count: migration.droppedCount }));
-      }
-      if (migration.narrowedVisibilityCount > 0) {
-        repairs.push(loadRepair({
-          code: 'feature-visibility-narrowed', path: 'features.featureVisibilityOverrides', effect: 'changed',
-          count: migration.narrowedVisibilityCount
-        }));
-      }
-      // S6: a `hash` color rule of a Session 44 or older names its features by
-      // their source hash (OV-401, release D-39). A Session before 31 has no
-      // request: its Linear cards give the records.
-      if (hashColorRules && restoredConfig) {
-        const ruleRecords = data.renderRequest?.records
-          ?? (generatedMode === 'linear' ? legacyLinearRequestRecords(projectedFiles.linearSeqs) : undefined);
-        const hashRules = migrateSessionHashRules({
-          rules: restoredConfig.rules,
-          mode: sessionMode,
-          catalog: validatedSessionCatalog,
-          legacy: legacy && { ...legacy, records: ruleRecords },
-          records: ruleRecords
-        });
-        restoredConfig.rules = hashRules.rules;
-        if (hashRules.unmappedCount > 0) {
-          repairs.push(loadRepair({ code: 'hash-selector-unmapped', path: 'config.rules', effect: 'changed', count: hashRules.unmappedCount }));
-        }
-      }
-      // R-7: an annotation's `hash=` target moves to its source feature only
-      // where the saved catalog makes the figure certain.
-      if (restoredConfig) {
-        const annotationMigration = migrateSessionAnnotationTargets({
-          annotationSets: restoredConfig.annotationSets,
-          mode: sessionMode,
-          catalog: validatedSessionCatalog,
-          records: data.renderRequest?.records
-        });
-        migratedAnnotationTargetCount = annotationMigration.migratedCount;
-        if (migratedAnnotationTargetCount > 0) restoredConfig.annotationSets = annotationMigration.annotationSets;
-      }
-      if (recovered) {
-        const recoveredWithoutRenderedIdEdits = { ...recovered };
-        RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete recoveredWithoutRenderedIdEdits[field]);
-        // `recovered` came from legacyFeatureRecoveryPlan.recoveredFeatureState, so the plan is set.
-        // Its edit rows are the committed mode's drawing's (R1-3).
-        /** @type {Record<string, any>} */ (legacyFeatureRecoveryPlan).recoveredFeatureState = {
-          ...recoveredWithoutRenderedIdEdits,
-          featureOverrides: unscopedDraftRows(features.featureOverrides, generatedMode),
-          labelOverrideRows: features.labelOverrideRows
-        };
-      }
-    }
-    // Each drawing's draft (PD-OI-086, plan 4.1). A Session 46 slice lies over
-    // its mode's committed projection. The flat draft of a Session 27-44, as
-    // Load has read it so far, is split by the registry (plan 4.2); a Session
-    // written without a draft (CLI, Python) splits only what its migrations
-    // wrote, and its committed mode keeps its request's projection.
-    const hasFlatDraft = !modeScopedSession && isPlainObject(data.config);
-    /** @type {Record<string, any>} */
-    let appUi = modeScopedSession && isPlainObject(data.ui) ? data.ui : {};
-    let sessionCliOptions = modeScopedSession ? data.cliOptions : undefined;
-    // The stored draft a Session 27-44's drawings both read.
-    /** @type {unknown} */
-    let flatDraft = null;
-    if (!modeScopedSession) {
-      const flatConfig = hasFlatDraft
-        ? restoredConfig
-        : migratedAnnotationTargetCount > 0 && restoredConfig ? { annotationSets: restoredConfig.annotationSets } : {};
-      flatDraft = hasFlatDraft ? restoredConfig : null;
-      const legend = isPlainObject(restoredEditorState?.legend) ? restoredEditorState.legend : {};
-      // The split writes what the Session saved and its migrations wrote
-      // (plan 4.2), not the empty defaults Load reads in their place.
-      const savedDraft = (/** @type {unknown} */ value) => isPlainObject(value);
-      const storedEditorEdits = /** @type {UnvalidatedFields<'legend' | 'featureStrokes'>} */ (data.editorState);
-      /**
-       * @param {Record<string, any> | null | undefined} value
-       * @param {unknown} saved
-       * @param {string[]} keys
-       */
-      const withoutUnsavedEmpty = (value, saved, keys) => {
-        if (!value || !isPlainObject(value)) return value;
-        const draft = /** @type {Record<string, any>} */ (value);
-        const unsaved = keys.filter((key) => {
-          if (!Object.hasOwn(draft, key) || (isPlainObject(saved) && Object.hasOwn(/** @type {Record<string, any>} */ (saved), key))) return false;
-          const field = draft[key];
-          return isPlainObject(field) ? Object.keys(field).length === 0
-            : Array.isArray(field) ? field.length === 0 : field === 0;
-        });
-        return Object.fromEntries(Object.entries(draft).filter(([key]) => !unsaved.includes(key)));
-      };
-      const split = splitDraftIntoModes({
-        // A Session 27-44 draft never saved `fileImports` (Session 48).
-        config: withoutUnsavedEmpty(flatConfig, data.config, ['unmanagedConfigOverrides', 'fileImports']) || {},
-        // With a catalog, the feature-edit migration writes `featureOverrides`.
-        ...(savedDraft(data.features) ? { features: withoutUnsavedEmpty(features, data.features, [
-          'featureColorOverrides', 'featureVisibilityManualRules', 'labelOverrideRows', 'labelTextBulkOverrides',
-          'selectedFeatureRecordIdx', ...(validatedSessionCatalog ? [] : ['featureOverrides'])
-        ]) } : {}),
-        editorState: {
-          ...(savedDraft(storedEditorEdits?.legend) ? { legend } : {}),
-          ...(savedDraft(storedEditorEdits?.featureStrokes)
-            ? { featureStrokes: restoredEditorState?.featureStrokes || { overrides: {} } } : {})
-        },
-        // A saved layout goes to its slots (registry `layout`); legacy layout
-        // fields are restored below, as before.
-        ui,
-        renderRequest: data.renderRequest
-      }, {
-        committedMode: generatedMode,
-        depthSources: sessionDepthSourceWidths({
-          c_depth: projectedFiles.target.files.c_depth, linearSeqs: projectedFiles.linearSeqs
-        }),
-        paletteColors: paletteColorsFromDefinitions(String(flatConfig?.palette || '').trim() || 'default')
-      });
-      // The shared migration vectors read the split as Load made it
-      // (tests/web/mode-split-vectors.test.mjs).
-      recordSessionLifecycleEvent('session-draft-split', { split });
-      // Each drawing takes the split's part of its mode.
-      SLICE_MODES.forEach((mode) => draftParts.set(fileDrawingIdOf(mode), { slice: split.modes?.[mode] ?? {}, at: '' }));
-      appUi = split.ui || {};
-      sessionCliOptions = split.cliOptions;
-    }
+    // Each drawing's draft (PD-OI-086, plan 4.1) is its part of the 49
+    // document (a Session 27-44's part is Python's conversion of it).
+    const appUi = isPlainObject(data.ui) ? data.ui : {};
+    const sessionCliOptions = data.cliOptions;
     // Each drawing's draft, by drawing ID: its settings (its part over its
     // committed projection) and its editor edits, read here so what they
     // lose is listed.
@@ -7302,11 +7112,8 @@ const importSessionDocument = async (e, options = {}) => {
       droppedLegendRecords.forEach(({ collection, from, to }) => repairs.push(loadRepair({
         code: 'legend-edit-rekey-dropped', path: `${editorPath}.legend.${collection}`, effect: 'dropped', label: from, used: to
       })));
-      const committed = id === committedSetDrawingId;
       /** @type {Record<string, any>} */
-      let config = modeScopedSession
-        ? sliceDraftConfigOf(id)
-        : overlayModeSliceConfig(committed && !hasFlatDraft ? { mode, config: restoredConfig } : null, slice.config);
+      let config = sliceDraftConfigOf(id);
       // A caption an older build saved with its own rule's color ID is read without it (PD-OI-042 scenario revision 2).
       if (Array.isArray(config.rules)) config.rules = savedSpecificRules(config.rules);
       // A Linear drawing's files hold its record rows, a Circular drawing's its conservation rows.
@@ -7332,8 +7139,8 @@ const importSessionDocument = async (e, options = {}) => {
       repairs.push(...configFieldRepairs(settings, installedConfig, pathIn(at, 'config'), {
         stored: slice.config, mode, resolveTrackPlacements: !settingsOnly && !isStoredSlice(id)
       }));
-      repairs.push(...unreadFieldRepairs(modeScopedSession ? slice.config : flatDraft,
-        pathIn(at, 'config'), mode, { slice: modeScopedSession }));
+      repairs.push(...unreadFieldRepairs(slice.config,
+        pathIn(at, 'config'), mode, { slice: true }));
       // (A Session 27-44 keeps them in its `ui` and `features`.)
       repairs.push(...sliceFieldRepairs(slice, at, mode));
       // A saved unmanaged override is checked against its own drawing's mode
@@ -7371,8 +7178,8 @@ const importSessionDocument = async (e, options = {}) => {
         // The request's input type wins over a stored one of no type.
         ...Object.fromEntries(/** @type {const} */ (['cInputType', 'lInputType']).filter(requestInputTypeWins).map((field) => [field, undefined]))
       }, 'ui'),
-      ...losatExecutionRepairs(appUi.losatExecution, modeScopedSession ? 'ui.losatExecution' : 'config.losat', { own: modeScopedSession }),
-      ...valueRepairs(readRichFeaturePopup, appUi.richFeaturePopup, modeScopedSession ? 'ui.richFeaturePopup' : 'config.adv.rich_feature_popup')
+      ...losatExecutionRepairs(appUi.losatExecution, 'ui.losatExecution', { own: true }),
+      ...valueRepairs(readRichFeaturePopup, appUi.richFeaturePopup, 'ui.richFeaturePopup')
     );
     let instantPreview = Boolean(typeof appUi.paletteInstantPreviewEnabled === 'boolean'
       ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled);
@@ -7401,7 +7208,7 @@ const importSessionDocument = async (e, options = {}) => {
     const loadedOrthogroupState = canonicalSession
       ? {
           ...projectionResult.artifactState.orthogroupState,
-          ...(modeScopedSession ? groupNamesOf(groupNamesDrawingId) : {}),
+          ...groupNamesOf(groupNamesDrawingId),
           ...(currentCatalogFeatureState
             ? { groups: currentCatalogFeatureState.orthogroups }
             : {}),
@@ -7428,7 +7235,7 @@ const importSessionDocument = async (e, options = {}) => {
     {
       const groupIds = new Set(orthogroupIdsOf(loadedOrthogroupState.groups));
       const editsPath = canonicalSession
-        ? (modeScopedSession ? `${pathIn(draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits` : 'orthogroupState')
+        ? `${pathIn(draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits`
         : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
       groupNameRepairs(loadedOrthogroupState, groupIds, editsPath, repairs);
     }
@@ -7855,7 +7662,8 @@ const importSessionDocument = async (e, options = {}) => {
       status: 'ok',
       // What the load changed without a loss, for the caller's notice; what
       // it could not restore was listed before the load (`repairs`).
-      notices: migratedAnnotationTargetCount > 0 ? [ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount)] : [],
+      // (Python's conversion of a Session 27-44 reports no moved annotation target, OV-2072.)
+      notices: [],
       repairs: listedRepairs,
       // A current-schema Session holds its records' identities: the end of
       // its Load reads no input records (each card stays "not inspected").
