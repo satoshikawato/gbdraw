@@ -15,9 +15,9 @@ write-up of a release.
 - Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
   the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
   again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
-  keeps the drawn Depth paths (#PRNUM).
+  keeps the drawn Depth paths (#1422).
 - Changed: `gbdraw.analysis.read_depth_tsv` returns `reference_name` as a categorical column; the values are
-  unchanged (#PRNUM).
+  unchanged (#1422).
 - Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
   a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
   the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
