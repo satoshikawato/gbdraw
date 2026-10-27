@@ -274,7 +274,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
-import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, uiLocale } from '../utils/i18n.js';
+import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
@@ -3828,6 +3828,14 @@ export const createAppSetup = () => {
         // The import resolves after the shown Result's preview is mounted.
         const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
         if (status === 'ok' || status === 'legacy') {
+          // #1383 (PD-OI-108): the notice of the loaded example offers its tutorial, found by the example's Gallery id.
+          if (example.tutorialUrl) {
+            noticeBanner.addLink({
+              text: t('This diagram has a step-by-step tutorial.'),
+              label: tx('English-only Gallery tutorial', 'Open the tutorial'),
+              href: example.tutorialUrl
+            });
+          }
           await nextTick();
           fitPreviewToViewport();
         }

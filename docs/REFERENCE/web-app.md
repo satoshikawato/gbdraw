@@ -230,7 +230,17 @@ the loaded Session; **Reset Settings** and a switch between Circular and Linear
 clear it. Popups open below the notice while it is in the upper half of the window, so it stays readable. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
-changes. The local `gbdraw gui` ships no Gallery and shows neither button.
+changes. The local `gbdraw gui` ships no Gallery and shows neither button. On gbdraw.app the empty Preview also shows a **Learn with tutorials** card,
+each row of the example list has a **Tutorial** link, and the notice of an
+example loaded with **Load example** links to that example's tutorial; each
+opens the Interactive Gallery's tutorial, which is in English, in a new tab.
+**Gallery & tutorials** in the header opens the Interactive Gallery at
+gbdraw.app in every build, the local `gbdraw gui` included. Where the one-row
+header lacks room, the button shows only its icon, and where even that would
+narrow the Session title, **Reset Settings**, **Save Session**, **Load
+Session**, and **Load example** show only their icons too and the header's
+groups move closer together. In the two-row header of a window 768 px wide or
+narrower, the button shows only its icon, at the end of the logo's row.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,

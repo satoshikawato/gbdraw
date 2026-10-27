@@ -1468,6 +1468,49 @@
            ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
         .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .app-session-button { overflow: hidden; }
+        /* #1383 (PD-OI-108): the way to the Gallery's tutorials stands out: the header link, the link in the notice
+           of a loaded example, and the card of the empty Preview share one accent-filled style. */
+        .app-gallery-link {
+            display: inline-flex; flex: none; align-items: center; gap: 0.375rem; padding: 0.25rem 0.625rem;
+            border: 1px solid var(--ui-accent); border-radius: 0.375rem; background-color: var(--ui-accent); color: #fff;
+            font-size: 0.8125rem; font-weight: 600; line-height: 1.25rem; white-space: nowrap; text-decoration: none;
+        }
+        .app-gallery-link:hover { background-color: #1d4ed8; border-color: #1d4ed8; }
+        .app-gallery-link:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+        .app-file-actions .app-gallery-link { padding: 0.25rem 0.5rem; }
+        .app-gallery-link-label { display: inline-flex; align-items: center; gap: 0.375rem; }
+        /* The states of the one-row header (app/header-fit.js): the Gallery link shows its cap alone, the file
+           buttons show their icons alone as they do below 1280 px, and with both, the toolbar's groups close up
+           (vi and th at 1024 px keep the Session title and the mode names on one line). The wrapped header below
+           769 px shows the cap alone at the end of the logo's row, which has room, so the toolbar's rows stay as
+           they are without the link (with its words, or in the toolbar's row, it would add a row). */
+        @media (min-width: 769px) {
+            .app-header[data-gallery-icon] .app-gallery-link-label { display: none; }
+            .app-header[data-file-icons] .app-file-actions .app-config-button {
+                width: 2rem !important; height: 2rem !important; padding: 0 !important;
+                justify-content: center !important; font-size: 0 !important;
+            }
+            .app-header[data-file-icons] .app-file-actions .app-config-button i { font-size: 0.95rem !important; }
+            .app-header[data-file-icons][data-gallery-icon] .app-toolbar { gap: 0.25rem; }
+            .app-header[data-file-icons][data-gallery-icon] .app-file-actions { margin-left: 0.25rem; padding-left: 0.25rem; }
+        }
+        @media (max-width: 768px) {
+            .app-header-inner { position: relative; }
+            .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
+            .app-gallery-link-label { display: none; }
+        }
+        .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
+        .tutorial-card {
+            margin-top: 1.5rem; max-width: 30rem; padding: 1rem 1.25rem; border: 1px solid #bfdbfe; border-radius: 0.75rem;
+            background-color: var(--ui-accent-soft); color: #1e3a8a; text-align: left;
+        }
+        .tutorial-card-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; font-weight: 700; }
+        .tutorial-card-text { margin: 0.25rem 0 0.75rem; font-size: 0.8125rem; line-height: 1.45; color: #1e40af; }
+        .example-tutorial-link {
+            display: inline-flex; flex: none; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem;
+            font-size: 0.75rem; font-weight: 600; color: #1d4ed8; white-space: nowrap;
+        }
+        .example-tutorial-link:hover { text-decoration: underline; }
         @media (max-width: 1439px) {
             .app-tagline {
                 display: none !important;
@@ -2139,7 +2182,7 @@
         </button>
     </div>
 
-    <header class="app-header border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
+    <header v-header-fit class="app-header border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="app-header-inner px-4 h-full flex items-center justify-between">
             <div class="app-brand flex items-center gap-3 min-w-0">
                 <img src="./assets/gbdraw-logo-title-outlined.svg" alt="gbdraw" class="app-logo-title h-9 w-auto shrink-0">
@@ -2170,6 +2213,10 @@
                     <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Open a finished Gallery example as a Session')" :aria-label="t('Load example')" aria-haspopup="dialog">
                         <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load example') }}
                     </button>
+                    <!-- #1383 (PD-OI-108): the Gallery and its tutorials, in every build; the pip GUI opens gbdraw.app's. -->
+                    <a data-gallery-link :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link" :title="t('Gallery & tutorials')" :aria-label="t('Gallery & tutorials')">
+                        <i class="ph ph-graduation-cap" aria-hidden="true"></i><span class="app-gallery-link-label">{{ t('Gallery & tutorials') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></span>
+                    </a>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Saving session…') }}</span>
@@ -5852,6 +5899,11 @@
                     <ul v-if="notice.items.length" class="mt-1 list-disc space-y-0.5 pl-4">
                         <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
                     </ul>
+                    <!-- #1383 (PD-OI-108): a loaded Gallery example offers its tutorial. -->
+                    <p v-if="notice.link" data-app-notice-link class="app-notice-link">
+                        <span><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ notice.link.text }}</span>
+                        <a :href="notice.link.href" target="_blank" rel="noopener noreferrer" class="app-gallery-link">{{ notice.link.label }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+                    </p>
                 </div>
                 <button type="button" data-history-ignore @click="$event.currentTarget.closest('.result-pane')?.focus({ preventScroll: true }); dismissNotice()" class="app-notice-dismiss" :title="t('Dismiss')" :aria-label="t('Dismiss notice')">
                     <i class="ph ph-x" aria-hidden="true"></i>
@@ -8430,6 +8482,12 @@
                         <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load an example') }}
                     </button>
                     <p id="example-session-help" class="ui-hint mt-2">{{ t('Opens a finished Gallery example as a Session.') }}</p>
+                    <!-- #1383 (PD-OI-108): the tutorials behind the examples. -->
+                    <div data-tutorial-card class="tutorial-card">
+                        <p class="tutorial-card-title"><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ t('Learn with tutorials') }}</p>
+                        <p class="tutorial-card-text">{{ t('Every Interactive Gallery example has a step-by-step tutorial that draws it from its input files.') }}</p>
+                        <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link">{{ t('Open the Interactive Gallery') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+                    </div>
                 </template>
             </div>
         </div>
@@ -8452,7 +8510,7 @@
         <span>
             <!-- A line breaks only between the items: each link stays whole and keeps its separator at its end (OV-1517). -->
             {{ t('License:') }} <a href="./open-source-notices.html" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a>&nbsp;|
-            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
+            <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
             <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a>&nbsp;|
             {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
         </span>
@@ -8712,16 +8770,21 @@
                 {{ t('Each example opens its Gallery Session: the inputs, settings, and Result.') }}
             </p>
             <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
-                <li v-for="example in galleryExamples" :key="example.id">
+                <li v-for="example in galleryExamples" :key="example.id" class="flex items-center">
                     <button type="button" data-history-managed :data-gallery-example="example.id" @click="loadExampleSession(example)"
-                            class="flex w-full items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
+                            class="flex min-w-0 flex-1 items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
                         <img v-if="example.thumbnailUrl" :src="example.thumbnailUrl" alt="" loading="lazy"
                              class="h-14 w-20 shrink-0 rounded border border-slate-200 bg-white object-contain">
                         <span class="min-w-0">
-                            <span class="block text-sm font-medium text-slate-800"><template v-for="(part, index) in example.titleParts" :key="index"><i v-if="part.italic">{{ part.text }}</i><template v-else>{{ part.text }}</template></template></span>
+                            <span :id="`example-title-${example.id}`" class="block text-sm font-medium text-slate-800"><template v-for="(part, index) in example.titleParts" :key="index"><i v-if="part.italic">{{ part.text }}</i><template v-else>{{ part.text }}</template></template></span>
                             <span v-if="example.mode" class="block text-xs text-slate-500">{{ example.mode }}</span>
                         </span>
                     </button>
+                    <!-- #1383 (PD-OI-108): the example's tutorial in the Gallery -->
+                    <a v-if="example.tutorialUrl" data-gallery-tutorial :href="example.tutorialUrl" target="_blank" rel="noopener noreferrer"
+                       :aria-describedby="`example-title-${example.id}`" class="example-tutorial-link">
+                        <i class="ph ph-graduation-cap" aria-hidden="true"></i>{{ tx('English-only Gallery tutorial', 'Tutorial') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                    </a>
                 </li>
             </ul>
             <div class="mt-4 flex justify-end">
