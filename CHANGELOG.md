@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
+  a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
+  the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
+  a fresh Generate's (#1418).
 - Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
   button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
   **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a

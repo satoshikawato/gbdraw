@@ -2309,3 +2309,35 @@ def test_a_feature_fill_change_sends_the_catalog(tmp_path: Path) -> None:
     assert reply["featureCatalog"] is not None
     assert reply["featureCatalog"] != held["featureCatalog"]
     assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+def _metadata_annotations(metadata: dict[str, str]) -> AnnotationOptions:
+    return AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (RegionAnnotation("focus", CoordinateSpan(None, 20, 80), label="Focus", metadata=metadata),),
+            ),
+        )
+    )
+
+
+def test_an_annotation_metadata_order_change_rebuilds_the_context_and_sends_the_catalog(tmp_path: Path) -> None:
+    """OV-1346: the context payload keeps the metadata key order, so another order is another context."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("metadata-order"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(
+        tmp_path, cache, _document(source, annotations=_metadata_annotations({"a": "2", "b": "1"})), request_id=1
+    )
+    document = _document(source, annotations=_metadata_annotations({"b": "1", "a": "2"}))
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert _catalog_bytes(fresh) != _catalog_bytes(held)
+    assert _metrics(diagnostics)["renderStageBuild:interactive_context"] == 1
+    assert reply["featureCatalog"] is not None
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)

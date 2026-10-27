@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Literal, Sequence, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
@@ -65,7 +64,9 @@ class InteractiveAnnotationRow:
     mark: str
     lane: int | None
     legend_label: str | None
-    metadata: Mapping[str, str]
+    # Ordered pairs, not a mapping: the payload keeps the key order, so the
+    # stage key must tell two orders apart (a mapping is keyed sorted).
+    metadata: tuple[tuple[str, str], ...]
 
     def payload(self) -> dict[str, object]:
         """The context's annotation payload for this row."""
@@ -105,7 +106,7 @@ def interactive_annotation_rows(
             mark=item.mark,
             lane=item.lane,
             legend_label=item.legend_label,
-            metadata=MappingProxyType(dict(item.metadata)),
+            metadata=tuple(item.metadata.items()),
         )
         for item in bundle.annotations
     )
@@ -155,14 +156,14 @@ def build_interactive_svg_context(
     if resolved_color_rules is None and color_table is not None and default_colors is not None:
         resolved_color_rules, _ = preprocess_color_tables(color_table, default_colors)
     resolved_annotations = (
-        resolve_annotations(
+        annotations
+        if annotations is None or isinstance(annotations, ResolvedAnnotationBundle)
+        else resolve_annotations(
             annotations,
             list(records),
             mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),
             record_transforms=record_transforms,
         )
-        if isinstance(annotations, AnnotationOptions)
-        else annotations
     )
     return interactive_svg_context(
         records,

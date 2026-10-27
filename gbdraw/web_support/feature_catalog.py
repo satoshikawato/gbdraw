@@ -567,9 +567,8 @@ def _rendered_svg_catalog_index(reads: Sequence[_CatalogElementReads]) -> _Rende
     )
 
 
+# One ``_RenderedFeatureEntry`` as ``_catalog_reads_text`` writes it: its field values in this order.
 _ENTRY_FIELDS = tuple(field.name for field in dataclass_fields(_RenderedFeatureEntry))
-# One ``_RenderedFeatureEntry`` as ``_catalog_reads_text`` writes it: its fields in order.
-_EntryWire = tuple[str, str, str, bool, str, int | None, bool, str, int | None, str, str, bool]
 
 
 def _catalog_reads_text(reads: _CatalogElementReads) -> str:
@@ -594,12 +593,16 @@ def _catalog_reads_text(reads: _CatalogElementReads) -> str:
 def _catalog_reads_from_text(text: str) -> _CatalogElementReads:
     # Only ``_catalog_reads_text`` writes the text, in this shape.
     spans, entries, matches, annotations = cast(
-        "tuple[list[tuple[int, tuple[int, int, int]]], list[_EntryWire], list[dict[str, str]], list[dict[str, str]]]",
+        "tuple[list[tuple[int, tuple[int, int, int]]], list[list[object]], list[dict[str, str]], list[dict[str, str]]]",
         json.loads(text),
     )
     return _CatalogElementReads(
         tuple((int(index), (int(span[0]), int(span[1]), int(span[2]))) for index, span in spans),
-        tuple(_RenderedFeatureEntry(*values) for values in entries),
+        # By field name: ``_RenderedFeatureEntry`` alone owns the field types.
+        tuple(
+            _RenderedFeatureEntry(**cast("dict[str, Any]", dict(zip(_ENTRY_FIELDS, values, strict=True))))
+            for values in entries
+        ),
         tuple(MappingProxyType(attributes) for attributes in matches),
         tuple(MappingProxyType(attributes) for attributes in annotations),
     )
