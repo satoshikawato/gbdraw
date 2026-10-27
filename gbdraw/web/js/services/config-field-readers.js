@@ -35,7 +35,7 @@ import {
 import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION, applyLinearTrackOrderPlacements, clampLinearTrackAxisIndex, normalizeLinearTrackSlots, resolveLinearTrackAxisIndex
 } from './linear-track-slot-model.js';
-import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { LEGACY_COMPARISON_SOURCE_FIELDS, normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import { MODE_SLICE_CONTAINERS } from './mode-scoped-migration.js';
 import { readRecordDisplayDrafts } from './record-display-model.js';
 import { isUnsafeObjectKey } from './safe-object-keys.js';
@@ -1328,21 +1328,99 @@ const readValueTablesOf = (tables, value) => {
 const readValueTables = (tables, value) => readValueTablesOf(tables, value).losses;
 
 /**
+ * The draft field a loss at `at` replaces: a field of a merged container
+ * (`losat.blastp` is one), a container that is no object, or a drawing field.
+ * @param {string} at
+ */
+const lostFieldOf = (at) => {
+  const parts = at.replace(/\[.*$/, '').split('.');
+  const depth = parts[0] === 'losat' && parts[1] === 'blastp' ? 3 : MERGED_CONTAINERS.includes(parts[0]) ? 2 : 1;
+  return parts.slice(0, depth).join('.');
+};
+/**
+ * `value` with the field at `at` (dotted) set to `leaf`, or left out when
+ * `leaf` is undefined; the containers above it are copied.
+ * @param {unknown} value @param {string} at @param {unknown} leaf
+ * @returns {unknown}
+ */
+const withFieldAt = (value, at, leaf) => {
+  const parentAt = at.split('.').slice(0, -1).join('.');
+  const field = /** @type {string} */ (at.split('.').at(-1));
+  /** @type {Record<string, unknown>} */
+  const parent = { ...(containerAt(value, parentAt) ?? {}) };
+  if (leaf === undefined) delete parent[field];
+  else parent[field] = leaf;
+  return withContainerAt(value, parentAt, parent);
+};
+
+/**
  * A Session 27-44's one draft (`config`, at `path`) as the draft field
  * readers read it before Python splits it into drawings (D-15-129): the read
- * value Python receives, and what the readers could not restore, listed for
- * a field any mode draws (every drawing of the split reads the draft). The
- * fields a drawing of one mode reads are read in its drawing, after the split.
+ * value Python receives, and what the readers could not restore. A field
+ * any mode draws is read once. Each mode's drawing reads the settings
+ * containers and its own fields of the whole draft, as `configFieldRepairs`
+ * and `unreadFieldRepairs` read a drawing's (D-15-138): its rows are listed
+ * for the fields it draws (`advRows(mode)` gives a blank its mode's
+ * default), a row both drawings list once. A field a reader replaced takes
+ * the value the drawings that draw it read (the arrow ratios as
+ * `applyConfigData` writes them), or is left out when they read it
+ * differently (each drawing of the split then takes its own default) or
+ * dropped it, so Python receives no value the readers did not use. The
+ * comparison source fields of an older draft are Python's migration's to
+ * read (`LEGACY_COMPARISON_SOURCE_FIELDS`): no settings reader reads them,
+ * and Python receives them as stored. The drawing of `openedMode` reads
+ * first, so its rows come first, as the drawing the Load opens; the value
+ * tables' rows follow the drawings' (the old Load's order, D-15-143).
  * @param {Record<string, unknown>} config
  * @param {string} path
+ * @param {{ resolveTrackPlacements: boolean, openedMode: 'circular' | 'linear' }} options
+ *   `resolveTrackPlacements`: whether the track stacks are resolved (`configFieldRepairs`); `openedMode`: the
+ *   mode of the drawing the Load opens (`drawnResultModes`).
  * @returns {{ value: Record<string, unknown>, repairs: LoadRepair[] }}
  */
-export const readSingleDraftValues = (config, path) => {
-  const { losses, value } = readValueTablesOf(FLAT_DRAFT_VALUE_TABLES, config);
-  return {
-    value: /** @type {Record<string, unknown>} */ (value),
-    repairs: lossRepairs(losses, path, config, { root: 'config' })
+export const readSingleDraftValues = (config, path, { resolveTrackPlacements, openedMode }) => {
+  const read = readValueTablesOf(FLAT_DRAFT_VALUE_TABLES, config);
+  /** @type {LoadRepair[]} */
+  const repairs = [];
+  /** @type {Set<string>} */
+  const listed = new Set();
+  /** @param {LoadRepair} repair */
+  const list = (repair) => {
+    const key = JSON.stringify(repair);
+    if (!listed.has(key)) repairs.push(repair);
+    listed.add(key);
   };
+  /** @type {Map<string, unknown[]>} The values the drawings that draw a replaced field read. */
+  const replaced = new Map();
+  /** @type {unknown} */
+  const settings = LEGACY_COMPARISON_SOURCE_FIELDS.reduce((draft, at) => (valueAt(draft, at) === undefined
+    ? draft : withFieldAt(draft, at, undefined)), /** @type {unknown} */ (config));
+  const settingsDraft = /** @type {Record<string, unknown>} */ (settings);
+  /** @type {readonly ('circular' | 'linear')[]} */
+  const modes = openedMode === 'linear' ? ['linear', 'circular'] : ['circular', 'linear'];
+  modes.forEach((mode) => {
+    const targets = defaultSettingsContainers(mode);
+    const { losses, arrowRatios } = installStoredSettings(targets, settingsDraft, mode);
+    if (arrowRatios) Object.assign(targets.adv, arrowRatios);
+    if (resolveTrackPlacements) resolvedTrackStacks(targets.adv, targets.form, losses);
+    const drawing = readValueTablesOf(DRAWING_TABLES[mode], settingsDraft);
+    losses.push(...drawing.losses);
+    [...lossRepairs(losses, path, config, { mode, root: 'config' }), ...unreadFieldRepairs(settingsDraft, path, mode)]
+      .forEach(list);
+    const view = { ...(isPlainObject(drawing.value) ? drawing.value : {}), ...targets };
+    losses.filter(({ at }) => drawnByMode(mode, 'config', at)).forEach(({ at }) => {
+      const field = lostFieldOf(at);
+      replaced.set(field, [...(replaced.get(field) ?? []), valueAt(view, field)]);
+    });
+  });
+  lossRepairs(read.losses, path, config, { root: 'config' }).forEach(list);
+  let value = read.value;
+  replaced.forEach((values, field) => {
+    const [first] = values;
+    const agreed = values.every((entry) => JSON.stringify(entry) === JSON.stringify(first));
+    value = withFieldAt(value, field, agreed ? copied(first) : undefined);
+  });
+  return { value: /** @type {Record<string, unknown>} */ (value), repairs };
 };
 
 /** Free text: Load names the place of such a value, not the value (12.3). */

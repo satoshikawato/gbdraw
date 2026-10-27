@@ -1517,6 +1517,14 @@ const normalizeSessionData = (data, repairs) => {
   };
 };
 
+/**
+ * A Session 27-33's draft reads its repeat regions as rectangles, the shape
+ * its writers drew them with: the one rule the Session paths share.
+ * @template T @param {T} configData @param {number} sourceSessionVersion @returns {T}
+ */
+const migrateSessionFeatureRenderingConfig = (configData, sourceSessionVersion) =>
+  migrateLegacyFeatureRenderingConfig(configData, sourceSessionVersion <= 33);
+
 /** @template T @param {T} configData @param {boolean} legacy @returns {T} */
 const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
   if (!legacy || !isPlainObject(configData)) return configData;
@@ -1801,14 +1809,14 @@ const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
   return ({
     ...data,
     version: SESSION_VERSION,
-    config: migrateLegacyFeatureRenderingConfig(
+    config: migrateSessionFeatureRenderingConfig(
       migrateImportedLinearTrackSlots(
         sourceSessionVersion <= 33
           ? withoutLegacyNullCircularSlotSpacing(circularSlotConfig)
           : circularSlotConfig,
         sourceSessionVersion
       ),
-      sourceSessionVersion <= 33
+      sourceSessionVersion
     )
   });
 };
@@ -6347,16 +6355,39 @@ const importSessionDocument = async (e, options = {}) => {
           : storedLogicalResults(storedResults), storedUi ?? {}));
         await nextTick();
       }
+      // What its Result was drawn with, at the file's own paths: its
+      // request's mode, else a Session 27-30's last Generate's or `ui.mode`
+      // (`drawnResultModes`). A Session 27-30's travels with the Results
+      // Python sets aside (OV-1953).
+      const { config: storedDraft, ui: storedUi, cliInvocation: storedInvocation, renderRequest: storedRequestOfMode } =
+        /** @type {{ config?: unknown, ui?: unknown, cliInvocation?: { mode?: unknown }, renderRequest?: { mode?: unknown } }} */
+        (fileParts.data);
+      const { form: storedForm, adv: storedAdv } = /** @type {{ form?: { legend?: unknown },
+        adv?: { plot_title_position?: unknown } }} */ (isPlainObject(storedDraft) ? storedDraft : {});
+      const legacyResult = fileDocument.version < CANONICAL_SESSION_MIN_VERSION;
+      /** @type {ResultDrawnWith} */
+      const fileDrawnWith = {
+        ui: isPlainObject(storedUi) ? storedUi : {},
+        committedMode: isPlainObject(storedRequestOfMode) ? storedRequestOfMode.mode : null,
+        invocationMode: legacyResult ? storedInvocation?.mode : null,
+        legend: storedForm?.legend, plotTitlePosition: storedAdv?.plot_title_position, canonical: !legacyResult
+      };
       // Its one draft is read by the draft field readers here, at the file's
-      // own path; each drawing of Python's split reads its mode's fields. A
-      // Session 41-43 display row lacks the two fields Session 44 added (as
-      // Python's migration of the draft, OV-1928).
-      const { config: storedDraft } = /** @type {{ config?: unknown }} */ (fileParts.data);
-      const draft = isPlainObject(storedDraft) && fileDocument.version < TYPED_DRAFT_SESSION_VERSION
-        && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
+      // own path, each mode's settings readers on the whole draft (D-15-138),
+      // the drawing of its Result's mode first, as the old Load opened it
+      // (D-15-142); the track stacks are resolved unless it loads as settings
+      // only. A Session 41-43 display row lacks the two fields Session 44
+      // added (as Python's migration of the draft, OV-1928). A Session
+      // 27-33's repeat-region shape is read before the readers, as the old
+      // Load read it (OV-1964).
+      const draft = migrateSessionFeatureRenderingConfig(isPlainObject(storedDraft)
+        && fileDocument.version < TYPED_DRAFT_SESSION_VERSION && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
         ? { ...storedDraft, recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(storedDraft.recordDisplayDrafts) }
-        : storedDraft;
-      const draftRead = isPlainObject(draft) ? readSingleDraftValues(draft, 'config') : null;
+        : storedDraft, fileDocument.version);
+      const draftRead = isPlainObject(draft) ? readSingleDraftValues(draft, 'config', {
+        resolveTrackPlacements: !projectsWithoutRequest(fileParts.data, fileDocument.version),
+        openedMode: drawnResultModes(fileDrawnWith).generatedMode
+      }) : null;
       if (draftRead) fileRepairs.push(...draftRead.repairs);
       // A Session 27-39's group names are read against its own groups, at
       // the file's path; the groups travel with the Results Python sets
@@ -6378,7 +6409,6 @@ const importSessionDocument = async (e, options = {}) => {
         : {};
       // Its layout and editor state are read here, at the file's own paths
       // (OV-652, TB8/TB9), and Python receives the read values (OV-1955).
-      const { ui: storedUi } = /** @type {{ ui?: unknown }} */ (fileParts.data);
       const layoutRead = isPlainObject(storedUi) ? readStoredLayoutUi(storedUi, 'ui') : null;
       /** @type {Record<string, unknown>} */
       const readData = {
@@ -6427,25 +6457,16 @@ const importSessionDocument = async (e, options = {}) => {
       const upgrade = await upgradeLegacySession(readData);
       if (!options.isCurrent()) return { status: 'canceled' };
       // The file's source facts, which its Session 49 does not say (`sessionSourceFactsOf`).
-      // A Session 27-30's Result has no request: what it was drawn with is in
-      // the file's `ui`, `cliInvocation` and draft, read at the file's own
-      // paths; it travels with the Results Python sets aside (OV-1953). A
+      // A Session 27-30's Result has no request: what it was drawn with
+      // (above) travels with the Results Python sets aside (OV-1953). A
       // Session 31-39's is its request's, which Python's Session 49 holds.
-      const { cliInvocation: storedInvocation } = /** @type {{ cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
-      const { form: storedForm, adv: storedAdv } = /** @type {{ form?: { legend?: unknown },
-        adv?: { plot_title_position?: unknown } }} */ (isPlainObject(storedDraft) ? storedDraft : {});
       legacyRead = {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
         sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
         orthogroups,
         featureMetadata,
         layoutRepairs: layoutRead ? layoutRead.repairs : [],
-        drawnWith: fileDocument.version < CANONICAL_SESSION_MIN_VERSION
-          ? {
-              ui: isPlainObject(storedUi) ? storedUi : {}, committedMode: null, invocationMode: storedInvocation?.mode,
-              legend: storedForm?.legend, plotTitlePosition: storedAdv?.plot_title_position, canonical: false
-            }
-          : null
+        drawnWith: legacyResult ? fileDrawnWith : null
       };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
