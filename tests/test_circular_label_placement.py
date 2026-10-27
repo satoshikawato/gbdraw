@@ -375,6 +375,10 @@ def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
                 assert gaps.gap(i, j) == gap
                 assert gaps.gap(j, i) == gap
             assert gaps.largest == max(table.values(), default=0.0)
+            # The one-pass bound pads the min-gap count (OV-730): never short, exact for one spacing.
+            assert gaps.bound >= gaps.largest
+            if len({module._resolve_label_spacing_px(label, base_margin_px=base) for label in labels}) <= 1:
+                assert gaps.bound == gaps.largest
     assert mixed_sets > 20
 
 

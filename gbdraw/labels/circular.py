@@ -206,6 +206,7 @@ class _PairGaps:
         self._labels = labels
         self._base_margin_px = base_margin_px
         spacings = {_resolve_label_spacing_px(label, base_margin_px=base_margin_px) for label in labels}
+        self._largest_spacing_px = max(spacings, default=0.0)
         self._parts: list[float] | None = None
         if len(spacings) <= 1:
             spacing_px = next(iter(spacings), 0.0)
@@ -225,6 +226,19 @@ class _PairGaps:
             return max(self._parts)
         return max(self.gap(idx, jdx) for idx in range(count) for jdx in range(idx + 1, count))
 
+    @cached_property
+    def bound(self) -> float:
+        """An upper bound of every pair's gap in one pass over the labels (0.0 for fewer than two labels).
+
+        A pair resolves one of its labels' spacings, and a label's part grows with the spacing, so
+        each label's part at the largest spacing bounds its pairs. With one spacing it is `largest`.
+        """
+        if len(self._labels) < 2:
+            return 0.0
+        if self._parts is not None:
+            return max(self._parts)
+        return max(_label_gap_part_px(label, self._largest_spacing_px) for label in self._labels)
+
     def gap(self, idx: int, jdx: int) -> float:
         """The gap of labels ``idx`` and ``jdx`` (either order)."""
         parts = self._parts
@@ -238,12 +252,6 @@ class _PairGaps:
 
 def _all_label_pairs(label_count: int) -> Iterator[tuple[int, int]]:
     return ((idx, jdx) for idx in range(label_count) for jdx in range(idx + 1, label_count))
-
-
-def _label_pair_index_padding(labels: list[CircularLabel], *, use_min_gap: bool) -> float:
-    if not use_min_gap:
-        return 1.0
-    return max((minimum_bbox_gap_px(label, label) for label in labels), default=0.0)
 
 
 def _candidate_label_pairs(
@@ -320,26 +328,24 @@ def _overlapping_label_pairs(
 
 
 def _count_label_overlaps(labels: list[CircularLabel], total_length: int, use_min_gap: bool) -> int:
-    """Count the label pairs that `_labels_overlap` finds overlapping, at their min gap or at the plain margins."""
+    """Count the label pairs that `_labels_overlap` finds overlapping, at their min gap or at the plain margins.
+
+    The broad phase is padded by a bound of every pair's gap (OV-730): a pair's gap can exceed every
+    label's own, when one label's spacing applies to the other.
+    """
     if use_min_gap:
         gaps = _PairGaps(labels)
+        padding = gaps.bound
 
         def margins(idx: int, jdx: int) -> OverlapMargins:
             return _min_gap_margins(gaps.gap(idx, jdx))
     else:
+        padding = 1.0
 
         def margins(idx: int, jdx: int) -> OverlapMargins:
             return PLAIN_OVERLAP_MARGINS
 
-    return sum(
-        1
-        for _ in _overlapping_label_pairs(
-            labels,
-            total_length,
-            padding=_label_pair_index_padding(labels, use_min_gap=use_min_gap),
-            margins=margins,
-        )
-    )
+    return sum(1 for _ in _overlapping_label_pairs(labels, total_length, padding=padding, margins=margins))
 
 
 def circular_label_font_size(cfg: GbdrawConfig, total_length: int) -> float:
