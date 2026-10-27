@@ -66,11 +66,12 @@ const input = (session) => ({
   target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
 });
 // What a Load replaces: the settings and edits of both drawings, the shown
-// mode and Results, the title, the input files.
-const loadedState = () => JSON.stringify({
+// mode and Results, the title, the input files. `shownResults: false` leaves
+// the shown Results out.
+const loadedState = ({ shownResults = true } = {}) => JSON.stringify({
   mode: state.mode.value,
   title: state.sessionTitle.value,
-  results: state.results.value.map((result) => result.content),
+  ...(shownResults ? { results: state.results.value.map((result) => result.content) } : {}),
   files: [...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
   drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
     const drawing = modeDrawing(state, mode);
@@ -95,6 +96,7 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   });
   assert.equal(before.status, 'ok', JSON.stringify(before.error));
   const snapshot = loadedState();
+  const snapshotWithoutResults = loadedState({ shownResults: false });
 
   const dialogs = [];
   const reached = [];
@@ -102,8 +104,10 @@ test('a lossy Load asks once before it changes anything, and Cancel leaves every
   const canceled = await importSession(event, {
     confirmLoadRepairs: async (dialog) => {
       dialogs.push(dialog);
-      // Nothing is applied while the question is open.
-      assert.equal(loadedState(), snapshot);
+      // Nothing is applied while the question is open. A Session 27-44 shows
+      // its stored figure while Python upgrades it (DESIGN 4.3, D-15-145): the
+      // shown Results are left out here, and Cancel restores them (below).
+      assert.equal(loadedState({ shownResults: false }), snapshotWithoutResults);
       return false;
     },
     rollbackState: spyOnPort(() => reached.push('snapshot'), () => reached.push('restore')),
