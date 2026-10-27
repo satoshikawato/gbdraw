@@ -13,14 +13,16 @@ searched for at most ``WEB_ROW_SEARCH_SECONDS`` (LP-D60).
 from __future__ import annotations
 
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from typing import Literal, TypeAlias, TypedDict, cast, get_args
+import warnings
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
+from typing import Literal, TextIO, TypeAlias, TypedDict, cast, get_args
 
 from svgwrite import Drawing
 
 from gbdraw.api.diagram import label_fit_report, label_fit_row
 from gbdraw.core.numeric import parse_ascii_nonnegative_integer
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, LabelsMayNotFitWarning, ValidationError
 from gbdraw.labels.fit import (
     ALL_OUTSIDE_SCOPE,
     CENTER_RESERVED_RADIUS_PATH,
@@ -34,6 +36,7 @@ from gbdraw.labels.fit import (
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
+    LabelCapacityRemedy,
     LabelFitRecord,
     LabelFitReport,
     LabelFitRow,
@@ -132,6 +135,8 @@ class LabelFitRecordPayload(TypedDict):
     definitionOverlaps: int
     regionOverlaps: int
     refused: bool
+    # The room the labels need as a multiple of the room around the map, when they were not placed (CAPACITY-STOP).
+    capacityRatio: float | None
     counts: str
 
 
@@ -145,6 +150,8 @@ class LabelFitReportPayload(TypedDict):
     notice: list[str]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
+    # The ways to make room for records that were not placed (CAPACITY-STOP); the Web words each with its controls.
+    remedies: list[LabelCapacityRemedy]
 
 
 class LabelFitFailurePayload(TypedDict):
@@ -226,6 +233,7 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
         "definitionOverlaps": record.fit.definition_overlaps,
         "regionOverlaps": record.fit.region_overlaps,
         "refused": record.refused,
+        "capacityRatio": float(record.capacity.ratio) if record.capacity is not None else None,
         # A refused radial record has no counts; the reason stands in (OV-699).
         "counts": label_fit_record_counts(record),
     }
@@ -244,7 +252,34 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
+        "remedies": list(report.capacity_remedies),
     }
+
+
+@contextmanager
+def label_capacity_notices(notice: Callable[[str], object]) -> Iterator[None]:
+    """Send each ``LabelsMayNotFitWarning`` of a render to ``notice`` as Python's sentence, when it is warned
+    (CAPACITY-WARN): before the labels are placed, so the Web shows it while the render runs."""
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("always", LabelsMayNotFitWarning)
+        show_other = warnings.showwarning
+
+        def show(
+            message: Warning | str,
+            category: type[Warning],
+            filename: str,
+            lineno: int,
+            file: TextIO | None = None,
+            line: str | None = None,
+        ) -> None:
+            if issubclass(category, LabelsMayNotFitWarning):
+                notice(str(message))
+                return
+            show_other(message, category, filename, lineno, file, line)
+
+        warnings.showwarning = show
+        yield
 
 
 def label_fit_failure(error: BaseException) -> LabelsDoNotFitError | None:
@@ -370,6 +405,7 @@ __all__ = [
     "LabelFitReportPayload",
     "LabelFitRowPayload",
     "LabelFitRowSearches",
+    "label_capacity_notices",
     "label_fit_failure",
     "label_fit_mode",
     "label_fit_report_payload",

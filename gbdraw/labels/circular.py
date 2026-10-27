@@ -16,7 +16,18 @@ from .filtering import label_filter_maps
 from .circular_candidates import build_circular_label_candidates
 from .circular_leaders import chosen_contact_end, leader_polyline
 from .circular_radial import place_radial_labels
-from .circular_types import CircularLabel, CircularLabelCandidateCache
+from .circular_capacity import (
+    LabelArc,
+    check_label_capacity,
+    circular_label_capacity,
+    label_capacity_checked,
+)
+from .circular_types import (
+    LABEL_FIT_X_MARGIN_PX,
+    LABEL_FIT_Y_MARGIN_PX,
+    CircularLabel,
+    CircularLabelCandidateCache,
+)
 from .fit import FITS, LabelFit, LabelKind, LabelShape, Polygon, label_fits_by_kind
 from .label_style import CIRCULAR_LABEL_GAP_EM
 from ..config.models import (
@@ -339,10 +350,10 @@ def circular_label_font_size(cfg: GbdrawConfig, total_length: int) -> float:
 
 
 def _label_fit_box(label: CircularLabel, total_length: int) -> Polygon:
-    """A horizontal label's box for the fit count, with the overlap margins (x 1.0 px, y 0.1 px)."""
+    """A horizontal label's box for the fit count, with the overlap margins."""
 
-    min_x, max_x = _label_x_bounds(label, 1.0)
-    min_y, max_y = _label_y_bounds(label, total_length, 0.1)
+    min_x, max_x = _label_x_bounds(label, LABEL_FIT_X_MARGIN_PX)
+    min_y, max_y = _label_y_bounds(label, total_length, LABEL_FIT_Y_MARGIN_PX)
     return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
 
 
@@ -4917,32 +4928,17 @@ def _polish_total_leader_distance(
     return labels
 
 
-def rearrange_labels_fc(
-    labels: list[CircularLabel],
+def label_arc(
     feature_radius,
-    total_length,
     genome_len,
     cfg: GbdrawConfig,
     strands,
     is_outer,
-    inner_labels_enabled: bool,
     arena_outer_radius: float | None = None,
-    spacing_px: float | None = None,
     track_preset: str | None = None,
-    *,
-    dense_outer_rows: DenseOuterRows = "legacy",
-    probe: bool = False,
-):
-    """Place one side's external labels on their arc.
+) -> LabelArc:
+    """The ellipse one side's horizontal labels are placed on; the capacity check reads the same one."""
 
-    ``dense_outer_rows`` chooses the row gap of the dense legacy packer for
-    outer labels: ``"spaced"`` keeps the circular label spacing (OV-479),
-    ``"legacy"`` keeps the 0.1 px gap of earlier releases. When the dense outer
-    candidate overlaps and the caller can use that answer (a ``"spaced"``
-    attempt, which falls back to ``"legacy"``, or a fit ``probe``), placement
-    stops with :class:`CircularLabelProbeStopped` instead of trying the slower
-    candidates.
-    """
     track_type = _normalize_circular_track_preset(track_preset or cfg.canvas.circular.track_type)
 
     if is_outer:
@@ -4978,9 +4974,40 @@ def rearrange_labels_fc(
                 scale = arena_outer_radius / current_max
                 x_radius *= scale
                 y_radius *= scale
+    return LabelArc(x_radius, y_radius, default_center_x)
 
+
+def rearrange_labels_fc(
+    labels: list[CircularLabel],
+    feature_radius,
+    total_length,
+    genome_len,
+    cfg: GbdrawConfig,
+    strands,
+    is_outer,
+    inner_labels_enabled: bool,
+    arena_outer_radius: float | None = None,
+    spacing_px: float | None = None,
+    track_preset: str | None = None,
+    *,
+    dense_outer_rows: DenseOuterRows = "legacy",
+    probe: bool = False,
+):
+    """Place one side's external labels on their arc.
+
+    ``dense_outer_rows`` chooses the row gap of the dense legacy packer for
+    outer labels: ``"spaced"`` keeps the circular label spacing (OV-479),
+    ``"legacy"`` keeps the 0.1 px gap of earlier releases. When the dense outer
+    candidate overlaps and the caller can use that answer (a ``"spaced"``
+    attempt, which falls back to ``"legacy"``, or a fit ``probe``), placement
+    stops with :class:`CircularLabelProbeStopped` instead of trying the slower
+    candidates.
+    """
+    arc = label_arc(feature_radius, genome_len, cfg, strands, is_outer, arena_outer_radius, track_preset)
+    x_radius = arc.x_radius
+    y_radius = arc.y_radius
     center_y = 0
-    center_x = default_center_x
+    center_x = arc.center_x
     start_angle = 0
     end_angle = 360
 
@@ -5193,6 +5220,7 @@ def prepare_label_list(
     probe: bool = False,
     definition_text: Sequence[Aabb] = (),
     label_filtering: Mapping[str, Any] | None = None,
+    record_id: str | None = None,
 ) -> list[CircularLabel]:
     """Return the record's drawn label list: embedded labels, then external labels.
 
@@ -5202,6 +5230,10 @@ def prepare_label_list(
     the final horizontal layout are repaired locally (LP-D57); ``definition_text``
     is the centre definition's lines, in the labels' coordinates.
     ``label_filtering``: the compiled maps when the caller holds them.
+    With ``record_id`` (a drawn placement, not a probe), horizontal outer and
+    inner labels are first read against the room around the map
+    (:func:`~gbdraw.labels.circular_capacity.check_label_capacity`), which may
+    raise ``CircularLabelCapacityExceeded`` or warn before they are placed.
     """
     cfg = profile.config
     embedded_labels: list[CircularLabel] = []
@@ -5519,6 +5551,28 @@ def prepare_label_list(
             )
         return embedded_labels + external_labels
 
+    if record_id is not None and not probe and label_capacity_checked():
+        outer_offsets = cfg.labels.unified_adjustment.outer_labels
+        check_label_capacity(
+            record_id,
+            circular_label_capacity(
+                outer_labels,
+                inner_labels if inner_labels_enabled else (),
+                outer_arc=label_arc(
+                    radius,
+                    length_param,
+                    cfg,
+                    strands,
+                    True,
+                    float(outer_arena[1]) if outer_arena is not None else None,
+                    track_type,
+                ),
+                inner_arc=label_arc(radius, length_param, cfg, strands, False, None, track_type),
+                outer_offsets=(float(outer_offsets.x_radius_offset), float(outer_offsets.y_radius_offset)),
+                font_size=font_size,
+            ),
+        )
+
     def place_external_labels(dense_outer_rows: DenseOuterRows) -> list[CircularLabel]:
         outer_labels_rearranged = rearrange_labels_fc(
             [label.copy() for label in outer_labels],
@@ -5784,6 +5838,7 @@ __all__ = [
     "normalize_angle_near_reference",
     "euclidean_distance",
     "improved_label_placement_fc",
+    "label_arc",
     "place_labels_on_arc_fc",
     "assign_leader_start_points",
     "prepare_label_list",

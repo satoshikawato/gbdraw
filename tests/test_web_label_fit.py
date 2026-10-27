@@ -19,7 +19,7 @@ from gbdraw.api import (
     RecordInput,
     RenderOutputRequest,
 )
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, LabelsMayNotFitWarning, ValidationError
 from gbdraw.labels.circular_fit import ROW_KINDS
 from gbdraw.labels.fit import (
     DEFINITION_FONT_PATH,
@@ -29,6 +29,7 @@ from gbdraw.labels.fit import (
     SEPARATE_FEATURES_PATH,
     SEPARATE_FEATURES_VALUES,
     Y_OFFSET_PATH,
+    LabelCapacityRecord,
     LabelFit,
     LabelFitRecord,
     LabelFitReport,
@@ -39,9 +40,11 @@ from gbdraw.session import build_session_document
 from gbdraw.web_support.label_fit import (
     WEB_ROW_SEARCH_SECONDS,
     LabelFitRowSearches,
+    label_capacity_notices,
     label_fit_failure,
     label_fit_report_payload,
 )
+from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.request_render import render_canonical_web_request
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
@@ -68,9 +71,10 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["records"] == [{
         "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
-        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
+        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False, "capacityRatio": None,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
     }]
+    assert payload["remedies"] == []
     vertical, font, tighter, combination = payload["rows"]
     assert vertical == {
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
@@ -84,6 +88,47 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert tighter["status"] == "not_found" and tighter["values"] is None and tighter["settings"] == []
     assert tighter["reason"] == "Does not fit down to 0.1 px label spacing"
     assert combination["status"] == "not_computed" and combination["canvasSize"] is None
+
+
+def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reason() -> None:
+    """CAPACITY-STOP: the dialog lists Python's sentence per record and the remedies; the banner has its own reason."""
+
+    capacity = LabelCapacityRecord(562, 6.0, 2.49, ("filter", "label_text", "linear"))
+    report = LabelFitReport(
+        records=(LabelFitRecord("AP027078.1", "circular_outer", 562, 6.0, LabelFit(0, 0), capacity=capacity),),
+        rows=(),
+        drawn=False,
+    )
+    payload = label_fit_report_payload(report, "circular")
+
+    (record,) = payload["records"]
+    assert record["capacityRatio"] == 2.49
+    assert record["counts"] == "they need about 2.5 times the room around the map"
+    assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
+    error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
+    assert error["context"] == {
+        "reason": "LABEL_CAPACITY",
+        "labelFitCounts": "Outer labels need about 2.5 times the room around the map.",
+    }
+    # Nothing to compute: the failure keeps no row token.
+    searches = LabelFitRowSearches()
+    failure = LabelsDoNotFitError("PRIVATE", report=report)
+    assert searches.retain_failure("circular", failure) is None
+
+
+def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> None:
+    notices: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with label_capacity_notices(notices.append):
+            capacity = LabelCapacityRecord(195, 14.0, 1.36, ())
+            warnings.warn(
+                LabelsMayNotFitWarning("SENTENCE", record_id="NC_005859.1", label_kind="circular_outer", capacity=capacity)
+            )
+            warnings.warn(LabelsMayNotFitWarning("AGAIN", record_id="r", label_kind="circular_inner", capacity=capacity))
+            warnings.warn(UserWarning("other"))
+    assert notices == ["SENTENCE", "AGAIN"]
+    assert [str(item.message) for item in caught] == ["other"]
 
 
 def test_a_row_with_an_unknown_config_path_is_an_error() -> None:
