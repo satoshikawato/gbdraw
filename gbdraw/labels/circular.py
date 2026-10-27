@@ -5015,6 +5015,14 @@ def rearrange_labels_fc(
     if not sorted_labels:
         return []
     label_spacing_px = _resolve_label_spacing_px(sorted_labels[0], base_margin_px=spacing_px)
+    from . import circular_packer_study as _clp  # STUDY ONLY
+
+    if _clp.ACTIVE:
+        packed = _clp.pack_labels(
+            [label.copy() for label in sorted_labels], total_length, center_x, x_radius, y_radius,
+            bool(is_outer), label_spacing_px,
+        )
+        return _assign_leader_start_points(packed, total_length)
     # OV-479: a spaced attempt keeps the circular label spacing between dense outer rows.
     legacy_row_gap_px = (
         max(label_spacing_px, LEGACY_MIN_ROW_GAP_PX)
@@ -5201,7 +5209,34 @@ def _is_label_embedded_in_segment(
     return (start_offset > eps) and (end_offset < (feature_span - eps))
 
 
-def prepare_label_list(
+def prepare_label_list(*args, **kwargs) -> list[CircularLabel]:
+    """STUDY ONLY: GBDRAW_CLP=A packs a record only when today's placement does not fit; B packs every record."""
+    from . import circular_packer_study as _clp
+
+    mode = _clp.mode()
+    _clp.LAST.clear()
+    if mode not in ("A", "B"):
+        return _prepare_label_list_today(*args, **kwargs)
+    if mode == "A":
+        try:
+            today = _prepare_label_list_today(*args, **kwargs)
+            fits = circular_label_fits([lab for lab in today if not lab.get("is_embedded")], args[1])
+            if all(fit.fits for fit in fits.values()):
+                _clp.LAST.update(variant="A", used="today")
+                return today
+            _clp.LAST.update(today_fit={k: (v.overlap_pairs, v.crossing_pairs) for k, v in fits.items()})
+        except CircularLabelProbeStopped:
+            _clp.LAST.update(today_fit="probe-stopped")
+    _clp.ACTIVE = True
+    try:
+        result = _prepare_label_list_today(*args, **kwargs)
+    finally:
+        _clp.ACTIVE = False
+    _clp.LAST.update(variant=mode, used="packer")
+    return result
+
+
+def _prepare_label_list_today(
     feature_dict,
     total_length,
     radius,
@@ -5719,7 +5754,10 @@ def prepare_label_list(
             # Collision optimization assumes angularly ordered neighbors.
             external_labels_sorted = sorted(external_labels, key=lambda label: float(label["middle"]))
             assign_leader_start_points(external_labels_sorted, total_length)
-            _resolve_label_leader_line_collisions(
+            from . import circular_packer_study as _clp  # STUDY ONLY
+
+            if not (_clp.ACTIVE and _clp.opts()["resolve"] == "0"):
+              _resolve_label_leader_line_collisions(
                 external_labels_sorted,
                 total_length,
                 margin_px=LEADER_LABEL_COLLISION_MARGIN_PX,
