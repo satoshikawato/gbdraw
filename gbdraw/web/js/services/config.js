@@ -166,10 +166,7 @@ import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
-import {
-  migrateLegacyLinearComparisonDraft,
-  promoteReadGallerySession
-} from './gallery-session-migration.js';
+import { promoteReadGallerySession } from './gallery-session-migration.js';
 import {
   compressSessionData,
   largeSessionDownloadMegabytes
@@ -2701,18 +2698,17 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
 };
 
 /**
- * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
+ * A Session's committed request as Load projects it, from the parts
+ * `readSessionImportParts` read: the Session in the current names (a Gallery
+ * Session's request rebuilt), the classification of its comparisons, its
+ * stored draft, and its request's projection. The one reader for the preflight
+ * of a Session 46-49 and the first pass of a Session 31-39 (OV-2011).
+ * @param {Awaited<ReturnType<typeof readSessionImportParts>>} read
  * @param {SessionChecked} sessionData The document `readSessionDocument` read.
  * @param {LoadRepair[]} repairs Collects what Load cannot restore.
- * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
- * @param {SourceFacts} [drawingsSourceFacts] As `readSessionImportParts`.
  */
-const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts) => {
-  const read = await readSessionImportParts(stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts);
-  const {
-    sourceSessionVersion, drawingsBand, openedDrawingAt, requestRead, currentSession, adoptedSession,
-    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState, data: cacheData
-  } = read;
+const readCommittedRequestProjection = (read, sessionData, repairs) => {
+  const { sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData } = read;
   let { upgrade } = read;
   const normalizedData = cacheData;
   // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
@@ -2795,50 +2791,55 @@ const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSe
     // inventory; no step after replaces `ui.mode`.
     ? projectSettingsOnlySession(/** @type {SettingsOnlyProjectionInput} */ (data), currentResourceTable)
     : canonicalProjectionInput && projectCanonicalSessionRequest(canonicalProjectionInput);
+  return {
+    upgrade, data, storedRequest, comparisonClassification, modeScopedSession, hasStoredDraft, runtimeStoredConfig,
+    settingsOnly, canonicalProjectionInput, canonicalProjection
+  };
+};
+
+/**
+ * A Session 31-39's draft as Load reads it, as the Load before the Worker
+ * route read it (OV-2011): its committed request's projection owns the drawn
+ * values, the draft keeps the state the request does not hold, and its rules
+ * keep their provenance. Python converts the read draft.
+ * @param {NonNullable<ReturnType<typeof readCommittedRequestProjection>['canonicalProjection']>} projection
+ * @param {unknown} storedConfig The stored draft (unvalidated).
+ * @returns {Record<string, unknown>}
+ */
+const readDraftOverCommittedRequest = (projection, storedConfig) => withCurrentLinearLabelVisibility({
+  ...restoreStoredNonCanonicalConfig(
+    projection.config,
+    storedConfig,
+    { hasCanonicalProteinPipeline: Boolean(projection.pipelineState) }
+  ),
+  rules: applySpecificRuleProvenance(
+    projection.config.rules,
+    /** @type {UnvalidatedFields<'rules'>} */ (storedConfig)?.rules
+  )
+});
+
+/**
+ * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
+ * @param {SessionChecked} sessionData The document `readSessionDocument` read.
+ * @param {LoadRepair[]} repairs Collects what Load cannot restore.
+ * @param {readonly ResultSetPath[]} uncomposedSets The sets whose Results the composition transform could not compose.
+ * @param {SourceFacts} [drawingsSourceFacts] As `readSessionImportParts`.
+ */
+const preflightSessionImport = async (stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts) => {
+  const read = await readSessionImportParts(stored, sessionData, repairs, uncomposedSets, drawingsSourceFacts);
+  const {
+    sourceSessionVersion, drawingsBand, openedDrawingAt, currentSession, adoptedSession,
+    currentResourceTable, validatedFeatureCatalog, setCatalogs, normalizedEditorState
+  } = read;
+  const {
+    upgrade, data, storedRequest, comparisonClassification, modeScopedSession, hasStoredDraft, runtimeStoredConfig,
+    settingsOnly, canonicalProjectionInput, canonicalProjection
+  } = readCommittedRequestProjection(read, sessionData, repairs);
   repairs.push(...(canonicalProjection?.legacyTableRepairs || []));
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
-  let restoredConfig = canonicalProjection
-    ? sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
-      ? cloneJsonData(canonicalProjection.config)
-      : {
-          ...restoreStoredNonCanonicalConfig(
-            canonicalProjection.config,
-            runtimeStoredConfig,
-            { hasCanonicalProteinPipeline: Boolean(canonicalProjection.pipelineState) }
-          ),
-          rules: applySpecificRuleProvenance(
-            canonicalProjection.config.rules,
-            /** @type {UnvalidatedFields<'rules'>} */ (runtimeStoredConfig)?.rules
-          )
-        }
-    : data.config;
-  if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && restoredConfig) {
-    restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
-  }
-  if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
-    const sourceStoredConfig = isPlainObject(normalizedData.config) ? normalizedData.config : {};
-    const storedUi = /** @type {UnvalidatedFields<'blastSource'>} */ (normalizedData.ui);
-    const forceWebDraft = isPlainObject(sourceStoredConfig.linearRecordLayout)
-      || !isPlainObject(sourceStoredConfig.cliOptions);
-    const comparisonMigrationConfig = cloneJsonData(restoredConfig);
-    if (
-      !Object.prototype.hasOwnProperty.call(comparisonMigrationConfig, 'blastSource')
-      && storedUi?.blastSource
-    ) {
-      comparisonMigrationConfig.blastSource = storedUi.blastSource;
-    }
-    const migratedComparisonDraft = migrateLegacyLinearComparisonDraft({
-      config: comparisonMigrationConfig,
-      filesData: canonicalProjection?.files || data.files || {},
-      forceWebDraft
-    });
-    restoredConfig = migratedComparisonDraft.config;
-    if (canonicalProjection) {
-      canonicalProjection.files = migratedComparisonDraft.filesData;
-    } else {
-      data.files = migratedComparisonDraft.filesData;
-    }
-  }
+  // The preflight reads a Session 46-49 (a Session 27-44 is read before
+  // Python converts it, and a Session 31-39's draft over its request there).
+  let restoredConfig = canonicalProjection ? cloneJsonData(canonicalProjection.config) : data.config;
   if (canonicalProjection && !modeScopedSession && sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
     && hasStoredDraft) {
     recordSessionLifecycleEvent('current-draft-validation-start');
@@ -6403,8 +6404,15 @@ const importSessionDocument = async (e, options = {}) => {
       // only. A Session 41-43 display row lacks the two fields Session 44
       // added (as Python's migration of the draft, OV-1928). A Session
       // 27-33's repeat-region shape is read before the readers, as the old
-      // Load read it (OV-1964).
-      const draft = migrateSessionFeatureRenderingConfig(isPlainObject(storedDraft)
+      // Load read it (OV-1964). A Session 31-39's draft is read over its
+      // committed request's projection, as the old Load read it (OV-2011);
+      // the read repeats no row of the readers above.
+      const committedRead = isPlainObject(storedDraft) && fileDocument.version >= CANONICAL_SESSION_MIN_VERSION
+        && fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION
+        ? readCommittedRequestProjection(fileParts, fileRead.value, []) : null;
+      const draft = committedRead?.canonicalProjection && !committedRead.settingsOnly
+        ? readDraftOverCommittedRequest(committedRead.canonicalProjection, committedRead.runtimeStoredConfig)
+        : migrateSessionFeatureRenderingConfig(isPlainObject(storedDraft)
         && fileDocument.version < TYPED_DRAFT_SESSION_VERSION && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
         ? { ...storedDraft, recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(storedDraft.recordDisplayDrafts) }
         : storedDraft, fileDocument.version);
