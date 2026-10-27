@@ -60,6 +60,7 @@ import {
   legendPositionOrDefault,
   readDrawnLegendSideOfMode,
   readLegendPositionOfMode,
+  readStoredLayoutUi,
   storedLegendPositionRepairs,
   normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
@@ -6177,9 +6178,11 @@ class UncomposedResultSet extends Error {
  * A Session 27-44 read by Load's readers at the file's own paths, with their
  * rows and Python's, and Python's conversion of the read document.
  * @typedef {{ upgrade: LegacySessionUpgrade, repairs: readonly LoadRepair[], sourceFacts: SourceFacts,
- *   orthogroups: readonly unknown[], drawnWith: ResultDrawnWith | null }} LegacySessionRead `orthogroups`: the
- *   similarity groups of the file's `orthogroupState` (a Session 27-39's, members by record key), which its
- *   set-aside Results draw; `drawnWith`: what a Session 27-30's Result was drawn with (OV-1953), else null
+ *   orthogroups: readonly unknown[], layoutRepairs: readonly LoadRepair[], drawnWith: ResultDrawnWith | null }}
+ *   LegacySessionRead `orthogroups`: the similarity groups of the file's `orthogroupState` (a Session 27-39's,
+ *   members by record key), which its set-aside Results draw; `layoutRepairs`: the rows of the file's `ui`
+ *   layout (`readStoredLayoutUi`), listed where Load lists the drawings' layouts; `drawnWith`: what a Session
+ *   27-30's Result was drawn with (OV-1953), else null
  */
 /**
  * What a loaded Result set was drawn with, at the paths of the document Load
@@ -6354,8 +6357,17 @@ const importSessionDocument = async (e, options = {}) => {
       const orthogroups = groupState
         ? migrateLegacyOrthogroupMembers(Array.isArray(groupState.groups) ? groupState.groups : [],
           Array.isArray(storedRequest?.records) ? storedRequest.records : null) : [];
+      // Its layout and editor state are read here, at the file's own paths
+      // (OV-652, TB8/TB9), and Python receives the read values (OV-1955).
+      const { ui: storedUi } = /** @type {{ ui?: unknown }} */ (fileParts.data);
+      const layoutRead = isPlainObject(storedUi) ? readStoredLayoutUi(storedUi, 'ui') : null;
       /** @type {Record<string, unknown>} */
-      const readData = { ...fileParts.data, ...(draftRead ? { config: draftRead.value } : {}) };
+      const readData = {
+        ...fileParts.data,
+        ...(draftRead ? { config: draftRead.value } : {}),
+        ...(layoutRead ? { ui: layoutRead.value } : {}),
+        ...(fileParts.normalizedEditorState ? { editorState: fileParts.normalizedEditorState } : {})
+      };
       if (groupState) {
         const groupIds = new Set(orthogroupIdsOf(orthogroups));
         groupNameRepairs(groupState, groupIds, 'orthogroupState', fileRepairs);
@@ -6386,14 +6398,14 @@ const importSessionDocument = async (e, options = {}) => {
       // the file's `ui`, `cliInvocation` and draft, read at the file's own
       // paths; it travels with the Results Python sets aside (OV-1953). A
       // Session 31-39's is its request's, which Python's Session 49 holds.
-      const { ui: storedUi, cliInvocation: storedInvocation } = /** @type {{ ui?: unknown,
-        cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
+      const { cliInvocation: storedInvocation } = /** @type {{ cliInvocation?: { mode?: unknown } }} */ (fileParts.data);
       const { form: storedForm, adv: storedAdv } = /** @type {{ form?: { legend?: unknown },
         adv?: { plot_title_position?: unknown } }} */ (isPlainObject(storedDraft) ? storedDraft : {});
       legacyRead = {
         upgrade, repairs: [...fileRepairs, ...upgrade.warnings],
         sourceFacts: sessionSourceFactsOf(fileDocument.version, isPlainObject(storedDraft)),
         orthogroups,
+        layoutRepairs: layoutRead ? layoutRead.repairs : [],
         drawnWith: fileDocument.version < CANONICAL_SESSION_MIN_VERSION
           ? {
               ui: isPlainObject(storedUi) ? storedUi : {}, committedMode: null, invocationMode: storedInvocation?.mode,
@@ -7101,14 +7113,12 @@ const importSessionDocument = async (e, options = {}) => {
     /** @type {Map<DrawingId, SettingsContainers>} */
     const installedSettings = new Map();
     // The legend positions of the drafts' layouts: a Session 46 slice holds
-    // its mode's slot; a Session 27-44 keeps one set in `ui` (OV-652).
-    if (modeScopedSession) {
-      loadedDrawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
-        slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
-      })));
-    } else {
-      repairs.push(...storedLegendPositionRepairs(ui, 'ui'));
-    }
+    // its mode's slot; a Session 27-44 keeps one set in `ui`, read before
+    // Python converts it (OV-652).
+    if (legacyRead) repairs.push(...legacyRead.layoutRepairs);
+    loadedDrawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
+      slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
+    })));
     /** @param {string} at @param {string} field */
     const pathIn = (at, field) => (at ? `${at}.${field}` : field);
     for (const { id, mode } of loadedDrawings) {

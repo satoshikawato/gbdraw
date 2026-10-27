@@ -436,6 +436,20 @@ export const storedLegendPositionRepairs = (ui, path, { slotOf = null, projected
 };
 
 /**
+ * A Session 27-44's `ui` as Load reads its layout, at the file's own path,
+ * before Python converts the file (D-15-129): what it does not use as stored
+ * (`storedLegendPositionRepairs`), and a stored `ui.layoutPreferences` as
+ * Load uses it, so Python receives the read value.
+ * @param {Record<string, unknown>} ui
+ * @param {string} path Where `ui` is in the file.
+ * @returns {{ value: Record<string, unknown>, repairs: LoadRepair[] }}
+ */
+export const readStoredLayoutUi = (ui, path) => ({
+  value: isRecord(ui.layoutPreferences) ? { ...ui, layoutPreferences: normalizeLayoutPreferences(ui.layoutPreferences) } : ui,
+  repairs: storedLegendPositionRepairs(ui, path)
+});
+
+/**
  * The layout preferences a Session 27-44 restores (Session Load and Gallery
  * publication). A saved layout owner (current or legacy `ui` fields) wins.
  * Without one, a canonical Session takes the layout projected from its
