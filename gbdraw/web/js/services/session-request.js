@@ -132,9 +132,8 @@ import {
 } from '../mode-profiles.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
-  createDefaultLayoutPreferences,
   legendPositionOfMode,
-  updateActiveLayoutPreference
+  requestLayoutPreferences
 } from './layout-preferences.js';
 import {
   requireCurrentCircularMultiRecordSizeMode,
@@ -5785,17 +5784,7 @@ export const projectCanonicalSessionRequest = ({
   }
   // Legend and plot-title positions are layout preferences, not form fields:
   // the committed request sets the slot of its own mode and grouping.
-  const layoutPreferences = createDefaultLayoutPreferences();
-  updateActiveLayoutPreference(
-    layoutPreferences,
-    renderRequest.mode,
-    renderRequest.mode === 'circular' && grouping === 'grid',
-    {
-      legend: options.output?.legend || 'right',
-      plotTitlePosition: options.output?.plotTitlePosition
-        || (renderRequest.mode === 'linear' ? 'bottom' : 'none')
-    }
-  );
+  const layoutPreferences = requestLayoutPreferences({ mode: renderRequest.mode, grouping, diagramOptions: options });
   return {
     mode: renderRequest.mode,
     inputType,
