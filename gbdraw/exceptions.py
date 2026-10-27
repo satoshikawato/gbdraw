@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
-    from gbdraw.labels.fit import LabelFitReport, LabelFitRows
+    from gbdraw.labels.fit import LabelCapacityRecord, LabelFitReport, LabelFitRows, LabelKind
 
 
 class GbdrawError(Exception):
@@ -80,7 +80,11 @@ def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
     # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
     from gbdraw.labels.fit import label_fit_error_counts
 
-    return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
+    diagnostic: dict[str, object] = {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
+    if any(record.capacity for record in report.records):
+        # Labels that need much more room than the map has were not placed: there is no fix to choose (CAPACITY-STOP).
+        diagnostic["reason"] = "LABEL_CAPACITY"
+    return diagnostic
 
 
 class LabelsDoNotFitError(GbdrawError):
@@ -115,6 +119,20 @@ class LabelLeadersCrossWarning(UserWarning):
         self.report = report
 
 
+class LabelsMayNotFitWarning(UserWarning):
+    """A record's Circular labels need much of the room around the map, so they may not fit and placing them can take
+    minutes (CAPACITY-WARN); warned before they are placed.
+
+    ``capacity`` is the room they need; ``record_id`` and ``label_kind`` name them.
+    """
+
+    def __init__(self, message: str, *, record_id: str, label_kind: LabelKind, capacity: LabelCapacityRecord) -> None:
+        super().__init__(message)
+        self.record_id = record_id
+        self.label_kind = label_kind
+        self.capacity = capacity
+
+
 __all__ = [
     "ComparisonIdentityError",
     "ConfigError",
@@ -123,6 +141,7 @@ __all__ = [
     "InputFileError",
     "LabelLeadersCrossWarning",
     "LabelsDoNotFitError",
+    "LabelsMayNotFitWarning",
     "ParseError",
     "ValidationError",
 ]

@@ -11,7 +11,7 @@
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
-/** @import { GenerationPayload } from '../services/diagram-generation.js' */
+/** @import { GenerationPayload, RequestProgress } from '../services/diagram-generation.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { msg, t, tm } from '../utils/i18n.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
@@ -243,6 +243,18 @@ const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
   return stage === 'preparing-runtime' && step && total && label
     ? t('Preparing diagram runtime (first use): step {step} of {total}, {label}...', { step, total, label: tm(label) })
     : tm(message);
+};
+/**
+ * The one owner of a diagram Worker progress report in the processing
+ * overlay: the status line, and each sentence Python sends about labels that
+ * may not fit (CAPACITY-WARN), kept under it until the run ends.
+ * @param {RequestProgress} progress
+ * @param {{ processingStatus: { value: string }, labelCapacityNotices: { value: readonly string[] } }} overlay
+ */
+export const showDiagramProgress = (progress, { processingStatus, labelCapacityNotices }) => {
+  const message = diagramProgressMessage(progress);
+  if (message) processingStatus.value = message;
+  if (progress.notice) labelCapacityNotices.value = [...labelCapacityNotices.value, progress.notice];
 };
 
 export const afterPaint = ({ requestFrame = globalThis.requestAnimationFrame } = {}) => {
@@ -1560,6 +1572,7 @@ export const createRunAnalysis = ({
   const {
     processing,
     processingStatus,
+    labelCapacityNotices,
     generationCancelRequested,
     results,
     selectedResultIndex,
@@ -2675,10 +2688,9 @@ export const createRunAnalysis = ({
         processingStatus.value = String(message || '');
       }
     };
-    /** @param {Parameters<typeof diagramProgressMessage>[0]} progress */
+    /** @param {RequestProgress} progress */
     const onDiagramProgress = (progress) => {
-      const message = diagramProgressMessage(progress);
-      if (message) setProcessingStatus(message);
+      if (generationToken === latestGenerationToken) showDiagramProgress(progress, { processingStatus, labelCapacityNotices });
     };
     const throwIfGenerationCanceled = () => {
       if (generationCancelRequested.value) {
@@ -5384,6 +5396,7 @@ export const createRunAnalysis = ({
     };
     let runDraftIsShown = false;
     processing.value = true;
+    labelCapacityNotices.value = [];
     processingStatus.value = t('Preparing input files...');
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
@@ -5598,11 +5611,8 @@ export const createRunAnalysis = ({
         mode: canonical.renderRequest.mode,
         kind: 'target-record-transform',
         shouldAdmit: () => paint.shouldAdmit() && !generationCancelRequested.value,
-        onProgress: (progress) => {
-          const message = diagramProgressMessage(progress);
-          if (message && generationToken === latestGenerationToken) {
-            processingStatus.value = message;
-          }
+        onProgress: (/** @type {RequestProgress} */ progress) => {
+          if (generationToken === latestGenerationToken) showDiagramProgress(progress, { processingStatus, labelCapacityNotices });
         },
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
@@ -5802,6 +5812,7 @@ export const createRunAnalysis = ({
     /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
+    labelCapacityNotices.value = [];
     processingStatus.value = t('Preparing target record...');
     generationCancelRequested.value = false;
     try {

@@ -54,14 +54,18 @@ test('Generate feedback follows cold/warm work, rejects duplicates, and ignores 
   worker.emit({ type: 'progress', requestId: requestId + 1, stage: 'rendering' });
   assert.equal(events.length, 2);
   worker.emit({ type: 'progress', requestId, stage: 'rendering' });
+  // CAPACITY-WARN: Python's sentence while it renders reaches the page with its stage; a notice that is not text does not.
+  worker.emit({ type: 'progress', requestId, stage: 'rendering', notice: 'NC_1: labels may not fit.' });
+  worker.emit({ type: 'progress', requestId, stage: 'rendering', notice: 7 });
   worker.emit({ type: 'progress', requestId, stage: 'finalizing' });
-  assert.deepEqual(events.map(e => e.stage), ['preparing-runtime', 'preparing-resources', 'rendering', 'finalizing']);
+  assert.deepEqual(events.map(e => e.stage), ['preparing-runtime', 'preparing-resources', 'rendering', 'rendering', 'rendering', 'finalizing']);
+  assert.deepEqual(events.map(e => e.notice), [undefined, undefined, undefined, 'NC_1: labels may not fit.', undefined, undefined]);
   assert.ok(events.every(e => e.requestId === requestId));
   worker.emit({ type: 'run', requestId, ok: true, results: [{ name: 'out.svg', content: '<svg/>' }] });
   assert.equal((await first).results[0].name, 'out.svg');
   assertClean(worker);
   worker.emit({ type: 'progress', requestId, stage: 'rendering' });
-  assert.equal(events.length, 4);
+  assert.equal(events.length, 6);
 
   const warmEvents = [];
   const second = runDiagramGeneration(payload(), { onProgress: event => warmEvents.push(event) });

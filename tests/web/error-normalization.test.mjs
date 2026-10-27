@@ -431,6 +431,9 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [{ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 20. Crossing leader pairs: 21.' } },
       // Every label kind and both modes (SCOPE-ALL-LABELS), not only Circular outer labels (OV-723).
       /^Labels do not fit\. Generate again to choose a fix, or change the label settings\. Overlapping label pairs: 20\. Crossing leader pairs: 21\.$/],
+    // CAPACITY-STOP: no fix to choose, so the guidance names the ways to make room; the counts stay Python's.
+    [{ code: 'LABEL_LAYOUT', context: { reason: 'LABEL_CAPACITY', labelFitCounts: 'Outer labels need about 2.5 times the room around the map.' } },
+      /^Labels do not fit\. Label fewer features, use a smaller Label Font Size, or draw a Linear map\. Outer labels need about 2\.5 times the room around the map\.$/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
   for (const configPath of ['PRIVATE VALUE', 'a', 'Objects.scale', `objects.${'x'.repeat(80)}`, 7]) {

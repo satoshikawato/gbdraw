@@ -63,6 +63,9 @@ const { ref, reactive, computed } = window.Vue;
 // System State
 const processing = ref(false);
 const processingStatus = ref('');
+// Python's sentences about labels that may not fit (CAPACITY-WARN), shown under the status line until the run ends;
+// the next run that shows the overlay starts without them.
+const labelCapacityNotices = /** @type {{ value: readonly string[] }} */ (ref([]));
 const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
@@ -1158,6 +1161,7 @@ const activeDrawing = () => drawingOf(activeDrawingId.value);
 export const state = Object.freeze({
   processing,
   processingStatus,
+  labelCapacityNotices,
   sessionSavePending,
   sessionImportPending,
   sessionOperationAvailability,

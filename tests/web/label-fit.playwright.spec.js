@@ -241,6 +241,53 @@ const genbank = (name, features) => {
     `DEFINITION  ${name}.`, `ACCESSION   ${name}`, `VERSION     ${name}`, 'FEATURES             Location/Qualifiers',
     ...features.flatMap(feature), 'ORIGIN', ...origin, '//', ''].join('\n');
 };
+// CAPACITY-STOP (PD-OI-097): 600 long outer labels on a 6 kb map need about
+// three times the room around it, even at 6 pt with the outer offsets at 2.
+// Python stops before placing them: nothing is drawn within seconds, and the
+// dialog lists the ways to make room, with Close only.
+test('labels far over the room around the map: Generate stops at once with the ways to make room and Close only', async ({ page }) => {
+  test.setTimeout(600000);
+  const features = Array.from({ length: 600 }, (_, index) => [`${index * 10 + 1}..${index * 10 + 9}`,
+    `hypothetical protein with a long descriptive name ${index + 1}`]);
+  await openWithOuterLabels(page, { name: 'capacity.gb', text: genbank('capacity', features) });
+  // The time from "Rendering diagram..." to the end of the run, without the first-use runtime start.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const times = window.__CAPACITY_TIMES__ = {};
+    window.Vue.watch(() => app.processingStatus, (value) => {
+      if (value === 'Rendering diagram...' && times.rendering === undefined) times.rendering = performance.now();
+    });
+    window.Vue.watch(() => app.processing, (value) => {
+      if (!value && times.rendering !== undefined) times.ended = performance.now();
+    });
+  });
+  await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
+  const dialog = page.locator('[data-label-fit-dialog]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading')).toHaveText('Labels do not fit');
+  await expect(dialog.locator('#label-fit-description')).toHaveText(
+    'Nothing was drawn. These labels need much more room than the map has, so placing them was not tried.');
+  await expect(dialog.locator('[data-label-fit-records]')).toHaveText(
+    /^capacity: 600 outer labels at 14 pt \(they need about \d\.\d times the room around the map\)\s*$/);
+  await expect(dialog.locator('[data-label-fit-remedies] li')).toHaveText([
+    'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
+    'Shorten the label text: a priority rule, for example gene before product.',
+    'Use a smaller Label Font Size.',
+    'Draw a Linear map.'
+  ]);
+  await expect(dialog.locator('[data-label-fit-rows]')).toHaveCount(0);
+  await expect(dialog.getByRole('button')).toHaveText(['Close']);
+  await expect(page.getByRole('alert').getByText(/^Labels do not fit\. Label fewer features, use a smaller Label Font Size, or draw a Linear map\. Outer labels need about \d\.\d times the room around the map\.$/)).toBeVisible();
+  const undo = await undoCount(page);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(await undoCount(page)).toBe(undo);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+  // Before the check, placing 600 labels took minutes; the stop comes within seconds of the render's start.
+  const times = await page.evaluate(() => window.__CAPACITY_TIMES__);
+  expect(times.ended - times.rendering).toBeLessThan(60000);
+});
+
 // The labels are pinned at 10 pt, the size the OV-1155 cases were drawn at (a region label without
 // its own font takes the feature label size since #1202).
 const regionsTsv = (rows) => ['set_id\tid\tmark\tstart\tend\tlabel\tlabel_font_size',

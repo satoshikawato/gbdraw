@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
+  fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
+  (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed
+  (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs). See
+  [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
+
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
 - Patch release of 0.14.1. Session files are unchanged (Session version 48).

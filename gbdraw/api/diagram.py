@@ -155,6 +155,7 @@ from gbdraw.io.colors import (
     read_color_table,
     resolve_color_to_hex,
 )
+from gbdraw.labels.circular_capacity import label_capacity_unchecked
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
@@ -3615,7 +3616,9 @@ def _checked_circular_drawing(
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
-            verified = assemble(overrides)
+            # A row is verified with the full placement and no capacity check, so the rows stay as they were.
+            with label_capacity_unchecked():
+                verified = assemble(overrides)
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:

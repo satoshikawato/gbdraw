@@ -155,7 +155,9 @@ const REASONS = Object.freeze({
   FONT_FILE: 'Choose a readable TrueType or OpenType font file (.ttf, .otf, .ttc, .otc) that names its font family.',
   FONT_EMBEDDING: 'Turn off Embed font in exported SVG in Font to export without the font, or choose another font.',
   FONT_RASTER: 'The PNG cannot draw this font. Choose another font.',
-  FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
+  FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.',
+  // LABEL_LAYOUT of labels not placed for lack of room (CAPACITY-STOP): no fix to choose; Python's counts follow.
+  LABEL_CAPACITY: 'Label fewer features, use a smaller Label Font Size, or draw a Linear map.'
 });
 // What a decline names as changed under an evaluation of rule inputs (OV-447,
 // OV-449): the label table import and the Specific rules import read it here.

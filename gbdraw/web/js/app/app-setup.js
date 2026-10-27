@@ -447,6 +447,7 @@ export const createAppSetup = () => {
   const {
     processing,
     processingStatus,
+    labelCapacityNotices,
     sessionSavePending,
     sessionImportPending,
     generationCancelRequested,
@@ -6907,6 +6908,7 @@ export const createAppSetup = () => {
     sessionSaveNeedsGenerate,
     processing,
     processingStatus,
+    labelCapacityNotices,
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
