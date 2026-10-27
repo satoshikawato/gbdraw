@@ -5711,35 +5711,25 @@ const synchronizeRestoredFeatureSummaryStatus = () => {
   state.setFeatureEditorStatus(ready ? 'summary-ready' : 'idle');
 };
 
+// The statuses of a feature recovery plan that read the drawn features again.
+const RECOVERED_PLAN_STATUSES = new Set(['recovered', 'aligned']);
+
 /**
- * @param {DrawingState} drawing
  * @param {{ status?: string, recoveredFeatureState?: SavedFeatureFields | null,
- *   migratedEditorState?: Record<string, unknown> | null, warning?: string | null,
- *   warningParts?: readonly ErrorTextPart[] } | null | undefined} plan
+ *   warning?: string | null, warningParts?: readonly ErrorTextPart[] } | null | undefined} plan
  *   What this reads of a feature recovery plan (`buildSessionFeatureRecoveryPlan`, or the failed plan Load builds:
  *   its warning is a normalized failure, `warningParts`).
  */
-const applySessionFeatureRecoveryPlan = (drawing, plan) => {
+const applySessionFeatureRecoveryPlan = (plan) => {
   state.featureExtractionPending.value = false;
   // A plan's warning is a marked text (`msg`) or the parts of a normalized failure.
   const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
 
-  if (plan?.status === 'recovered' || plan?.status === 'aligned') {
-    // The plan reads the drawn features again and moves the drawing's fills
-    // and strokes keyed by a drawn feature onto them. The drawing's other
-    // edits and its Legend are its draft part's, installed before (OV-2000).
-    if (plan.recoveredFeatureState) {
-      applyFeatureArtifactData(plan.recoveredFeatureState);
-      PAINT_SLICE.install(drawing.slices.paint, {
-        featureColorOverrides: /** @type {Record<string, FeatureFill>} */ (readFeatureColorEdits(
-          savedFeatureColorEdits(plan.recoveredFeatureState.featureColorOverrides)).value)
-      });
-    }
-    if (plan.migratedEditorState) {
-      PAINT_SLICE.install(drawing.slices.paint, {
-        featureStrokeOverrides: normalizeEditorStateData(plan.migratedEditorState).featureStrokes.overrides
-      });
-    }
+  if (plan?.status && RECOVERED_PLAN_STATUSES.has(plan.status)) {
+    // The plan read the drawn features again; the fills and strokes it moved
+    // onto them are the opened drawing's install's (`withRecoveredPaint`,
+    // OV-2000), with the drawing's other edits and its Legend.
+    if (plan.recoveredFeatureState) applyFeatureArtifactData(plan.recoveredFeatureState);
     state.setFeatureEditorStatus('summary-ready', shownWarning);
     return;
   }
@@ -7509,6 +7499,28 @@ const importSessionDocument = async (e, options = {}) => {
     state.generatedMultiRecordCanvas.value = Boolean(drawnUi.generatedMultiRecordCanvas);
     state.generatedCircularPlotTitlePosition.value = readGeneratedCircularPlotTitlePosition(drawnUi.generatedCircularPlotTitlePosition, drawnUi).value;
 
+    /**
+     * A drawing's edits and draft as its install reads them: for the drawing
+     * that opens a Session 27-39, the fills and strokes its feature recovery
+     * moved onto the features it read again, over its draft part's (OV-2000).
+     * @param {DrawingId} drawingId
+     * @param {Readonly<Record<string, unknown>>} features
+     * @param {LoadedDraft} draft
+     */
+    const withRecoveredPaint = (drawingId, features, draft) => {
+      const recovery = legacyFeatureRecoveryPlan;
+      if (drawingId !== committedSetDrawingId || !recovery || !RECOVERED_PLAN_STATUSES.has(recovery.status)) {
+        return { features, ...draft };
+      }
+      return {
+        features: recovery.recoveredFeatureState
+          ? { ...features, featureColorOverrides: recovery.recoveredFeatureState.featureColorOverrides } : features,
+        config: draft.config,
+        editorState: recovery.migratedEditorState
+          ? { ...draft.editorState, featureStrokes: normalizeEditorStateData(recovery.migratedEditorState).featureStrokes }
+          : draft.editorState
+      };
+    };
     // Each loaded drawing over its mode's defaults (a new drawing state); the shown
     // drawing's Canvas padding follows once its Result is mounted. A Session 46
     // slice without its mode's request projection is stored settings: its track
@@ -7518,7 +7530,7 @@ const importSessionDocument = async (e, options = {}) => {
       const { slice } = draftPartOf(id);
       // A drawing that holds a request takes its request's per-feature edits
       // where its draft has none (OV-220), opened or not (OV-1786).
-      applyModeSliceData(drawing, mode, { ...slice, features: loadedFeatureEditsOf(id), ...draftOf(id) }, {
+      applyModeSliceData(drawing, mode, { ...slice, ...withRecoveredPaint(id, loadedFeatureEditsOf(id), draftOf(id)) }, {
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         applyCanvasPadding: id !== plan.activeDrawingId
       });
@@ -7670,7 +7682,7 @@ const importSessionDocument = async (e, options = {}) => {
     storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(committedDrawing, legacyFeatureRecoveryPlan);
+      applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan);
     }
 
     let desiredResultIndex = (
