@@ -5214,30 +5214,57 @@ def _is_label_embedded_in_segment(
 
 
 def prepare_label_list(*args, **kwargs) -> list[CircularLabel]:
-    """STUDY ONLY: GBDRAW_CLP=A packs a record only when today's placement does not fit; B packs every record."""
+    """STUDY ONLY: GBDRAW_CLP=A packs a record only when today's placement does not fit; B packs every record.
+
+    In both variants the packer's placement replaces today's only when it fits (0 overlaps and 0 crossings
+    by the fit check); otherwise today's placement is returned unchanged (or today's probe stop re-raised),
+    and the packer's counts are kept in ``LAST["packer_fit"]`` for the study metrics only.
+    """
     from . import circular_packer_study as _clp
 
     mode = _clp.mode()
     _clp.LAST.clear()
     if mode not in ("A", "B"):
         return _prepare_label_list_today(*args, **kwargs)
-    if mode == "A":
-        try:
-            today = _prepare_label_list_today(*args, **kwargs)
-            fits = circular_label_fits([lab for lab in today if not lab.get("is_embedded")], args[1])
-            if all(fit.fits for fit in fits.values()):
-                _clp.LAST.update(variant="A", used="today")
-                return today
-            _clp.LAST.update(today_fit={k: (v.overlap_pairs, v.crossing_pairs) for k, v in fits.items()})
-        except CircularLabelProbeStopped:
-            _clp.LAST.update(today_fit="probe-stopped")
+
+    def fit_counts(labels):
+        fits = circular_label_fits(
+            [lab for lab in labels if not lab.get("is_embedded")],
+            args[1],
+            definition_text=kwargs.get("definition_text", ()),
+        )
+        return all(fit.fits for fit in fits.values()), {
+            k: (v.overlap_pairs, v.crossing_pairs) for k, v in fits.items()
+        }
+
+    today: list[CircularLabel] | None = None
+    stopped: CircularLabelProbeStopped | None = None
+    try:
+        today = _prepare_label_list_today(*args, **kwargs)
+        today_fits, today_counts = fit_counts(today)
+        _clp.LAST.update(today_fit=today_counts)
+    except CircularLabelProbeStopped as exc:
+        stopped = exc
+        today_fits = False
+        _clp.LAST.update(today_fit="probe-stopped")
+    if mode == "A" and today_fits:
+        _clp.LAST.update(variant="A", used="today")
+        return today
     _clp.ACTIVE = True
     try:
-        result = _prepare_label_list_today(*args, **kwargs)
+        packed = _prepare_label_list_today(*args, **kwargs)
     finally:
         _clp.ACTIVE = False
-    _clp.LAST.update(variant=mode, used="packer")
-    return result
+    packer_fits, packer_counts = fit_counts(packed)
+    _clp.LAST.update(variant=mode, packer_fit=packer_counts, packer_fits=packer_fits)
+    if packer_fits:
+        _clp.LAST.update(used="packer")
+        return packed
+    _clp.LAST.update(used="today-fallback")
+    if stopped is not None:
+        raise stopped
+    assert today is not None
+    return today
 
 
 def _prepare_label_list_today(
