@@ -6834,12 +6834,17 @@ const importSessionDocument = async (e, options = {}) => {
       : [];
     recordSessionLifecycleEvent('session-candidate-sequences-start');
     // E1: each Result set reads its sources in its own mode, from its drawing's files.
+    // The Results Python sets aside for a drawing without a request (a
+    // Session 27-39's, which Python's Session 49 holds without a catalog)
+    // read them again, as the file's own Results did (OV-2008).
+    const setAsideRequestLessId = legacyStoredResults !== undefined && settingsOnly ? projectedDrawingId : null;
     /** @param {DrawingId} drawingId */
     const sequenceSourceOptionsOf = (drawingId) => {
       const { target, linearSeqs } = filesOf(drawingId);
+      const setAside = drawingId === setAsideRequestLessId;
       return {
-        olderSession: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-        settingsOnly,
+        olderSession: setAside || sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+        settingsOnly: settingsOnly && !setAside,
         cInputType: target.cInputType.value,
         lInputType: storedDrawingInputs.get(drawingId)?.inputType ?? inputTypes.lInputType,
         files: target.files,
@@ -6853,9 +6858,14 @@ const importSessionDocument = async (e, options = {}) => {
       catalog: currentSchemaSession ? validatedSessionCatalog : null,
       renderRequest: data.renderRequest
     });
-    // OV-712: listed, and reported as `degradedRecovery`.
+    // OV-712: listed, and reported as `degradedRecovery`; set-aside Results
+    // read the file's `files`.
     if (currentRecoveryError) {
-      repairs.push(loadRepair({ code: 'match-sequences-unrestored', path: currentSchemaSession ? 'resources' : 'files', effect: 'dropped' }));
+      repairs.push(loadRepair({
+        code: 'match-sequences-unrestored',
+        path: currentSchemaSession && committedSetDrawingId !== setAsideRequestLessId ? 'resources' : 'files',
+        effect: 'dropped'
+      }));
     }
 
     recordSessionLifecycleEvent('session-candidate-sequences-end');
