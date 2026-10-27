@@ -83,7 +83,8 @@ Journey rules:
   python docs/capture/build_video.py render --recording <run> --out <new folder>
   ```
 
-  - Edits include clip offsets, holds, speed, labels, captions, fades, the
+  - Edits include clip offsets, holds, speed, cuts, skims, opening clips, the
+    outro text, labels, captions, fades, the
     badge, the camera framing (crop, zoom, letterbox), and where the pointer
     is drawn.
   - When the renderer cannot make such a fix from what the take logged,
