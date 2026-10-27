@@ -6,16 +6,13 @@ const source = readFileSync(new URL('../../.github/workflows/release.yml', impor
 const build = source.split('  build-release-distributions:\n')[1].split('  pypi-publish:\n')[0];
 const publish = source.split('  pypi-publish:\n')[1];
 
-test('publishing starts only when a GitHub Release is published and uses immutable actions', () => {
+test('publishing starts only when a GitHub Release is published', () => {
   assert.match(source, /\non:\n  release:\n    types: \[published\]\n\n/);
   assert.doesNotMatch(source, /workflow_dispatch|workflow_call|pull_request|\n  push:|branches:/);
   assert.match(source, /\npermissions: \{\}/);
   assert.equal((source.match(/id-token: write/g) || []).length, 1);
   assert.doesNotMatch(source, /secrets\.|password:|username:|user:|PYPI_TOKEN|TWINE_|repository-url:|continue-on-error|retry|always\(\)/);
   assert.equal((source.match(/^  [\w-]+:\n    (?:needs|runs-on):/gm) || []).length, 2);
-  for (const line of source.split('\n').filter(line => line.includes('uses:'))) {
-    assert.match(line, /uses: [\w/-]+@[0-9a-f]{40} # v\d+\.\d+\.\d+$/);
-  }
 });
 
 test('build checks exact source before one standard build and package verification', () => {

@@ -37,14 +37,14 @@ jobs:
       plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
     steps:
       - name: Checkout complete history
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
           # All commits and trees; Git fetches old file contents on demand.
           filter: blob:none
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -57,7 +57,7 @@ jobs:
 
       - name: Checkout trusted CI policy
         if: github.event_name == 'pull_request'
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .ci-trusted-base
@@ -96,7 +96,7 @@ jobs:
 
       - name: Upload the tested tree and planned jobs
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.pr_record.outputs.name }}
           path: ${{ runner.temp }}/ci-impact-plan.json
@@ -131,14 +131,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
           # All commits and trees; Git fetches old file contents on demand.
           filter: blob:none
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
 
@@ -194,13 +194,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -231,10 +231,10 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -286,10 +286,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -339,10 +339,10 @@ jobs:
       GBDRAW_GALLERY_PR_PARITY: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -360,7 +360,7 @@ jobs:
 
       - name: Set up Node.js for Gallery parity
         if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -374,7 +374,7 @@ jobs:
       - name: Restore Playwright system packages
         if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -399,7 +399,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -415,7 +415,7 @@ jobs:
 
       - name: Upload Gallery parity traces
         if: failure() && env.GBDRAW_GALLERY_PR_PARITY == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: gallery-parity-traces-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -436,17 +436,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -458,7 +458,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -482,7 +482,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -535,17 +535,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -557,7 +557,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -581,7 +581,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -637,17 +637,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -659,7 +659,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -683,7 +683,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -697,7 +697,7 @@ jobs:
 
       - name: Upload Playwright PR smoke traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-pr-smoke-traces-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -723,10 +723,10 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -741,7 +741,7 @@ jobs:
 
       - name: Set up Python 3.11
         if: steps.shard.outputs.files != ''
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -756,7 +756,7 @@ jobs:
       - name: Restore Playwright system packages
         if: steps.shard.outputs.files != ''
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -781,7 +781,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -810,7 +810,7 @@ jobs:
 
       - name: Upload Playwright functional traces and report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-functional-shard-${{ matrix.shard }}-traces-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -831,17 +831,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -853,7 +853,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -877,7 +877,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -891,7 +891,7 @@ jobs:
 
       - name: Upload Playwright performance traces
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-performance-traces-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -916,10 +916,10 @@ jobs:
         surface: ["recipe", "gallery", "browser"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -927,7 +927,7 @@ jobs:
 
       - name: Set up Node.js
         if: matrix.surface == 'browser'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -944,7 +944,7 @@ jobs:
       - name: Restore Playwright system packages
         if: matrix.surface == 'browser'
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -969,7 +969,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -997,10 +997,10 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -1010,7 +1010,7 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
 
@@ -1042,17 +1042,17 @@ jobs:
     timeout-minutes: 35
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -1064,7 +1064,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -1088,7 +1088,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -1113,10 +1113,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -1141,17 +1141,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -1164,7 +1164,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -1188,7 +1188,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -1213,10 +1213,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
@@ -1281,7 +1281,7 @@ jobs:
 
       - name: Upload recipe evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: promotion-audit-recipes
           path: ${{ runner.temp }}/promotion-audit/
@@ -1309,17 +1309,17 @@ jobs:
             specs: session-load-timing
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -1331,7 +1331,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -1355,7 +1355,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -1387,7 +1387,7 @@ jobs:
 
       - name: Upload sweep evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: promotion-audit-sweep-${{ matrix.sweep }}
           path: ${{ runner.temp }}/promotion-audit/
@@ -1409,20 +1409,20 @@ jobs:
       # The journeys print the capabilities changed since origin/main, so the
       # checkout keeps the history (without old file contents).
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
           filter: blob:none
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -1434,7 +1434,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -1458,7 +1458,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -1479,7 +1479,7 @@ jobs:
 
       - name: Upload journey evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: promotion-audit-journeys-${{ matrix.journey }}
           path: ${{ runner.temp }}/promotion-audit/
@@ -1505,17 +1505,17 @@ jobs:
           echo "$GITHUB_RUN_ID" > "$RUNNER_TEMP/promotion-audit/seed.txt"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: pyproject.toml
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -1527,7 +1527,7 @@ jobs:
 
       - name: Restore Playwright system packages
         id: playwright-apt
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
@@ -1551,7 +1551,7 @@ jobs:
         if: >-
           steps.playwright-install.outputs.apt-cache-key != '' &&
           steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/playwright-apt
           key: ${{ steps.playwright-install.outputs.apt-cache-key }}
@@ -1568,7 +1568,7 @@ jobs:
 
       - name: Upload random walk evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: promotion-audit-random-walk
           path: ${{ runner.temp }}/promotion-audit/
@@ -1589,19 +1589,19 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout audit tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           sparse-checkout: tools/audit
           fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
 
       - name: Download audit evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: promotion-audit-*
           path: ${{ runner.temp }}/audit-artifacts
@@ -1624,7 +1624,7 @@ jobs:
 
       - name: Upload the journey contact sheet
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: promotion-journeys-contact-sheet
           path: ${{ runner.temp }}/journeys/
@@ -1651,7 +1651,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout trusted CI policy
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .ci-trusted-base
@@ -1660,7 +1660,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout trusted Node version
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: refs/heads/${{ github.base_ref }}
           path: .ci-node-version
@@ -1669,7 +1669,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .ci-node-version/.node-version
 
@@ -1705,14 +1705,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
 
@@ -1747,14 +1747,14 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .node-version
 

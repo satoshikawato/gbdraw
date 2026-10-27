@@ -850,7 +850,7 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
   }
-  assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12"\]/);
+  assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12", "3.13"\]/);
   assert.match(job('acceptance-supported-main'), /python-version: \["3.10", "3.12"\]/);
   assert.match(job('acceptance-supported-main'), /surface: \["recipe", "gallery", "browser"\]/);
   assert.match(job('slow-main'), /python-version: \["3.10", "3.11", "3.12"\]/);
@@ -925,7 +925,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     assert.ok(source.indexOf(restore) < source.indexOf(install), id);
     assert.ok(source.indexOf(install) < source.indexOf(save), id);
     assert.equal((source.match(/playwright install --with-deps chromium/g) || []).length, 1, id);
-    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@v4/);
+    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@[0-9a-f]{40} # v4\.3\.0/);
     assert.ok(restore.includes(`key: ${prefix}\n`), id);
     assert.ok(restore.includes(`restore-keys: ${prefix}`), id);
     // apt only receives cached files; the install command and its exit status are unchanged.
@@ -941,7 +941,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
       install,
       /echo "apt-cache-key=playwright-apt-v1-\$\{RUNNER_OS\}-\$\{RUNNER_ARCH\}-\$\{sum\}" >> "\$GITHUB_OUTPUT"/
     );
-    assert.match(save, /uses: actions\/cache\/save@v4/);
+    assert.match(save, /uses: actions\/cache\/save@[0-9a-f]{40} # v4\.3\.0/);
     assert.match(save, /steps\.playwright-install\.outputs\.apt-cache-key != ''/);
     assert.match(
       save,
@@ -996,7 +996,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
   for (const id of ['ci-impact', 'web-change-budget']) {
     assert.match(
       job(id),
-      /uses: actions\/checkout@v4\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
+      /uses: actions\/checkout@[0-9a-f]{40} # v4\.3\.1\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
       id
     );
   }
@@ -1022,7 +1022,7 @@ test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
   assert.match(planner, /\n    timeout-minutes: 5\n/);
   assert.match(
     planner,
-    /uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
+    /uses: actions\/checkout@[0-9a-f]{40} # v4\.3\.1\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
   );
 });
 

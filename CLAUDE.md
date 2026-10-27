@@ -274,7 +274,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 
 ## CI/CD
 
-- **Python versions tested:** 3.10, 3.11, 3.12
+- **Python versions tested:** 3.10, 3.11, 3.12 (3.13 also in the dev-tier Core matrix)
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
 - **Type check:** `Core PR` and `Core` install the `typecheck` extra and run `tests/test_type_check_ratchet.py` (mypy 2.4.0) with the other core tests
 - **CairoSVG:** The Core jobs install the `export` extra (`cairosvg`) with `typecheck`; no workflow installs extra system packages
