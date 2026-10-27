@@ -1670,6 +1670,22 @@ test('a schema 1/2 request lists an invalid comparison height of its full config
   }
 });
 
+// A Session 31-39 draft the CLI wrote (no record layout, CLI options) gains no
+// Web comparison; a Web draft without a stored layout keeps its adjacent plan
+// and its request's alignment, as the old Load read them (OV-2048).
+test('a Session 31-39 CLI draft loads with no comparison and a Web draft keeps its plan (OV-2048)', async () => {
+  for (const [name, mode, translations, groupId] of [
+    ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'none', 0, null],
+    ['BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz', 'adjacent', 5, 'og_1']
+  ]) {
+    const loaded = await importSession(input(fixture(name)), { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
+    assert.equal(loaded.status, 'ok', `${name}: ${JSON.stringify(loaded.error)}`);
+    assert.equal(modeDrawing(state, 'linear').linearComparisonPlan.mode, mode, name);
+    assert.deepEqual([state.linearRecordTranslations.value.length, state.similarityAlignmentPlan.value?.groupId ?? null],
+      [translations, groupId], name);
+  }
+});
+
 test('a flat configuration override name of a schema-1 request loads as the decoder reads it (OV-799)', async () => {
   const session = fixture('HmmtDNA_basic_circular.v32-schema1.gbdraw-session.json.gz');
   delete session.renderRequest.diagramOptions.config;

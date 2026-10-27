@@ -2806,17 +2806,27 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
  * @param {unknown} storedConfig The stored draft (unvalidated).
  * @returns {Record<string, unknown>}
  */
-const readDraftOverCommittedRequest = (projection, storedConfig) => withCurrentLinearLabelVisibility({
-  ...restoreStoredNonCanonicalConfig(
-    projection.config,
-    storedConfig,
-    { hasCanonicalProteinPipeline: Boolean(projection.pipelineState) }
-  ),
-  rules: applySpecificRuleProvenance(
-    projection.config.rules,
-    /** @type {UnvalidatedFields<'rules'>} */ (storedConfig)?.rules
-  )
-});
+const readDraftOverCommittedRequest = (projection, storedConfig) => {
+  /** @type {Record<string, unknown>} */
+  const read = withCurrentLinearLabelVisibility({
+    ...restoreStoredNonCanonicalConfig(
+      projection.config,
+      storedConfig,
+      { hasCanonicalProteinPipeline: Boolean(projection.pipelineState) }
+    ),
+    rules: applySpecificRuleProvenance(
+      projection.config.rules,
+      /** @type {UnvalidatedFields<'rules'>} */ (storedConfig)?.rules
+    )
+  });
+  // The record layout is the draft's only when the stored draft holds one
+  // (OV-2048): Python's comparison migration reads its presence as "the Web
+  // wrote this draft", as the old Load read the stored draft.
+  if (!isPlainObject(/** @type {UnvalidatedFields<'linearRecordLayout'>} */ (storedConfig)?.linearRecordLayout)) {
+    delete read.linearRecordLayout;
+  }
+  return read;
+};
 
 /**
  * @param {SessionEnvelope} stored The document as the file holds it (`restoresNothing`).
