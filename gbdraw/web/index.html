@@ -8597,7 +8597,7 @@
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
+                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt <template v-if="record.capacity">{{ record.counts }}</template><template v-else>({{ record.counts }})</template>
                 </li>
             </ul>
             <div v-if="labelFitDialog.capacity" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>

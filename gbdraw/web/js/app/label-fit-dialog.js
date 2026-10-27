@@ -44,7 +44,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
  * @property {string[]} remedies The ways to make room, as the Web words them (i18n keys), in Python's order.
  * @property {{ recordId: string, recordIndex: number | null, labelKindTitle: string, labelCount: number,
- *   fontSize: number, counts: string }[]} records Python's counts text per record (OV-699: a refused record says why).
+ *   fontSize: number, counts: string, capacity: boolean }[]} records Python's counts text per record (OV-699: a refused
+ *   record says why); a record not placed for lack of room (`capacity`) shows Python's sentence without brackets.
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  * @property {boolean} finishing Apply or Cancel waits for the row being computed.
@@ -176,7 +177,8 @@ export const createLabelFitDialog = ({
       labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,
       fontSize: record.fontSize,
-      counts: record.counts
+      counts: record.counts,
+      capacity: record.capacityRatio !== null
     }));
     // Only a drawn figure has the definition to edit: after a Generate that drew nothing the preview may show an
     // older figure. One button per drawn record, by its index (two records may share an ID).

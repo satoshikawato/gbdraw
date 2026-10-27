@@ -103,7 +103,7 @@ def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reaso
 
     (record,) = payload["records"]
     assert record["capacityRatio"] == 2.49
-    assert record["counts"] == "they need about 2.5 times the room around the map"
+    assert record["counts"] == "need about 2.5 times the room around the map"
     assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
     error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
     assert error["context"] == {

@@ -1184,8 +1184,8 @@ OverlapMargins: TypeAlias = tuple[float, float]
 """The (x, y) margins at which a pair of labels is tested."""
 LabelBounds: TypeAlias = tuple[float, float, float, float]
 """A label's box at given margins: (min_x, max_x, min_y, max_y)."""
-PLAIN_OVERLAP_MARGINS: OverlapMargins = (1.0, 0.1)
-"""The plain overlap test's margins (x, y)."""
+PLAIN_OVERLAP_MARGINS: OverlapMargins = (LABEL_FIT_X_MARGIN_PX, LABEL_FIT_Y_MARGIN_PX)
+"""The plain overlap test's margins (x, y): the fit box's margins, which the capacity check also reads."""
 
 
 def _min_gap_margins(gap_px: float) -> OverlapMargins:
