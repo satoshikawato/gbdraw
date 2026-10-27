@@ -16,6 +16,10 @@ write-up of a release.
   the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
   again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
   keeps the drawn Depth paths (#1422).
+- Performance (web app): on a Multi-Record Circular canvas, a change that moves or restyles only some records
+  copies and re-reads only those records' parts; label leaders and texts no longer redraw when a definition font,
+  scale interval or center radius changes, and Linear comparison ribbons no longer redraw when a definition or
+  record label changes. The drawn bytes are unchanged.
 - Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
   a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
   the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
