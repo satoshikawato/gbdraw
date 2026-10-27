@@ -78,7 +78,7 @@ import {
   splitLegacyVisibilityRules
 } from './feature-visibility.js';
 import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
-import { migrateSessionFeaturePlacements } from './feature-edit-migration.js';
+import { ANNOTATION_TARGET_MIGRATION_NOTICE, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { buildSessionFeatureRecoveryPlan } from './session-feature-recovery.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
@@ -7661,9 +7661,10 @@ const importSessionDocument = async (e, options = {}) => {
     return {
       status: 'ok',
       // What the load changed without a loss, for the caller's notice; what
-      // it could not restore was listed before the load (`repairs`).
-      // (Python's conversion of a Session 27-44 reports no moved annotation target, OV-2072.)
-      notices: [],
+      // it could not restore was listed before the load (`repairs`): the
+      // annotation targets Python's conversion of a Session 27-44 moved.
+      notices: legacyRead && legacyRead.upgrade.movedAnnotationTargets > 0
+        ? [ANNOTATION_TARGET_MIGRATION_NOTICE(legacyRead.upgrade.movedAnnotationTargets)] : [],
       repairs: listedRepairs,
       // A current-schema Session holds its records' identities: the end of
       // its Load reads no input records (each card stays "not inspected").

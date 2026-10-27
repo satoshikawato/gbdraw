@@ -68,7 +68,7 @@ if TYPE_CHECKING:
         RequestRenderResult,
     )
     from gbdraw.api.requests import DiagramRequest
-    from gbdraw.session_migration import DraftMigrationRepair
+    from gbdraw.session_migration import DraftMigrationRepair, DraftMigrationReport
 
 
 logger = logging.getLogger(__name__)
@@ -1462,6 +1462,7 @@ class LegacyDrawings(NamedTuple):
     stored_results: StoredResults
     result_set_sources: LegacyResultSetSources
     repairs: tuple[DraftMigrationRepair, ...]
+    moved_annotation_targets: int
 
 
 def _set_aside_results(stored_results: StoredResults, drawing_id: str, state: dict[str, Any]) -> None:
@@ -1648,7 +1649,9 @@ def drawings_document_from_legacy(
     the Session 48 check, which refuses a settings-only file with biological
     sources while Session 49 admits an undrawn drawing with its bindings.
     The returned document is checked as a Session 49. The repairs are what
-    the draft migrations could not keep, as Web Load reports them. Other
+    the draft migrations could not keep, as Web Load reports them, and
+    ``moved_annotation_targets`` the ``hash=`` annotation targets they moved
+    to their source feature, which Load's notice names (OV-2072). Other
     versions raise :class:`SessionVersionError`. ``stored_request_schema``
     is the schema of the request the file stored, which Web Load's reader
     read before sending it; None reads it from the request.
@@ -1661,15 +1664,17 @@ def drawings_document_from_legacy(
             f"through this step; this one is {loaded.version}.",
             diagnostic={"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"},
         )
-    repairs: list[DraftMigrationRepair] = []
+    from gbdraw.session_migration import DraftMigrationReport
+
+    report = DraftMigrationReport()
     stored_results: StoredResults = {}
     current = (
         _request_less_data(
-            loaded, temporary_directory, repairs=repairs, stored_results=stored_results
+            loaded, temporary_directory, report=report, stored_results=stored_results
         )
         if loaded._drawing_parts().request is None
         else _upgrade_to_current(
-            loaded, temporary_directory, stored_results=stored_results, repairs=repairs,
+            loaded, temporary_directory, stored_results=stored_results, report=report,
             stored_request_schema=stored_request_schema,
         ).document.to_dict()
     )
@@ -1693,7 +1698,9 @@ def drawings_document_from_legacy(
             "The Result set of a Session 27-44 went to more than one drawing: "
             + ", ".join(sorted(set_sources)) + "."
         )
-    return LegacyDrawings(drawings, stored_results, set_sources, tuple(repairs))
+    return LegacyDrawings(
+        drawings, stored_results, set_sources, tuple(report.repairs), report.moved_annotation_targets
+    )
 
 
 def _web_read_document(data: Mapping[str, Any]) -> SessionDocument:
@@ -1711,7 +1718,7 @@ def _web_read_document(data: Mapping[str, Any]) -> SessionDocument:
 def _project_adjunct(
     loaded: SessionDocument,
     *,
-    repairs: list[DraftMigrationRepair] | None,
+    report: DraftMigrationReport | None,
     source_features: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """The current drawing state and Web file inventory of a Session 27-44."""
@@ -1723,7 +1730,7 @@ def _project_adjunct(
             loaded._data,
             source_version=loaded.version,
             source_features=source_features,
-            repairs=repairs,
+            report=report,
         )
     except SessionError:
         raise
@@ -1735,7 +1742,7 @@ def _request_less_data(
     loaded: SessionDocument,
     temporary_directory: str | Path | None,
     *,
-    repairs: list[DraftMigrationRepair] | None = None,
+    report: DraftMigrationReport | None = None,
     stored_results: StoredResults | None = None,
 ) -> dict[str, Any]:
     """The current data of a Session 27-44 whose drawing has no request, not yet checked.
@@ -1757,7 +1764,7 @@ def _request_less_data(
     drawing = loaded._drawing_parts()
     state, web_file_inventory = _project_adjunct(
         loaded,
-        repairs=repairs,
+        report=report,
         source_features=read_request_less_source_features(loaded._data, temporary_directory),
     )
     if stored_results is not None:
@@ -1825,7 +1832,7 @@ def _upgrade_to_current(
     temporary_directory: str | Path | None,
     *,
     stored_results: StoredResults | None = None,
-    repairs: list[DraftMigrationRepair] | None = None,
+    report: DraftMigrationReport | None = None,
     stored_request_schema: int | None = None,
 ) -> SessionUpgrade:
     """``loaded`` in the newest mode-scoped version (48), or a Session 48 or
@@ -1855,7 +1862,7 @@ def _upgrade_to_current(
     drawing = loaded._drawing_parts()
     if drawing.request is None:
         return SessionUpgrade(
-            SessionDocument(_request_less_data(loaded, temporary_directory, repairs=repairs))
+            SessionDocument(_request_less_data(loaded, temporary_directory, report=report))
         )
     from gbdraw.api.session_compat import (
         adapt_session_request,
@@ -1872,7 +1879,7 @@ def _upgrade_to_current(
         # sources read again, as Web Load reads them.
         state, web_file_inventory = _project_adjunct(
             loaded,
-            repairs=repairs,
+            report=report,
             source_features=read_legacy_source_features(source, materialized.resource_paths),
         )
         request = _decode_drawing(materialized, drawing, stored_request_schema=stored_request_schema)

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Mapping, NamedTuple, Sequence, TypedDict, cast
 
@@ -391,6 +392,16 @@ class DraftMigrationRepair(TypedDict):
     count: int
 
 
+@dataclass
+class DraftMigrationReport:
+    """What the draft migrations of a Session 27-44 tell Web Load: the repairs
+    it lists before the commit, and how many ``hash=`` annotation targets
+    moved to their source feature, which its notice after Load names."""
+
+    repairs: list[DraftMigrationRepair] = field(default_factory=list)
+    moved_annotation_targets: int = 0
+
+
 def session_draft_migration_repairs(migration: SessionDraftMigration) -> tuple[DraftMigrationRepair, ...]:
     """The Load repairs of the draft migrations that
     :func:`log_session_draft_migration` reports as warnings."""
@@ -469,14 +480,14 @@ def project_session_adjunct_for_current_write(
     *,
     source_version: int,
     source_features: Mapping[str, Any] | None = None,
-    repairs: list[DraftMigrationRepair] | None = None,
+    report: DraftMigrationReport | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Detach non-canonical state and migrate released Web-owned field names.
 
     ``source_features`` are the Session's sources read again
     (:func:`read_legacy_source_features`) for the rendered-ID edits of a
-    Session without a feature catalog. The Load repairs of the draft
-    migrations are added to ``repairs`` when it is given.
+    Session without a feature catalog. What the draft migrations tell Load
+    is added to ``report`` when it is given.
     """
 
     adjunct = {
@@ -506,8 +517,9 @@ def project_session_adjunct_for_current_write(
             else:
                 adjunct.pop(key, None)
         log_session_draft_migration(migration, source_version)
-        if repairs is not None:
-            repairs.extend(session_draft_migration_repairs(migration))
+        if report is not None:
+            report.repairs.extend(session_draft_migration_repairs(migration))
+            report.moved_annotation_targets += migration.migrated_annotation_count
     orthogroup_state = adjunct.get("orthogroupState")
     # The alignment target moves into the typed request; with no request it
     # has nowhere to move, so the drawing keeps it, as Web Load did (D-15-147).
@@ -760,6 +772,7 @@ def with_current_artifacts(
 
 __all__ = [
     "DraftMigrationRepair",
+    "DraftMigrationReport",
     "LegacySourceRead",
     "legacy_source_reads",
     "log_session_draft_migration",

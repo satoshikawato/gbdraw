@@ -71,6 +71,16 @@ test('a Session 39 Load shows the stored Results Python returns beside its docum
   assert.equal(state.results.value.length, expected.storedResults[expected.document.ui.activeDrawingId].length);
 });
 
+// OV-2072: Python's conversion counts the hash= annotation targets it moved
+// to their source feature (feature_1 of the Session main saved), and the
+// notice after Load names them, as the Load before the Worker route did.
+test('a Session 44 Load names the hash= annotation targets Python moved in its notice', async () => {
+  const { ANNOTATION_TARGET_MIGRATION_NOTICE } = await import('../../gbdraw/web/js/services/feature-edit-migration.js');
+  const loaded = await load(fixture('selected-feature-annotations.v44'));
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  assert.deepEqual(loaded.notices, [ANNOTATION_TARGET_MIGRATION_NOTICE(1)]);
+});
+
 // OV-2000: a Session 27-39's Results are read again (feature recovery); the
 // drawing that opens keeps the per-feature edits Python's conversion gave it.
 test('a Session 33 Load keeps the feature edits of the drawing that opens through its feature recovery', async () => {
