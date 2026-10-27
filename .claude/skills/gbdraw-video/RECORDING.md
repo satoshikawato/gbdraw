@@ -99,8 +99,10 @@ Journey rules:
     - `AddSkim` and `Retime` add or change a fast-forward.
     - `CloseRead` reads a still result hold closely: it plays the hold longer
       under camera stops.
-    - `ShowOnly` makes recorded camera stops show only their rect, cut to
-      `within` when an app control overlaps it.
+    - `ShowOnly` makes recorded camera stops show only their rect.
+    - `Hide` paints an app control that floats over the figure, such as the
+      preview's panel toggle, white wherever a view shows only a rect (a
+      close-read stop, an opening clip).
     - `render` applies them and counts them in its report. It fails when an
       anchor is missing or ambiguous, a span overlaps another, or a still's
       frames change.
