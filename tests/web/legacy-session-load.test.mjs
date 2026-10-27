@@ -71,6 +71,22 @@ test('a Session 39 Load shows the stored Results Python returns beside its docum
   assert.equal(state.results.value.length, expected.storedResults[expected.document.ui.activeDrawingId].length);
 });
 
+// OV-2000: a Session 27-39's Results are read again (feature recovery); the
+// drawing that opens keeps the per-feature edits Python's conversion gave it.
+test('a Session 33 Load keeps the feature edits of the drawing that opens through its feature recovery', async () => {
+  const session = fixture('feature-edits-circular.v33');
+  const expected = await pythonUpgrade(session);
+  const loaded = await load(session);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const opened = expected.document.drawings.find(({ id }) => id === state.activeDrawingId.value);
+  const rows = (overrides) => Object.values(overrides).map(({ recordKey, biologicalFeatureId, featureVisibility, labelVisibility, labelText }) => (
+    [recordKey, biologicalFeatureId, featureVisibility, labelVisibility, labelText]));
+  assert.equal(state.featureExtractionPending.value, false);
+  assert.ok(state.extractedFeatures.value.length > 0, 'the plan installed the file\'s feature metadata');
+  assert.deepEqual(rows(state.activeDrawing().featureOverrides), rows(opened.features.featureOverrides));
+  assert.equal(rows(state.activeDrawing().featureOverrides).length, 3);
+});
+
 test('a Worker failure of a Session 27-44 Load installs nothing, withdraws the stored figure and reports one diagnostic', async () => {
   const before = await load(fixture('HmmtDNA_basic_circular.v44-schema8'));
   assert.equal(before.status, 'ok');

@@ -5709,8 +5709,21 @@ const applySessionFeatureRecoveryPlan = (drawing, plan) => {
   const shownWarning = plan?.warningParts ? errorText(plan.warningParts) : plan?.warning ? tm(plan.warning) : null;
 
   if (plan?.status === 'recovered' || plan?.status === 'aligned') {
-    if (plan.recoveredFeatureState) applyFeatureStateData(drawing, plan.recoveredFeatureState);
-    if (plan.migratedEditorState) applyEditorStateData(drawing, plan.migratedEditorState);
+    // The plan reads the drawn features again and moves the drawing's fills
+    // and strokes keyed by a drawn feature onto them. The drawing's other
+    // edits and its Legend are its draft part's, installed before (OV-2000).
+    if (plan.recoveredFeatureState) {
+      applyFeatureArtifactData(plan.recoveredFeatureState);
+      PAINT_SLICE.install(drawing.slices.paint, {
+        featureColorOverrides: /** @type {Record<string, FeatureFill>} */ (readFeatureColorEdits(
+          savedFeatureColorEdits(plan.recoveredFeatureState.featureColorOverrides)).value)
+      });
+    }
+    if (plan.migratedEditorState) {
+      PAINT_SLICE.install(drawing.slices.paint, {
+        featureStrokeOverrides: normalizeEditorStateData(plan.migratedEditorState).featureStrokes.overrides
+      });
+    }
     state.setFeatureEditorStatus('summary-ready', shownWarning);
     return;
   }
@@ -6578,6 +6591,18 @@ const importSessionDocument = async (e, options = {}) => {
     const requestFeatureEditsOf = (drawingId) => (drawingId === committedSetDrawingId
       ? (projectionResult && !settingsOnly ? projectionResult.renderState : null)
       : storedDrawingInputs.get(drawingId)?.requestFeatureEdits ?? null);
+    /**
+     * A drawing's per-feature edits as Load installs them: its draft part's,
+     * over its request's where the part has none (OV-220).
+     * @param {DrawingId} drawingId
+     * @returns {Readonly<Record<string, unknown>>}
+     */
+    const loadedFeatureEditsOf = (drawingId) => {
+      const { slice } = draftPartOf(drawingId);
+      const requestEdits = requestFeatureEditsOf(drawingId);
+      return requestEdits ? featureEditsOverProjection(slice.features, requestEdits)
+        : isPlainObject(slice.features) ? slice.features : {};
+    };
     // Any other Session 46-48 slice is stored settings: its track stacks install as saved (R11).
     /** @param {DrawingId} drawingId */
     const isStoredSlice = (drawingId) => modeScopedSession && projectedConfigOf(drawingId) === null;
@@ -6971,13 +6996,21 @@ const importSessionDocument = async (e, options = {}) => {
     // again from the file's sources (B50). They are the Results Python sets
     // aside for the drawing that opens (OV-1958).
     if (legacyStoredResults !== undefined) {
+      // The plan reads the opened drawing's own edits and strokes: Python's
+      // split put them in its draft part (OV-2000).
+      const recoveredFeatures = { ...features, ...loadedFeatureEditsOf(committedSetDrawingId) };
+      const recoveredEditor = draftPartOf(committedSetDrawingId).slice.editorState;
       try {
         legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan(/** @type {any} */ ({
-          snapshot: legacyFeatureSnapshot,
-          // After `splitLegacyFeatureVisibilityRules`, a rule list is the manual
-          // rules or none (a value of another kind serialized as no rule).
+          snapshot: {
+            ...legacyFeatureSnapshot,
+            featureState: recoveredFeatures,
+            editorState: { ...restoredEditorState, featureStrokes: isPlainObject(recoveredEditor) ? recoveredEditor.featureStrokes : undefined }
+          },
+          // A rule list is the manual rules or none (a value of another kind
+          // serialized as no rule).
           featureVisibilityTsv: serializeFeatureVisibilityRules(
-            Array.isArray(features.featureVisibilityManualRules) ? features.featureVisibilityManualRules : []
+            Array.isArray(recoveredFeatures.featureVisibilityManualRules) ? recoveredFeatures.featureVisibilityManualRules : []
           )
         }));
       } catch (error) {
@@ -7436,9 +7469,7 @@ const importSessionDocument = async (e, options = {}) => {
       const { slice } = draftPartOf(id);
       // A drawing that holds a request takes its request's per-feature edits
       // where its draft has none (OV-220), opened or not (OV-1786).
-      const requestEdits = requestFeatureEditsOf(id);
-      const features = requestEdits ? { features: featureEditsOverProjection(slice.features, requestEdits) } : {};
-      applyModeSliceData(drawing, mode, { ...slice, ...features, ...draftOf(id) }, {
+      applyModeSliceData(drawing, mode, { ...slice, features: loadedFeatureEditsOf(id), ...draftOf(id) }, {
         resolveTrackPlacements: !settingsOnly && !isStoredSlice(id),
         applyCanvasPadding: id !== plan.activeDrawingId
       });
