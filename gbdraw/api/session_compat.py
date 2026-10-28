@@ -1275,7 +1275,9 @@ def _search_frame_resources(
     from gbdraw.session_resources import SessionResourceTable
     from gbdraw.session_io import _embedded_resource_bytes
 
-    def items_of(value: DiagramRequest) -> tuple[list[Mapping[str, object]], Mapping[str, Mapping[str, object]]]:
+    def items_of(
+        value: DiagramRequest,
+    ) -> tuple[dict[tuple[object, ...], Mapping[str, object]], Mapping[str, Mapping[str, object]]]:
         table = SessionResourceTable()
         encoded = encode_canonical_request(value, table=table).payload
         return _comparison_items(encoded.get("comparisons"), kinds), table.descriptors()
@@ -1284,12 +1286,11 @@ def _search_frame_resources(
     as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
                  if isinstance(request, LinearDiagramRequest) else request)
     (before, before_resources), (after, after_resources) = items_of(as_stored), items_of(converted)
-    if not len(stored) == len(before) == len(after):
+    if not stored.keys() == before.keys() == after.keys():
         raise ValidationError("Stored comparison results do not match their decoded request.")
     changed: dict[str, bytes] = {}
-    for item, old, new in zip(stored, before, after, strict=True):
-        if not item["kind"] == old["kind"] == new["kind"]:
-            raise ValidationError("Stored comparison results do not match their decoded request.")
+    for identity, item in stored.items():
+        old, new = before[identity], after[identity]
         content = _embedded_resource_bytes(after_resources[_comparison_resource_id(new)])
         if content == _embedded_resource_bytes(before_resources[_comparison_resource_id(old)]):
             continue
@@ -1300,11 +1301,36 @@ def _search_frame_resources(
     return changed
 
 
-def _comparison_items(comparisons: object, kinds: frozenset[str]) -> list[Mapping[str, object]]:
-    """The ``kinds`` items of a stored or encoded request's ``comparisons``."""
+_RECORD_PAIR_RESULT_KINDS = frozenset({"nucleotideBlast", "precomputedProteinComparison"})
 
-    return [item for item in (comparisons if isinstance(comparisons, list) else ())
-            if isinstance(item, Mapping) and item.get("kind") in kinds]
+
+def _comparison_items(comparisons: object, kinds: frozenset[str]) -> dict[tuple[object, ...], Mapping[str, object]]:
+    """The ``kinds`` items of a stored or encoded request's ``comparisons``, by identity.
+
+    An item is its kind and record pair: the stored indices, or under request
+    schema 1 (no indices) the k-th item of its kind compares records k and
+    k + 1, as the decoder reads it. Orthogroup and collinearity results are
+    one per request. A repeated identity is told apart by its occurrence.
+    """
+
+    items: dict[tuple[object, ...], Mapping[str, object]] = {}
+    per_kind: dict[object, int] = {}
+    for item in comparisons if isinstance(comparisons, list) else ():
+        if not isinstance(item, Mapping) or item.get("kind") not in kinds:
+            continue
+        kind = item.get("kind")
+        position = per_kind[kind] = per_kind.get(kind, -1) + 1
+        pair: tuple[object, ...] = (
+            (item.get("queryRecordIndex"), item.get("subjectRecordIndex")) if "queryRecordIndex" in item
+            else (position, position + 1) if kind in _RECORD_PAIR_RESULT_KINDS
+            else ()
+        )
+        identity = (kind, *pair)
+        occurrence = 0
+        while identity + (occurrence,) in items:
+            occurrence += 1
+        items[identity + (occurrence,)] = item
+    return items
 
 
 def _comparison_resource_id(item: Mapping[str, object]) -> str:

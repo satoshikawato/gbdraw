@@ -12,7 +12,7 @@ import pytest
 
 from gbdraw.exceptions import GbdrawError
 
-from gbdraw.session import load_session_document, materialize_session, render_session
+from gbdraw.session import load_session_document, materialize_session, render_session, session_to_request
 from gbdraw import session_drawings
 from gbdraw.session_io import (
     CLI_SESSION_ADMISSION,
@@ -87,6 +87,33 @@ def test_a_main_web_session_s_converted_comparison_table_is_one_resource_for_req
         "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
     )
     assert set(document["resources"]) == {*source["resources"]}
+
+
+def test_converted_comparison_tables_keep_the_resource_of_their_own_record_pair(tmp_path: Path) -> None:
+    # OV-2094: the stored items and the encoded ones meet by record pair, not by their order in the list.
+    from dataclasses import replace
+
+    from gbdraw.api.session_compat import search_frame_nucleotide_resources
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t{}\t{}\t1\t1000\t0.0\t1847\n"
+    document = load_session_document(SESSIONS / "q-frame-main-web-upload.v42.gbdraw-session.json.gz")
+    stored = {"comparisons": [
+        {"kind": "nucleotideBlast", "resourceId": "backward", "queryRecordIndex": 1, "subjectRecordIndex": 0},
+        {"kind": "nucleotideBlast", "resourceId": "forward", "queryRecordIndex": 0, "subjectRecordIndex": 1},
+    ]}
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        [forward] = request.options.linear_comparisons
+        backward = replace(forward, query_record_index=1, subject_record_index=0)
+
+        def with_rows(forward_rows: str, backward_rows: str) -> Any:
+            comparisons = (replace(forward, search_frame_text=forward_rows), replace(backward, search_frame_text=backward_rows))
+            return replace(request, options=replace(request.options, linear_comparisons=comparisons))
+
+        converted = search_frame_nucleotide_resources(
+            stored, with_rows(row.format(1, 1000), row.format(1001, 2000)), with_rows(row.format(3001, 4000), row.format(4001, 4300)),
+        )
+    assert converted == {"forward": row.format(3001, 4000).encode(), "backward": row.format(4001, 4300).encode()}
 
 
 @pytest.mark.parametrize(
