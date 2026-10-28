@@ -4,7 +4,7 @@
 
 **件数**: 固有の問題 3 件（P2 3: OV-1985、OV-1987、OV-1988）。#1433 の review で同じ経路の OV-1986 を追加（再現せず）。どの run でも `Promotion audit / random-walk` だけが失敗し、その原因は run 40634318370 では OV-1985、run 40648501950 では OV-1987、run 40655413787 では OV-1988 である。修正は OV-1985 が #1433（`fix/ov1985-legend-stroke-caption`）、OV-1987 が #1438（`fix/ov1987-legend-stroke-leave`）、OV-1988 が #1441（`fix/ov1988-legend-fill-palette`）。
 
-追加の乱歩（dev `d08c1878e`、seed 20261101 から 20261108、fixture ごとに 30 step）で 3 件（P2 3: OV-2187、OV-2188、OV-2189）。8 seed のうち 4 seed が失敗し、すべて live と Generate の Legend の差。修正は OV-2187 と OV-2188 が #PRNUM（`fix/rw-legend-parity-0143`）。OV-2189 は Owner の判断待ちで、test.fail の case で固定した。3 件とも v0.14.2 で同じ seed が同じ step で失敗し、0.14.2 からの回帰ではない。
+追加の乱歩（dev `d08c1878e`、seed 20261101 から 20261108、fixture ごとに 30 step）で 3 件（P2 3: OV-2187、OV-2188、OV-2189）。8 seed のうち 4 seed が失敗し、すべて live と Generate の Legend の差。修正は OV-2187 と OV-2188 が #1445（`fix/rw-legend-parity-0143`）。OV-2189 は Owner の判断待ちで、test.fail の case で固定した。3 件とも v0.14.2 で同じ seed が同じ step で失敗し、0.14.2 からの回帰ではない。
 
 ## 方法と表記
 
@@ -63,9 +63,9 @@
 | OV-2188 | P2 | Legend の並びを変えて GC の行を先頭にした後（Sort、行の移動）、feature popup の Legend name や Legend の rename で rule の行を作ると、新しい行の枠線が live では無し（`none`）、Generate では block stroke の灰色（`#808080`）になる | rule の行をすぐ表示するとき、executor（`applyLegendOperations` in `services/svg-result-ingestion.js`）は表示中の並びで先頭の行を複製した。並びを変えると先頭は GC content の行（枠線なし）になる。Python は rule の行を block stroke で描き、Generate の executor は Python の並びの先頭（feature の行）を複製する。関係するコードは v0.14.2 と同一 |
 | OV-2189 | P2 | product の rule 2 つ（`alpha`、`beta`）の後、`beta` 行の唯一の feature に feature popup で Legend name `gamma` を付けると、live では `gamma` が `beta` の位置に残り（OV-158）、Generate では先頭に描かれる。乱歩の Sort（step 12）は並びを変えておらず、関係しない | 色の編集の rule 表は Python が作り（OV-244）、この編集ではその feature の rule を表の先頭に置く。Python は rule の行を表の順に描く。live の commit は OV-158（Owner 2026-10-07: 名前を変えた行はその位置に残る）に従い、行と生成時の並びの記録の両方を同じ位置で新しい key に移すので、並びは編集されたものと見なされず、Generate は Python の並びのまま描く。v0.14.2 でも同じ seed が同じ step で失敗する |
 
-**修正（OV-2188、#PRNUM）**: 追加する行は Python の最初の行の複製にする。group が記録した Python の並び（`LEGEND_ORDER_RECORD`）の最初の key、記録がなければ描かれた並びの最初で、Python が描いた行（`data-legend-owner` のない行）から選ぶ。記録の読み手は `recordedGroupOrder`（`services/legend-svg.js`）1 つにし、`restoreLegendStructure` の JSON の読み取りも置き換えた。Generate の結果は変わらない。
+**修正（OV-2188、#1445）**: 追加する行は Python の最初の行の複製にする。group が記録した Python の並び（`LEGEND_ORDER_RECORD`）の最初の key、記録がなければ描かれた並びの最初で、Python が描いた行（`data-legend-owner` のない行）から選ぶ。記録の読み手は `recordedGroupOrder`（`services/legend-svg.js`）1 つにし、`restoreLegendStructure` の JSON の読み取りも置き換えた。Generate の結果は変わらない。
 
-**修正（OV-2187、#PRNUM）**: rule commit が退かせる行は、表示中の Result で描かれる feature が最初の rule として取る rule の行だけにする（#1441 の `drawnRuleMatches` の `groupTaken`）。match が分からない間は従来どおりすべての rule の行。Generate の結果は変わらない。
+**修正（OV-2187、#1445）**: rule commit が退かせる行は、表示中の Result で描かれる feature が最初の rule として取る rule の行だけにする（#1441 の `drawnRuleMatches` の `groupTaken`）。match が分からない間は従来どおりすべての rule の行。Generate の結果は変わらない。
 
 **OV-2189（未修正）**: Product Contract に該当する行がなく、Owner の決定 OV-158（`tests/web/source-legend-reconciliation.playwright.spec.js` の M15: 行は live でも Generate でも位置を保つ）は live 側を意図した結果としている。直すには Generate の結果（または rule 表の順）を変える必要があり、Owner の判断を待つ。選択肢と推奨は handoff `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md` にある。
 

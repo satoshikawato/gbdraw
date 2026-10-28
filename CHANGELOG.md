@@ -43,11 +43,11 @@ write-up of a release.
   Generate (OV-1988, #1441).
 - Fixed: in the Web app, a Legend row that a popup Legend name or a Legend rename adds at once is drawn with the
   feature line, as Generate draws it, also when a Legend sort or move has put a GC row first. Before, it took the GC
-  row's lack of a line until the next Generate (OV-2188, #PRNUM).
+  row's lack of a line until the next Generate (OV-2188, #1445).
 - Fixed: in the Web app, a color rule edit made while a batch Result is shown on which the rule colors no feature
   keeps that Result's Legend row of the rule's name and color (for example the CDS row after "Use existing color" on
   a CDS of the other Result), as Generate draws it. Before, the row disappeared until the next Generate
-  (OV-2187, #PRNUM).
+  (OV-2187, #1445).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
