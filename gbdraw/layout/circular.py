@@ -212,6 +212,15 @@ class CircularResolvedSlot:
         return float(self.reserved_band_px.width_px) if self.reserved_band_px is not None else 0.0
 
 
+def slots_feature_layout(slots: Sequence[CircularResolvedSlot]) -> CircularFeatureLayout | None:
+    """The feature lanes' layout: the payload of the features slot among ``slots``."""
+
+    for slot in slots:
+        if slot.renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
+            return slot.payload
+    return None
+
+
 @dataclass(frozen=True)
 class CircularRadialLayout:
     axis: CircularAxisLayout
@@ -224,10 +233,7 @@ class CircularRadialLayout:
 
     @property
     def features(self) -> CircularFeatureLayout | None:
-        for slot in self.slots:
-            if slot.renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
-                return slot.payload
-        return None
+        return slots_feature_layout(self.slots)
 
     @property
     def ticks(self) -> CircularTickLayout | None:
@@ -443,6 +449,7 @@ def calculate_feature_position_factors_circular(
 
 
 __all__ = [
+    "slots_feature_layout",
     "CircularAxisLayout",
     "CircularFeatureLabelLayout",
     "CircularFeatureLaneDirection",

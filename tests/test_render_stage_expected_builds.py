@@ -64,7 +64,7 @@ _DEPTH = (
     "depth_tick_font_size",
 )
 P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
-    "C1": frozenset((*_CIRCULAR_COMMON, "hide_scale", "species (no plot title)",
+    "C1": frozenset((*_CIRCULAR_COMMON, "hide_scale", "species", "species (no plot title)",
                      "keep_full_definition_with_plot_title")),
     "C2": frozenset((*_CIRCULAR_COMMON, "line_stroke_width", "definition_font_size", "plot_title_position",
                      "legend", "hide_scale", "multi_record_column_gap_ratio", "multi_record_row_gap_ratio")),
@@ -135,6 +135,9 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
+    # Beside a plot title the species draws in the title and the short definition; the tracks keep the band of the
+    # untitled definition (OV-1710), which the labels read only where it reaches past the inside tracks (OV-2103).
+    "species": _TITLE | {"circular_definition_content"},
 }
 
 # The options a record content reads, per mode: the Linear record draws the
@@ -299,6 +302,16 @@ _CATALOG_KEPT_OPTIONS = frozenset(
 )
 
 
+# The Circular definition-over-track count reads the centre definition lines, the radial layout and every track's
+# paint (OV-2088): it rebuilds with any stage that holds one of them.
+_DEFINITION_COUNT_INPUTS = frozenset(
+    {
+        "circular_definition_content", "circular_labels", "feature_layers", "axis_content", "ticks_content",
+        "gc_content_content", "gc_skew_content", "depth_content", "conservation_content", "annotation_content",
+    }
+)
+
+
 # The composition plan is keyed by the bounds of the primary content, the
 # legend and the title, and by their placements. These stages hold those bounds.
 _BOUNDS_STAGES = (
@@ -342,6 +355,8 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if allowed & _DEFINITION_COUNT_INPUTS:
+        allowed |= {"definition_track_overlaps"}
     if allowed & _PLACED_LABELS:
         allowed |= {"circular_record_content"}
     if allowed & _RECORD_MERGE_INPUTS:
@@ -479,6 +494,47 @@ def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definit
     assert outcome.error is None
     assert "circular_plot_title_content" in outcome.stages.builds
     assert "circular_definition_content" not in outcome.stages.builds
+
+
+def test_a_species_change_beside_a_plot_title_that_moves_no_track_keeps_the_circular_labels(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2103: beside a plot title the tracks keep the band of the untitled definition (OV-1710).
+
+    A species change that moves no track draws the same labels, so the labels
+    stage, which reads that band only where it reaches past the inside tracks,
+    stays a hit.
+    """
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    assert outcome.reply == before.reply
+    assert "circular_labels" not in outcome.stages.builds
+
+
+@pytest.mark.parametrize("case_id", ["L2", "L3"])
+def test_a_gc_toggle_that_moves_rows_rebuilds_no_comparison_ribbon(case_id: str, tables: Path, tmp_path: Path) -> None:
+    """OV-2089: a GC toggle moves the rows but not the ribbons' shape; each comparison draws in its own frame.
+
+    The comparison stage takes its ends in that frame (each record's anchor
+    less the comparison's top) and the feature attachment as offsets from the
+    record's anchor, so moving rows changes only where the group is placed.
+    """
+
+    case = CASES[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "comparison_content" not in outcome.stages.builds
 
 
 @pytest.mark.parametrize("case_id", ["C3", "L2"])

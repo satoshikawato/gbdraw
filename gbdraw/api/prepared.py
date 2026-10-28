@@ -345,26 +345,56 @@ _FEATURE_STAMP_FIELDS = (
 )
 
 
-def _feature_stamp(feature: Any) -> tuple[Hashable, ...]:
+_HASH_WORD = 1 << 64
+_HASH_SIGN = 1 << 63
+
+
+def _qualifiers_hash(qualifiers: object) -> int:
+    """The hash of a feature's qualifiers field (``_shallow_value_stamp`` semantics, without building that stamp).
+
+    A dict whose keys are all ``str`` (every GenBank qualifier mapping): the sum,
+    mod 2**64, of the hash of its (owner, length) and one hash per (key, entry
+    stamp) pair. The sum does not see the key order, as the sorted stamp does
+    not, and a change of the owner, the length or one pair changes one term and
+    so the sum. Any other value: the hash of its shallow stamp.
+    """
+
+    if type(qualifiers) is not dict:
+        return hash(_shallow_value_stamp(qualifiers))
+    total = hash(("mapping", id(qualifiers), len(qualifiers)))
+    for key, entry in qualifiers.items():
+        if type(key) is not str:
+            return hash(_shallow_value_stamp(qualifiers))
+        total += hash((key, entry if entry is None or type(entry) is str else _entry_stamp(entry)))
+    total %= _HASH_WORD
+    return total - _HASH_WORD if total >= _HASH_SIGN else total
+
+
+def _feature_hash_bytes(feature: Any) -> bytes:
+    """The hash of each field of a feature, in ``_FEATURE_STAMP_FIELDS`` order, 8 bytes each."""
+
     location = getattr(feature, "location", None)
-    qualifiers = getattr(feature, "qualifiers", None)
-    return (
-        id(feature),
-        str(getattr(feature, "type", "") or ""),
-        id(location),
-        int(location.start) if location is not None else None,
-        int(location.end) if location is not None else None,
-        getattr(location, "strand", None),
-        _shallow_value_stamp(qualifiers),
-    )
+    return array(
+        "q",
+        (
+            hash(id(feature)),
+            hash(str(getattr(feature, "type", "") or "")),
+            hash(id(location)),
+            hash(int(location.start) if location is not None else None),
+            hash(int(location.end) if location is not None else None),
+            hash(getattr(location, "strand", None)),
+            _qualifiers_hash(getattr(feature, "qualifiers", None)),
+        ),
+    ).tobytes()
 
 
 def _feature_field_hashes(features: Iterable[object], memo: dict[int, bytes]) -> bytes:
-    """Hash each field of each feature stamp, in order; the full stamp keeps these.
+    """Hash each field of each feature (``_feature_hash_bytes``), in order; the full stamp keeps these.
 
-    Equal stamps give equal hashes. CPython's tuple hash changes whenever one
-    element's hash changes, so a change of one value in a field always changes
-    that field's hash; any other change is missed only by a hash collision.
+    Equal fields give equal hashes, and a change of one value in a field
+    changes that field's hash (a tuple's hash changes whenever one element's
+    hash does; the qualifiers sum changes one term), so a change is missed only
+    by a hash collision.
 
     ``memo`` keeps each feature object's hashes, so one check stamps a feature
     once although the parsed and resolved entries both hold it. It lives for
@@ -376,7 +406,7 @@ def _feature_field_hashes(features: Iterable[object], memo: dict[int, bytes]) ->
     for feature in features:
         hashes = memo.get(id(feature))
         if hashes is None:
-            hashes = memo[id(feature)] = array("q", map(hash, _feature_stamp(feature))).tobytes()
+            hashes = memo[id(feature)] = _feature_hash_bytes(feature)
         parts.append(hashes)
     return b"".join(parts)
 

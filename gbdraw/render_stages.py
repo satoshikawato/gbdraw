@@ -65,6 +65,7 @@ RenderStageName = Literal[
     "definition_content",
     "circular_definition_content",
     "annotation_content",
+    "definition_track_overlaps",
     "record_content",
     "circular_record_content",
     "comparison_content",
@@ -136,6 +137,10 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "definition_content": frozenset(),
     "circular_definition_content": frozenset(),
     "annotation_content": frozenset(),
+    # The centre definition lines over the Circular track paint: the text font, the conservation background and
+    # the tick ring (the tick group's sections) are the settings that paint reads (OV-2088).
+    "definition_track_overlaps": _CIRCULAR_TRACK_SECTIONS
+    | {"objects.conservation", "objects.scale", "objects.text", "objects.ticks"},
     # Linear: the record group draws the axis, the ruler, features and labels (with their style).
     "record_content": frozenset(
         {"labels.linear", "labels.stroke_color", "objects.axis", "objects.scale", "objects.text"}
