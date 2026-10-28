@@ -62,10 +62,17 @@ class PreparedInputRetention:
     besides this request's (the Worker's retain set). The cache keeps each
     drawing's decoded, parsed and resolved inputs of its last committed request
     while every resource they name is requested or retained.
+
+    ``held_tokens``, a subset of ``resource_tokens``, are the tokens of the
+    files the rendered drawing's draft holds while this request omits them (a
+    hidden Depth file; gbdraw/web/CLAUDE.md, Runtime data flow). The commit
+    keeps, for this drawing only, every unused entry of any layer that names
+    one of them while each resource it names is requested or held.
     """
 
     drawing: str
     resource_tokens: frozenset[str]
+    held_tokens: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -587,7 +594,13 @@ class PreparedBiologicalInputCache:
     A successful transaction discards the entries that the request did not use,
     except, with a ``PreparedInputRetention``, the decoded, parsed and resolved
     entries that another drawing's last committed request used (A4b); render
-    stages keep only the last successful render's. A changed semantic key
+    stages keep only the last successful render's. The retention's held tokens
+    also keep, in every layer, the unused entries that name a held file and
+    nothing that is neither requested nor held: the parsed source and stage
+    results of the last render that used a hidden Depth file. They stay until
+    a render of the drawing uses the file again or no longer holds it; held
+    entries do not join the drawing's inputs, so another drawing's render
+    releases them. A changed semantic key
     rebuilds its dependent layer; a resource identity that is neither requested
     nor retained evicts every entry that refers to it.
     The retained-byte diagnostic estimates what each entry holds without
@@ -1041,6 +1054,7 @@ class PreparedBiologicalInputCache:
         replacements: dict[str, tuple[OrderedDict[Hashable, _PreparedCacheEntry], int]] = {}
         retained_total = 0
         held: set[PreparedResourceIdentity] = set()
+        held_tokens = frozenset() if retention is None else retention.held_tokens
         for layer in self._layers:
             current = self._layers[layer]
             retained: OrderedDict[Hashable, _PreparedCacheEntry] = OrderedDict()
@@ -1052,6 +1066,22 @@ class PreparedBiologicalInputCache:
                         retained[key] = current[key]
                         retained_total += current[key].retained_bytes
                         held.update(current[key].resource_identities)
+                        kept += 1
+            # A hidden file's entries of its last render, for this drawing only:
+            # each names a held token, and every resource it names is requested
+            # or held. Also checked when a request reads them (D-05).
+            if held_tokens:
+                for key, entry in current.items():
+                    if key in retained or key in transaction.used[layer]:
+                        continue
+                    tokens = {identity.cache_token for identity in entry.resource_identities}
+                    if not tokens.isdisjoint(held_tokens) and all(
+                        identity in transaction.active_identities or identity.cache_token in held_tokens
+                        for identity in entry.resource_identities
+                    ):
+                        retained[key] = entry
+                        retained_total += entry.retained_bytes
+                        held.update(entry.resource_identities)
                         kept += 1
             for key, entry in self._used_entries(layer, transaction):
                 retained[key] = entry

@@ -3379,6 +3379,23 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
 };
 
 /**
+ * The descriptor of a Session resource view, under the name the view shows; null for any other value.
+ * @param {unknown} file
+ * @returns {RawSessionResourceDescriptor | null}
+ */
+const sessionViewDescriptor = (file) => {
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
+  if (!source?.descriptor) return null;
+  // A view: its name is read as an unvalidated value.
+  const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
+  const descriptor = visibleName && visibleName !== source.descriptor.name
+    ? { ...source.descriptor, name: visibleName }
+    : source.descriptor;
+  setResourcePayloadOwner(descriptor, file);
+  return descriptor;
+};
+
+/**
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
  *   (a list included) is rejected by `readFileBytes`.
  * @returns {Promise<RawSessionResourceDescriptor | null>}
@@ -3387,15 +3404,8 @@ const serializeFile = async (file) => {
   if (!file) return null;
   // A view: each member is read as an unvalidated value.
   const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);
-  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-  if (source?.descriptor) {
-    const visibleName = String(view?.name || '').trim();
-    const descriptor = visibleName && visibleName !== source.descriptor.name
-      ? { ...source.descriptor, name: visibleName }
-      : source.descriptor;
-    setResourcePayloadOwner(descriptor, file);
-    return descriptor;
-  }
+  const viewDescriptor = sessionViewDescriptor(file);
+  if (viewDescriptor) return viewDescriptor;
   const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
@@ -4035,6 +4045,48 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
+ * The draft's Depth slot values, one owner for the request and the held set: Circular has one slot
+ * (the drawing's `files.c_depth`), Linear one per drawn record (`seq.depth`, in request order), each a
+ * ref into the project's input file store. Callers gate by `draftDrawsDepth`.
+ * @param {string} mode The drawing's mode.
+ * @param {DrawingState} drawing The drawing whose input fields and record rows hold the slots.
+ * @returns {BoundFileValue[]}
+ */
+const draftDepthSlots = (mode, drawing) =>
+  mode === 'linear'
+    ? normalizeLinearSeqList(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff)).map((seq) => seq.depth)
+    : [drawing.files.c_depth];
+
+/**
+ * The refs of a slot value, a list flattened.
+ * @param {BoundFileValue} value
+ * @returns {InputFileRef[]}
+ */
+const boundFileRefs = (value) => (
+  Array.isArray(value) ? value.flatMap(boundFileRefs) : value ? [/** @type {InputFileRef} */ (value)] : []
+);
+
+/**
+ * The Depth files a drawing's draft holds while its request omits them (Show Depth off), as the
+ * descriptors a Session loaded or an earlier Generate encoded: the Worker keeps their bytes while
+ * the draft holds them (gbdraw/web/CLAUDE.md, Runtime data flow). Nothing is read, so a file no
+ * request carried is not held.
+ * @param {string} mode The drawing's mode.
+ * @param {{ inputFiles: Pick<InputFileStore, 'fileOf'> }} sourceState The project (`state`), whose store
+ *   holds the files.
+ * @param {DrawingState} drawing The drawing whose Depth slots are read.
+ * @returns {RawSessionResourceDescriptor[]}
+ */
+export const heldDepthFiles = (mode, sourceState, drawing) => {
+  if (draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing)) return [];
+  return draftDepthSlots(mode, drawing).flatMap(boundFileRefs).flatMap((ref) => {
+    const file = sourceState.inputFiles.fileOf(ref);
+    const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
+    return descriptor ? [descriptor] : [];
+  });
+};
+
+/**
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project (`state`), whose store holds the files.
  * @param {DrawingState} drawing The drawing whose settings choose the inputs, and whose input fields and record
@@ -4058,13 +4110,14 @@ export const serializeActiveRenderFiles = async (
     ? normalizeLinearSeqList(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff))
     : [];
   const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
+  const depthSlots = draftDepthSlots(mode, drawing);
   const serializedLinearSeqs = await Promise.all(
-    normalizedLinearSeqs.map(async (seq) => ({
+    normalizedLinearSeqs.map(async (seq, index) => ({
       uid: seq.uid,
       gb: await serializeFileValue(store, seq.gb),
       gff: await serializeFileValue(store, seq.gff),
       fasta: await serializeFileValue(store, seq.fasta),
-      depth: depthRequested ? await serializeFileValue(store, seq.depth) : null,
+      depth: depthRequested ? await serializeFileValue(store, depthSlots[index]) : null,
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
@@ -4146,7 +4199,7 @@ export const serializeActiveRenderFiles = async (
     c_gff: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_gff) : null,
     c_fasta: mode === 'circular' ? await serializeFileValue(store, sourceFiles.c_fasta) : null,
     c_depth: mode === 'circular' && depthRequested
-      ? await serializeFileValue(store, sourceFiles.c_depth)
+      ? await serializeFileValue(store, depthSlots[0])
       : null,
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(store, sourceFiles.c_conservation_blasts)

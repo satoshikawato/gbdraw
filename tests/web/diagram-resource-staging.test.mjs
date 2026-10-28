@@ -302,3 +302,120 @@ test('staging names payloads by inline text or by the payload owner identity', a
   assert.deepEqual(first.resourceManifest.map(({ cacheToken }) => cacheToken), [fileText, 'LOCUS inline\nORIGIN\n//\n', 'LOCUS view\nORIGIN\n//\n'].map(sha256Hex));
   assert.equal(again.commit(), true);
 });
+
+// Show Depth off: a drawing's draft holds the Depth file while its request omits it
+// (gbdraw/web/CLAUDE.md, Runtime data flow). The Worker keeps its bytes while a drawing's
+// draft holds it now, and only that drawing's renders name it as held.
+const depthText = 'record-1\t1\t5\nrecord-1\t2\t7\n';
+const depthToken = sha256Hex(depthText);
+const depthDescriptor = () => ({ ...descriptor(depthText, 'reads.depth.tsv'), kind: 'depth-track-file' });
+const shownDepth = (depth = depthDescriptor()) => ({
+  request: {
+    ...genbankRequest('record-1-genbank'),
+    diagramOptions: { depthTracks: [{ source: { resourceId: 'depth-tracks-1-source', representation: 'file' } }] }
+  },
+  resources: { 'record-1-genbank': descriptor('LOCUS depth\nORIGIN\n//\n'), 'depth-tracks-1-source': depth }
+});
+// A Show Depth off render: the draft, not the committed request, says what is held.
+const hiddenDepth = (shown) => ({
+  request: genbankRequest('record-1-genbank'),
+  resources: { 'record-1-genbank': shown.resources['record-1-genbank'] }
+});
+/** Each drawing's draft held files, as the composition root reads them at every render. */
+const draftTransport = (committed, drafts) => createDiagramResourceTransport({
+  readCommittedResourceSets: () => committed,
+  readDraftHeldFiles: () => [...drafts].map(([drawingId, files]) => ({ drawingId, files }))
+});
+
+test('a held resource stays across hidden renders and is not staged again', async () => {
+  const committed = [];
+  const drafts = new Map([['drawing-a', []]]);
+  const transport = draftTransport(committed, drafts);
+  const shown = shownDepth();
+  const first = await transport.prepare({ ...shown, drawingId: 'drawing-a' });
+  assert.ok(stagedTokens(first).includes(depthToken));
+  assert.equal(first.commit(), true);
+  committed[0] = shown;
+
+  // A hide, then an edit while hidden: each keeps the file and names it as held.
+  drafts.set('drawing-a', [shown.resources['depth-tracks-1-source']]);
+  for (let render = 0; render < 2; render += 1) {
+    const hidden = hiddenDepth(shown);
+    const prepared = await transport.prepare({ ...hidden, drawingId: 'drawing-a' });
+    assert.deepEqual(prepared.retainedResourceTokens, [depthToken]);
+    assert.deepEqual(prepared.heldResourceTokens, [depthToken]);
+    assert.equal(prepared.commit(), true);
+    committed[0] = hidden;
+  }
+
+  drafts.set('drawing-a', []);
+  const again = await transport.prepare({ ...shown, drawingId: 'drawing-a' });
+  assert.deepEqual(again.stagedResources, [], 'the show stages nothing');
+  assert.ok(again.resourceManifest.some(({ cacheToken }) => cacheToken === depthToken));
+  assert.deepEqual(again.heldResourceTokens, []);
+});
+
+test('a file the draft drops is released by the next render', async () => {
+  const committed = [];
+  const drafts = new Map([['drawing-a', []]]);
+  const transport = draftTransport(committed, drafts);
+  const shown = shownDepth();
+  (await transport.prepare({ ...shown, drawingId: 'drawing-a' })).commit();
+  committed[0] = shown;
+  drafts.set('drawing-a', [shown.resources['depth-tracks-1-source']]);
+  const hidden = hiddenDepth(shown);
+  (await transport.prepare({ ...hidden, drawingId: 'drawing-a' })).commit();
+  committed[0] = hidden;
+
+  // The file is removed while Depth is hidden: this render neither holds nor retains it,
+  // although the committed request it replaces was rendered while the draft held it.
+  drafts.set('drawing-a', []);
+  const dropping = await transport.prepare({ request: hidden.request, resources: hidden.resources, drawingId: 'drawing-a' });
+  assert.deepEqual(dropping.heldResourceTokens, []);
+  assert.deepEqual(dropping.retainedResourceTokens, [], 'released at once, not one render later');
+  assert.equal(dropping.commit(), true);
+  assert.deepEqual(stagedTokens(await transport.prepare({ ...shown, drawingId: 'drawing-a' })), [depthToken], 'a show stages it again');
+});
+
+test('another drawing\'s renders keep a file a draft holds and release it once the draft drops it', async () => {
+  const committed = [];
+  const drafts = new Map([['drawing-a', []], ['drawing-b', []]]);
+  const transport = draftTransport(committed, drafts);
+  const shown = shownDepth();
+  (await transport.prepare({ ...shown, drawingId: 'drawing-a' })).commit();
+  drafts.set('drawing-a', [shown.resources['depth-tracks-1-source']]);
+  const hidden = hiddenDepth(shown);
+  (await transport.prepare({ ...hidden, drawingId: 'drawing-a' })).commit();
+  committed[0] = hidden;
+  const linear = { request: genbankRequest('linear-genbank'), resources: { 'linear-genbank': descriptor('LINEAR') } };
+  const circularToken = sha256Hex('LOCUS depth\nORIGIN\n//\n');
+
+  // Drawing A's draft still holds its hidden Depth file: drawing B's renders keep it, and never name it as held.
+  for (let render = 0; render < 2; render += 1) {
+    const prepared = await transport.prepare({ ...linear, drawingId: 'drawing-b' });
+    assert.deepEqual([...prepared.retainedResourceTokens].sort(), [circularToken, depthToken].sort());
+    assert.deepEqual(prepared.heldResourceTokens, []);
+    assert.equal(prepared.commit(), true);
+    committed[1] = linear;
+  }
+
+  // The file is removed from drawing A's draft, and only drawing B renders: its bytes go there.
+  drafts.set('drawing-a', []);
+  const released = await transport.prepare({ ...linear, drawingId: 'drawing-b' });
+  assert.deepEqual(released.retainedResourceTokens, [circularToken], "drawing A's request keeps only its own resource");
+  assert.equal(released.commit(), true);
+  assert.deepEqual(stagedTokens(await transport.prepare({ ...shown, drawingId: 'drawing-a' })), [depthToken]);
+});
+
+test('a held file that was never staged is not held', async () => {
+  const shown = shownDepth();
+  const unread = setResourcePayloadOwner(
+    { ...depthDescriptor(), data: undefined },
+    { arrayBuffer: async () => { throw new Error('a held file is never read'); } }
+  );
+  const transport = draftTransport([], new Map([['drawing-a', [unread]]]));
+  const prepared = await transport.prepare({ ...hiddenDepth(shown), drawingId: 'drawing-a' });
+  assert.deepEqual(prepared.heldResourceTokens, []);
+  assert.deepEqual(prepared.retainedResourceTokens, []);
+  assert.deepEqual(prepared.resourceManifest.map(({ resourceId }) => resourceId), ['record-1-genbank']);
+});
