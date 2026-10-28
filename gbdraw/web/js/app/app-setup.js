@@ -244,6 +244,7 @@ import {
   buildLinearComparisonTimeline,
   createLinearComparisonEdge,
   setComparisonEdgeFile,
+  swapComparisonEdgeFile,
   linearComparisonEdgeKey,
   materializeResolvedEdgesAsSelectedPlan,
   missingUploadPairsToResolve,
@@ -1252,11 +1253,11 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(drawing, next);
   });
   /**
-   * A Linear comparison's uploaded file, found by the comparison's id: the
-   * shown drawing's control and the replacement for every drawing write through it.
-   * @param {DrawingState} drawing @param {string} id @param {InputFileCandidate | InputFileRef} file
+   * The shown drawing's upload into a comparison's file input, found by the
+   * comparison's id: the file becomes the pair's active upload.
+   * @param {string} id @param {InputFileCandidate} file
    */
-  const replaceLinearComparisonFile = (drawing, id, file) => {
+  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -1265,9 +1266,21 @@ export const createAppSetup = () => {
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
     edge.included = Boolean(ref) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
+  });
+  /**
+   * A replacement of the file a comparison binds, in any drawing (PD-OI-090
+   * 〔入力ファイル〕): only the file changes (R17-28).
+   * @param {DrawingState} drawing @param {string} id @param {InputFileCandidate | InputFileRef} file
+   */
+  const swapLinearComparisonFile = (drawing, id, file) => {
+    const next = selectedPlanForEdit(drawing);
+    const edge = next.edges.find((entry) => entry.id === id);
+    if (!edge) return;
+    const ref = state.inputFiles.registerFile(file);
+    if (!ref) return;
+    swapComparisonEdgeFile(edge, ref);
+    replaceLinearComparisonPlan(drawing, next);
   };
-  /** @param {string} id @param {InputFileCandidate} file */
-  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => replaceLinearComparisonFile(drawing, id, file));
   /** @param {string} id */
   const reuseLinearComparisonFile = (id) => shownAction('linear', (drawing) => {
     const next = selectedPlanForEdit(drawing);
@@ -4575,6 +4588,10 @@ export const createAppSetup = () => {
     || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null)
     || (featureActions.ruleWritePending() ? RULE_WRITE_BUSY : null);
   const drawingSwitchAvailable = computed(() => !drawingSwitchBusy());
+  // The drawing an operation error names (PD-OI-079 `context.drawingId`), if
+  // any: read by the switch, the drawing removal, and E1's Generate. Its
+  // producers write a `DrawingId`; the normalizer, a leaf, keeps it as text.
+  const errorDrawingId = () => /** @type {DrawingId | undefined} */ (normalizeUserFacingError(errorLog.value)?.context.drawingId);
   // The switch work, steps 1-5, without the gate: `selectDrawing` and a step
   // of the drawing list (`app/drawing-list.js`, which shows a drawing inside
   // its project step, R16-2) call it. Showing the shown drawing does nothing.
@@ -4604,10 +4621,7 @@ export const createAppSetup = () => {
     failedGeneratePreservedResult.value = false;
     // OV-372: an operation error belongs to the drawing it was raised in,
     // except one that names the arriving drawing's Result (PD-OI-079).
-    const errorContext = errorLog.value ? normalizeUserFacingError(errorLog.value)?.context : undefined;
-    if (errorLog.value && errorContext?.drawingId !== arriving.id) {
-      errorLog.value = null;
-    }
+    if (errorLog.value && errorDrawingId() !== arriving.id) errorLog.value = null;
     if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
     // The arriving drawing's annotations, over its mode's record catalog.
     rebindAnnotationRecords();
@@ -4645,7 +4659,13 @@ export const createAppSetup = () => {
       return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
     },
     addDrawing: state.addDrawing,
-    removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
+    // An error that names a drawing leaves with it (R17-29), as it leaves on
+    // a switch away (OV-372): every Delete, its Redo, and the Undo of New and
+    // Duplicate remove a drawing here.
+    removeDrawing: (drawingId) => {
+      if (errorDrawingId() === drawingId) errorLog.value = null;
+      return state.removeDrawing(drawingId, artifactSlots);
+    },
     putSlot: artifactSlots.putSlot,
     renameDrawing: state.renameDrawing,
     moveDrawing: state.moveDrawing,
@@ -5115,13 +5135,11 @@ export const createAppSetup = () => {
   };
   // E1 (PD-OI-079): an error about another drawing's Result (Save of a
   // legacy Result kept in that drawing) offers Generate there: the action
-  // shows that drawing first. A drawing deleted since the error is no
-  // longer a target: the action generates the shown drawing, as for an error
-  // that names no drawing (OV-2151).
+  // shows that drawing first. The drawing exists: its removal took the error
+  // with it (R17-29), and a Load clears every error.
   const generateFromError = () => {
-    const target = errorLog.value?.context?.drawingId;
-    const targetListed = state.drawingTabs.value.some((tab) => tab.id === target);
-    if (targetListed && target !== undefined && target !== state.activeDrawingId.value) {
+    const target = errorDrawingId();
+    if (target !== undefined && target !== state.activeDrawingId.value) {
       const switched = selectDrawing(target);
       if (switched && switched.status === 'busy') return switched;
     }
@@ -6926,7 +6944,7 @@ export const createAppSetup = () => {
       if (!seq) return;
       slotIndexesOfFile(depthFileSlotsFromValue(seq.depth), fileId).forEach((idx) => setLinearDepthFiles(drawing, [seq], idx, file));
     },
-    edge: (drawing, site, _fileId, file) => replaceLinearComparisonFile(drawing, String(site.edgeId), file)
+    edge: (drawing, site, _fileId, file) => swapLinearComparisonFile(drawing, String(site.edgeId), file)
   });
   // The replacement of an input file for the shown drawing or every drawing
   // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`,
