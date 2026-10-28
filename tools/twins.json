@@ -101,7 +101,7 @@
         "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
       ],
       "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateRenderedIdFeatureEdits in feature-edit-migration.test.mjs.",
+      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run only through Python's pytest (tests/test_session_compat.py).",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
     },
