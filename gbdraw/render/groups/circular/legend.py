@@ -19,6 +19,10 @@ from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
 from ....svg.path_data import path_number, path_point
 
+# The colour of the similarity-ring block's captions (``outer``, ``inner``, ``identity``) and scale labels; the
+# ring names keep the Legend's text colour. Drawn only here; the Web's Legend layout reads positions, not colours.
+RING_LEGEND_MUTED_TEXT_COLOR = "#5a6273"
+
 
 class LegendGroup:
     def __init__(
@@ -64,10 +68,21 @@ class LegendGroup:
             properties["max_color"],
         )
 
-    def _text(self, text: str, x: float, y: float, *, baseline: str = "central", anchor: str = "start"):
+    def _text(
+        self,
+        text: str,
+        x: float,
+        y: float,
+        *,
+        baseline: str = "central",
+        anchor: str = "start",
+        fill: str | None = None,
+    ):
         path = generate_text_path(
             text, 0, 0, 0, self.font_size, "normal", self.font_family, dominant_baseline=baseline, text_anchor=anchor
         )
+        if fill is not None:
+            path.attribs["fill"] = fill
         path.translate(x, y)
         return path
 
@@ -76,7 +91,7 @@ class LegendGroup:
         ``data-track-index``), ``inner``, and the identity band; the band and captions are not Legend rows."""
 
         group = self._comparison_legend_group()
-        group.add(self._text(RING_OUTER_CAPTION, 0, layout.outer_caption_y))
+        group.add(self._text(RING_OUTER_CAPTION, 0, layout.outer_caption_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
         swatch_path = self.create_rectangle_path_for_legend()
         for row in layout.rows:
             row_group = Group()
@@ -89,7 +104,7 @@ class LegendGroup:
                 row_group.add(swatch)
             row_group.add(self._text(drawn_name, row.text_x, row.y))
             group.add(row_group)
-        group.add(self._text(RING_INNER_CAPTION, 0, layout.inner_caption_y))
+        group.add(self._text(RING_INNER_CAPTION, 0, layout.inner_caption_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
 
         band = Group()
         band.attribs["data-gbdraw-role"] = "conservation-identity-band"
@@ -117,9 +132,10 @@ class LegendGroup:
         )
         bar.translate(0, layout.band_y)
         band.add(bar)
-        band.add(self._text(RING_BAND_LABEL, layout.band_label_x, layout.band_y))
-        band.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, baseline="hanging"))
-        band.add(self._text("100%", layout.max_label_x, layout.scale_label_y, baseline="hanging", anchor="end"))
+        band.add(self._text(RING_BAND_LABEL, layout.band_label_x, layout.band_y, fill=RING_LEGEND_MUTED_TEXT_COLOR))
+        scale = {"baseline": "hanging", "fill": RING_LEGEND_MUTED_TEXT_COLOR}
+        band.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, **scale))
+        band.add(self._text("100%", layout.max_label_x, layout.scale_label_y, anchor="end", **scale))
         group.add(band)
         return group
 

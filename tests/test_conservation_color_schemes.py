@@ -299,6 +299,17 @@ def test_one_colour_legend_lists_the_drawn_rings_without_swatches() -> None:
     assert _band_stops(block) == ["#f0f1f5", "#8b9cc1"]
 
 
+def test_captions_and_scale_labels_are_muted_and_ring_names_keep_the_legend_text_colour() -> None:
+    block = _ring_block(_draw_legend("ten", ["", "#123456", ""]))
+    font_sizes = {text.get("font-size") for text in block.iter("{http://www.w3.org/2000/svg}text")}
+    names = [row.find("svg:text", _SVG) for row in block.findall("svg:g[@data-legend-key]", _SVG)]
+    muted = [text for text in block.iter("{http://www.w3.org/2000/svg}text") if text not in names]
+
+    assert [text.text for text in muted] == ["outer", "inner", "identity", "90%", "100%"]
+    assert {text.get("fill") for text in muted} == {"#5a6273"}
+    assert [text.get("fill") for text in names] == [None, None, None]
+    assert len(font_sizes) == 1
+
 def test_a_ring_coloured_like_the_default_keeps_the_one_colour_legend() -> None:
     block = _ring_block(_draw_legend("same", ["#8B9CC1", "", ""]))
 
