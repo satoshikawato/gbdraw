@@ -58,7 +58,9 @@ const loadFile = async (page, file, message = 'Session loaded') => {
   const input = page.locator('input[accept^=".json,"]');
   await input.setInputFiles(file);
   if (typeof message === 'string') {
-    await expect(page.locator('[data-app-notice]')).toContainText(message);
+    // A Session 27-44 Load converts through Python, which starts the diagram Worker first: without
+    // the CI Pyodide snapshot that alone takes about 5 s, the expect default.
+    await expect(page.locator('[data-app-notice]')).toContainText(message, { timeout: 120_000 });
     await expect(page.locator('[data-app-notice] li')).toHaveCount(0);
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
     return;
