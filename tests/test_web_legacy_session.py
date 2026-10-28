@@ -71,6 +71,24 @@ def test_a_legacy_session_becomes_session_49_with_its_results_and_replays_as_bef
     assert replayed == old.output_paths[0].read_text(encoding="utf-8")
 
 
+@pytest.mark.parametrize("name", ["q-frame-main-web-upload.v42", "q-frame-main-web-losatn.v42"])
+def test_a_main_web_session_s_converted_comparison_table_is_one_resource_for_request_and_card(name: str) -> None:
+    # OV-2080: the rows stored in the display frame of reversed R3c move to the search frame once, under
+    # their stored resource ID, so the Linear comparison card and the request read the same rows.
+    source = json.loads(_text(f"{name}.gbdraw-session.json.gz"))
+    [stored] = source["renderRequest"]["comparisons"]
+    document = json.loads(legacy_session_to_drawings_json(_text(f"{name}.gbdraw-session.json.gz")))["document"]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    [item] = drawing["renderRequest"]["comparisons"]
+    assert (item["kind"], item["resourceId"]) == ("nucleotideBlast", stored["resourceId"])
+    cards = [card["file"]["resourceId"] for card in drawing["webFiles"]["bindings"]["linearComparisons"]]
+    assert cards == [stored["resourceId"]] * len(source["webFiles"]["bindings"]["linearComparisons"])
+    assert base64.b64decode(document["resources"][item["resourceId"]]["data"]).decode("utf-8") == (
+        "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
+    )
+    assert set(document["resources"]) == {*source["resources"]}
+
+
 @pytest.mark.parametrize(
     ("name", "mode"),
     [

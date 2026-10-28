@@ -25,7 +25,9 @@ for (const vector of vectors.upgrades) {
       vector.drawings
     );
     assert.equal(document.ui.activeDrawingId, vector.activeDrawingId);
-    assert.deepEqual(sourceFacts, vector.sourceFacts);
+    // The vectors hold the facts Python's twin writes; every Session 46-48
+    // also saved records of Python's paint with its Results (the Web's own fact).
+    assert.deepEqual(sourceFacts, { ...vector.sourceFacts, resultsRecordPythonPaint: true });
   });
 }
 
@@ -111,7 +113,7 @@ test('source facts name a Session 48 without a Web draft', () => {
   const data = settingsOnly();
   delete data.modes;
   assert.deepEqual(upgradeModeScopedSession(data, data.version).sourceFacts,
-    { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false });
+    { cardRowsAreFileRows: true, proteinResultsInDrawnFrame: false, resultsRecordPythonPaint: true });
 });
 
 for (const version of [44, 49]) {

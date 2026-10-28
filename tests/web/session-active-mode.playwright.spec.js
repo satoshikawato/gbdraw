@@ -9,7 +9,7 @@ const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
-  assertSessionLoadLeftWorkerIdle,
+  assertLegacyLoadConvertedOnce,
   evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
@@ -292,7 +292,7 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
         ? settings.config.adv.axis_stroke_color
         : settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
     }
-    await assertSessionLoadLeftWorkerIdle(fresh);
+    await assertLegacyLoadConvertedOnce(fresh);
   } finally {
     await context.close();
   }
