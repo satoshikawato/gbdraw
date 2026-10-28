@@ -5,6 +5,7 @@
 const { test, expect } = require('@playwright/test');
 const { HMMT_SESSION, loadSessionFile, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
@@ -167,10 +168,9 @@ test('a Legend row of color None shows empty and None; its popup Color still col
   page.on('console', (message) => { if (/does not conform/.test(message.text())) inputWarnings.push(message.text()); });
   await openFresh(page);
   const genome = (name) => readFileSync(resolve(__dirname, '../../examples', name), 'utf8');
+  await takeLinearOffer(page);
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
     app.setLinearSeqPrimaryFile(1, 'gb', new File([second], 'MelaMJNV.gb', { type: 'text/plain' }));

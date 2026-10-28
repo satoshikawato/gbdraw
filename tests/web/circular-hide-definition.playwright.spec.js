@@ -5,6 +5,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { join, resolve } = require('node:path');
+const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   answerSessionTitle,
@@ -35,11 +36,14 @@ const readSession = (path) => {
 test('Show Definition off draws no center definition, keeps the plot title, and survives Save and Load', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   await openApp(page);
+  // A new Session shows its one Circular drawing; the file is registered as a chosen file is.
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
+    const { registerInputFileTree } = await import('./js/services/drawing/inputs.js');
+    const { state } = await import('./js/state.js');
     app.cInputType = 'gb';
-    app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1 });
+    app.files.c_gb = registerInputFileTree(state.inputFiles,
+      new File([genbankText], 'HmmtDNA.gbk', { type: 'text/plain', lastModified: 1 }));
     app.form.labels_mode = 'none';
     app.form.plot_title = 'Mitochondrial genome';
     app.adv.plot_title_position = 'top';
@@ -69,8 +73,9 @@ test('Show Definition off draws no center definition, keeps the plot title, and 
   await download.saveAs(savedPath);
   const saved = readSession(savedPath);
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.modes.circular.config.adv.show_definition).toBe(false);
-  expect(saved.renderRequest.diagramOptions.configOverrides[SHOW_PATH]).toBe(false);
+  // The shown drawing holds the setting and its request (Session 50: one entry per drawing).
+  expect(shownSavedDrawing(saved).config.adv.show_definition).toBe(false);
+  expect(shownSavedDrawing(saved).renderRequest.diagramOptions.configOverrides[SHOW_PATH]).toBe(false);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
