@@ -170,7 +170,7 @@ for (const name of sessionNames) {
 for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz']) {
   const released = await loadReleasedSession(name);
   assert.throws(() => admitGallerySession(released),
-    /Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it \(Python converts it at Load\), or refresh it with tools\/refresh_gallery_sessions\.py/);
+    /Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');

@@ -1266,30 +1266,22 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
     ] == ["record-1-genbank"]
 
 
-def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(
-    tmp_path: Path,
+def test_gallery_refresh_refuses_a_session_27_44(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
+    # Gallery publication admits Sessions 46-49; Python converts a Session
+    # 27-44 when the app loads it.
     source = tmp_path / "source.gbdraw-session.json"
     destination = tmp_path / "refreshed.gbdraw-session.json"
     source.write_bytes(
         (Path(__file__).parent / "fixtures/sessions/lambda_basic_linear.v40-schema5.json").read_bytes()
     )
-    committed = load_session(source)
 
-    assert committed["renderRequest"]["schema"] == 5
-    assert all(
-        "cardinality" not in record
-        for record in committed["renderRequest"]["records"]
-    )
+    with pytest.raises(subprocess.CalledProcessError):
+        _refresh_one_session(source, destination_path=destination)
 
-    _refresh_one_session(source, destination_path=destination)
-
-    refreshed = _published_drawing(destination)
-    assert refreshed["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert [
-        record["cardinality"]
-        for record in refreshed["renderRequest"]["records"]
-    ] == ["exactly_one"]
+    assert "Gallery publication supports Sessions 46-49" in capfd.readouterr().err
+    assert not destination.exists()
 
 
 def test_staged_gallery_validator_accepts_current_artifact_schemas(
