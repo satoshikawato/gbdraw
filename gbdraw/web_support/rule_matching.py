@@ -120,14 +120,14 @@ class SynthesizeColorRulesRequest(TypedDict):
     `color` is not empty, gives it `color` and `caption` by itself. `labels`
     holds, for each selected feature in the same order, the label texts it
     shows (its displayed and its annotation label). `rules` is the rule table
-    at the write's turn, in order.
+    at the write's turn, in order, with each row's color and caption.
     """
 
     scope: Literal["group", "features", "reset"]
     features: list[RuleFeaturePayload]
     selected: list[int]
     labels: list[list[str]]
-    rules: list[ColorRuleCondition]
+    rules: list[ColorRuleRow]
     color: str
     caption: str
 
@@ -280,14 +280,18 @@ def _next_table(
     hash_rows: dict[HashTarget, ColorRuleRow],
     retired: dict[HashTarget, list[int]],
     anchors: dict[HashTarget, int],
+    in_place: dict[Condition, int],
 ) -> list[int | ColorRuleRow]:
-    """The next table: the kept rows in order (by index); a condition before the
-    first kept row of its type and qualifier, so it precedes them, its old rows
-    of the same condition removed; a target's `hash` row before the old `hash`
+    """The next table: the kept rows in order (by index); a condition in the
+    place of the old row of the same condition named in `in_place`, else before
+    the first kept row of its type and qualifier, so it precedes them, its old
+    rows of the same condition removed; a target's `hash` row before the old `hash`
     row that matched it first (`anchors`) when that row comes before its own old
     `hash` row (a broader pattern would still color it), else in the place of
     its own old `hash` row (`retired`), else last."""
     same_condition = {(row["feat"], row["qual"], row["val"]) for row in conditions}
+    placed_at = {in_place[key]: row for row in conditions
+                 if (key := (row["feat"], row["qual"], row["val"])) in in_place}
     retired_at = {retired[key][0]: key for key in hash_rows
                   if retired.get(key) and anchors.get(key, len(rules)) > retired[key][0]}
     dropped = {position for rows in retired.values() for position in rows}
@@ -295,6 +299,8 @@ def _next_table(
     table: list[int | ColorRuleRow] = []
     for position, rule in enumerate(rules):
         if (rule["feat"], rule["qual"].lower(), rule["val"]) in same_condition:
+            if position in placed_at:
+                table.append(placed_at[position])
             continue
         if position in retired_at:
             table.append(hash_rows[retired_at[position]])
@@ -306,6 +312,8 @@ def _next_table(
         table.insert(at, row)
 
     for row in conditions:
+        if (row["feat"], row["qual"], row["val"]) in in_place:
+            continue
         family = (row["feat"], row["qual"])
         insert_before(row, lambda index: (rules[index]["feat"], rules[index]["qual"].lower()) == family)
     for target, row in hash_rows.items():
@@ -360,7 +368,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
             stable_of.update(((feat, spelling), (feat, stable)) for spelling in _spellings(stable))
     # Each entry of the next table, the row it reads as, and the old row it comes from.
     table: list[int | ColorRuleRow | RetargetedColorRule] = []
-    rows: list[ColorRuleCondition] = []
+    rows: list[ColorRuleRow] = []
     origin: list[int] = []
     for position, rule in enumerate(rules):
         named = (rule["feat"], rule["val"].strip()) if rule["qual"].lower() == "hash" else None
@@ -372,7 +380,8 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
                 raise ValueError("The rule synthesis could not reset the color of the selected features.")
             for instance in sorted({key[1] for key in (hash_of[i] for i in others) if key}):
                 table.append(RetargetedColorRule(row=position, val=exact_value_pattern(instance)))
-                rows.append(ColorRuleCondition(feat=rule["feat"], qual=rule["qual"], val=exact_value_pattern(instance)))
+                rows.append(ColorRuleRow(feat=rule["feat"], qual=rule["qual"], val=exact_value_pattern(instance),
+                                         color=rule["color"], cap=rule["cap"]))
                 origin.append(position)
             continue
         table.append(position)
@@ -438,6 +447,17 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
         for condition in _color_rule_ranks(item, candidate_rules):
             hits[condition].add(index)
     usable = sorted((c for c, found in enumerate(hits) if found and found <= targets), key=lambda c: -len(hits[c]))
+    # A condition that differs from the old row of the same condition at most
+    # in its caption, where that row colored every feature the condition hits,
+    # takes that row's place: the table order, and so the Legend order, stays
+    # (OV-158; Owner 2026-10-29, OV-2189). The first such row is the one that
+    # colors them.
+    first_of: dict[Condition, int] = {}
+    for position, rule in enumerate(rules):
+        first_of.setdefault((rule["feat"], rule["qual"].lower(), rule["val"]), position)
+    in_place = {candidates[c]: first_of[candidates[c]] for c in usable
+                if candidates[c] in first_of and rules[first_of[candidates[c]]]["color"].lower() == color.lower()
+                and all(old_winners[i] == first_of[candidates[c]] for i in hits[c])}
 
     retired: dict[HashTarget, list[int]] = {}
     for position, rule in enumerate(rules):
@@ -469,7 +489,7 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
                            and rules[r]["feat"] == key[0]), None)
             if anchor is not None:
                 anchors.setdefault(key, anchor)
-        table = _next_table(rules, conditions, hash_rows, retired, anchors)
+        table = _next_table(rules, conditions, hash_rows, retired, anchors, in_place)
         winners = _winners(features, [rules[row] if isinstance(row, int) else row for row in table])
         # The old row that colors each feature now; None for a new row, -1 for none.
         sources = [-1 if w < 0 else table[w] if isinstance(table[w], int) else None for w in winners]

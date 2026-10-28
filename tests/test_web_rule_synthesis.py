@@ -59,7 +59,7 @@ def _synthesize(features: list[dict], selected: list[int], rules: list[dict] | N
                 labels: list[list[str]] | None = None, caption: str = "Group", scope: str = "group",
                 color: str = COLOR) -> dict:
     request = dict(scope=scope, features=features, selected=selected, labels=labels or [[] for _ in selected],
-                   rules=[{key: rule[key] for key in ("feat", "qual", "val")} for rule in rules or []],
+                   rules=[{key: rule[key] for key in ("feat", "qual", "val", "color", "cap")} for rule in rules or []],
                    color=color, caption=caption)
     return json.loads(synthesize_color_rules_json(json.dumps(request)))
 
@@ -164,6 +164,56 @@ def test_a_rule_of_the_same_condition_gives_way_to_the_new_one_before_its_family
     # In place, the broader rule before it would still color the feature.
     answer = _synthesize(features, [0], rules=current)
     assert answer["table"] == [{"feat": "CDS", "qual": "product", "val": "^kinase$", "color": COLOR, "cap": "Group"}, 0]
+
+
+def test_a_rule_renamed_whole_keeps_its_place_in_the_table():
+    # OV-2189 (Owner 2026-10-29): a new name for every feature of a rule's row
+    # (the same condition and color, and the rule colored them) takes the
+    # rule's place, so the table and Python's Legend keep their order (OV-158).
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="other")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha"),
+               dict(feat="CDS", qual="product", val="^dup alpha$", color="#2a9d8f", cap="beta")]
+    answer = _synthesize(features, [1], rules=current, color="#2A9D8F", caption="gamma")
+    assert answer["table"] == [0, {"feat": "CDS", "qual": "product", "val": "^dup alpha$", "color": "#2A9D8F",
+                                   "cap": "gamma"}]
+
+
+@pytest.mark.parametrize(("name", "color", "extra"), [
+    # A new color is a color edit, not a rename: the rule goes before its family, as before.
+    ("a new color", "#000000", None),
+    # The rule also colors a feature that is not selected: the condition is
+    # refused and the selected feature takes a hash rule at the end; the other
+    # feature keeps the old rule and its name.
+    ("a rule that also colors an unselected feature", "#2a9d8f", "dup alpha"),
+])
+def test_only_a_rename_of_the_whole_rule_keeps_its_place(name, color, extra):
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product=extra or "other")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha"),
+               dict(feat="CDS", qual="product", val="^dup alpha$", color="#2a9d8f", cap="beta")]
+    answer = _synthesize(features, [1], rules=current, color=color, caption="gamma")
+    if extra is None:
+        assert answer["table"] == [{"feat": "CDS", "qual": "product", "val": "^dup alpha$", "color": color,
+                                     "cap": "gamma"}, 0], name
+    else:
+        table = _next_table(answer, current)
+        assert answer["table"][:2] == [0, 1] and table[2]["qual"] == "hash", name
+        assert [table[w]["cap"] for w in _winners(features, table)] == ["alpha", "gamma", "beta"], name
+
+
+def test_a_rename_by_locus_tag_appends_its_hash_rule_as_before():
+    # A rule on a qualifier no condition reads (locus_tag, not a shown label):
+    # the selected feature takes a hash rule at the end, and the old rule stays
+    # for a feature the edit does not select.
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="x", locus_tag="T_1"), _cds(2, product="x", locus_tag="T_12")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="locus_tag", val="^T_1", color="#2a9d8f", cap="beta"),
+               dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha")]
+    answer = _synthesize(features, [1], rules=current, color="#2a9d8f", caption="gamma")
+    table = _next_table(answer, current)
+    assert answer["table"][:2] == [0, 1] and len(table) == 3 and table[2]["qual"] == "hash"
+    assert [table[w]["cap"] for w in _winners(features, table)] == ["alpha", "gamma", "beta"]
 
 
 @pytest.mark.parametrize("scope", ["features", "group"])

@@ -56,6 +56,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Legend color** on a CDS of the other Result). The same holds on one Result when the rule
   colors only features that Feature visibility hides. Before, the row
   disappeared until the next **Generate Diagram**.
+- A popup Legend name in the Web app on the only feature of a color
+  rule's Legend row keeps the row in its place at **Generate Diagram**, as
+  the live Legend shows it: when the new rule only gives that rule's
+  condition a new name, it takes that rule's place in the color rule table.
+  Before, Generate could draw the row ahead of rows it followed live.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only

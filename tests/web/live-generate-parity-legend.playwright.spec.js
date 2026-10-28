@@ -1974,26 +1974,25 @@ for (const [name, field, value] of [
 }
 
 // OV-2189 (release-tier random walk, seed 20261108): a popup Legend name on
-// the only feature of a rule row renames the row in its place (OV-158), but
-// the rule table Python synthesizes for the edit puts the feature's rule
-// first, so Generate draws the row first. Expected to fail until the Owner
-// settles which order both show.
+// the only feature of a rule row renames the row in its place (OV-158). The
+// rule Python writes for it only re-captions the rule the feature took, so it
+// takes that rule's place in the table, and Generate draws the row there too.
+// The edit is one History step (PD-OI-088).
 test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
   test.setTimeout(240_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
   await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
-  // The preconditions of the mismatch, so the expected failure is this one:
-  // the synthesized table puts the feature's rule first, and the live Legend
-  // keeps the renamed row in its place.
-  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap }) => [val, cap]));
-  expect(rules, 'the rule table of the edit').toEqual([['^dup alpha$', 'gamma'], ['^alpha protein$', 'alpha']]);
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['^alpha protein$', 'alpha', '#e63946'], ['^dup alpha$', 'gamma', '#2a9d8f']], undo: undoCount + 1
+  });
   const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
   expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
-  // Only the comparison is the expected failure: a failed precondition fails
-  // the case, so the pin cannot outlive a fix.
-  test.fail(true, 'OV-2189');
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
 });

@@ -48,6 +48,10 @@ write-up of a release.
   keeps that Result's Legend row of the rule's name and color (for example the CDS row after **Use the "CDS" Legend
   color** on a CDS of the other Result), as Generate draws it; the same holds on one Result when the rule colors only
   features that Feature visibility hides. Before, the row disappeared until the next Generate (OV-2187, #1445).
+- Fixed: in the Web app, a popup Legend name on the only feature of a color rule's Legend row keeps the row in its
+  place at Generate, as the live Legend shows it: when the new rule only gives that rule's condition a new name, it
+  takes that rule's place in the color rule table. Before, it was written ahead of the other rules on the same
+  qualifier, and Generate drew the row ahead of rows it followed live (OV-2189, #1445).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
