@@ -1559,9 +1559,9 @@ export const createAppSetup = () => {
       selector: seq.region_record_id,
       drawn,
       hasInput: Boolean(primaryFile && (inputType !== 'gff' || pairedFile)),
-      status: linearRecordSelector.statusFor(seq),
-      error: linearRecordSelector.errorFor(seq),
-      records: linearRecordSelector.recordsFor(seq)
+      status: linearRecordSelector.statusFor(drawing, seq),
+      error: linearRecordSelector.errorFor(drawing, seq),
+      records: linearRecordSelector.recordsFor(drawing, seq)
     };
   };
   /**
@@ -1794,6 +1794,13 @@ export const createAppSetup = () => {
       });
     }
   });
+  /**
+   * A reader of one card of the shown drawing, for the template.
+   * @template T
+   * @param {(drawing: DrawingState, seq: LinearSeq) => T} read
+   * @returns {(seq: LinearSeq) => T}
+   */
+  const readingShownLinearCard = (read) => (seq) => read(state.activeDrawing(), seq);
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -2285,18 +2292,19 @@ export const createAppSetup = () => {
   /**
    * The record a Linear entry draws, once its records are read: the one its
    * selector names, or the only record of its file.
+   * @param {DrawingState} drawing the drawing that holds the card
    * @param {LinearSeq} seq
    */
-  const linearSeqRecord = (seq) => {
-    const records = linearRecordSelector.recordsFor(seq);
+  const linearSeqRecord = (drawing, seq) => {
+    const records = linearRecordSelector.recordsFor(drawing, seq);
     const selection = resolveDisambiguatedRecordSelection(records, seq.region_record_id);
     return selection.record || (selection.status === 'unspecified' && records.length === 1 ? records[0] : null);
   };
   // The note beside a Linear entry's Region fields (`regionClampNote`). The
   // request draws the larger coordinate as the region's end (reverse when typed first).
-  /** @param {LinearSeq} seq */
+  /** @param {LinearSeq} seq a card of the shown drawing */
   const linearRegionNote = (seq) => {
-    const region = linearCardRegion(seq, 1, linearSeqRecord(seq)?.recordLength);
+    const region = linearCardRegion(seq, 1, linearSeqRecord(state.activeDrawing(), seq)?.recordLength);
     return region && !('error' in region) ? regionClampNote(region.drawn) : '';
   };
   const circularRegionNote = computed(() => {
@@ -2313,7 +2321,7 @@ export const createAppSetup = () => {
       if (!drawing) return [];
       const lengths = drawing.drawnLinearSeqs.value.map((seq) => {
         if (String(seq.region_start ?? '').trim() || String(seq.region_end ?? '').trim()) return NaN;
-        return Number(linearSeqRecord(seq)?.recordLength);
+        return Number(linearSeqRecord(drawing, seq)?.recordLength);
       });
       return lengths.length && lengths.every((length) => length > 0) ? lengths : [];
     }
@@ -2457,8 +2465,8 @@ export const createAppSetup = () => {
   // The problems a File card marks, for the open card and its folded line:
   // a file whose inspection failed, and a record that TLOSATX cannot search
   // without a translation table.
-  /** @param {LinearSourceGroup} source */
-  const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(source.sequence));
+  /** @param {LinearSourceGroup} source a File card of the shown drawing */
+  const linearSourceInspectionFailed = (source) => Boolean(linearRecordSelector.errorFor(state.activeDrawing(), source.sequence));
   /** @param {LinearSeq} seq */
   const linearRecordGencodeRequired = (seq) => {
     const drawing = shownDrawingOfMode('linear');
@@ -3504,13 +3512,13 @@ export const createAppSetup = () => {
     // deferred after a Load); the Circular list is the one Generate awaited.
     readRecordIdentitySources: async (drawing) => {
       if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
-      if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(seq) === 'deferred')) {
+      if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(drawing, seq) === 'deferred')) {
         const outcome = linearRecordSelector.refresh(drawing);
         if (outcome instanceof Promise) await outcome;
       }
       return {
         mode: drawing.mode,
-        linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))]))
+        linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(drawing, seq))]))
       };
     },
     recordDisplayRows: recordDisplayControls.allRows,
@@ -3582,7 +3590,7 @@ export const createAppSetup = () => {
     // UJ-08: a discovery that reads every Linear card ends a Generate failure
     // about those inputs, as the Circular discovery does.
     return Promise.resolve(linearRecordSelector.refresh(drawing)).then((outcome) => {
-      if (drawing.linearSeqs.every((seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(seq)))) {
+      if (drawing.linearSeqs.every((seq) => ['ready', 'error'].includes(linearRecordSelector.statusFor(drawing, seq)))) {
         releaseSourceInputFailure(drawing);
       }
       return outcome;
@@ -4965,7 +4973,7 @@ export const createAppSetup = () => {
       : {
           catalog: null,
           // A stored '' (no error) has no `code`: the read is undefined, as for null.
-          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => /** @type {UserFacingError} */ (error)?.code)
+          error: drawing.drawnLinearSeqs.value.map(seq => linearRecordSelector.errorModelFor(drawing, seq)).find(error => /** @type {UserFacingError} */ (error)?.code)
             || catalogIssueError(catalog)
         };
   }
@@ -6805,9 +6813,9 @@ export const createAppSetup = () => {
 
   // Record selection (D-01..D-10): the record sources and edits its owner
   // reads, and the transitions it asks the root for.
-  /** @param {LinearSeq} seq The discovered record a Linear card draws. */
-  const linearCardRecord = (seq) => {
-    const selection = resolveDisambiguatedRecordSelection(linearRecordSelector.recordsFor(seq), seq.region_record_id);
+  /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq The discovered record a Linear card draws. */
+  const linearCardRecord = (drawing, seq) => {
+    const selection = resolveDisambiguatedRecordSelection(linearRecordSelector.recordsFor(drawing, seq), seq.region_record_id);
     return selection.record || (selection.entries.length === 1 ? selection.entries[0] : null);
   };
   /** @param {DrawingState} drawing the drawing that holds the card @param {LinearSeq} seq @returns {RecordSettingsOwner} */
@@ -6882,7 +6890,7 @@ export const createAppSetup = () => {
       key: group.uid,
       name: linearSourceFileName(group),
       records: cards.map((seq) => {
-        const record = linearCardRecord(seq);
+        const record = linearCardRecord(drawing, seq);
         return {
           key: seq.uid, recordId: String(record?.recordId || seq.region_record_id || ''),
           length: record?.recordLength ?? null, hasSettings: edited.has(seq.uid) || linearCardHasSettings(seq)
@@ -7019,8 +7027,8 @@ export const createAppSetup = () => {
     // The inferred definition follows the record the row now selects (D-12);
     // the row is a card of the shown Linear drawing.
     const drawing = shownDrawingOfMode('linear');
-    if (drawing !== null && drawing.inputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
-      sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(sequence), next);
+    if (drawing !== null && drawing.inputType.value === 'gb' && linearRecordSelector.statusFor(drawing, sequence) === 'ready') {
+      sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(drawing, sequence), next);
     }
     rebindAnnotationRecords();
     return true;
@@ -7414,12 +7422,14 @@ export const createAppSetup = () => {
     resolveLinearRecordEffectiveSubtitle,
     resetLinearRecordDefinition,
     resetLinearRecordSubtitle,
-    linearRecordOptions: linearRecordSelector.optionsFor,
+    // The template lists the shown drawing's cards; its selector readers read
+    // that drawing (OV-2149: a card's uid names it only inside its drawing).
+    linearRecordOptions: readingShownLinearCard(linearRecordSelector.optionsFor),
     // The Inspect records button and the test API read the shown drawing's cards.
     refreshLinearRecordSelectors: () => linearRecordSelector.refresh(state.activeDrawing()),
-    linearRecordSelectorDisabled: linearRecordSelector.isDisabled,
-    linearRecordSelectorError: linearRecordSelector.errorFor,
-    linearRecordSelectorWarning: linearRecordSelector.warningFor,
+    linearRecordSelectorDisabled: readingShownLinearCard(linearRecordSelector.isDisabled),
+    linearRecordSelectorError: readingShownLinearCard(linearRecordSelector.errorFor),
+    linearRecordSelectorWarning: readingShownLinearCard(linearRecordSelector.warningFor),
     form: drawingMember('form'),
     adv: drawingMember('adv'),
     linearTypographyLinked: drawingMember('linearTypographyLinked'),

@@ -44,6 +44,8 @@ export const RECORD_READ_ERROR_LABEL = msg('Records could not be loaded');
  */
 
 /** @typedef {Partial<LinearSeq> | null | undefined} LinearSeqLike A row, or a partial one. */
+/** @typedef {Pick<DrawingState, 'id' | 'inputType'>} LinearCardDrawing The drawing that holds a card: its identity keys the card's state, its input type says which files the card's records come from. */
+/** @typedef {Record<string, RecordSelectorState>} RowSelectorStates One drawing's selector states, by row uid. */
 /** @typedef {{ suppress?: boolean }} RefreshOptions */
 /** @typedef {Pick<DrawingState, 'id' | 'mode' | 'linearSeqs' | 'inputType'>} LinearDiscoveryDrawing The drawing a discovery runs for, over its record rows and input type. */
 /** @typedef {SessionBusy | true | undefined} RefreshOutcome What a refresh settles to: a busy outcome, true when it expanded the rows and restarts, or nothing. */
@@ -111,8 +113,8 @@ const sanitizePathSegment = (value) =>
  * the whole state. The two suppression flags and `sessionOperationAvailability`
  * are absent in a test state.
  * @typedef {object} LinearRecordSelectorState
- * @property {() => readonly Pick<DrawingState, 'linearSeqs' | 'inputType'>[]} drawingList every drawing, whose rows
- *   keep their selector state, each read with its drawing's input type
+ * @property {() => readonly Pick<DrawingState, 'id' | 'linearSeqs'>[]} drawingList every drawing; a drawing's
+ *   rows keep their selector state while the drawing holds them
  * @property {{ value: boolean }} [semanticFileWatchersSuppressed]
  * @property {{ value: boolean }} [sessionImportRollbackInProgress]
  * @property {() => SessionBusy | null} [sessionOperationAvailability]
@@ -121,7 +123,7 @@ const sanitizePathSegment = (value) =>
 /**
  * @typedef {Object} LinearRecordSelectorOptions
  * @property {LinearRecordSelectorState} state
- * @property {(initial: Record<string, RecordSelectorState>) => Record<string, RecordSelectorState>} reactive
+ * @property {(initial: Map<DrawingId, RowSelectorStates>) => Map<DrawingId, RowSelectorStates>} reactive
  * @property {(request: LinearRecordReadRequest) => Promise<SequenceRecord[]>} recordReader
  * @property {((discovered: { drawingId: DrawingId, uid: string, records: SequenceRecord[] }) => boolean | void) | null} [onRecordsDiscovered]
  *   The records of one card, for the drawing the discovery ran for. Returns
@@ -137,7 +139,9 @@ export const createLinearRecordSelector = ({
   onRecordsDiscovered = null,
   logger = console
 }) => {
-  const selectorStateByUid = reactive({});
+  // OV-2149: each drawing's states, by drawing ID then row uid. A Duplicate
+  // keeps its source's row uids, so a uid names a card only inside its drawing.
+  const selectorStateByDrawing = reactive(new Map());
   // Each drawing's discovery: its read generation and the refresh still running.
   /** @type {Map<DrawingId, number>} */
   const refreshGenerations = new Map();
@@ -162,16 +166,15 @@ export const createLinearRecordSelector = ({
   );
 
   /**
+   * @param {LinearCardDrawing} drawing the drawing that holds the card
    * @param {LinearSeqLike} seq
    * @returns {RecordSelectorState}
    */
-  const stateFor = (seq) => {
+  const stateFor = (drawing, seq) => {
     const uid = uidFor(seq);
-    // The row's drawing, found by the row's uid: its input type says which
-    // files the row's records come from. A row no drawing holds has none.
-    const drawing = uid ? state.drawingList().find((candidate) => candidate.linearSeqs.some((row) => uidFor(row) === uid)) : undefined;
-    if (!drawing) return emptySelectorState();
-    const stored = selectorStateByUid[uid] || emptySelectorState();
+    if (!uid) return emptySelectorState();
+    // A drawing no refresh has written yet has no entry.
+    const stored = selectorStateByDrawing.get(drawing.id)?.[uid] || emptySelectorState();
     const inputType = drawing.inputType.value;
     const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
     if (
@@ -179,9 +182,14 @@ export const createLinearRecordSelector = ({
       stored.primaryFile !== primaryFile ||
       stored.pairedFile !== pairedFile
     ) {
+      const readable = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
+      // A card this drawing has not read yet (a Duplicate's) shows the settled
+      // read of the same files, as its refresh would reuse it.
+      const settled = readable ? settledStateFor(inputType, primaryFile, pairedFile) : null;
+      if (settled) return settled;
       return {
         ...emptySelectorState(),
-        status: primaryFile && (inputType !== 'gff' || pairedFile) ? 'deferred' : 'idle',
+        status: readable ? 'deferred' : 'idle',
         inputType,
         primaryFile,
         pairedFile
@@ -191,11 +199,15 @@ export const createLinearRecordSelector = ({
   };
 
   /**
+   * @param {DrawingId} drawingId
    * @param {string} uid
    * @param {RecordSelectorStateInput} nextState
    */
-  const replaceState = (uid, nextState) => {
-    selectorStateByUid[uid] = {
+  const replaceState = (drawingId, uid, nextState) => {
+    if (!selectorStateByDrawing.has(drawingId)) selectorStateByDrawing.set(drawingId, {});
+    // Set above; read back through the (reactive) map so the write is tracked.
+    const rows = /** @type {RowSelectorStates} */ (selectorStateByDrawing.get(drawingId));
+    rows[uid] = {
       status: nextState.status,
       records: Array.isArray(nextState.records) ? nextState.records : [],
       error: nextState.error || '',
@@ -205,23 +217,33 @@ export const createLinearRecordSelector = ({
     };
   };
 
-  // The settled read of these exact source files on any row: its records, or
-  // an error the reader reported for those bytes. A refresh reuses it.
+  // The settled read of these exact source files on any row of any drawing:
+  // its records, or an error the reader reported for those bytes. A refresh reuses it.
   /**
    * @param {string} inputType
    * @param {InputFileRef | null} primaryFile
    * @param {InputFileRef | null} pairedFile
    */
-  const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
+  const settledStateFor = (inputType, primaryFile, pairedFile) => [...selectorStateByDrawing.values()]
+    .flatMap((rows) => Object.values(rows))
     .find((stored) => (
       stored.inputType === inputType && stored.primaryFile === primaryFile && stored.pairedFile === pairedFile
       && (stored.status === 'ready' || (stored.status === 'error' && discoveryErrorIsFinal(stored.error)))
     )) || null;
 
+  // A deleted drawing's states go, and each drawing's states of rows it no longer holds.
   const purgeInactiveState = () => {
-    const activeUids = new Set(state.drawingList().flatMap((drawing) => drawing.linearSeqs).map(uidFor).filter(Boolean));
-    Object.keys(selectorStateByUid).forEach((uid) => {
-      if (!activeUids.has(uid)) delete selectorStateByUid[uid];
+    const drawings = new Map(state.drawingList().map((drawing) => [drawing.id, drawing]));
+    [...selectorStateByDrawing.entries()].forEach(([drawingId, rows]) => {
+      const drawing = drawings.get(drawingId);
+      if (!drawing) {
+        selectorStateByDrawing.delete(drawingId);
+        return;
+      }
+      const activeUids = new Set(drawing.linearSeqs.map(uidFor));
+      Object.keys(rows).forEach((uid) => {
+        if (!activeUids.has(uid)) delete rows[uid];
+      });
     });
   };
 
@@ -279,11 +301,11 @@ export const createLinearRecordSelector = ({
       if (!uid) continue;
       const { primaryFile, pairedFile } = sourceFilesFor(seq, inputType);
       if (!primaryFile || (inputType === 'gff' && !pairedFile)) {
-        replaceState(uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
+        replaceState(drawing.id, uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
         continue;
       }
       if (!settledStateFor(inputType, primaryFile, pairedFile)) {
-        replaceState(uid, {
+        replaceState(drawing.id, uid, {
           status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
         });
       }
@@ -292,7 +314,7 @@ export const createLinearRecordSelector = ({
     for (const { uid, primaryFile, pairedFile } of targets) {
       const settled = settledStateFor(inputType, primaryFile, pairedFile);
       if (settled?.status === 'error') {
-        replaceState(uid, settled);
+        replaceState(drawing.id, uid, settled);
         continue;
       }
       try {
@@ -305,10 +327,10 @@ export const createLinearRecordSelector = ({
         if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
-          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          replaceState(drawing.id, uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
           return busy;
         }
-        replaceState(uid, {
+        replaceState(drawing.id, uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
         if (onRecordsDiscovered?.({ drawingId: drawing.id, uid, records }) === true) return true;
@@ -316,11 +338,11 @@ export const createLinearRecordSelector = ({
         if (!isCurrentRequest(drawing, { generation, uid, primaryFile, pairedFile, inputType })) return;
         const busy = state.sessionOperationAvailability?.();
         if (busy) {
-          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          replaceState(drawing.id, uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
           return busy;
         }
         logger.warn?.('Input record discovery failed.', normalizeUserFacingError(error));
-        replaceState(uid, {
+        replaceState(drawing.id, uid, {
           status: 'error',
           records: [],
           error: normalizeUserFacingError(error, { operation: inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', stage: 'helper' }),
@@ -362,11 +384,12 @@ export const createLinearRecordSelector = ({
   };
 
   /**
+   * @param {LinearCardDrawing} drawing the drawing that holds the card
    * @param {LinearSeqLike} seq
    * @returns {RecordOption[]}
    */
-  const optionsFor = (seq) => {
-    const selectorState = stateFor(seq);
+  const optionsFor = (drawing, seq) => {
+    const selectorState = stateFor(drawing, seq);
     const currentValue = currentSelectorValue(seq);
     if (selectorState.status === 'ready') {
       return buildRecordOptions(selectorState.records, currentValue);
@@ -386,23 +409,24 @@ export const createLinearRecordSelector = ({
     }];
   };
 
-  /** @param {LinearSeqLike} seq */
-  const isDisabled = (seq) => stateFor(seq).status !== 'ready';
-  /** @param {LinearSeqLike} seq */
-  const statusFor = (seq) => stateFor(seq).status;
-  /** @param {LinearSeqLike} seq */
-  const recordsFor = (seq) => stateFor(seq).records.slice();
-  /** @param {LinearSeqLike} seq */
-  const errorModelFor = (seq) => stateFor(seq).error;
-  /** @param {LinearSeqLike} seq */
+  // Every reader takes the drawing that holds the card (OV-2149).
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
+  const isDisabled = (drawing, seq) => stateFor(drawing, seq).status !== 'ready';
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
+  const statusFor = (drawing, seq) => stateFor(drawing, seq).status;
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
+  const recordsFor = (drawing, seq) => stateFor(drawing, seq).records.slice();
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
+  const errorModelFor = (drawing, seq) => stateFor(drawing, seq).error;
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
   // A stored '' (no error) is no model: it is returned as is.
-  const errorFor = (seq) => {
-    const error = errorModelFor(seq);
+  const errorFor = (drawing, seq) => {
+    const error = errorModelFor(drawing, seq);
     return error && typeof error === 'object' ? errorText(error.summaryParts) : error;
   };
-  /** @param {LinearSeqLike} seq */
-  const warningFor = (seq) => {
-    const selectorState = stateFor(seq);
+  /** @param {LinearCardDrawing} drawing @param {LinearSeqLike} seq */
+  const warningFor = (drawing, seq) => {
+    const selectorState = stateFor(drawing, seq);
     const currentValue = currentSelectorValue(seq);
     if (selectorState.status !== 'ready' || !currentValue) return '';
     const available = buildRecordOptions(selectorState.records).some((option) => option.value === currentValue);
@@ -410,7 +434,7 @@ export const createLinearRecordSelector = ({
   };
 
   return {
-    selectorStateByUid,
+    selectorStateByDrawing,
     refresh,
     purgeInactiveState,
     optionsFor,

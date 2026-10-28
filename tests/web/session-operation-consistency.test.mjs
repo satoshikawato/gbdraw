@@ -283,10 +283,10 @@ test('late source discovery cannot expand the live source set during Session', a
   read.release([{ selector: '#1', recordId: 'first', recordLength: 100 }]);
   assert.deepEqual(await pending, saving);
   assert.equal(expanded, 0);
-  assert.equal(selector.statusFor(source), 'deferred');
+  assert.equal(selector.statusFor(linear, source), 'deferred');
   state.sessionSavePending.value = false;
   await selector.refresh(linear);
-  assert.equal(selector.statusFor(source), 'ready');
+  assert.equal(selector.statusFor(linear, source), 'ready');
   assert.equal(expanded, 1);
 });
 
