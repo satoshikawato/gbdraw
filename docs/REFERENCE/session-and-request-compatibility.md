@@ -545,7 +545,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, and 46–49. Python refuses unknown or malformed
+Schema 2 is accepted with sessions 41–42, 44, and 46–50. Python refuses unknown or malformed
 bindings; the Web app drops each one and lists it in the **Load this file?** dialog
 before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
@@ -724,7 +724,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–49;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–50;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
 loads them from their saved settings. A Linear replay that combines `--region`,
 `--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it

@@ -218,8 +218,8 @@ def test_source_facts_name_a_session_48_without_a_web_draft() -> None:
     assert facts == {"cardRowsAreFileRows": True, "proteinResultsInDrawnFrame": False}
 
 
-@pytest.mark.parametrize("version", [44, 49])
-def test_only_sessions_46_to_48_move_to_drawings(version: int) -> None:
+@pytest.mark.parametrize("version", [44, 50])
+def test_only_sessions_46_to_49_move_to_drawings(version: int) -> None:
     data = _settings_only_v48()
     data["version"] = version
     with pytest.raises(ValidationError, match="moves to drawings"):

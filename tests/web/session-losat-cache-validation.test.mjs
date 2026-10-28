@@ -1408,7 +1408,7 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     // OV-1253: the refusal names the version and the versions this gbdraw reads.
     assert.deepEqual(result.error.context, {
       field: 'schema', reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: unsupportedVersion,
-      readSessionVersions: '27–33, 39–42, 44, and 46–49'
+      readSessionVersions: '27–33, 39–42, 44, and 46–50'
     });
     assert.match(result.error.summary, new RegExp(`Unsupported session version: ${unsupportedVersion}\\.`));
     assert.deepEqual(state.errorLog.value, result.error);

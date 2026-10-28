@@ -441,8 +441,8 @@ def test_each_drawing_gives_its_own_mode_slice(tmp_path: Path) -> None:
     data = document.to_dict()
     assert drawing_view(data, "circular")["modes"] == {"circular": circular_slice}
     assert drawing_view(data, "linear")["modes"] == {"linear": linear_slice}
-    # A Session 46-48 moves to drawings before it is saved again.
-    with pytest.raises(ValidationError, match="Only a Session 49"):
+    # A Session 46-49 moves to drawings before it is saved again.
+    with pytest.raises(ValidationError, match="Only a Session 50"):
         replace_session_drawings(
             {**data, "version": MODE_SCOPED_SESSION_MAX_VERSION},
             {"circular": drawing_view(data, "circular")},

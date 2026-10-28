@@ -91,10 +91,10 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50}
     )
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})
-    assert "27–33, 39–42, 44, and 46–49" in source
+    assert "27–33, 39–42, 44, and 46–50" in source
     assert "1, 2, 5, 6, 7, 8, and 9" in source
 
 
@@ -104,7 +104,7 @@ def test_reference_pages_name_the_current_session_version() -> None:
     current = CURRENT_SESSION_VERSION
     mode_scoped = MODE_SCOPED_SESSION_MAX_VERSION
     statements = {
-        "command-line.md": f"Session {mode_scoped} holds at most",
+        "command-line.md": f"Sessions 46 to {mode_scoped} hold at most",
         "typed-requests.md": f"The current Session version, {current}, holds",
         "web-app.md": f"(Session {current}, [compatibility]",
     }
