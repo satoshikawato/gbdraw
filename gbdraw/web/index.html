@@ -2498,11 +2498,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="inputType === 'gb'">
-                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GenBank/DDBJ File')" :model-value="files.c_gb" @update:model-value="uploadCircularSourceFile('c_gb', $event)" file-kind="genbank" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="setCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
-                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="setCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('GFF3 File')" :model-value="files.c_gff" @update:model-value="uploadCircularSourceFile('c_gff', $event)" file-kind="gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader :label="t('FASTA File')" :model-value="files.c_fasta" @update:model-value="uploadCircularSourceFile('c_fasta', $event)" file-kind="fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section :aria-label="t('Source records')" class="space-y-2">
                             <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -2621,7 +2621,7 @@
                                     small
                                     accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                     :model-value="getCircularDepthFile(0)"
-                                    @update:model-value="setCircularDepthFile(0, $event)" file-kind="depth"
+                                    @update:model-value="uploadCircularDepthFile(0, $event)" file-kind="depth"
                                 ></file-uploader>
                             </div>
                             <div v-else class="space-y-2 pt-1">
@@ -2750,7 +2750,7 @@
                                         small
                                         accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                         :model-value="getCircularDepthFile(track.index)"
-                                        @update:model-value="setCircularDepthFile(track.index, $event)" file-kind="depth"
+                                        @update:model-value="uploadCircularDepthFile(track.index, $event)" file-kind="depth"
                                     ></file-uploader>
                                 </div>
                                 <button type="button" @click="addCircularDepthTrack" class="btn btn-secondary text-xs w-full" :disabled="!semanticMutationAvailable">
@@ -2847,7 +2847,7 @@
                                     :model-value="source.sequence.gb"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)" file-kind="genbank"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'gb', $event)" file-kind="genbank"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
@@ -2858,7 +2858,7 @@
                                     :model-value="source.sequence.gff"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)" file-kind="gff"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'gff', $event)" file-kind="gff"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                                 <file-uploader
@@ -2867,7 +2867,7 @@
                                     :model-value="source.sequence.fasta"
                                     :inspection-failed="linearSourceInspectionFailed(source)"
                                     :request-clear="true"
-                                    @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)" file-kind="fasta"
+                                    @update:model-value="uploadLinearSeqPrimaryFile(source.index, 'fasta', $event)" file-kind="fasta"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
                                 ></file-uploader>
                             </div>
@@ -2938,7 +2938,7 @@
                                             small
                                             accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                             :model-value="track.status.file"
-                                            @update:model-value="setLinearSourceDepthFile(source, track.index, $event)" file-kind="depth"
+                                            @update:model-value="uploadLinearSourceDepthFile(source, track.index, $event)" file-kind="depth"
                                             :data-input-aria-label="sourceIndex === 0 && track.index === 0
                                                 ? 'Depth TSV'
                                                 : `Depth TSV for file ${sourceIndex + 1}, series ${track.index + 1}`"
@@ -3049,7 +3049,7 @@
                                                 small
                                                 accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="getLinearDepthFile(seq, track.index)"
-                                                @update:model-value="setLinearDepthFile(seq, track.index, $event)" file-kind="depth"
+                                                @update:model-value="uploadLinearDepthFile(seq, track.index, $event)" file-kind="depth"
                                                 :data-input-aria-label="`Depth TSV for sequence ${idx + 1}, series ${track.index + 1}`"
                                             ></file-uploader>
                                         </div>
@@ -3585,7 +3585,7 @@
                                                 small
                                                 accept=".tsv,.tab,.txt,.out,.blast,text/tab-separated-values,text/plain,text/*"
                                                 :model-value="pair.draft?.fileActive ? pair.draft.file : null"
-                                                @update:model-value="setLinearComparisonCardFile(pair.edgeKey, $event)" file-kind="comparison"
+                                                @update:model-value="uploadLinearComparisonCardFile(pair.edgeKey, $event)" file-kind="comparison"
                                             ></file-uploader>
                                             <p v-if="linearComparisonGlobalAction === 'upload'" class="text-[9px] leading-snug text-slate-500">{{ t('Choosing a file here switches the plan to Selected pairs; pairs without a file are then not compared.') }}</p>
                                             <button

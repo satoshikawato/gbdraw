@@ -276,6 +276,8 @@ export const createDrawingList = ({
  * @property {RunReplacementStep} runProjectStep A project step: one Undo from any drawing (R11).
  * @property {RunReplacementStep} runDrawingStep A step of the shown drawing.
  * @property {ApplyInputReplacementToDrawings} applyInputReplacementToDrawings
+ * @property {(previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null>} askScope
+ *   Asks "This drawing only" / "Every drawing that uses this file"; null is Cancel.
  */
 
 /**
@@ -287,7 +289,7 @@ export const createDrawingList = ({
  * @param {InputReplacementPorts} ports
  */
 export const createInputReplacement = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope
 }) => {
   /**
    * @param {string} fileId the bound file being replaced
@@ -317,7 +319,24 @@ export const createInputReplacement = ({
     const drawings = drawingTabs().filter((tab) => tab.id !== shown).map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
     return [...new Set(projectInputReplacement(drawings, fileId).map((site) => site.drawingId))];
   };
-  return { replaceInputFile, otherDrawingsUsing };
+  /**
+   * An uploader of the shown drawing writes a new file in place of `previous`
+   * (PD-OI-090 〔入力ファイル〕). When another drawing uses `previous`, the
+   * scope is asked: Cancel records nothing, else `replaceInputFile`. Else,
+   * and for a Remove (`file` null, not a replacement), the uploader's own
+   * write `writeShown`, a step of the shown drawing. The only place that asks.
+   * @template T
+   * @param {InputFileRef | null} previous the file the uploader binds now
+   * @param {InputFileCandidate | InputFileRef | null} file
+   * @param {() => T} writeShown
+   * @returns {T | Promise<DrawingListOutcome | null>}
+   */
+  const replaceFromShownDrawing = (previous, file, writeShown) => {
+    const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
+    if (!previous || !file || !others.length) return writeShown();
+    return askScope(previous, others).then((scope) => (scope ? replaceInputFile(previous.fileId, file, scope) : null));
+  };
+  return { replaceInputFile, otherDrawingsUsing, replaceFromShownDrawing };
 };
 
 /**

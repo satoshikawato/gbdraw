@@ -162,7 +162,7 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert ':data-linear-comparison-pair-upload="pair.edgeKey"' in index
     assert '@change="setLinearComparisonGapAction(pair.edgeKey, ' in index
     assert (
-        '@update:model-value="setLinearComparisonCardFile(pair.edgeKey, '
+        '@update:model-value="uploadLinearComparisonCardFile(pair.edgeKey, '
         '$event)"' in index
     )
     assert (

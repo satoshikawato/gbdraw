@@ -6918,7 +6918,51 @@ export const createAppSetup = () => {
     runDrawingStep: history.runUndoable,
     applyInputReplacementToDrawings: (sites, fileId, file) => sites.forEach((site) => {
       INPUT_REPLACEMENT_WRITERS[site.slot](state.drawingOf(site.drawingId), site, fileId, file);
-    })
+    }),
+    askScope: async (previous, otherDrawingIds) => {
+      const choice = await askChoice({
+        title: t('Replace input file?'),
+        description: t('{name} is also used in other drawings ({count}).', {
+          name: previous.name, count: otherDrawingIds.length
+        }),
+        actions: [
+          { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },
+          { id: 'all', label: t('Every drawing that uses this file'), tone: 'primary' }
+        ]
+      });
+      return choice === 'drawing' || choice === 'all' ? choice : null;
+    }
+  });
+  // The uploaders of the shown drawing's bound input files: each names the
+  // file its control binds and its own write; `replaceFromShownDrawing`
+  // decides whether to ask (PD-OI-090 〔入力ファイル〕). The five cards and
+  // the similarity-ring file list are not replacements of one bound file.
+  const { replaceFromShownDrawing } = inputReplacement;
+  /** @param {'c_gb' | 'c_gff' | 'c_fasta'} field @param {File | null} file */
+  const uploadCircularSourceFile = (field, file) => shownAction('circular', (drawing) => (
+    replaceFromShownDrawing(drawing.files[field], file, () => replaceCircularSource(drawing, field, file))
+  ));
+  /** @param {number} index @param {File | null} file */
+  const uploadCircularDepthFile = (index, file) => shownAction('circular', (drawing) => (
+    replaceFromShownDrawing(circularDepthRepresentatives(drawing)[Number(index)] || null, file, () => replaceCircularDepthFile(drawing, index, file))
+  ));
+  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {File | null} file */
+  const uploadLinearSeqPrimaryFile = (index, field, file) => shownAction('linear', (drawing) => {
+    const seq = drawing.linearSeqs[Number(index)];
+    return seq ? replaceFromShownDrawing(seq[field], file, () => replaceLinearSourceFile(drawing, seq.uid, field, file)) : undefined;
+  });
+  /** @param {LinearSeq} seq @param {number} index @param {File | null} file */
+  const uploadLinearDepthFile = (seq, index, file) => shownAction('linear', (drawing) => (
+    replaceFromShownDrawing(getLinearDepthFile(seq, index), file, () => setLinearDepthFiles(drawing, [seq], index, file))
+  ));
+  /** @param {LinearSourceGroup} source @param {number} index @param {File | null} file */
+  const uploadLinearSourceDepthFile = (source, index, file) => shownAction('linear', () => (
+    replaceFromShownDrawing(getLinearDepthFile(source.sequence, index), file, () => setLinearSourceDepthFile(source, index, file))
+  ));
+  /** @param {string} edgeKey @param {File | null} file */
+  const uploadLinearComparisonCardFile = (edgeKey, file) => shownAction('linear', () => {
+    const pair = linearComparisonPairForEdgeKey(edgeKey);
+    return replaceFromShownDrawing(pair && pair.draft ? pair.draft.file : null, file, () => setLinearComparisonCardFile(edgeKey, file));
   });
 
   // Record selection (D-01..D-10): the record sources and edits its owner
@@ -7786,6 +7830,12 @@ export const createAppSetup = () => {
     changeCircularMultiRecordCanvas,
     setCircularSourceFile,
     replaceInputFile: inputReplacement.replaceInputFile,
+    uploadCircularSourceFile,
+    uploadCircularDepthFile,
+    uploadLinearSeqPrimaryFile,
+    uploadLinearDepthFile,
+    uploadLinearSourceDepthFile,
+    uploadLinearComparisonCardFile,
     recordSelection,
     circularDrawnRecordCount,
     formatRecordLength,

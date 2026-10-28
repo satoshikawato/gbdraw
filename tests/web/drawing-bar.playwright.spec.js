@@ -318,6 +318,46 @@ test('Duplicate in the tab menu shows a named copy as one step that Undo takes b
   expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(first);
 });
 
+// PD-OI-090 〔入力ファイル〕〔Undo と削除〕, R17-3: replacing a file that another
+// drawing also uses asks. "Every drawing that uses this file" is one project
+// step that one Undo from the other drawing takes back; "This drawing only"
+// leaves the other drawing's file.
+test('replacing a genome file that a Duplicate also uses asks for this drawing only or every drawing', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [source] = await drawingIds(page);
+  const uploader = page.getByLabel('GenBank/DDBJ File', { exact: true });
+  const fileName = (id) => page.evaluate(async (drawingId) => {
+    const ref = (await import('./js/state.js')).state.drawingOf(drawingId).files.c_gb;
+    return ref ? ref.name : null;
+  }, id);
+  await uploader.setInputFiles('tests/test_inputs/NC_001416.gb');
+  await expect.poll(() => fileName(source)).toBe('NC_001416.gb');
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Duplicate drawing', exact: true }).click();
+  const copy = (await drawingIds(page))[1];
+  expect((await shownDrawing(page)).id).toBe(copy);
+  expect(await fileName(copy)).toBe('NC_001416.gb');
+
+  const dialog = page.getByRole('dialog', { name: 'Replace input file?' });
+  await uploader.setInputFiles('tests/test_inputs/NC_005856.1.gb');
+  await dialog.getByRole('button', { name: 'Every drawing that uses this file', exact: true }).click();
+  await expect.poll(() => fileName(copy)).toBe('NC_005856.1.gb');
+  expect(await fileName(source), 'both drawings bind the new file').toBe('NC_005856.1.gb');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Replace input file');
+  await showDrawing(page, { name: await tabName(page, source) });
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(() => fileName(source)).toBe('NC_001416.gb');
+  expect(await fileName(copy), 'one Undo from the other drawing restores both').toBe('NC_001416.gb');
+
+  await uploader.setInputFiles('tests/test_inputs/NC_005856.1.gb');
+  await dialog.getByRole('button', { name: 'This drawing only', exact: true }).click();
+  await expect.poll(() => fileName(source)).toBe('NC_005856.1.gb');
+  expect(await fileName(copy), 'This drawing only leaves the other drawing').toBe('NC_001416.gb');
+});
+
 // PD-OI-090 〔入力ファイル〕, T-B4-6: another drawing chooses a file this Session
 // already holds without an upload. The Linear drawing's GenBank uploader offers
 // the Circular drawing's file; choosing it binds the same file ID as one step.

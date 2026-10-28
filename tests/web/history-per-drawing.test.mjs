@@ -879,3 +879,53 @@ test('replacing a multi-record file for every drawing expands it into records in
   assert.deepEqual(recordsOf(linear, replaced), ['REC_A', 'REC_B'], 'the shown drawing expands the new file into its records');
   assert.deepEqual(recordsOf(copy, replaced), ['REC_A', 'REC_B'], 'so does its Duplicate');
 });
+
+// PD-OI-090 〔入力ファイル〕: an uploader that replaces a file another drawing
+// also uses asks "This drawing only" / "Every drawing that uses this file";
+// Cancel records nothing; a Remove is not a replacement and never asks.
+test('an uploader asks whether to replace a file another drawing uses for this drawing only or for every drawing', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const genbank = (name) => new File([`LOCUS       ${name} 40 bp DNA\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`], name);
+  const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  app.selectDrawing('circular');
+  // Earlier cases leave a file that other drawings use; a Remove never asks.
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', null); });
+  assert.equal(app.choicePrompt.show, false, 'a Remove never asks');
+  const shared = state.inputFiles.registerFile(genbank('asked-shared.gb'));
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', shared); });
+  assert.equal(app.choicePrompt.show, false, 'no other drawing uses the file: no question');
+  const { drawingId: copyId } = app.drawingList.duplicateDrawing('circular');
+  app.selectDrawing(copyId);
+  const copy = state.drawingOf(copyId);
+  const circular = state.drawingOf('circular');
+  const before = history.undoLabel();
+  const ask = async (name, answer) => {
+    const pending = app.uploadCircularSourceFile('c_gb', genbank(name));
+    await settle();
+    assert.equal(app.choicePrompt.show, true, 'another drawing uses the file: the uploader asks');
+    assert.deepEqual(app.choicePrompt.actions.map((action) => action.id), ['drawing', 'all']);
+    app.resolveChoicePrompt(answer);
+    await pending;
+    await settle();
+  };
+  await ask('asked-cancel.gb', 'cancel');
+  assert.equal(copy.files.c_gb, shared, 'Cancel changes nothing');
+  assert.equal(history.undoLabel(), before, 'and records no step');
+  await ask('asked-one.gb', 'drawing');
+  assert.notEqual(copy.files.c_gb?.fileId, shared.fileId, 'This drawing only replaces the shown drawing');
+  assert.equal(circular.files.c_gb, shared, 'and leaves the other drawing');
+  await app.undoHistory();
+  assert.equal(copy.files.c_gb, shared);
+  await ask('asked-all.gb', 'all');
+  assert.notEqual(copy.files.c_gb?.fileId, shared.fileId);
+  assert.equal(circular.files.c_gb, copy.files.c_gb, 'Every drawing that uses this file replaces both');
+  assert.equal(history.undoLabel(), 'Replace input file', 'as one project step');
+  await app.undoHistory();
+  assert.equal(circular.files.c_gb, shared);
+  assert.equal(copy.files.c_gb, shared);
+  await history.runUndoable('Change uploaded file', () => { app.uploadCircularSourceFile('c_gb', null); });
+  assert.equal(app.choicePrompt.show, false, 'a Remove never asks');
+  assert.equal(copy.files.c_gb, null);
+  assert.equal(circular.files.c_gb, shared);
+});
