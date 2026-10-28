@@ -506,6 +506,25 @@ def test_a_species_change_beside_a_plot_title_that_moves_no_track_keeps_the_circ
     assert "circular_labels" not in outcome.stages.builds
 
 
+@pytest.mark.parametrize("case_id", ["L2", "L3"])
+def test_a_gc_toggle_that_moves_rows_rebuilds_no_comparison_ribbon(case_id: str, tables: Path, tmp_path: Path) -> None:
+    """OV-2089: a GC toggle moves the rows but not the ribbons' shape; each comparison draws in its own frame.
+
+    The comparison stage takes its ends in that frame (each record's anchor
+    less the comparison's top) and the feature attachment as offsets from the
+    record's anchor, so moving rows changes only where the group is placed.
+    """
+
+    case = CASES[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "comparison_content" not in outcome.stages.builds
+
+
 @pytest.mark.parametrize("case_id", ["C3", "L2"])
 def test_a_depth_label_change_rebuilds_no_depth_path(case_id: str, tables: Path, tmp_path: Path) -> None:
     """OV-1229: the label is a legend input; the Depth config and path do not read it."""
