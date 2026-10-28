@@ -161,6 +161,13 @@ test.describe('390 px', () => {
 test.describe('195 px', () => {
   test.use({ viewport: { width: 195, height: 422 }, hasTouch: true });
 
+  test('the Settings pane without a Result does not run past the window width (OV-1810)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openApp(page);
+    const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, window: document.documentElement.clientWidth }));
+    expect(width.scroll).toBeLessThanOrEqual(width.window);
+  });
+
   test('the page scrolls as a whole, the Preview pane is at least 70 % of the window, and Generate keeps one line', async ({ page }) => {
     test.setTimeout(240_000);
     await openApp(page);
