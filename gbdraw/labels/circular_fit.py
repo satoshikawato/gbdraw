@@ -55,6 +55,7 @@ from .fit import (
     DEFINITION_FONT_PATH,
     DEFINITION_ROW_KINDS,
     FITS,
+    FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
     LabelCapacityRecord,
     PLACEMENT_PATH,
@@ -84,7 +85,6 @@ from .fit import (
 OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
 FONT_STEP_PT = 0.5
-FONT_LIMIT_PT = 6.0
 TIGHTER_ROW_GRID_PX = (2.5, 2.0, 1.5, 1.0, 0.5, 0.25, 0.1)
 
 # The dialog order of the rows; a report has the rows that apply to its records.

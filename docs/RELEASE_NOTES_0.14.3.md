@@ -94,7 +94,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   runs, and after a stop the **Labels do not fit** dialog lists the ways to make
   room. Python raises `LabelsDoNotFitError` with no rows and a `capacity`
   (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was
-  not placed, and warns with `LabelsMayNotFitWarning`.
+  not placed, and warns with `LabelsMayNotFitWarning`. Labels that are placed
+  and searched and that no fix makes fit get the same ways to make room, in the
+  **Labels do not fit** dialog and on the command line.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
   write no file, and print one error that names the formats and the install

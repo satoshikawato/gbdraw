@@ -73,7 +73,9 @@ write-up of a release.
   37 min); labels that need 0.8 times or more warn before they are placed
   (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs, and after a stop the **Labels do not fit**
   dialog lists the ways to make room). Python raises `LabelsDoNotFitError` with no rows and a `capacity`
-  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). See
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). Labels that are
+  placed and searched and that no fix makes fit get the same ways to make room in the **Labels do not fit** dialog
+  and after `No single change of the label settings fits this map.` on the command line (OV-2180, #1447). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
   the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.

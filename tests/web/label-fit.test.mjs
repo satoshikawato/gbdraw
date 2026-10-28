@@ -536,13 +536,55 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
   const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
   assert.match(markup, /\{\{ labelFitDialog\.capacity\s+\? t\('Nothing was drawn\. These labels need much more room than the map has, so placing them was not tried\.'\)/);
-  assert.match(markup, /<div v-if="labelFitDialog\.capacity"[^>]*data-label-fit-remedies>\s*<p[^>]*>\{\{ t\('To make room:'\) \}\}<\/p>\s*<ul[^>]*>\s*<li v-for="remedy in labelFitDialog\.remedies" :key="remedy">\{\{ tm\(remedy\) \}\}<\/li>/);
+  assert.match(markup, /<div v-if="labelFitDialog\.remedies\.length"[^>]*data-label-fit-remedies>\s*<p[^>]*>\{\{ t\('To make room:'\) \}\}<\/p>\s*<ul[^>]*>\s*<li v-for="remedy in labelFitDialog\.remedies" :key="remedy">\{\{ tm\(remedy\) \}\}<\/li>/);
   // No rows section and no Apply over a capacity stop; the one button reads Close.
-  assert.match(markup, /<p v-else-if="!labelFitDialog\.rows\.length"/);
+  assert.match(markup, /<fieldset v-if="labelFitDialog\.rows\.length"/);
+  assert.match(markup, /<p v-else-if="!labelFitDialog\.capacity"[^>]*>\{\{ t\('No setting in this dialog makes these labels fit\.'\) \}\}<\/p>/);
   assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
   // A record not placed for lack of room reads in the Web's words (OV-2179); other records keep their counts in brackets.
   assert.match(markup, /<i18n-text v-if="record\.capacity" :text="labelCapacityText\(record\.capacity\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
+});
+
+test('when every row does not fit, the dialog also lists Python\'s ways to make room (NO-ROW-WAYS, OV-2180)', async () => {
+  const notFound = (kind) => row(kind, 'not_found', { reason: 'Does not fit down to 6 pt' });
+  const ways = ['filter', 'label_text', 'linear'];
+  const words = [
+    'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
+    'Shorten the label text: a priority rule, for example gene before product.',
+    'Draw a Linear map.'
+  ];
+  const { dialog, steps, writes, generates } = dialogHarness();
+  const state = dialog.labelFitDialog;
+  await dialog.openLabelFitDialog(normalizeReport({ ...report([notFound('outward_both'), notFound('smaller_font')]),
+    remedies: ways }), { mode: 'circular' });
+  assert.equal(state.capacity, false);
+  assert.deepEqual(state.rows.map((item) => [item.kind, item.status, item.offered]),
+    [['outward_both', 'not_found', false], ['smaller_font', 'not_found', false]]);
+  assert.deepEqual(state.remedies, words);
+  assert.equal(state.selectedKind, '');
+  await dialog.resolveLabelFitChoice('cancel');
+  assert.equal(state.show, false);
+  assert.deepEqual([steps, writes, generates], [[], [], []]);
+
+  // Rows still to compute may fit: the ways show only once every row is known not to fit.
+  const later = [];
+  const computeRow = (token, kind) => new Promise((resolve) => later.push(() => resolve({ row: notFound(kind) })));
+  const lazy = dialogHarness({ computeRow });
+  const opened = lazy.dialog.openLabelFitDialog(normalizeReport({
+    ...report([notFound('outward_both'), row('combination', 'not_computed')], { drawn: true }), remedies: ways
+  }), { rowToken: 'circular:1:0', mode: 'circular' });
+  assert.deepEqual(lazy.dialog.labelFitDialog.remedies, []);
+  await Promise.resolve();
+  later.splice(0).forEach((resolve) => resolve());
+  await opened;
+  assert.deepEqual(lazy.dialog.labelFitDialog.rows.map((item) => item.status), ['not_found', 'not_found']);
+  assert.deepEqual(lazy.dialog.labelFitDialog.remedies, words);
+
+  // A row that fits: no ways, even when the report names them.
+  await dialog.openLabelFitDialog(normalizeReport({ ...report([notFound('outward_both'), foundRow('outward_vertical', 1.5)]),
+    remedies: ways }), { mode: 'circular' });
+  assert.deepEqual(state.remedies, []);
 });
 
 // The status line the shared choice dialog shows, from the label fit dialog's

@@ -34,10 +34,16 @@ import warnings
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-from .circular_fit import FONT_LIMIT_PT, OFFSET_LIMIT
+from .circular_fit import OFFSET_LIMIT
 from .circular_types import LABEL_FIT_X_MARGIN_PX, LABEL_FIT_Y_MARGIN_PX, CircularLabel
 from ..exceptions import LabelsMayNotFitWarning
-from .fit import HorizontalLabelKind, LabelCapacityRecord, LabelCapacityRemedy, label_capacity_sentence
+from .fit import (
+    FONT_LIMIT_PT,
+    HorizontalLabelKind,
+    LabelCapacityRecord,
+    label_capacity_sentence,
+    label_room_remedies,
+)
 
 # A side whose labels need more than this many times the room stops at once when its lever needs more than
 # CAPACITY_LEVER_RATIO times too (CAPACITY-STOP); from CAPACITY_WARN_RATIO it warns before placement (CAPACITY-WARN).
@@ -133,13 +139,6 @@ def _widened(arc: LabelArc, x_offset: float, y_offset: float) -> LabelArc:
     return LabelArc(arc.x_radius * factor(x_offset), arc.y_radius * factor(y_offset), arc.center_x)
 
 
-def _remedies(font_size: float) -> tuple[LabelCapacityRemedy, ...]:
-    if font_size > FONT_LIMIT_PT:
-        return ("filter", "label_text", "font", "linear")
-    # The font row stops at its floor, so a smaller font is not offered from there.
-    return ("filter", "label_text", "linear")
-
-
 def _level(ratio: float, lever: float) -> CapacityLevel:
     if ratio > CAPACITY_STOP_RATIO and lever > CAPACITY_LEVER_RATIO:
         return "over"
@@ -151,7 +150,7 @@ def _level(ratio: float, lever: float) -> CapacityLevel:
 def _capacity(
     label_kind: HorizontalLabelKind, labels: Sequence[CircularLabel], ratio: float, lever: float, font_size: float
 ) -> CircularLabelCapacity:
-    record = LabelCapacityRecord(len(labels), float(font_size), ratio, _remedies(font_size))
+    record = LabelCapacityRecord(len(labels), float(font_size), ratio, label_room_remedies(font_size))
     return CircularLabelCapacity(label_kind, record, lever, _level(ratio, lever))
 
 

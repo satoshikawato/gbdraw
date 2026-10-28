@@ -165,7 +165,8 @@ class LabelFitReportPayload(TypedDict):
     notice: list[str]
     records: list[LabelFitRecordPayload]
     rows: list[LabelFitRowPayload]
-    # The ways to make room for records that were not placed (CAPACITY-STOP); the Web words each with its controls.
+    # The ways to make room for records that were not placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS,
+    # listed once every row is known not to fit); the Web words each with its controls.
     remedies: list[LabelCapacityRemedy]
 
 
@@ -267,7 +268,7 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
         "notice": list(label_fit_notice(report)),
         "records": [_record_payload(record) for record in report.records],
         "rows": [label_fit_row_payload(row, mode) for row in report.rows],
-        "remedies": list(report.capacity_remedies),
+        "remedies": list(report.room_remedies),
     }
 
 

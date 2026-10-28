@@ -72,6 +72,8 @@ LabelFitValue: TypeAlias = bool | float | str
 # What makes room for labels that need much more room than the map has (CAPACITY-STOP): label fewer features, shorten
 # the label text, use a smaller font, or draw a Linear map.
 LabelCapacityRemedy: TypeAlias = Literal["filter", "label_text", "font", "linear"]
+# The smallest label font the font rows try.
+FONT_LIMIT_PT = 6.0
 Polygon: TypeAlias = tuple[Point, ...]
 Polyline: TypeAlias = Sequence[Point]
 
@@ -533,10 +535,22 @@ class LabelFitReport:
         return sum(record.fit.definition_track_overlaps for record in self.records)
 
     @property
-    def capacity_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
-        """The ways to make room for the records that were not placed (CAPACITY-STOP), in the order offered."""
+    def room_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
+        """The ways to make room, in the order offered: for the records that were not placed (CAPACITY-STOP), else,
+        when no row has a value, for the outer and inner Circular labels (NO-ROW-WAYS, OV-2180). A row not computed
+        may still fit, so a surface lists the second only once every row is known not to fit."""
 
-        offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
+        if any(record.capacity for record in self.records):
+            offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
+        elif self.rows and all(row.values is None for row in self.rows):
+            offered = {
+                remedy
+                for record in self.records
+                if is_horizontal_label_kind(record.label_kind)
+                for remedy in label_room_remedies(record.font_size)
+            }
+        else:
+            return ()
         return tuple(remedy for remedy in get_args(LabelCapacityRemedy) if remedy in offered)
 
 
@@ -673,13 +687,21 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
 
 
 _RADIAL_REFUSAL = "need more room than the circular tracks leave"
-# The CLI's ways to make room (CAPACITY-STOP); the Web names its own controls for the same remedies.
+# The CLI's ways to make room (CAPACITY-STOP, NO-ROW-WAYS); the Web names its own controls for the same remedies.
 _CLI_CAPACITY_REMEDIES: Mapping[LabelCapacityRemedy, str] = {
     "filter": "label fewer features with --label_blacklist or --label_whitelist;",
     "label_text": "shorten the label text with --qualifier_priority (for example gene names only);",
     "font": "use a smaller --label_font_size;",
     "linear": "or draw a Linear map (gbdraw linear).",
 }
+
+
+def label_room_remedies(font_size: float) -> tuple[LabelCapacityRemedy, ...]:
+    """The ways to make room for labels at ``font_size``: a smaller font only above the font rows' floor."""
+
+    if font_size > FONT_LIMIT_PT:
+        return ("filter", "label_text", "font", "linear")
+    return ("filter", "label_text", "linear")
 
 
 def shown_capacity_ratio(capacity: LabelCapacityRecord) -> float:
@@ -851,6 +873,7 @@ def format_label_fit_report(report: LabelFitReport, *, search_seconds: float | N
         lines.append(f"{names[0].upper()}{names[1:]} {verb} not fit this map.")
     elif missing:
         lines.append("No single change of the label settings fits this map.")
+        lines.extend(_room_lines(report))
     if skipped:
         seconds = search_seconds
         if seconds is None:
@@ -878,9 +901,15 @@ def _capacity_report(report: LabelFitReport) -> str:
         lines.append(_first_line(LabelFitReport(others, (), drawn=False)))
     else:
         lines[-1] += " Nothing was drawn."
-    lines.append("To make room:")
-    lines.extend(f"  - {_CLI_CAPACITY_REMEDIES[remedy]}" for remedy in report.capacity_remedies)
+    lines.extend(_room_lines(report))
     return "\n".join(lines)
+
+
+def _room_lines(report: LabelFitReport) -> list[str]:
+    remedies = report.room_remedies
+    if not remedies:
+        return []
+    return ["To make room:", *(f"  - {_CLI_CAPACITY_REMEDIES[remedy]}" for remedy in remedies)]
 
 
 def raise_or_warn(
@@ -902,6 +931,7 @@ __all__ = [
     "DEFINITION_TEXT_REMEDY",
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
+    "FONT_LIMIT_PT",
     "FONT_SIZE_PATHS",
     "HorizontalLabelKind",
     "PLACEMENT_PATH",
@@ -946,6 +976,7 @@ __all__ = [
     "label_kind_nouns",
     "label_kind_title",
     "label_kind_words",
+    "label_room_remedies",
     "overlapping_pairs",
     "polyline_crossing_count",
     "polylines_cross",
