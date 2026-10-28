@@ -28,6 +28,7 @@ import {
   pythonLegendKey,
   pythonLegendRow,
   pythonLegendRows,
+  pythonOrderedLegendRows,
   recordedGroupOrder,
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
@@ -983,17 +984,6 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
 /** @param {Element} entry */
 const isEditorRow = (entry) => entry.getAttribute('data-legend-owner') === 'direct-editor';
 
-// Python's first row of a feature Legend group, as Python drew the group: the
-// first key of the order the group recorded as Python's, else the first row
-// in the drawn order. A user order never picks it, and neither an editor row
-// nor a rule commit's row is Python's (OV-2188).
-/** @param {Element} group @param {Element[]} rows The group's rows. */
-const pythonFirstRow = (group, rows) => {
-  const drawn = rows.filter((entry) => !entry.getAttribute('data-legend-owner'));
-  const first = recordedGroupOrder(group)?.find((key) => drawn.some((entry) => pythonLegendKey(entry) === key));
-  return (first === undefined ? drawn[0] : drawn.find((entry) => pythonLegendKey(entry) === first)) || null;
-};
-
 /**
  * @param {LazyMutationIndex} index
  * @param {string} renderedId
@@ -1114,7 +1104,8 @@ const applyLegendOperations = (index, operations, {
     }
     entries.set(caption, groups.map((group) => {
       const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
-      const row = /** @type {Element | null} */ (pythonFirstRow(group, rows)?.cloneNode?.(true) || null);
+      // The template is Python's first row, whatever row a user order shows first (OV-2188).
+      const row = /** @type {Element | null} */ (pythonOrderedLegendRows(group)[0]?.cloneNode?.(true) || null);
       if (!row) throw new Error('Current SVG has no Legend entry template.');
       // The copy is of Python's row as drawn, not of that row's edits (OV-121);
       // Python draws no hidden row.
@@ -1192,8 +1183,7 @@ const applyLegendOperations = (index, operations, {
 // of a group's order records Python's order of its rows (their Python keys).
 /** @param {Element} group @param {readonly string[]} captions @param {boolean} keepFollowed */
 const orderLegendGroup = (group, captions, keepFollowed) => {
-  const pythonOrder = JSON.stringify(Array.from(group.querySelectorAll('g[data-legend-key]'))
-    .filter((entry) => !isEditorRow(entry)).map(pythonLegendKey));
+  const pythonOrder = JSON.stringify(pythonOrderedLegendRows(group).map(pythonLegendKey));
   const moved = orderLegendEntries(group, captions, { keepFollowed });
   if (moved && !group.hasAttribute(LEGEND_ORDER_RECORD)) group.setAttribute(LEGEND_ORDER_RECORD, pythonOrder);
   return moved;

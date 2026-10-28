@@ -128,6 +128,23 @@ export const recordedGroupOrder = (group) => {
   }
 };
 
+// The one owner of Python's order of a feature Legend group: its rows Python
+// stands for (every row but an editor row; a rule commit's row stands for the
+// rule row Python draws next, as the order record has always counted it), in
+// the order the group recorded as Python's when its rows were first
+// reordered (only the rows of recorded keys), else in the drawn order. The
+// executor writes the record from it and copies a new row from its first row
+// (OV-2188); `legendRowTakesPlace` compares the shown rows with it.
+/** @param {Element} group @returns {Element[]} */
+export const pythonOrderedLegendRows = (group) => {
+  const rows = Array.from(group.querySelectorAll('g[data-legend-key]'))
+    .filter((row) => row.getAttribute('data-legend-owner') !== 'direct-editor');
+  const recorded = recordedGroupOrder(group);
+  if (!recorded) return rows;
+  const at = (/** @type {Element} */ row) => recorded.indexOf(pythonLegendKey(row));
+  return rows.filter((row) => at(row) >= 0).sort((left, right) => at(left) - at(right));
+};
+
 // The rows of a key each feature Legend group of a Result holds, shown or hidden.
 /** @param {Element} group @param {string} key */
 const rowsOfKey = (group, key) => Array.from(group.querySelectorAll('g[data-legend-key]'))
@@ -150,10 +167,9 @@ export const shownPythonLegendRow = (svg, key) => getAllFeatureLegendGroups(svg)
 export const legendRowTakesPlace = (svg, key, nextKey) => getAllFeatureLegendGroups(svg).every((group) => {
   const rows = Array.from(group.querySelectorAll('g[data-legend-key]'))
     .filter((row) => row.getAttribute('data-legend-owner') !== 'direct-editor');
-  const drawn = rows.map(pythonLegendKey);
-  if (!drawn.includes(key)) return true;
+  if (!rows.some((row) => pythonLegendKey(row) === key)) return true;
   const relabeled = (/** @type {string[]} */ keys) => [...new Set(keys.map((each) => (each === key ? nextKey : each)))];
-  const python = relabeled(recordedGroupOrder(group) ?? drawn);
+  const python = relabeled(pythonOrderedLegendRows(group).map(pythonLegendKey));
   const shown = relabeled(rows.filter(legendRowShown).map(pythonLegendKey));
   const inOrder = python.filter((each) => shown.includes(each));
   return shown.filter((each) => python.includes(each)).every((each, at) => each === inOrder[at]);

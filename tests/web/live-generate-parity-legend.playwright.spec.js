@@ -1986,5 +1986,12 @@ test('a popup Legend name on the only feature of a rule row shows the Legend ord
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
   await generate(page);
   await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  // The preconditions of the mismatch, so the expected failure is this one:
+  // the synthesized table puts the feature's rule first, and the live Legend
+  // keeps the renamed row in its place.
+  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap }) => [val, cap]));
+  expect(rules, 'the rule table of the edit').toEqual([['^dup alpha$', 'gamma'], ['^alpha protein$', 'alpha']]);
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
 });

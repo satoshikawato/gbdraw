@@ -182,7 +182,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // OV-2187; while a match is not known, every current rule's row), the
   // listed rows of the Python rows the rules take (by key, `takenKeys`, with
   // the caption and the swatch they show, OV-310), and `retiredLegendIntents`, rows this commit replaces, which are no
-  // renderer rows for the N-06 caption allocation. `removedRuleRows` are
+  // renderer rows for the N-06 caption allocation. `ownedCaptions` are the
+  // captions of those rows with every current rule's row, drawn or not: the
+  // rows the rules leave in the Legend editor's record of added rows
+  // (`addedLegendCaptions`). `removedRuleRows` are
   // the rows of current rules that no candidate rule names, drawn or not;
   // `rekeyed` are the rows both rule tables hold under another key (OV-645).
   /**
@@ -217,6 +220,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
+      ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
       rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
     };
@@ -490,8 +494,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
-    const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -532,7 +535,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       replaceColorRules(drawing.slices.colorRules, /** @type {readonly SpecificColorRule[]} */ (candidate.rules), sourceRows);
       patternDrafts.reconcile();
       replaceAddedLegendCaptions(drawing.slices.paint, [
-        ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+        ...[...drawing.addedLegendCaptions.value].filter(caption => !ownedCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
       refreshFeatureOverrides(drawing, extractedFeatures.value);
