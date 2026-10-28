@@ -1080,10 +1080,10 @@
         "gbdraw/session_io.py:split_draft_into_modes"
       ],
       "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitDraftIntoModes"
+        "gbdraw/web/js/services/config.js:importSessionDocument"
       ],
       "vector": "tests/fixtures/sessions/mode-split-vectors.json",
-      "reason": "Both Load paths split a legacy draft; the cases pin the slices. The function: row splitDraftIntoModes names the same pair of owners.",
+      "reason": "the Web Load installs Python's split",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "OV-1665 (tests/fixtures subfolders; twin.unregistered.v1 on origin/dev f0b23d4ac)"
     },

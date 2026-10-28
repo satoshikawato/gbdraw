@@ -1,8 +1,8 @@
-// The JavaScript split of a Session 27-44 draft into Session 46 mode slices,
-// against the vectors it shares with the Python twin
+// Python's split of a Session 27-44 draft into Session 46 mode slices,
+// against the vectors it shares with the Web split
 // (tests/fixtures/sessions/mode-split-vectors.json, tests/test_mode_split_vectors.py).
 //
-// A flat-draft case runs `splitDraftIntoModes` on its input and checks its
+// A flat-draft case runs Python's `split_draft_into_modes` on its input and checks its
 // `expect` and `expectAbsent` pointers and, where present, `expectedModes` (the
 // slices the Python split must equal). A whole-Session case loads the Session
 // as the app does (`importSession`): Python converts it once (D-15-129), and
@@ -12,7 +12,7 @@
 // Python's split against the whole case. `loadDefaults` lists the values Load
 // fills for the pointers the split leaves absent, checked on Load's drawings.
 import { acceptNodeFeatureRecoveryRow, installSessionImportWorker } from './helpers/session-import-node.mjs';
-import { pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { pythonDraftSplit, pythonLegacySessionUpgrader, validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -36,7 +36,6 @@ installFakeSvgDom();
 globalThis.alert = () => {};
 installSessionImportWorker();
 
-const { splitDraftIntoModes } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { sessionLegendEditsByRowKey } = await import('../../gbdraw/web/js/services/session-drawings-upgrade.js');
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const {
@@ -138,13 +137,8 @@ const settingsOnlySession = (split) => {
   };
 };
 
-/** The JavaScript split of a flat-draft case, seen as a (partial) Session 46. */
-const splitOf = (vector) => splitDraftIntoModes(structuredClone(vector.input), {
-  committedMode: vector.context.committedMode,
-  modeProfiles: vector.context.modeProfiles,
-  depthSources: vector.context.depthSources ?? null,
-  paletteColors: vector.context.paletteColors ?? null
-});
+/** Python's split of a flat-draft case, seen as a (partial) Session 46. */
+const splitOf = (vector) => pythonDraftSplit(vector.input, vector.context);
 
 /** A drawing as Save writes it (a complete slice). */
 const savedSlice = (drawing) => JSON.parse(JSON.stringify(buildModeSliceData(drawing, drawing.mode, {
@@ -238,7 +232,7 @@ for (const vector of VECTORS.cases) {
       assert.deepEqual(mismatches, []);
       return;
     }
-    const result = splitOf(vector);
+    const result = await splitOf(vector);
     const mismatches = [...expectMismatches(vector, result), ...absentMismatches(vector, result)];
     if (vector.expectedModes) {
       for (const mode of MODES) {
