@@ -4,6 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
+const { shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
 const { settleLive } = require('./helpers/live-generate-parity.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
@@ -601,6 +602,11 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a drawi
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
+    // The Session holds one Circular drawing; the round trip's Linear drawing
+    // is made first, the way a user makes it (a project step of its own).
+    await switchMode(page, 'linear');
+    const linearId = (await shownDrawing(page)).id;
+    await switchMode(page, 'circular');
     const catalogState = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
       const { isAdoptedFeatureCatalog } = await import('./js/services/feature-catalog.js');
@@ -667,7 +673,10 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a drawi
     // PD-OI-090: each drawing has its own History; a switch records no step.
     const tripCounts = (await history()).counts;
     await switchMode(page, 'linear');
-    expect((await history()).counts, 'the Linear drawing\'s own History').toEqual([0, 0]);
+    expect(await page.evaluate((drawingId) => {
+      const own = window.__GBDRAW_HISTORY__.managerOf(drawingId);
+      return [own.getUndoCount(), own.getRedoCount()];
+    }, linearId), 'the Linear drawing\'s own History').toEqual([0, 0]);
     await switchMode(page, 'circular');
     expect((await history()).counts, 'a drawing round trip records no step').toEqual(tripCounts);
     expect(await roundTripCatalog(), 'the same catalog across the round trip').toBe(true);

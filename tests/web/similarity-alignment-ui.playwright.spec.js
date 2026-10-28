@@ -4,7 +4,7 @@ const { mkdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { CURRENT_FEATURE_CATALOG_SCHEMA, CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, answerLoadRepairs, evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
-const { showPhonePane, paneTop } = require('./helpers/drawing-bar.cjs');
+const { showPhonePane, paneTop, newDrawingFromMenu, showDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 
 const importSession = async (page, bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {
@@ -2785,12 +2785,12 @@ test('a Session loaded under an open review keeps its own view and Editor when t
   const before = await previewView(page);
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   await expect.poll(async () => (await previewView(page)).zoom).toBeLessThan(before.zoom);
-  // Another Session arrives with its own view.
-  const shownView = shownSavedDrawing(session);
-  shownView.ui = { ...shownView.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
+  // Another Session arrives. A file Session Load with a Result fits its figure (R17-25), so the
+  // view is the loaded figure's fit, not the view the review holds.
   await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
   const loaded = await previewView(page);
-  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
+  expect(loaded).not.toEqual(before);
   // The review stays open on its draft, without rings: they belonged to the replaced Result.
   await expect(dialog).toBeVisible();
   await expect(page.locator('[data-similarity-alignment-canvas]')).toHaveCount(0);
@@ -2959,11 +2959,18 @@ test('outside Review alignment a change of the room of the Result keeps the zoom
 });
 
 // The user's own view and Editor tab, then the review opened from a feature popup.
-const openReviewOverOwnView = async (page) => {
+// `withCircular`: the Linear-only Session gets a Circular drawing first, made the way a user
+// makes it (the drawing menu), for the cases that switch drawings under the review.
+const openReviewOverOwnView = async (page, { withCircular = false } = {}) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713.gbdraw-session.json');
+  const ids = {};
+  if (withCircular) {
+    ids.circular = await newDrawingFromMenu(page, 'circular');
+    ids.linear = await showDrawing(page, { kind: 'linear' });
+  }
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -2974,7 +2981,7 @@ const openReviewOverOwnView = async (page) => {
   const before = await previewView(page);
   const { dialog } = await openPopupReview(page, featureByProteinId, 'CAG38712.1');
   await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
-  return { before, dialog };
+  return { before, dialog, ids };
 };
 
 // One live setting change: the CDS color in Colors, drawn on the shown Result.
@@ -3145,15 +3152,13 @@ test('Apply of a review draws a live color changed before the review', async ({ 
 // review's mode again, so it does not tell which mode the replacement test reads.
 test('a Session loaded while the other mode is shown under a review keeps its own view', async ({ page }) => {
   test.setTimeout(600000);
-  const { dialog } = await openReviewOverOwnView(page);
-  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
+  const { dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
+  await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
   await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.mode.value)).toBe('circular');
-  const session = JSON.parse(readFileSync(galleryAlignmentSession, 'utf8'));
-  const shownView = shownSavedDrawing(session);
-  shownView.ui = { ...shownView.ui, zoom: 0.37, canvasPan: { x: -21, y: 13 } };
-  await importSession(page, Buffer.from(JSON.stringify(session)), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  // A file Session Load with a Result fits its figure (R17-25): the view is the loaded figure's.
+  await importSession(page, readFileSync(galleryAlignmentSession), 'BGC0000708-BGC0000713-other-view.gbdraw-session.json');
+  await expect.poll(async () => (await figureFit(page)).fitted).toBe(true);
   const loaded = await previewView(page);
-  expect(loaded).toEqual({ zoom: 0.37, pan: { x: -21, y: 13 } });
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   expect(await previewView(page)).toEqual(loaded);
@@ -3167,10 +3172,10 @@ test('a mode switch and back under an open review leaves the view the review giv
   test.setTimeout(600000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  const { before, dialog } = await openReviewOverOwnView(page);
+  const { before, dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
   for (const target of ['circular', 'linear']) {
-    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), target);
+    await page.evaluate((next) => window.__GBDRAW_APP__.selectDrawing(next), ids[target]);
     await expect.poll(shownMode).toBe(target);
   }
   await expect(dialog).toBeVisible();
@@ -3196,9 +3201,9 @@ test('a Linear review ended in Circular gives the Linear view back to no other f
   test.setTimeout(600000);
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(String(error?.message || error)));
-  const { before, dialog } = await openReviewOverOwnView(page);
+  const { before, dialog, ids } = await openReviewOverOwnView(page, { withCircular: true });
   const shownMode = () => page.evaluate(async () => (await import('./js/state.js')).state.mode.value);
-  await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'));
+  await page.evaluate((drawingId) => window.__GBDRAW_APP__.selectDrawing(drawingId), ids.circular);
   await expect.poll(shownMode).toBe('circular');
   // PD-OI-039 rev 4: the review stays open across the switch (Circular has no Result here, so
   // its panel has no Result area to dock in), and Escape ends it there.
