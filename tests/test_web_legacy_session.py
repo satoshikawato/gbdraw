@@ -12,7 +12,7 @@ import pytest
 
 from gbdraw.exceptions import GbdrawError
 
-from gbdraw.session import load_session_document, materialize_session, render_session
+from gbdraw.session import load_session_document, materialize_session, render_session, session_to_request
 from gbdraw import session_drawings
 from gbdraw.session_io import (
     CLI_SESSION_ADMISSION,
@@ -87,6 +87,120 @@ def test_a_main_web_session_s_converted_comparison_table_is_one_resource_for_req
         "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t1\t1000\t0.0\t1847\n"
     )
     assert set(document["resources"]) == {*source["resources"]}
+
+
+def test_converted_comparison_tables_keep_the_resource_of_their_own_record_pair(tmp_path: Path) -> None:
+    # OV-2094: the stored items and the encoded ones meet by record pair, not by their order in the list.
+    from dataclasses import replace
+
+    from gbdraw.api.session_compat import search_frame_nucleotide_resources
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t{}\t{}\t1\t1000\t0.0\t1847\n"
+    document = load_session_document(SESSIONS / "q-frame-main-web-upload.v42.gbdraw-session.json.gz")
+    stored = {"comparisons": [
+        {"kind": "nucleotideBlast", "resourceId": "backward", "queryRecordIndex": 1, "subjectRecordIndex": 0},
+        {"kind": "nucleotideBlast", "resourceId": "forward", "queryRecordIndex": 0, "subjectRecordIndex": 1},
+    ]}
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        [forward] = request.options.linear_comparisons
+        backward = replace(forward, query_record_index=1, subject_record_index=0)
+
+        def with_rows(forward_rows: str, backward_rows: str) -> Any:
+            comparisons = (replace(forward, search_frame_text=forward_rows), replace(backward, search_frame_text=backward_rows))
+            return replace(request, options=replace(request.options, linear_comparisons=comparisons))
+
+        resources = {
+            resource_id: {"kind": "nucleotide-blast", "name": f"{resource_id}.tsv", "encoding": "base64",
+                          "data": base64.b64encode(rows.encode()).decode("ascii"), "size": len(rows)}
+            for resource_id, rows in (("forward", row.format(1, 1000)), ("backward", row.format(1001, 2000)))
+        }
+        converted = search_frame_nucleotide_resources(
+            stored, with_rows(row.format(1, 1000), row.format(1001, 2000)), with_rows(row.format(3001, 4000), row.format(4001, 4300)),
+            resources,
+        )
+    assert {key: base64.b64decode(value["data"]).decode() for key, value in converted.resources.items()} == {
+        "forward": row.format(3001, 4000), "backward": row.format(4001, 4300),
+    }
+    assert converted.pair_resources == {}
+
+
+def _one_table_for_two_pairs(reversed_records: set[int]) -> dict[str, Any]:
+    """A main Web Session 42 of records R2c, R3c, R3d whose one uploaded table is bound to pairs
+    (0, 1) and (1, 2), as the Session 42 writer saves it again after a Load (OV-2097)."""
+
+    import copy
+
+    source = json.loads(_text("q-frame-main-web-upload.v42.gbdraw-session.json.gz"))
+    request = source["renderRequest"]
+    third = copy.deepcopy(request["records"][1])
+    third["recordKey"] = "linear-seq-third"
+    third["source"]["resourceId"] = "record-3-genbank"
+    request["records"].append(third)
+    for index, record in enumerate(request["records"]):
+        record["presentation"].update(reverseComplement=index in reversed_records, gridRow=index + 1)
+    source["resources"]["record-3-genbank"] = {**source["resources"]["record-2-genbank"], "name": "record-3-genbank-R3d.gb"}
+    request["comparisons"] = [
+        {"kind": "nucleotideBlast", "resourceId": "comparison-nucleotide-1", "queryRecordIndex": query, "subjectRecordIndex": query + 1}
+        for query in (0, 1)
+    ]
+    web_files = source["webFiles"]
+    rows = web_files["bindings"]["linearSeqs"]
+    rows.append({**copy.deepcopy(rows[1]), "uid": "linear-seq-third"})
+    rows[2]["gb"]["resourceId"] = "record-3-genbank"
+    for index, row in enumerate(rows):
+        row["region_reverse"] = index in reversed_records
+    web_files["linearRecordMetadata"].append({"recordKey": "linear-seq-third", "losatGencode": 1})
+    web_files["resourceOriginalNames"]["record-3-genbank"] = "R3d.gb"
+    [card] = web_files["bindings"]["linearComparisons"]
+    web_files["bindings"]["linearComparisons"].append({**copy.deepcopy(card), "id": "linear-comparison-second"})
+    plan = source["config"]["linearComparisonPlan"]
+    plan["edges"].append(
+        {**plan["edges"][0], "id": "linear-comparison-second", "queryUid": rows[1]["uid"], "subjectUid": "linear-seq-third"}
+    )
+    source["config"]["linearRecordLayout"]["rows"].append({"uid": "linear-seq-third", "row": 3})
+    return source
+
+
+@pytest.mark.parametrize(
+    ("reversed_records", "rows"),
+    [
+        # The stored row (subject on the minus strand) is 2001-3000 against 3000-2001.
+        # Only pair (1, 2) has a reversed endpoint: pair (0, 1) keeps the stored rows (OV-2097).
+        ({2}, {(0, 1): (2001, 3000, 3000, 2001), (1, 2): (2001, 3000, 1, 1000)}),
+        # Both pairs have a reversed endpoint, converted differently (OV-2094).
+        ({1}, {(0, 1): (2001, 3000, 1, 1000), (1, 2): (1000, 1, 3000, 2001)}),
+    ],
+)
+def test_one_table_shared_by_two_pairs_becomes_each_pair_s_rows_for_its_request_and_card(
+    reversed_records: set[int], rows: dict[tuple[int, int], tuple[int, int, int, int]]
+) -> None:
+    source = _one_table_for_two_pairs(reversed_records)
+    reply = json.loads(legacy_session_to_drawings_json(json.dumps(source)))
+    assert "error" not in reply
+    document = reply["document"]
+    [drawing] = [drawing for drawing in document["drawings"] if drawing.get("renderRequest") is not None]
+    keys = [record["recordKey"] for record in drawing["renderRequest"]["records"]]
+    edges = {edge["id"]: edge for edge in drawing["config"]["linearComparisonPlan"]["edges"]}
+    cards = {
+        (keys.index(edges[card["id"]]["queryUid"]), keys.index(edges[card["id"]]["subjectUid"])): card["file"]["resourceId"]
+        for card in drawing["webFiles"]["bindings"]["linearComparisons"]
+    }
+    items = {
+        (item["queryRecordIndex"], item["subjectRecordIndex"]): item["resourceId"]
+        for item in drawing["renderRequest"]["comparisons"]
+    }
+
+    def text(resource_id: str) -> str:
+        return base64.b64decode(document["resources"][resource_id]["data"]).decode("utf-8")
+
+    row = "R2c\tR3c\t100.0\t1000\t0\t0\t{}\t{}\t{}\t{}\t0.0\t1847\n"
+    assert {pair: text(resource_id) for pair, resource_id in cards.items()} == {
+        pair: row.format(*coordinates) for pair, coordinates in rows.items()
+    }
+    assert {pair: text(resource_id) for pair, resource_id in items.items()} == {
+        pair: row.format(*coordinates) for pair, coordinates in rows.items()
+    }
 
 
 @pytest.mark.parametrize(

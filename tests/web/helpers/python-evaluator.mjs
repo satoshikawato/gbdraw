@@ -123,7 +123,7 @@ result = validate_web_config_overrides_json(payload['mode'], json.dumps(payload[
  * Python's split of a flat Web draft into Session 46 mode slices.
  * @param {unknown} input the flat draft
  * @param {{ committedMode: unknown, modeProfiles?: unknown, depthSources?: unknown, paletteColors?: unknown }} context
- * @returns {Promise<any>}
+ * @returns {Promise<import('../../../gbdraw/web/js/services/gallery-session-publication.js').PublicationSplitDraft>}
  */
 export const pythonDraftSplit = async (input, context) => JSON.parse(await evaluatePython(`
 import json

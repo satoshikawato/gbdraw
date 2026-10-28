@@ -2213,8 +2213,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     ``record_idx`` its record in that input. Identities are the renderer's:
     the record key, ``<recordKey>:<n>`` for each record of an ALL input with
     several records, and the source hash, ``~<source index>`` when the record
-    has it twice. The twin of ``legacyIndex`` in the Web
-    ``feature-edit-migration.js``.
+    has it twice.
     """
 
     fields = legacy if isinstance(legacy, Mapping) else {}
@@ -2363,8 +2362,7 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
 
     A catalog row's rendered ID (``svgId``) carries the feature's hash in its
     drawn (cropped, reverse-complemented) record. The record position is the
-    rendered ID's or the row's place in its item's records. The twin of
-    ``catalogDrawnFeatures`` in the Web ``feature-edit-migration.js``.
+    rendered ID's or the row's place in its item's records.
     """
 
     drawn: list[_IndexedFeature] = []
@@ -2495,8 +2493,6 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped or reverse-complemented, so
     the drawn hashes of its features differ from their source hashes (a
     rotation or a region that only selects a record changes no hash).
-
-    The twin of ``hashFrameChanged`` in the Web ``feature-edit-migration.js``.
     """
 
     region = record.get("region")
@@ -2513,8 +2509,6 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
 
 def has_hash_color_rules(rules: object) -> bool:
     """Whether specific color rules (``qual`` and ``val``) hold a ``hash`` rule.
-
-    The twin of ``hasHashColorRules`` in the Web ``feature-edit-migration.js``.
     """
 
     return isinstance(rules, list) and any(
@@ -2638,8 +2632,7 @@ def migrate_session_feature_edits(
     When a label map is migrated the saved label table (``labelOverrideRows``)
     is cleared, as it was built from those maps.
 
-    ``tests/fixtures/feature-edit-migration-vectors.json`` pins it and the
-    Web ``migrateRenderedIdFeatureEdits`` in ``feature-edit-migration.js``. Without
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins it. Without
     a catalog or ``legacy`` every edit is dropped.
     """
 
@@ -2787,8 +2780,6 @@ def _js_truthy(value: object) -> bool:
 
 def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped, reverse-complemented, or rotated.
-
-    The twin of ``drawnTransformed`` in the Web ``feature-edit-migration.js``.
     """
 
     presentation = record.get("presentation")
@@ -5350,6 +5341,23 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
         files,
         force_web_draft=force_web_draft,
     )
+
+
+class _SessionResourceDescriptorRequired(TypedDict):
+    size: int
+    # Base64 text, or the encoded depth payload under ``DEPTH_FILE_ENCODING``.
+    data: str | Mapping[str, object]
+
+
+class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False):
+    """One entry of a Session's ``resources``: embedded bytes and their file metadata."""
+
+    kind: str
+    name: str
+    type: str
+    lastModified: int
+    encoding: str
+    checksum: str | None
 
 
 def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:

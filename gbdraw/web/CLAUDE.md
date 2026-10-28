@@ -1156,7 +1156,7 @@ write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
 contract used by normal restore and Gallery publication. Python alone converts a
-historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–49. It does not clean up
+historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–49. The conversion does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.
