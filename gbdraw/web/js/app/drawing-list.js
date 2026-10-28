@@ -303,8 +303,10 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DeleteDrawingStep The list's Delete.
  * @typedef {(drawingId: DrawingId) => boolean} NeedsDeleteConfirmation
  * @typedef {(mode: ModeProfileName) => DrawingListOutcome} NewDrawingStep The list's New.
+ * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DuplicateDrawingStep The list's Duplicate.
  * @typedef {object} DrawingBarPorts
  * @property {NewDrawingStep} newDrawing
+ * @property {DuplicateDrawingStep} duplicateDrawing
  * @property {RenameDrawingStep} renameDrawing
  * @property {MoveDrawingStep} moveDrawing
  * @property {DeleteDrawingStep} deleteDrawing
@@ -350,12 +352,12 @@ export const moveTabFocus = (event) => {
 
 /**
  * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs with
- * the Linear offer tab, and the tab menu's New Circular, New Linear, Rename,
- * Move, and Delete, each one list operation (one History step).
+ * the Linear offer tab, and the tab menu's New Circular, New Linear, Duplicate,
+ * Rename, Move, and Delete, each one list operation (one History step).
  * @param {DrawingBarPorts} ports
  */
 export const createDrawingBar = ({
-  newDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
+  newDrawing, duplicateDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
   drawingTabs, shownDrawingId, modeOf, askText, askChoice
 }) => {
   /** @returns {Array<DrawingBarTab | DrawingBarOffer>} */
@@ -436,5 +438,5 @@ export const createDrawingBar = ({
     return deleteStep(drawingId);
   };
 
-  return { tabs, newDrawing, renameDrawing, moveDrawing, deleteDrawing };
+  return { tabs, newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing };
 };

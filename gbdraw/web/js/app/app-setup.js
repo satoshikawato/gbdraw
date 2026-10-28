@@ -4589,6 +4589,7 @@ export const createAppSetup = () => {
   // New Circular, New Linear, Rename, Move, and Delete (B4a-5, B4b).
   const drawingBar = createDrawingBar({
     newDrawing: drawingList.newDrawing,
+    duplicateDrawing: drawingList.duplicateDrawing,
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
     deleteDrawing: drawingList.deleteDrawing,
