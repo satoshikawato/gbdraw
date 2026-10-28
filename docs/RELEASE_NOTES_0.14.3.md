@@ -93,9 +93,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   definition font or the center radius changes, and Linear comparison ribbons
   no longer redraw when a definition or record label changes. The Worker
   parses each Depth file once and keeps it while **Show Depth** is off, so
-  showing Depth again does not parse the file again. In a warm Generate of the
-  vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
-  of 331 ms.
+  showing Depth again does not parse the file again. A Circular Species change
+  that moves no track keeps the placed labels, and a Linear change that moves
+  rows without changing a comparison keeps its ribbons. In a warm Generate of
+  the vibrio Gallery Session, the prepared-input check takes 155 ms of CPU
+  instead of 331 ms.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).
