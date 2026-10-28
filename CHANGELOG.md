@@ -12,10 +12,6 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
-  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
-  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
-
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
@@ -40,6 +36,10 @@ write-up of a release.
   row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
   strokes no feature by its color after a later edit, as Generate draws it. Before, a later rule edit or Legend delete
   stroked the features of the row's old color again until the next Generate (OV-1987, #1438).
+- Fixed: in the Web app, after a palette switch or a Default colors change, a Legend row whose name a color rule
+  also uses takes its new color while the rule colors no drawn feature (for example "Use existing color" on a CDS
+  feature that a visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next
+  Generate (OV-1988, #1441).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
@@ -118,6 +118,9 @@ write-up of a release.
   orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
   Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
   including an exact tie, could in principle move by 0.001 px (#1434).
+- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
+  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
+  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 

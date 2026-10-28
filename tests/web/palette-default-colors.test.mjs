@@ -310,7 +310,7 @@ test('the palette dialog closes after the History step of its choice', async () 
 // color is derived: nothing writes it into the Legend rows, which are an input
 // of the rule preparation (a write during a Generate made it stale).
 // Edit-unify: the rows a rule draws are Python's (`draftLegendRowColors`).
-const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
+const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC', features = [] } = {}) => {
   const { draftLegendPanelColors, draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
   const entries = [
     { caption: 'CDS', color: '#AABBCC' }, { caption: 'other tRNAs', color: '#111111' },
@@ -323,9 +323,9 @@ const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
   ]);
   const paletteColors = { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' };
   const panel = draftLegendPanelColors({
-    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, paletteColors, drawnTracks: []
+    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, features, paletteColors, drawnTracks: []
   });
-  const compiled = draftLegendRowColors({ rules, pythonRows, originalLegendOrder, paletteColors, drawnTracks: [] });
+  const compiled = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder, paletteColors, drawnTracks: [] });
   return { panel, compiled, entries };
 };
 
@@ -398,11 +398,31 @@ test('rules of one caption in two colors color a row each', async () => {
 // color, also when its caption names a palette key (a rule captioned CDS
 // whose color Python drew in the CDS row): the compile gives it the rule's
 // color, and the panel does not report it.
+// The drawn CDS features with the rule's match known, as the rule preparation records them.
+const drawnCdsFeatures = async (rule, matched) => {
+  const { recordRuleMatches, ruleKey } = await import('../../gbdraw/web/js/services/rule-matchers.js');
+  const features = [{ type: 'CDS', fill_color: '#00aa00' }, { type: 'CDS', fill_color: '#00aa00' }];
+  recordRuleMatches(features, [ruleKey(rule)], () => ({ matched: matched ? [0] : [], priorities: matched ? [0] : [], declined: [] }));
+  return features;
+};
 test('a palette change leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
-  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00' });
+  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, true) });
   assert.deepEqual([...panel.listed], [['other tRNAs', '#333333']]);
   assert.equal(compiled.colorOf('CDS'), '#00aa00');
+});
+
+// OV-1988: a rule captioned CDS in the CDS row's color that colors no drawn
+// feature (its feature is hidden) draws no row, so the CDS row is the
+// palette's and takes the new palette color, in the compile and the panel.
+test('a palette change recolors the CDS row a rule names when the rule colors no drawn feature', async () => {
+  const rule = { feat: 'CDS', qual: 'locus_tag', val: '^HIDDEN$', color: '#00aa00', cap: 'CDS' };
+  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, false) });
+  assert.equal(compiled.colorOf('CDS'), '#123456');
+  assert.deepEqual([...panel.listed], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  // The unknown-match fallback: while a drawn feature's match is unknown, live keeps the rule's color.
+  const pending = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: [{ type: 'CDS', fill_color: '#00aa00' }] });
+  assert.equal(pending.compiled.colorOf('CDS'), '#00aa00');
 });
 
 // OV-527: a hand-edited Session may name a palette `constructor` or `__proto__`;
