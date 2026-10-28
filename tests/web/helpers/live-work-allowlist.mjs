@@ -113,8 +113,10 @@ export const WORK_ALLOWLIST = [
     // rows it adds. Requests: the commit's rule matches and the rerender. A
     // caption written in two colors stays as written (the Legend numbers the
     // names it draws), so no caption normalization request precedes the
-    // matches.
-    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    // matches. The setup's CDS rule row, stroked by the Legend row stroke
+    // above, takes a color ID with its stroke, so the commit also shows the
+    // strokes (OV-1985).
+    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
@@ -209,8 +211,10 @@ export const WORK_ALLOWLIST = [
     }).then(() => settleLive(page))
   },
   {
-    // Result 2 draws the row too: Python draws it again there.
-    kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    // Result 2 draws the row too: Python draws it again there. The rename
+    // leaves the stroked CDS rule row the only CDS row, which moves to its
+    // caption with its stroke (OV-1985).
+    kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
   },
   {

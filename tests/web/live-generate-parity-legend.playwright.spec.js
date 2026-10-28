@@ -1814,3 +1814,40 @@ test('legend names: Undo and Redo of a color rule commit keep the name of the ru
   await expectNamesLiveAndGenerated(page, two.map(([, , text]) => text), 'after Undo and Redo');
   expect(await rows(), 'Generate writes the same keys and names').toEqual(two);
 });
+
+// OV-1985 (release-tier random walk, seed 40634318370): a caption-scope stroke
+// on a rule row whose key a later rule edit changes. The fill of FL2 "Use
+// existing color" writes a CDS rule in the palette color, and a second CDS rule
+// in another color makes Python draw the row as `CDS [#54bcf8]`; the stroke is
+// stored under that key. A caption edit of the second rule leaves CDS in one
+// color, so the commit moves the row and its stroke to the key `CDS` (OV-660);
+// after Generate, the caption written back moves them to `CDS [#54bcf8]`
+// again. Each time the live Result shows the stroke on the moved row, as
+// Generate draws it.
+for (const { name, generateBetween } of [
+  { name: 'the row leaves its color ID', generateBetween: false },
+  { name: 'the row takes its color ID back after Generate', generateBetween: true }
+]) {
+  test(`a Legend row stroke moves with its row when a rule caption edit re-keys it, live = Generate: ${name} (OV-1985)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
+    await popupEdit(page, { type: 'CDS', start: 2000, end: 2600 }, { fill: '#e63946', scope: 'useExisting' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#e63946', cap: 'CDS' });
+    await popupEdit(page, { type: 'CDS', start: 2850, end: 2900 }, { stroke: '#123456', scope: 'caption' });
+    const setCaption = async (value) => {
+      await evaluateWithRetainedPromise(page, (caption) => {
+        const app = window.__GBDRAW_APP__;
+        return app.setSpecificRuleField(app.manualSpecificRules.findIndex((rule) => rule.val === '^FL2$'), 'cap', caption);
+      }, value);
+      await settleLive(page);
+    };
+    await setCaption('transfer RNA');
+    if (generateBetween) {
+      await generate(page);
+      await setCaption('CDS');
+    }
+    const cdsRow = (snapshot) => snapshot.legend.find((row) => row.caption === 'CDS');
+    expect(cdsRow(await semanticSnapshot(page))?.stroke, 'the live CDS row shows the stroke').toBe('#123456');
+    await expectLiveEqualsGenerate(page, { label: `a rule caption edit after a caption-scope stroke: ${name}` });
+  });
+}

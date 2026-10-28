@@ -1926,23 +1926,28 @@ export const createAppSetup = () => {
   // show through the port, compiled with Generate's precedence, unless the
   // caller shows them in its own compile (`show: false`). The Save that shows
   // what a display declined because of it (`saving`) does not count itself.
-  // A rule commit's Legend rows (`legendRows`) show in the same compile.
+  // A rule commit's Legend rows (`legendRows`) show in the same compile, with
+  // the strokes when the commit moved a row's stroke edit to a new key
+  // (`strokes`, OV-1985).
   /** @param {boolean} saving */
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
   /**
    * @param {{
    *   recolor?: { recolorPairwise?: boolean, recolorCollinear?: boolean }, prepareRules?: boolean, show?: boolean, saving?: boolean,
-   *   legendRows?: import('./candidate-render.js').RuleLegendRows | null
+   *   legendRows?: import('./candidate-render.js').RuleLegendRows | null, strokes?: boolean
    * }} [options]
    */
-  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false, legendRows = null } = {}) => {
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false, legendRows = null, strokes = false } = {}) => {
     const blocked = () => sessionBlocks(saving);
     const project = () => {
       if (blocked()) return false;
       svgActions.applyPaletteToSvg(recolor);
       if (show) {
         showEditorIntent(legendRows
-          ? { domains: [...FILL_DOMAINS, ...LIVE_EDIT_DOMAINS.legendStructure], ruleRows: legendRows }
+          ? {
+              domains: [...FILL_DOMAINS, ...LIVE_EDIT_DOMAINS.legendStructure, ...(strokes ? LIVE_EDIT_DOMAINS.strokes : [])],
+              ruleRows: legendRows
+            }
           : { domains: FILL_DOMAINS });
       }
       return true;

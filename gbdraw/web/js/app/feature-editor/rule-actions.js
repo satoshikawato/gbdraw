@@ -115,7 +115,7 @@ import {
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
  *   History's undoable step that stores a checkpoint of the Result.
- * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null }) => boolean | Promise<boolean>} projectPaletteAndRules
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean, legendRows?: import('../candidate-render.js').RuleLegendRows | null, strokes?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3).
  * @property {RuleActionsPorts} ports
  * @property {EditDefaultColorsPort} editDefaultColors
@@ -533,11 +533,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       supersededLegendColors(drawing, intents, removedRuleRows).forEach((key) => setLegendColor(drawing.slices.paint, key, null));
       afterCommit(intents);
       applied = true;
+      // A row the commit keeps in place under a new key takes its stroke edit
+      // with it (OV-660), so the step also shows the strokes (OV-1985).
+      const strokedKeys = () => Object.keys(drawing.legendStrokeOverrides).join('\n');
+      const strokedBefore = strokedKeys();
       const legendRows = legend.apply();
       // The step shows its fills and Legend rows once its rules, feature
       // fills, Legend colors, and rows are written: every feature and row fill
       // is an operation of the one compile (OV-146).
-      projectPaletteAndRules({ prepareRules: false, legendRows });
+      projectPaletteAndRules({ prepareRules: false, legendRows, strokes: strokedKeys() !== strokedBefore });
       return legend.diff;
     }, { joinsOpenStep, drawn: { before: () => !ports.isRedrawOwed(drawing), change: !redrawsLegend } });
     if (applied) appliedWrites += 1;
