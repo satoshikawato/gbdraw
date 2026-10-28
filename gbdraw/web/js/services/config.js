@@ -7360,6 +7360,8 @@ const importSessionDocument = async (e, options = {}) => {
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
     const committed = commitLoadedDrawings(plan);
+    // The History router's members follow the store at once: the shown drawing below may be one the page did not hold.
+    rollbackState.replaceHistoryMembers(state.drawingTabs.value.map((tab) => tab.id));
     resetSessionProject();
     // Each committed drawing takes a new drawing's settings of its mode, its
     // default palette colors included (a new drawing state has none), before
@@ -7937,9 +7939,12 @@ export const exportSession = (titleOverride = null, options) => {
  * @typedef {{ target?: { files?: ArrayLike<File> | null, value: string } | null } | null | undefined} SessionFileInput
  */
 /**
- * The Load rollback port: `capture` before the Load commits, `restore` with what it returned when the Load fails
- * (the method form keeps the owner's own snapshot type assignable).
- * @typedef {{ capture(): unknown, restore(snapshot: unknown): void | Promise<void> }} SessionImportRollbackState
+ * The Load rollback port: `capture` before the Load commits, `replaceHistoryMembers` with the committed drawings'
+ * IDs in the same task as the store write (each drawing a Load makes has a History before any reader asks for the
+ * shown drawing's; OV-2131), `restore` with what `capture` returned when the Load fails (the method form keeps the
+ * owner's own snapshot type assignable).
+ * @typedef {{ capture(): unknown, replaceHistoryMembers(drawingIds: readonly DrawingId[]): void,
+ *   restore(snapshot: unknown): void | Promise<void> }} SessionImportRollbackState
  */
 /**
  * What the composition root passes to `importSession`: the Save and Load availability and the shown drawing

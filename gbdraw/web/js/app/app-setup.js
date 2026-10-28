@@ -355,7 +355,8 @@ const loadExportService = () => {
  * @property {ArtifactSlotStore} artifactSlots
  *   The kept generated artifacts of the drawings not shown (E1), held by reference.
  * @property {HistoryRouter['captureMembers']} captureHistoryMembers
- *   The History router's members: a Load replaces them before the baseline (OV-1769).
+ *   The History router's members: a Load replaces them at its store commit (OV-1769, OV-2131).
+ * @property {HistoryRouter['replaceMembers']} replaceHistoryMembers
  * @property {HistoryRouter['restoreMembers']} restoreHistoryMembers
  * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture
  *   of the shown drawing.
@@ -385,6 +386,7 @@ const loadExportService = () => {
 export const createSessionImportRollbackState = ({
   artifactSlots,
   captureHistoryMembers,
+  replaceHistoryMembers,
   restoreHistoryMembers,
   captureDisplayedArtifact,
   installDisplayedArtifact,
@@ -406,6 +408,8 @@ export const createSessionImportRollbackState = ({
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
+  // A Load's commit: each drawing it made starts with an empty History.
+  replaceHistoryMembers,
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     // The previous drawings' Histories, which the Load replaced (`replaceMembers`).
     restoreHistoryMembers(snapshot.historyMembers);
@@ -3762,6 +3766,7 @@ export const createAppSetup = () => {
   const sessionImportRollbackState = createSessionImportRollbackState({
     artifactSlots,
     captureHistoryMembers: () => history.captureMembers(),
+    replaceHistoryMembers: (drawingIds) => history.replaceMembers(drawingIds),
     restoreHistoryMembers: (members) => history.restoreMembers(members),
     captureDisplayedArtifact: () => historySnapshots.captureArtifactSlot(),
     // The rollback restored the pan already; the install keeps it.
@@ -3866,10 +3871,9 @@ export const createAppSetup = () => {
         previewFeatureSearch.resetModeSearches();
         settingsPaneActions.closeSettingsPopup();
         await nextTick();
-        // A loaded Session's drawings are new drawing states: each gets an
-        // empty History before the baseline. (A legacy configuration Load
-        // does not come here: its drawing keeps its History, OV-1790.)
-        history.replaceMembers(state.drawingList().map((drawing) => drawing.id));
+        // The Load's commit gave each loaded drawing an empty History
+        // (`replaceHistoryMembers`); a legacy configuration Load does not
+        // come here: its drawing keeps its History (OV-1790).
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
           throw new Error('Session loading canceled.');

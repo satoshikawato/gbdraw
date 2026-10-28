@@ -1220,6 +1220,7 @@ const restoredHistoryMembers = [];
 const sessionImportRollbackState = createSessionImportRollbackState({
   artifactSlots,
   captureHistoryMembers: () => historyMembersBefore,
+  replaceHistoryMembers: () => {},
   restoreHistoryMembers: (members) => restoredHistoryMembers.push(members),
   captureDisplayedArtifact: () => {
     const slot = artifactPort.captureArtifactSlot();
