@@ -12,16 +12,6 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Performance (web app): beside a plot title, a Circular Species change that moves no track keeps the placed labels,
-  the record content and the catalog snapshot (tobacco: 6 stage builds to 3, about 190 ms to 70 ms in CPython).
-  A Circular Generate that changes neither the centre definition nor the tracks reuses the check of the definition
-  over the tracks instead of building every track's paint again (Vnig: about 20 ms less per Generate). The commit
-  check of the cached records hashes each feature field directly (Vnig about 40-85 ms to 32-39 ms). A GC toggle or
-  another change that moves Linear rows without changing a comparison ribbon keeps the ribbons (Hepatoplasmataceae
-  orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
-  Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
-  including an exact tie, could in principle move by 0.001 px.
-
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
 - Patch release of 0.14.2. Session files are unchanged (Session version 48).
@@ -106,6 +96,15 @@ write-up of a release.
 - Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
   and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
   warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
+- Performance (web app): beside a plot title, a Circular Species change that moves no track keeps the placed labels,
+  the record content and the catalog snapshot (tobacco: 6 stage builds to 3, about 190 ms to 70 ms in CPython).
+  A Circular Generate that changes neither the centre definition nor the tracks reuses the check of the definition
+  over the tracks instead of building every track's paint again (Vnig: about 20 ms less per Generate). The commit
+  check of the cached records hashes each feature field directly (Vnig about 40-85 ms to 32-39 ms). A GC toggle or
+  another change that moves Linear rows without changing a comparison ribbon keeps the ribbons (Hepatoplasmataceae
+  orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
+  Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
+  including an exact tie, could in principle move by 0.001 px (#1434).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
