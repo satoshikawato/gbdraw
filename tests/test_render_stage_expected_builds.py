@@ -660,3 +660,32 @@ def test_a_linear_definition_change_keeps_the_ribbons(change: tuple[str, ...], t
     assert outcome.error is None and outcome.reply != before.reply
     assert "comparison_content" not in outcome.stages.builds
     assert outcome.stages.hits.get("comparison_content") == 1
+
+
+def test_a_species_change_on_a_multi_record_circular_canvas_builds_no_catalog_snapshot(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2108: the catalog reads a record part only when its kind holds what the catalog reads.
+
+    With the full definition kept beside the plot title, a species change
+    redraws each record's definition part, which reads nothing for the catalog,
+    so it builds no ``catalog_snapshot``; a palette change repaints the feature
+    parts, whose snapshots rebuild with the new fills (no stale hit).
+    """
+
+    case = CASES["C2"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C2")
+    base = [*placeholders.expand(case, case.base), "--keep_full_definition_with_plot_title"]
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    species = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert species.error is None
+    assert species.reply["results"] != before.reply["results"]
+    assert "record_part" in species.stages.builds
+    assert "catalog_snapshot" not in species.stages.builds
+    assert species.reply["featureCatalog"] == before.reply["featureCatalog"]
+    palette = harness.warm([*base, "--species", "<i>Homo sapiens</i> X", "-p", "soft_pastels"])
+    assert palette.error is None
+    assert "catalog_snapshot" in palette.stages.builds
+    assert palette.reply["featureCatalog"] != species.reply["featureCatalog"]
