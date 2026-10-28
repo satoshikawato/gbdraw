@@ -318,6 +318,41 @@ test('Duplicate in the tab menu shows a named copy as one step that Undo takes b
   expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(first);
 });
 
+// PD-OI-090 〔入力ファイル〕, T-B4-6: another drawing chooses a file this Session
+// already holds without an upload. The Linear drawing's GenBank uploader offers
+// the Circular drawing's file; choosing it binds the same file ID as one step.
+test('an uploader offers the files in this Session and binds the chosen one without an upload', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [circular] = await drawingIds(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  const boundId = (id, read) => page.evaluate(async ([drawingId, field]) => {
+    const drawing = (await import('./js/state.js')).state.drawingOf(drawingId);
+    const ref = field === 'c_gb' ? drawing.files.c_gb : drawing.linearSeqs[0].gb;
+    return ref ? ref.fileId : null;
+  }, [id, read]);
+  await expect.poll(() => boundId(circular, 'c_gb')).not.toBeNull();
+  const fileId = await boundId(circular, 'c_gb');
+
+  const linear = await takeLinearOffer(page);
+  const picker = page.getByRole('combobox', { name: 'Choose GenBank / DDBJ File from this Session', exact: true });
+  await expect(picker.locator('option')).toHaveText(['Files in this Session', 'NC_001416.gb']);
+  // The store names its files file-1, file-2, ...: the highest stored ID.
+  const lastStoredId = () => page.evaluate(async () => {
+    const { inputFiles } = (await import('./js/state.js')).state;
+    let last = 0;
+    for (let id = 1; id <= 500; id += 1) if (inputFiles.has(`file-${id}`)) last = id;
+    return last;
+  });
+  const before = await lastStoredId();
+  await picker.selectOption({ label: 'NC_001416.gb' });
+  await expect.poll(() => boundId(linear, 'gb'), 'the Linear drawing binds the same file').toBe(fileId);
+  expect(await lastStoredId(), 'choosing stored no new file').toBe(before);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Change uploaded file');
+  await expect(picker, 'the uploader offers no file it already shows').toHaveCount(0);
+});
+
 // D-15-120: a Load of a one-mode Session makes no drawing of the other mode. The bar lists the
 // Session's drawings; the Linear offer tab, or the menu's New Circular drawing, makes the other
 // mode's drawing at its defaults.

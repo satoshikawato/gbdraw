@@ -197,6 +197,49 @@ const BOUND_FILE_KEYS = Object.freeze([
 const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
 
 /**
+ * The kinds of file an uploader takes; a binding slot's kind is the kind of
+ * the files it binds. Each of the five cards is its own kind.
+ * @typedef {'genbank' | 'gff' | 'fasta' | 'depth' | 'comparison' | CardFileSlot} InputFileKind
+ */
+/**
+ * The kind of each slot that an uploader binds; a bound slot missing here
+ * (the conservation sequences, a committed comparison) is offered to no
+ * uploader. `row.` names a Linear record row's field, `edge` a Linear
+ * comparison's uploaded file.
+ * @type {Readonly<Record<string, InputFileKind>>}
+ */
+const FILE_KIND_OF_SLOT = Object.freeze({
+  c_gb: 'genbank', 'row.gb': 'genbank', c_gff: 'gff', 'row.gff': 'gff', c_fasta: 'fasta', 'row.fasta': 'fasta',
+  c_depth: 'depth', 'row.depth': 'depth', c_conservation_blasts: 'comparison', edge: 'comparison',
+  d_color: 'd_color', t_color: 't_color', blacklist: 'blacklist', whitelist: 'whitelist',
+  qualifier_priority: 'qualifier_priority'
+});
+
+/**
+ * Every ref the bindings name, with the slot that names it (`FILE_KIND_OF_SLOT`'s keys, `committed` for a
+ * committed comparison): the one walk of the bindings.
+ * @param {InputBindings} bindings
+ * @param {(ref: InputFileRef, slot: string) => void} visit
+ */
+const visitBoundFiles = (bindings, visit) => {
+  /** @param {string} slot @param {unknown} value */
+  const add = (slot, value) => {
+    if (Array.isArray(value)) {
+      value.forEach((entry) => add(slot, entry));
+      return;
+    }
+    if (isInputFileRef(value)) visit(value, slot);
+  };
+  bindings.drawingList().forEach((drawing) => {
+    BOUND_FILE_KEYS.forEach((key) => add(key, drawing.files[key]));
+    (Array.isArray(drawing.files.linearCanonicalComparisons) ? drawing.files.linearCanonicalComparisons : [])
+      .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add('committed', comparison?.file));
+    drawing.linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(`row.${key}`, sequence[key])));
+    (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add('edge', edge.file));
+  });
+};
+
+/**
  * The IDs of every file a binding names.
  * @param {InputBindings} bindings
  * @returns {Set<string>}
@@ -204,29 +247,26 @@ const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
 export const boundInputFileIds = (bindings) => {
   /** @type {Set<string>} */
   const fileIds = new Set();
-  /** @param {unknown} value */
-  const add = (value) => {
-    if (Array.isArray(value)) {
-      value.forEach(add);
-      return;
-    }
-    if (isInputFileRef(value)) fileIds.add(value.fileId);
-  };
-  /**
-   * @param {Readonly<Record<string, unknown>>} files
-   * @param {readonly Readonly<Record<string, unknown>>[]} linearSeqs
-   */
-  const addInputs = (files, linearSeqs) => {
-    BOUND_FILE_KEYS.forEach((key) => add(files[key]));
-    (Array.isArray(files.linearCanonicalComparisons) ? files.linearCanonicalComparisons : [])
-      .forEach((/** @type {{ file?: unknown } | null | undefined} */ comparison) => add(comparison?.file));
-    linearSeqs.forEach((sequence) => LINEAR_SEQ_FILE_KEYS.forEach((key) => add(sequence[key])));
-  };
-  bindings.drawingList().forEach((drawing) => {
-    addInputs(drawing.files, drawing.linearSeqs);
-    (drawing.linearComparisonPlan?.edges || []).forEach((edge) => add(edge.file));
-  });
+  visitBoundFiles(bindings, (ref) => fileIds.add(ref.fileId));
   return fileIds;
+};
+
+/**
+ * The files in this Session that an uploader of `kind` offers (PD-OI-090
+ * 〔入力ファイル〕, T-B4-6): every ref any drawing binds in a slot of that
+ * kind, once per file, in binding order. Choosing one binds the ref itself,
+ * so no file is stored twice.
+ * @param {InputBindings} bindings
+ * @param {InputFileKind} kind
+ * @returns {InputFileRef[]}
+ */
+export const sessionFilesOfKind = (bindings, kind) => {
+  /** @type {Map<string, InputFileRef>} */
+  const refs = new Map();
+  visitBoundFiles(bindings, (ref, slot) => {
+    if (FILE_KIND_OF_SLOT[slot] === kind && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
+  });
+  return [...refs.values()];
 };
 
 /**

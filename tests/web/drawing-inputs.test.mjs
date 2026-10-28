@@ -386,3 +386,32 @@ test('Save writes each drawing\'s own card bindings', async () => {
   const cards = written.map(({ webFiles }) => ['d_color', 'blacklist'].map((key) => Boolean(webFiles.bindings[key])));
   assert.deepEqual(cards, [[true, false], [false, true]], 'each drawing names its own card files only');
 });
+
+// PD-OI-090 〔入力ファイル〕, T-B4-6: another drawing chooses a file the project
+// already holds without an upload. The picker offers the files every drawing
+// binds in a slot of the uploader's kind; choosing one binds the same ref (the
+// same file ID) through the uploader's own bind path and stores nothing new.
+test('a Session file chosen in another drawing binds the same file ID and stores no new file', async () => {
+  const { sessionFilesOfKind } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const store = createInputFileStore();
+  const circular = INPUTS_SLICE.create();
+  const linear = INPUTS_SLICE.create();
+  const genome = bindDrawingInputFile(store, circular.handle, 'c_gb', fileNamed('genome.gb'));
+  const colors = bindInputFile(store, circular.handle, 'd_color', fileNamed('colors.tsv'));
+  const blast = store.registerFile(fileNamed('pair.tsv'));
+  const bindings = { drawingList: () => [
+    { ...circular.view, linearComparisonPlan: null },
+    { ...linear.view, linearComparisonPlan: { edges: [{ file: blast }] } }
+  ] };
+  assert.deepEqual(sessionFilesOfKind(bindings, 'genbank'), [genome], 'a GenBank uploader offers the bound GenBank');
+  assert.deepEqual(sessionFilesOfKind(bindings, 'd_color'), [colors], 'a card offers its own kind only');
+  assert.deepEqual(sessionFilesOfKind(bindings, 'comparison'), [blast]);
+  assert.deepEqual(sessionFilesOfKind(bindings, 'fasta'), [], 'no FASTA is bound');
+  assert.deepEqual(sessionFilesOfKind(bindings, 'blacklist'), []);
+  const [picked] = sessionFilesOfKind(bindings, 'genbank');
+  bindLinearSeqFile(store, linear.handle, linear.view.linearSeqs[0].uid, 'gb', picked);
+  assert.equal(linear.view.linearSeqs[0].gb, genome, 'the other drawing binds the same ref');
+  assert.equal(linear.view.linearSeqs[0].gb.fileId, genome.fileId);
+  assert.deepEqual(sessionFilesOfKind(bindings, 'genbank'), [genome], 'one file, bound twice, is offered once');
+  assert.equal(store.registerFile(fileNamed('later.gb')).fileId, 'file-4', 'choosing stored no new file');
+});
