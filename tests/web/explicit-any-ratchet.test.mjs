@@ -80,7 +80,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/depth-track-state.js': 1,
   'services/diagram-generation.js': 1,
   'services/feature-catalog.js': 3,
-  'services/feature-edit-migration.js': 13,
+  'services/feature-edit-migration.js': 10,
   'services/feature-metadata-extraction.js': 3,
   'services/feature-placement.js': 12,
   'services/feature-utils.js': 2,

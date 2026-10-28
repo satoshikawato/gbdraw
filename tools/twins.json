@@ -3,20 +3,6 @@
   "description": "Logic that Python and the Web each implement (boundary audit M2). tests/web/twin-registry.test.mjs requires a row for every twin that twin.unregistered.v1 (tools/web-twin-detectors.mjs) detects and no vector: or function: row it does not detect; constant: and concern: rows record twins it does not see. Rows leave when a side is deleted; a new row is an authority change, made before its twin with \"pending\": true, which the change that adds the twin removes.",
   "twins": [
     {
-      "id": "vector:tests/fixtures/annotation-target-migration-vectors.json",
-      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_annotation_targets"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
-      ],
-      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
-      "reason": "Web Load and CLI replay of a Session 44 or older must move the same hash annotation targets; 19 cases pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (annotation targets; OV-134)"
-    },
-    {
       "id": "vector:tests/fixtures/auto_size_vectors.json",
       "concern": "Auto size values by record length (size class)",
       "pythonOwner": [
@@ -146,20 +132,6 @@
       "reason": "The editor answers before Generate; rule matches come from Python and the vector pins the drawn decision.",
       "retireWhen": "the Web calls the Python owner (Worker) instead of its own copy",
       "source": "inventory C section B (rule evaluation; OV-249)"
-    },
-    {
-      "id": "vector:tests/fixtures/hash-rule-migration-vectors.json",
-      "concern": "Hash color rules to source hash (Session 44 and older, R-7)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_hash_rules"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
-      ],
-      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
-      "reason": "Both Load paths migrate the rule values; the vector pins them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
       "id": "vector:tests/fixtures/legacy-render-request-vectors.json",
@@ -565,20 +537,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:migrateSessionAnnotationTargets",
-      "concern": "Hash annotation targets to feature identity (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_annotation_targets"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionAnnotationTargets"
-      ],
-      "vector": "tests/fixtures/annotation-target-migration-vectors.json",
-      "reason": "Both Load paths migrate; the 19 cases of the shared vector pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (annotation targets; OV-134)"
-    },
-    {
       "id": "function:migrateSessionFeatureEdits",
       "concern": "Session 31-44 rendered-ID feature edits to feature identity",
       "pythonOwner": [
@@ -605,20 +563,6 @@
       "reason": "Both Load paths migrate; the shared vector pins them.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts; OV-102)"
-    },
-    {
-      "id": "function:migrateSessionHashRules",
-      "concern": "Hash color rules to source hash (Session 44 and older)",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_hash_rules"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionHashRules"
-      ],
-      "vector": "tests/fixtures/hash-rule-migration-vectors.json",
-      "reason": "Both Load paths migrate; the shared vector pins them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
       "id": "function:normalizeCircularTrackPreset",
