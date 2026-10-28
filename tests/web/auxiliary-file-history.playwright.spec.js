@@ -3,6 +3,7 @@ const { openApp, reveal, evaluateWithRetainedPromise } = require('./helpers/app-
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { load, generate, switchMode } = require('./helpers/mode-transition.cjs');
+const { shownDrawing } = require('./helpers/drawing-bar.cjs');
 
 const cases = [
   { label: 'Default colors file', key: 'd_color', text: 'CDS\t#123456\n', value: 'a.currentColors.CDS', expected: '#123456' },
@@ -142,21 +143,28 @@ test('a Specific rules card changes only the shown drawing, and Undo from either
   // A Session load, a Generate, and a Pyodide start come before the checks.
   test.setTimeout(300_000);
   const page = await load(browser);
-  const rulesOf = (mode) => page.evaluate(async (drawingMode) => {
+  // The Session holds one Circular drawing. The Linear drawing is made first,
+  // the way a user makes it: making it is a project step, which an Undo in
+  // Circular would take before the Circular card steps that follow it.
+  const ids = { circular: (await shownDrawing(page)).id };
+  await switchMode(page, 'linear');
+  ids.linear = (await shownDrawing(page)).id;
+  await switchMode(page, 'circular');
+  const rulesOf = (kind) => page.evaluate(async (drawingId) => {
     const { state } = await import('./js/state.js');
-    const drawing = state.drawingOf(drawingMode);
+    const drawing = state.drawingOf(drawingId);
     return {
       file: drawing.files.t_color?.name ?? null,
       rules: drawing.manualSpecificRules.map((rule) => [rule.val, Boolean(rule.fromFile)])
     };
-  }, mode);
+  }, ids[kind]);
   await evaluateWithRetainedPromise(page, async () => {
     const a = window.__GBDRAW_APP__;
     Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'product', val: 'cytochrome', color: '#445566', cap: 'Hand' });
     await a.addSpecificRule();
   });
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'rules.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tNADH\t#123456\tImported\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   const circularLoaded = { file: 'rules.tsv', rules: [['cytochrome', false], ['NADH', true]] };
   await expect.poll(() => rulesOf('circular')).toEqual(circularLoaded);
   await switchMode(page, 'linear');
@@ -173,7 +181,7 @@ test('a Specific rules card changes only the shown drawing, and Undo from either
   await reveal(page.getByLabel('Specific rules file', { exact: true }));
   await expect(page.getByRole('button', { name: 'Remove Specific rules file', exact: true })).toHaveCount(0);
   await page.getByLabel('Specific rules file', { exact: true }).setInputFiles({ name: 'linear-rules.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\tterminase\t#654321\tLinear file\n') });
-  await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+  await evaluateWithRetainedPromise(page, async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   const linearLoaded = { file: 'linear-rules.tsv', rules: [['terminase', true]] };
   await expect.poll(() => rulesOf('linear')).toEqual(linearLoaded);
   expect(await rulesOf('circular')).toEqual(circularLoaded);
