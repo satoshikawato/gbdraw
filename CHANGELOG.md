@@ -57,7 +57,7 @@ write-up of a release.
   769 to 778 px), cutting off the translation feedback link, and narrowed the Session title to nothing below about
   810 px. Where the title still narrows, the closed Language menu takes the width of the shown language's name;
   where the title would be narrower than 5rem, the header wraps to two rows, the logo above the toolbar, as below
-  769 px. The Circular and Linear names stay on one line (OV-2177, OV-2178; 0.14.2 had both).
+  769 px. The Circular and Linear names stay on one line (OV-2177, OV-2178, #1446; 0.14.2 had both).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
