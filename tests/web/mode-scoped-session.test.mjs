@@ -57,7 +57,10 @@ const loadDialogs = [];
 const load = (session) => importSession({
   target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
 }, { confirmLoadRepairs: async (dialog) => { loadDialogs.push(dialog); return true; } });
+// The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
 const resetDrawings = () => {
+  addPairDrawings();
   for (const mode of MODES) {
     Object.assign(modeDrawing(state, mode).form, createDefaultForm());
     Object.assign(modeDrawing(state, mode).adv, createDefaultAdv(mode));
@@ -133,9 +136,9 @@ test('Session 49 saves each drawing as its own entry and loads it back into that
   assert.deepEqual(modeDrawing(state, 'linear').legendEntries.value, []);
   assert.deepEqual(modeDrawing(state, 'circular').dormantLegendEntries.value, []);
 
-  // A slice may omit any field, and the slice of a mode not shown may be
-  // absent: Load fills them with that mode's defaults. (A settings-only
-  // Session keeps the slice of its shown mode.)
+  // A slice may omit any field, which Load fills with its mode's defaults, and
+  // a Session may hold no drawing of a mode: Load makes none (D-15-120). (A
+  // settings-only Session keeps the slice of its shown mode.)
   const partial = withSavedDrawingView(saved, 'circular', (view) => {
     delete view.modes.circular.config.adv.label_font_size;
   });
@@ -148,8 +151,7 @@ test('Session 49 saves each drawing as its own entry and loads it back into that
   assert.equal(loadedPartial.status, 'ok', JSON.stringify(loadedPartial.error));
   assert.equal(modeDrawing(state, 'circular').adv.label_font_size, createDefaultAdv('circular').label_font_size);
   assert.equal(modeDrawing(state, 'circular').form.separate_strands, false);
-  assert.equal(modeDrawing(state, 'linear').adv.depth_min, createDefaultAdv('linear').depth_min);
-  assert.equal(modeDrawing(state, 'linear').form.plot_title, '');
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular']);
 });
 
 test('a file that is not a gbdraw Session is refused as such before its contents are read', async () => {
@@ -362,6 +364,7 @@ test('a slice keeps its OFF records, and omission draws every record (record-sel
   installShownDrawing('circular');
   const gallery = JSON.parse(readFileSync(new URL('../../gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', import.meta.url), 'utf8'));
   assert.equal((await load(gallery)).status, 'ok');
+  addPairDrawings();
   const uid = modeDrawing(state, 'linear').linearSeqs[0].uid;
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, uid);
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
@@ -415,9 +418,8 @@ test('a Session without a mode slice turns every record of that mode ON (record 
   const gallery = (name) => JSON.parse(readFileSync(new URL(`../../gbdraw/web/gallery/sessions/${name}.gbdraw-session.json`, import.meta.url), 'utf8'));
   assert.equal((await load(gallery('lambda_basic_linear'))).status, 'ok');
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, modeDrawing(state, 'linear').linearSeqs[0].uid);
-  modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#2');
   assert.equal((await load(gallery('HmmtDNA_basic_circular'))).status, 'ok');
-  assert.deepEqual([...modeDrawing(state, 'linear').recordsOff], []);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), ['circular']);
   assert.deepEqual([...modeDrawing(state, 'circular').recordsOff], []);
   await save('circular only, saved again');
 });
@@ -426,6 +428,7 @@ test('a Session without a mode slice turns every record of that mode ON (record 
 // drawings (PD-OI-070, PD-OI-091).
 test('Reset Settings keeps the OFF records of both drawings (record selection)', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  addPairDrawings();
   modeDrawing(state, 'linear').recordsOff.splice(0, Infinity, 'card-b');
   modeDrawing(state, 'circular').recordsOff.splice(0, Infinity, '#3');
   state.drawingList().forEach((drawing) => resetSettings(state, drawing));
@@ -440,6 +443,7 @@ test('Reset Settings keeps the OFF records of both drawings (record selection)',
 // Similarity group names, in both drawings.
 test('Reset Settings removes the saved label table and the dormant Similarity group names of both drawings', async () => {
   const { resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+  addPairDrawings();
   const row = { recordId: '*', featureType: '*', qualifier: 'product', valueRegex: '^a$', labelText: 'A' };
   MODES.forEach((mode) => {
     const drawing = modeDrawing(state, mode);
@@ -563,25 +567,6 @@ test('a Load that fails in its commit leaves the drawings, their order and the s
   state.drawingList().forEach((drawing, index) => assert.equal(drawing, before[index], drawing.id));
   assert.equal(state.activeDrawing().id, 'linear');
   assert.equal(modeDrawing(state, 'linear').adv.label_font_size, 11);
-});
-
-test('a Load of a Session with a drawing of one mode keeps a new drawing of the other mode for the mode buttons (T-1)', async () => {
-  const vector = drawingsVector('file-card-imports-circular.v48');
-  assert.deepEqual(vector.drawings.map((drawing) => drawing.mode), ['circular']);
-  resetDrawings();
-  modeDrawing(state, 'linear').adv.label_font_size = 9;
-  const before = state.drawingList();
-  const loaded = await load(fixtureSession('file-card-imports-circular.v48'));
-  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
-  const linear = modeDrawing(state, 'linear');
-  assert.equal(before.includes(linear), false);
-  // A new drawing at its mode's defaults (D-15-120): the pre-Load edit is gone.
-  assert.deepEqual({ ...linear.form }, createDefaultForm());
-  assert.equal(linear.adv.label_font_size, createDefaultAdv('linear').label_font_size);
-  installShownDrawing(linear.id);
-  assert.equal(state.activeDrawing(), linear);
-  installShownDrawing('circular');
 });
 
 test('Load reads each drawing\'s saved Result set from its own entry of the 49 document, not from `otherModeResult`', () => {
@@ -802,17 +787,16 @@ test('a Session 49 whose Linear drawings hold different LOSAT entries keeps each
   }
 });
 
-test('a Session 49 without a Linear drawing gives the Linear drawing the app adds the Linear defaults', async () => {
+// D-15-120: a Session 49 without a Linear drawing loads without one; the Linear drawing the app
+// held before the Load goes with the drawings the Load replaces.
+test('a Session 49 without a Linear drawing loads no Linear drawing', async () => {
   const session = v49Session('drawings-circular-only');
   resetDrawings();
   modeDrawing(state, 'linear').form.plot_title = 'left over';
-  modeDrawing(state, 'linear').adv.linear_track_layout = 'below';
   const loaded = await load(session);
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  const linear = state.drawingList().find((drawing) => drawing.mode === 'linear');
-  assert.ok(linear, 'the app shows a Linear drawing');
-  assert.equal(linear.form.plot_title, createDefaultForm().plot_title);
-  assert.equal(linear.adv.linear_track_layout, createDefaultAdv('linear').linear_track_layout);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), session.drawings.map((entry) => entry.mode));
+  assert.equal(state.drawingList().some((drawing) => drawing.mode === 'linear'), false);
 });
 
 test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 40-48\'s top-level ones are', async () => {
@@ -1234,9 +1218,8 @@ test('Load and Save keep a Linear row without a Depth file as depth null (OV-337
   assert.deepEqual(linearRows(second).map((row) => row.depth), rows.map((row) => row.depth));
 });
 
-// OV-1811: the drawing Load adds for a mode the Session lacks (T-1) is a new drawing at its mode's
-// defaults (D-15-120), so Save does not count it as used.
-test('Save does not write the unused Circular drawing Load adds for the mode buttons (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+// OV-1811: Save writes the drawings a one-mode Session 49 Load made, and no drawing of the other mode.
+test('Save after a one-mode Session 49 Load writes no drawing of the other mode (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
   resetDrawings();
   const first = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
   const result = await exportSession('ov-1811', { readKeptArtifacts: () => [first.opening, ...first.stashed].filter(Boolean) });
@@ -1245,14 +1228,24 @@ test('Save does not write the unused Circular drawing Load adds for the mode but
   assert.deepEqual(saved.drawings.map((entry) => entry.id), ['linear', 'linear-2']);
 }));
 
-// OV-1811, a Session 48 the move gives one drawing (its Linear part unused): the Linear drawing Load
-// adds takes nothing of that part, so Save writes the Circular drawing alone.
-test('Save does not write the unused Linear drawing Load adds after a Session 48 Load (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
+// OV-1811, a Session 48 the move gives one drawing (its Linear part unused): Load makes no Linear
+// drawing (D-15-120), so Save writes the Circular drawing alone.
+test('a Session 48 Load whose Linear part is unused makes no Linear drawing; Save writes the Circular one (R16-8, OV-1811)', () => withBootPalettes(state, async () => {
   assert.deepEqual(drawingsVector('file-card-imports-circular.v48').drawings.map((drawing) => drawing.mode), ['circular']);
   resetDrawings();
   const loaded = await load(fixtureSession('file-card-imports-circular.v48'));
   assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
-  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular', 'linear']);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['circular']);
   const saved = await save('ov-1811 48');
   assert.deepEqual(saved.drawings.map((entry) => entry.id), ['circular']);
+}));
+
+// D-15-120: a Load makes only the drawings the Session holds; the bar's offer tab, not the Load,
+// makes a drawing of the other mode.
+test('a one-mode Session 49 Load lists only its own drawings (D-15-120)', () => withBootPalettes(state, async () => {
+  resetDrawings();
+  const loaded = await loadKeepingSlots(v49Session('drawings-linear-pair-losat'));
+  assert.equal(loaded.loaded.status, 'ok', JSON.stringify(loaded.loaded.error));
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), ['linear', 'linear-2']);
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['linear', 'linear-2']);
 }));

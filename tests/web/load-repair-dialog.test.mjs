@@ -50,6 +50,8 @@ const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/
 const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+// The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const rollbackPort = await sessionRollbackPort(state);
 const { exportSession, importSession } = callerSession(sessionConfig, state, rollbackPort);
@@ -67,7 +69,7 @@ const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixture
 const input = (session) => ({
   target: { files: [new File([JSON.stringify(session)], 'session.json', { type: 'application/json' })], value: 'selected' }
 });
-// What a Load replaces: the settings and edits of both drawings, the shown
+// What a Load replaces: the drawings and their settings and edits, the shown
 // mode and Results, the title, the input files. `shownResults: false` leaves
 // the shown Results out.
 const loadedState = ({ shownResults = true } = {}) => JSON.stringify({
@@ -75,13 +77,10 @@ const loadedState = ({ shownResults = true } = {}) => JSON.stringify({
   title: state.sessionTitle.value,
   ...(shownResults ? { results: state.results.value.map((result) => result.content) } : {}),
   files: [...state.drawingList().flatMap((drawing) => Object.keys(drawing.files))],
-  drawings: Object.fromEntries(['circular', 'linear'].map((mode) => {
-    const drawing = modeDrawing(state, mode);
-    return [mode, {
-      form: drawing.form, adv: drawing.adv, featureOverrides: drawing.featureOverrides,
-      legendEntries: drawing.legendEntries.value
-    }];
-  }))
+  drawings: Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
+    form: drawing.form, adv: drawing.adv, featureOverrides: drawing.featureOverrides,
+    legendEntries: drawing.legendEntries.value
+  }]))
 });
 
 // A Linear Session 44 with one Feature visibility edit that names no feature
@@ -1161,6 +1160,7 @@ test('a configuration file group or list Load does not use keeps the drawing\'s 
   // `losat.blastp` is a Linear setting and `circularConservation` a Circular one: each row is its mode's.
   const shownMode = state.mode.value;
   for (const [file, , mode = 'circular'] of cases) {
+    addPairDrawings();
     installShownDrawing(mode);
     assert.equal((await importSession(input(first), { confirmLoadRepairs: async () => true })).status, 'legacy');
     const drawing = modeDrawing(state, state.mode.value);

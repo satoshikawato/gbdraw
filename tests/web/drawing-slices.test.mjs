@@ -57,6 +57,8 @@ setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validate
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+// The Circular and Linear pair a case works on (a one-mode Load makes no drawing of the other mode).
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -122,16 +124,16 @@ test('install(capture(x)) gives back x, also after reset, on the Session 46 fixt
   for (const name of fixtureNames) {
     const loaded = await load(name);
     assert.equal(loaded?.status, 'ok', `${name}: ${loaded?.error?.message ?? loaded?.status}`);
-    for (const mode of MODES) {
+    for (const drawing of state.drawingList()) {
       for (const [sliceName, slice] of SLICES) {
-        const handle = modeDrawing(state, mode).slices[sliceName];
+        const handle = drawing.slices[sliceName];
         const captured = slice.capture(handle);
         const json = JSON.stringify(captured);
         slice.install(handle, captured);
-        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${mode} ${sliceName}: install(capture(x))`);
+        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${drawing.id} ${sliceName}: install(capture(x))`);
         slice.reset(handle);
         slice.install(handle, JSON.parse(json));
-        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${mode} ${sliceName}: after reset`);
+        assert.equal(JSON.stringify(slice.capture(handle)), json, `${name} ${drawing.id} ${sliceName}: after reset`);
       }
     }
   }
@@ -210,6 +212,7 @@ test('the slice write scan flags a planted write and leaves reads alone', () => 
 // templates; it does not see a write through an alias held under another
 // name (`const m = state.mode; m.value = ...`).
 test('the shown drawing is drawings[activeDrawingId], mode follows it, and one writer installs it', () => {
+  addPairDrawings();
   const shown = state.activeDrawingId.value;
   for (const id of MODES) {
     installShownDrawing(id);
@@ -240,6 +243,7 @@ test('the shown drawing is drawings[activeDrawingId], mode follows it, and one w
 // entry and the Run info replay read it there, and an unknown drawing ID is a
 // typed refusal, not a bare Error.
 test('a drawing\'s tab name is read through one owner, which refuses an unknown drawing', () => {
+  addPairDrawings();
   for (const id of MODES) {
     assert.equal(state.drawingTabOf(id), state.drawingTabs.value.find((tab) => tab.id === id));
   }
@@ -383,11 +387,13 @@ const saveSession = async () => {
 // Before Load the edit is undone: by the slice's reset, or, for the inputs
 // slice, whose reset keeps every binding (PD-OI-070), by a new drawing's inputs.
 const undo = (name, slice, handle) => (name === 'inputs' ? slice.install(handle, slice.capture(slice.create().handle)) : slice.reset(handle));
-// The other mode's drawing of a one-mode fixture is the new drawing Load adds
-// (D-15-120), at the defaults with the boot palettes, so Save does not write it.
+// A one-mode fixture loads no drawing of the other mode (D-15-120): the case
+// adds it after each Load as the offer tab makes it, at the defaults with the
+// boot palettes, so Save does not write it.
 test('a slice edit shows in its drawing, survives Save and Load, and leaves the other drawing unchanged', () => withBootPalettes(state, async () => {
   assert.deepEqual(Object.keys(SAMPLES).sort(), SLICES.map(([name]) => name).sort(), 'every slice has a sample');
   assert.equal((await load(fixtureNames[0]))?.status, 'ok');
+  addPairDrawings();
   for (const mode of MODES) {
     const other = MODES.find((candidate) => candidate !== mode);
     for (const [name, slice] of SLICES) {
@@ -407,6 +413,7 @@ test('a slice edit shows in its drawing, survives Save and Load, and leaves the 
       const reloaded = await importSession({ target: { files: [session], value: 'selected' } },
         { transformLegacyResultSvg, confirmLoadRepairs: async () => true });
       assert.equal(reloaded?.status, 'ok', `${mode} ${name}: ${reloaded?.error?.message ?? reloaded?.status}`);
+      addPairDrawings();
       assert.equal(refFree(slice.capture(modeDrawing(state, mode).slices[name])), refFree(sample), `${mode} ${name}: Save then Load`);
       assert.equal(captures(other), untouched, `${mode} ${name}: Load leaves the ${other} drawing as saved`);
       // Back to the loaded fixture, which a Save and Load keep as it is (Load

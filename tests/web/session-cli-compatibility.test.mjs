@@ -139,7 +139,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         assert.equal(result.status, 'ok', result.error?.stack);
         assert.equal(state.mode.value, mode);
         assert.equal(modeDrawing(state, mode).inputType.value, label === 'gff' ? 'gff' : 'gb');
-        assert.equal(modeDrawing(state, mode === 'circular' ? 'linear' : 'circular').inputType.value, 'gb', 'the other mode drawing keeps its input type');
+        assert.deepEqual(state.drawingList().map(drawing => drawing.mode), [mode], 'the Load makes no drawing of the other mode (D-15-120)');
         assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
         assert.deepEqual(getCommittedCanonicalRenderRequest(), view.renderRequest);
         assert.ok(state.results.value.length > 0);
@@ -869,8 +869,7 @@ await test('every drawing of a Session 49 draws the CLI figure after a Web Load,
         await writeFile(webSave, gunzipSync(Buffer.from(await saved.blob.arrayBuffer())));
         // A Web Save writes into each drawing the entries its request's inputs name (DESIGN §1): each drawing keeps
         // its request, and gets every entry of the file whose two rows its request names, so a drawing whose request
-        // names another drawing's rows gets that drawing's entries too (OV-1884). A drawing the file does not hold
-        // (the one Load adds for the mode buttons, written here because this harness boots no palettes) has none.
+        // names another drawing's rows gets that drawing's entries too (OV-1884).
         const savedSession = JSON.parse(await readFile(webSave, 'utf8'));
         const storedEntries = stored.drawings.flatMap(drawing => drawing.losatCache?.entries ?? []);
         const requestOf = (session, id) => session.drawings.find(drawing => drawing.id === id)?.renderRequest ?? null;
