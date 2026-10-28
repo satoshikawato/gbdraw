@@ -714,8 +714,8 @@ Like every setting, the plot-title text, plot-title **Font size**, and
 In Circular mode, **Show Definition** under **Record Labels** (on by default)
 turns the center definition of every record on or off, on one map and on a
 Multi-Record Canvas: off draws no name, strain, replicon, accession, length, or
-GC line, the inside tracks keep no room for it, and no definition-fit warning
-appears. The plot title is still drawn, and **Keep Full Definition with Plot
+GC line, the inside tracks keep no room for it (a **Center Reserved Radius**
+you set still applies), and no definition-fit warning appears. The plot title is still drawn, and **Keep Full Definition with Plot
 Title** is hidden while **Show Definition** is off. It applies on **Generate**,
 is saved with the Session, and appears in Run info as `--hide_definition`
 (config `objects.definition.circular.show`).

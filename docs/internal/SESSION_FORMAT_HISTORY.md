@@ -18,7 +18,7 @@ Session version 49 adds `adv.show_definition` (boolean, Circular **Show
 Definition**, PD-OI-109) to the Circular slice (`modes.circular.config.adv`),
 an `own` row of the mode-scoped registry
 (`gbdraw/web_support/mode_scoped_settings.py`). The mode-slice `adv` shape is
-closed and Session 48 reached `main` with 0.14.3, whose reader refuses the key,
+closed and Session 48 reached `main` with 0.14.0, whose reader refuses the key,
 so the key needs a new version. The canonical request carries the setting as
 the config override `objects.definition.circular.show` only when it is `false`
 (the Web writer, `--hide_definition`, or a Python `config_overrides`); a

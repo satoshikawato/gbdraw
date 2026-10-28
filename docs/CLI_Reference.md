@@ -654,8 +654,8 @@ disable that slot to hide the scale.
 
 `--hide_definition` draws no center definition for any record, on one map or
 on a Multi-Record Canvas: no name, strain, replicon, accession, length, or GC
-line. The inside tracks keep no room for it, and no definition-fit warning is
-printed. A plot title (`--plot_title_position top` or `bottom`) is still
+line. The inside tracks keep no room for it (a `--center_reserved_radius` you
+set still applies), and no definition-fit warning is printed. A plot title (`--plot_title_position top` or `bottom`) is still
 drawn, and `--keep_full_definition_with_plot_title` has no effect. The config
 key is `objects.definition.circular.show` (default `true`).
 
