@@ -194,6 +194,24 @@ export const addStartLinearDrawing = async () => {
   state.addDrawing(createDrawingState(id, 'linear'), 'Linear', state.drawingTabs.value.length);
 };
 
+// A one-mode Load makes no drawing of the other mode (D-15-120). A test that
+// works on the Circular and Linear pair after one gets this adder once (after
+// it has set up `window`) and calls it to add the pair's missing drawing as
+// the bar's offer tab makes it (a new drawing at its mode's defaults,
+// `withNewDrawingDefaults`), Circular first, with no History step.
+export const modeDrawingsAdder = async () => {
+  const { state, createDrawingState } = await import('../../../gbdraw/web/js/state.js');
+  const { withNewDrawingDefaults } = await import('../../../gbdraw/web/js/services/reset.js');
+  return () => {
+    for (const mode of ['circular', 'linear']) {
+      const id = drawingIdOfMode(mode);
+      if (state.drawingTabs.value.some((tab) => tab.id === id)) continue;
+      state.addDrawing(withNewDrawingDefaults(state, createDrawingState(id, mode)), mode === 'circular' ? 'Circular' : 'Linear',
+        mode === 'circular' ? 0 : state.drawingTabs.value.length);
+    }
+  };
+};
+
 // The drawing of a diagram mode in a `state`-shaped value (the real state or a
 // fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
 // mode names.

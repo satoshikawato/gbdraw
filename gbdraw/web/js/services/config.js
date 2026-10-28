@@ -13,7 +13,7 @@ import {
   resetRightDrawerState,
   restoreRightDrawerState
 } from './right-drawer-state.js';
-import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from './reset.js';
+import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from './reset.js';
 import {
   INPUTS_SLICE, bindDrawingCanonicalComparisons, bindDrawingInputFileList, bindDrawingInputFileTree,
   bindLoadedInputs, collapseEmptyLinearSeqList, idleCircularRecordDiscovery, normalizeLinearSeqList,
@@ -281,7 +281,6 @@ import { COLOR_RULES_SLICE, replaceColorRules } from './drawing/color-rules.js';
 import { PALETTE_SLICE, clearQueuedPalette, queuePalette, queuedPaletteData } from './drawing/palette.js';
 import { LABEL_TABLES_SLICE, labelTextEditsData } from './drawing/label-tables.js';
 import { FEATURE_EDITS_SLICE } from './drawing/feature-edits.js';
-import { firstDrawingOfMode } from './drawing-view.js';
 /** @import { FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { StoredLabelOverrideRow } from './label-override-table.js' */
 
@@ -320,7 +319,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LoadedTrackSettings } from './track-legend-rows.js' */
 /** @import { ArtifactSlot, LoadedArtifactSlots } from './artifact-slot.js' */
 /** @import { LinearComparisonResolvedEdge } from './linear-comparisons.js' */
-/** @import { DiagramMode, DrawingState, LinearSeq, SessionBusy } from '../state.js' */
+/** @import { DiagramMode, DrawingState, DrawingTab, LinearSeq, SessionBusy } from '../state.js' */
 /** @import { DrawingId, DrawingIdentity } from './drawing-view.js' */
 /** @import { SessionChecked46 } from '../contracts/session.generated.js' */
 /** @import { ModeScopedUpgrade, Session49, SessionDrawing49, SourceFacts } from './session-drawings-upgrade.js' */
@@ -4507,16 +4506,16 @@ const convertLoadedProteinResultFrames = async (source, keptSlots, shownDrawing)
  * @param {ProteinFrameSource} source
  * @param {T} committed
  * @param {Parameters<typeof projectCanonicalSessionRequest>[0] | null} projectionInput
- * @param {DrawingState} linearDrawing The Linear drawing the Load installed, whose comparisons are projected again.
+ * @param {DrawingState} committedDrawing The drawing of the committed set, whose comparisons a Linear request projects again.
  * @returns {Promise<T>} `committed` itself when nothing is converted
  */
-const convertDetachedProteinResultFrames = async (source, committed, projectionInput, linearDrawing) => {
+const convertDetachedProteinResultFrames = async (source, committed, projectionInput, committedDrawing) => {
   const converted = await convertStoredProteinResultFrames(source, [/** @type {StoredDrawing} */ (committed)]);
   if (converted.size === 0) return committed;
   const resources = await withConvertedResources(/** @type {Record<string, unknown>} */ (committed.resources), converted);
   const mode = /** @type {UnvalidatedFields<'mode'> | undefined} */ (committed.renderRequest)?.mode;
   if (projectionInput && mode === 'linear') {
-    bindDrawingCanonicalComparisons(state.inputFiles, linearDrawing.slices.inputs, deserializeCanonicalComparisons(
+    bindDrawingCanonicalComparisons(state.inputFiles, committedDrawing.slices.inputs, deserializeCanonicalComparisons(
       projectCanonicalSessionRequest({ ...projectionInput, resources }).files.linearCanonicalComparisons,
       // Load listed the repairs of these entries when it first read them.
       { repairs: [] }
@@ -5202,8 +5201,7 @@ const restoreSessionImportSnapshot = async (snapshot) => {
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionProject();
-    state.replaceDrawings(snapshot.drawings, snapshot.tabs);
-    installShownDrawing(snapshot.shownDrawingId);
+    replaceDrawingsShowing(snapshot.drawings, snapshot.tabs, snapshot.shownDrawingId);
     const { shownUi } = snapshot;
     applySessionUiData(shownUi);
     applyShownResultUiData(shownUi);
@@ -5258,6 +5256,23 @@ export const installShownDrawing = (id) => {
   state.activeDrawingId.value = id;
   return drawing;
 };
+/**
+ * Load and its rollback: `list` and its `tabs` replace the store's drawings
+ * and `shownId`, one of them, is shown. A computed value reads the shown
+ * drawing as the store changes, so it stays readable at each step: the old
+ * and new drawings together (a new drawing replaces an old one of its ID),
+ * then the new shown one, then the new drawings alone (OV-2133).
+ * @param {readonly DrawingState[]} list @param {readonly DrawingTab[]} tabs @param {DrawingId} shownId
+ * @returns {DrawingState} The shown drawing.
+ */
+const replaceDrawingsShowing = (list, tabs, shownId) => {
+  const ids = new Set(list.map((drawing) => drawing.id));
+  state.replaceDrawings([...state.drawingList().filter((drawing) => !ids.has(drawing.id)), ...list],
+    [...state.drawingTabs.value.filter((tab) => !ids.has(tab.id)), ...tabs]);
+  const shown = installShownDrawing(shownId);
+  state.replaceDrawings(list, tabs);
+  return shown;
+};
 
 /**
  * One drawing a Load makes: its ID, mode and tab name.
@@ -5266,10 +5281,9 @@ export const installShownDrawing = (id) => {
 /**
  * The drawings a Load makes, in tab order, and the one it opens (DESIGN §4):
  * a Session's 49 document's, the fast path's for a Session 46-48
- * (`upgradeModeScopedSession`). `unused` is a new drawing of each mode
- * `drawings` have none of, which a Load keeps for the mode buttons until B4
- * removes them (D-15-93); it takes nothing of the file (D-15-120).
- * @typedef {Readonly<{ drawings: readonly LoadedDrawing[], unused: readonly LoadedDrawing[], activeDrawingId: DrawingId }>} LoadedDrawingPlan
+ * (`upgradeModeScopedSession`). A Load makes no drawing of a mode the file
+ * has none of; the bar's offer tab makes one (D-15-120).
+ * @typedef {Readonly<{ drawings: readonly LoadedDrawing[], activeDrawingId: DrawingId }>} LoadedDrawingPlan
  */
 /**
  * The one place a Load decides which drawings it makes.
@@ -5278,8 +5292,6 @@ export const installShownDrawing = (id) => {
  */
 const drawingPlanOf = (drawings, activeDrawingId) => Object.freeze({
   drawings: Object.freeze(drawings),
-  unused: Object.freeze(SLICE_MODES.filter((mode) => !drawings.some((drawing) => drawing.mode === mode))
-    .map((mode) => /** @type {LoadedDrawing} */ (firstDrawingOfMode(/** @type {DiagramMode} */ (mode))))),
   activeDrawingId
 });
 /** @param {Session49} document @returns {LoadedDrawingPlan} */
@@ -5314,21 +5326,17 @@ const drawingDraftPartOf = (entry) => {
 };
 /**
  * The Load commit's one store write (DESIGN §4.1): a new drawing state for
- * each drawing of the plan, then the plan's unused drawings (D-15-93). They
- * replace the store at once; the caller installs each committed drawing and
- * shows the plan's.
+ * each drawing of the plan. They replace the store at once and the plan's
+ * shown drawing is shown; the caller installs each committed drawing.
  * A rollback puts the previous drawings back (`restoreSessionImportSnapshot`).
- * An unused drawing is a new drawing at its mode's defaults
- * (`withNewDrawingDefaults`) that takes nothing of the file, so Save does not
- * write it (R16-8, OV-1811).
  * @param {LoadedDrawingPlan} plan
- * @returns {readonly DrawingState[]} The plan's drawings, in tab order: the ones Load installs.
+ * @returns {{ drawings: readonly DrawingState[], shown: DrawingState }} The plan's drawings, in tab order (the ones
+ * Load installs), and the shown one.
  */
 const commitLoadedDrawings = (plan) => {
   const loaded = plan.drawings.map(({ id, mode }) => createDrawingState(id, mode));
-  const unused = plan.unused.map(({ id, mode }) => withNewDrawingDefaults(state, createDrawingState(id, mode)));
-  state.replaceDrawings([...loaded, ...unused], [...plan.drawings, ...plan.unused].map(({ id, name }) => ({ id, name })));
-  return Object.freeze(loaded);
+  const shown = replaceDrawingsShowing(loaded, plan.drawings.map(({ id, name }) => ({ id, name })), plan.activeDrawingId);
+  return { drawings: Object.freeze(loaded), shown };
 };
 
 /**
@@ -6689,27 +6697,36 @@ const importSessionDocument = async (e, options = {}) => {
     // of the file as its own entry, found by drawing ID, and where the file
     // holds its saved Result set, `setSources`).
     const upgraded = upgrade.document;
+    // The drawings the Load makes and the one it opens: the 49 document's
+    // (R17-1/R17-2/R17-7; a Session 27-44's is Python's conversion of it).
+    const plan = loadedDrawingPlan(upgraded);
     /**
      * The drawing that takes a Session's part of `mode` the projection reads:
      * a Session 49's opened drawing for its mode, else its 49 document's
-     * drawing of that mode, else the new drawing of it a Load makes
-     * (`drawingPlanOf`). The one place a Load maps
-     * the file's modes to drawing IDs.
-     * @param {DiagramMode} mode @returns {DrawingId}
+     * drawing of that mode; null when the document has no drawing of it (a
+     * Load makes none, D-15-120). The one place a Load maps the file's modes
+     * to drawing IDs.
+     * @param {DiagramMode} mode @returns {DrawingId | null}
      */
-    const fileDrawingIdOf = (mode) => /** @type {DrawingId} */ ((projectedDrawingId !== null
-      && upgraded?.drawings.find((entry) => entry.id === projectedDrawingId)?.mode === mode ? projectedDrawingId : null)
-      ?? upgraded?.drawings.find((entry) => entry.mode === mode)?.id ?? firstDrawingOfMode(mode).id);
+    const fileDrawingIdOf = (mode) => {
+      const drawings = upgraded ? upgraded.drawings : [];
+      const entry = drawings.find((drawing) => drawing.id === projectedDrawingId && drawing.mode === mode)
+        ?? drawings.find((drawing) => drawing.mode === mode);
+      return entry ? /** @type {DrawingId} */ (entry.id) : null;
+    };
     // The drawing of the committed set (the top-level set of a Session 27-48,
-    // whose request Load projects), and the drawing that takes the file's one
-    // Linear part (its comparisons, LOSAT caches and group names).
-    const committedSetDrawingId = projectedDrawingId ?? fileDrawingIdOf(generatedMode);
+    // whose request Load projects; the move gives the generated mode a
+    // drawing, else the set is the opened drawing's), and the drawing that
+    // takes the file's one Linear part (its comparisons, LOSAT caches and
+    // group names), null when the file has no Linear drawing.
+    const committedSetDrawingId = projectedDrawingId ?? fileDrawingIdOf(generatedMode) ?? plan.activeDrawingId;
     const linearPartDrawingId = fileDrawingIdOf('linear');
     /**
      * The saved entries of a LOSAT cache field the file wrote into each
      * drawing, by drawing ID (unvalidated): a Session 49's own, the projected
-     * drawing's from its view; a Session 27-48's one list, `partDrawingId`'s.
-     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId} partDrawingId
+     * drawing's from its view; a Session 27-48's one list, `partDrawingId`'s
+     * (none when the file has no drawing of that part).
+     * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId
      * @returns {{ id: DrawingId, entries: unknown }[]}
      */
     const fileLosatEntriesOf = (projectedEntries, field, partDrawingId) => (projectedDrawingId !== null && upgraded
@@ -6718,7 +6735,7 @@ const importSessionDocument = async (e, options = {}) => {
             id: /** @type {DrawingId} */ (entry.id),
             entries: /** @type {UnvalidatedFields<'entries'>} */ (/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (entry))[field])?.entries
           }))]
-      : [{ id: partDrawingId, entries: projectedEntries }]);
+      : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
     // of the conservation entries the file wrote into its drawing (a Session
     // 27-48's one list is its one Circular part's). A drawing without a
@@ -6732,10 +6749,7 @@ const importSessionDocument = async (e, options = {}) => {
     const loadedConservationPairsOf = (drawingId) => loadedConservationPairs.get(drawingId) ?? NO_CONSERVATION_PAIRS;
     /**
      * Each drawing's draft part of a Session 46-49, by drawing ID: its entry's
-     * (`drawingDraftPartOf`). An unused drawing (one of a mode the document
-     * has none of) takes none, so its draft is its mode's defaults, which the
-     * reads that map a mode to a drawing see; Load installs nothing into it
-     * (D-15-120, OV-1811). A Session 27-44's parts come from its split, below.
+     * (`drawingDraftPartOf`). A Session 27-44's parts come from its split, below.
      * @type {Map<DrawingId, LoadedDraftPart>}
      */
     const draftParts = new Map();
@@ -6743,7 +6757,6 @@ const importSessionDocument = async (e, options = {}) => {
       upgraded.drawings.forEach((entry, index) => draftParts.set(/** @type {DrawingId} */ (entry.id), {
         slice: drawingDraftPartOf(entry), at: draftPartAt(entry.mode, drawingSetPath(index))
       }));
-      loadedDrawingPlan(upgraded).unused.forEach(({ id }) => draftParts.set(id, { slice: {}, at: '' }));
     }
     /** @param {DrawingId} drawingId @returns {LoadedDraftPart} */
     const draftPartOf = (drawingId) => /** @type {LoadedDraftPart} */ (draftParts.get(drawingId));
@@ -6805,8 +6818,9 @@ const importSessionDocument = async (e, options = {}) => {
     // The files the Load projects: a Session 49's opened drawing's, else the
     // file's one set of a Session 27-48, whose drawings each take their
     // mode's part (`restoreLiveFileState`).
+    const filesDrawingId = projectedDrawingId ?? linearPartDrawingId;
     const projectedFiles = loadFiles(canonicalSession ? projectionResult.restoredFiles : data.files,
-      draftConfigOf(projectedDrawingId ?? fileDrawingIdOf('linear')), inputTypes.cInputType, filesAt);
+      filesDrawingId === null ? null : draftConfigOf(filesDrawingId), inputTypes.cInputType, filesAt);
     /**
      * Every other Session 49 drawing's own files, by drawing ID (B2d-3a-2);
      * a drawing the document lacks has none (D-15-105 (5)).
@@ -6983,14 +6997,8 @@ const importSessionDocument = async (e, options = {}) => {
           { transformSvg: transformRestoredSessionSvg, selectedFeatureTypes }
         ));
     recordSessionLifecycleEvent('svg-admission-end');
-    // The drawings the Load makes and the one it opens: the 49 document's
-    // (R17-1/R17-2/R17-7; a Session 27-44's is Python's conversion of it).
-    const plan = loadedDrawingPlan(upgraded);
     /** @type {DiagramMode} The mode of the drawing the Load opens. */
     const shownMode = /** @type {LoadedDrawing} */ (plan.drawings.find((drawing) => drawing.id === plan.activeDrawingId)).mode;
-    // Every drawing whose draft the Load reads: the plan's, which it installs,
-    // and its unused ones, whose empty part reads as their mode's defaults.
-    const loadedDrawings = [...plan.drawings, ...plan.unused];
     // Every other drawing with a saved Result set, read from its own entry of
     // the 49 document: its request, Results, editor state, `ui` and run
     // metadata, and the catalog preflight read where the file holds the set
@@ -7125,12 +7133,12 @@ const importSessionDocument = async (e, options = {}) => {
     // its mode's slot; a Session 27-44 keeps one set in `ui`, read before
     // Python converts it (OV-652).
     if (legacyRead) repairs.push(...legacyRead.layoutRepairs);
-    loadedDrawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
+    plan.drawings.forEach(({ id, mode }) => repairs.push(...storedLegendPositionRepairs(draftPartOf(id).slice.ui, `${draftPartOf(id).at}.ui`, {
       slotOf: mode, projected: id === committedSetDrawingId && Boolean(projectedLayout)
     })));
     /** @param {string} at @param {string} field */
     const pathIn = (at, field) => (at ? `${at}.${field}` : field);
-    for (const { id, mode } of loadedDrawings) {
+    for (const { id, mode } of plan.drawings) {
       const { slice, at } = draftPartOf(id);
       const storedEditorState = slice.editorState;
       const editorPath = pathIn(at, 'editorState');
@@ -7191,7 +7199,7 @@ const importSessionDocument = async (e, options = {}) => {
     }
     // What each drawing's Depth fit drops (B45): it runs on the restored files.
     if (!settingsOnly) {
-      loadedDrawings.forEach(({ id, mode }) => repairs.push(...depthFitRepairs(mode,
+      plan.drawings.forEach(({ id, mode }) => repairs.push(...depthFitRepairs(mode,
         /** @type {SettingsContainers} */ (installedSettings.get(id)), draftPartOf(id).slice.config?.adv, {
         at: `${pathIn(draftPartOf(id).at, 'config')}.adv`,
         resolveTrackPlacements: !isStoredSlice(id),
@@ -7206,7 +7214,7 @@ const importSessionDocument = async (e, options = {}) => {
     // SLICE_MODES order, each over the Instant Preview the one before left.
     // A boolean Instant Preview of an older draft wins over `ui`'s.
     const draftInstantPreview = (appUi !== ui && typeof appUi.paletteInstantPreviewEnabled === 'boolean')
-      || loadedDrawings.some(({ id }) => typeof draftOf(id).config.paletteInstantPreviewEnabled === 'boolean');
+      || plan.drawings.some(({ id }) => typeof draftOf(id).config.paletteInstantPreviewEnabled === 'boolean');
     repairs.push(
       ...sessionUiFieldRepairs({
         ...ui,
@@ -7219,7 +7227,7 @@ const importSessionDocument = async (e, options = {}) => {
     );
     let instantPreview = Boolean(typeof appUi.paletteInstantPreviewEnabled === 'boolean'
       ? appUi.paletteInstantPreviewEnabled : ui.paletteInstantPreviewEnabled);
-    for (const { id } of loadedDrawings) {
+    for (const { id } of plan.drawings) {
       const { config } = draftOf(id);
       const { slice, at } = draftPartOf(id);
       if (typeof config.paletteInstantPreviewEnabled === 'boolean') instantPreview = config.paletteInstantPreviewEnabled;
@@ -7234,13 +7242,17 @@ const importSessionDocument = async (e, options = {}) => {
     }
     // The similarity groups' state Load installs; a name or description edit
     // of a group it does not hold is dropped and listed (B47). The group
-    // names are the projected Session 49 drawing's, else the file's Linear part's.
+    // names are the projected Session 49 drawing's, else the file's Linear
+    // part's; a file without a Linear drawing has none.
     const groupNamesDrawingId = projectedDrawingId ?? linearPartDrawingId;
-    /** @param {DrawingId} id */
-    const groupNamesOf = (id) => ({
-      orthogroupNameOverrides: draftOf(id).config.webEdits?.orthogroupNameOverrides || {},
-      orthogroupDescriptionOverrides: draftOf(id).config.webEdits?.orthogroupDescriptionOverrides || {}
-    });
+    /** @param {DrawingId | null} id */
+    const groupNamesOf = (id) => {
+      const webEdits = id === null ? null : draftOf(id).config.webEdits;
+      return {
+        orthogroupNameOverrides: webEdits?.orthogroupNameOverrides || {},
+        orthogroupDescriptionOverrides: webEdits?.orthogroupDescriptionOverrides || {}
+      };
+    };
     const loadedOrthogroupState = canonicalSession
       ? {
           ...projectionResult.artifactState.orthogroupState,
@@ -7271,13 +7283,13 @@ const importSessionDocument = async (e, options = {}) => {
     {
       const groupIds = new Set(orthogroupIdsOf(loadedOrthogroupState.groups));
       const editsPath = canonicalSession
-        ? `${pathIn(draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits`
+        ? `${pathIn(groupNamesDrawingId === null ? '' : draftPartOf(groupNamesDrawingId).at, 'config')}.webEdits`
         : (isPlainObject(data.orthogroupState) ? 'orthogroupState' : 'features');
       groupNameRepairs(loadedOrthogroupState, groupIds, editsPath, repairs);
     }
     // Each other Session 49 drawing's group names, of the groups its own
     // Result holds (its slot's), installed in it by drawing ID.
-    const storedGroupNames = (projectedDrawingId === null ? [] : loadedDrawings).filter(({ id }) => id !== projectedDrawingId)
+    const storedGroupNames = (projectedDrawingId === null ? [] : plan.drawings).filter(({ id }) => id !== projectedDrawingId)
       .map(({ id }) => {
         const names = groupNamesOf(id);
         const groupIds = new Set(orthogroupIdsOf(storedSetSlots.find((slot) => slot.drawingId === id)?.values.orthogroups));
@@ -7347,8 +7359,12 @@ const importSessionDocument = async (e, options = {}) => {
     // It asks after the repair list, so a Cancel there loads no font either.
     /** @type {SessionFontConfirmation | undefined} */
     const confirmSessionFonts = options.confirmSessionFonts;
-    // The fonts are asked in the file's mode order (Circular, then Linear), as 0.14.0 asked them.
-    if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.map((mode) => draftOf(fileDrawingIdOf(mode)).config.adv?.font_family))) {
+    // The fonts are asked in the file's mode order (Circular, then Linear), as 0.14.0 asked them,
+    // for each mode the file has a drawing of.
+    if (confirmSessionFonts && !await confirmSessionFonts(SLICE_MODES.flatMap((mode) => {
+      const drawingId = fileDrawingIdOf(mode);
+      return drawingId === null ? [] : [draftOf(drawingId).config.adv?.font_family];
+    }))) {
       return { status: 'canceled' };
     }
     // The admitted candidate is still private. Let the browser handle input
@@ -7359,15 +7375,14 @@ const importSessionDocument = async (e, options = {}) => {
     rollbackExtensionSnapshot = rollbackState.capture();
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
-    const committed = commitLoadedDrawings(plan);
-    // The History router's members follow the store at once: the shown drawing below may be one the page did not hold.
+    const { drawings: committed, shown: shownDrawing } = commitLoadedDrawings(plan);
+    // The History router's members follow the store at once: the shown drawing may be one the page did not hold.
     rollbackState.replaceHistoryMembers(state.drawingTabs.value.map((tab) => tab.id));
     resetSessionProject();
     // Each committed drawing takes a new drawing's settings of its mode, its
     // default palette colors included (a new drawing state has none), before
     // its part of the file installs over them; the shown artifact takes the
     // shown drawing's palette (the Results are cleared above).
-    const shownDrawing = installShownDrawing(plan.activeDrawingId);
     const committedDrawing = state.drawingOf(committedSetDrawingId);
     committed.filter((drawing) => drawing !== shownDrawing).forEach((drawing) => resetDrawingSettings(state, drawing));
     const artifact = resetDrawingSettings(state, shownDrawing);
@@ -7490,12 +7505,14 @@ const importSessionDocument = async (e, options = {}) => {
     // Each drawing takes its own files, its card files among them (R16-4).
     restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })));
     // The Linear drawing the Files card list folds: the shown one, else a
-    // Session 27-48's Linear part's (a Session 49's first Linear drawing).
-    const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing : state.drawingOf(linearPartDrawingId);
+    // Session 27-48's Linear part's (a Session 49's first Linear drawing);
+    // without one, no card is folded.
+    const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing
+      : linearPartDrawingId === null ? null : state.drawingOf(linearPartDrawingId);
     // The loaded File cards are new to the user: view state, reset with the document.
     foldLoadedLinearSources(
-      state.linearFoldedSources, groupLinearSourceRecords(linearDrawing.linearSeqs),
-      linearDrawing.inputType.value
+      state.linearFoldedSources, linearDrawing ? groupLinearSourceRecords(linearDrawing.linearSeqs) : [],
+      linearDrawing ? linearDrawing.inputType.value : 'gb'
     );
     // Each Linear drawing's comparisons, classified from its own request
     // (a Session 27-48's one Linear part is its Linear drawing's), a Session
@@ -7508,14 +7525,17 @@ const importSessionDocument = async (e, options = {}) => {
         ? comparisonClassification : storedDrawingInputs.get(drawing.id)?.comparisonClassification ?? null),
       draftConfigOf(drawing.id)?.importedComparisonResolution
     ));
+    const losatPartDrawingId = linearPartDrawingId ?? shownDrawing.id;
     /**
      * Each drawing's saved raw LOSAT entries as the preflight read them
      * (`readSessionLosatArtifacts`): a Session 49's by drawing, the
      * projected one first (its own are its view's), merged into the one
-     * cache (DESIGN §4.1); a Session 27-48's one list, its Linear part's.
+     * cache (DESIGN §4.1); a Session 27-48's one list, its Linear part's,
+     * else the shown drawing's (a cache row of a Circular drawing names no
+     * records, `restoredLosatCacheInfoIdentity`).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
      */
-    const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, linearPartDrawingId)
+    const losatSourcesOf = (projectedEntries, field) => fileLosatEntriesOf(projectedEntries, field, losatPartDrawingId)
       .map(({ id, entries }) => ({ drawing: shownDrawing.id === id ? shownDrawing : state.drawingOf(id), entries }));
     if (!settingsOnly) {
       // Each drawing's Depth tracks fit its own rows and files (DESIGN §9).
@@ -7544,7 +7564,7 @@ const importSessionDocument = async (e, options = {}) => {
     } else {
       const legacyArtifacts = /** @type {UnvalidatedFields<'proteinRawCandidates' | 'proteinDerivedEvidence'>} */ (data.legacyArtifacts);
       applyLosatCache(
-        [{ drawing: state.drawingOf(linearPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries }],
+        [{ drawing: state.drawingOf(losatPartDrawingId), entries: /** @type {UnvalidatedFields<'entries'>} */ (data.losatCache)?.entries }],
         legacyArtifacts?.proteinRawCandidates
       );
       applyLosatDerivedCache(
@@ -7574,13 +7594,11 @@ const importSessionDocument = async (e, options = {}) => {
     ]);
 
     // The shown Result's groups; their names are the projected Session 49
-    // drawing's, else the Linear drawing's (Session 46 `webEdits`), and
-    // each other Session 49 drawing takes its own.
-    applyOrthogroupStateData(
-      state.drawingOf(groupNamesDrawingId),
-      loadedOrthogroupState,
-      { catalogFeatureState: currentCatalogFeatureState }
-    );
+    // drawing's, else the Linear drawing's (Session 46 `webEdits`; a file
+    // without a Linear drawing installs none), and each other Session 49
+    // drawing takes its own.
+    const shownGroupIds = applyOrthogroupArtifactData(loadedOrthogroupState, { catalogFeatureState: currentCatalogFeatureState });
+    if (groupNamesDrawingId !== null) installGroupNames(state.drawingOf(groupNamesDrawingId), loadedOrthogroupState, shownGroupIds);
     storedGroupNames.forEach(({ id, names, groupIds }) => installGroupNames(state.drawingOf(id), names, groupIds));
     applyEditorArtifactData({ ...artifactEditorState, legend: rekeyLegendRecords(artifactEditorState.legend, legendRekeysOf(committedSetDrawingId)) });
     if (legacyFeatureRecoveryPlan) {
@@ -7664,7 +7682,7 @@ const importSessionDocument = async (e, options = {}) => {
       const stored = canonicalSession ? cloneCanonicalSession(data) : null;
       // OV-1181 B-LOAD: after the stored figure, before History's base (`afterImport`).
       committedSession = stored && await convertDetachedProteinResultFrames(
-        proteinFrameSource, stored, canonicalProjectionInput, linearDrawing
+        proteinFrameSource, stored, canonicalProjectionInput, committedDrawing
       );
       setCommittedCanonicalSession(committedSession, loadedConservationPairsOf(committedSetDrawingId));
       activeSessionResourceTable = null;
@@ -7710,7 +7728,8 @@ const importSessionDocument = async (e, options = {}) => {
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
-      comparisonDisposition: linearDrawing.importedComparisonIntent.disposition
+      // The Linear drawing's comparison disposition; null without a Linear drawing (D-15-120).
+      comparisonDisposition: linearDrawing ? linearDrawing.importedComparisonIntent.disposition : null
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };

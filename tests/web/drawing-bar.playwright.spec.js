@@ -291,6 +291,41 @@ test('Delete in the tab menu removes the shown drawing as one step that Undo res
   expect((await shownDrawing(page)).id, 'Undo shows the restored drawing').toBe(second);
 });
 
+// D-15-120: a Load of a one-mode Session makes no drawing of the other mode. The bar lists the
+// Session's drawings; the Linear offer tab, or the menu's New Circular drawing, makes the other
+// mode's drawing at its defaults.
+test('a one-mode Session Load lists only its own drawings; the offer tab or New makes the other mode at its defaults', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const atDefaults = (id) => page.evaluate(async (drawingId) => {
+    const { state, createDrawingState } = await import('./js/state.js');
+    const drawing = state.drawingOf(drawingId);
+    const fresh = createDrawingState(drawing.id, drawing.mode);
+    return JSON.stringify([drawing.form, drawing.adv]) === JSON.stringify([fresh.form, fresh.adv]);
+  }, id);
+
+  const linearOnly = await loadGallerySession(page, 'lambda_basic_linear.gbdraw-session.json');
+  expect(linearOnly.status, JSON.stringify(linearOnly.error)).toBe('ok');
+  expect(await drawingIds(page)).toEqual(['linear']);
+  await expect(page.locator('.drawing-bar [role="tab"]'), 'the bar lists the Linear drawing only').toHaveCount(1);
+  await expect(offerTab(page)).toHaveCount(0);
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'New Circular drawing', exact: true }).click();
+  await expect.poll(() => drawingIds(page)).toEqual(['linear', 'circular']);
+  expect(await shownDrawing(page)).toEqual({ id: 'circular', kind: 'circular' });
+  expect(await atDefaults('circular'), 'the new Circular drawing is at its defaults').toBe(true);
+
+  const circularOnly = await loadGallerySession(page, 'HmmtDNA_basic_circular.gbdraw-session.json');
+  expect(circularOnly.status, JSON.stringify(circularOnly.error)).toBe('ok');
+  expect(await drawingIds(page)).toEqual(['circular']);
+  await expect(offerTab(page)).toHaveAccessibleName('Linear');
+  await takeLinearOffer(page);
+  expect(await drawingIds(page)).toEqual(['circular', 'linear']);
+  expect(await atDefaults('linear'), 'the offer tab makes the Linear drawing at its defaults').toBe(true);
+});
+
 test('Save then a fresh Load keeps the drawings, their names, and their tab order', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
