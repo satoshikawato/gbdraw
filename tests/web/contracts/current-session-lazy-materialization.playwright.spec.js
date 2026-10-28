@@ -7,6 +7,7 @@ const { shownSavedDrawing } = require('../helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
   NEWEST_READ_SESSION_VERSION,
+  assertLegacyLoadConvertedOnce,
   evaluateWithRetainedPromise,
   expectNoLoadRepairDialog,
   getDiagramWorkerActivity,
@@ -414,13 +415,11 @@ test('neutral cached conservation session regenerates three ordered rings offlin
     expect(imported.metadataOnly).toEqual(
       Array.from({ length: 7 }, () => ({ frozen: true, ownFields: [] }))
     );
-    expect(imported.metrics.structural).toEqual(ZERO_PREVIEW_METRICS);
-    expect(await getDiagramWorkerActivity(page)).toMatchObject({
-      constructions: 0,
-      initializations: 0,
-      helpers: 0,
-      runs: 0
+    // A Session 27-44 Load converts through Python: one Worker, one helper.
+    expect(imported.metrics.structural).toEqual({
+      ...ZERO_PREVIEW_METRICS, workerConstructionCount: 1, workerInitializationCount: 1
     });
+    await assertLegacyLoadConvertedOnce(page);
 
     const generated = await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
