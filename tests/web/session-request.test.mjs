@@ -760,6 +760,24 @@ assert.equal(
   30
 );
 state.adv.circular_definition_interval = null;
+// PD-OI-109: Show Definition (Circular only). A shown definition is left out of the
+// request, as an earlier writer left it; a hidden one is `false`, and both project back.
+assert.ok(managedConfigOverridePathsForMode('circular').includes('objects.definition.circular.show'));
+assert.ok(!managedConfigOverridePathsForMode('linear').includes('objects.definition.circular.show'));
+const shownDefinitionRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  Object.hasOwn(shownDefinitionRequest.renderRequest.diagramOptions.configOverrides, 'objects.definition.circular.show'),
+  false
+);
+assert.equal(projectCanonicalSessionRequest(shownDefinitionRequest).config.adv.show_definition, true);
+state.adv.show_definition = false;
+const hiddenDefinitionRequest = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  hiddenDefinitionRequest.renderRequest.diagramOptions.configOverrides['objects.definition.circular.show'],
+  false
+);
+assert.equal(projectCanonicalSessionRequest(hiddenDefinitionRequest).config.adv.show_definition, false);
+state.adv.show_definition = true;
 // The diagram font is a managed setting: the draft list goes to the request as
 // typed, and the request projects back into the setting (custom-fonts PR-2).
 state.adv.font_family = "'DejaVu Serif', serif";

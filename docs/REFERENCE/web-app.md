@@ -57,7 +57,7 @@ restores both. The Circular inputs (**GenBank/DDBJ File**, or **GFF3 File** and
 **FASTA File**) and the Linear **File** cards are separate inputs: a Circular
 upload does not appear in Linear, and a mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
 feature popup are shared. A saved Session keeps each mode's settings
-(Session 48, [compatibility](session-and-request-compatibility.md)).
+(Session 49, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
@@ -711,6 +711,14 @@ Plot-title text, position, and size share the **Plot Title** subsection.
 Like every setting, the plot-title text, plot-title **Font size**, and
 **Record Labels** **Default font size** are kept per mode. Record label defaults and the per-line **Style** disclosures share
 **Record Labels**.
+In Circular mode, **Show Definition** under **Record Labels** (on by default)
+turns the center definition of every record on or off, on one map and on a
+Multi-Record Canvas: off draws no name, strain, replicon, accession, length, or
+GC line, the inside tracks keep no room for it, and no definition-fit warning
+appears. The plot title is still drawn, and **Keep Full Definition with Plot
+Title** is hidden while **Show Definition** is off. It applies on **Generate**,
+is saved with the Session, and appears in Run info as `--hide_definition`
+(config `objects.definition.circular.show`).
 The separate **Legend · position** section sets legend position, swatch size,
 and font size. Opening or closing these native disclosures is not saved.
 

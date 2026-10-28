@@ -1203,6 +1203,21 @@ test('the Circular track narrowing settings have their CLI flags in the Source r
   }
 });
 
+// PD-OI-109: a request that hides the Circular definition writes `--hide_definition`;
+// one that shows it (no override) writes nothing.
+test('a hidden Circular definition has its CLI flag in the Source recipe', async () => {
+  for (const show of [false, undefined]) {
+    const session = structuredClone(circularGallerySession);
+    const overrides = session.renderRequest.diagramOptions.configOverrides;
+    delete overrides['objects.definition.circular.show'];
+    if (show !== undefined) overrides['objects.definition.circular.show'] = show;
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    assert.equal(recipe.args.includes('--hide_definition'), show === false, JSON.stringify(recipe.args));
+    await assertCliParserAccepts(recipe);
+  }
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {

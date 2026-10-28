@@ -12,6 +12,29 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
+
+Session version 49 adds `adv.show_definition` (boolean, Circular **Show
+Definition**, PD-OI-109) to the Circular slice (`modes.circular.config.adv`),
+an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`). The mode-slice `adv` shape is
+closed and Session 48 reached `main` with 0.14.3, whose reader refuses the key,
+so the key needs a new version. The canonical request carries the setting as
+the config override `objects.definition.circular.show` only when it is `false`
+(the Web writer, `--hide_definition`, or a Python `config_overrides`); a
+request that shows the definition is the request an earlier writer wrote, and
+Gallery publication compares it unchanged. A Session up to 48 has no key and
+loads with the definition shown (`trueUnlessFalse` in
+`services/config-field-readers.js`); no reader converts it. Load projects a
+request's `false` into the slice (`projectCanonicalSessionRequest`).
+
+The checks that listed each Web-draft version by hand (the settings-only form
+and Web binding schema 2, in `gbdraw/session_io.py` and
+`services/session-authority.js`) now accept every version from 46 to the
+current one, so Session 48 keeps its settings-only form. The Gallery and
+test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
+Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
+
 ## Unreleased: LOSAT runtime records without `cli` or `bundled`
 
 No Session or request version changes. The source tree no longer holds a LOSAT

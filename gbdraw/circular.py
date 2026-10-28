@@ -259,6 +259,13 @@ def _get_args(
         help='Definition font size (optional; default: 18)',
         type=argparse_float)
     parser.add_argument(
+        '--hide_definition',
+        help=(
+            'Draw no center definition for any record (name, strain, replicon, accession, length, GC); '
+            'the inside tracks keep no room for it. A plot title (--plot_title_position) is still drawn.'
+        ),
+        action='store_true')
+    parser.add_argument(
         '--plot_title',
         help='Circular plot title shown when plot_title_position is top or bottom (optional; defaults to species + strain).',
         type=str)
@@ -1198,6 +1205,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.depth.share_axis": depth_share_axis,
         "objects.definition.circular.font_size": definition_font_size,
         "objects.definition.circular.plot_title_font_size": plot_title_font_size,
+        # Only a hidden definition is an override, so a default run's request is unchanged.
+        "objects.definition.circular.show": False if args.hide_definition else None,
         "labels.rendering": label_rendering,
         "labels.circular.line": args.label_line,
         "labels.circular.protection": args.label_protection,

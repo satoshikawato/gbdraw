@@ -115,7 +115,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
-              [--plot_title PLOT_TITLE]
+              [--hide_definition] [--plot_title PLOT_TITLE]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
@@ -278,6 +278,10 @@ options:
                         genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; default: 18)
+  --hide_definition     Draw no center definition for any record (name,
+                        strain, replicon, accession, length, GC); the inside
+                        tracks keep no room for it. A plot title
+                        (--plot_title_position) is still drawn.
   --plot_title PLOT_TITLE
                         Circular plot title shown when plot_title_position is
                         top or bottom (optional; defaults to species +
@@ -647,6 +651,13 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 `--circular_track_table` inputs are authoritative. An enabled `ticks` slot
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
+
+`--hide_definition` draws no center definition for any record, on one map or
+on a Multi-Record Canvas: no name, strain, replicon, accession, length, or GC
+line. The inside tracks keep no room for it, and no definition-fit warning is
+printed. A plot title (`--plot_title_position top` or `bottom`) is still
+drawn, and `--keep_full_definition_with_plot_title` has no effect. The config
+key is `objects.definition.circular.show` (default `true`).
 
 A `--circular_track_slot` takes only the parameters its renderer reads:
 `features` takes `lane_direction` (alias `lanes`) and `stack_preset` (alias

@@ -462,7 +462,7 @@ def test_legend_reflow_carries_the_exact_python_layout_inputs(
 
 def test_current_request_schema_and_session_envelope_versions() -> None:
     assert CANONICAL_REQUEST_SCHEMA == 9
-    assert CURRENT_SESSION_VERSION == 48
+    assert CURRENT_SESSION_VERSION == 49
 
 
 @pytest.mark.parametrize("mode", ("circular", "linear"))
