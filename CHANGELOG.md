@@ -118,13 +118,13 @@ write-up of a release.
   orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
   Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
   including an exact tie, could in principle move by 0.001 px (#1434).
-- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
-  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
-  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
 - Performance (web app): a change of Separate strands, Resolve overlaps, the feature overlap tolerance or Label
   rendering rebuilds only the drawing stages that read that setting (Vnig Gallery Session, Label rendering change:
   42 stage builds to 0). A stage result that holds the drawing settings, at any depth, is no longer reused after
   a setting it did not declare changes (OV-2105). The drawn bytes are unchanged.
+- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
+  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
+  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
