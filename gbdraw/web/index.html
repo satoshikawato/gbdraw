@@ -2432,8 +2432,9 @@
          the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
          the focused drawing (manual activation). While the project has no Linear drawing, the Linear offer tab follows the
          tabs; choosing it makes an empty Linear drawing (New Linear). The tab menu holds New Circular, New Linear, and
-         Duplicate (a copy of its tab's drawing, with its Result and an empty History), then Rename, Move, and Delete of
-         its tab's drawing; each item is one History step. -->
+         Duplicate (a copy of its tab's drawing, with its Result and an empty History), New Circular and New Linear drawing
+         with this style (a new drawing of that mode with its tab's settings that the mode has and the user's table rows,
+         no files; R17-27), then Rename, Move, and Delete of its tab's drawing; each item is one History step. -->
     <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
         <!-- At <= 768 px the tabs give way to one picker: the shown drawing's name, opening a list of every drawing. -->
         <template v-for="tab in drawingBarTabs" :key="'picker-' + tab.id">
@@ -2461,6 +2462,8 @@
                              { label: t('New Circular drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('circular') },
                              { label: t('New Linear drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('linear') },
                              { label: t('Duplicate drawing'), icon: 'ph-copy', disabled: !drawingSwitchAvailable, run: () => drawingBar.duplicateDrawing(tab.id) },
+                             { label: t('New Circular drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'circular') },
+                             { label: t('New Linear drawing with this style'), icon: 'ph-paint-brush', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawingWithStyle(tab.id, 'linear') },
                              { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
                              { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
                              { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) },

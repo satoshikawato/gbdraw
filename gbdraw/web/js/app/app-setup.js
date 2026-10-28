@@ -94,7 +94,8 @@ import {
   applyLabelFitValues,
   setHeldPreviewViewportReader,
   installShownDrawing,
-  duplicateDrawingState
+  duplicateDrawingState,
+  applyDrawingStyle
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
@@ -4650,6 +4651,11 @@ export const createAppSetup = () => {
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
     boundFileIdsOf: (drawingId) => boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] }),
     createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
+    styleDrawing: (sourceId, drawingId, mode) => {
+      const source = state.drawingOf(sourceId);
+      return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
+        resultsManager.paletteColorsOf(source));
+    },
     // The copy's Result is its source's slot under the copy's ID: the shown
     // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
     copyDrawing: (sourceId, copyId) => {
@@ -4675,10 +4681,12 @@ export const createAppSetup = () => {
     showDrawingNow
   });
   // The drawing bar: its tabs with the Linear offer tab, and the tab menu's
-  // New Circular, New Linear, Rename, Move, and Delete (B4a-5, B4b).
+  // New Circular, New Linear, Duplicate, New with this style, Rename, Move,
+  // and Delete (B4a-5, B4b).
   const drawingBar = createDrawingBar({
     newDrawing: drawingList.newDrawing,
     duplicateDrawing: drawingList.duplicateDrawing,
+    newDrawingWithStyle: drawingList.newDrawingWithStyle,
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
     deleteDrawing: drawingList.deleteDrawing,

@@ -20,7 +20,7 @@ import {
   setConservationBlastsSource
 } from './drawing/inputs.js';
 import { floatSettingsSection, returnSettingsSection } from './settings-pane-state.js';
-import { FILE_IMPORT_CARDS } from './file-imports.js';
+import { FILE_IMPORT_CARDS, userTableRows } from './file-imports.js';
 import { orderedOptionalConservationFiles, parseConservationLabelText, withoutConservationSeries } from './conservation-series.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
 import { isNoStrokeColor, normalizeLegendColorOverrides, normalizeStrokeOverrideMap, normalizeStrokeWidth } from './style-overrides.js';
@@ -5366,6 +5366,63 @@ export const duplicateDrawingState = (source, copyId) => {
   FEATURE_EDITS_SLICE.install(copy.slices.featureEdits, FEATURE_EDITS_SLICE.capture(slices.featureEdits));
   LABEL_TABLES_SLICE.install(copy.slices.labelTables, LABEL_TABLES_SLICE.capture(slices.labelTables));
   return copy;
+};
+
+// The registry rows a style copy leaves out (PD-OI-090 〔作成〕(3), R17-4):
+// files (the card files and the comparison plans, which name their files),
+// annotation sets, Feature placements, group names, the per-feature edits and
+// label bulk edits, the Legend edits and per-feature paint (`editorState`),
+// and the Features-list record of a Result.
+const NOT_STYLE_ROWS = new Set([
+  'config.fileImports', 'config.annotationSets', 'config.featurePlacementOverrides', 'config.webEdits',
+  'config.linearComparisonPlan', 'config.importedComparisonResolution', 'config.circularConservation',
+  'features.featureOverrides', 'features.featureColorOverrides', 'features.labelOverrideRows',
+  'features.labelTextBulkOverrides', 'ui.selectedFeatureRecordIdx'
+]);
+/**
+ * A style copy's settings for a drawing of `mode` (PD-OI-090 〔作成〕(3)):
+ * `source`'s Save slice (`buildModeSliceData`; its layout preferences of
+ * `mode`) with only the registry rows of `mode` (`modes`: both or `mode`)
+ * that are style, and the five card tables with only the user's rows
+ * (`userTableRows`).
+ * @param {DrawingState} source
+ * @param {'circular' | 'linear'} mode
+ * @param {Readonly<Record<string, string>>} paletteColors The colors of `source`'s palette.
+ * @returns {Record<string, Record<string, unknown>>} A slice `applyModeSliceData` installs.
+ */
+const drawingStyleOf = (source, mode, paletteColors) => {
+  const saved = buildModeSliceData(source, mode);
+  /** @type {Record<string, unknown>} */
+  const config = { ...saved.config, ...userTableRows(saved.config, paletteColors) };
+  /** @type {Record<string, unknown>} */
+  const from = { config, features: saved.features, ui: saved.ui };
+  /** @type {Record<string, Record<string, unknown>>} */
+  const style = { config: {}, features: {}, ui: {} };
+  MODE_SCOPED_SETTINGS.rows.forEach((/** @type {{ domain: string, path: string, modes: string }} */ row) => {
+    if ((row.modes !== 'both' && row.modes !== mode) || NOT_STYLE_ROWS.has(`${row.domain}.${row.path}`)) return;
+    const [head, nested] = row.domain.split('.');
+    if (!Object.hasOwn(style, head) || (nested && head !== 'config')) return;
+    const fromContainer = /** @type {Record<string, unknown>} */ (from[head]);
+    const container = nested ? fromContainer[nested] : fromContainer;
+    if (!isPlainObject(container) || !Object.hasOwn(container, row.path)) return;
+    const target = nested ? /** @type {Record<string, unknown>} */ (style.config[nested] ??= {}) : style[head];
+    target[row.path] = cloneJsonData(container[row.path]);
+  });
+  return style;
+};
+
+/**
+ * Installs a style copy of `source` (`drawingStyleOf`) into `drawing`, a new
+ * drawing at its mode's defaults, as Load installs a drawing's slice.
+ * @param {DrawingState} drawing
+ * @param {DrawingState} source
+ * @param {Readonly<Record<string, string>>} paletteColors The colors of `source`'s palette.
+ * @returns {DrawingState} `drawing`
+ */
+export const applyDrawingStyle = (drawing, source, paletteColors) => {
+  const style = drawingStyleOf(source, drawing.mode, paletteColors);
+  applyModeSliceData(drawing, drawing.mode, { ...style, editorState: normalizeEditorStateData() });
+  return drawing;
 };
 
 /**

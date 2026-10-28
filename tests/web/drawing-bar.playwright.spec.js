@@ -318,6 +318,46 @@ test('Duplicate in the tab menu shows a named copy as one step that Undo takes b
   expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(first);
 });
 
+// PD-OI-090 〔作成〕(3), R17-4, R17-27: "New Linear drawing with this style" in
+// the tab menu makes a Linear drawing with the source's settings that Linear
+// has, without its files, as one step whose Undo shows the source.
+test('New Linear drawing with this style copies a both-mode setting and no files as one step that Undo takes back', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [source] = await drawingIds(page);
+  expect((await shownDrawing(page)).kind).toBe('circular');
+  // The files a drawing uses, read by the app's one reader of bound inputs.
+  const boundFiles = (id) => page.evaluate(async (drawingId) => {
+    const { state } = await import('./js/state.js');
+    const { boundInputFileIds } = await import('./js/services/drawing/inputs.js');
+    return [...boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] })];
+  }, id);
+  const plotTitle = (id) => page.evaluate(async (drawingId) => (
+    (await import('./js/state.js')).state.drawingOf(drawingId).form.plot_title), id);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  await expect.poll(async () => (await boundFiles(source)).length).toBe(1);
+  // Plot Title is a setting of both modes.
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.plot_title = 'Styled title'; });
+
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'New Linear drawing with this style', exact: true }).click();
+  const ids = await drawingIds(page);
+  expect(ids).toHaveLength(2);
+  const styled = ids[1];
+  expect(ids[0]).toBe(source);
+  expect(await shownDrawing(page), 'the new Linear drawing is shown').toEqual({ id: styled, kind: 'linear' });
+  expect(await plotTitle(styled)).toBe('Styled title');
+  expect(await boundFiles(styled)).toEqual([]);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('New drawing with this style');
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect(await drawingIds(page)).toEqual([source]);
+  expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(source);
+  expect(await plotTitle(source)).toBe('Styled title');
+});
+
 // PD-OI-090 〔入力ファイル〕〔Undo と削除〕, R17-3: replacing a file that another
 // drawing also uses asks. "Every drawing that uses this file" is one project
 // step that one Undo from the other drawing takes back; "This drawing only"
