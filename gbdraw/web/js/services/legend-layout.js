@@ -23,6 +23,11 @@ const LEGEND_TEXT_OFFSET_RATIO = 22.0 / 14.0;
 const GRADIENT_BAR_WIDTH_RATIO = 10;
 const GRADIENT_LABEL_GAP_RATIO = 0.2;
 const SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35;
+// The similarity-ring block (gbdraw/legend/circular_layout.py, PD-OI-110).
+const RING_OUTER_CAPTION = 'outer';
+const RING_INNER_CAPTION = 'inner';
+const RING_BAND_LABEL = 'identity';
+const RING_BAND_LINE_GAP = 1.5;
 const GLYPH_FIELDS = 5;
 const KERNING_KEY_BASE = 65536;
 const HORIZONTAL_SIDES = new Set(['top', 'bottom']);
@@ -74,10 +79,12 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {string} key The row key, which places the row's layout.
  * @property {string} name The name the row draws, which the layout measures (Python measures
  *   `drawn_names[key].drawn`); a renamed row keeps its key and draws its new name.
- * @property {'solid' | 'gradient'} type
+ * @property {'solid' | 'gradient' | 'ring'} type `ring`: a drawn similarity ring of the ring block.
  * @property {string} [stroke] The swatch stroke color, `none` for no stroke.
  * @property {number} [strokeWidth]
- * @property {number | string} [minValue] Gradient rows: the lowest identity, which names the scale's first label.
+ * @property {number | string} [minValue] Gradient and ring rows: the lowest identity, which names the scale's
+ *   first label.
+ * @property {boolean} [swatch] Ring rows: whether the row shows its ring's color (the rings differ in color).
  */
 
 /**
@@ -645,6 +652,35 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  */
 
 /**
+ * One drawn ring's row of the ring block: its swatch (when the block shows swatches) and name, centred on `y`.
+ * @typedef {object} CircularRingRowLayout
+ * @property {string} key
+ * @property {LegendLayoutRow} row
+ * @property {number} swatchX
+ * @property {number} textX
+ * @property {number} y
+ */
+
+/**
+ * The similarity-ring block (Python's `CircularRingLegendLayout`): caption `outer`, the drawn rings outermost
+ * first, caption `inner`, and the identity band labelled `identity` with its scale labels below it.
+ * @typedef {object} CircularRingLayout
+ * @property {number} width
+ * @property {number} height
+ * @property {boolean} showSwatches
+ * @property {number} outerCaptionY
+ * @property {number} innerCaptionY
+ * @property {CircularRingRowLayout[]} rows
+ * @property {number} barWidth
+ * @property {number} bandY
+ * @property {number} bandLabelX
+ * @property {string} minLabelText
+ * @property {number} minLabelX
+ * @property {number} maxLabelX
+ * @property {number} scaleLabelY
+ */
+
+/**
  * @typedef {object} CircularLegendLayout
  * @property {boolean} horizontal
  * @property {number} width
@@ -658,12 +694,56 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
  * @property {number} numColumns
  * @property {number} numItemsPerLine
  * @property {LegendEntryLayout[]} entries
- * @property {CircularGradientLayout | null} gradient
- * @property {number} gradientX
+ * @property {CircularGradientLayout | null} gradient The gradient rows a saved Result drawn before the ring block
+ *   still holds.
+ * @property {CircularRingLayout | null} rings The similarity-ring block; it takes the gradient block's place.
+ * @property {number} gradientX Where the gradient or ring block sits.
  * @property {number} gradientY
  */
 
 /** @typedef {{ row: LegendLayoutRow, key: string, textWidth: number, entryWidth: number }} MeasuredCircularEntry */
+
+/**
+ * Python's `_build_ring_layout`.
+ * @param {readonly MeasuredCircularEntry[]} rings
+ * @param {(caption: string) => { width: number, height: number }} measure
+ * @param {number} rect
+ * @returns {CircularRingLayout | null}
+ */
+const circularRingLayout = (rings, measure, rect) => {
+  if (rings.length === 0) return null;
+  const line = LEGEND_LINE_HEIGHT_RATIO * rect;
+  const xMargin = LEGEND_TEXT_OFFSET_RATIO * rect;
+  const showSwatches = rings.some((entry) => Boolean(entry.row.swatch));
+  const textX = showSwatches ? xMargin : 0.0;
+  const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
+  const bandLabelX = barWidth + (xMargin - rect);
+  const outerCaptionY = rect / 2;
+  const rows = rings.map((entry, index) => ({
+    key: entry.key, row: entry.row, swatchX: 0.0, textX, y: outerCaptionY + ((index + 1) * line)
+  }));
+  const innerCaptionY = outerCaptionY + ((rings.length + 1) * line);
+  const bandY = innerCaptionY + (RING_BAND_LINE_GAP * line);
+  const scaleLabelY = bandY + (rect / 2) + 2;
+  const labelHeight = measure('100%').height;
+  const captionWidth = Math.max(measure(RING_OUTER_CAPTION).width, measure(RING_INNER_CAPTION).width);
+  const bandWidth = bandLabelX + measure(RING_BAND_LABEL).width;
+  return {
+    width: Math.max(captionWidth, bandWidth, ...rings.map((entry) => textX + entry.textWidth)),
+    height: scaleLabelY + labelHeight + (line * SINGLE_GRADIENT_TRAILING_GAP_RATIO),
+    showSwatches,
+    outerCaptionY,
+    innerCaptionY,
+    rows,
+    barWidth,
+    bandY,
+    bandLabelX,
+    minLabelText: minGradientLabelText(rings[0].row.minValue ?? 0),
+    minLabelX: 0.0,
+    maxLabelX: barWidth,
+    scaleLabelY
+  };
+};
 
 /**
  * @param {readonly MeasuredCircularEntry[]} gradients
@@ -738,22 +818,29 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
   const solids = [];
   /** @type {MeasuredCircularEntry[]} */
   const gradients = [];
+  /** @type {MeasuredCircularEntry[]} */
+  const ringEntries = [];
   rows.forEach((row) => {
-    if (row.type !== 'solid' && row.type !== 'gradient') return;
+    if (row.type !== 'solid' && row.type !== 'gradient' && row.type !== 'ring') return;
     const textWidth = measure(row.name).width;
     const measured = { row, key: row.key, textWidth, entryWidth: textWidth + (2 * xMargin) };
-    (row.type === 'gradient' ? gradients : solids).push(measured);
+    ({ solid: solids, gradient: gradients, ring: ringEntries })[row.type].push(measured);
   });
-  const gradient = circularGradientLayout(gradients, measure, rect);
+  const rings = circularRingLayout(ringEntries, measure, rect);
+  const gradientRows = rings ? null : circularGradientLayout(gradients, measure, rect);
+  // The block beside or below the solid rows: the ring block, or a saved Result's gradient rows.
+  const gradient = rings || gradientRows;
   let pairwiseLegendWidth = 0.0;
-  if (gradients.length > 0) {
+  if (rings) {
+    pairwiseLegendWidth = rings.width;
+  } else if (gradients.length > 0) {
     const barWidth = GRADIENT_BAR_WIDTH_RATIO * rect;
     // One gradient reserves its block, title included (OV-1611).
     pairwiseLegendWidth = gradients.length > 1
       ? barWidth + (Math.max(...gradients.map((entry) => entry.textWidth)) + xMargin)
       : singleGradientBlockX(barWidth, gradients[0].textWidth).width;
   }
-  const base = { pairwiseLegendWidth, lineMargin, xMargin, gradient };
+  const base = { pairwiseLegendWidth, lineMargin, xMargin, gradient: gradientRows, rings };
 
   if (HORIZONTAL_SIDES.has(options.side)) {
     let width = 0.0;
@@ -845,7 +932,9 @@ export const buildCircularLegendLayout = (rows, options, metrics) => {
     height = Math.max(featureHeight, gradientY + gradient.height) + (rect / 2.0);
   }
   let numLines = solids.length;
-  if (gradient) numLines += gradients.length + (gradients.length > 1 ? 1 : 2);
+  // outer, the rings, inner, the band and its scale labels
+  if (rings) numLines += ringEntries.length + 4;
+  else if (gradient) numLines += gradients.length + (gradients.length > 1 ? 1 : 2);
   return {
     ...base, horizontal: false, width, height, featureWidth: featureBlockWidth, featureHeight, numLines,
     numColumns: 1, numItemsPerLine: solids.length ? 1 : 0, entries, gradientX, gradientY
@@ -866,6 +955,17 @@ export const circularLegendLocalBounds = (layout, colorRectSize) => {
       layoutBox(entry.rectX, entry.rectY - (0.5 * rect), entry.rectX + rect, entry.rectY + (0.5 * rect)),
       halfStrokeWidth(entry.row)
     ));
+  }
+  const rings = layout.rings;
+  if (rings) {
+    const x = layout.gradientX;
+    const y = layout.gradientY;
+    if (rings.showSwatches) {
+      for (const row of rings.rows) {
+        boxes.push(layoutBox(x + row.swatchX, y + row.y - (0.5 * rect), x + row.swatchX + rect, y + row.y + (0.5 * rect)));
+      }
+    }
+    boxes.push(layoutBox(x, y + rings.bandY - (0.5 * rect), x + rings.barWidth, y + rings.bandY + (0.5 * rect)));
   }
   const gradient = layout.gradient;
   if (gradient) {

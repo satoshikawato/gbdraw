@@ -243,3 +243,106 @@ def test_python_api_rejects_an_unknown_scheme() -> None:
     rings = gbdraw.ComparisonRingOptions(tracks=[gbdraw.ComparisonRingTrackOptions(source=_frame())], color_scheme="x")
     with pytest.raises(ValidationError):
         gbdraw.draw_circular(_record(), options=gbdraw.CircularOptions(comparison_rings=rings))
+
+
+_SVG = {"svg": "http://www.w3.org/2000/svg"}
+
+
+def _ring_block(svg: str) -> ET.Element:
+    block = ET.fromstring(svg).find(".//svg:g[@id='conservation_identity_legend']", _SVG)
+    assert block is not None
+    return block
+
+
+def _block_rows(block: ET.Element) -> list[tuple[str | None, str | None, str | None, str | None]]:
+    """(name, source index, track index, swatch fill) of each ring row, top to bottom."""
+
+    rows = []
+    for row in block.findall("svg:g[@data-legend-key]", _SVG):
+        swatch = row.find("svg:path", _SVG)
+        rows.append((
+            row.findtext("svg:text", namespaces=_SVG),
+            row.get("data-source-index"),
+            row.get("data-track-index"),
+            None if swatch is None else swatch.get("fill"),
+        ))
+    return rows
+
+
+def _block_texts(block: ET.Element) -> list[str | None]:
+    return [text.text for text in block.iter("{http://www.w3.org/2000/svg}text")]
+
+
+def _band_stops(block: ET.Element) -> list[str | None]:
+    return [stop.get("stop-color") for stop in block.iter("{http://www.w3.org/2000/svg}stop")]
+
+
+def _draw_legend(scheme: str, colors: list[str] | None = None, *, slots: list[CircularTrackSlot] | None = None) -> str:
+    return assemble_circular_diagram_from_record(
+        _record(),
+        cfg=apply_config_overrides(None, {SCHEME_PATH: scheme}),
+        conservation_dataframes=[_frame(), _frame(), _frame()],
+        conservation_reference="subject",
+        conservation_labels=["A", "B", "C"],
+        conservation_colors=colors,
+        circular_track_slots=slots,
+        identity=90,
+        legend="right",
+    ).tostring()
+
+
+def test_one_colour_legend_lists_the_drawn_rings_without_swatches() -> None:
+    block = _ring_block(_draw_legend("same"))
+
+    assert _block_rows(block) == [("A", "0", "1", None), ("B", "1", "2", None), ("C", "2", "3", None)]
+    assert _block_texts(block) == ["outer", "A", "B", "C", "inner", "identity", "90%", "100%"]
+    assert _band_stops(block) == ["#f0f1f5", "#8b9cc1"]
+
+
+def test_a_ring_coloured_like_the_default_keeps_the_one_colour_legend() -> None:
+    block = _ring_block(_draw_legend("same", ["#8B9CC1", "", ""]))
+
+    assert [row[3] for row in _block_rows(block)] == [None, None, None]
+    assert _band_stops(block) == ["#f0f1f5", "#8b9cc1"]
+
+
+def test_mixed_colour_legend_shows_swatches_and_the_grey_band() -> None:
+    from gbdraw.core.color import tint_color
+
+    block = _ring_block(_draw_legend("ten", ["", "#123456", ""]))
+
+    assert [row[3] for row in _block_rows(block)] == [TEN[0], "#123456", TEN[2]]
+    assert _band_stops(block) == [tint_color("#9c9c9c"), "#9c9c9c"]
+
+
+def test_legend_lists_rings_in_drawn_order() -> None:
+    slots = [
+        CircularTrackSlot(id="features", renderer="features"),
+        *[
+            CircularTrackSlot(id=f"c{index}", renderer="sequence_conservation", params={"track_index": index})
+            for index in (3, 1, 2)
+        ],
+    ]
+    block = _ring_block(_draw_legend("ten", slots=slots))
+
+    assert _block_rows(block) == [("C", "2", "3", TEN[0]), ("A", "0", "1", TEN[1]), ("B", "1", "2", TEN[2])]
+
+
+def test_multi_record_canvas_draws_the_same_ring_block() -> None:
+    def block_of(svg: str) -> list[object]:
+        block = _ring_block(svg)
+        return [_block_rows(block), _block_texts(block), _band_stops(block)]
+
+    single = _draw_legend("ten", ["", "#123456", ""])
+    multi = assemble_circular_diagram_from_records(
+        [_record("rec1"), _record("rec1b")],
+        cfg=apply_config_overrides(None, {SCHEME_PATH: "ten"}),
+        conservation_dataframes=[_frame(), _frame(), _frame()],
+        conservation_reference="subject",
+        conservation_labels=["A", "B", "C"],
+        conservation_colors=["", "#123456", ""],
+        identity=90,
+        legend="right",
+    ).tostring()
+
+    assert block_of(multi) == block_of(single)

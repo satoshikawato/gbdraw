@@ -450,7 +450,9 @@ def test_circular_api_renders_conservation_ring_and_gradient_legend() -> None:
     assert 'data-subject-record-id="rec1"' in svg
     assert 'data-qstart="1"' in svg
     assert 'data-send="120"' in svg
-    assert 'data-legend-key="Conservation identity"' in svg
+    # PD-OI-110: the legend lists the drawn ring by name in the similarity-ring block.
+    assert 'data-legend-key="Reference A"' in svg
+    assert "Conservation identity" not in svg
 
 
 def test_circular_api_renders_source_colored_conservation_ring() -> None:

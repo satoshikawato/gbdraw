@@ -17,6 +17,7 @@ from gbdraw.config.models import (
 from gbdraw.legend.circular_layout import (
     CircularCompactGradientEntryLayout,
     CircularLegendLayout,
+    CircularRingLegendLayout,
     CircularSingleGradientEntryLayout,
     build_circular_legend_layout,
 )
@@ -125,7 +126,15 @@ def _circular_legend_local_bounds(
             ).expanded(_entry_half_stroke_width(entry.properties))
         )
     gradient = layout.gradient
-    if gradient is not None:
+    if isinstance(gradient, CircularRingLegendLayout):
+        gx, gy = float(layout.gradient_x), float(layout.gradient_y)
+        if gradient.show_swatches:
+            for row in gradient.rows:
+                x, y = gx + row.swatch_x, gy + row.y
+                bounds.append(Aabb(x, y - (0.5 * rect_size), x + rect_size, y + (0.5 * rect_size)))
+        band_y = gy + gradient.band_y
+        bounds.append(Aabb(gx, band_y - (0.5 * rect_size), gx + gradient.bar_width, band_y + (0.5 * rect_size)))
+    elif gradient is not None:
         gradient_entries: tuple[
             CircularCompactGradientEntryLayout | CircularSingleGradientEntryLayout, ...
         ] = (*gradient.compact_entries, *gradient.single_entries)

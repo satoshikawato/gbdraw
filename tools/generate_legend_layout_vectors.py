@@ -53,7 +53,11 @@ from gbdraw.layout.composition import (  # noqa: E402
     plan_composition,
 )
 from gbdraw.layout.spatial import Aabb  # noqa: E402
-from gbdraw.legend.circular_layout import build_circular_legend_layout  # noqa: E402
+from gbdraw.legend.circular_layout import (  # noqa: E402
+    CircularGradientLegendLayout,
+    CircularRingLegendLayout,
+    build_circular_legend_layout,
+)
 from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
@@ -289,6 +293,35 @@ def _synthetic(template: dict[str, Any]) -> list[dict[str, Any]]:
             "name": f"synthetic {mode}", "mode": mode, "edit": "empty table", "rows": [],
             "options": {**options, "side": "left"}, "composition": composition,
         })
+    cases.extend(_ring_cases(options, composition, solid))
+    return cases
+
+
+def _ring_cases(
+    options: dict[str, Any], composition: dict[str, Any], solid: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The Circular similarity-ring block (PD-OI-110): one color (names only) and colors that differ (a swatch
+    per row), beside or below the solid rows and alone."""
+
+    def rings(count: int, swatch: bool) -> list[dict[str, Any]]:
+        names = ["AF332093 (China)", "AF369029 (Thailand)", "A much longer similarity ring name (KT995472)", "B"]
+        return [
+            {"key": names[index % len(names)] + (f" {index}" if index >= len(names) else ""), "type": "ring",
+             "stroke": "none", "strokeWidth": 0.0, "minValue": 90, "swatch": swatch}
+            for index in range(count)
+        ]
+
+    cases = []
+    for side in ("left", "top", "upper_right", "lower_left"):
+        for label, rows in (
+            ("solid rows and one-color rings", solid + rings(3, False)),
+            ("solid rows and rings of several colors", solid + rings(12, True)),
+            ("rings only", rings(1, False)),
+        ):
+            cases.append({
+                "name": "synthetic circular", "mode": "circular", "edit": f"{label}, {side}", "rows": rows,
+                "options": {**options, "side": side, "wrapWidth": 900.0}, "composition": composition,
+            })
     return cases
 
 
@@ -320,12 +353,14 @@ def build_inputs() -> dict[str, Any]:
 
 def _table(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     table: dict[str, dict[str, Any]] = {}
-    for row in rows:
+    for index, row in enumerate(rows):
         properties: dict[str, Any] = {
             "type": row["type"], "fill": "#000000", "stroke": row["stroke"], "width": row["strokeWidth"],
         }
-        if row["type"] == "gradient":
+        if row["type"] in {"gradient", "ring"}:
             properties.update({"min_value": row.get("minValue", 0), "min_color": "#000000", "max_color": "#ffffff"})
+        if row["type"] == "ring":
+            properties.update({"track_index": index + 1, "fill": "#000000" if row["swatch"] else None})
         table[row["key"]] = properties
     return table
 
@@ -397,7 +432,17 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
         "pairwiseLegendWidth": layout.pairwise_legend_width, "lineMargin": layout.line_margin,
         "xMargin": layout.x_margin, "numLines": layout.num_lines, "numColumns": layout.num_columns,
         "numItemsPerLine": layout.num_items_per_line, "entries": _entries(layout.solid_entries),
-        "gradient": None if gradient is None else {
+        "rings": None if not isinstance(gradient, CircularRingLegendLayout) else {
+            "width": gradient.width, "height": gradient.height, "showSwatches": gradient.show_swatches,
+            "outerCaptionY": gradient.outer_caption_y, "innerCaptionY": gradient.inner_caption_y,
+            "rows": [
+                {"key": row.key, "swatchX": row.swatch_x, "textX": row.text_x, "y": row.y} for row in gradient.rows
+            ],
+            "barWidth": gradient.bar_width, "bandY": gradient.band_y, "bandLabelX": gradient.band_label_x,
+            "minLabelText": gradient.min_label_text, "minLabelX": gradient.min_label_x,
+            "maxLabelX": gradient.max_label_x, "scaleLabelY": gradient.scale_label_y,
+        },
+        "gradient": None if not isinstance(gradient, CircularGradientLegendLayout) else {
             "compact": gradient.compact, "width": gradient.width, "height": gradient.height,
             "barWidth": gradient.bar_width, "barX": gradient.bar_x, "minLabelText": gradient.min_label_text,
             "minLabelX": gradient.min_label_x, "maxLabelX": gradient.max_label_x,

@@ -168,16 +168,23 @@ class ConservationTrack:
 
 @dataclass(frozen=True)
 class ConservationLegendSource:
-    """What a legend reads from one conservation track: its label and color."""
+    """What a legend reads from one drawn conservation track: its label, color, and identity."""
 
     track_label: str
     track_color: str | None
+    source_index: int
+    track_index: int
 
 
 def conservation_legend_sources(
     tracks: Sequence[ConservationTrack] | None,
 ) -> tuple[ConservationLegendSource, ...]:
-    return tuple(ConservationLegendSource(track.track_label, track.track_color) for track in tracks or ())
+    """The legend's rings: the resolved drawn tracks (``resolve_conservation_track_colors``), outermost first."""
+
+    return tuple(
+        ConservationLegendSource(track.track_label, track.track_color, int(track.source_index), int(track.track_index))
+        for track in tracks or ()
+    )
 
 
 @dataclass(frozen=True)
@@ -253,6 +260,9 @@ def conservation_track_gradient_colors(
 
 
 ConservationColorScheme: TypeAlias = Literal["same", "ten", "per_five"]
+# The legend's identity band when the drawn rings differ in colour: a neutral grey with the OKLab lightness of the
+# default ring colour, drawn with the ring gradient rule (PD-OI-110, D-07).
+CONSERVATION_MIXED_BAND_COLOR = "#9c9c9c"
 # The colours of the rings without a colour of their own, by drawn position (outermost first), repeating
 # (PD-OI-110). ``same`` draws the configured default gradient (``objects.conservation`` min/max colours).
 _PER_FIVE_HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
@@ -653,6 +663,7 @@ def normalize_conservation_tracks_for_record(
 
 __all__ = [
     "CONSERVATION_COLOR_SCHEMES",
+    "CONSERVATION_MIXED_BAND_COLOR",
     "ConservationColorScheme",
     "ConservationInput",
     "ConservationLegendSource",

@@ -6,7 +6,13 @@ from typing import Mapping
 from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
-from ....legend.circular_layout import CircularGradientLegendLayout
+from ....legend.circular_layout import (
+    RING_BAND_LABEL,
+    RING_INNER_CAPTION,
+    RING_OUTER_CAPTION,
+    CircularGradientLegendLayout,
+    CircularRingLegendLayout,
+)
 from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
@@ -58,10 +64,73 @@ class LegendGroup:
             properties["max_color"],
         )
 
-    def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
+    def _text(self, text: str, x: float, y: float, *, baseline: str = "central", anchor: str = "start"):
+        path = generate_text_path(
+            text, 0, 0, 0, self.font_size, "normal", self.font_family, dominant_baseline=baseline, text_anchor=anchor
+        )
+        path.translate(x, y)
+        return path
+
+    def _build_ring_legend(self, layout: CircularRingLegendLayout) -> Group:
+        """The similarity-ring block (PD-OI-110): ``outer``, one row per drawn ring (``data-source-index``,
+        ``data-track-index``), ``inner``, and the identity band; the band and captions are not Legend rows."""
+
+        group = self._comparison_legend_group()
+        group.add(self._text(RING_OUTER_CAPTION, 0, layout.outer_caption_y))
+        swatch_path = self.create_rectangle_path_for_legend()
+        for row in layout.rows:
+            row_group = Group()
+            drawn_name = self._name_entry(row_group.attribs, row.key)
+            row_group.attribs["data-source-index"] = str(row.properties["source_index"])
+            row_group.attribs["data-track-index"] = str(row.properties["track_index"])
+            if layout.show_swatches:
+                swatch = Path(d=swatch_path, fill=row.properties["fill"], stroke="none", stroke_width=0)
+                swatch.translate(row.swatch_x, row.y)
+                row_group.add(swatch)
+            row_group.add(self._text(drawn_name, row.text_x, row.y))
+            group.add(row_group)
+        group.add(self._text(RING_INNER_CAPTION, 0, layout.inner_caption_y))
+
+        band = Group()
+        band.attribs["data-gbdraw-role"] = "conservation-identity-band"
+        properties = layout.rows[0].properties
+        gradient_id = stable_svg_id(
+            "circular_legend_grad",
+            "circular-conservation-gradient",
+            RING_BAND_LABEL,
+            properties["min_color"],
+            properties["max_color"],
+        )
+        gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
+        gradient.add_stop_color(offset="0%", color=properties["min_color"])
+        gradient.add_stop_color(offset="100%", color=properties["max_color"])
+        band.add(gradient)
+        half = self.color_rect_size / 2
+        bar = Path(
+            d=(
+                f"M 0,{path_number(-half)} L {path_point(layout.bar_width, -half)} "
+                f"L {path_point(layout.bar_width, half)} L 0,{path_number(half)} z"
+            ),
+            fill=f"url(#{gradient_id})",
+            stroke="none",
+            stroke_width=0,
+        )
+        bar.translate(0, layout.band_y)
+        band.add(bar)
+        band.add(self._text(RING_BAND_LABEL, layout.band_label_x, layout.band_y))
+        band.add(self._text(layout.min_label_text, layout.min_label_x, layout.scale_label_y, baseline="hanging"))
+        band.add(self._text("100%", layout.max_label_x, layout.scale_label_y, baseline="hanging", anchor="end"))
+        group.add(band)
+        return group
+
+    def _comparison_legend_group(self) -> Group:
         group = Group(id="conservation_identity_legend")
         group.attribs["data-gbdraw-role"] = "comparison-legend"
         group.attribs["data-gbdraw-orientation"] = "circular"
+        return group
+
+    def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
+        group = self._comparison_legend_group()
         font = self.font_family
         path_desc = (
             f"M 0,{path_number(-self.color_rect_size / 2)} L {path_point(layout.bar_width, -self.color_rect_size / 2)} "
@@ -241,7 +310,11 @@ class LegendGroup:
         if layout.gradient is not None and layout.solid_entries:
             self.legend_group.add(feature_group)
         if layout.gradient is not None:
-            gradient_group = self._build_gradient_legend(layout.gradient)
+            gradient_group = (
+                self._build_ring_legend(layout.gradient)
+                if isinstance(layout.gradient, CircularRingLegendLayout)
+                else self._build_gradient_legend(layout.gradient)
+            )
             gradient_group.translate(layout.gradient_x, layout.gradient_y)
             self.legend_group.add(gradient_group)
         return self.legend_group
