@@ -1,7 +1,7 @@
-"""Python admits Session 49 (DESIGN §1) before the Web does (D-15-81).
+"""Python admits Session 50 (DESIGN §1) before the Web does (D-15-81).
 
 ``validate_session`` checks the closed project and its drawings, then checks
-each drawing's one-drawing view as it checks a Session 46-48. The v49
+each drawing's one-drawing view as it checks a Session 46-49. The v49
 fixtures were written by the 49 writer (``write_v49_fixtures.py``, named in
 each ``.provenance.json``).
 """
@@ -33,12 +33,12 @@ from gbdraw.session_io import (
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions"
-V49 = sorted(FIXTURES.glob("drawings-*.v49.gbdraw-session.json.gz"))
+V49 = sorted(FIXTURES.glob("drawings-*.v50.gbdraw-session.json.gz"))
 Document = dict[str, Any]
 
 
 def _load(name: str) -> Document:
-    with gzip.open(FIXTURES / f"{name}.v49.gbdraw-session.json.gz", "rt", encoding="utf-8") as handle:
+    with gzip.open(FIXTURES / f"{name}.v50.gbdraw-session.json.gz", "rt", encoding="utf-8") as handle:
         return json.load(handle)
 
 
@@ -173,7 +173,7 @@ def test_the_conservation_web_files_are_the_circular_drawings() -> None:
 
 
 def test_saving_a_49_again_drops_the_resources_no_drawing_names() -> None:
-    base = load_session_document(FIXTURES / "drawings-circular-linear.v49.gbdraw-session.json.gz")
+    base = load_session_document(FIXTURES / "drawings-circular-linear.v50.gbdraw-session.json.gz")
     linear = base.drawing("linear")
     state = {
         key: value
@@ -188,7 +188,7 @@ def test_saving_a_49_again_drops_the_resources_no_drawing_names() -> None:
         resources=base.to_dict()["resources"],
     ).to_dict()
 
-    assert saved["version"] == 49
+    assert saved["version"] == CURRENT_SESSION_VERSION
     assert sorted(saved["resources"]) == ["colors-default-colors", "record-1-genbank"]
     assert _drawing(saved, "linear")["renderRequest"] is None
     assert _drawing(saved, "circular") == _drawing(base.to_dict(), "circular")

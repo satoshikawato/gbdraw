@@ -120,7 +120,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        # Session 49 keeps the request in the drawing the Session opens.
+        # A drawings-layout Session keeps the request in the drawing it opens.
         (opened,) = [drawing for drawing in saved['drawings'] if drawing['id'] == saved['ui']['activeDrawingId']]
         request = opened['renderRequest']
         assert saved['version'] == CURRENT_SESSION_VERSION and request['schema'] == 9

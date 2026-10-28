@@ -1,6 +1,6 @@
 // @ts-check
-// The Web's move of a Session 46-48 to the drawings of a Session 49 (the
-// 46-48 fast path, DESIGN §4.2; Python twin `drawings_document_from_mode_scoped`
+// The Web's move of a Session 46-49 to the drawings of a Session 50 (the
+// 46-49 fast path, DESIGN §4.2; Python twin `drawings_document_from_mode_scoped`
 // in gbdraw/session_drawings.py, pinned by
 // tests/fixtures/sessions/drawings-vectors.json). A state-free module: every
 // function reads only the document it is given and two generated modules,
@@ -192,7 +192,7 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
 };
 
 // ---------------------------------------------------------------------------
-// The move of a Session 46-48 to drawings: `upgradeModeScopedSession`, the
+// The move of a Session 46-49 to drawings: `upgradeModeScopedSession`, the
 // twin of `drawings_document_from_mode_scoped` (gbdraw/session_drawings.py),
 // function by function as named below.
 
@@ -211,13 +211,13 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  */
 /**
  * The one reading of a Session file's source facts by its version, for the
- * Session 49 Load reads from it (a Session 46-48's here, a Session 27-44's
- * from Python's conversion, a Session 49 itself).
+ * Session 50 Load reads from it (a Session 46-50's here, a Session 27-44's
+ * from Python's conversion, a Session 50 itself).
  * @param {number} version The file's Session version.
- * @param {boolean} hasDraft The file holds a Web draft (a Session 49 holds
+ * @param {boolean} hasDraft The file holds a Web draft (a Session 50 holds
  *   each drawing's own, which the drawing's projection reads: pass false).
  *   A Session 27-44's protein Results are in the search frame of the
- *   Session 49 Load reads: Python's conversion moves them (OV-1969).
+ *   Session 50 Load reads: Python's conversion moves them (OV-1969).
  * @returns {SourceFacts}
  */
 export const sessionSourceFactsOf = (version, hasDraft) => ({
@@ -226,7 +226,7 @@ export const sessionSourceFactsOf = (version, hasDraft) => ({
   resultsRecordPythonPaint: version >= MODE_SCOPED_SESSION_VERSION
 });
 /**
- * One drawing of a Session 49 (`SessionDrawing`, gbdraw/session_contract.py).
+ * One drawing of a Session 50 (`SessionDrawing`, gbdraw/session_contract.py).
  * @typedef {{
  *   id: string,
  *   name: string,
@@ -245,10 +245,10 @@ export const sessionSourceFactsOf = (version, hasDraft) => ({
  *   editorState?: Fields,
  *   ui: Fields,
  *   webFiles?: Fields
- * }} SessionDrawing49
+ * }} SessionDrawing50
  */
 /**
- * A Session 49 (`GbdrawSession49`, gbdraw/session_contract.py; DESIGN §1).
+ * A Session 50 (`GbdrawSession50`, gbdraw/session_contract.py; DESIGN §1).
  * @typedef {{
  *   format: 'gbdraw-session',
  *   version: number,
@@ -258,8 +258,8 @@ export const sessionSourceFactsOf = (version, hasDraft) => ({
  *   legacyArtifacts?: Fields,
  *   ui: Fields & { activeDrawingId: string },
  *   webFiles?: { resourceOriginalNames?: Fields },
- *   drawings: SessionDrawing49[]
- * }} Session49
+ *   drawings: SessionDrawing50[]
+ * }} Session50
  */
 
 const LAYOUT = SESSION_DRAWINGS_LAYOUT;
@@ -337,8 +337,8 @@ const viewOf = (shared, resultSet) => {
 };
 
 /**
- * Each mode's committed one-drawing view of a Session 46-48, in document
- * order (`read_session_drawings`, the 46-48 branch), with where the file
+ * Each mode's committed one-drawing view of a Session 46-49, in document
+ * order (`read_session_drawings`, the 46-49 branch), with where the file
  * holds its Result set (`at`, the prefix of the set's paths).
  * @param {Fields} source
  * @returns {Map<DrawingMode, { view: Fields, at: ResultSetPath }>}
@@ -362,7 +362,7 @@ const committedViews = (source) => {
   return committed;
 };
 
-/** `_undrawn_view`: the view of `mode` in a Session 46-48 with no Result of it. @param {Fields} source @param {DrawingMode} mode @returns {Fields} */
+/** `_undrawn_view`: the view of `mode` in a Session 46-49 with no Result of it. @param {Fields} source @param {DrawingMode} mode @returns {Fields} */
 const undrawnView = (source, mode) => {
   const view = sharedOf(source);
   return {
@@ -519,7 +519,7 @@ const migratedDrawingModes = (source, committed) => {
   return hasResult(other) && !hasResult(shown) ? [other, shown] : [shown, other];
 };
 
-/** `_project_of_view`: the Session 49 project fields of a view. @param {Fields} view @returns {Fields} */
+/** `_project_of_view`: the Session 50 project fields of a view. @param {Fields} view @returns {Fields} */
 const projectOf = (view) => {
   const project = { ...only(view, PROJECT_FIELDS), ui: only(mapping(view.ui), PROJECT_UI_FIELDS) };
   withKey(project, 'webFiles', only(mapping(view.webFiles), PROJECT_WEB_FILES_FIELDS), false);
@@ -527,11 +527,11 @@ const projectOf = (view) => {
 };
 
 /**
- * `_drawing_of_view`: one Session 49 drawing from its one-drawing view; it
+ * `_drawing_of_view`: one Session 50 drawing from its one-drawing view; it
  * keeps its own mode's slice, input slots and request metadata. Its ID and
  * name are its mode's.
  * @param {Fields} view
- * @returns {SessionDrawing49}
+ * @returns {SessionDrawing50}
  */
 const drawingOf = (view) => {
   const mode = viewMode(view);
@@ -569,19 +569,19 @@ const drawingOf = (view) => {
     );
   }
   withKey(drawing, 'webFiles', drawingWebFiles, false);
-  return /** @type {SessionDrawing49} */ (drawing);
+  return /** @type {SessionDrawing50} */ (drawing);
 };
 
 
 /**
- * `_drawing_view` (the inverse of `drawingOf`): one drawing of a Session 49
- * as the one-drawing view a Session 46-48 gives, the project's fields with
+ * `_drawing_view` (the inverse of `drawingOf`): one drawing of a Session 50
+ * as the one-drawing view a Session 46-49 gives, the project's fields with
  * the drawing's: its Result set and request metadata at the top level, its
  * draft as the slice of its mode (`modes.<mode>`), its input type under its
  * mode's `ui` key. Load projects a drawing from it as it projects the
- * committed set of a Session 46-48.
- * @param {Session49} project
- * @param {SessionDrawing49} drawing
+ * committed set of a Session 46-49.
+ * @param {Session50} project
+ * @param {SessionDrawing50} drawing
  * @returns {Fields}
  */
 export const drawingViewOf = (project, drawing) => {
@@ -619,31 +619,31 @@ export const drawingViewOf = (project, drawing) => {
 };
 
 /**
- * A Session 49 of one-drawing views (`_drawings_document`): each drawing from
+ * A Session 50 of one-drawing views (`_drawings_document`): each drawing from
  * its view (`drawingOf`) with its ID and name, in tab order; the views share
  * their project fields by construction (one source, or one Save), so the
- * first gives them. Save writes it; the move of a Session 46-48 builds it.
+ * first gives them. Save writes it; the move of a Session 46-49 builds it.
  * @param {readonly { id: string, name: string, view: Fields }[]} saved
  * @param {string} activeDrawingId
- * @returns {Session49}
+ * @returns {Session50}
  */
 export const sessionDocumentOfViews = (saved, activeDrawingId) => {
   const project = projectOf(saved[0].view);
   project.version = LAYOUT.version;
   project.ui = { ...mapping(project.ui), activeDrawingId };
   project.drawings = saved.map(({ id, name, view }) => ({ ...drawingOf(view), id, name }));
-  return /** @type {Session49} */ (/** @type {unknown} */ (project));
+  return /** @type {Session50} */ (/** @type {unknown} */ (project));
 };
 
 /**
- * A Session 46-48's Session 49, what only the source says, and where the
+ * A Session 46-50's Session 50, what only the source says, and where the
  * file holds each drawing's saved Result set (`setSources`, by drawing ID;
  * a drawing without a saved set has none), so Load finds a set's reading and
  * keeps its repair paths the file's own.
- * @typedef {{ document: Session49, sourceFacts: SourceFacts, setSources: ReadonlyMap<string, ResultSetPath> }} ModeScopedUpgrade
+ * @typedef {{ document: Session50, sourceFacts: SourceFacts, setSources: ReadonlyMap<string, ResultSetPath> }} ModeScopedUpgrade
  */
 /**
- * The Session 49 of an admitted Session 46-48, and what only the source says
+ * The Session 50 of an admitted Session 46-49, and what only the source says
  * (`drawings_document_from_mode_scoped`, gbdraw/session_drawings.py). Each
  * mode's committed set goes to its mode's drawing; the drawings, their
  * order and the one that opens are `migratedDrawingModes`'s. Each drawing keeps its own mode's slice, input
@@ -661,7 +661,7 @@ export const upgradeModeScopedSession = (checked, version) => upgradeRowKeyedMod
 );
 
 /**
- * `upgradeModeScopedSession` of a Session 46-48 whose Legend edits are keyed
+ * `upgradeModeScopedSession` of a Session 46-49 whose Legend edits are keyed
  * by row key already: Load reads them so before it plans (its preflight runs
  * `sessionLegendEditsByRowKey` and lists what that drops), and the reading
  * is not run twice.
@@ -693,7 +693,7 @@ export const upgradeRowKeyedModeScopedSession = (checked, version) => {
   });
   return {
     setSources,
-    document: /** @type {Session49} */ (/** @type {unknown} */ (project)),
+    document: /** @type {Session50} */ (/** @type {unknown} */ (project)),
     sourceFacts: sessionSourceFactsOf(version, hasDraft)
   };
 };

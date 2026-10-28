@@ -518,17 +518,17 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const version of [undefined, null, '46', 46.5, true, [46], {}]) {
     assert.equal(refusal({ format: 'gbdraw-session', version }), format, `version ${JSON.stringify(version)}`);
   }
-  for (const version of [50, 45, 43, 38, 34, 26, 0, -1]) {
+  for (const version of [51, 45, 43, 38, 34, 26, 0, -1]) {
     // B51 (Q2): a Session older than 27 is refused as an old version; OV-1253:
     // a newer one, and one in a gap, are refused as such.
-    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 49 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
+    const reason = version === 26 ? 'SESSION_TOO_OLD' : version > 50 ? 'SESSION_TOO_NEW' : 'SESSION_VERSION_UNSUPPORTED';
     assert.equal(refusal({ format: 'gbdraw-session', version }), `INPUT_INVALID:${reason}`, `version ${version}`);
     if (reason === 'SESSION_TOO_OLD') continue;
     // The refusal names the versions this reader takes.
     assert.throws(() => readSessionInput({ format: 'gbdraw-session', version }), (error) => {
       assert.deepEqual(error.context, reason === 'SESSION_TOO_NEW'
-        ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 49 }
-        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–49' });
+        ? { field: 'schema', reason, sessionVersion: version, latestSessionVersion: 50 }
+        : { field: 'schema', reason, sessionVersion: version, readSessionVersions: '27–33, 39–42, 44, and 46–50' });
       return true;
     });
     // The version is read before the format.
@@ -537,7 +537,7 @@ assert.throws(() => validateSessionAuthorityInventory({
   for (const formatValue of [undefined, null, 'other', 'GBDRAW-SESSION', ['gbdraw-session'], 46]) {
     assert.equal(refusal({ format: formatValue, version: 46 }), format, `format ${JSON.stringify(formatValue)}`);
   }
-  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49]) {
+  for (const version of [27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, 50]) {
     const document = { format: 'gbdraw-session', version, anything: { unvalidated: true } };
     assert.equal(readSessionInput(document), document, `version ${version}`);
   }
@@ -553,12 +553,12 @@ assert.throws(() => validateSessionAuthorityInventory({
     [isArtifactBand, ['SessionChecked39', 'SessionChecked40', 'SessionChecked46']],
     [isAuthorityBand, ['SessionChecked40', 'SessionChecked46']],
     [isModeScopedBand, ['SessionChecked46']],
-    // A Session 49 is in none of the four (DESIGN §6: no `>=` branch admits it).
-    [isDrawingsBand, ['SessionChecked49']]
+    // A Session 50 is in none of the four (DESIGN §6: no `>=` branch admits it).
+    [isDrawingsBand, ['SessionChecked50']]
   ];
   const { bands } = SESSION_ADMISSION_DESCRIPTION;
-  // D-15-95: the 46-48 band has one range predicate; a version test that
-  // also admits 49 is `versionKeepsModeSlices`, not a second band predicate.
+  // D-15-95: the 46-49 band has one range predicate; a version test that
+  // also admits 50 is `versionKeepsModeSlices`, not a second band predicate.
   const authority = await import(pathToFileURL(join(repoRoot, 'gbdraw/web/js/services/session-authority.js')));
   assert.equal(Object.hasOwn(authority, 'isModeScopedVersion'), false, 'isModeScopedVersion duplicates the band predicates');
   assert.deepEqual(bands.flatMap(({ versions }) => versions), [...SUPPORTED_SESSION_VERSIONS].sort((a, b) => a - b));
@@ -573,18 +573,17 @@ assert.throws(() => validateSessionAuthorityInventory({
 }
 
 {
-  // DESIGN §6: the writer flip (SESSION_VERSION 49) leaves the settings-only
-  // form and the schema-2 bindings of Sessions 46-48 as they are, and gives a
-  // Session 49 no settings-only form: its drawing without a request is read
-  // by that drawing (`projectsWithoutRequest`). The child reads
-  // session-authority.js with the generated SESSION_VERSION set to 49.
+  // DESIGN §6: the writer flip (SESSION_VERSION 50) leaves the settings-only
+  // form and the schema-2 bindings of Sessions 46-49 as they are, and gives a
+  // Session 50 no settings-only form: its drawing without a request is read
+  // by that drawing (`projectsWithoutRequest`).
   const { spawnSync } = await import('node:child_process');
-  const run = spawnSync(process.execPath, ['--experimental-test-module-mocks', '--no-warnings',
+  const run = spawnSync(process.execPath, ['--no-warnings',
     join(repoRoot, 'tests/web/helpers/session-authority-at-flip.mjs')], { encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr);
   const atFlip = JSON.parse(run.stdout.trim().split('\n').at(-1));
-  assert.equal(atFlip.sessionVersion, 49);
-  assert.deepEqual(atFlip.settingsOnly, { 46: true, 47: true, 48: true, 49: false });
-  assert.deepEqual(atFlip.bindings, { 46: 'read', 47: 'read', 48: 'read', 49: 'read' });
-  assert.deepEqual(atFlip.projectsWithoutRequest, { 30: false, 48: true, 49: true });
+  assert.equal(atFlip.sessionVersion, 50);
+  assert.deepEqual(atFlip.settingsOnly, { 46: true, 47: true, 48: true, 49: true, 50: false });
+  assert.deepEqual(atFlip.bindings, { 46: 'read', 47: 'read', 48: 'read', 49: 'read', 50: 'read' });
+  assert.deepEqual(atFlip.projectsWithoutRequest, { 30: false, 48: true, 49: true, 50: true });
 }

@@ -4993,7 +4993,7 @@
                                     </div>
                                 </div>
                                 </div>
-                                <div v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="flex items-center text-xs">
+                                <div v-if="mode === 'circular' && adv.plot_title_position !== 'none' && adv.show_definition !== false" class="flex items-center text-xs">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="adv.keep_full_definition_with_plot_title" aria-describedby="help-title-keep-full-definition-with-plot-title" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Keep Full Definition with Plot Title') }}</span>
@@ -5004,6 +5004,13 @@
 
                             <section aria-labelledby="record-label-settings-heading" class="space-y-2 border-t border-slate-200 pt-3">
                                 <h4 id="record-label-settings-heading" class="group-heading">{{ t('Record Labels') }}</h4>
+                                <div v-if="mode === 'circular'" class="flex items-center text-xs">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.show_definition" aria-describedby="help-record-labels-show-definition" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <span>{{ t('Show Definition') }}</span>
+                                    </label>
+                                    <help-tip id="help-record-labels-show-definition" :text="t('Circular only. Off draws no center definition for any record (name, strain, replicon, accession, length, GC), and the inside tracks keep no room for it. The plot title is kept.')"></help-tip>
+                                </div>
                                 <div>
                                     <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">

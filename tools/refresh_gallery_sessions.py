@@ -729,7 +729,7 @@ def _validate_staged_gallery_session(
     )
 
     validate_session(session)
-    # A staged Session is a Session 49 that shows one drawing: read its drawn
+    # A staged Session is a Session 50 that shows one drawing: read its drawn
     # drawing as the one-drawing view (this checks the Gallery rule).
     session, _drawing_id = _gallery_view(session)
     expected_session_version = CURRENT_SESSION_VERSION
@@ -1175,10 +1175,10 @@ def _write_session_file(session_path: Path, session: Mapping[str, Any], *, compr
 def _gallery_view(document: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """The one-drawing view a refresh reads and edits, and the ID of its drawing.
 
-    A Gallery Session shows one drawing: a Session 49's only drawing with a
+    A Gallery Session shows one drawing: a Session 50's only drawing with a
     committed render (``GALLERY_SESSION_DRAWN_DRAWINGS`` in
     gbdraw/session_contract.py, which ``galleryPublicationView`` reads
-    generated). A Session 46-48 is its own view (ID ``None``).
+    generated). A Session 46-49 is its own view (ID ``None``).
     """
 
     drawings = document.get("drawings")
@@ -1198,7 +1198,7 @@ def _gallery_document(
     """``document`` with the drawing of :func:`_gallery_view` replaced by ``view``.
 
     A resource that no drawing names any more (a stored comparison an edit
-    replaced) is left out, as Session 49 requires.
+    replaced) is left out, as Session 50 requires.
     """
 
     if drawing_id is None:
@@ -1209,8 +1209,8 @@ def _gallery_document(
 
 
 def _one_drawing_document(session: Mapping[str, Any]) -> Mapping[str, Any]:
-    """A document the Session readers take: a Session 49 drawing's one-drawing
-    view (:func:`_gallery_view`) as the Session 49 of that one drawing, with
+    """A document the Session readers take: a Session 50 drawing's one-drawing
+    view (:func:`_gallery_view`) as the Session 50 of that one drawing, with
     the resources it names; any other document as it is."""
 
     if "drawings" in session or int(session["version"]) < DRAWINGS_SESSION_MIN_VERSION:

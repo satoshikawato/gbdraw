@@ -77,7 +77,7 @@ export const modeSliceFieldViolations = (value, container = '') => {
 /**
  * The registry fields of `value` read as the slice `container` (its nested
  * containers the same way; a value of another kind is kept for its reader):
- * what a drawing's draft takes of its Session 49 entry's `editorState` and
+ * what a drawing's draft takes of its Session 50 entry's `editorState` and
  * `ui`, which also hold its Result set's fields.
  * @param {unknown} value
  * @param {string} container

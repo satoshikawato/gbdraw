@@ -2,24 +2,33 @@
 
 # Session and request compatibility
 
-Current writers emit session version 49 and canonical `renderRequest` schema 9.
-Session 49 lists the drawings of a project in `drawings`. The Web app and Python
-read a Session 46–48 into drawings themselves; a Session 27–44 is converted by
+Current writers emit session version 50 and canonical `renderRequest` schema 9.
+Session 50 lists the drawings of a project in `drawings`. The Web app and Python
+read a Session 46–49 into drawings themselves; a Session 27–44 is converted by
 Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 49 | 27–33, 39–42, 44, and 46–49 |
+| gbdraw session | 50 | 27–33, 39–42, 44, and 46–50 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–48 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–50 |
+
+Session 49 stores the Circular **Show Definition** setting in each Circular
+slice (`modes.circular.config.adv.show_definition`). Off is saved in the
+render request as `objects.definition.circular.show: false`; on is left out
+of the request, as earlier writers left it. An older Session reads it as on and
+draws as before. gbdraw 0.14.3 writes Session 49; gbdraw 0.14.0 to 0.14.2 read
+Sessions up to 48 and refuse a Session 49 file. Session 50 keeps the setting in
+each Circular drawing's `config.adv.show_definition`; reading a Session 49 moves
+it there.
 
 Sessions 48 and 49 store the saved protein results (LOSATP tables, Similarity groups,
 Collinear blocks) of a reverse-complemented Linear record in the record's
 search frame, as it stores comparison tables. Sessions 46 and 47 stored them
 after the reverse complement. A replay of an older Session draws as before,
-and a re-save or `upgrade_session_document()` writes Session 49. A saved result
+and a re-save or `upgrade_session_document()` writes the current Session. A saved result
 that matches neither strand of its record is still drawn, but the Session
-cannot be saved again (`SessionConversionError`); generate the comparison
+cannot be saved as 48 or later (`SessionConversionError`); generate the comparison
 again.
 
 Session 48 also records which rows, colors, and Blacklist words each file card
@@ -28,7 +37,7 @@ effect. In an older Session, Whitelist and Priority rows read as rows added by
 hand, and Remove keeps them; Specific rules rows that came from a rules file
 were marked so already, and Remove takes them back. Rows that a built-in
 **Preset scheme** added count as yours, and Remove keeps them; an older Session
-stored them like a rules file's rows, so there Remove takes them back. In a Session 48 that the
+stored them like a rules file's rows, so there Remove takes them back. In a Session 48 or later that the
 CLI or the Python API writes, the settings read from its color, priority,
 and whitelist files count as those files' cards. `--label_blacklist` takes
 keywords, so a CLI Session records it as keywords only; a CLI Session written
@@ -51,7 +60,7 @@ keeps the former name in the palette of the shown Result and in its render
 request; both still draw `herbal_garden`.
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 48,
+readable. Current saves promote that request to schema 9 and the Session to 49,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
@@ -81,7 +90,7 @@ at Load, Generate and any re-render of the stored request (label reflow,
 alignment, record transform) show "An input value is invalid"
 (`INPUT_INVALID`, field `schema`).
 
-Session 49 holds a project and its list of drawings. The project keeps
+Session 50 holds a project and its list of drawings. The project keeps
 `format`, `version`, `createdAt`, `title`, `resources`, `ui` (with
 `ui.activeDrawingId`, the drawing that opens), and `legacyArtifacts`. Each entry
 of `drawings` is one drawing in tab order: its `id`, `name`, and `mode`
@@ -89,10 +98,10 @@ of `drawings` is one drawing in tab order: its `id`, `name`, and `mode`
 per-feature edits (`features`), editor state, view (`ui`), file bindings
 (`webFiles`), and saved LOSAT results. A project may hold several drawings of one
 mode. The top-level `modes`, `otherModeResult`, `renderRequest`, `results`,
-`config`, and `features` of Sessions 46 to 48 are not part of Session 49.
-Reading a Session 46 to 48 moves each mode's part into its own drawing.
+`config`, and `features` of Sessions 46 to 49 are not part of Session 50.
+Reading a Session 46 to 49 moves each mode's part into its own drawing.
 
-Sessions 46 to 48 keep the Web app's settings and edits of each diagram mode in its
+Sessions 46 to 49 keep the Web app's settings and edits of each diagram mode in its
 own slice, `modes.circular` and `modes.linear`:
 
 - `config`: the draft configuration.
@@ -100,13 +109,13 @@ own slice, `modes.circular` and `modes.linear`:
 - `editorState`: the Legend edits and per-feature strokes.
 - `ui`: the mode's layout, padding, and pending palette.
 
-A field missing from a slice reads as that mode's default. A Session 46 to 48 rejects
+A field missing from a slice reads as that mode's default. A Session 46 to 49 rejects
 the top-level `config` and `features` of Sessions 44 and older. Reading an
 older Session splits its draft into the two slices. A Session that the CLI or
 the Python API writes from a request has no slices; a CLI re-save keeps or
 splits the source's draft.
 
-Sessions 47 and 48 store each slice's Legend color and stroke edits
+Sessions 47 to 49 store each slice's Legend color and stroke edits
 (`editorState.legend.colorOverrides` and `strokeOverrides`) under the row's
 key: the caption gbdraw drew for the row (`originalCaption`), not the name the
 row shows. Two rows can then show one name and keep their own edits. Session 46
@@ -121,7 +130,7 @@ kept; a stroke takes its color and its width each from the last edit that sets
 it. The Web app, a CLI re-save, and `upgrade_session_document()` read
 these edits the same way.
 
-Sessions 46 to 48 store the per-feature edits (Feature visibility, Label visibility,
+Sessions 46 to 49 store the per-feature edits (Feature visibility, Label visibility,
 and label text) in each slice's `features.featureOverrides`. There is one row
 per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
 in the request. Feature placement drafts and the `featureIdentity` targets of
@@ -216,7 +225,7 @@ and two readings keep older files usable:
   `Coverage` row, and the edits saved for the second row are not used. Two
   GC content tracks always have equal colors.
 
-A Session 46 to 48 can also hold `otherModeResult`: the Result set of the diagram
+A Session 46 to 49 can also hold `otherModeResult`: the Result set of the diagram
 mode that the top-level set does not draw (Circular or Linear), written when
 both modes have a Result. Its `renderRequest`, `results`, `editorState`
 (`featureCatalog`, `alignmentResetReceipt`, and the Result's generated Legend
@@ -342,9 +351,9 @@ Python options still refuse such a size.
 
 When the saved diagram's settings cannot be read at all (for example, their
 `schema` is not an integer), or are missing, the file loads as settings only if it holds the web app's own settings: a Session
-of version 42, 44, 46, 47 or 48 saved by the web app. A row says that the saved
+of version 42, 44, or 46 to 49 saved by the web app. A row says that the saved
 Results, the GenBank, GFF and FASTA inputs, the feature list and the caches
-are left out. A Session of version 42, 44, 47 or 48 written by the CLI or the
+are left out. A Session of version 42, 44, or 47 to 49 written by the CLI or the
 Python API, and a Session of version 31–41, has no saved settings that can be
 read without them, so it is refused; so is a Session of version 31–41 whose
 request names a record file the Session does not hold. A `null` request
@@ -392,7 +401,7 @@ The Web app refuses these files and shows an error instead:
   would be dropped or replaced by its default. A settings-only Session whose
   `modes` is not an object, or whose settings hold nothing or were all
   dropped, is such a file, and so is a Session of version 31–41, or one of
-  version 42, 44, 47 or 48 written by the CLI or the Python API, whose saved
+  version 42, 44, or 47 to 49 written by the CLI or the Python API, whose saved
   settings cannot be read. A Session of version 27–30 that holds only its
   `format` and `version` loads.
 
@@ -536,7 +545,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings keep their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, and 46–48. Python refuses unknown or malformed
+Schema 2 is accepted with sessions 41–42, 44, and 46–49. Python refuses unknown or malformed
 bindings; the Web app drops each one and lists it in the **Load this file?** dialog
 before the import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
@@ -660,9 +669,10 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 48, while current readers also accept the
-session-42, session-44, session-46, and session-47 forms. Readers whose maximum
-version is 42, 44, 46, or 47 reject newly written session-48 files.
+writers emit a session 50 whose drawing holds no request, while current readers
+also accept the session-42, session-44, and session-46 to session-49
+settings-only forms. Readers whose maximum version is 42, 44, or 46 to 49
+reject newly written session-50 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -714,7 +724,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–48;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46–49;
 versions 27–30 have no `renderRequest`: the CLI replays them, and the Web app
 loads them from their saved settings. A Linear replay that combines `--region`,
 `--reverse_complement 1`, and `-b` or `--comparisons_table` now crops before it

@@ -1870,7 +1870,7 @@ _WEB_JSON_HELPERS = {
     "stored_protein_results_to_search_frame_json": (
         _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
     ),
-    # Load of a Session 27-44: Python moves it to a Session 49 once (DESIGN 4.3).
+    # Load of a Session 27-44: Python moves it to a Session 50 once (DESIGN 4.3).
     "legacy_session_to_drawings_json": (legacy_session_to_drawings_json, "upgradeLegacySession"),
     "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),

@@ -2330,7 +2330,7 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
     resaved = tmp_path / "resaved.gbdraw-session.json"
     assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 49
+    assert saved.version == CURRENT_SESSION_VERSION == 50
     with materialize_session(saved, output_directory=tmp_path) as materialized:
         written = session_to_request(materialized, drawing="linear")
         assert _protein_results(written.options) == _protein_results(converted.options)
@@ -2401,7 +2401,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     resaved = tmp_path / "resaved.gbdraw-session.json"
     first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 49
+    assert saved.version == CURRENT_SESSION_VERSION == 50
     with materialize_session(saved, output_directory=tmp_path) as materialized:
         [written] = session_to_request(materialized, drawing="linear").options.linear_comparisons
         assert not written.drawn_feature_ids
@@ -2650,7 +2650,7 @@ def test_two_mode_session_48_moves_to_drawings_with_no_saved_value_lost() -> Non
 def test_two_mode_session_48_linear_drawing_replays_as_the_old_session(tmp_path: Path) -> None:
     # OIC-030: the first drawing renders as the old Session replays.
     upgraded = upgrade_session_document(_TWO_MODE_V48_SESSION, temporary_directory=tmp_path).document
-    assert upgraded.version == 49
+    assert upgraded.version == CURRENT_SESSION_VERSION
     with materialize_session(_TWO_MODE_V48_SESSION, output_directory=tmp_path / "v48") as materialized:
         old = render_session(materialized)
     with materialize_session(upgraded, output_directory=tmp_path / "v49") as materialized:
@@ -2665,7 +2665,7 @@ def test_upgrade_to_session_49_moves_a_session_47_after_its_current_upgrade(tmp_
     assert current.version == CURRENT_SESSION_VERSION
     upgraded = upgrade_session_document(source, temporary_directory=tmp_path).document
     data = upgraded.to_dict()
-    assert data["version"] == 49
+    assert data["version"] == CURRENT_SESSION_VERSION
     assert [drawing["id"] for drawing in data["drawings"]] == ["linear"]
     assert data["drawings"][0]["renderRequest"] == drawing_view(current.to_dict())["renderRequest"]
     assert upgrade_session_document(upgraded).document.to_dict() == data

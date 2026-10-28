@@ -1,5 +1,5 @@
 // @ts-check
-// Which drawings a Session 49 Save writes and which one its Load opens
+// Which drawings a Session 50 Save writes and which one its Load opens
 // (PD-OI-090 〔Save と Load〕, R16-8; DESIGN §4.4). State-free: the caller says
 // which drawing is shown and which drawings are used.
 

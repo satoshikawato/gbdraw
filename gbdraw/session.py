@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, NamedTuple, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession49, SessionResult
+from gbdraw.session_contract import SESSION_ID_RE, GbdrawSession50, SessionResult
 from gbdraw.io.table_text import legacy_table_rows
 from gbdraw.render.output_paths import OutputExistsError, preflight_output_paths
 from gbdraw.session_io import (
@@ -263,7 +263,7 @@ class SessionDocument:
 
     @classmethod
     def _from_checked_move(cls, data: Mapping[str, Any]) -> SessionDocument:
-        """Keep the Session 49 that a checked Session 46-48 document moved to, unchecked.
+        """Keep the Session 50 that a checked Session 46-50 document moved to, unchecked.
 
         Only the CLI re-save keeps one (``_upgraded_session``): the document it
         writes holds every drawing of this one and is checked (OV-1815).
@@ -922,15 +922,15 @@ def _build_session_document_from_drawings(
     web_file_inventory: Mapping[str, Any] | None = None,
     resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument:
-    """Build a current (Session 49) document from already-resolved drawings.
+    """Build a current (Session 50) document from already-resolved drawings.
 
-    With a ``base`` (a Session 49) the drawings replace its drawings of their
+    With a ``base`` (a Session 50) the drawings replace its drawings of their
     IDs and the other drawings stay; otherwise the drawings are the
     Session's, in the given order (D-15-125). ``resources`` are the
     resources of the Session being saved again: equal bytes keep their IDs,
     and those that no request or Web file binding names are dropped. A
     drawing's ``state`` holds its own mode's slice only: another mode's
-    (the retired ``modes`` key of Sessions 46-48) is refused.
+    (the retired ``modes`` key of Sessions 46-49) is refused.
     """
 
     for drawing in drawings:
@@ -1202,7 +1202,7 @@ def _drawings_session_document(
     created_at: datetime | None,
     web_file_inventory: Mapping[str, Any] | None,
 ) -> SessionDocument:
-    """A Session 49 saved again: each view replaces the base drawing of its ID.
+    """A Session 50 saved again: each view replaces the base drawing of its ID.
 
     The resources that no drawing names any more are dropped before the
     writer, which refuses them.
@@ -1339,7 +1339,7 @@ def build_session_document(
     cannot replace canonical envelope fields, and it holds its own mode's
     draft only: another mode's slice (``state["modes"]["linear"]`` on a
     Circular drawing) raises :class:`SessionFormatError`. The current
-    Session version is 49: it keeps the drawings in the given order, any
+    Session version is 50: it keeps the drawings in the given order, any
     number of them, several of one mode, and drawings without a request.
     Each drawing gets its ID and name from its mode (``circular``,
     ``circular-2``; ``Circular``, ``Circular 2``).
@@ -1443,15 +1443,15 @@ def _dropped_results_warning(
     )
 
 
-# The stored Results of a Session 27-39 that a Session 49 cannot hold, by
-# the ID of the Session 49 drawing they belong to (OV-1659).
+# The stored Results of a Session 27-39 that a Session 50 cannot hold, by
+# the ID of the Session 50 drawing they belong to (OV-1659).
 StoredResults = dict[str, list[SessionResult]]
 
 
 # Where a Session 27-44 holds its Result set: the top level, its one set (a
 # Session before 46 has no ``otherModeResult``).
 LegacyResultSetPath = Literal[""]
-# The file Result set each Session 49 drawing of a Session 27-44 took, by the
+# The file Result set each Session 50 drawing of a Session 27-44 took, by the
 # drawing's ID: the drawing that holds the file's request or its set-aside
 # Results (D-15-130). A drawing that took none is not named.
 LegacyResultSetSources = dict[str, LegacyResultSetPath]
@@ -1460,7 +1460,7 @@ LegacyResultSetSources = dict[str, LegacyResultSetPath]
 class LegacyDrawings(NamedTuple):
     """:func:`drawings_document_from_legacy` of a Session 27-44."""
 
-    document: GbdrawSession49
+    document: GbdrawSession50
     stored_results: StoredResults
     result_set_sources: LegacyResultSetSources
     repairs: tuple[DraftMigrationRepair, ...]
@@ -1468,7 +1468,7 @@ class LegacyDrawings(NamedTuple):
 
 
 def _set_aside_results(stored_results: StoredResults, drawing_id: str, state: dict[str, Any]) -> None:
-    """Move the Results a Session 49 cannot hold out of ``state`` (OV-1659).
+    """Move the Results a Session 50 cannot hold out of ``state`` (OV-1659).
 
     Those of a Session 27-30 have no request and those of a Session 31-39 no
     feature catalog; a current Result needs both. Web Load shows them from
@@ -1562,10 +1562,10 @@ def upgrade_session_document(
     *,
     temporary_directory: str | Path | None = None,
 ) -> SessionUpgrade:
-    """Return a Session in the current version (49) without rendering it.
+    """Return a Session in the current version (50) without rendering it.
 
     A Session 27-47 is upgraded to the mode-scoped Session 48 as below, and a
-    Session 46-48 then moves to drawings
+    Session 46-49 then moves to drawings
     (:func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`).
 
     A current document is returned unchanged. A Session 46 or 47 keeps its
@@ -1617,8 +1617,8 @@ def _drawings_of_current(
     data: Mapping[str, Any],
     *,
     stored_results: StoredResults | None = None,
-) -> GbdrawSession49:
-    """A mode-scoped (46-48) document's data moved to drawings, the drawings of
+) -> GbdrawSession50:
+    """A mode-scoped (46-49) document's data moved to drawings, the drawings of
     ``stored_results`` counting as drawings with a Result; a refusal is a
     :class:`SessionConversionError`."""
 
@@ -1639,12 +1639,12 @@ def drawings_document_from_legacy(
     temporary_directory: str | Path | None = None,
     stored_request_schema: int | None = None,
 ) -> LegacyDrawings:
-    """A Session 27-44 as a Session 49, as Web Load reads it, with its stored
+    """A Session 27-44 as a Session 50, as Web Load reads it, with its stored
     Results, where each drawing's Result set was in the file, and Load repairs.
 
     Web Load's readers read the file first and send what they kept; it is
     admitted with :data:`gbdraw.session_io.WEB_READ_SESSION_ADMISSION`, here
-    and in the check of the Session 49 (D-15-131).
+    and in the check of the Session 50 (D-15-131).
 
     The migrations are those of :func:`upgrade_session_document` (the mode
     split, feature edits, annotation targets, hash rules, placements, legacy
@@ -1653,13 +1653,13 @@ def drawings_document_from_legacy(
     move of :func:`gbdraw.session_drawings.drawings_document_from_mode_scoped`.
     Unlike the CLI re-save, no stored Result is
     dropped: the Results of a Session 40-44 stay in the document with their
-    catalog, and those a Session 49 cannot hold (27-30 have no request,
+    catalog, and those a Session 50 cannot hold (27-30 have no request,
     31-39 no feature catalog) are returned beside it, by the ID of their
     drawing, which keeps ``results: []`` (OV-1659). A Session 27-30
     is a drawing without a request; its document goes to drawings without
     the Session 48 check, which refuses a settings-only file with biological
-    sources while Session 49 admits an undrawn drawing with its bindings.
-    The returned document is checked as a Session 49. The repairs are what
+    sources while Session 50 admits an undrawn drawing with its bindings.
+    The returned document is checked as a Session 50. The repairs are what
     the draft migrations could not keep, as Web Load reports them, and
     ``moved_annotation_targets`` the ``hash=`` annotation targets they moved
     to their source feature, which Load's notice names (OV-2072). Other
@@ -1694,7 +1694,7 @@ def drawings_document_from_legacy(
     if not stored_results.keys() <= drawing_ids:
         raise SessionConversionError(
             "The drawings " + ", ".join(sorted(stored_results.keys() - drawing_ids))
-            + " of the stored Results are not in the Session 49."
+            + " of the stored Results are not in the Session 50."
         )
     _web_read_document(cast(Mapping[str, Any], drawings))
     # The file's one set went to the drawing of its request, or was set aside
@@ -1792,7 +1792,7 @@ def _request_less_data(
 ) -> dict[str, Any]:
     """The current data of a Session 27-44 whose drawing has no request, not yet checked.
 
-    A drawing without a request has no Results' catalog (Session 48 and 49);
+    A drawing without a request has no Results' catalog (Sessions 48 to 50);
     its Results go to ``stored_results`` when given (Web Load), by the ID of
     the drawing, else stay for the check to refuse. The document keeps the
     mode shown at Save (``ui.mode``), which is a use of that mode,
@@ -1880,8 +1880,8 @@ def _upgrade_to_current(
     report: DraftMigrationReport | None = None,
     stored_request_schema: int | None = None,
 ) -> SessionUpgrade:
-    """``loaded`` in the newest mode-scoped version (48), or a Session 48 or
-    49 unchanged. With ``stored_results`` (Web Load's reading), Results
+    """``loaded`` in the newest mode-scoped version (49), or a Session 49 or
+    50 unchanged. With ``stored_results`` (Web Load's reading), Results
     without a feature catalog go there instead of being dropped (OV-1659).
     ``stored_request_schema`` is the schema of the request the file stored
     (None: the request's own)."""

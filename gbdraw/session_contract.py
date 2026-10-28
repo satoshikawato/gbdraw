@@ -251,7 +251,7 @@ GALLERY_SESSION_DRAWN_DRAWINGS = 1
 
 
 class SessionProjectUi(TypedDict, total=False):
-    """A Session 49 project's ``ui``: the Web's app-level view state, and the
+    """A Session 50 project's ``ui``: the Web's app-level view state, and the
     drawing the Web opens. A drawing's ``ui`` holds the rest."""
 
     activeDrawingId: str
@@ -264,7 +264,7 @@ class SessionProjectUi(TypedDict, total=False):
 
 
 class SessionProjectWebFiles(TypedDict, total=False):
-    """A Session 49 project's ``webFiles``: what the resources were named."""
+    """A Session 50 project's ``webFiles``: what the resources were named."""
 
     resourceOriginalNames: dict[str, object]
 
@@ -279,8 +279,8 @@ class _SessionDrawingRequired(TypedDict):
 
 
 class SessionDrawing(_SessionDrawingRequired, total=False):
-    """One drawing of a Session 49. :mod:`gbdraw.session_drawings` maps it to
-    the one-drawing Session that Sessions 46-48 give, which ``validate_session``
+    """One drawing of a Session 50. :mod:`gbdraw.session_drawings` maps it to
+    the one-drawing Session that Sessions 46-49 give, which ``validate_session``
     checks; the parts are checked there."""
 
     runMetadata: SessionRunMetadata
@@ -290,7 +290,7 @@ class SessionDrawing(_SessionDrawingRequired, total=False):
     losatCache: SessionArtifactCache
     losatDerivedCache: SessionArtifactCache
     proteinIdentityManifest: dict[str, object]
-    # The drawing's mode slice (``modes[mode]`` of Sessions 46-48).
+    # The drawing's mode slice (``modes[mode]`` of Sessions 46-49).
     config: dict[str, object]
     features: dict[str, object]
     # The Result set's and the slice's editor state, and the drawing's ``ui``.
@@ -300,7 +300,7 @@ class SessionDrawing(_SessionDrawingRequired, total=False):
     webFiles: dict[str, object]
 
 
-class _GbdrawSession49Required(TypedDict):
+class _GbdrawSession50Required(TypedDict):
     format: Literal["gbdraw-session"]
     version: int
     createdAt: str
@@ -309,8 +309,8 @@ class _GbdrawSession49Required(TypedDict):
     drawings: list[SessionDrawing]
 
 
-class GbdrawSession49(_GbdrawSession49Required, total=False):
-    """A Session 49: the project and its drawings, in tab order (DESIGN §1)."""
+class GbdrawSession50(_GbdrawSession50Required, total=False):
+    """A Session 50: the project and its drawings, in tab order (DESIGN §1)."""
 
     title: str
     legacyArtifacts: SessionLegacyArtifacts
@@ -529,7 +529,7 @@ def describe_session_admission() -> dict[str, Any]:
                 | {"id": STRING, "name": STRING, "mode": literal(*DIAGRAM_MODES)},
                 optional=sorted(keys_of(SessionDrawing) - {"id", "name", "mode"}),
             )
-            project = {key: UNKNOWN for key in sorted(keys_of(GbdrawSession49))} | fields | {
+            project = {key: UNKNOWN for key in sorted(keys_of(GbdrawSession50))} | fields | {
                 "resources": record(UNKNOWN),
                 "drawings": array(named("SessionCheckedDrawing", drawing)),
             }
@@ -588,7 +588,7 @@ __all__ = [
     "DRAWING_ID_MAX_LENGTH",
     "FlatDraftFields",
     "GbdrawSession",
-    "GbdrawSession49",
+    "GbdrawSession50",
     "SESSION_ID_RE",
     "SessionDrawing",
     "SessionProjectUi",

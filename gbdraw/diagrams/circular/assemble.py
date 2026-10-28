@@ -1529,6 +1529,7 @@ def _resolve_radial_layout_fitting_definition(
     definition_profile: CircularDefinitionProfile,
     layout_definition_profile: CircularDefinitionProfile,
     definition_position: str,
+    definition_shown: bool,
     center_reserved_radius: float | None,
     record_presentation: RecordPresentation | None,
 ) -> _CentreDefinitionFit:
@@ -1547,13 +1548,14 @@ def _resolve_radial_layout_fitting_definition(
     the definition the record draws without a plot title or, for rows that
     pack on a Multi-Record Canvas, alone (OV-1710, OV-1711), so a title or the
     canvas changes only the centre text. The band and the narrow row read the
-    drawn definition (``definition_profile``).
+    drawn definition (``definition_profile``). A hidden definition
+    (``definition_shown`` false) has no band.
     """
 
     if center_reserved_radius is not None:
         reserved = max(0.0, float(center_reserved_radius))
         return _CentreDefinitionFit(resolve_layout(reserved), reserved)
-    if str(definition_position).strip().lower() != "center":
+    if not definition_shown or str(definition_position).strip().lower() != "center":
         return _CentreDefinitionFit(resolve_layout(None), None)
 
     def band_px(profile: CircularDefinitionProfile) -> float:
@@ -2768,6 +2770,9 @@ def add_record_on_circular_canvas(
     )
 
     show_labels_base = profile.labels_enabled
+    # A hidden definition (``objects.definition.circular.show``) is no definition: the tracks keep no band for it,
+    # it has no text to fit, and no group is drawn. The plot title is drawn by the caller either way.
+    definition_shown = bool(cfg.objects.definition.circular.show)
     depth_enabled = bool(profile.show_depth and depth_config is not None)
     simple_show_ticks = bool(cfg.objects.scale.show)
     # The caller planned and laid out the annotation slots (_prepare_circular_annotation_tracks).
@@ -2949,12 +2954,13 @@ def add_record_on_circular_canvas(
             definition_profile=definition_profile,
             layout_definition_profile=reserved_definition_profile,
             definition_position=definition_position,
+            definition_shown=definition_shown,
             center_reserved_radius=center_reserved_radius,
             record_presentation=record_presentation,
         )
 
     def centre_definition(text_cfg: GbdrawConfig) -> DefinitionGroup | None:
-        if str(definition_position) != "center" or str(definition_profile) == "shared_common":
+        if not definition_shown or str(definition_position) != "center" or str(definition_profile) == "shared_common":
             return None
         facts = definition_record_facts(gb_record)
         style = CircularDefinitionStyle.of(text_cfg, definition_profile)
@@ -3295,36 +3301,38 @@ def add_record_on_circular_canvas(
             phase="text",
         )
 
-    definition_kwargs: dict[str, Any] = {}
-    definition_kwargs["record_index"] = int(annotation_record_index)
-    definition_kwargs["record_count"] = int(definition_record_count)
-    if plot_title is not None:
-        definition_kwargs["plot_title"] = plot_title
-    if str(definition_profile) != "full":
-        definition_kwargs["definition_profile"] = definition_profile
-    if str(definition_position) != "center":
-        definition_kwargs["definition_position"] = definition_position
-    if definition_group_id is not None:
-        definition_kwargs["definition_group_id"] = definition_group_id
-    definition_target_start = len(getattr(canvas, "elements", []))
-    canvas = add_record_definition_group_on_canvas(
-        canvas,
-        gb_record,
-        canvas_config,
-        species,
-        strain,
-        group_key=GroupKey(record_key, GroupKind.DEFINITION),
-        **definition_kwargs,
-        record_presentation=record_presentation,
-    )
-    definition_target = next(
-        (
-            element
-            for element in getattr(canvas, "elements", [])[definition_target_start:]
-            if isinstance(element, Group)
-        ),
-        None,
-    )
+    definition_target: Group | None = None
+    if definition_shown:
+        definition_kwargs: dict[str, Any] = {}
+        definition_kwargs["record_index"] = int(annotation_record_index)
+        definition_kwargs["record_count"] = int(definition_record_count)
+        if plot_title is not None:
+            definition_kwargs["plot_title"] = plot_title
+        if str(definition_profile) != "full":
+            definition_kwargs["definition_profile"] = definition_profile
+        if str(definition_position) != "center":
+            definition_kwargs["definition_position"] = definition_position
+        if definition_group_id is not None:
+            definition_kwargs["definition_group_id"] = definition_group_id
+        definition_target_start = len(getattr(canvas, "elements", []))
+        canvas = add_record_definition_group_on_canvas(
+            canvas,
+            gb_record,
+            canvas_config,
+            species,
+            strain,
+            group_key=GroupKey(record_key, GroupKind.DEFINITION),
+            **definition_kwargs,
+            record_presentation=record_presentation,
+        )
+        definition_target = next(
+            (
+                element
+                for element in getattr(canvas, "elements", [])[definition_target_start:]
+                if isinstance(element, Group)
+            ),
+            None,
+        )
     # The check counts the labels as drawn: after the legend shift and the last leader pass.
     label_layout = _record_label_layout(
         gb_record,

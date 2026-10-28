@@ -1066,7 +1066,7 @@ one drawing never reaches another (PD-OI-090).
   slot, and History restores it through its slot port (R11); none of them
   writes it to the shown Result.
 - Each drawing has its own History (R11).
-- Once the Session format holds a list of drawings (Session 49), a new Session starts with
+- Once the Session format holds a list of drawings (Session 50), a new Session starts with
   one Circular drawing. Save Session writes, as one document, every drawing that has a
   file, a changed setting, an edit, or a Result, the drawing that is shown, and only the
   files a saved drawing uses. Load installs every drawing or changes nothing, shows each
@@ -1079,7 +1079,7 @@ one drawing never reaches another (PD-OI-090).
   rebuilds each drawing from the projection of its committed request,
   then its stored values, then its mode's defaults.
   Python alone converts a Session 27–44, once at Load (`split_draft_into_modes` in
-  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46, 47, or 48
+  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46 to 49
   moves to the list without Python, and Load makes the drawing of a mode that has no
   Result only when the Session shows that mode was used
   (its input files, a Save while it was shown, or a setting that differs from the default
@@ -1102,7 +1102,7 @@ values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing
 the current format, a Session 46 read into its drawings, and a Session 45 or a field
 outside the registry rejected);
 `tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
-(the Web Load installs Python's split of a Session 27–44 as it loads that Session 49);
+(the Web Load installs Python's split of a Session 27–44 as it loads that Session 50);
 `tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
 equal to its Python source); and
 `tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
@@ -1151,7 +1151,7 @@ write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
 contract used by normal restore and Gallery publication. Python alone converts a
-historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–49. The conversion does not clean up
+historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–50. The conversion does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.

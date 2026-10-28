@@ -214,6 +214,7 @@
  * @property {unknown} [scale_interval]
  * @property {unknown} [scale_stroke_color]
  * @property {unknown} [scale_stroke_width]
+ * @property {unknown} [show_definition]
  * @property {unknown} [step_size]
  * @property {unknown} [tick_label_font_size]
  * @property {unknown} [track_axis_gap]
@@ -653,6 +654,7 @@
  * @property {unknown} [scale_interval]
  * @property {unknown} [scale_stroke_color]
  * @property {unknown} [scale_stroke_width]
+ * @property {unknown} [show_definition]
  * @property {unknown} [step_size]
  * @property {unknown} [tick_label_font_size]
  * @property {unknown} [track_axis_gap]
@@ -771,7 +773,7 @@
  * @property {unknown} [runMetadata]
  * @property {unknown} [cliInvocation]
  * @property {'gbdraw-session'} format
- * @property {46 | 47 | 48} version
+ * @property {46 | 47 | 48 | 49} version
  * @property {unknown} [createdAt]
  * @property {unknown} renderRequest
  * @property {Record<string, unknown>} resources
@@ -812,7 +814,7 @@
  * @property {unknown} [webFiles]
  */
 /**
- * @typedef {object} SessionChecked49
+ * @typedef {object} SessionChecked50
  * @property {unknown} [createdAt]
  * @property {SessionCheckedDrawing[]} drawings
  * @property {'gbdraw-session'} format
@@ -820,7 +822,7 @@
  * @property {Record<string, unknown>} resources
  * @property {unknown} [title]
  * @property {unknown} [ui]
- * @property {49} version
+ * @property {50} version
  * @property {unknown} [webFiles]
  * @property {never} [results]
  * @property {never} [runMetadata]
@@ -838,5 +840,5 @@
  * @property {never} [features]
  * @property {never} [files]
  */
-/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46 | SessionChecked49} SessionChecked */
+/** @typedef {SessionChecked27 | SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46 | SessionChecked50} SessionChecked */
 export {};

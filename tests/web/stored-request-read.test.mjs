@@ -36,7 +36,7 @@ installFakeSvgDom();
 globalThis.File = File;
 globalThis.alert = () => {};
 installSessionImportWorker();
-// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// A Session 27-44 moves to a Session 50 in Python, as the composition root's
 // Worker port does it (DESIGN 4.3).
 const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
 setLegacySessionUpgrader(pythonLegacySessionUpgrader());
@@ -58,7 +58,7 @@ const read = (path) => {
   const raw = readFileSync(new URL(path, REPO));
   return JSON.parse((raw[0] === 0x1f ? gunzipSync(raw) : raw).toString('utf8'));
 };
-// A bundled Session is a 49; the tests read the shown drawing as its one-drawing view.
+// A bundled Session is a 50; the tests read the shown drawing as its one-drawing view.
 // The view carries `drawingOrigin` so `load` can write it back as the drawing's 49.
 const galleryView = (saved) => {
   if (saved?.format !== 'gbdraw-session' || !saved.drawings) return saved;
@@ -387,7 +387,7 @@ test('a request whose comparisons Load holds is promoted like any other, and the
   }
 });
 
-// A Circular request of a Session 27-48 that carries a Linear comparison keeps the Comparisons notice in the Linear
+// A Circular request of a Session 27-49 that carries a Linear comparison keeps the Comparisons notice in the Linear
 // Comparisons card after the Load upgrades it to 49, as before (C-OD14): the Linear drawing holds the classification
 // of the stored request, and the Circular drawing stays editable (its Generate is not held by a choice only the
 // Linear card offers).
@@ -404,17 +404,16 @@ test('a Linear comparison in a Circular request of a v44 keeps the Comparisons n
     ['DECISION_REQUIRED', 'A Circular session contains unsupported Linear comparison data.']);
 });
 
-// OV-1873, Owner PQ-F3-1 (C, 2026-10-26): in a Session 49 a Linear comparison in a Circular drawing's request is a
+// OV-1873, Owner PQ-F3-1 (C, 2026-10-26): in a Session 50 a Linear comparison in a Circular drawing's request is a
 // setting only the other diagram type uses, so Load drops it with no notice and holds no Generate on a choice.
-test('a Linear comparison in a Session 49 Circular request is dropped with no notice (OV-1873, PQ-F3-1 C)', async () => {
+test('a Linear comparison in a Session 50 Circular request is dropped with no notice (OV-1873, PQ-F3-1 C)', async () => {
   const session = gallery('HmmtDNA_basic_circular');
   session.renderRequest.comparisons = linearComparison();
   const { result } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  for (const mode of ['circular', 'linear']) {
-    const intent = modeDrawing(state, mode).importedComparisonIntent;
-    assert.notEqual(intent?.disposition, 'DECISION_REQUIRED', mode);
-  }
+  // A one-mode Load makes no Linear drawing (D-15-120), so no Linear drawing holds a decision either.
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), ['circular']);
+  assert.notEqual(modeDrawing(state, 'circular').importedComparisonIntent?.disposition, 'DECISION_REQUIRED');
   assert.deepEqual((result.repairs || []).filter(requestRow), []);
 });
 
@@ -424,7 +423,7 @@ test('Save writes the request Load read: the legacy alignment keeps the feature 
   const saved = await exportSession('probe', { askChoice: async () => 'download' });
   assert.equal(saved.status, 'saved', JSON.stringify(saved.error));
   const document = JSON.parse(gunzipSync(Buffer.from(await saved.blob.arrayBuffer())).toString('utf8'));
-  // A Session 49 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
+  // A Session 50 holds the request in its drawing's entry; the Load opened the stored Result's drawing.
   const session = savedDrawingView(document, document.ui.activeDrawingId);
   assert.equal(session.renderRequest.schema, 9);
   assert.equal(session.renderRequest.layout.similarityAlignment.reference.sourceFeatureIndex, 14);
@@ -618,7 +617,7 @@ test('R4 alone refuses a CLI or Python API Session 42, 44 or 47 whose request is
   const sessions = [
     ['se08-main-linear-cli.v42', fixture('se08-main-linear-cli.v42.gbdraw-session.json.gz')],
     ['scale-interval-zero-circular-cli.v44', fixture('scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz')],
-    // The version the case names: the CLI's Session 49 drawing as a Session 47 (a 49 drawing without a request is
+    // The version the case names: the CLI's Session 50 drawing as a Session 47 (a 50 drawing without a request is
     // an undrawn drawing and loads, PD-OI-090).
     ['cli.v47', (() => {
       const { modes: _modes, ...view } = savedDrawingView(cliCurrent, cliCurrent.ui.activeDrawingId);

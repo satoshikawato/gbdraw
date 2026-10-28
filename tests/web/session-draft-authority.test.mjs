@@ -376,7 +376,7 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
-// The Linear drawing's draft is the one drawing of the Session 49.
+// The Linear drawing's draft is the one drawing of the Session 50.
 const divergentSlice = divergentSession.drawings[0];
 divergentSlice.ui ||= {};
 // This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
@@ -1397,14 +1397,14 @@ assert.equal(alerts.length, 0);
 assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
 
-// A Session 49 Load that fails after its commit gives back the same: the
+// A Session 50 Load that fails after its commit gives back the same: the
 // drawings (the same objects), the shown Result, the feature-editor status,
 // the groups and the History members. The Load commits new drawings
 // (`commitLoadedDrawings`), so the rollback's own copy of the status adds
 // nothing to what the displayed-artifact port gives back.
 const { gunzipSync } = await import('node:zlib');
 const session49 = JSON.parse(gunzipSync(await readFile(
-  'tests/fixtures/sessions/drawings-circular-only.v49.gbdraw-session.json.gz'
+  'tests/fixtures/sessions/drawings-circular-only.v50.gbdraw-session.json.gz'
 )).toString('utf8'));
 const drawingsBefore49 = state.drawingList();
 const tabsBefore49 = state.drawingTabs.value;

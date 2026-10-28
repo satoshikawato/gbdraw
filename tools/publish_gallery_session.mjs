@@ -68,7 +68,7 @@ const {
 });
 
 // A Session file as the publication reads it: the one-drawing view of the
-// drawing it shows, and that drawing's ID and name (Session 49).
+// drawing it shows, and that drawing's ID and name (Session 50).
 const readSession = async (path) => {
   const payload = await readFile(path);
   const decoded = payload[0] === 0x1f && payload[1] === 0x8b

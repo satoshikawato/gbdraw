@@ -34,12 +34,11 @@ import {
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
   ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 /**
- * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46, SessionChecked49,
+ * @import { SessionChecked, SessionChecked31, SessionChecked39, SessionChecked40, SessionChecked46, SessionChecked50,
  *   SessionEnvelope, SessionInput, SessionResult } from '../contracts/session.generated.js'
  */
 /** @import { RawSessionResourceDescriptor } from './session-resource-backing.js' */
@@ -160,7 +159,7 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 // The versions this reader takes (`SUPPORTED_SESSION_VERSIONS`), in words,
 // for the refusal of another version (OV-1253); session-authority.test.mjs
-// pins the text, "27–33, 39–42, 44, and 46–49" today.
+// pins the text, "27–33, 39–42, 44, and 46–50" today.
 const READ_SESSION_VERSIONS = (() => {
   /** @type {[number, number][]} */
   const runs = [];
@@ -208,26 +207,15 @@ export const readSessionInput = (value) => {
 // TypeScript does not narrow a version's literal union by `>=`, so these five
 // are the version tests that narrow it; each starts at its band's generated
 // threshold (tests/web/session-authority.test.mjs compares them with the bands).
-// A Session 49 is a list of drawings (`isDrawingsBand`): none of the four
+// A Session 50 is a list of drawings (`isDrawingsBand`): none of the four
 // bands of the file's sets holds it, so none of them reads it (DESIGN §6).
 // Every Web reader of a Session reads a version's band through these and the
 // two version tests below (tests/web/mode-scoped-session.test.mjs).
-/** A Session 49 or later is a list of drawings. @param {number} version */
+/** A Session 50 or later is a list of drawings. @param {number} version */
 export const versionHoldsDrawings = (version) => version >= SESSION_DRAWINGS_LAYOUT.version;
 /** A Session 46 or later keeps each mode's draft in its slice. @param {number} version */
 export const versionKeepsModeSlices = (version) => version >= MODE_SCOPED_SESSION_VERSION;
-// The versions with a settings-only form (`is_settings_only_session`): a
-// Session 49 has none, its drawing without a request holds no Results
-// (`projectsWithoutRequest`; DESIGN §1, §6).
-/** @type {ReadonlySet<unknown>} */
-const SETTINGS_ONLY_FORM_VERSIONS = new Set([42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION]);
-// The versions whose Web bindings may be schema 2 (`_validate_web_file_bindings`),
-// a Session 49 for each drawing's bindings (its one-drawing view).
-/** @type {readonly number[]} */
-const BINDING_SCHEMA_2_VERSIONS = [41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version];
-/** @param {SessionChecked} document @returns {document is SessionChecked49} */
+/** @param {SessionChecked} document @returns {document is SessionChecked50} */
 export const isDrawingsBand = (document) => versionHoldsDrawings(document.version);
 /** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
 export const isCanonicalBand = (document) => document.version >= CANONICAL_SESSION_MIN_VERSION && !isDrawingsBand(document);
@@ -379,7 +367,7 @@ const heldInputNames = (value) => {
 // The band fact Load reads of a file before Python converts a Session 27-44
 // (B2d-4): whether its Legend lists name a row by its shown caption (46 or
 // older). Whether it keeps its drafts in mode slices (46 or later, a Session
-// 49's drawing parts too) is `versionKeepsModeSlices`.
+// 50's drawing parts too) is `versionKeepsModeSlices`.
 /** @param {SessionEnvelope} document */
 export const holdsCaptionLegendRows = (document) => document.version < ROW_KEYED_LEGEND_SESSION_VERSION;
 
@@ -419,7 +407,7 @@ const withoutFields = (container, drop) => (isPlainObject(container) && Object.k
 
 /**
  * A Result set holder's Web-only artifact fields (a Session 40+'s top level,
- * a Session 49 drawing): a development-branch feature field is dropped with
+ * a Session 50 drawing): a development-branch feature field is dropped with
  * a row (J3), the derived orthogroup `groups` with none (A7c).
  * @template {Record<string, unknown>} T
  * @param {T} holder
@@ -523,7 +511,7 @@ const readWebFileBindings = (webFiles, resources, inputSlot, at, repairs) => {
  * The input files of a Session as the app reads them (A8, A6b): a resource
  * whose descriptor cannot be read is dropped, with a row when a binding or
  * a request names it, and each input inventory is read
- * (`readWebFileBindings`): a Session 27-48's one, each Session 49 drawing's
+ * (`readWebFileBindings`): a Session 27-50's one, each Session 50 drawing's
  * own (B2d-3a-2). The request's references to a dropped resource are its
  * reader's (`readSessionRequests`).
  * @param {SessionChecked} document
@@ -583,14 +571,14 @@ export const readSessionDocument = (value) => {
   if (!isPlainObject(read.value)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
   const repaired = read.rows.some(({ path }) => path === 'results') ? withoutResultSetMembers(read.value) : read.value;
   const checked = /** @type {SessionChecked} */ (repaired); // the band's description holds, as repaired
-  // A Session 49's drawings are read by drawing (Load's preflight); the
+  // A Session 50's drawings are read by drawing (Load's preflight); the
   // project holds the resources every drawing names. The description drops
   // a drawing without an ID, a name or a diagram mode; two drawings of one
   // ID leave no drawing to find by its ID: the file is no Session this app
   // reads (R2).
   if (isDrawingsBand(checked)) {
     if (!drawingIdsAreUnique(checked)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
-    // Each drawing's Web-only artifact fields are read as a Session 40-48's top level's.
+    // Each drawing's Web-only artifact fields are read as a Session 40-50's top level's.
     const entries = /** @type {Record<string, unknown>[]} */ (/** @type {Record<string, unknown>} */ (checked).drawings);
     const read = entries.map((entry, index) => (isPlainObject(entry) ? withoutArtifactWebOnlyFields(entry, drawingSetPath(index), repairs) : entry));
     const document = read.some((entry, index) => entry !== entries[index])
@@ -604,9 +592,9 @@ export const readSessionDocument = (value) => {
 };
 
 /**
- * Each drawing of a Session 49 has an ID of its own (`_identity_problem`,
+ * Each drawing of a Session 50 has an ID of its own (`_identity_problem`,
  * gbdraw/session_drawings.py).
- * @param {SessionChecked49} document
+ * @param {SessionChecked50} document
  * @returns {boolean}
  */
 const drawingIdsAreUnique = (document) => {
@@ -653,13 +641,13 @@ const withNullRequestAsMissing = (document) => {
  */
 export const restoresNothing = (stored, repairs) => {
   const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
-  // A Session 49 drawing whose request was dropped stays, with its settings.
+  // A Session 50 drawing whose request was dropped stays, with its settings.
   if (requestDropped && !hasSettingsOnlyForm(stored) && !versionHoldsDrawings(stored.version)) return true;
-  // A Session 46-48's stored set dropped for its request is its top-level
-  // part (a Session 49 drawing stays without its set).
+  // A Session 46-50's stored set dropped for its request is its top-level
+  // part (a Session 50 drawing stays without its set).
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? topLevelKey(path) : path)));
-  // A Session 49 restores nothing when every drawing it holds was dropped.
+  // A Session 50 restores nothing when every drawing it holds was dropped.
   const storedDrawings = /** @type {{ drawings?: unknown }} */ (/** @type {unknown} */ (stored)).drawings;
   if (versionHoldsDrawings(stored.version) && Array.isArray(storedDrawings)) {
     return storedDrawings.every((_entry, index) => dropped.has(drawingSetPath(index).slice(0, -1)));
@@ -925,6 +913,17 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 );
 
 /**
+ * Whether `version` is one of `older` or a mode-scoped (`modes`) version
+ * (`is_settings_only_session`, `_validate_web_file_bindings`). A drawings-layout
+ * Session has neither form: its drawing without a request holds no Results
+ * (`projectsWithoutRequest`; DESIGN §1, §6).
+ * @param {unknown} version
+ * @param {readonly number[]} older
+ */
+const isWebDraftVersion = (version, older) => typeof version === 'number'
+  && (older.includes(version) || (versionKeepsModeSlices(version) && !versionHoldsDrawings(version)));
+
+/**
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
@@ -935,13 +934,13 @@ export const isSettingsOnlySessionDocument = data => data != null && settingsOnl
  * version has that form and its request is null.
  * @param {SessionInput} data @param {unknown} version
  */
-const settingsOnlyAt = (data, version) => SETTINGS_ONLY_FORM_VERSIONS.has(version)
+const settingsOnlyAt = (data, version) => isWebDraftVersion(version, [42, 44])
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /**
  * Whether Load projects a document of the file it reads without a request: a
  * settings-only Session, or the one-drawing view (`drawingViewOf`) of a
- * Session 49 drawing that holds no request. The band is the file's: Load's
+ * drawings-layout drawing that holds no request. The band is the file's: Load's
  * migration of a Session 27-39 names the writer's version.
  * @param {SessionInput} data
  * @param {number} sourceVersion The version of the file Load reads.
@@ -951,7 +950,7 @@ export const projectsWithoutRequest = (data, sourceVersion) => settingsOnlyAt(da
   || (versionHoldsDrawings(sourceVersion) && data.renderRequest == null);
 
 /**
- * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
+ * Whether a Session's version has a settings-only form (42, 44, and every mode-scoped version): one
  * whose request cannot be read loads as settings only (K22, C-OD07).
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
@@ -962,7 +961,7 @@ export const hasSettingsOnlyForm = (data) => data != null && isSettingsOnlySessi
  * The request schemas a file stored, read before Load promoted its requests:
  * a check that depends on what the writer wrote reads them (RK-1).
  * Keyed by set path (`ResultSetPath`, `storedResultSets`): the projected
- * set's under `''`, where its view holds it (a Session 49's opened drawing
+ * set's under `''`, where its view holds it (a Session 50's opened drawing
  * too), every stored set's under its own path.
  * @typedef {{ [at in ResultSetPath]?: unknown }} StoredRequestSchemas
  */
@@ -985,7 +984,7 @@ const EMPTY_WEB_BINDINGS = Object.freeze({
  */
 export const settingsOnlySessionCandidate = (session) => {
   let candidate = JSON.parse(JSON.stringify(session));
-  // A Session 42-48 (the versions with a settings-only form) keeps only its projected set.
+  // A Session 42-49 (the versions with a settings-only form) keeps only its projected set.
   for (const { at } of storedResultSets(candidate).filter(({ projected }) => !projected)) {
     candidate = withStoredResultSet(candidate, at, null);
   }
@@ -1268,24 +1267,24 @@ const refuseFirstFault = ([fault]) => {
 };
 
 /**
- * The field of a Session 49 that holds its drawings (a file path, not the
+ * The field of a Session 50 that holds its drawings (a file path, not the
  * app's drawing list).
  */
 const DRAWING_LIST_FIELD = /** @type {const} */ ('drawings');
 /**
- * Where a Session 49 holds a drawing's Result set: the prefix of its paths,
+ * Where a Session 50 holds a drawing's Result set: the prefix of its paths,
  * written as the description reader writes a list member's (`list[i].`).
  * @typedef {`${typeof DRAWING_LIST_FIELD}[${number}].`} DrawingSetPath
  */
 /**
  * Where a committed Result set is in a Session: the top level or the other
- * mode's set of a Session 27-48, or a Session 49 drawing's (the prefix of its
+ * mode's set of a Session 27-49, or a Session 50 drawing's (the prefix of its
  * paths).
  * @typedef {'' | 'otherModeResult.' | DrawingSetPath} ResultSetPath
  */
 /** @param {number} index @returns {DrawingSetPath} */
 export const drawingSetPath = (index) => `${DRAWING_LIST_FIELD}[${index}].`;
-/** The index of the Session 49 drawing whose set is at `at`, else null. @param {ResultSetPath} at */
+/** The index of the Session 50 drawing whose set is at `at`, else null. @param {ResultSetPath} at */
 export const drawingSetIndex = (at) => {
   const matched = /^drawings\[(\d+)\]\.$/.exec(at);
   return matched ? Number(matched[1]) : null;
@@ -1340,7 +1339,7 @@ const validateCommittedResultSet = (set, version, storedSchema = storedRequestSc
 // top-level set. It needs a committed top-level request of the other mode, at
 // least one Result, and resources in the top-level table.
 /**
- * What a stored Result set of a Session 46-48 (`storedResultSets`, the other
+ * What a stored Result set of a Session 46-49 (`storedResultSets`, the other
  * mode's) holds that it cannot be restored with: `set` and `request` faults
  * come first; `set` faults of its committed Result set follow
  * (`committedResultSetFaults`). Run notices are read by
@@ -1388,7 +1387,7 @@ const storedSetFaults = ({ at, set: other }, sessionData, version, storedSchemas
 };
 
 /**
- * Save: the stored Result sets of a Session 46-48 (E1).
+ * Save: the stored Result sets of a Session 46-49 (E1).
  * @param {SessionInput} sessionData
  * @param {number | string} version
  * @param {StoredRequestSchemas} storedSchemas
@@ -1505,9 +1504,9 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
 };
 
 /**
- * Load: one drawing's committed Result set of a Session 49, read after its
+ * Load: one drawing's committed Result set of a Session 50, read after its
  * request (`readSessionRequests`) as `readSessionAuthorityParts` reads a
- * Session 46-48's: the drawing Load projects keeps what can be restored of
+ * Session 46-50's: the drawing Load projects keeps what can be restored of
  * its set, as the top-level set does; any other drawing's set is dropped on
  * a fault of its own (`session-part-dropped`), as the other mode's set is.
  * Null drops the set (the drawing stays).
@@ -1615,7 +1614,7 @@ const validateBandFields = (sessionData, version) => {
 };
 
 /**
- * Save's check of the Session it writes (of a Session 49, each drawing's
+ * Save's check of the Session it writes (of a Session 50, each drawing's
  * one-drawing view), and Load's (`load`), which leaves the
  * values of the drawings' settings to the reader table: Load drops what it
  * cannot read with a dialog row before it applies the file (E-OD02).
@@ -1648,10 +1647,10 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  // A Session 49 drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
-  if (bindings?.schema === 2 && !BINDING_SCHEMA_2_VERSIONS.includes(Number(version))) {
-    throw new Error(`Web binding schema 2 requires session version ${BINDING_SCHEMA_2_VERSIONS.slice(0, -1).join(', ')}, `
-      + `or ${BINDING_SCHEMA_2_VERSIONS.at(-1)}.`);
+  // A drawings-layout drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
+  if (bindings?.schema === 2
+    && !(versionHoldsDrawings(Number(version)) || isWebDraftVersion(Number(version), [41, 42, 44]))) {
+    throw new Error(`Web binding schema 2 requires session version 41, 42, 44, or ${MODE_SCOPED_SESSION_VERSION} and later.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
@@ -1667,14 +1666,14 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       }
     }
     // Load read the committed Result sets (`readSessionAuthorityParts`): it
-    // keeps Results whose catalog it dropped, which Save refuses. A Session 49
+    // keeps Results whose catalog it dropped, which Save refuses. A Session 50
     // drawing without a request holds no Result set (`projectsWithoutRequest`).
     if (!load && !(versionHoldsDrawings(Number(version)) && sessionData.renderRequest == null)) {
       validateCommittedResultSet(sessionData, version,
         storedSchemas[''] ?? /** @type {UnvalidatedFields<'schema'>} */ (sessionData.renderRequest)?.schema);
     }
   }
-  // A Session 49 drawing's one-drawing view holds one set, its own (`drawingViewOf`).
+  // A Session 50 drawing's one-drawing view holds one set, its own (`drawingViewOf`).
   if (!load && !versionHoldsDrawings(Number(version))) validateStoredResultSets(sessionData, version, storedSchemas);
   // Load read the run notices (`readSessionAuthorityParts`). A Session 31-39
   // reaches these checks with `results` unvalidated: they read it by index only.
@@ -1775,12 +1774,12 @@ export const projectDocumentMetadata = (sessionData) => ({
   title: typeof sessionData?.title === 'string' ? sessionData.title : ''
 });
 
-/** @import { Session49 } from './session-drawings-upgrade.js' */
+/** @import { Session50 } from './session-drawings-upgrade.js' */
 /**
- * The drawing a Session 49 opens (`_opened_drawing`, gbdraw/session_drawings.py):
+ * The drawing a Session 50 opens (`_opened_drawing`, gbdraw/session_drawings.py):
  * the one `ui.activeDrawingId` names, else the first; a `ui` that is no
  * object names none (the band reader admits any `ui`). The one place the Web
- * reads which drawing a Session 49 opens.
+ * reads which drawing a Session 50 opens.
  * @template {{ id: string }} D
  * @param {{ ui?: unknown, drawings: readonly D[] }} document
  * @returns {D}
@@ -1795,7 +1794,7 @@ export const openedDrawingOf = (document) => {
  * One committed Result set of a Session as the file holds it: `at` is where
  * (the prefix of its paths, so its rows keep the file's own paths), and
  * `projected` says it is the set Load projects (the top-level set of a
- * Session 27-48) rather than a stored set, which loads only as saved.
+ * Session 27-49) rather than a stored set, which loads only as saved.
  * @typedef {{ at: ResultSetPath, projected: boolean, set: SessionInput }} StoredResultSet
  */
 /**
@@ -1804,8 +1803,8 @@ export const openedDrawingOf = (document) => {
  */
 /**
  * The committed Result sets of a Session, the projected one first: a Session
- * 27-48's top-level set and a Session 46-48's `otherModeResult`; each Session
- * 49 drawing that holds a request, the one it opens (`openedDrawingOf`)
+ * 27-50's top-level set and a Session 46-50's `otherModeResult`; each Session
+ * 50 drawing that holds a request, the one it opens (`openedDrawingOf`)
  * projected (a drawing is found by its ID). The one place Load names where a
  * file holds a set; each set reader below reads one.
  * @param {SessionInput} data
@@ -1813,8 +1812,8 @@ export const openedDrawingOf = (document) => {
  */
 export const storedResultSets = (data) => {
   if (isDrawingsBand(/** @type {SessionChecked} */ (data))) {
-    const document = /** @type {Session49} */ (/** @type {unknown} */ (data));
-    // A Session 49 whose every drawing was dropped holds no set (R4, `restoresNothing`).
+    const document = /** @type {Session50} */ (/** @type {unknown} */ (data));
+    // A Session 50 whose every drawing was dropped holds no set (R4, `restoresNothing`).
     const openedId = document.drawings.length > 0 ? openedDrawingOf(document).id : null;
     /** @type {StoredResultSet[]} */
     const sets = document.drawings.flatMap((entry, index) => (entry.renderRequest == null ? [] : [{
@@ -1834,8 +1833,8 @@ export const storedResultSets = (data) => {
 
 /**
  * `data` with its set at `at` replaced by `set`; a null `set` leaves a stored
- * set out (the projected set of a Session 27-48 is never left out). A Session
- * 49 drawing whose set is left out stays, without its set: no request, no
+ * set out (the projected set of a Session 27-49 is never left out). A Session
+ * 50 drawing whose set is left out stays, without its set: no request, no
  * Results, and none of the set's catalog, run metadata or invocation.
  * @template {SessionInput} T
  * @param {T} data @param {ResultSetPath} at @param {SessionInput | null} set

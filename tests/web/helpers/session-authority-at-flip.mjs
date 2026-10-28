@@ -1,18 +1,13 @@
-// Reads session-authority.js as the writer flip will build it: the generated
-// SESSION_VERSION is 49, every other generated constant is as today. Prints
-// the band answers the flip must leave as they are, as JSON. The module mock
-// needs `--experimental-test-module-mocks`, so a test runs this file in a
-// child process (tests/web/session-authority.test.mjs).
-import { mock } from 'node:test';
-
-const schemaUrl = new URL('../../../gbdraw/web/js/contracts/schema.generated.js', import.meta.url).href;
-const real = await import(`${schemaUrl}?real`);
-mock.module(schemaUrl, { exports: { ...real, SESSION_VERSION: real.SESSION_DRAWINGS_LAYOUT.version } });
+// Reads session-authority.js after the writer flip (the generated
+// SESSION_VERSION is the drawings layout's, 50) and prints the band answers
+// the flip must leave as they are, as JSON. A test runs this file in a child
+// process (tests/web/session-authority.test.mjs).
+const real = await import(new URL('../../../gbdraw/web/js/contracts/schema.generated.js', import.meta.url).href);
 const { isSettingsOnlySessionDocument, projectsWithoutRequest, validateSessionAuthorityInventory } = await import(
   new URL('../../../gbdraw/web/js/services/session-authority.js', import.meta.url).href
 );
 
-// A settings-only Session of `version`, or a Session 49 drawing's view
+// A settings-only Session of `version`, or a Session 50 drawing's view
 // (`drawingViewOf`) of a drawing that holds no request.
 /** @param {number} version */
 const requestLess = (version) => ({
@@ -31,13 +26,14 @@ const bindingsRead = (version) => {
 };
 console.log(JSON.stringify({
   sessionVersion: real.SESSION_DRAWINGS_LAYOUT.version,
-  settingsOnly: Object.fromEntries([46, 47, 48, 49].map((version) => [version, isSettingsOnlySessionDocument(requestLess(version))])),
-  bindings: Object.fromEntries([46, 47, 48, 49].map((version) => [version, bindingsRead(version)])),
-  // Load's migration of a Session 27-39 names the writer's version (49), and a
+  settingsOnly: Object.fromEntries([46, 47, 48, 49, 50].map((version) => [version, isSettingsOnlySessionDocument(requestLess(version))])),
+  bindings: Object.fromEntries([46, 47, 48, 49, 50].map((version) => [version, bindingsRead(version)])),
+  // Load's migration of a Session 27-39 names the writer's version (50), and a
   // Session 27-30 holds no request: Load reads it by the file's band.
   projectsWithoutRequest: {
-    30: projectsWithoutRequest({ format: 'gbdraw-session', version: 49 }, 30),
+    30: projectsWithoutRequest({ format: 'gbdraw-session', version: 50 }, 30),
     48: projectsWithoutRequest(requestLess(48), 48),
-    49: projectsWithoutRequest(requestLess(49), 49)
+    49: projectsWithoutRequest(requestLess(49), 49),
+    50: projectsWithoutRequest(requestLess(50), 50)
   }
 }));

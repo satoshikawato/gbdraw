@@ -562,6 +562,8 @@ class ObjectsDefinitionCircularConfig:
     interval: int
     font_size: float
     plot_title_font_size: float
+    # False draws no record's centre definition and keeps no room for it (CLI ``--hide_definition``).
+    show: bool = True
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsDefinitionCircularConfig":
@@ -569,6 +571,7 @@ class ObjectsDefinitionCircularConfig:
             interval=ascii_int(d["interval"]),
             font_size=ascii_float(d["font_size"]),
             plot_title_font_size=ascii_float(d.get("plot_title_font_size", d["font_size"])),
+            show=_bool_from_config(d.get("show", True), default=True),
         )
 
 
