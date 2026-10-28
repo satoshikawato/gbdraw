@@ -30,6 +30,7 @@ installSessionImportWorker();
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createArtifactSlot } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 const { createPaletteLoader } = await import('../../gbdraw/web/js/app/palettes.js');
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));

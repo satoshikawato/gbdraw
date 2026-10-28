@@ -12,6 +12,7 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout };
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createArtifactSlotStore } = await import('../../gbdraw/web/js/services/artifact-slot.js');
 
 const ids = () => state.drawingList().map((drawing) => drawing.id);

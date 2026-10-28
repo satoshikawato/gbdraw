@@ -30,6 +30,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createAuxiliaryFileImports, setupWatchers } = await import('../../gbdraw/web/js/app/watchers.js');
 const { memberWriteSites, sliceHandleCalls } = await import('./helpers/drawing-writes.mjs');

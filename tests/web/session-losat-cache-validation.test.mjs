@@ -81,6 +81,7 @@ const {
   installShownDrawing
 } = sessionConfig;
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { promoteCanonicalRenderRequestToCurrent } = await import('../../gbdraw/web/js/services/session-request.js');
 // The composition root's transform of an older Session's Results (R13 port).

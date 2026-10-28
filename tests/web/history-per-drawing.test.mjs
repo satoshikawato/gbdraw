@@ -25,6 +25,7 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const { DRAWING_SLICES } = await import('./helpers/drawing-state.mjs');

@@ -25,6 +25,7 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { coordinateTarget } = await import('../../gbdraw/web/js/app/annotations/target-actions.js');

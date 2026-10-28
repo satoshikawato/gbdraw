@@ -257,6 +257,7 @@ const {
   featureStateFromCatalog
 } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { createDrawingState, state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { registerInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 // A binding holds refs of the project's file store, as the app's writers bind them.
 const bound = (value) => registerInputFileTree(state.inputFiles, value);

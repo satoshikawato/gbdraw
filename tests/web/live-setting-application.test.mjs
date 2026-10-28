@@ -21,6 +21,7 @@ globalThis.window = {
 };
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');

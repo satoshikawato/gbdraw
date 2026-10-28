@@ -51,6 +51,7 @@ const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-rep
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const read = (path) => {

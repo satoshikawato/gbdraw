@@ -46,6 +46,7 @@ const {
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { floatSettingsSection, returnSettingsSection } = await import('../../gbdraw/web/js/services/settings-pane-state.js');
 const {

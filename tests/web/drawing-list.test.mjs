@@ -53,6 +53,41 @@ const DEFAULT_SESSION_VALUES = {
   paletteInstantPreviewEnabled: createDefaultPaletteDraftState().paletteInstantPreviewEnabled
 };
 
+// A new Session starts with one Circular drawing; the Linear offer tab makes
+// the Linear one (PD-OI-090 〔drawing bar と切り替え〕, T-B4-5). The tests below
+// work on that pair.
+test('a new Session lists one Circular drawing; the Linear offer tab makes the Linear drawing as one step', async () => {
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })), [{ id: 'circular', name: 'Circular' }]);
+  assert.equal(state.activeDrawingId.value, 'circular');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const offerOf = () => app.drawingBar.tabs().filter((tab) => tab.kind === 'offer');
+  assert.deepEqual(offerOf().map(({ mode, label }) => ({ mode, label })), [{ mode: 'linear', label: 'Linear' }],
+    'the offer tab shows while the project has no Linear drawing');
+  assert.deepEqual(app.drawingBar.tabs().map((tab) => tab.kind), ['drawing', 'offer'], 'after the drawing tabs');
+
+  const outcome = app.drawingBar.newDrawing('linear');
+  assert.deepEqual(outcome, { status: 'ok', drawingId: 'linear' });
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })),
+    [{ id: 'circular', name: 'Circular' }, { id: 'linear', name: 'Linear' }]);
+  assert.equal(state.activeDrawingId.value, 'linear', 'the new Linear drawing is shown');
+  assert.equal(state.drawingOf('linear').mode, 'linear');
+  assert.deepEqual(offerOf(), [], 'no offer tab once a Linear drawing exists');
+  assert.equal(history.undoLabel(), 'New drawing');
+  assert.equal(history.managerOf('linear').getUndoCount(), 0, 'its History starts empty');
+
+  await history.undo();
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular'], 'Undo removes the Linear drawing');
+  assert.equal(state.activeDrawingId.value, 'circular', 'and shows the drawing shown before');
+  assert.equal(offerOf().length, 1, 'the offer tab is back');
+  assert.equal(history.undoLabel(), '', 'the step was the only one');
+
+  await history.redo();
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular', 'linear']);
+  assert.equal(state.activeDrawingId.value, 'linear');
+  app.selectDrawing('circular');
+});
+
 test('a drawing\'s reset leaves the other drawing and the Session values; the project reset restores those', () => {
   const circular = modeDrawing(state, 'circular');
   const linear = modeDrawing(state, 'linear');

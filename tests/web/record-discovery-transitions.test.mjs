@@ -22,6 +22,7 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 
 const genbank = (name, ...records) => new File([records.map(([id, length]) => (

@@ -4557,8 +4557,10 @@ export const createAppSetup = () => {
     runListStep: history.runListStep,
     showDrawingNow
   });
-  // The drawing bar: its tabs and the tab menu's Rename, Move, and Delete (B4a-5).
+  // The drawing bar: its tabs with the Linear offer tab, and the tab menu's
+  // New Circular, New Linear, Rename, Move, and Delete (B4a-5, B4b).
   const drawingBar = createDrawingBar({
+    newDrawing: drawingList.newDrawing,
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
     deleteDrawing: drawingList.deleteDrawing,

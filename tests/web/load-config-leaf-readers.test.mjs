@@ -36,6 +36,7 @@ const { setUnmanagedConfigOverrideValidator, installShownDrawing } = sessionConf
 setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const fixture = (name) => {

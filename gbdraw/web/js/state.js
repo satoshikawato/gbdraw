@@ -52,7 +52,7 @@ import { LABEL_TABLES_SLICE, labelTextEditsData } from './services/drawing/label
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
-import { defaultDrawingName, drawingIdOfMode } from './services/drawing-view.js';
+import { allocateDrawingId, defaultDrawingName, drawingIdOfMode } from './services/drawing-view.js';
 import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
 /** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
 import { diagnosticError } from './utils/error-normalization.js';
@@ -125,11 +125,14 @@ const canvasPan = reactive({ x: 0, y: 0 });
 const canvasContainerRef = ref(null);
 
 // App State
+// The drawing a new Session starts with: one Circular drawing (PD-OI-090
+// 〔drawing bar と切り替え〕); the Linear offer tab makes a Linear one.
+const FIRST_DRAWING_ID = allocateDrawingId('circular', []);
 // The shown drawing, by its ID: `installShownDrawing` (services/config.js) is
 // its one writer. The shown mode is the shown drawing's (`drawing.mode`), so
 // nothing writes `mode`.
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
-const activeDrawingId = typedRef(drawingIdOfMode('circular'));
+const activeDrawingId = typedRef(FIRST_DRAWING_ID);
 const mode = typedComputed(() => activeDrawing().mode);
 
 const selectedAnnotation = ref(null);
@@ -573,7 +576,7 @@ const generatedLegendPosition = ref('left');
 // The drawing the displayed Result belongs to, by ID (S6): the artifact slot
 // installs write it (`installArtifactSlot`, the History owner set), and Load.
 /** @type {import('./utils/reactivity.js').Ref<DrawingId>} */
-const generatedDrawingId = typedRef(drawingIdOfMode('circular'));
+const generatedDrawingId = typedRef(FIRST_DRAWING_ID);
 const generatedMultiRecordCanvas = ref(false);
 const generatedCircularPlotTitlePosition = ref('none');
 
@@ -1047,8 +1050,8 @@ const editsText = (value) => JSON.stringify(value, (_key, item) => (
 export const drawingHasEdits = (drawing) => (
   editsText(editsOf(drawing)) !== editsText(editsOf(createDrawingState(drawing.id, drawing.mode)))
 );
-const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circular');
-/** @typedef {typeof circularDrawing} DrawingState */
+const firstDrawing = createDrawingState(FIRST_DRAWING_ID, 'circular');
+/** @typedef {typeof firstDrawing} DrawingState */
 /**
  * A drawing tab: the drawing's ID and its name, in tab order.
  * @typedef {Readonly<{ id: DrawingId, name: string }>} DrawingTab
@@ -1061,7 +1064,7 @@ const circularDrawing = createDrawingState(drawingIdOfMode('circular'), 'circula
  * holds the order and names, and only the store writers below change either.
  * @type {import('./utils/reactivity.js').Ref<ReadonlyMap<DrawingId, DrawingState>>}
  */
-const drawings = typedShallowRef(new Map([circularDrawing, createDrawingState(drawingIdOfMode('linear'), 'linear')].map((d) => [d.id, d])));
+const drawings = typedShallowRef(new Map([[firstDrawing.id, firstDrawing]]));
 /** @param {readonly DrawingTab[]} tabs @returns {readonly DrawingTab[]} */
 const freezeTabs = (tabs) => Object.freeze(tabs.map(({ id, name }) => Object.freeze({ id, name: String(name) })));
 /**
