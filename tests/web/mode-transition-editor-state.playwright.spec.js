@@ -21,14 +21,17 @@ for (const mode of ['circular', 'linear']) {
     const page = await load(browser, seeds[mode]);
     let fresh;
     const text = 'MODE_RETAINED_LABEL';
+    const temporary = mode === 'circular' ? 'linear' : 'circular';
     try {
+      // Making the other mode's drawing is a project step of its own: make it first, so the Undo below walks the label edit.
+      await switchMode(page, temporary);
+      await switchMode(page, mode);
       await generate(page);
       const generated = await snapshot(page);
       await rename(page, text);
       const edited = await snapshot(page);
       expect(Object.values(edited.labels)).toContain(text);
       expect(edited.mounted).toContain(text);
-      const temporary = mode === 'circular' ? 'linear' : 'circular';
       await switchMode(page, temporary);
       expect.soft(labelIntent(await snapshot(page))).toEqual(noLabelIntent);
       expect((await snapshot(page)).featureCount).toBe(0);

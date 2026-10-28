@@ -10,10 +10,13 @@ const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { buildConfigData, getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const circular = s.drawingList().find(drawing => drawing.mode === 'circular');
+  const linear = s.drawingList().find(drawing => drawing.mode === 'linear');
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.drawingOf('circular').files[key])),
-    linearSources: s.drawingOf('linear').linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
+    // A mode the project has no drawing of (a new Session starts with a Circular one) holds no source.
+    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(circular?.files[key])),
+    linearSources: (linear ? linear.linearSeqs : []).map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
   };
@@ -312,10 +315,18 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     } else {
       error = (await loadFile(page, file, expected)) ?? null;
     }
-    expect(await snapshot(page), `${name}: complete state at Load completion`).toEqual({ ...before, error });
+    // A Load that succeeds opens the saved drawings only; the unused Linear drawing made above is not saved (R16-8),
+    // so the loaded project holds none until the next case makes it again.
+    const loaded = expected === 'Session loaded';
+    expect(await snapshot(page), `${name}: complete state at Load completion`)
+      .toEqual({ ...before, error, ...(loaded ? { linearSources: [] } : {}) });
     const after = await capture(page, testInfo, `kept-${name}`);
     await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
+    if (loaded) {
+      await showDrawing(page, { kind: 'linear' });
+      await showDrawing(page, { kind: 'circular' });
+    }
   }
   await loadFile(page, path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
   const replaced = await snapshot(page);
