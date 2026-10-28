@@ -12,38 +12,32 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
-  tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
-  Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the
-  draft no longer holds the file, a render draws it again, or another drawing renders. The request, the Session
-  and the Result are unchanged.
-- Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
-  the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
-  again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
-  keeps the drawn Depth paths (#1422).
-- Performance (web app): on a Multi-Record Circular canvas, a change that moves or restyles only some records
-  copies and re-reads only those records' parts; label leaders and texts no longer redraw when a definition font
-  or center radius changes, and Linear comparison ribbons no longer redraw when a definition or
-  record label changes. The drawn bytes are unchanged.
-- Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
-  a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
-  the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
-  a fresh Generate's (#1418).
-- Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
-  button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
-  **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
-  loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
-  four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
-  button's icon beside the logo (PD-OI-108, #1383).
+## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
+
+- Patch release of 0.14.2. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.3.md).
+- Fixed: per-feature edits in the Web app (a "This feature only" color, label
+  text and visibility, Feature visibility, stroke, Feature placements, and
+  annotations of selected features) keep applying when the view of their
+  record changes: a Circular record drawn alone or on the Multi-record canvas,
+  a Linear File card that draws all of its records or one of them. Before,
+  they stopped applying after a Generate that drew the record under another
+  key. Undo of that Generate puts them back; Session files are unchanged
+  (OV-1949, #1417). Edits made on an "all records" card of a 0.13.0 Session do not
+  follow its records after the first Generate splits the card.
+- Fixed: label text and Label visibility typed in the Web feature popup and
+  not yet applied stay when the labels are placed again while the popup is
+  open (OV-1984, #1417).
+- Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
+  `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
+  only `herbal_garden`, and new requests name it (#1407).
+- Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
+  and Windows have no LOSAT binary (#1406).
 - Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
   fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
   (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed
   (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
-- Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
-  Security Advisories (#1403).
-- Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
-  inputs in `gbdraw/web/tutorial-data/` of a source checkout; the Quickstart also links the web app (#1407).
 - Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
   the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
   Before, they wrote only the SVG with a warning and exited 0 (#1404).
@@ -53,27 +47,46 @@ write-up of a release.
 - Changed: building gbdraw from source needs setuptools 77 or newer. The package lists Python 3.13, which the
   `dev` CI tier tests. CI actions are pinned to commits, and Dependabot proposes grouped monthly updates (#1403).
 - Changed: the installation notes state what CI and each release check instead of a 0.14.0 claim (#1407).
+- Changed: in the one-row header from 769 to 1000 px, where every button already shows only its icon and the
+  Session title would still narrow, the Session block hides its "Session" caption and the toolbar gaps close up
+  to 2 px, so the title keeps its width (PD-OI-108, #1415).
 - Removed: the LOSAT development build tracked at `gbdraw/bin/linux-x86_64/losat`, and the resolver step that
   preferred it over `losat` on `PATH`. In a source checkout, run `gbdraw setup-losat` or put `losat` on `PATH`.
   The automatic order is now: the explicit option, conda, the managed install (`gbdraw setup-losat`), `losat` on
   `PATH`, then NCBI BLAST+ on `PATH` (#1406).
-- Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
-  `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
-  only `herbal_garden`, and new requests name it (#1407).
-- Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
-  and Windows have no LOSAT binary (#1406).
-- Fixed: per-feature edits in the Web app (a "This feature only" color, label
-  text and visibility, Feature visibility, stroke, Feature placements, and
-  annotations of selected features) keep applying when the view of their
-  record changes: a Circular record drawn alone or on the Multi-record canvas,
-  a Linear File card that draws all of its records or one of them. Before,
-  they stopped applying after a Generate that drew the record under another
-  key. Undo of that Generate puts them back; Session files are unchanged
-  (OV-1949). Edits made on an "all records" card of a 0.13.0 Session do not
-  follow its records after the first Generate splits the card.
-- Fixed: label text and Label visibility typed in the Web feature popup and
-  not yet applied stay when the labels are placed again while the popup is
-  open (OV-1984).
+- Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
+  button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
+  **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
+  loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
+  four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
+  button's icon beside the logo (PD-OI-108, #1383).
+- Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
+  Security Advisories (#1403).
+- Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
+  inputs in `gbdraw/web/tutorial-data/` of a source checkout; the Quickstart also links the web app (#1407).
+- Performance: Circular label placement and the label-fit search on large label sets
+  build far fewer pair tables, and the leader-crossing count looks for
+  candidates in the grid cells each leader passes through. The output is the
+  same. AP027078 `--labels out` (562 labels) takes about 11 s instead of 28 s;
+  radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
+  about 4 s instead of 25 s, with less memory (#1396, #1400).
+- Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
+  tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
+  Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the
+  draft no longer holds the file, a render draws it again, or another drawing renders. The request, the Session
+  and the Result are unchanged (#1425).
+- Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
+  the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
+  again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
+  keeps the drawn Depth paths (#1422).
+- Performance (web app): on a Multi-Record Circular canvas, a change that moves or restyles only some records
+  copies and re-reads only those records' parts; label leaders and texts no longer redraw when a definition font
+  or center radius changes, and Linear comparison ribbons no longer redraw when a definition or
+  record label changes. The drawn bytes are unchanged (#1424).
+- Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
+  a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
+  the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
+  a fresh Generate's (#1418).
 - Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
   and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
   warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).

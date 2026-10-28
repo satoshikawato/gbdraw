@@ -42,8 +42,8 @@ The [documentation home](https://github.com/satoshikawato/gbdraw/blob/main/docs/
 pages cover [installation](https://github.com/satoshikawato/gbdraw/blob/main/docs/INSTALL.md), [tutorial
 inputs](https://github.com/satoshikawato/gbdraw/blob/main/docs/GETTING_TUTORIAL_DATA.md), [citation and project
 background](https://github.com/satoshikawato/gbdraw/blob/main/docs/ABOUT.md), and the [changelog](https://github.com/satoshikawato/gbdraw/blob/main/CHANGELOG.md).
-See the [0.14.2 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.2.md)
-for the latest fixes, the [0.14.1 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.1.md), and the [0.14.0 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.0.md)
+See the [0.14.3 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.3.md)
+for the latest fixes, the [0.14.2 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.2.md), the [0.14.1 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.1.md), and the [0.14.0 release notes](https://github.com/satoshikawato/gbdraw/blob/main/docs/RELEASE_NOTES_0.14.0.md)
 for changes and migration from 0.13.
 See [Contributing](https://github.com/satoshikawato/gbdraw/blob/main/CONTRIBUTING.md) to report a bug, set up a development
 environment, or submit a pull request.
@@ -83,7 +83,7 @@ python -m pip install -e ".[dev,export]"
 
 Local GUI/Web assets have no hosted Google Analytics injection.
 See [Installation](https://github.com/satoshikawato/gbdraw/blob/main/docs/INSTALL.md) for details, supported Python versions,
-platform notes, and the PyPI route. The source version is `0.14.2`; check
+platform notes, and the PyPI route. The source version is `0.14.3`; check
 [PyPI](https://pypi.org/project/gbdraw/) for available packages and
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) for publication
 dates. If the desired package is unavailable, use a source install.
