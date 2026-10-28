@@ -1889,3 +1889,20 @@ for (const { name, history: steps } of [
     await expectLiveEqualsGenerate(page, { label: `a pattern edit after a Legend row stroke: ${name}` });
   });
 }
+
+// OV-1987: a rule that takes a CDS feature under another caption makes Python
+// name the CDS palette row "other proteins", so the stroke edit of row `CDS`
+// names a row the Result no longer draws, and Generate strokes no feature with
+// it. A later rule edit shows the strokes live; the row it names is absent, so
+// it reaches no feature either, although the draft still gives the key `CDS`
+// its palette color.
+test('a stroke on a Legend row the Result no longer draws reaches no feature after a rule edit, live = Generate (OV-1987)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await legendRowStrokeColor(page, 'CDS', '#7b2cbf');
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: 'FL2$', color: '#f4a261', cap: 'transfer RNA' });
+  const index = await ruleIndexOf(page, 'transfer RNA');
+  await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.setSpecificRuleField(rule, 'color', '#123456'), index);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'a rule edit after the stroked row left the Result' });
+});

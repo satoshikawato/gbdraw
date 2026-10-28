@@ -34,6 +34,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   edit gives the row another key (for example a caption edit of another rule),
   as **Generate Diagram** draws it. Before, the row showed the default line
   until the next Generate.
+- A Legend row's stroke in the Web app no longer comes back on features after
+  its row has left the Legend (for example the CDS row that becomes "other
+  proteins" when a color rule takes a CDS feature under another caption).
+  Before, a later rule edit or Legend delete stroked those features again
+  until the next **Generate Diagram**.
 
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,

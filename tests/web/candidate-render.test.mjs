@@ -500,6 +500,9 @@ test('a Legend row stroke reaches the listed, named, and same-colored features w
   assert.deepEqual(legendRowFeatureIds(reach(), 'none', drawnFills), []);
   assert.deepEqual(legendRowFeatureIds(reach({ namedIds: ['f2'] }), null, drawnFills), ['f2']);
   assert.deepEqual(legendRowFeatureIds(reach({ draftColor: '#d3d3d3' }), '#54bcf8', drawnFills), ['f2']);
+  // A row the Result does not draw reaches no feature by color, whatever color
+  // the draft gives the key, as Generate draws it (OV-1987).
+  assert.deepEqual(legendRowFeatureIds(reach({ draftColor: '#54bcf8' }), null, drawnFills), []);
 });
 
 test('a stroke on a generated Legend row gives each Result the features that keep their own stroke', () => {
