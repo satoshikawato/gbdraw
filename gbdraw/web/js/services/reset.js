@@ -78,8 +78,8 @@ const resetPaletteState = (state, drawing) => {
  * A new drawing at its mode's defaults: the drawing state `createDrawingState`
  * just made takes its default palette's colors (a new drawing state has
  * none). It is the drawing `tools/generate_mode_slice_defaults.mjs` reads as a
- * mode's default, so Save counts it as unused (R16-8, OV-1811). Load's
- * drawings for the mode buttons and the drawing list's New take it.
+ * mode's default, so Save counts it as unused (R16-8, OV-1811). The drawing
+ * list's New takes it.
  * @param {typeof AppState} state
  * @param {DrawingState} drawing A new drawing state.
  * @returns {DrawingState} The same drawing.

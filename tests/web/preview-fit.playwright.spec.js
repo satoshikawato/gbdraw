@@ -182,6 +182,25 @@ test('Fit shows the whole Linear comparison centred, left of an open Editor', as
   expect(beside.zoom).toBeLessThanOrEqual(plain.zoom);
 });
 
+// R17-25 (OV-1809): a Session file Load with a Result fits the figure to the
+// shown Preview at every width; Generate keeps 100 %.
+const circularSession = join(repoRoot, 'gbdraw/web/gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json');
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`a Session file Load fits the figure to the Preview at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(180000);
+    await page.setViewportSize(viewport);
+    await openApp(page);
+    page.on('dialog', (dialog) => dialog.dismiss());
+    await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
+      .setInputFiles(circularSession);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+    await settle(page);
+    const loaded = await fitGeometry(page);
+    expect(loaded.zoom, JSON.stringify(loaded)).toBeLessThan(1);
+    expectFitted(loaded, `Load ${viewport.width}x${viewport.height}`);
+  });
+}
+
 // GX-02: the buttons keep the wheel's range and 0.1 steps.
 test('Zoom in stops at 500% and Zoom out at 10%, on exact 0.1 steps', async ({ page }) => {
   test.setTimeout(180000);

@@ -3817,6 +3817,12 @@ export const createAppSetup = () => {
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
     // without a Result shows Settings.
     if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
+    // R17-25: a Load with a Result fits the figure to the shown Preview, at every width
+    // (after the phone pane switch, so the measured canvas is visible); Generate resets to 100 %.
+    if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) {
+      await nextTick();
+      fitPreviewToViewport();
+    }
     // A loaded Session makes a Generate likely: download the Worker's boot
     // files now, after the Load, so they never slow its own requests.
     if (result?.status === 'ok' || result?.status === 'legacy') prefetchPyodideBootAssets();
@@ -3900,8 +3906,8 @@ export const createAppSetup = () => {
   // serves the Gallery catalog (gbdraw.app, not the pip GUI), and its chooser
   // lists every catalog example. The choice closes the chooser, asks the UJ-09
   // question, and loads the Session through the Load Session path. The catalog
-  // read does not hold up startup. A loaded example opens fitted, as the Fit
-  // button leaves it (Owner 2026-10-08); Load Session keeps the saved zoom.
+  // read does not hold up startup. A loaded Session, an example
+  // included, opens fitted (importSession).
   const galleryExamples = ref(/** @type {GalleryExample[]} */ ([]));
   void readGalleryExamples().then((examples) => { galleryExamples.value = examples; });
   const exampleChooserOpen = ref(false);
@@ -3928,8 +3934,6 @@ export const createAppSetup = () => {
               href: example.tutorialUrl
             });
           }
-          await nextTick();
-          fitPreviewToViewport();
         }
       } catch (error) {
         errorLog.value = normalizeUserFacingError(error);

@@ -122,18 +122,6 @@ export const defaultDrawingName = (mode, drawingId, modeName = MODE_DRAWING_NAME
 };
 
 /**
- * The first drawing of a mode, its ID and tab name: a Session 27-44's
- * drawings until the Worker names them (B2d-4), and the unused drawing Load
- * keeps of a mode the Session has none of (D-15-93).
- * @param {ModeProfileName} mode
- * @returns {Readonly<DrawingIdentity & { name: string }>}
- */
-export const firstDrawingOfMode = (mode) => {
-  const id = drawingIdOfMode(mode);
-  return Object.freeze({ id, mode, name: defaultDrawingName(mode, id) });
-};
-
-/**
  * Why `names` cannot name the drawings of a project, if they cannot: a blank
  * name, or two names that differ only in case. Python's
  * `gbdraw.session_drawings._identity_problem` takes the same rule (case
