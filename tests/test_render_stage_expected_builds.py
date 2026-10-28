@@ -135,9 +135,9 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
-    # Beside a plot title the species draws in the title and the short definition; the tracks keep the band of the
-    # untitled definition (OV-1710), which the labels read only where it reaches past the inside tracks (OV-2103).
-    "species": _TITLE | {"circular_definition_content"},
+    # "species" builds nothing: beside a typed plot title neither the title (OV-2110) nor the record summary
+    # (OV-2109) draws it, and the tracks keep the band of the untitled definition (OV-1710), which the labels read
+    # only where it reaches past the inside tracks (OV-2103).
 }
 
 # The options a record content reads, per mode: the Linear record draws the
@@ -689,3 +689,66 @@ def test_a_species_change_on_a_multi_record_circular_canvas_builds_no_catalog_sn
     assert palette.error is None
     assert "catalog_snapshot" in palette.stages.builds
     assert palette.reply["featureCatalog"] != species.reply["featureCatalog"]
+
+
+def _without_typed_plot_title(arguments: list[str]) -> list[str]:
+    at = arguments.index("--plot_title")
+    return [*arguments[:at], *arguments[at + 2:]]
+
+
+@pytest.mark.parametrize(
+    ("keep_full", "drawn"),
+    [pytest.param(False, False, id="record-summary"), pytest.param(True, True, id="full-definition")],
+)
+def test_a_species_change_rebuilds_the_record_definitions_only_where_they_draw_it(
+    keep_full: bool, drawn: bool, tables: Path, tmp_path: Path
+) -> None:
+    """OV-2109: beside a plot title each record draws its summary (no species, no strain), so a species change
+    rebuilds no record definition, record part or record group. Kept in full, the definitions draw the
+    species and rebuild (no stale hit)."""
+
+    case = CASES["C2"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C2")
+    base = [*placeholders.expand(case, case.base), *(["--keep_full_definition_with_plot_title"] if keep_full else [])]
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    builds = outcome.stages.builds
+    if drawn:
+        assert outcome.reply["results"] != before.reply["results"]
+        assert builds.get("circular_definition_content") == 3
+        assert builds.get("record_part", 0) >= 3
+    else:
+        assert outcome.reply == before.reply
+        assert not {"circular_definition_content", "record_part", "record_merge"} & set(builds), builds
+
+
+@pytest.mark.parametrize(
+    ("typed_title", "drawn"),
+    [pytest.param(True, False, id="typed-title"), pytest.param(False, True, id="name-title")],
+)
+def test_a_species_change_rebuilds_the_plot_title_only_where_it_draws_the_name(
+    typed_title: bool, drawn: bool, tables: Path, tmp_path: Path
+) -> None:
+    """OV-2110: a typed plot title replaces the name, so a species change rebuilds neither the title nor the
+    composition plan that places it. Without a typed title the title draws the species and rebuilds (no
+    stale hit)."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    base = list(base) if typed_title else _without_typed_plot_title(list(base))
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    builds = outcome.stages.builds
+    if drawn:
+        assert outcome.reply["results"] != before.reply["results"]
+        assert "circular_plot_title_content" in builds
+    else:
+        assert outcome.reply == before.reply
+        assert not {"circular_plot_title_content", "composition_plan"} & set(builds), builds

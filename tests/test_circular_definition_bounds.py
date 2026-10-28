@@ -13,7 +13,8 @@ from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.toml import load_config_toml
 from gbdraw.layout.spatial import Aabb
 from gbdraw.diagrams.circular.positioning import place_definition_group_on_canvas
-from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
+from gbdraw.core.record_metadata import infer_record_source_metadata
+from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup, DefinitionNameLines
 from svgwrite.container import Group
 
 
@@ -28,15 +29,20 @@ def _definition(
     render_profile = CircularRenderProfile(cfg)
     record = SeqRecord(Seq("ATGC" * 250), id="NC_TEST.1")
     canvas = CircularCanvasConfigurator("test", render_profile, "none", record)
+    style = CircularDefinitionStyle.of(cfg, profile)
     return DefinitionGroup(
         record,
         canvas.geometry(),
-        style=CircularDefinitionStyle.of(cfg, profile),
-        species="<i>Testus boundsii</i>",
-        strain="strain A",
-        plot_title=plot_title,
+        style=style,
+        names=DefinitionNameLines.of(
+            infer_record_source_metadata(record),
+            style.profile,
+            species="<i>Testus boundsii</i>",
+            strain="strain A",
+            plot_title=plot_title,
+            record_presentation=RecordPresentation(label=record_label, subtitle=record_subtitle),
+        ),
         definition_group_id=("plot_title" if profile == "shared_common" else None),
-        record_presentation=RecordPresentation(label=record_label, subtitle=record_subtitle),
     )
 
 
@@ -125,8 +131,12 @@ def _k12_definition(
         record,
         canvas.geometry(),
         style=CircularDefinitionStyle.of(cfg, "full"),
-        species=species,
-        record_presentation=RecordPresentation(label=record_label),
+        names=DefinitionNameLines.of(
+            infer_record_source_metadata(record),
+            "full",
+            species=species,
+            record_presentation=RecordPresentation(label=record_label),
+        ),
     )
 
 
@@ -153,7 +163,7 @@ def test_a_typed_line_one_draws_the_strain_the_organism_named() -> None:
 
 
 def test_a_candidatus_name_with_markup_characters_draws_the_italic_ca_and_the_literal_name() -> None:
-    from gbdraw.core.record_metadata import format_inferred_definition, infer_record_source_metadata
+    from gbdraw.core.record_metadata import format_inferred_definition
     from gbdraw.render.groups.linear import DefinitionGroup as LinearDefinitionGroup, LinearDefinitionStyle
 
     circular = _k12_definition(organism="Candidatus Foo & Bar", strain="", taxonomy=("Bacteria",))

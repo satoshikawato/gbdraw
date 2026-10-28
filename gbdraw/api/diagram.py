@@ -230,7 +230,11 @@ from gbdraw.render.group_content import (
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
-from gbdraw.render.groups.circular.definition import CircularDefinitionProfile, definition_record_facts
+from gbdraw.render.groups.circular.definition import (
+    CircularDefinitionProfile,
+    DefinitionNameLines,
+    definition_record_facts,
+)
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -1509,18 +1513,24 @@ def _circular_plot_title_content(
         legend="none",
         gb_record=gb_record,
     )
+    facts = definition_record_facts(gb_record, gc_percent=False)
     return painted_title_content(render_stage(
         "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
-        definition_record_facts(gb_record, gc_percent=False),
+        facts,
         plot_title_canvas_config.geometry(),
         style=CircularDefinitionStyle.of(cfg, "shared_common"),
-        species=species,
-        strain=strain,
-        plot_title=plot_title,
+        # A typed title replaces the name, so the species and strain do not key it (OV-2110).
+        names=DefinitionNameLines.of(
+            facts.metadata,
+            "shared_common",
+            species=species,
+            strain=strain,
+            plot_title=plot_title,
+            record_presentation=record_presentation,
+        ),
         definition_group_id="plot_title",
-        record_presentation=record_presentation,
     ))
 
 

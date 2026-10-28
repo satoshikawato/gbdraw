@@ -165,7 +165,13 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import CircularDefinitionProfile, CircularDefinitionStyle, DefinitionGroup
+from ...render.groups.circular.definition import (
+    CircularDefinitionProfile,
+    CircularDefinitionStyle,
+    DefinitionGroup,
+    DefinitionNameLines,
+    definition_record_facts,
+)
 from .radial_layout import AnnotationLabelRoom, resolve_circular_radial_layout
 from .presets import (
     CircularPresetContext,
@@ -1440,14 +1446,20 @@ def _definition_reserved_radius_px(
     definition_profile: CircularDefinitionProfile,
     record_presentation: RecordPresentation | None = None,
 ) -> float:
+    facts = definition_record_facts(gb_record)
+    style = CircularDefinitionStyle.of(cfg, definition_profile)
     definition = DefinitionGroup(
-        gb_record,
+        facts,
         geometry,
-        style=CircularDefinitionStyle.of(cfg, definition_profile),
-        species=species,
-        strain=strain,
-        plot_title=plot_title,
-        record_presentation=record_presentation,
+        style=style,
+        names=DefinitionNameLines.of(
+            facts.metadata,
+            style.profile,
+            species=species,
+            strain=strain,
+            plot_title=plot_title,
+            record_presentation=record_presentation,
+        ),
     )
 
     # Track-slot reservation is a record-local compatibility contract. Keep it on
@@ -2939,16 +2951,22 @@ def add_record_on_circular_canvas(
     def centre_definition(text_cfg: GbdrawConfig) -> DefinitionGroup | None:
         if str(definition_position) != "center" or str(definition_profile) == "shared_common":
             return None
+        facts = definition_record_facts(gb_record)
+        style = CircularDefinitionStyle.of(text_cfg, definition_profile)
         return DefinitionGroup(
-            gb_record,
+            facts,
             canvas_config.geometry(),
-            style=CircularDefinitionStyle.of(text_cfg, definition_profile),
-            species=species,
-            strain=strain,
-            plot_title=plot_title,
+            style=style,
+            names=DefinitionNameLines.of(
+                facts.metadata,
+                style.profile,
+                species=species,
+                strain=strain,
+                plot_title=plot_title,
+                record_presentation=record_presentation,
+            ),
             record_index=int(annotation_record_index),
             record_count=int(definition_record_count),
-            record_presentation=record_presentation,
         )
 
     def definition_lines_on_tracks(
