@@ -298,6 +298,23 @@ def _normalize_conservation_reference(value: Any) -> str:
     return normalized
 
 
+CONSERVATION_COLOR_SCHEME_PATH = "objects.conservation.color_scheme"
+ConservationColorSchemeName = Literal["same", "ten", "per_five"]
+_CONSERVATION_COLOR_SCHEMES: tuple[ConservationColorSchemeName, ...] = ("same", "ten", "per_five")
+
+
+def _normalize_conservation_color_scheme(value: Any) -> ConservationColorSchemeName:
+    """The colour scheme of the rings without a colour of their own (PD-OI-110)."""
+
+    for scheme in _CONSERVATION_COLOR_SCHEMES:
+        if value == scheme:
+            return scheme
+    raise ValidationError(
+        f"{CONSERVATION_COLOR_SCHEME_PATH} must be one of: {', '.join(_CONSERVATION_COLOR_SCHEMES)}",
+        diagnostic={"code": "INPUT_INVALID", "configPath": CONSERVATION_COLOR_SCHEME_PATH},
+    )
+
+
 @dataclass(frozen=True)
 class ObjectsConservationConfig:
     fill_opacity: float
@@ -311,6 +328,10 @@ class ObjectsConservationConfig:
     ring_width: float | None
     ring_gap: float | None
     reference: str
+    color_scheme: ConservationColorSchemeName = "same"
+
+    def __post_init__(self) -> None:
+        _normalize_conservation_color_scheme(self.color_scheme)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsConservationConfig":
@@ -326,6 +347,7 @@ class ObjectsConservationConfig:
             ring_width=_optional_auto_positive_float(d.get("ring_width", None), field_name="conservation ring_width"),
             ring_gap=_optional_auto_positive_float(d.get("ring_gap", None), field_name="conservation ring_gap"),
             reference=_normalize_conservation_reference(d.get("reference", "auto")),
+            color_scheme=_normalize_conservation_color_scheme(d.get("color_scheme", "same")),
         )
 
 

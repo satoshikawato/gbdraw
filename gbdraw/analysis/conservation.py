@@ -6,8 +6,8 @@ import hashlib
 import io
 import logging
 import os
-from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence, TypeAlias, cast
+from dataclasses import dataclass, replace
+from typing import Iterable, Literal, Mapping, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -19,6 +19,7 @@ from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
+from gbdraw.tracks.circular import CircularTrackSlot
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     ComparisonFilter,
@@ -241,13 +242,66 @@ def conservation_track_gradient_colors(
     default_min_color: str,
     default_max_color: str,
 ) -> tuple[str, str]:
+    """The (min, max) gradient a ring draws. A ring without a colour, or with the configured max colour, draws the
+    configured default pair, so rings of one colour draw one gradient."""
+
     normalized_track_color = normalize_conservation_color(track_color)
-    if normalized_track_color is None:
-        return (
-            _default_conservation_color(default_min_color, "min_color"),
-            _default_conservation_color(default_max_color, "max_color"),
-        )
+    default_max = _default_conservation_color(default_max_color, "max_color")
+    if normalized_track_color is None or normalized_track_color == default_max:
+        return _default_conservation_color(default_min_color, "min_color"), default_max
     return tint_color(normalized_track_color), normalized_track_color
+
+
+ConservationColorScheme: TypeAlias = Literal["same", "ten", "per_five"]
+# The colours of the rings without a colour of their own, by drawn position (outermost first), repeating
+# (PD-OI-110). ``same`` draws the configured default gradient (``objects.conservation`` min/max colours).
+_PER_FIVE_HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
+CONSERVATION_COLOR_SCHEMES: Mapping[ConservationColorScheme, tuple[str, ...]] = {
+    "same": (),
+    "ten": (
+        "#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb",
+        "#77b26f", "#be92b2", "#f0d369", "#ae8e7c", "#ffafb7",
+    ),
+    "per_five": tuple(hue for hue in _PER_FIVE_HUES for _ in range(5)),
+}
+
+
+def conservation_slot_track(
+    params: Mapping[str, object] | None, tracks: Sequence[ConservationTrack] | None
+) -> ConservationTrack | None:
+    """The track a ``sequence_conservation`` slot draws: the one its ``track_index`` names."""
+
+    track_index = int(cast("int | str", (params or {}).get("track_index", 0) or 0))
+    return next((track for track in (tracks or ()) if int(track.track_index) == track_index), None)
+
+
+def resolve_conservation_track_colors(
+    scheme: ConservationColorScheme | str,
+    slots: Sequence[CircularTrackSlot] | None,
+    tracks: Sequence[ConservationTrack],
+) -> tuple[ConservationTrack, ...]:
+    """The drawn rings, outermost first, each with the colour it draws.
+
+    ``slots`` is the final slot list (stacked outermost first). A ring keeps its own colour; a ring without one
+    takes the scheme colour of its drawn position (``None`` under ``same``). Rings no enabled slot draws are left
+    out, so the ring groups and the legend read one list.
+    """
+
+    cycle = CONSERVATION_COLOR_SCHEMES[cast(ConservationColorScheme, scheme)]
+    drawn: list[ConservationTrack] = []
+    drawn_indexes: set[int] = set()
+    for slot in slots or ():
+        if not slot.enabled or str(slot.renderer) != "sequence_conservation":
+            continue
+        track = conservation_slot_track(slot.params, tracks)
+        if track is None or int(track.track_index) in drawn_indexes:
+            continue
+        drawn_indexes.add(int(track.track_index))
+        color = track.track_color or (cycle[len(drawn) % len(cycle)] if cycle else None)
+        if color != track.track_color:
+            track = replace(track, track_color=color, hits=track.hits.assign(track_color=color))
+        drawn.append(track)
+    return tuple(drawn)
 
 
 def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: ComparisonFilter) -> DataFrame:
@@ -598,6 +652,8 @@ def normalize_conservation_tracks_for_record(
 
 
 __all__ = [
+    "CONSERVATION_COLOR_SCHEMES",
+    "ConservationColorScheme",
     "ConservationInput",
     "ConservationLegendSource",
     "ConservationLoadResult",
@@ -609,6 +665,7 @@ __all__ = [
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
     "conservation_legend_sources",
+    "conservation_slot_track",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",
     "load_conservation_sources",
@@ -617,4 +674,5 @@ __all__ = [
     "normalize_conservation_tracks_for_record",
     "read_conservation_inputs",
     "resolve_conservation_reference_side",
+    "resolve_conservation_track_colors",
 ]

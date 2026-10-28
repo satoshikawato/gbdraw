@@ -28,6 +28,7 @@ from ...analysis.conservation import (
     ConservationLegendSource,
     ConservationTrack,
     conservation_legend_sources,
+    conservation_slot_track,
     conservation_track_gradient_colors,
 )
 from ...analysis.depth_tracks import (
@@ -1765,11 +1766,7 @@ def _slot_conservation_track(
 ) -> ConservationTrack | None:
     """The conservation track a conservation slot draws."""
 
-    track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-    return next(
-        (track for track in (conservation_tracks or ()) if int(track.track_index) == track_index),
-        None,
-    )
+    return conservation_slot_track(resolved_slot.params, conservation_tracks)
 
 
 class _TickOptions(TypedDict):

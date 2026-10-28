@@ -49,6 +49,7 @@ from gbdraw.analysis.conservation import (
     normalize_conservation_reference,
     read_conservation_inputs,
     normalize_conservation_tracks_for_record,
+    resolve_conservation_track_colors,
 )
 from gbdraw.analysis.depth import depth_df as build_depth_df
 from gbdraw.analysis.depth_tracks import (
@@ -2830,6 +2831,9 @@ def assemble_circular_diagram_from_record(
                 conservation_slots,
                 axis_index=circular_track_axis_index,
             )
+        conservation_tracks = resolve_conservation_track_colors(
+            cfg.objects.conservation.color_scheme, parsed_circular_track_slots, conservation_tracks
+        )
 
     # Match legacy CLI behavior: circular window/step are based on the record length.
     auto_window, auto_step = sliding_window(len(gb_record.seq), cfg)
@@ -3291,6 +3295,10 @@ def assemble_circular_diagram_from_records(
                 conservation_slots,
                 axis_index=circular_track_axis_index,
             )
+        # The legend's rings; each record's rings are resolved by the record's own assembly, on these slots.
+        first_record_conservation_tracks = resolve_conservation_track_colors(
+            cfg.objects.conservation.color_scheme, parsed_circular_track_slots, first_record_conservation_tracks
+        )
     record_scales = _resolve_multi_record_scales(
         record_lengths,
         mode=normalized_multi_record_size_mode,
