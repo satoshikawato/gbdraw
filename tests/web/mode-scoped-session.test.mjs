@@ -927,8 +927,6 @@ const BAND_READERS = {
   'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-48, writes sourceFacts',
   'services/session-drawings-upgrade.js sessionSourceFactsOf':
     'the source facts by version (one owner, shared by the 46-48 upgrade and the 27-44 Load)',
-  'services/svg-result-ingestion.js createSavedResultPlan':
-    'a Session 27-44 saved no paint records with its Results (B2d-4: Python supplies them, else one sourceFacts fact)',
   'services/main-session-comparison-frame.js storesDrawnFrameProteinResults':
     'Gallery publication, before any conversion: the stored file\'s protein frame (flip: Gallery reads 49)',
   'services/gallery-session-publication.js validateEnvelope': 'Gallery publication writes the writer\'s version (flip: 49)',

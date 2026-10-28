@@ -2968,11 +2968,12 @@ const restoreLoadedSetSequenceSources = async ({
  * @param {Record<string, any>} data
  * @param {'circular' | 'linear'} mode
  * @param {unknown} setEditorState
- * @param {number} sessionVersion The version of the Session `data`.
+ * @param {number} sessionVersion The version of the Session `data` (the shape Load reads it in).
+ * @param {SourceFacts} sourceFacts The source facts of the file `data` came from.
  * @param {unknown} [storedRules]
  * @returns {SavedResultEdits}
  */
-export const savedResultEdits = (data, mode, setEditorState, sessionVersion, storedRules) => {
+export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sourceFacts, storedRules) => {
   // An entry that is no object is no rule (the rules' reader drops it, listed).
   const rules = Array.isArray(storedRules) ? storedRules.filter(isPlainObject) : [];
   const slice = versionKeepsModeSlices(sessionVersion)
@@ -2999,7 +3000,7 @@ export const savedResultEdits = (data, mode, setEditorState, sessionVersion, sto
     rules: savedSpecificRules(rules),
     legendRekeys,
     mode,
-    sessionVersion
+    resultsRecordPythonPaint: sourceFacts.resultsRecordPythonPaint
   };
 };
 
@@ -6934,7 +6935,7 @@ const importSessionDocument = async (e, options = {}) => {
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
     const committedSavedEdits = savedResultEdits(
-      data, generatedMode, data.editorState, sourceSessionVersion, draftConfigOf(committedSetDrawingId)?.rules
+      data, generatedMode, data.editorState, sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(committedSetDrawingId)?.rules
     );
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? admitLoadedSetResults(logicalImportedResults, {
@@ -6995,7 +6996,7 @@ const importSessionDocument = async (e, options = {}) => {
     for (const { drawing, mode, at, catalog, set, webFiles } of storedSets) {
       // The drawing's own draft part, found by its ID.
       const savedEdits = savedResultEdits({ modes: { [mode]: draftPartOf(drawing.id).slice } }, mode, set.editorState,
-        sourceSessionVersion, draftConfigOf(drawing.id)?.rules);
+        sourceSessionVersion, upgrade.sourceFacts, draftConfigOf(drawing.id)?.rules);
       savedEditsOf.set(drawing.id, savedEdits);
       const sequenceSources = await restoreLoadedSetSequenceSources({
         ...sequenceSourceOptionsOf(drawing.id), mode, catalog, renderRequest: set.renderRequest
