@@ -52,10 +52,31 @@ const takeLinearOffer = async (page) => {
 };
 
 /**
+ * Make a drawing of `kind` from the drawing menu's "New Circular drawing" or
+ * "New Linear drawing", as a user does when the bar offers no tab for it (a
+ * one-mode Session Load makes no drawing of the other mode). Waits until the
+ * new drawing is shown.
+ * @param {import('@playwright/test').Page} page @param {'circular' | 'linear'} kind
+ * @returns {Promise<string>} the new drawing's ID
+ */
+const newDrawingFromMenu = async (page, kind) => {
+  const before = await drawingIds(page);
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  const label = kind === 'circular' ? 'New Circular drawing' : 'New Linear drawing';
+  await menu.getByRole('button', { name: label, exact: true }).click();
+  await expect.poll(async () => (await drawingIds(page)).length).toBe(before.length + 1);
+  const [drawingId] = (await drawingIds(page)).filter((id) => !before.includes(id));
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
+  return drawingId;
+};
+
+/**
  * Show a drawing and wait until the app shows it. `kind` names the first
  * drawing of that kind in tab order, `name` the drawing with that stored name.
- * A Linear `kind` in a project with no Linear drawing makes it through the
- * offer tab, as a user reaches Linear in a new Session.
+ * A `kind` the project has no drawing of is made the way a user makes it: a
+ * Linear drawing through the offer tab (a new Session), a Circular drawing
+ * through the drawing menu (after a Linear-only Session Load).
  * @param {import('@playwright/test').Page} page
  * @param {{ kind?: 'circular' | 'linear', name?: string }} target
  * @returns {Promise<string>} the shown DrawingId
@@ -68,6 +89,7 @@ const showDrawing = async (page, { kind, name }) => {
     return tab ? tab.id : null;
   }, { wantedKind: kind, wantedName: name });
   if (!drawingId && name === undefined && kind === 'linear') return takeLinearOffer(page);
+  if (!drawingId && name === undefined && kind === 'circular') return newDrawingFromMenu(page, 'circular');
   if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
   if (await drawingTab(page, drawingId).isVisible()) {
     await drawingTab(page, drawingId).click();
@@ -100,4 +122,4 @@ const showPhonePane = async (page, pane) => {
  */
 const paneTop = (page) => page.locator('.drawing-bar').evaluate((bar) => bar.getBoundingClientRect().bottom);
 
-module.exports = { showPhonePane, showDrawing, takeLinearOffer, offerTab, drawingTab, drawingIds, shownDrawing, paneTop };
+module.exports = { showPhonePane, showDrawing, takeLinearOffer, newDrawingFromMenu, offerTab, drawingTab, drawingIds, shownDrawing, paneTop };
