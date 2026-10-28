@@ -161,6 +161,13 @@ test.describe('390 px', () => {
 test.describe('195 px', () => {
   test.use({ viewport: { width: 195, height: 422 }, hasTouch: true });
 
+  test('the Settings pane without a Result does not run past the window width (OV-1810)', async ({ page }) => {
+    test.setTimeout(120_000);
+    await openApp(page);
+    const width = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, window: document.documentElement.clientWidth }));
+    expect(width.scroll).toBeLessThanOrEqual(width.window);
+  });
+
   test('the page scrolls as a whole, the Preview pane is at least 70 % of the window, and Generate keeps one line', async ({ page }) => {
     test.setTimeout(240_000);
     await openApp(page);
@@ -229,4 +236,30 @@ test('Rename in the tab menu is one History step that Undo restores; a repeated 
   await expect(drawingTab(page, second)).toHaveAccessibleName(name);
   expect(await tabName(page, second)).toBe(name);
   expect((await shownDrawing(page)).id, 'Undo of a rename shows the same drawing').toBe(second);
+});
+
+test('Delete in the tab menu removes the shown drawing as one step that Undo restores; the last drawing cannot be deleted', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [first, second] = await drawingIds(page);
+  await drawingTab(page, second).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(second);
+  const menu = page.locator('.drawing-bar-menu');
+  const deleteItem = menu.getByRole('button', { name: 'Delete drawing', exact: true });
+
+  await menu.locator('summary').click();
+  await deleteItem.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await drawingIds(page), 'a drawing without Result or edits is deleted without asking').toEqual([first]);
+  expect((await shownDrawing(page)).id).toBe(first);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Delete drawing');
+
+  await menu.locator('summary').click();
+  await expect(deleteItem, 'the last drawing has no Delete').toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect(await drawingIds(page)).toEqual([first, second]);
+  expect((await shownDrawing(page)).id, 'Undo shows the restored drawing').toBe(second);
 });

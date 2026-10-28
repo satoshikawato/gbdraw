@@ -15,7 +15,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { DrawingState, DrawingTab } from '../state.js' */
 /** @import { ProjectListStep } from '../services/history.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
-/** @import { AskText } from './app-messages.js' */
+/** @import { AskChoice, AskText } from './app-messages.js' */
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
 
 /**
@@ -239,19 +239,25 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * @property {boolean} selected the shown drawing
  * @property {boolean} canMoveLeft
  * @property {boolean} canMoveRight
+ * @property {boolean} canDelete false for the last drawing, which a Session always keeps (R11)
  */
 /**
  * @typedef {(drawingId: DrawingId) => ModeProfileName} ReadDrawingMode
  * @typedef {(drawingId: DrawingId, name: string) => DrawingListOutcome} RenameDrawingStep
  *   The list's Rename: one History step, or a typed refusal (`stage: 'drawing-list'`).
  * @typedef {(drawingId: DrawingId, index: number) => DrawingListOutcome} MoveDrawingStep The list's Move.
+ * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DeleteDrawingStep The list's Delete.
+ * @typedef {(drawingId: DrawingId) => boolean} NeedsDeleteConfirmation
  * @typedef {object} DrawingBarPorts
  * @property {RenameDrawingStep} renameDrawing
  * @property {MoveDrawingStep} moveDrawing
+ * @property {DeleteDrawingStep} deleteDrawing
+ * @property {NeedsDeleteConfirmation} needsDeleteConfirmation
  * @property {ReadDrawingTabs} drawingTabs
  * @property {ReadShownDrawingId} shownDrawingId
  * @property {ReadDrawingMode} modeOf
  * @property {AskText} askText
+ * @property {AskChoice} askChoice
  */
 
 /**
@@ -288,10 +294,13 @@ export const moveTabFocus = (event) => {
 
 /**
  * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs, and
- * the tab menu's Rename and Move, each one list operation (one History step).
+ * the tab menu's Rename, Move, and Delete, each one list operation (one History step).
  * @param {DrawingBarPorts} ports
  */
-export const createDrawingBar = ({ renameDrawing: renameStep, moveDrawing: moveStep, drawingTabs, shownDrawingId, modeOf, askText }) => {
+export const createDrawingBar = ({
+  renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
+  drawingTabs, shownDrawingId, modeOf, askText, askChoice
+}) => {
   /** @returns {DrawingBarTab[]} */
   const tabs = () => {
     const all = drawingTabs();
@@ -304,7 +313,8 @@ export const createDrawingBar = ({ renameDrawing: renameStep, moveDrawing: moveS
         label: name === defaultDrawingName(mode, id) ? defaultDrawingName(mode, id, tm(MODE_LABELS[mode])) : name,
         selected: id === shown,
         canMoveLeft: index > 0,
-        canMoveRight: index < all.length - 1
+        canMoveRight: index < all.length - 1,
+        canDelete: all.length > 1
       };
     });
   };
@@ -344,5 +354,26 @@ export const createDrawingBar = ({ renameDrawing: renameStep, moveDrawing: moveS
     drawingId, drawingTabs().findIndex((tab) => tab.id === drawingId) + step
   );
 
-  return { tabs, renameDrawing, moveDrawing };
+  /**
+   * Delete, asking first only for a drawing with a Result or edits (R17-6);
+   * Undo brings any deleted drawing back (R16-3). Cancel deletes nothing and
+   * records no step.
+   * @param {DrawingId} drawingId
+   * @returns {Promise<DrawingListOutcome | null>}
+   */
+  const deleteDrawing = async (drawingId) => {
+    if (needsDeleteConfirmation(drawingId)) {
+      const name = tabs().find((tab) => tab.id === drawingId)?.label ?? drawingId;
+      const choice = await askChoice({
+        title: t('Delete {name}?', { name }),
+        description: t('Its settings, edits, and Result are removed from this Session. Undo brings the drawing back.'),
+        actions: [{ id: 'delete', label: t('Delete drawing'), tone: 'danger' }],
+        cancelLabel: t('Keep drawing')
+      });
+      if (choice !== 'delete') return null;
+    }
+    return deleteStep(drawingId);
+  };
+
+  return { tabs, renameDrawing, moveDrawing, deleteDrawing };
 };

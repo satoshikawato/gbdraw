@@ -1517,6 +1517,7 @@
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
         }
         @media (max-width: 768px) {
+            .input-label { flex-wrap: wrap; }
             .app-header-inner { position: relative; }
             .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
             .app-gallery-link-label { display: none; }
@@ -2068,6 +2069,8 @@
                     contain: size;
                     grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) auto auto;
                 }
+                /* The Result pane scrolls here, not the page, so the sticky-header margin of the page layout does not apply. */
+                .app-main[data-phone-pane="preview"] .preview-workspace:has(> .alignment-review-panel) .preview-canvas { scroll-margin-top: 0; }
                 .app-main[data-phone-pane="preview"] .preview-workspace:has(.alignment-review-panel) {
                     grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) clamp(15rem, 29dvh, 18rem) auto;
                 }
@@ -2452,7 +2455,8 @@
                          :items="[
                              { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
                              { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
-                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) }
+                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) },
+                             { label: t('Delete drawing'), icon: 'ph-trash', disabled: !drawingSwitchAvailable || !tab.canDelete, run: () => drawingBar.deleteDrawing(tab.id) }
                          ]"></action-menu>
         </template>
     </div>
@@ -2481,7 +2485,7 @@
 
                     <p v-if="recordDisplayControls.hasPendingChanges.value" role="status" class="mb-2 text-xs text-amber-700">{{ t('Record rotation, feature placement, or tolerance has changes pending Generate. This notice covers record display only; the Result keeps its applied settings.') }}</p>
                     <div v-if="mode === 'circular'" class="space-y-4">
-                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
+                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setCircularInputType('gb')" value="gb" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GenBank</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setCircularInputType('gff')" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
@@ -2749,7 +2753,7 @@
                     </div>
 
                     <div v-if="mode === 'linear'" class="space-y-4">
-                        <div class="flex gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
+                        <div class="flex flex-wrap gap-4 text-sm font-bold bg-slate-50 p-2 rounded-lg inline-flex mb-2">
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gb'" @change="setLinearInputType('gb')" value="gb" class="text-blue-600" :disabled="!semanticMutationAvailable"> GenBank</label>
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="inputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>

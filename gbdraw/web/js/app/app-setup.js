@@ -138,7 +138,7 @@ import { copyTextToClipboard } from '../utils/clipboard.js';
 import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
-import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings } from '../services/reset.js';
+import { resetLayoutState, resetProject, resetSettings as resetDrawingSettings, withNewDrawingDefaults } from '../services/reset.js';
 import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
@@ -4548,7 +4548,7 @@ export const createAppSetup = () => {
     drawingHasResult: (drawingId) => resultsOf(drawingId).length > 0,
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
     boundFileIdsOf: (drawingId) => boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] }),
-    createDrawing: createDrawingState,
+    createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
     addDrawing: state.addDrawing,
     removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
     putSlot: artifactSlots.putSlot,
@@ -4559,14 +4559,17 @@ export const createAppSetup = () => {
     runListStep: history.runListStep,
     showDrawingNow
   });
-  // The drawing bar: its tabs and the tab menu's Rename and Move (B4a-5).
+  // The drawing bar: its tabs and the tab menu's Rename, Move, and Delete (B4a-5).
   const drawingBar = createDrawingBar({
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
+    deleteDrawing: drawingList.deleteDrawing,
+    needsDeleteConfirmation: drawingList.needsDeleteConfirmation,
     drawingTabs: () => state.drawingTabs.value,
     shownDrawingId: () => state.activeDrawingId.value,
     modeOf: (drawingId) => state.drawingOf(drawingId).mode,
-    askText
+    askText,
+    askChoice
   });
   const drawingBarTabs = computed(() => drawingBar.tabs());
   // Why the tabs wait: the switch's own busy reason (R15).
