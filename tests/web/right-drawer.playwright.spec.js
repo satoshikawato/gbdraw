@@ -247,12 +247,14 @@ for (const viewport of ISSUE_461_VIEWPORTS) {
     const drawer = page.locator('.right-drawer');
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await waitForSettledDrawer(page);
-    const initialSurface = await readSettledPreviewSurface(page);
 
     const closedGeometry = await readOverlayGeometry(page);
     logOverlayGeometry(viewport, 'closed', closedGeometry);
     assertOverlayGeometry(closedGeometry, `${viewport.id} drawer closed`, false);
     await exercisePreviewControls(page);
+    // The Load fitted the figure (R17-25); the controls left it at 100 % with
+    // the fitted pan, which opening and closing the Editor keeps.
+    const initialSurface = await readSettledPreviewSurface(page);
 
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -1214,8 +1216,15 @@ for (const viewport of [
     await expect(drawer.getByRole('button', { name: /Features$/ })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(drawer.getByRole('button', { name: /Similarity groups$/ })).toBeFocused();
-    // Nothing has moved yet, so Reset layout is disabled and takes no focus.
-    await expect(page.getByRole('button', { name: 'Reset layout', exact: true })).toBeDisabled();
+    // The Load fitted the figure (R17-25), as a Gallery example Load did: the
+    // fitted view is zoomed and panned, so Reset layout is enabled. It returns
+    // the view to 100 %; then nothing has moved, so it is disabled and takes no focus.
+    const resetLayout = page.getByRole('button', { name: 'Reset layout', exact: true });
+    await exposeControl(page, resetLayout);
+    await expect(resetLayout).toBeEnabled();
+    await resetLayout.click();
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('100%');
+    await expect(resetLayout).toBeDisabled();
     for (const name of ['Toggle layout edit mode', 'Toggle canvas padding controls', 'Zoom in', 'Reset zoom', 'Zoom out']) {
       const control = page.getByRole('button', { name, exact: true });
       await exposeControl(page, control);
@@ -1226,7 +1235,6 @@ for (const viewport of [
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
     // The zoom change enables Reset layout.
-    const resetLayout = page.getByRole('button', { name: 'Reset layout', exact: true });
     await exposeControl(page, resetLayout);
     await resetLayout.focus();
     await expect(resetLayout).toBeFocused();
@@ -1290,8 +1298,13 @@ for (const [mode, session] of [
     await page.mouse.up();
     await expect.poll(() => page.evaluate(() => ({ ...window.__GBDRAW_APP__.canvasPan }))).toEqual({ x: pan.x + 30, y: pan.y + 12 });
     await page.mouse.move(box.x + 4, box.y + 4);
+    // The Load fitted the figure (R17-25): the wheel steps up from the fitted
+    // zoom onto the 0.1 grid of the zoom steps.
+    const fittedZoom = await page.evaluate(() => window.__GBDRAW_APP__.zoom);
+    expect(fittedZoom).not.toBe(1);
     await page.mouse.wheel(0, -100);
-    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true })).toHaveText('110%');
+    await expect(page.getByRole('button', { name: 'Reset zoom', exact: true }))
+      .toHaveText(`${Math.round((fittedZoom + 0.1) * 10) * 10}%`);
     for (const viewport of [{ width: 1600, height: 1000 }, { width: 390, height: 844 }, { width: 390, height: 740 }]) {
       await page.setViewportSize(viewport);
       await waitForSettledDrawer(page);

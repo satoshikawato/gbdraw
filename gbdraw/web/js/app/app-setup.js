@@ -4,6 +4,7 @@
 /** @import { ResultLabelFit } from '../services/label-fit.js' */
 /** @import { DiagramMode, DrawingState, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
+/** @import { NoticeLink } from './app-messages.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
@@ -3797,9 +3798,10 @@ export const createAppSetup = () => {
   });
   // A loaded Session says so in the notice banner, with what the load changed
   // without a loss as a list; what it could not restore was listed in the
-  // Load dialog before.
-  /** @param {SessionFileInput} event */
-  const importSession = async (event) => {
+  // Load dialog before. A Gallery example's notice also offers its tutorial
+  // (`noticeLink`, #1383 PD-OI-108).
+  /** @param {SessionFileInput} event @param {{ noticeLink?: NoticeLink | null }} [options] */
+  const importSession = async (event, { noticeLink = null } = {}) => {
     const name = String(event?.target?.files?.[0]?.name || '');
     const result = await loadSessionFromFile(event);
     // R10: a Load that installed a Session, or rolled back to the previous
@@ -3819,11 +3821,13 @@ export const createAppSetup = () => {
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
     }
+    if (noticeLink && (result?.status === 'ok' || result?.status === 'legacy')) noticeBanner.addLink(noticeLink);
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
     // without a Result shows Settings.
     if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
-    // R17-25: a Load with a Result fits the figure to the shown Preview, at every width
-    // (after the phone pane switch, so the measured canvas is visible); Generate resets to 100 %.
+    // R17-25: a Load with a Result fits the figure to the shown Preview, at every width,
+    // after the phone pane switch and the whole notice (its height sizes the canvas), so the
+    // measured canvas is the one shown; Generate resets to 100 %.
     if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) {
       await nextTick();
       fitPreviewToViewport();
@@ -3928,18 +3932,15 @@ export const createAppSetup = () => {
       exampleSessionPending.value = true;
       try {
         const file = await fetchGalleryExampleSession(example);
-        // The import resolves after the shown Result's preview is mounted.
-        const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
-        if (status === 'ok' || status === 'legacy') {
-          // #1383 (PD-OI-108): the notice of the loaded example offers its tutorial, found by the example's Gallery id.
-          if (example.tutorialUrl) {
-            noticeBanner.addLink({
-              text: t('This diagram has a step-by-step tutorial.'),
-              label: tx('English-only Gallery tutorial', 'Open the tutorial'),
-              href: example.tutorialUrl
-            });
-          }
-        }
+        // The import resolves after the shown Result's preview is mounted. #1383 (PD-OI-108):
+        // the notice of the loaded example offers its tutorial, found by the example's Gallery id.
+        await importSession({ target: { files: [file], value: '' } }, {
+          noticeLink: example.tutorialUrl ? {
+            text: t('This diagram has a step-by-step tutorial.'),
+            label: tx('English-only Gallery tutorial', 'Open the tutorial'),
+            href: example.tutorialUrl
+          } : null
+        });
       } catch (error) {
         errorLog.value = normalizeUserFacingError(error);
       } finally {

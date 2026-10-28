@@ -5,6 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -41,11 +42,10 @@ const renderRealDiagram = async (
   genbankText,
   { legendSide = 'right' } = {}
 ) => {
+  await showDrawing(page, { kind: mode });
   const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing(diagramMode);
-    await window.Vue.nextTick();
     await window.Vue.nextTick();
     app.form.prefix = `wp5-real-${diagramMode}`;
     app.form.plot_title = `WP5 real ${diagramMode} composition`;
