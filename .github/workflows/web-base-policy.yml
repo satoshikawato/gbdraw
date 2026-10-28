@@ -19,13 +19,16 @@ jobs:
     name: Web base policy (trusted base)
     if: github.event.pull_request.base.ref == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
+      # The checker reads only base, head, and origin/main files, so fetch commits and trees and let Git fetch
+      # those files on demand; every blob of every branch is over 6 GB and timed the job out.
       - name: Checkout trusted base
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       # pull_request.base.sha can predate a .node-version change; github.sha is the base branch tip
