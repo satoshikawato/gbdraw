@@ -15,7 +15,7 @@ import math
 import copy
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Collection, Optional, Mapping, Sequence, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Callable, Collection, Optional, Mapping, Sequence, TypeAlias, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -765,6 +765,12 @@ def _reaches_band(inner: float, outer: float, band: RadialBand) -> bool:
     return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
 
 
+# What one drawn GC content, GC skew or depth slot paints with: its data and its settings.
+SlotPaintData: TypeAlias = (
+    tuple[DataFrame, GcContentConfigurator] | tuple[DataFrame, GcSkewConfigurator] | tuple[DataFrame, DepthConfigurator]
+)
+
+
 @dataclass(frozen=True, eq=False)
 class CircularTrackInkSources:
     """What a record's tracks paint from, besides the radial layout: the sources the drawing reads for each slot
@@ -774,17 +780,11 @@ class CircularTrackInkSources:
     geometry: CircularCanvasGeometry
     profile: CircularRenderProfile
     record_transform: RecordDisplayTransform | None
-    gc_df: DataFrame
-    gc_config: GcContentConfigurator
-    skew_config: GcSkewConfigurator
-    # Each depth slot's data and settings (``_slot_depth_source``), by slot id: not the track's label.
-    depth_by_slot: Mapping[str, tuple[DataFrame, DepthConfigurator]]
+    # Each drawn GC content, GC skew and depth slot's data and settings, by slot id (``_slot_paint_data``): only
+    # what a drawn slot paints with, not a depth track's label.
+    slot_data: Mapping[str, SlotPaintData]
     conservation_tracks: Sequence[ConservationTrack] | None
     conservation_min_identity: float
-    dinucleotide_dataframes: dict[str, DataFrame] | None
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None
-    gc_content_tick_font_size_override: float | None
     # The feature layers the radial layout measured (``_radial_layout_feature_dict``).
     feature_layers: FeatureBuildResult
     # Half the feature blocks' stroke (``stroke_pad_px``): not their arrow shape.
@@ -814,49 +814,33 @@ def _record_track_ink(
     cfg = sources.profile.config
     font_family = str(cfg.objects.text.font_family)
     record_transform = sources.record_transform
-    gc_df, gc_config = sources.gc_df, sources.gc_config
     inks: list[CircularInk] = [CircularInkRing(radial_layout.axis.paint_band_px)]
     for slot in radial_layout.slots:
         renderer = str(slot.renderer)
         if slot.draw_band_px is None:
             continue
         norm_factor = _slot_norm_factor(slot, canvas_radius)
-        if renderer == "dinucleotide_content":
-            _, content_df, content_config = _slot_content_source(
-                slot,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                dataframes=sources.dinucleotide_content_dataframes or sources.dinucleotide_dataframes,
-                tick_font_size_override=sources.gc_content_tick_font_size_override,
-            )
-            if content_df is not None:
+        slot_data = sources.slot_data.get(str(slot.id))
+        if slot_data is not None:
+            data_df, data_config = slot_data
+            if renderer == "dinucleotide_content" and isinstance(data_config, GcContentConfigurator):
                 inks.extend(
-                    GcContentDrawer(content_config).ink(
-                        canvas_radius, content_df, record_length, slot.draw_width_px, norm_factor,
-                        content_config.dinucleotide, record_transform, font_family=font_family,
+                    GcContentDrawer(data_config).ink(
+                        canvas_radius, data_df, record_length, slot.draw_width_px, norm_factor,
+                        data_config.dinucleotide, record_transform, font_family=font_family,
                     )
                 )
-        elif renderer == "dinucleotide_skew":
-            _, skew_df, slot_skew_config = _slot_skew_source(
-                slot,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=sources.skew_config,
-                dataframes=sources.dinucleotide_skew_dataframes or sources.dinucleotide_dataframes,
-            )
-            if skew_df is not None:
+            elif renderer == "dinucleotide_skew" and isinstance(data_config, GcSkewConfigurator):
                 inks.extend(
-                    SkewDrawer(slot_skew_config).ink(
-                        canvas_radius, skew_df, record_length, slot.draw_width_px, norm_factor,
-                        slot_skew_config.dinucleotide, record_transform,
+                    SkewDrawer(data_config).ink(
+                        canvas_radius, data_df, record_length, slot.draw_width_px, norm_factor,
+                        data_config.dinucleotide, record_transform,
                     )
                 )
-        elif renderer == "depth":
-            depth_paint = sources.depth_by_slot.get(str(slot.id))
-            if depth_paint is not None:
+            elif renderer == "depth" and isinstance(data_config, DepthConfigurator):
                 inks.extend(
-                    DepthDrawer(depth_paint[1]).ink(
-                        canvas_radius, depth_paint[0], record_length, float(slot.draw_width_px), norm_factor,
+                    DepthDrawer(data_config).ink(
+                        canvas_radius, data_df, record_length, float(slot.draw_width_px), norm_factor,
                         font_family=font_family, record_transform=record_transform,
                     )
                 )
@@ -1707,22 +1691,54 @@ def _slot_depth_source(
     return depth_track.df, depth_track.config, depth_track
 
 
-def _depth_paint_by_slot(
+def _slot_paint_data(
     radial_layout: CircularRadialLayout,
+    *,
+    gc_df: DataFrame,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    dinucleotide_dataframes: dict[str, DataFrame] | None,
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None,
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None,
+    gc_content_tick_font_size_override: float | None,
     depth_df: DataFrame | None,
     depth_config: DepthConfigurator | None,
     depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
-) -> dict[str, tuple[DataFrame, DepthConfigurator]]:
-    """The data and settings each drawn depth slot of ``radial_layout`` paints with (``_slot_depth_source``)."""
+) -> dict[str, SlotPaintData]:
+    """The data and settings each drawn GC content, GC skew and depth slot of ``radial_layout`` paints with, by
+    slot id, from the sources the drawing reads (``_slot_content_source``, ``_slot_skew_source``,
+    ``_slot_depth_source``). A slot with no data is left out."""
 
-    paint: dict[str, tuple[DataFrame, DepthConfigurator]] = {}
+    data: dict[str, SlotPaintData] = {}
     for slot in radial_layout.slots:
-        if str(slot.renderer) != "depth" or slot.draw_band_px is None:
+        renderer = str(slot.renderer)
+        if slot.draw_band_px is None:
             continue
-        source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
-        if source is not None and source[0] is not None and source[1] is not None:
-            paint[str(slot.id)] = (source[0], source[1])
-    return paint
+        if renderer == "dinucleotide_content":
+            _, content_df, content_config = _slot_content_source(
+                slot,
+                gc_df=gc_df,
+                gc_config=gc_config,
+                dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
+                tick_font_size_override=gc_content_tick_font_size_override,
+            )
+            if content_df is not None:
+                data[str(slot.id)] = (content_df, content_config)
+        elif renderer == "dinucleotide_skew":
+            _, skew_df, slot_skew_config = _slot_skew_source(
+                slot,
+                gc_df=gc_df,
+                gc_config=gc_config,
+                skew_config=skew_config,
+                dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+            )
+            if skew_df is not None:
+                data[str(slot.id)] = (skew_df, slot_skew_config)
+        elif renderer == "depth":
+            source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
+            if source is not None and source[0] is not None and source[1] is not None:
+                data[str(slot.id)] = (source[0], source[1])
+    return data
 
 
 def _slot_conservation_track(
@@ -2950,16 +2966,21 @@ def add_record_on_circular_canvas(
                 geometry=canvas_config.geometry(),
                 profile=canvas_config.profile,
                 record_transform=record_transform,
-                gc_df=gc_df,
-                gc_config=gc_config,
-                skew_config=skew_config,
-                depth_by_slot=_depth_paint_by_slot(layout, depth_df, depth_config, depth_tracks_by_index),
+                slot_data=_slot_paint_data(
+                    layout,
+                    gc_df=gc_df,
+                    gc_config=gc_config,
+                    skew_config=skew_config,
+                    dinucleotide_dataframes=dinucleotide_dataframes,
+                    dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+                    dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
+                    gc_content_tick_font_size_override=gc_content_tick_font_size_override,
+                    depth_df=depth_df,
+                    depth_config=depth_config,
+                    depth_tracks_by_index=depth_tracks_by_index,
+                ),
                 conservation_tracks=conservation_tracks,
                 conservation_min_identity=conservation_min_identity,
-                dinucleotide_dataframes=dinucleotide_dataframes,
-                dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-                dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
-                gc_content_tick_font_size_override=gc_content_tick_font_size_override,
                 feature_layers=layout_feature_layers,
                 feature_stroke_pad_px=stroke_pad_px(
                     feature_config.block_stroke_color, feature_config.block_stroke_width

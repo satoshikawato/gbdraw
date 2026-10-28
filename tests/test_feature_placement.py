@@ -1433,8 +1433,12 @@ def test_radial_preflight_replans_final_slot_without_stale_assignment(monkeypatc
     request = _request(record, feature_placements=(_exact(record, index),),
         config_overrides={"labels.circular.scope": "both", "labels.circular.placement": "radial",
             "labels.rendering": "external_only", "canvas.strandedness": False})
-    plans, layouts, candidates = [], [], []
+    plans, layouts, candidates, drawn = [], [], [], []
     real_plan, real_labels, real_candidates = placement.plan_feature_placements, assembly.prepare_label_list, labels.build_circular_label_candidates
+    real_overlaps = assembly._region_labels_on_other_tracks
+    def capture_drawn(layout, annotation_labels):
+        drawn.append(layout)
+        return real_overlaps(layout, annotation_labels)
     def capture_plan(features, **kwargs):
         result = real_plan(features, **kwargs)
         plans.append((kwargs["slot"], result, features))
@@ -1449,6 +1453,7 @@ def test_radial_preflight_replans_final_slot_without_stale_assignment(monkeypatc
         return result
     monkeypatch.setattr(placement, "plan_feature_placements", capture_plan)
     monkeypatch.setattr(assembly, "prepare_label_list", capture_labels)
+    monkeypatch.setattr(assembly, "_region_labels_on_other_tracks", capture_drawn)
     monkeypatch.setattr(labels, "build_circular_label_candidates", capture_candidates)
     first = plan_request(request).build().tostring()
     assert [slot.direction for slot, _, _ in plans] == ["inside", "outside"]
@@ -1467,7 +1472,8 @@ def test_radial_preflight_replans_final_slot_without_stale_assignment(monkeypatc
                  for line in root.iter() if line.tag.endswith("}line")]
     assert all(any(point == pytest.approx((label["feature_anchor_x"], label["feature_anchor_y"]))
                    for point in endpoints) for label in layouts[-1][1] if not label["is_embedded"])
-    feature_slot = next(slot for slot in layouts[-1][0]["radial_layout"].slots if slot.renderer == "features")
+    # The layout drawn after the radial growth: the replanned one the last placement read.
+    feature_slot = next(slot for slot in drawn[-1].slots if slot.renderer == "features")
     assert feature_slot.reserved_band_px.inner_px <= layout.all_band_px.inner_px
     assert feature_slot.reserved_band_px.outer_px >= layout.all_band_px.outer_px
     assert max(label.get("required_radius_growth_px", 0) for label in layouts[-1][1]) <= 1e-3
