@@ -5,6 +5,8 @@
 /** @import { DiagramMode, DrawingState, LinearSeq, PopupPosition } from '../state.js' */
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
+/** @import { DrawingInputSite } from './drawing-list.js' */
+/** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -1247,8 +1249,12 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   });
-  /** @param {string} id @param {InputFileCandidate} file */
-  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => {
+  /**
+   * A Linear comparison's uploaded file, found by the comparison's id: the
+   * shown drawing's control and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {string} id @param {InputFileCandidate | InputFileRef} file
+   */
+  const replaceLinearComparisonFile = (drawing, id, file) => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -1257,7 +1263,9 @@ export const createAppSetup = () => {
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
     edge.included = Boolean(ref) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
-  });
+  };
+  /** @param {string} id @param {InputFileCandidate} file */
+  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => replaceLinearComparisonFile(drawing, id, file));
   /** @param {string} id */
   const reuseLinearComparisonFile = (id) => shownAction('linear', (drawing) => {
     const next = selectedPlanForEdit(drawing);
@@ -2795,8 +2803,12 @@ export const createAppSetup = () => {
   };
   /** @param {number} index */
   const getCircularDepthFile = (index) => circularDepthRepresentatives(state.activeDrawing())[Number(index)] || null;
-  /** @param {number} index @param {FileLike | null} file */
-  const setCircularDepthFile = (index, file) => shownAction('circular', (drawing) => {
+  /**
+   * A Circular drawing's Depth file at series `index`: the shown drawing's
+   * control and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {number} index @param {InputFileCandidate | InputFileRef} file
+   */
+  const replaceCircularDepthFile = (drawing, index, file) => {
     const idx = Math.max(0, Number(index) || 0);
     const ref = state.inputFiles.registerFile(file);
     ensureDepthTrackConfigCount(drawing, idx + 1);
@@ -2816,13 +2828,18 @@ export const createAppSetup = () => {
         drawing.form.show_depth = true;
       }
     });
-  });
+  };
+  /** @param {number} index @param {FileLike | null} file */
+  const setCircularDepthFile = (index, file) => shownAction('circular', (drawing) => replaceCircularDepthFile(drawing, index, file));
   /** @param {LinearSeq | null | undefined} seq @param {number} index */
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /** @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file */
+  /**
+   * The Depth file at series `index` of Linear record rows: the shown drawing's
+   * controls and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index
+   * @param {InputFileCandidate | InputFileRef} file
+   */
   const setLinearDepthFiles = (drawing, sequences, index, file) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
@@ -2996,8 +3013,6 @@ export const createAppSetup = () => {
   };
   /** @param {DrawingState} drawing @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles Files, or refs kept */
   const setCircularConservationSourceFiles = (drawing, nextFiles) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
     if (isCircularConservationUploadSource(drawing)) {
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
       setConservationBlastsSource(drawing.slices.inputs, null);
@@ -3006,6 +3021,20 @@ export const createAppSetup = () => {
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
     }
     losatCacheInfo.value = [];
+    reconcileCircularConservation(drawing);
+  };
+  /**
+   * A Circular drawing's similarity-ring BLAST files, the files kept in their
+   * places: the uploaded rings through their source edit, the rows of a LOSAT
+   * cache replay in place, each followed by the rings' reconcile.
+   * @param {DrawingState} drawing @param {readonly (InputFileRef | null)[]} nextFiles
+   */
+  const replaceCircularConservationBlasts = (drawing, nextFiles) => {
+    if (isCircularConservationUploadSource(drawing)) {
+      setCircularConservationSourceFiles(drawing, nextFiles);
+      return;
+    }
+    bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
     reconcileCircularConservation(drawing);
   };
   /** @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles */
@@ -6440,22 +6469,6 @@ export const createAppSetup = () => {
    * @param {File | null} value
    */
   const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => replaceCircularSource(drawing, field, value));
-  /** @type {Readonly<Record<string, 'c_gb' | 'c_gff' | 'c_fasta'>>} */
-  const CIRCULAR_SOURCE_SLOTS = Object.freeze({ c_gb: 'c_gb', c_gff: 'c_gff', c_fasta: 'c_fasta' });
-  // The replacement of an input file for the shown drawing or every drawing
-  // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`.
-  const inputReplacement = createInputReplacement({
-    drawingTabs: () => state.drawingTabs.value,
-    shownDrawingId: () => state.activeDrawingId.value,
-    switchBusy: drawingSwitchBusy,
-    drawingOf: state.drawingOf,
-    runProjectStep: history.runProjectStep,
-    runDrawingStep: history.runUndoable,
-    applyInputReplacementToDrawings: (sites, file) => sites.forEach((site) => {
-      const field = CIRCULAR_SOURCE_SLOTS[site.slot];
-      if (field) replaceCircularSource(state.drawingOf(site.drawingId), field, file);
-    })
-  });
   /** @param {unknown} value */
   const setCircularRecordPresentationSelector = (value) => {
     const busy = sessionOperationAvailability();
@@ -6794,17 +6807,22 @@ export const createAppSetup = () => {
     return openLinearSourceRemovalDialog(source, 'global', event?.currentTarget || null);
   };
 
-  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
-  const setLinearSeqPrimaryFile = (index, field, value) => shownAction('linear', (drawing) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.linearSeqs.length) return;
-    if (!['gb', 'gff', 'fasta'].includes(field)) return;
-
+  /**
+   * A Linear record row's source file (upload, replace, Remove), found by the
+   * row's uid, with the drawing's reactions to its new source: the shown
+   * drawing's File card and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing
+   * @param {string} rowUid
+   * @param {'gb' | 'gff' | 'fasta'} field
+   * @param {InputFileCandidate | InputFileRef} value
+   */
+  const replaceLinearSourceFile = (drawing, rowUid, field, value) => {
+    const seq = drawing.linearSeqs.find((entry) => entry.uid === rowUid);
+    if (!seq) return;
     const nextValue = state.inputFiles.registerFile(value);
-    const seq = drawing.linearSeqs[idx];
     if (seq[field] === nextValue) return;
     // `groupLinearSourceRecords` puts every record card of the drawing in a group, and `seq` is one of them.
-    const group = /** @type {LinearSourceGroup} */ (linearSourceGroups.value.find((entry) => (
+    const group = /** @type {LinearSourceGroup} */ (groupLinearSourceRecords(drawing.linearSeqs).find((entry) => (
       entry.records.some(({ sequence }) => sequence.uid === seq.uid)
     )));
     const members = new Set(group.records.map(({ sequence }) => sequence.uid));
@@ -6825,6 +6843,58 @@ export const createAppSetup = () => {
       pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
       pendingLinearUploads.add(replacement.uid);
     }
+  };
+  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
+  const setLinearSeqPrimaryFile = (index, field, value) => shownAction('linear', (drawing) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.linearSeqs.length) return;
+    if (!['gb', 'gff', 'fasta'].includes(field)) return;
+    replaceLinearSourceFile(drawing, drawing.linearSeqs[idx].uid, field, value);
+  });
+  /** @param {readonly (InputFileRef | null)[]} slots @param {string} fileId @returns {number[]} */
+  const slotIndexesOfFile = (slots, fileId) => slots.flatMap((ref, idx) => (ref && ref.fileId === fileId ? [idx] : []));
+  /**
+   * The writer of each slot an input file replacement names: every
+   * `ReplaceableInputSlot` has one (a missing one fails the type check), and
+   * each is the body the shown drawing's control of that slot runs.
+   * @type {Readonly<Record<ReplaceableInputSlot, (drawing: DrawingState, site: DrawingInputSite, fileId: string, file: InputFileCandidate | InputFileRef) => void>>}
+   */
+  const INPUT_REPLACEMENT_WRITERS = Object.freeze({
+    c_gb: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gb', file),
+    c_gff: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gff', file),
+    c_fasta: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_fasta', file),
+    c_depth: (drawing, _site, fileId, file) => {
+      const indexes = new Set(circularDepthRows(drawing).flatMap((row) => slotIndexesOfFile(row, fileId)));
+      indexes.forEach((idx) => replaceCircularDepthFile(drawing, idx, file));
+    },
+    c_conservation_blasts: (drawing, _site, fileId, file) => {
+      const ref = state.inputFiles.registerFile(file);
+      replaceCircularConservationBlasts(drawing, normalizeFileList(drawing.files.c_conservation_blasts)
+        .map((entry) => (entry.fileId === fileId ? ref : entry)));
+    },
+    'row.gb': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gb', file),
+    'row.gff': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gff', file),
+    'row.fasta': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'fasta', file),
+    'row.depth': (drawing, site, fileId, file) => {
+      const seq = drawing.linearSeqs.find((entry) => entry.uid === site.rowUid);
+      if (!seq) return;
+      slotIndexesOfFile(depthFileSlotsFromValue(seq.depth), fileId).forEach((idx) => setLinearDepthFiles(drawing, [seq], idx, file));
+    },
+    edge: (drawing, site, _fileId, file) => replaceLinearComparisonFile(drawing, String(site.edgeId), file)
+  });
+  // The replacement of an input file for the shown drawing or every drawing
+  // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`,
+  // created after every writer it reaches.
+  const inputReplacement = createInputReplacement({
+    drawingTabs: () => state.drawingTabs.value,
+    shownDrawingId: () => state.activeDrawingId.value,
+    switchBusy: drawingSwitchBusy,
+    drawingOf: state.drawingOf,
+    runProjectStep: history.runProjectStep,
+    runDrawingStep: history.runUndoable,
+    applyInputReplacementToDrawings: (sites, fileId, file) => sites.forEach((site) => {
+      INPUT_REPLACEMENT_WRITERS[site.slot](state.drawingOf(site.drawingId), site, fileId, file);
+    })
   });
 
   // Record selection (D-01..D-10): the record sources and edits its owner

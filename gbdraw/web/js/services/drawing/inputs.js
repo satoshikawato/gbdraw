@@ -202,11 +202,17 @@ const LINEAR_SEQ_FILE_KEYS = Object.freeze(['gb', 'gff', 'fasta', 'depth']);
  * @typedef {'genbank' | 'gff' | 'fasta' | 'depth' | 'comparison' | CardFileSlot} InputFileKind
  */
 /**
+ * The slots an input file replacement writes (PD-OI-090 〔入力ファイル〕): every
+ * uploader slot except the five cards'. `row.` names a Linear record row's field,
+ * `edge` a Linear comparison's uploaded file.
+ * @typedef {'c_gb' | 'c_gff' | 'c_fasta' | 'c_depth' | 'c_conservation_blasts'
+ *   | 'row.gb' | 'row.gff' | 'row.fasta' | 'row.depth' | 'edge'} ReplaceableInputSlot
+ */
+/**
  * The kind of each slot that an uploader binds; a bound slot missing here
  * (the conservation sequences, a committed comparison) is offered to no
- * uploader. `row.` names a Linear record row's field, `edge` a Linear
- * comparison's uploaded file.
- * @type {Readonly<Record<string, InputFileKind>>}
+ * uploader.
+ * @type {Readonly<Record<ReplaceableInputSlot | CardFileSlot, InputFileKind>>}
  */
 const FILE_KIND_OF_SLOT = Object.freeze({
   c_gb: 'genbank', 'row.gb': 'genbank', c_gff: 'gff', 'row.gff': 'gff', c_fasta: 'fasta', 'row.fasta': 'fasta',
@@ -259,8 +265,16 @@ const visitBoundFiles = (bindings, visit) => {
 /**
  * A place an input file replacement writes: a drawing by its ID, and the place in it.
  * @template {string} Id the drawing ID type of the caller
- * @typedef {BoundFilePlace & { drawingId: Id }} InputReplacementSite
+ * @typedef {object} InputReplacementSite
+ * @property {Id} drawingId
+ * @property {ReplaceableInputSlot} slot
+ * @property {string | null} rowUid
+ * @property {string | null} edgeId
  */
+/** @param {string} slot @returns {slot is ReplaceableInputSlot | CardFileSlot} */
+const isUploaderSlot = (slot) => Object.hasOwn(FILE_KIND_OF_SLOT, slot);
+/** @param {string} slot @returns {slot is ReplaceableInputSlot} */
+const isReplaceableSlot = (slot) => isUploaderSlot(slot) && !CARD_FILE_SLOTS.some((card) => card === slot);
 /**
  * The places where the drawings bind the file `fileId` that a replacement of it writes
  * (PD-OI-090 〔入力ファイル〕, R17-3): every uploader slot except the five cards' (each
@@ -277,12 +291,12 @@ export const projectInputReplacement = (drawings, fileId) => {
   /** @type {Set<string>} */
   const seen = new Set();
   drawings.forEach(({ drawingId, drawing }) => visitDrawingFiles(drawing, (ref, place) => {
-    const kind = FILE_KIND_OF_SLOT[place.slot];
-    if (ref.fileId !== fileId || !kind || CARD_FILE_SLOTS.some((slot) => slot === kind)) return;
-    const key = JSON.stringify([drawingId, place.slot, place.rowUid, place.edgeId]);
+    const { slot, rowUid, edgeId } = place;
+    if (ref.fileId !== fileId || !isReplaceableSlot(slot)) return;
+    const key = JSON.stringify([drawingId, slot, rowUid, edgeId]);
     if (seen.has(key)) return;
     seen.add(key);
-    sites.push({ drawingId, ...place });
+    sites.push({ drawingId, slot, rowUid, edgeId });
   }));
   return sites;
 };
@@ -312,7 +326,7 @@ export const sessionFilesOfKind = (bindings, kind) => {
   /** @type {Map<string, InputFileRef>} */
   const refs = new Map();
   visitBoundFiles(bindings, (ref, slot) => {
-    if (FILE_KIND_OF_SLOT[slot] === kind && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
+    if (isUploaderSlot(slot) && FILE_KIND_OF_SLOT[slot] === kind && !refs.has(ref.fileId)) refs.set(ref.fileId, ref);
   });
   return [...refs.values()];
 };

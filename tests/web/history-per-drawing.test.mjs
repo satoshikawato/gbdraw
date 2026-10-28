@@ -787,6 +787,52 @@ test('replacing a file for every drawing that uses it is one project step that l
   assert.equal(copy.files.c_gb, shared);
 });
 
+test('replacing a Linear row file or a comparison file for every drawing that uses it is one project step found by row uid and comparison id', async () => {
+  const { projectInputReplacement } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const genbank = (name) => new File([`LOCUS       ${name} 40 bp DNA\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`], name);
+  const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  app.selectDrawing('linear');
+  const linear = state.drawingOf('linear');
+  const shared = state.inputFiles.registerFile(genbank('shared.gb'));
+  await history.runUndoable('Change uploaded file', () => { app.setLinearSeqPrimaryFile(0, 'gb', shared); });
+  if (linear.linearSeqs.length < 2) app.addLinearSeq();
+  await history.runUndoable('Change uploaded file', () => { app.setLinearSeqPrimaryFile(1, 'gb', genbank('other.gb')); });
+  const [query, subject] = linear.linearSeqs;
+  const edgeId = 'edge-1';
+  // The comparison the File cards' Add comparison makes, written through its slice (no record discovery here).
+  await history.runUndoable('Change comparisons', () => SETTINGS_SLICE.install(linear.slices.settings, { linearComparisonPlan: {
+    mode: 'selected', defaultSource: 'upload', edges: [{ id: edgeId, queryUid: query.uid, subjectUid: subject.uid, source: 'upload', included: true }]
+  } }));
+  const blast = state.inputFiles.registerFile(new File(['q\ts\t100\t10\t0\t0\t1\t10\t1\t10\t1e-5\t20\n'], 'pair.tsv'));
+  await history.runUndoable('Change uploaded file', () => { app.setLinearComparisonFile(edgeId, blast); });
+  const { drawingId: copyId } = app.drawingList.duplicateDrawing('linear');
+  const copy = state.drawingOf(copyId);
+  const rowFile = (drawing) => drawing.linearSeqs.find((seq) => seq.uid === query.uid)?.gb ?? null;
+  const edgeFile = (drawing) => drawing.linearComparisonPlan.edges.find((edge) => edge.id === edgeId)?.file ?? null;
+  assert.equal(rowFile(copy), shared, 'the copy binds the same row file by row uid');
+  assert.equal(edgeFile(copy), blast, 'and the same comparison file by comparison id');
+  const drawings = () => state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
+  for (const [old, next, read] of [[shared, genbank('new.gb'), rowFile], [blast, new File(['x'], 'new.tsv'), edgeFile]]) {
+    const before = history.undoLabel();
+    assert.equal(app.replaceInputFile(old.fileId, next, 'all').status, 'ok');
+    await settle();
+    const replaced = read(linear);
+    assert.ok(replaced && replaced.fileId !== old.fileId, `${old.name}: the shown drawing binds the new file`);
+    assert.equal(read(copy), replaced, `${old.name}: so does the other drawing`);
+    assert.deepEqual(projectInputReplacement(drawings(), old.fileId), [], `${old.name}: no drawing keeps the old file`);
+    assert.equal(history.undoLabel(), 'Replace input file', `${old.name}: one step`);
+    await app.undoHistory();
+    assert.equal(read(linear), old, `${old.name}: one Undo restores the shown drawing`);
+    assert.equal(read(copy), old, `${old.name}: and the other drawing`);
+    assert.equal(history.undoLabel(), before);
+    await app.redoHistory();
+    assert.equal(read(copy)?.fileId, replaced.fileId, `${old.name}: Redo replaces it again`);
+  }
+});
+
 test('the replacement sites are found by drawing ID, slot, row uid, and comparison id, never on a card', async () => {
   const { projectInputReplacement, INPUTS_SLICE, bindDrawingInputFile, bindInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const store = state.inputFiles;

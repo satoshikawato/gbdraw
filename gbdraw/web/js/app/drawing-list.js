@@ -263,8 +263,9 @@ export const createDrawingList = ({
 
 /**
  * @typedef {import('../services/drawing/inputs.js').InputReplacementSite<DrawingId>} DrawingInputSite
- * @typedef {(sites: readonly DrawingInputSite[], file: InputFileCandidate | InputFileRef) => void} ApplyInputReplacementToDrawings
- *   Writes `file` at each site, in the site's drawing, with that drawing's reactions to its new source.
+ * @typedef {(sites: readonly DrawingInputSite[], fileId: string, file: InputFileCandidate | InputFileRef) => void} ApplyInputReplacementToDrawings
+ *   Writes `file` in place of the file `fileId` at each site, in the site's drawing, with that
+ *   drawing's reactions to its new source; every slot a site names has a writer.
  * @typedef {(label: string, apply: () => void) => unknown} RunReplacementStep One History step that runs `apply`.
  * @typedef {'drawing' | 'all'} InputReplacementScope The shown drawing only, or every drawing that uses the file.
  * @typedef {object} InputReplacementPorts
@@ -302,7 +303,7 @@ export const createInputReplacement = ({
       .map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
     const sites = projectInputReplacement(drawings, fileId);
     if (sites.length) {
-      (scope === 'all' ? runProjectStep : runDrawingStep)('Replace input file', () => applyInputReplacementToDrawings(sites, file));
+      (scope === 'all' ? runProjectStep : runDrawingStep)('Replace input file', () => applyInputReplacementToDrawings(sites, fileId, file));
     }
     return { status: 'ok', drawingId: shown };
   };
