@@ -2452,7 +2452,8 @@
                          :items="[
                              { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
                              { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
-                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) }
+                             { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) },
+                             { label: t('Delete drawing'), icon: 'ph-trash', disabled: !drawingSwitchAvailable || !tab.canDelete, run: () => drawingBar.deleteDrawing(tab.id) }
                          ]"></action-menu>
         </template>
     </div>

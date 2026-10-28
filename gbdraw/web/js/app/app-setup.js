@@ -4559,14 +4559,17 @@ export const createAppSetup = () => {
     runListStep: history.runListStep,
     showDrawingNow
   });
-  // The drawing bar: its tabs and the tab menu's Rename and Move (B4a-5).
+  // The drawing bar: its tabs and the tab menu's Rename, Move, and Delete (B4a-5).
   const drawingBar = createDrawingBar({
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
+    deleteDrawing: drawingList.deleteDrawing,
+    needsDeleteConfirmation: drawingList.needsDeleteConfirmation,
     drawingTabs: () => state.drawingTabs.value,
     shownDrawingId: () => state.activeDrawingId.value,
     modeOf: (drawingId) => state.drawingOf(drawingId).mode,
-    askText
+    askText,
+    askChoice
   });
   const drawingBarTabs = computed(() => drawingBar.tabs());
   // Why the tabs wait: the switch's own busy reason (R15).

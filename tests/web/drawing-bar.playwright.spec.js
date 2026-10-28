@@ -230,3 +230,29 @@ test('Rename in the tab menu is one History step that Undo restores; a repeated 
   expect(await tabName(page, second)).toBe(name);
   expect((await shownDrawing(page)).id, 'Undo of a rename shows the same drawing').toBe(second);
 });
+
+test('Delete in the tab menu removes the shown drawing as one step that Undo restores; the last drawing cannot be deleted', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [first, second] = await drawingIds(page);
+  await drawingTab(page, second).click();
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(second);
+  const menu = page.locator('.drawing-bar-menu');
+  const deleteItem = menu.getByRole('button', { name: 'Delete drawing', exact: true });
+
+  await menu.locator('summary').click();
+  await deleteItem.click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await drawingIds(page), 'a drawing without Result or edits is deleted without asking').toEqual([first]);
+  expect((await shownDrawing(page)).id).toBe(first);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Delete drawing');
+
+  await menu.locator('summary').click();
+  await expect(deleteItem, 'the last drawing has no Delete').toBeDisabled();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect(await drawingIds(page)).toEqual([first, second]);
+  expect((await shownDrawing(page)).id, 'Undo shows the restored drawing').toBe(second);
+});

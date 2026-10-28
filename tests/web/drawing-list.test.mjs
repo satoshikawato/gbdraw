@@ -358,6 +358,43 @@ test('the drawing bar lists the tabs; Rename asks again on a refused name and Un
   assert.deepEqual(tabIds(), order, 'Undo restores the order');
 });
 
+test('bar Delete asks once for a drawing with a Result and Cancel records no step; a bare drawing goes without asking', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const { drawingId: bare } = app.drawingList.newDrawing('linear');
+  const { drawingId: kept } = app.drawingList.newDrawing('circular');
+  state.results.value = [resultOf('kept.svg')];
+  const order = tabIds();
+  const undoCount = history.getUndoCount();
+  assert.equal(app.drawingBar.tabs().every((tab) => tab.canDelete), true, 'with several drawings every tab can be deleted');
+
+  const cancelled = app.drawingBar.deleteDrawing(kept);
+  await settle();
+  assert.equal(app.choicePrompt.show, true, 'a drawing with a Result asks first');
+  assert.match(app.choicePrompt.title, /^Delete /);
+  app.resolveChoicePrompt('cancel');
+  assert.equal(await cancelled, null);
+  assert.deepEqual(tabIds(), order, 'Cancel deletes nothing');
+  assert.equal(history.getUndoCount(), undoCount, 'and records no step');
+
+  const confirmed = app.drawingBar.deleteDrawing(kept);
+  await settle();
+  app.resolveChoicePrompt('delete');
+  assert.equal((await confirmed).status, 'ok');
+  assert.deepEqual(tabIds(), order.filter((id) => id !== kept));
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, kept, 'Undo shows the deleted drawing');
+  assert.deepEqual(state.results.value.map((result) => result.name), ['kept.svg'], 'with its Result');
+
+  state.results.value = [];
+  app.selectDrawing(bare);
+  const outcome = await app.drawingBar.deleteDrawing(bare);
+  assert.equal(outcome.status, 'ok', 'a drawing without Result or edits is deleted without asking');
+  assert.equal(app.choicePrompt.show, false);
+  await history.undo();
+});
+
 test('arrow keys move the focus over the tabs and wrap; Home and End go to the ends', () => {
   assert.equal(focusedTabIndex('ArrowRight', 0, 3), 1);
   assert.equal(focusedTabIndex('ArrowRight', 2, 3), 0);
