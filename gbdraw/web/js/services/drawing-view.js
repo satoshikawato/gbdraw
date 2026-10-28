@@ -122,6 +122,20 @@ export const defaultDrawingName = (mode, drawingId, modeName = MODE_DRAWING_NAME
 };
 
 /**
+ * A copy's name (T-B4-5): "<name> copy", then "<name> copy 2", "<name> copy
+ * 3" ..., the first that no name in `names` repeats under the rule of
+ * `drawingNamesProblem`. Python names no copy, so this rule has no twin.
+ * @param {string} name @param {readonly string[]} names
+ * @returns {string}
+ */
+export const copyDrawingName = (name, names) => {
+  for (let number = 1; ; number += 1) {
+    const candidate = `${name} copy${number > 1 ? ` ${number}` : ''}`;
+    if (!drawingNamesProblem([...names, candidate])) return candidate;
+  }
+};
+
+/**
  * Why `names` cannot name the drawings of a project, if they cannot: a blank
  * name, or two names that differ only in case. Python's
  * `gbdraw.session_drawings._identity_problem` takes the same rule (case
