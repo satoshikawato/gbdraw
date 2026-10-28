@@ -20,7 +20,9 @@ whose undeclared sections and leaves flag a read. A view that outlives its
 build (the result, or anything else, holds a part of it) also flags the build,
 and a copy of a view section reads the section: a stored result never hands a
 later reader the sections its key left out. A flagged result is returned but
-not stored, gets no identity, and is counted.
+not stored, gets no identity, and is counted. Views made in a nested stage count for every
+enclosing stage too. A view kept alive only by a reference cycle until the collector runs also makes
+the build unstored (a lost store, never a stale hit).
 """
 
 from __future__ import annotations
@@ -907,6 +909,9 @@ def render_stage(
         result = cast(Callable[..., R], function)(*call_args, **call_kwargs)
     finally:
         frame.active = False
+        # An enclosing stage may keep what this build made, by its return value or an error.
+        for outer in enclosing:
+            outer.views.extend(frame.views)
         _FRAMES.reset(token)
     _metric("Build", name)
     # The views and profile copies the function received count as arguments.

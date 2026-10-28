@@ -557,6 +557,44 @@ def test_a_result_that_holds_a_profile_at_any_depth_is_never_stored(build, read)
         assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
 
 
+class HolderError(Exception):
+    def __init__(self, profile: RenderProfile) -> None:
+        super().__init__("holds a profile")
+        self.profile = profile
+
+
+def raise_holding_profile(profile: RenderProfile) -> None:
+    raise HolderError(profile)
+
+
+def outer_returns_inner_result(profile: RenderProfile) -> list[tuple[Box, ...]]:
+    return render_stage("legend_measurement", box_profile_deep, profile)
+
+
+def outer_keeps_inner_error_payload(profile: RenderProfile) -> list[tuple[Box, ...]]:
+    try:
+        render_stage("legend_measurement", raise_holding_profile, profile)
+    except HolderError as error:
+        return [(Box(error.profile),)]
+    return []
+
+
+@pytest.mark.parametrize("outer", [outer_returns_inner_result, outer_keeps_inner_error_payload])
+def test_a_profile_held_through_a_nested_stage_keeps_the_outer_stage_unstored(outer) -> None:
+    # The inner stage declares nothing and the outer one does not declare canvas: the view made
+    # inside the inner build still reaches the outer result, by the return value or by an error.
+    cache = PreparedBiologicalInputCache()
+    for show_gc in (True, False, True):
+        profile = CircularRenderProfile(_config(**{"canvas.show_gc": show_gc}))
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            holder = render_stage("legend_table", outer, profile)
+            assert render_stage("feature_dom_index", read_deep_show_gc, holder) is show_gc
+        counts = _metrics(metrics)
+        assert counts["renderStageUndeclaredRead:legend_table"] == 1
+        assert counts.get("renderStageHit:legend_table", 0) == 0
+
+
 def copy_font_size(config: GbdrawConfig) -> object:
     return copy.copy(config.labels.font_size)
 
