@@ -134,6 +134,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
+              [--conservation_color_scheme {same,ten,per_five}]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
               [--losat {losatn,tlosatx,losatp}]
@@ -352,7 +353,15 @@ options:
                         index.
   --conservation_colors COLOR [COLOR ...]
                         Colors for similarity rings, aligned by logical source
-                        index. Accepts SVG color names or #RRGGBB.
+                        index. Accepts SVG color names, #RRGGBB, or auto (the
+                        ring takes the --conservation_color_scheme color of
+                        its position).
+  --conservation_color_scheme {same,ten,per_five}
+                        Colors of the similarity rings without a color of
+                        their own, by drawn position from the outermost ring:
+                        same (every ring the default color), ten (ten colors,
+                        repeating from ring 11), or per_five (one color per
+                        five rings, repeating from ring 31) (default: same).
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Similarity ring width for circular mode (in px; must
                         be > 0).

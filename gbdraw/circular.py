@@ -186,6 +186,12 @@ def _render_output_request(
 
 
 
+def conservation_colors_from_cli(values: Sequence[str] | None) -> list[str] | None:
+    """``--conservation_colors``: ``auto`` is a ring without a color of its own, which gbdraw reads as ``''``."""
+
+    return ['' if color.strip().lower() == 'auto' else color for color in values or ()] or None
+
+
 def _get_args(
     args,
     *,
@@ -348,9 +354,21 @@ def _get_args(
     parser.add_argument(
         '--conservation_colors',
         metavar='COLOR',
-        help='Colors for similarity rings, aligned by logical source index. Accepts SVG color names or #RRGGBB.',
+        help=(
+            'Colors for similarity rings, aligned by logical source index. Accepts SVG color names, #RRGGBB, '
+            'or auto (the ring takes the --conservation_color_scheme color of its position).'
+        ),
         type=str,
         nargs='+')
+    parser.add_argument(
+        '--conservation_color_scheme',
+        help=(
+            'Colors of the similarity rings without a color of their own, by drawn position from the outermost '
+            'ring: same (every ring the default color), ten (ten colors, repeating from ring 11), or per_five '
+            '(one color per five rings, repeating from ring 31) (default: same).'
+        ),
+        choices=('same', 'ten', 'per_five'),
+        default=None)
     parser.add_argument(
         '--conservation_ring_width',
         help='Similarity ring width for circular mode (in px; must be > 0).',
@@ -1051,7 +1069,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     conservation_sequence_sources = list(args.conservation_sequence or []) or None
     conservation_reference: str = args.conservation_reference
     conservation_labels = list(args.conservation_labels or []) or None
-    conservation_colors = list(args.conservation_colors or []) or None
+    conservation_colors = conservation_colors_from_cli(args.conservation_colors)
     conservation_ring_width: Optional[float] = args.conservation_ring_width
     conservation_ring_gap: Optional[float] = args.conservation_ring_gap
     evalue: float = args.evalue
@@ -1207,6 +1225,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         "objects.definition.circular.plot_title_font_size": plot_title_font_size,
         # Only a hidden definition is an override, so a default run's request is unchanged.
         "objects.definition.circular.show": False if args.hide_definition else None,
+        "objects.conservation.color_scheme": args.conservation_color_scheme,
         "labels.rendering": label_rendering,
         "labels.circular.line": args.label_line,
         "labels.circular.protection": args.label_protection,

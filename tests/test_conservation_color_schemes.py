@@ -159,3 +159,87 @@ def test_multi_record_canvas_colours_every_record_alike() -> None:
     )
 
     assert _ring_colours(canvas.tostring()) == [TEN[0], TEN[1], TEN[0], TEN[1]]
+
+
+def _write_inputs(tmp_path, count: int = 3):
+    from Bio import SeqIO
+
+    gbk = tmp_path / "rec1.gb"
+    SeqIO.write([_record()], str(gbk), "genbank")
+    blasts = []
+    for index in range(count):
+        path = tmp_path / f"ring{index + 1}.tsv"
+        _frame().to_csv(path, sep="\t", header=False, index=False)
+        blasts.append(str(path))
+    return str(gbk), blasts
+
+
+def _run_cli(tmp_path, monkeypatch, *args: str) -> str:
+    import sys
+
+    from gbdraw import cli
+
+    output = tmp_path / "out"
+    monkeypatch.setattr(sys, "argv", ["gbdraw", "circular", *args, "-o", str(output), "-f", "svg"])
+    cli.main()
+    return output.with_suffix(".svg").read_text()
+
+
+def test_cli_scheme_and_auto_ring_colours(tmp_path, monkeypatch) -> None:
+    gbk, blasts = _write_inputs(tmp_path)
+
+    svg = _run_cli(
+        tmp_path, monkeypatch,
+        "--gbk", gbk, "--conservation_blast", *blasts, "--conservation_reference", "subject",
+        "--conservation_colors", "auto", "#123456", "AUTO", "--conservation_color_scheme", "ten",
+    )
+
+    assert _ring_colours(svg) == [TEN[0], "#123456", TEN[2]]
+
+
+def test_cli_parses_the_scheme_choices() -> None:
+    from gbdraw.circular import _get_args
+
+    assert _get_args(["--gbk", "dummy.gb"]).conservation_color_scheme is None
+    assert _get_args(["--gbk", "dummy.gb", "--conservation_color_scheme", "per_five"]).conservation_color_scheme == "per_five"
+    with pytest.raises(SystemExit):
+        _get_args(["--gbk", "dummy.gb", "--conservation_color_scheme", "rainbow"])
+
+
+def test_cli_table_blank_colour_cell_takes_the_scheme_colour(tmp_path, monkeypatch) -> None:
+    gbk, blasts = _write_inputs(tmp_path, 2)
+    table = tmp_path / "rings.tsv"
+    table.write_text(f"blast\tlabel\tcolor\n{blasts[0]}\tA\t\n{blasts[1]}\tB\tred\n")
+
+    svg = _run_cli(
+        tmp_path, monkeypatch,
+        "--gbk", gbk, "--conservation_table", str(table), "--conservation_reference", "subject",
+        "--conservation_color_scheme", "per_five",
+    )
+
+    assert _ring_colours(svg) == [HUES[0], "#ff0000"]
+
+
+def test_python_api_scheme_and_rings_without_a_colour() -> None:
+    import gbdraw
+
+    rings = gbdraw.ComparisonRingOptions(
+        tracks=[
+            gbdraw.ComparisonRingTrackOptions(source=_frame()),
+            gbdraw.ComparisonRingTrackOptions(source=_frame(), color="#123456"),
+            gbdraw.ComparisonRingTrackOptions(source=_frame()),
+        ],
+        reference="subject",
+        color_scheme="ten",
+    )
+    diagram = gbdraw.draw_circular(_record(), options=gbdraw.CircularOptions(comparison_rings=rings, legend="none"))
+
+    assert _ring_colours(diagram.to_svg()) == [TEN[0], "#123456", TEN[2]]
+
+
+def test_python_api_rejects_an_unknown_scheme() -> None:
+    import gbdraw
+
+    rings = gbdraw.ComparisonRingOptions(tracks=[gbdraw.ComparisonRingTrackOptions(source=_frame())], color_scheme="x")
+    with pytest.raises(ValidationError):
+        gbdraw.draw_circular(_record(), options=gbdraw.CircularOptions(comparison_rings=rings))
