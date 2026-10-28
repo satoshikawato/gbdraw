@@ -254,7 +254,7 @@ test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () 
 });
 
 test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {
-  const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|set(?:Circular|LinearSource|Linear)DepthFile)\(/
+  const depthSourceControls = settingsControls.filter((element) => /(?:remove(?:Circular|Linear)DepthTrack|clearLinearSourceDepthFile|(?:set|upload)(?:Circular|LinearSource|Linear)DepthFile)\(/
     .test(`${element.attributes.get('@click') || ''} ${element.attributes.get('@update:model-value') || ''}`));
   assert.equal(depthSourceControls.length, 7, depthSourceControls.map(describe).join('\n'));
   for (const control of depthSourceControls) assert.equal(scopeOf(control).attributes.get('data-setting'), 'depth-sources', describe(control));
