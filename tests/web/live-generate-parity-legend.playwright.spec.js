@@ -1972,3 +1972,19 @@ for (const [name, field, value] of [
     await expectLiveEqualsGenerate(page, { label: `a rule edit (${name}) on the Result the rule does not color` });
   });
 }
+
+// OV-2189 (release-tier random walk, seed 20261108): a popup Legend name on
+// the only feature of a rule row renames the row in its place (OV-158), but
+// the rule table Python synthesizes for the edit puts the feature's rule
+// first, so Generate draws the row first. Expected to fail until the Owner
+// settles which order both show.
+test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
+  test.fail(true, 'OV-2189');
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
+  await generate(page);
+  await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
+});
