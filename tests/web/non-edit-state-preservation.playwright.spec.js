@@ -307,7 +307,7 @@ const ROWS = [
       await switchMode(page, 'linear');
       expect(await historyCounts(page), 'the Linear drawing records no Reset step').toEqual(linearCounts);
       await switchMode(page, 'circular');
-      await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
       await settle(page);
       expect(await historyCounts(page), 'one Undo takes the Reset step').toEqual([counts[0], 1]);
     }
