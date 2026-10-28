@@ -49,7 +49,8 @@ const snapshot = page => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const feature = state.extractedFeatures.value.find(f => f.biological_feature_id === 'fb8ff22d9');
-  return { mode: state.mode.value, records: state.drawingList().find((drawing) => drawing.mode === 'circular').circularRecordList.value,
+  return { mode: state.mode.value, // null: a Linear-only Load makes no Circular drawing.
+    records: state.drawingList().find((drawing) => drawing.mode === 'circular')?.circularRecordList.value ?? null,
     placements: state.activeDrawing().featurePlacementOverrides,
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
@@ -84,6 +85,10 @@ for (const committed of [false, true]) {
 
       const page = await load(browser);
       pages.push(page);
+      // The drawing switch below makes the Linear drawing; making it first keeps
+      // the project step that creates it out of the Circular drawing's Undo walk.
+      await switchMode(page, 'linear');
+      await switchMode(page, 'circular');
       await generate(page);
       await placement(page, 'outward');
       if (committed) await generate(page);

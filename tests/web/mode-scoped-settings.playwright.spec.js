@@ -98,7 +98,10 @@ const readDrawings = (page, paths) => page.evaluate(async (fieldPaths) => {
     return plain === undefined ? null : JSON.parse(JSON.stringify(plain));
   };
   const pick = (drawing) => Object.fromEntries(Object.entries(fieldPaths).map(([name, path]) => [name, copy(at(drawing, path))]));
-  return { mode: state.mode.value, circular: pick(state.drawingOf('circular')), linear: pick(state.drawingOf('linear')) };
+  // A mode with no drawing yet (a new Session starts with a Circular one) reads as null.
+  const ofKind = (kind) => state.drawingList().find((drawing) => drawing.mode === kind);
+  const read = (kind) => (ofKind(kind) ? pick(ofKind(kind)) : null);
+  return { mode: state.mode.value, circular: read('circular'), linear: read('linear') };
 }, paths);
 
 // One History step that assigns `values` (dotted paths) in the shown mode's drawing.
@@ -649,6 +652,9 @@ const sampleSummary = (drawing) => ({
 test('per-mode samples: settings, palette, color rule, annotation set, Depth min, and GC mode stay in their mode', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The sample compares both drawings: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const read = async () => {
     const value = await readDrawings(page, SAMPLE_FIELDS);
     return { mode: value.mode, circular: sampleSummary(value.circular), linear: sampleSummary(value.linear) };
@@ -700,6 +706,9 @@ test('per-mode samples: settings, palette, color rule, annotation set, Depth min
 test('H1: Undo and Redo walk the shown drawing\'s steps across an edit, a switch, and an edit in the other mode', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The cases read both drawings from the start: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const read = async () => {
     const value = await readDrawings(page, { size: 'adv.label_font_size' });
     return { mode: value.mode, circular: value.circular.size, linear: value.linear.size };
@@ -776,6 +785,9 @@ test('OV-1249: Reset Settings keeps a Record Order row for each loaded record', 
 test('H2: Reset Settings is one project step that one Undo restores in both drawings', async ({ page }) => {
   test.setTimeout(240_000);
   await openCircular(page);
+  // The cases read both drawings from the start: make the Linear one (a new Session starts with a Circular drawing only).
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   const fields = { size: 'adv.label_font_size', width: 'adv.axis_stroke_width' };
   const initial = await readDrawings(page, fields);
   await editStep(page, 'Circular label font size', { 'adv.label_font_size': 13 });

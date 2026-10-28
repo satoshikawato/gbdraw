@@ -10,10 +10,13 @@ const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs
 const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { buildConfigData, getCommittedCanonicalSession } = await import('./js/services/config.js');
+  const circular = s.drawingList().find(drawing => drawing.mode === 'circular');
+  const linear = s.drawingList().find(drawing => drawing.mode === 'linear');
   return {
     mode: s.mode.value, config: buildConfigData(s.activeDrawing()),
-    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(s.drawingOf('circular').files[key])),
-    linearSources: s.drawingOf('linear').linearSeqs.map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
+    // A mode the project has no drawing of (a new Session starts with a Circular one) holds no source.
+    circularSources: ['c_gb', 'c_gff', 'c_fasta'].map(key => Boolean(circular?.files[key])),
+    linearSources: (linear ? linear.linearSeqs : []).map(row => ['gb', 'gff', 'fasta'].map(key => Boolean(row[key]))),
     results: s.results.value.length, catalog: s.featureCatalog.value,
     committed: getCommittedCanonicalSession(), error: s.errorLog.value
   };

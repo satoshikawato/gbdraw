@@ -7,7 +7,7 @@ const path = require('node:path');
 const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { drawingIds, drawingTab, offerTab, shownDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
+const { drawingIds, drawingTab, offerTab, shownDrawing, showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 
 const loadGallerySession = (page, filename) => evaluateWithRetainedPromise(page, async (path) => {
   const name = path.split('/').pop();
@@ -27,6 +27,9 @@ test.describe('390 px', () => {
     test.setTimeout(240_000);
     await openApp(page);
     expect((await loadGallerySession(page, 'HmmtDNA_ATskew.gbdraw-session.json')).status).toBe('ok');
+    // The Session holds one Circular drawing; the list below needs a second one, made through the offer.
+    await takeLinearOffer(page);
+    await showDrawing(page, { kind: 'circular' });
     const ids = await drawingIds(page);
     const shown = (await shownDrawing(page)).id;
     const other = ids.find((id) => id !== shown);

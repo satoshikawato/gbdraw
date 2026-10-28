@@ -44,6 +44,8 @@ const snapshot = page => page.evaluate(async () => {
   const { readFileBytes } = await import('./js/services/file-content-cache.js');
   const digest = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
+  const circularDrawing = state.drawingList().find((drawing) => drawing.mode === 'circular');
+  const linearDrawing = state.drawingList().find((drawing) => drawing.mode === 'linear');
   const fileInfo = async file => file ? {
     name: file.name, type: file.type, lastModified: file.lastModified,
     bytes: await digest(await readFileBytes(file))
@@ -57,8 +59,9 @@ const snapshot = page => page.evaluate(async () => {
     selectedResultIndex: state.selectedResultIndex.value,
     featurePanelTab: state.featurePanelTab.value,
     downloadDpi: state.downloadDpi.value,
-    circularSource: await fileInfo(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'circular').files.c_gb)),
-    linearSource: await fileInfo(state.inputFiles.fileOf(state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs[0]?.gb)),
+    // null: the project has no drawing of that mode (a one-mode Load makes none for the other mode).
+    circularSource: circularDrawing ? await fileInfo(state.inputFiles.fileOf(circularDrawing.files.c_gb)) : null,
+    linearSource: linearDrawing ? await fileInfo(state.inputFiles.fileOf(linearDrawing.linearSeqs[0]?.gb)) : null,
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]
   };
 });
