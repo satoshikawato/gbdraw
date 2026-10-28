@@ -459,9 +459,12 @@ HMMTDNA = TEST_INPUTS / "HmmtDNA.gbk"
 
 
 def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tuple[object, ...]]:
-    """Draw a figure and return the radial layout and the paint the definition check read for its record."""
+    """Draw a figure and return the radial layout and the paint the definition check read for its record (built
+    even where the text stays inside every track, which the count otherwise skips)."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
+
+    monkeypatch.setattr(assemble_module, "_track_ink_floor_px", lambda *args: -float("inf"))
 
     captured: list[tuple[object, tuple[object, ...]]] = []
     original = assemble_module._record_track_ink
@@ -743,3 +746,102 @@ def test_tracks_narrowed_around_the_definition_leave_no_notice(
     narrowed = any(track.compressed for track in fits[0].layout.tracks)
     notice = "definition line does not fit" in capsys.readouterr().err
     assert narrowed and not notice, (narrowed, notice)
+
+
+# --- The count skips the track paint when the text stays inside every track (OV-2088) ----------------------------
+
+
+@pytest.mark.circular
+def test_a_definition_inside_every_track_builds_no_track_paint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The count builds every track's paint only when a definition line reaches past the nearest track band."""
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    built: list[object] = []
+    original = assemble_module._record_track_ink
+
+    def counting(layout, **kwargs):
+        built.append(layout)
+        return original(layout, **kwargs)
+
+    monkeypatch.setattr(assemble_module, "_record_track_ink", counting)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", LabelLeadersCrossWarning)
+        _assemble()()
+    assert built == []
+
+
+_CIRCULAR_GALLERY_SESSIONS = (
+    "HmmtDNA_ATskew.gbdraw-session.json",
+    "HmmtDNA_basic_circular.gbdraw-session.json",
+    "tobacco-chloroplast.gbdraw-session.json",
+    "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz",
+)
+
+
+def _render_circular_input(source: str, tmp_path: Path) -> None:
+    import gzip
+    import json
+
+    if source.startswith("C"):
+        from tests.utils.render_stage_equivalence import CASES, EquivalenceHarness, Placeholders, write_tables
+
+        case = CASES[source]
+        harness = EquivalenceHarness(case.mode, tmp_path / source)
+        outcome = harness.uncached(Placeholders(write_tables(tmp_path / "tables")).expand(case, case.base))
+        assert outcome.error is None
+        return
+    from gbdraw.web_support.request_render import render_embedded_canonical_web_request
+
+    path = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery" / "sessions" / source
+    opener = gzip.open if source.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as handle:
+        session = json.load(handle)
+    render_embedded_canonical_web_request(
+        session["renderRequest"], resources=session["resources"], workspace=tmp_path / "workspace"
+    )
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("source", ["C1", "C2", "C3", *_CIRCULAR_GALLERY_SESSIONS])
+def test_every_track_paint_lies_outside_the_floor_the_count_skips_by(
+    source: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The early exit is exact only while no paint comes nearer the centre than ``_track_ink_floor_px``.
+
+    Each record's full count runs here (the floor is recorded, then the exit is
+    turned off), and every paint item of every track must start at or beyond
+    the floor of its layout. A GC area starts on its band's inner edge, which
+    two sums can round 1e-13 px apart; the exit stays exact, because
+    ``box_meets_ink`` shrinks a line by the 0.5 px threshold, so it reaches
+    less far than the corner the exit compares.
+    """
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+
+    floors: list[float] = []
+    inks: list[tuple[object, ...]] = []
+    floor_of = assemble_module._track_ink_floor_px
+    track_ink = assemble_module._record_track_ink
+
+    def recording_floor(*args, **kwargs) -> float:
+        floors.append(floor_of(*args, **kwargs))
+        return -float("inf")
+
+    def recording_ink(layout, **kwargs):
+        inks.append(track_ink(layout, **kwargs))
+        return inks[-1]
+
+    monkeypatch.setattr(assemble_module, "_track_ink_floor_px", recording_floor)
+    monkeypatch.setattr(assemble_module, "_record_track_ink", recording_ink)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LabelLeadersCrossWarning)
+        _render_circular_input(source, tmp_path)
+    assert floors and len(floors) == len(inks)
+    nearer = [
+        (index, type(ink).__name__, ink.nearest_px, floor)
+        for index, (floor, record_inks) in enumerate(zip(floors, inks))
+        for ink in record_inks
+        if ink.nearest_px < floor - 1e-6
+    ]
+    assert not nearer, nearer

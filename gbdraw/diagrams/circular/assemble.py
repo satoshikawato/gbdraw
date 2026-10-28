@@ -897,6 +897,34 @@ def _record_track_ink(
     return tuple(inks)
 
 
+def _ink_reach_px(boxes: Sequence[Aabb]) -> float:
+    """How far from the record centre ``boxes`` reach: the farthest corner of any box (0 for none)."""
+
+    return max(
+        (math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y))) for box in boxes),
+        default=0.0,
+    )
+
+
+def _track_ink_floor_px(
+    radial_layout: CircularRadialLayout, labels: Mapping[str, Sequence[CircularAnnotationLabel]], pad_px: float
+) -> float:
+    """How near the centre a record's track paint (``_record_track_ink``) can come: the inner edge of the axis
+    paint band, of each drawn slot's drawn and reserved bands, and of each annotation label, less ``pad_px`` (the
+    feature blocks' stroke). Tests pin that no paint item comes nearer (OV-2088)."""
+
+    floor = float(radial_layout.axis.paint_band_px.inner_px)
+    for slot in radial_layout.slots:
+        if slot.draw_band_px is None:
+            continue
+        floor = min(floor, float(slot.draw_band_px.inner_px))
+        if slot.reserved_band_px is not None:
+            floor = min(floor, float(slot.reserved_band_px.inner_px))
+    for slot_labels in labels.values():
+        floor = min([floor, *(float(label.ink_radii[0]) for label in slot_labels)])
+    return floor - pad_px
+
+
 def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Sequence[Aabb]) -> int:
     """How many lines of the centre definition text meet what a track paints (D-18).
 
@@ -2868,6 +2896,11 @@ def add_record_on_circular_canvas(
         definition_lines: Sequence[Aabb],
         labels: Mapping[str, Sequence[CircularAnnotationLabel]],
     ) -> int:
+        # Lines whose farthest corner stays inside the nearest track paint meet none: ``box_meets_ink`` keeps only
+        # paint nearer than a line's corner, so the count is 0 without building every track's paint (OV-2088).
+        feature_pad_px = stroke_pad_px(feature_config.block_stroke_color, feature_config.block_stroke_width)
+        if _ink_reach_px(definition_lines) <= _track_ink_floor_px(layout, labels, feature_pad_px):
+            return 0
         inks = _record_track_ink(
             layout,
             gb_record=gb_record,
