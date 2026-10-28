@@ -349,17 +349,12 @@ def unmanaged_config_override_modes(path: str) -> tuple[DiagramMode, ...]:
 def mode_scoped_settings_payload() -> dict[str, Any]:
     """The registry as the Web's generated leaf holds it."""
 
-    from gbdraw.api.options import _MODE_CONFIG_OVERRIDE_PREFIXES
-
     return {
         "revision": MODE_SCOPED_SETTINGS_REVISION,
         "modes": list(DIAGRAM_MODES),
         "migrationTokens": sorted(MIGRATION_TOKENS),
         "rows": [row.to_json() for row in MODE_SCOPED_SETTINGS],
         "losatExecutionFields": list(LOSAT_EXECUTION_FIELDS),
-        "unmanagedConfigOverrideModePrefixes": {
-            mode: list(_MODE_CONFIG_OVERRIDE_PREFIXES[mode]) for mode in DIAGRAM_MODES
-        },
     }
 
 

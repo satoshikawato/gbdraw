@@ -38,41 +38,6 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     "linear"
   ],
   "revision": 5,
-  "unmanagedConfigOverrideModePrefixes": {
-    "circular": [
-      "canvas.circular",
-      "labels.circular",
-      "labels.length_threshold.circular",
-      "labels.font_size.short",
-      "labels.font_size.long",
-      "labels.radius_factor",
-      "labels.inner_radius_factor",
-      "labels.arc_x_radius_factor",
-      "labels.arc_y_radius_factor",
-      "labels.arc_center_x",
-      "labels.arc_angle",
-      "labels.inner_arc_x_radius_factor",
-      "labels.inner_arc_y_radius_factor",
-      "labels.inner_arc_center_x",
-      "labels.inner_arc_angle",
-      "labels.unified_adjustment",
-      "labels.spacing.circular",
-      "objects.axis.circular",
-      "objects.conservation",
-      "objects.definition.circular",
-      "objects.ticks"
-    ],
-    "linear": [
-      "canvas.linear",
-      "labels.linear",
-      "labels.length_threshold.linear",
-      "labels.font_size.linear",
-      "labels.spacing.linear",
-      "objects.axis.linear",
-      "objects.blast_match",
-      "objects.definition.linear"
-    ]
-  },
   "rows": [
     {"domain": "config.form", "key": null, "migrate": "copy", "modes": "both", "path": "prefix"},
     {"domain": "config.form", "key": null, "migrate": "own", "modes": "circular", "path": "species"},
