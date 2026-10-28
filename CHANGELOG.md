@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): a repeat Generate of a Linear similarity-groups or collinear figure with a reversed
+  record no longer walks every orthogroup member to look up the cached interactive context and the Session's
+  stored result; the orthogroups moved into the drawn frame or back into each record's search frame are reused
+  from the cache. In CPython a warm majanivirus Generate takes about 40 ms instead of 180-250 ms. The drawn bytes
+  are unchanged (OV-1582).
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2

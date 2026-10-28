@@ -1086,6 +1086,88 @@ def test_typed_results_move_between_frames_by_their_tags() -> None:
     )
 
 
+def test_a_projected_typed_result_is_keyed_by_identity_and_rebuilds_on_a_changed_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # OV-1582: a stage that takes a projected orthogroup keys it by an identity
+    # from what it was projected from, not by walking every member on each
+    # warm render; a changed projection input gives another identity (no stale hit).
+    from gbdraw import render_stages
+    from gbdraw.analysis.protein_colinearity import OrthogroupResult
+    from gbdraw.api.prepared import (
+        PreparedBiologicalInputCache,
+        PreparedResourceIdentity,
+        prepared_value_identity,
+        register_prepared_resource_value,
+    )
+    from gbdraw.api.record_planning import (
+        ComparisonRecordBinding,
+        comparison_record_binding,
+        project_source_bound_results,
+    )
+    from gbdraw.features.source import capture_source_features
+    from gbdraw.render_stages import render_stage
+    from gbdraw.session_request_codec import encode_canonical_typed_resource
+
+    record = _frame_test_record()
+    binding = comparison_record_binding(record, capture_source_features(record), False)
+    other = ComparisonRecordBinding({}, {}, {}, 50, {}, {}, False)
+    reversed_binding = ComparisonRecordBinding(
+        binding.source, binding.opposite, binding.current, binding.length,
+        binding.opposite_spans, binding.current_spans, True,
+    )
+    members = [_member(index, binding.opposite_spans[index]) for index in (0, 1, 2)]
+    groups = OrthogroupResult(orthogroups={"og1": members},
+                              member_by_protein_id={member.protein_id: member for member in members})
+    resource = tmp_path / "orthogroups.bin"
+    resource.write_text("stored orthogroups", encoding="utf-8")
+    identities = {resource: PreparedResourceIdentity("orthogroups", "token-orthogroups", 18)}
+    cache = PreparedBiologicalInputCache()
+    calls = {"key": 0}
+    original_key = render_stages._key
+
+    def counting_key(*args, **kwargs):
+        calls["key"] += 1
+        return original_key(*args, **kwargs)
+
+    monkeypatch.setattr(render_stages, "_key", counting_key)
+
+    def project(bindings: tuple[ComparisonRecordBinding, ...]):
+        diagnostics: dict[str, object] = {"metrics": {}}
+        with cache.transaction(resource_paths=identities, diagnostics=diagnostics):
+            register_prepared_resource_value(groups, resource)
+            projected = project_source_bound_results(LinearDiagramOptions(orthogroups=groups), bindings)
+            orthogroups = projected.options.orthogroups
+            identity = prepared_value_identity(orthogroups)
+            calls["key"] = 0
+            # A consumer stage, as the derived payload encodes the result.
+            render_stage("derived_losat_entries", encode_canonical_typed_resource, "orthogroupResult", orthogroups)
+            consumer_keys = calls["key"]
+        return projected, identity, consumer_keys, diagnostics["metrics"]
+
+    cold, cold_identity, _, _ = project((binding, other))
+    warm, warm_identity, consumer_keys, warm_metrics = project((binding, other))
+    expected = project_source_bound_results(LinearDiagramOptions(orthogroups=groups), (binding, other))
+
+    assert repr(cold.options.orthogroups) == repr(warm.options.orthogroups) == repr(expected.options.orthogroups)
+    assert cold.options.orthogroups is not groups  # the members moved
+    assert warm.unmatched == cold.unmatched == expected.unmatched
+    assert warm_identity is not None and warm_identity == cold_identity
+    assert consumer_keys <= 2  # the identity, not the members
+    assert warm_metrics["renderStageHit:derived_losat_entries"] == 1
+    assert "renderStageBuild:derived_losat_entries" not in warm_metrics
+
+    # Another frame: another identity and the projection of that frame.
+    flipped, flipped_identity, _, _ = project((reversed_binding, other))
+    assert flipped_identity != warm_identity
+    assert flipped.options.orthogroups is groups  # already in that frame
+    # Another orthogroup resource: rebuilt, never the stored projection.
+    identities[resource] = PreparedResourceIdentity("orthogroups", "token-orthogroups-2", 18)
+    rebuilt, rebuilt_identity, _, _ = project((binding, other))
+    assert rebuilt_identity != warm_identity
+    assert repr(rebuilt.options.orthogroups) == repr(expected.options.orthogroups)
+
+
 @pytest.mark.parametrize("cropped", [False, True])
 def test_web_protein_map_binding_equals_the_planned_search_frame_binding(tmp_path: Path, cropped: bool) -> None:
     # OV-1145: the Web builds each record's binding from its protein map with
