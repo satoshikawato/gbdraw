@@ -76,15 +76,27 @@ class ExportError(GbdrawError):
     """Raised when an explicitly requested library export cannot be generated."""
 
 
+# The Web error's context key of the room each side's labels need when they were not placed (CAPACITY-STOP).
+_CAPACITY_CONTEXT_KEYS: Mapping[LabelKind, str] = {
+    "circular_outer": "labelCapacityOuter",
+    "circular_inner": "labelCapacityInner",
+}
+
+
 def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
     # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
-    from gbdraw.labels.fit import label_fit_error_counts
+    from gbdraw.labels.fit import label_fit_error_counts, largest_capacities, shown_capacity_ratio
 
-    diagnostic: dict[str, object] = {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
-    if any(record.capacity for record in report.records):
+    largest = largest_capacities(report)
+    if largest:
         # Labels that need much more room than the map has were not placed: there is no fix to choose (CAPACITY-STOP).
-        diagnostic["reason"] = "LABEL_CAPACITY"
-    return diagnostic
+        # The Web words the room each side needs from its value (OV-2179).
+        return {
+            "code": "LABEL_LAYOUT",
+            "reason": "LABEL_CAPACITY",
+            **{_CAPACITY_CONTEXT_KEYS[kind]: shown_capacity_ratio(capacity) for kind, capacity in largest.items()},
+        }
+    return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
 
 
 class LabelsDoNotFitError(GbdrawError):

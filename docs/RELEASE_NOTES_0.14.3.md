@@ -71,6 +71,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Chrome and Edge); where the title would be narrower than 5rem, the header
   takes the two-row layout it has in a window 768 px wide or narrower. 0.14.2
   had both problems.
+- When Circular labels need much more room than the map has, the Web app
+  states the room they need in the chosen UI language: the record line of the
+  **Labels do not fit** dialog, the Generate error, and the **Labels may not
+  fit** note while Generate runs. Before, those sentences stayed English.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only

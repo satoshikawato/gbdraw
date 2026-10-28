@@ -19,9 +19,11 @@ globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { draftFieldsForConfigValues } = await import('../../gbdraw/web/js/services/session-request.js');
-const { normalizeLabelFitFailure, normalizeLabelFitRow, normalizeResultLabelFits } = await import(
-  '../../gbdraw/web/js/services/label-fit.js'
-);
+const {
+  labelCapacityNoticeText, labelCapacityText, normalizeLabelCapacityNotice, normalizeLabelFitFailure, normalizeLabelFitRow,
+  normalizeResultLabelFits
+} = await import('../../gbdraw/web/js/services/label-fit.js');
+const { SOURCE_LOCALE, setUiLocale } = await import('../../gbdraw/web/js/utils/i18n.js');
 const { createLabelFitDialog } = await import('../../gbdraw/web/js/app/label-fit-dialog.js');
 
 const Y_OFFSET = 'labels.unified_adjustment.outer_labels.y_radius_offset';
@@ -434,6 +436,50 @@ test('a capacity stop carries each record\'s ratio and Python\'s remedies; an un
     value.records = [{ ...value.records[0], capacityRatio: ratio }];
     assert.throws(() => normalizeReport(value), invalid, String(ratio));
   }
+  // Only the kinds whose room Python reads carry a ratio (the Web words them, OV-2179).
+  assert.equal(normalizeReport({ ...capacityReport(), records: [{ ...capacityReport().records[0], labelKind: 'circular_inner' }] })
+    .records[0].labelKind, 'circular_inner');
+  for (const labelKind of ['circular_embedded', 'linear', 'outer']) {
+    const value = capacityReport();
+    value.records = [{ ...value.records[0], labelKind }];
+    assert.throws(() => normalizeReport(value), invalid, labelKind);
+  }
+});
+
+// OV-2179: the room labels need is worded by the Web from Python's values, in the UI language; the record line of
+// the dialog and the overlay's notice are whole sentences per side and count.
+test('the room labels need reads in the UI language, from Python\'s values', async () => {
+  const outer = { labelKind: 'circular_outer', labelCount: 562, fontSize: 8, capacityRatio: 2.5 };
+  // `{record}` is the dialog's slot for the record ID in bold.
+  assert.equal(labelCapacityText(outer), '{record}: 562 outer labels at 8 pt need about 2.5 times the room around the map');
+  assert.equal(labelCapacityText({ ...outer, labelKind: 'circular_inner', labelCount: 1, fontSize: 7.5 }),
+    '{record}: 1 inner label at 7.5 pt needs about 2.5 times the room around the map');
+  const notice = normalizeLabelCapacityNotice(JSON.stringify({ recordId: 'AP027078.1', ...outer, fontSize: 6,
+    capacityRatio: 1.8 }));
+  assert.ok(Object.isFrozen(notice));
+  assert.equal(labelCapacityNoticeText(/** @type {NonNullable<typeof notice>} */ (notice)), 'AP027078.1: 562 outer labels'
+    + ' at 6 pt need about 1.8 times the room around the map, so they may not fit. Placing them can take minutes.');
+  const { default: ja } = await import('../../gbdraw/web/js/utils/i18n-catalogs/ja.js');
+  // This file's stand-in document has no element to take the page language.
+  const page = globalThis.document;
+  globalThis.document = undefined;
+  try {
+    await setUiLocale('ja', async () => ({ default: ja }));
+    for (const text of [labelCapacityText(outer), labelCapacityNoticeText(/** @type {NonNullable<typeof notice>} */ (notice))]) {
+      assert.match(text, /562/);
+      assert.match(text, /^(\{record\}|AP027078\.1)：/, 'Japanese puts a full-width colon after the record');
+      assert.doesNotMatch(text, /room around the map|outer labels|may not fit/, text);
+    }
+  } finally {
+    await setUiLocale(SOURCE_LOCALE);
+    globalThis.document = page;
+  }
+  // Text of another shape is no notice: Python's sentence, a missing value, another label kind.
+  for (const value of ['AP027078.1: 562 outer labels', JSON.stringify({ ...outer, recordId: 7 }), JSON.stringify(outer),
+    JSON.stringify({ recordId: 'r', ...outer, labelKind: 'circular_embedded' }),
+    JSON.stringify({ recordId: 'r', ...outer, capacityRatio: 0 }), undefined, 3]) {
+    assert.equal(normalizeLabelCapacityNotice(value), null, String(value));
+  }
 });
 
 test('the Web words exactly the remedies Python can name, in Python\'s order', async () => {
@@ -460,8 +506,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
     'Draw a Linear map.'
   ]);
   assert.deepEqual(state.rows, []);
-  assert.deepEqual(state.records.map((record) => [record.recordId, record.labelCount, record.labelKindTitle, record.fontSize,
-    record.counts, record.capacity]), [['AP027078.1', 562, 'outer labels', 8, 'need about 2.5 times the room around the map', true]]);
+  assert.deepEqual(state.records.map((record) => [record.recordId, record.labelKind, record.labelCount, record.fontSize,
+    record.capacityRatio]), [['AP027078.1', 'circular_outer', 562, 8, 2.5]]);
   assert.equal(state.selectedKind, '');
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(state.show, false);
@@ -470,7 +516,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
   assert.equal(state.capacity, false);
   assert.deepEqual(state.remedies, []);
-  assert.deepEqual(state.records.map((record) => record.capacity), [false]);
+  assert.deepEqual(state.records.map((record) => record.capacityRatio), [null]);
 
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
@@ -481,8 +527,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, /<p v-else-if="!labelFitDialog\.rows\.length"/);
   assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
-  // A record not placed for lack of room reads as Python's sentence; other records keep their counts in brackets.
-  assert.match(markup, / pt <template v-if="record\.capacity">\{\{ record\.counts \}\}<\/template><template v-else>\(\{\{ record\.counts \}\}\)<\/template>/);
+  // A record not placed for lack of room reads in the Web's words (OV-2179); other records keep their counts in brackets.
+  assert.match(markup, /<i18n-text v-if="record\.capacityRatio !== null" :text="labelCapacityText\(record\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
 });
 
 // The status line the shared choice dialog shows, from the label fit dialog's

@@ -61,6 +61,7 @@ REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEA
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
 ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY""".split())
+_LABEL_CAPACITY_KEYS = frozenset({"labelCapacityOuter", "labelCapacityInner"})
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
     "subjectRecordIndex".split()
@@ -233,6 +234,11 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
     counts = diagnostic.get("labelFitCounts")
     if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
         context["labelFitCounts"] = counts
+    # The room each side's labels need when they were not placed (CAPACITY-STOP); the Web words it (OV-2179).
+    for key in sorted(_LABEL_CAPACITY_KEYS & diagnostic.keys()):
+        room = diagnostic[key]
+        if diagnostic["code"] == "LABEL_LAYOUT" and type(room) is float and 0.0 < room <= 1_000_000.0:
+            context[key] = room
     return diagnostic["code"], context
 
 
@@ -339,7 +345,7 @@ def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> 
     context = {key: value for key, value in context.items()
                if (isinstance(value, str) and len(value) <= 80 and
                    (key != "reason" or value in {"EMPTY_ENDPOINT", "INDEX_ALIGNMENT", "SOURCE_INDEX", "SOURCE_VIEW_CONFLICT"} or code != "COMPARISON_IDENTITY"))
-               or (type(value) is int and 0 <= value <= 10_000_000)}
+               or (type(value) in (int, float) and 0 <= value <= 10_000_000)}
     payload = {"code": code, "operation": operation, "stage": stage, "context": context}
     secondary = getattr(error, "_web_error_secondary", None)
     if isinstance(secondary, list) and secondary:

@@ -15,7 +15,8 @@
 // Cancel does and shows the field that writes that record's name lines, found
 // by the record's drawn index; it applies nothing. Labels that need much more
 // room than the map has were not placed (CAPACITY-STOP): the dialog has no rows
-// and lists the ways to make room Python names, with Close only.
+// and lists the ways to make room Python names, with Close only; it words the
+// room they need from Python's values (`labelCapacityText`, OV-2179).
 import { LABEL_CAPACITY_REMEDY_WORDS, labelFitRowOffered, normalizeLabelFitRow } from '../services/label-fit.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 
@@ -43,9 +44,10 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {boolean} drawn True over a drawn figure (crossing leaders or labels over the definition text).
  * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
  * @property {string[]} remedies The ways to make room, as the Web words them (i18n keys), in Python's order.
- * @property {{ recordId: string, recordIndex: number | null, labelKindTitle: string, labelCount: number,
- *   fontSize: number, counts: string, capacity: boolean }[]} records Python's counts text per record (OV-699: a refused
- *   record says why); a record not placed for lack of room (`capacity`) shows Python's sentence without brackets.
+ * @property {{ recordId: string, recordIndex: number | null, labelKind: string, labelKindTitle: string,
+ *   labelCount: number, fontSize: number, counts: string, capacityRatio: number | null }[]} records Python's counts
+ *   text per record (OV-699: a refused record says why); a record not placed for lack of room (`capacityRatio`) is
+ *   worded by `labelCapacityText` instead.
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
  * @property {boolean} finishing Apply or Cancel waits for the row being computed.
@@ -174,11 +176,12 @@ export const createLabelFitDialog = ({
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
       recordIndex: record.recordIndex,
+      labelKind: record.labelKind,
       labelKindTitle: record.labelKindTitle,
       labelCount: record.labelCount,
       fontSize: record.fontSize,
       counts: record.counts,
-      capacity: record.capacityRatio !== null
+      capacityRatio: record.capacityRatio
     }));
     // Only a drawn figure has the definition to edit: after a Generate that drew nothing the preview may show an
     // older figure. One button per drawn record, by its index (two records may share an ID).

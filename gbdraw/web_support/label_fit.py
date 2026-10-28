@@ -12,6 +12,7 @@ searched for at most ``WEB_ROW_SEARCH_SECONDS`` (LP-D60).
 
 from __future__ import annotations
 
+import json
 import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -48,6 +49,7 @@ from gbdraw.labels.fit import (
     label_fit_record_counts,
     label_kind_title,
     row_note,
+    shown_capacity_ratio,
     split_row_option_values,
 )
 
@@ -135,9 +137,21 @@ class LabelFitRecordPayload(TypedDict):
     definitionOverlaps: int
     regionOverlaps: int
     refused: bool
-    # The room the labels need as a multiple of the room around the map, when they were not placed (CAPACITY-STOP).
+    # The room the labels need as a multiple of the room around the map, as shown (``shown_capacity_ratio``), when
+    # they were not placed (CAPACITY-STOP); the Web words such a record from its values, not from ``counts``.
     capacityRatio: float | None
     counts: str
+
+
+class LabelCapacityNoticePayload(TypedDict):
+    """One side of a record whose labels may not fit (CAPACITY-WARN), as the Web words it while the render runs."""
+
+    recordId: str
+    labelKind: LabelKind
+    labelCount: int
+    fontSize: float
+    # As shown (``shown_capacity_ratio``).
+    capacityRatio: float
 
 
 class LabelFitReportPayload(TypedDict):
@@ -233,7 +247,7 @@ def _record_payload(record: LabelFitRecord) -> LabelFitRecordPayload:
         "definitionOverlaps": record.fit.definition_overlaps,
         "regionOverlaps": record.fit.region_overlaps,
         "refused": record.refused,
-        "capacityRatio": float(record.capacity.ratio) if record.capacity is not None else None,
+        "capacityRatio": shown_capacity_ratio(record.capacity) if record.capacity is not None else None,
         # A refused radial record has no counts; the reason stands in (OV-699).
         "counts": label_fit_record_counts(record),
     }
@@ -256,10 +270,23 @@ def label_fit_report_payload(report: LabelFitReport, mode: LabelFitMode) -> Labe
     }
 
 
+def label_capacity_notice_payload(warning: LabelsMayNotFitWarning) -> LabelCapacityNoticePayload:
+    """The values of a ``LabelsMayNotFitWarning`` the Web words in the UI language (OV-2179)."""
+
+    return {
+        "recordId": warning.record_id,
+        "labelKind": warning.label_kind,
+        "labelCount": warning.capacity.label_count,
+        "fontSize": float(warning.capacity.font_size),
+        "capacityRatio": shown_capacity_ratio(warning.capacity),
+    }
+
+
 @contextmanager
 def label_capacity_notices(notice: Callable[[str], object]) -> Iterator[None]:
-    """Send each ``LabelsMayNotFitWarning`` of a render to ``notice`` as Python's sentence, when it is warned
-    (CAPACITY-WARN): before the labels are placed, so the Web shows it while the render runs."""
+    """Send each ``LabelsMayNotFitWarning`` of a render to ``notice`` as the JSON text of its
+    :class:`LabelCapacityNoticePayload`, when it is warned (CAPACITY-WARN): before the labels are placed, so the Web
+    shows it while the render runs."""
 
     with warnings.catch_warnings():
         warnings.simplefilter("always", LabelsMayNotFitWarning)
@@ -273,8 +300,8 @@ def label_capacity_notices(notice: Callable[[str], object]) -> Iterator[None]:
             file: TextIO | None = None,
             line: str | None = None,
         ) -> None:
-            if issubclass(category, LabelsMayNotFitWarning):
-                notice(str(message))
+            if isinstance(message, LabelsMayNotFitWarning):
+                notice(json.dumps(label_capacity_notice_payload(message)))
                 return
             show_other(message, category, filename, lineno, file, line)
 
@@ -399,12 +426,14 @@ class LabelFitRowSearches:
 __all__ = [
     "LABEL_FIT_PAYLOAD_SCHEMA",
     "WEB_ROW_SEARCH_SECONDS",
+    "LabelCapacityNoticePayload",
     "LabelFitFailurePayload",
     "LabelFitMode",
     "LabelFitRecordPayload",
     "LabelFitReportPayload",
     "LabelFitRowPayload",
     "LabelFitRowSearches",
+    "label_capacity_notice_payload",
     "label_capacity_notices",
     "label_fit_failure",
     "label_fit_mode",

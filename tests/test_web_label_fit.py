@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 import warnings
@@ -102,14 +103,24 @@ def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reaso
     payload = label_fit_report_payload(report, "circular")
 
     (record,) = payload["records"]
-    assert record["capacityRatio"] == 2.49
-    assert record["counts"] == "need about 2.5 times the room around the map"
+    # OV-2179: the ratio as shown (one decimal place, Python's rounding); the Web words the record from its values.
+    assert record["capacityRatio"] == 2.5
+    assert (record["labelKind"], record["labelCount"], record["fontSize"]) == ("circular_outer", 562, 6.0)
     assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
     error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
-    assert error["context"] == {
-        "reason": "LABEL_CAPACITY",
-        "labelFitCounts": "Outer labels need about 2.5 times the room around the map.",
-    }
+    assert error["context"] == {"reason": "LABEL_CAPACITY", "labelCapacityOuter": 2.5}
+    # Both sides: the largest room of each.
+    inner = LabelCapacityRecord(40, 6.0, 1.84, ("filter", "label_text", "linear"))
+    both = LabelFitReport(
+        records=(
+            *report.records,
+            LabelFitRecord("AP027078.1", "circular_inner", 40, 6.0, LabelFit(0, 0), capacity=inner),
+        ),
+        rows=(),
+        drawn=False,
+    )
+    error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=both), operation="generate", stage="render")
+    assert error["context"] == {"reason": "LABEL_CAPACITY", "labelCapacityInner": 1.8, "labelCapacityOuter": 2.5}
     # Nothing to compute: the failure keeps no row token.
     searches = LabelFitRowSearches()
     failure = LabelsDoNotFitError("PRIVATE", report=report)
@@ -127,7 +138,12 @@ def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> No
             )
             warnings.warn(LabelsMayNotFitWarning("AGAIN", record_id="r", label_kind="circular_inner", capacity=capacity))
             warnings.warn(UserWarning("other"))
-    assert notices == ["SENTENCE", "AGAIN"]
+    # OV-2179: the values, not Python's English sentence, so the Web words them in the UI language.
+    assert [json.loads(notice) for notice in notices] == [
+        {"recordId": "NC_005859.1", "labelKind": "circular_outer", "labelCount": 195, "fontSize": 14.0,
+         "capacityRatio": 1.4},
+        {"recordId": "r", "labelKind": "circular_inner", "labelCount": 195, "fontSize": 14.0, "capacityRatio": 1.4},
+    ]
     assert [str(item.message) for item in caught] == ["other"]
 
 

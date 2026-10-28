@@ -291,6 +291,9 @@ const PHRASES = Object.freeze({
   keptBelowAmong: 'Below it, {px} px are kept for the tracks inside it, among them {tracks}.',
   // OV-1389 review item 6: each remedy is a whole sentence of `SWITCHED_TRACKS`, after one of these.
   makeRoom: 'To make room, do the following.', makeRoomAny: 'To make room, do one of the following.',
+  // OV-2179: the room the labels not placed need (CAPACITY-STOP), the largest of each side, as Python sends it.
+  outerLabelRoom: 'Outer labels need about {ratio} times the room around the map.',
+  innerLabelRoom: 'Inner labels need about {ratio} times the room around the map.',
   and: '{first} and {second}',
   position: 'At character {position}.', requiredColumns: 'Required columns: {count}.', loadedRecords: 'Loaded records: {count}.',
   exception: 'Python exception: {type}.', applyAgain: 'Review the updated preview and Apply again.',
@@ -403,6 +406,9 @@ const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
  * @property {number} [queryRecordIndex]
  * @property {number} [subjectRecordIndex]
  * @property {string} [labelFitCounts] Python's sentence of the label fit counts, shown as sent.
+ * @property {number} [labelCapacityOuter] The room the outer labels not placed need, as a multiple of the room around
+ *   the map (CAPACITY-STOP), to one decimal place as Python rounds it.
+ * @property {number} [labelCapacityInner] The same for the inner labels.
  * @property {number} [sessionVersion] The version of a Session file this app does not read.
  * @property {number} [latestSessionVersion] The newest Session version this app reads.
  * @property {string} [readSessionVersions] The Session versions this app reads, as words ("27–33, 39–42, and 44").
@@ -670,6 +676,10 @@ const contextFor = (value) => {
   if (typeof value.labelFitCounts === 'string' && value.labelFitCounts.length <= 80 && /^[\x20-\x7e]+$/.test(value.labelFitCounts)) {
     context.labelFitCounts = value.labelFitCounts;
   }
+  for (const key of /** @type {const} */ (['labelCapacityOuter', 'labelCapacityInner'])) {
+    const room = value[key];
+    if (typeof room === 'number' && Number.isFinite(room) && room > 0 && room <= 1000000) context[key] = room;
+  }
   if (typeof value.keptInsideTracks === 'string' && value.keptInsideTracks.length <= 80) {
     const tracks = [...new Set(value.keptInsideTracks.split(','))].filter((track) => Object.hasOwn(SWITCHED_TRACKS, track));
     if (tracks.length) context.keptInsideTracks = tracks.join(',');
@@ -755,7 +765,7 @@ export const normalizeUserFacingError = (value, {
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
-  const { queryRecordIndex, subjectRecordIndex, labelFitCounts, exceptionType } = result.context;
+  const { queryRecordIndex, subjectRecordIndex, labelFitCounts, labelCapacityOuter, labelCapacityInner, exceptionType } = result.context;
   // One part per sentence, in the order the summary shows them.
   /** @type {(ErrorTextPart | null | false | '' | undefined)[]} */
   const pieces = [
@@ -781,6 +791,8 @@ export const normalizeUserFacingError = (value, {
     innerPx !== undefined && outerPx !== undefined && { text: PHRASES.band, params: { inner: innerPx, outer: outerPx } },
     ...trackRoomParts(result.context),
     labelFitCounts && { text: labelFitCounts, verbatim: /** @type {const} */ (true) },
+    labelCapacityOuter !== undefined && { text: PHRASES.outerLabelRoom, params: { ratio: labelCapacityOuter } },
+    labelCapacityInner !== undefined && { text: PHRASES.innerLabelRoom, params: { ratio: labelCapacityInner } },
     // The context keeps Python's zero-based index; people count from one.
     position !== undefined && { text: PHRASES.position, params: { position: position + 1 } },
     columnCount !== undefined && { text: PHRASES.requiredColumns, params: { count: columnCount } },

@@ -679,8 +679,14 @@ _CLI_CAPACITY_REMEDIES: Mapping[LabelCapacityRemedy, str] = {
 }
 
 
+def shown_capacity_ratio(capacity: LabelCapacityRecord) -> float:
+    """The room the labels need as every surface shows it: the ratio to one decimal place."""
+
+    return round(capacity.ratio, 1)
+
+
 def _room_needed(capacity: LabelCapacityRecord) -> str:
-    return f"need about {capacity.ratio:.1f} times the room around the map"
+    return f"need about {shown_capacity_ratio(capacity):.1f} times the room around the map"
 
 
 def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: LabelCapacityRecord, *, placed: bool) -> str:
@@ -697,8 +703,22 @@ def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: Lab
 DEFINITION_TEXT_REMEDY = "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
 
 
+def largest_capacities(report: LabelFitReport) -> dict[LabelKind, LabelCapacityRecord]:
+    """The room of each label kind whose labels were not placed (CAPACITY-STOP): the largest of its records, in the
+    order the kinds first appear."""
+
+    largest: dict[LabelKind, LabelCapacityRecord] = {}
+    for record in report.records:
+        if record.capacity is not None and (
+            record.label_kind not in largest or record.capacity.ratio > largest[record.label_kind].ratio
+        ):
+            largest[record.label_kind] = record.capacity
+    return largest
+
+
 def label_fit_error_counts(report: LabelFitReport) -> str:
-    """The counts sentence of the Web error over a figure that was not drawn.
+    """The counts sentence of the Web error over a figure that was not drawn and has no record left unplaced for lack
+    of room (those the Web words from :func:`largest_capacities`).
 
     A refused record's counts are those of the layout it refused, so a report
     with one states the refusal instead (OV-1194).
@@ -706,16 +726,6 @@ def label_fit_error_counts(report: LabelFitReport) -> str:
 
     if any(record.refused for record in report.records):
         return f"Radial labels {_RADIAL_REFUSAL}."
-    largest: dict[LabelKind, LabelCapacityRecord] = {}
-    for record in report.records:
-        if record.capacity is not None and (
-            record.label_kind not in largest or record.capacity.ratio > largest[record.label_kind].ratio
-        ):
-            largest[record.label_kind] = record.capacity
-    if largest:
-        return " ".join(
-            f"{_KIND_WORDS[kind].capitalize()} labels {_room_needed(capacity)}." for kind, capacity in largest.items()
-        )
     return f"Overlapping label pairs: {report.overlap_pairs}. Crossing leader pairs: {report.crossing_pairs}."
 
 
@@ -915,6 +925,7 @@ __all__ = [
     "fit_counts",
     "format_label_fit_report",
     "label_fit_error_counts",
+    "largest_capacities",
     "label_capacity_sentence",
     "label_fit_notice",
     "label_fit_outcome",
@@ -929,6 +940,7 @@ __all__ = [
     "raise_or_warn",
     "row_note",
     "shapes_overlap",
+    "shown_capacity_ratio",
     "split_row_option_values",
     "switch_row",
     "verified_row",
