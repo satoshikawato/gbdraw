@@ -669,7 +669,7 @@ const HARNESS_CANNOT_LOAD = new Map([
   ['feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz', 'feature extraction Worker'],
   ['hash-color-rule-linear-rc.v30.gbdraw-session.json.gz', 'feature extraction Worker'],
   // Their comparison tables are converted to the display frame by a Worker
-  // (`convertMainSessionComparisonFrames`; OV-775, C-OD19 F2).
+  // (OV-775, C-OD19 F2; Python converts them now).
   ['q-frame-main-web-losatn.v42.gbdraw-session.json.gz', 'comparison conversion Worker'],
   ['q-frame-main-web-upload.v42.gbdraw-session.json.gz', 'comparison conversion Worker']
 ]);
