@@ -1243,9 +1243,9 @@ def capture_gui_session_reproduction(
         )
 
         page.get_by_role("button", name="Reset Settings", exact=True).click()
-        reset_prompt = page.get_by_role("dialog", name="Reset all settings?", exact=True)
+        reset_prompt = page.get_by_role("dialog", name="Reset settings?", exact=True)
         expect(reset_prompt).to_be_visible()
-        reset_prompt.get_by_role("button", name="Reset all settings", exact=True).click()
+        reset_prompt.get_by_role("button", name="Reset all drawings", exact=True).click()
         expect(reset_prompt).to_have_count(0)
         expect(page.get_by_label("Output Prefix", exact=True)).to_have_value("")
         expect(page.get_by_label("Species", exact=True)).to_have_value("")

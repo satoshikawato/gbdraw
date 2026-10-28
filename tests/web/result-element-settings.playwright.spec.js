@@ -516,7 +516,7 @@ test('Circular, the default layout with a plot title: an edit in the popup is on
 
   // Reset Settings closes it.
   await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
-  await page.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
   await expectNoPopup(page, 'Reset Settings');
   expect(await popupState(page, 'titles')).toMatchObject({ copies: 1, inPane: 1 });
 });

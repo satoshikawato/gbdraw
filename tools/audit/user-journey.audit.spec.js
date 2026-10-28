@@ -642,7 +642,7 @@ journey('J5', 'Feature editing and Reset', 20, async ({ page, steps }) => {
     await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
     await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
     await settleLive(page);
-    return { prompt: 'Reset all settings?' };
+    return { prompt: 'Reset settings?' };
   });
   // PD-OI-066: right after Reset Settings, the shown Result and the Legend list
   // equal what the next Generate draws from the reset draft (OV-287, OV-289, OV-290).

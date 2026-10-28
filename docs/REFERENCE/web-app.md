@@ -1487,7 +1487,7 @@ Generate gives the loaded diagram. Ctrl+Z undoes and Ctrl+Shift+Z or Ctrl+Y redo
 select has focus. In a text field these keys keep the browser's text undo. Undo and Redo, like a failed Session Load, restore each setting exactly as
 it was: a setting that was not set, such as a track slot side or the Circular
 multi-record legend position, stays unset. **Reset Settings** is broader than undo and asks
-first; its dialog lists what it resets and what stays, and **Reset all settings** applies it. Every Legend rename, of a feature row or a track row such as GC content, returns
+first; its dialog lists what it resets and what stays. **Reset this drawing** resets the shown drawing as one step of its History; **Reset all drawings** resets every drawing and also the LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, and Instant Preview, as one step that one Undo from any drawing restores; **Cancel** changes nothing. Every Legend rename, of a feature row or a track row such as GC content, returns
 to the caption Python draws. The reset also removes the label table that a loaded
 Session saved and every Similarity group name, including the saved names of
 groups that the current results do not show. The **Default colors file**,

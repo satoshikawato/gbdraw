@@ -185,7 +185,7 @@ def test_h_gui_14_writes_current_gzip_session_and_uses_a_fresh_context() -> None
         "first_capture.close()",
         "second_capture = open_browser_capture",
         '"[data-app-notice]"',
-        'name="Reset all settings?", exact=True',
+        'name="Reset settings?", exact=True',
         "_assert_semantically_equivalent(source_report, restored_report)",
         "_assert_semantically_equivalent(source_report, exported)",
         "_stabilize_static_capture_surface(page)",
