@@ -31,6 +31,10 @@ write-up of a release.
 - Fixed: in the Web app, a Legend row's stroke stays on the Result when a color rule edit gives the row
   another key (for example a caption edit of another rule that leaves the row's color alone in it), as
   Generate draws it. Before, the row showed the default line until the next Generate (OV-1985, #1433).
+- Fixed: in the Web app, a Legend row stroke whose row the Result no longer draws (for example the `CDS`
+  row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
+  strokes no feature after a later edit, as Generate draws it. Before, a later rule edit or Legend delete
+  stroked the features of the row's old color again until the next Generate (OV-1987, #PRNUM).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).

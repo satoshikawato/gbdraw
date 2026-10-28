@@ -486,15 +486,18 @@ export const namedLegends = (svg) => {
  * @property {readonly RenderedFeatureId[]} namedIds The features a feature color edit names into the row.
  * @property {readonly RenderedFeatureId[]} ownStrokeIds The features with a stroke edit of their own.
  * @property {SwatchColor | null} draftColor The color the draft gives the row's features where the Result
- *   predates it (a live preview of the row's rule or palette color); null: Python's row color.
+ *   predates it (a live preview of the row's rule or palette color); null: Python's row color. Used only
+ *   where the Result draws the row.
  */
 
 // The features a stroke on a Legend row reaches in one Result (R3, PD-OI-066,
 // OV-123, OV-288): the features the row lists, else the features a feature
 // color edit names into the row and the features drawn in the color the
 // renderer gives the row's features, Python's row color (R15-4), never the
-// color the row's swatch shows. A feature with a stroke edit of its own keeps
-// it: the explicit per-feature edit wins over the row. The executor reads it
+// color the row's swatch shows. A row the Result does not draw reaches no
+// feature by color, whatever color the draft gives its key, as Generate draws
+// it (OV-1987). A feature with a stroke edit of its own keeps it: the
+// explicit per-feature edit wins over the row. The executor reads it
 // for every Result it styles (services/svg-result-ingestion.js), and the
 // feature popup for the feature it shows.
 /**
@@ -507,7 +510,7 @@ export const legendRowFeatureIds = ({ listedIds, namedIds, ownStrokeIds, draftCo
   const listed = new Set(listedIds);
   const named = new Set(namedIds);
   const own = new Set(ownStrokeIds);
-  const color = paintKey(draftColor ?? pythonColor);
+  const color = pythonColor === null ? null : paintKey(draftColor ?? pythonColor);
   /** @type {Set<RenderedFeatureId>} */
   const reached = new Set();
   for (const [id, fill] of drawnFills) {
