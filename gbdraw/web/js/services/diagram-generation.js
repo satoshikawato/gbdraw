@@ -23,7 +23,8 @@ import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { HeldResourceDescriptors, ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { HeldResources } from './session-request.js' */
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
@@ -849,7 +850,7 @@ const settleActiveRequest = (request, callback) => {
 
 /**
  * @param {GenerationPayload} [payload]
- * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null, heldResources?: HeldResourceDescriptors }} [options]
+ * @param {{ onProgress?: ((progress: RequestProgress) => void) | null, held?: Readonly<HeldRenderState>, drawingId?: string | null, heldResources?: HeldResources }} [options]
  *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
  *   catalog's revision and each segment's revision and byte count are posted.
  *   `drawingId`: the drawing it renders; the Worker keeps each drawing's prepared inputs

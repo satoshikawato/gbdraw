@@ -1380,6 +1380,7 @@ export const executeCanonicalRenderCandidate = async ({
   const held = selectHeldRenderState(heldFeatureCatalog, heldResults, resultNames);
   // `heldResources`: the files the drawing's draft holds while the request omits them, which
   // the Worker keeps (gbdraw/web/CLAUDE.md, Runtime data flow); a loaded request has none.
+  const committedHeldResources = /** @type {CommittedCanonicalSession['heldResources']} */ (canonical.heldResources) ?? {};
   const generationResponse = generationExecutor
     ? await generationExecutor({
         request: canonical.renderRequest,
@@ -1388,7 +1389,7 @@ export const executeCanonicalRenderCandidate = async ({
     : await runDiagramGeneration({
         request: canonical.renderRequest,
         resources: canonical.resources
-      }, { onProgress: onProgress, held, drawingId, heldResources: canonical.heldResources ?? {} });
+      }, { onProgress: onProgress, held, drawingId, heldResources: committedHeldResources });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
     return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };

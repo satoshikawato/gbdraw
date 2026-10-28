@@ -6732,7 +6732,12 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
     throw new Error('A cropped record cannot be rotated from a feature.');
   }
 
-  const candidate = cloneCanonicalJsonValue(committed);
+  // The request and its metadata are cloned; the file descriptors are shared, since no
+  // transform rewrites them and each carries a file's base64 (held files included).
+  const { resources, heldResources, ...rest } = /** @type {CommittedCanonicalSession} */ (committed);
+  const candidate = {
+    ...cloneCanonicalJsonValue(rest), resources: { ...resources }, ...(heldResources ? { heldResources } : {})
+  };
   let records = candidate.renderRequest.records;
   let targetIndex = sourceIndex;
   let materialized = false;

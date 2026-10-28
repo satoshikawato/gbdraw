@@ -15,6 +15,7 @@ import {
 /** @import { ResourceContentToken } from './file-content-cache.js' */
 /** @import { ResourcePayloadOwner } from './resource-payload-owner.js' */
 /** @import { FileLike } from './session-resource-backing.js' */
+/** @import { HeldResources } from './session-request.js' */
 
 /**
  * A canonical render resource as a Session or request holds it: base64 text,
@@ -110,17 +111,12 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
 };
 
 /**
- * The files a drawing's draft holds while its request omits them (a hidden
- * Depth file), by an id of their own (gbdraw/web/CLAUDE.md, Runtime data flow).
- * @typedef {Readonly<Record<string, unknown>>} HeldResourceDescriptors
- */
-/**
  * A request a drawing has committed, with the resources it names and the
  * files its draft held then (none for a loaded request).
  * @typedef {{
  *   request: unknown,
  *   resources: Readonly<Record<string, unknown>> | null | undefined,
- *   heldResources: HeldResourceDescriptors | undefined
+ *   heldResources: HeldResources | undefined
  * }} CommittedResourceSet
  */
 /**
@@ -190,7 +186,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
    * @param {{
    *   request?: unknown,
    *   resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null,
-   *   heldResources?: HeldResourceDescriptors,
+   *   heldResources?: HeldResources,
    *   retain?: boolean
    * }} [payload]
    */
