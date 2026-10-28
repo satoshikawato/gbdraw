@@ -1495,7 +1495,6 @@ def _upgrade_mode_scoped_session(
     from gbdraw.api.session_compat import (
         describe_unmatched_frame_item,
         drawn_frame_protein_results_to_search_frame,
-        replace_resource_bytes,
         search_frame_protein_resources,
         stores_protein_results,
     )
@@ -1538,12 +1537,22 @@ def _upgrade_mode_scoped_session(
                     raise
                 except ValidationError as exc:
                     raise SessionConversionError(str(exc)) from exc
-        resources = loaded._data["resources"]
-        data["resources"] = {
-            **resources,
-            **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
-        }
+        data["resources"] = _with_resource_bytes(loaded._data["resources"], replaced)
     return SessionDocument({**data, "version": MODE_SCOPED_SESSION_MAX_VERSION})
+
+
+def _with_resource_bytes(
+    resources: Mapping[str, Mapping[str, Any]],
+    replaced: Mapping[str, bytes],
+) -> dict[str, Any]:
+    """``resources`` with the bytes of ``replaced`` under their stored IDs."""
+
+    from gbdraw.api.session_compat import replace_resource_bytes
+
+    return {
+        **resources,
+        **{key: replace_resource_bytes(resources[key], content) for key, content in replaced.items()},
+    }
 
 
 def upgrade_session_document(
@@ -1720,14 +1729,16 @@ def _project_adjunct(
     *,
     report: DraftMigrationReport | None,
     source_features: Mapping[str, Any] | None = None,
+    resources: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """The current drawing state and Web file inventory of a Session 27-44."""
+    """The current drawing state and Web file inventory of a Session 27-44;
+    its Web file cards hold ``resources`` when given (the converted ones)."""
 
     from gbdraw.session_migration import project_session_adjunct_for_current_write
 
     try:
         return project_session_adjunct_for_current_write(
-            loaded._data,
+            loaded._data if resources is None else {**loaded._data, "resources": resources},
             source_version=loaded.version,
             source_features=source_features,
             report=report,
@@ -1867,6 +1878,7 @@ def _upgrade_to_current(
     from gbdraw.api.session_compat import (
         adapt_session_request,
         project_legacy_similarity_alignment_for_current_write,
+        search_frame_nucleotide_resources,
     )
     from gbdraw.web_support.feature_catalog import promote_legacy_feature_catalog
 
@@ -1875,21 +1887,27 @@ def _upgrade_to_current(
         output_directory=Path("."),
         temporary_directory=temporary_directory,
     ) as materialized:
-        # Rendered-ID edits without a saved catalog are named through the
-        # sources read again, as Web Load reads them.
-        state, web_file_inventory = _project_adjunct(
-            loaded,
-            report=report,
-            source_features=read_legacy_source_features(source, materialized.resource_paths),
-        )
+        source_features = read_legacy_source_features(source, materialized.resource_paths)
         request = _decode_drawing(materialized, drawing, stored_request_schema=stored_request_schema)
         try:
             adapted = adapt_session_request(request, drawing.artifacts)
+            # The rows a main Session stored in the display frame keep their
+            # stored resource ID in the search frame, so a Web file card that
+            # names the table reads the rows the request draws (OV-2080).
+            resources = _with_resource_bytes(
+                source["resources"],
+                search_frame_nucleotide_resources(drawing.request, request, adapted.request),
+            )
         except SessionError:
             raise
         except ValidationError as exc:
             raise SessionConversionError(str(exc)) from exc
         require_search_frame_protein_results(adapted.migration_report)
+        # Rendered-ID edits without a saved catalog are named through the
+        # sources read again, as Web Load reads them.
+        state, web_file_inventory = _project_adjunct(
+            loaded, report=report, source_features=source_features, resources=resources,
+        )
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,
@@ -1933,7 +1951,7 @@ def _upgrade_to_current(
                 state=state,
             ),
             web_file_inventory=web_file_inventory,
-            resources=source["resources"],
+            resources=resources,
         )
     for warning in warnings:
         logger.warning("WARNING: %s", warning)

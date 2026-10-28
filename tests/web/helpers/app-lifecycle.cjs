@@ -330,6 +330,16 @@ const assertDiagramWorkerIdle = async (page, label = 'Expected the diagram Worke
   return diagnostics.worker;
 };
 
+// A Session 27-44 Load converts through Python (DESIGN 4.3, PD-OI-044 rev 4
+// "May retire"): one `upgradeLegacySession` helper call and no render run.
+const assertLegacyLoadConvertedOnce = async (page, label = 'A Session 27-44 Load makes one Python conversion') => {
+  const activity = await getDiagramWorkerActivity(page);
+  const operations = activity.instances.flatMap((instance) => (instance.helpers || []).map((helper) => helper.operation));
+  expect({ operations, runs: activity.runs }, `${label}:\n${compactJson(activity)}`)
+    .toEqual({ operations: ['upgradeLegacySession'], runs: 0 });
+  return activity;
+};
+
 const assertSessionLoadLeftWorkerIdle = (page) => assertDiagramWorkerIdle(
   page,
   'Loading a saved preview must not initialize the diagram Worker'
@@ -972,6 +982,7 @@ module.exports = {
   assertOperationHealth,
   readErrorSignature,
   assertSessionLoadLeftWorkerIdle,
+  assertLegacyLoadConvertedOnce,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
   diffUserOwnedState,

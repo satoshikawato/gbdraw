@@ -201,8 +201,13 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
 /**
  * What only the source version says (DESIGN §4.2): Session 48 card rows are
  * file rows when it has no Web draft; Sessions 46-47 keep protein Results in
- * the drawn frame. No other reader compares source versions.
- * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean }} SourceFacts
+ * the drawn frame; Sessions 46 and later saved records of Python's paint with
+ * their Results (a Session 27-44 saved none, and Python's conversion adds
+ * none: Load records them, `createSavedResultPlan`). No other reader compares
+ * source versions. `resultsRecordPythonPaint` is the Web's own: Python's twin
+ * (`ModeScopedSourceFacts`) reads no Results.
+ * @typedef {{ cardRowsAreFileRows: boolean, proteinResultsInDrawnFrame: boolean,
+ *   resultsRecordPythonPaint: boolean }} SourceFacts
  */
 /**
  * The one reading of a Session file's source facts by its version, for the
@@ -217,7 +222,8 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  */
 export const sessionSourceFactsOf = (version, hasDraft) => ({
   cardRowsAreFileRows: version >= FILE_IMPORT_ORIGIN_SESSION_VERSION && !hasDraft,
-  proteinResultsInDrawnFrame: version >= MODE_SCOPED_SESSION_VERSION && version < FILE_IMPORT_ORIGIN_SESSION_VERSION
+  proteinResultsInDrawnFrame: version >= MODE_SCOPED_SESSION_VERSION && version < FILE_IMPORT_ORIGIN_SESSION_VERSION,
+  resultsRecordPythonPaint: version >= MODE_SCOPED_SESSION_VERSION
 });
 /**
  * One drawing of a Session 49 (`SessionDrawing`, gbdraw/session_contract.py).

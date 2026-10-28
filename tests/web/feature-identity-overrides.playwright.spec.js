@@ -643,8 +643,8 @@ test('an older Session whose sources cannot be read again fails to load and keep
   await openFresh(page);
   const runtimeAssets = /pyodide\.asm\.(?:js|wasm)(?:\?|$)/;
   await page.context().route(runtimeAssets, (route) => route.abort());
-  // A current Session loads without the diagram Worker.
-  await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
+  // A Session 46-49 loads without the diagram Worker.
+  await loadSession(page, 'tests/fixtures/sessions/record-identity-circular-single.v48.gbdraw-session.json.gz');
   const loaded = () => page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
@@ -653,7 +653,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
         row.labelVisibility, row.labelText]).sort(), records: app.linearSeqs.map((seq) => seq.gb?.name || null) };
   });
   const previous = await loaded();
-  expect(previous.rows.length).toBe(3);
+  expect(previous.rows.length).toBe(2);
   await page.locator('input[accept^=".json,"]').setInputFiles(file);
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
   await settle(page);

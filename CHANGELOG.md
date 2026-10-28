@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
+  tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
+  Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the
+  draft no longer holds the file, a render draws it again, or another drawing renders. The request, the Session
+  and the Result are unchanged.
 - Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
   the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
   again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change

@@ -3731,3 +3731,99 @@ test('TK-03: stepping a Depth row track index past the series adds no series', a
   expect(saved.status, JSON.stringify(saved)).toBe('saved');
   await pending;
 });
+
+// While Show Depth is off the draft still holds the Depth file: the page keeps its
+// bytes staged and the Worker its parsed table and stages, for the drawing that
+// renders (gbdraw/web/CLAUDE.md, Runtime data flow). Show Depth after hide stages
+// nothing and builds no Depth stage, and its Result equals the one before the hide.
+test('Show Depth after hide reuses the held Depth file and its stages', async ({ page }) => {
+  test.setTimeout(240000);
+  const genbank = readFileSync(sparseGenbankAPath, 'utf8');
+  const depthTsv = [
+    'reference_name\tposition\tdepth',
+    ...Array.from({ length: 41 }, (_, index) => `BGC0000708\t${Math.min(40579, index * 1000 + 1)}\t${10 + (index % 5)}`)
+  ].join('\n');
+  await page.addInitScript(() => {
+    window.__HELD_DEPTH_RUNS__ = [];
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...(window.__GBDRAW_TEST_HOOKS__ || {}),
+      onSessionLifecycleEvent: (event) => {
+        if (event?.name === 'python-diagnostics') window.__HELD_DEPTH_RUNS__.at(-1).metrics = event.metrics || {};
+      },
+      onStructuralMetric: (metric) => {
+        if (metric?.name === 'resourceMaterializationCount') window.__HELD_DEPTH_RUNS__.at(-1)?.staged.push(metric.resourceId);
+      }
+    };
+  });
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ genbankText, depthText }) => {
+    const app = window.__GBDRAW_APP__;
+    // A drawing's file slots hold refs into the project's input file store.
+    const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
+    window.__HELD_DEPTH_BIND__ = bound;
+    app.selectDrawing('circular');
+    app.setCircularInputType('gb');
+    app.files.c_gb = bound(new File([genbankText], 'BGC0000708.gbk', { type: 'text/plain', lastModified: 1 }));
+    window.__HELD_DEPTH_FILE__ = new File([depthText], 'reads.depth.tsv', {
+      type: 'text/tab-separated-values', lastModified: 2
+    });
+    app.files.c_depth = bound([window.__HELD_DEPTH_FILE__]);
+    Object.assign(app.form, { show_depth: true, labels_mode: 'none', legend: 'none' });
+  }, { genbankText: genbank, depthText: depthTsv });
+  // One Generate with the draft as it is now: its staged resource ids, its
+  // Depth stage builds, and the Result text.
+  const generate = (form = {}) => evaluateWithRetainedPromise(page, async (formValues) => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, formValues);
+    window.__HELD_DEPTH_RUNS__.push({ staged: [], metrics: {} });
+    const result = await app.runAnalysis();
+    const run = window.__HELD_DEPTH_RUNS__.at(-1);
+    return {
+      result,
+      errorLog: app.errorLog,
+      staged: run.staged,
+      depthFrameBuilds: run.metrics['renderStageBuild:depth_frame'] || 0,
+      svg: app.currentResults()[0]?.content || ''
+    };
+  }, form);
+  const ok = (run) => {
+    expect(run.result).toEqual({ status: 'ok' });
+    expect(run.errorLog).toBeNull();
+    return run;
+  };
+
+  const shown = ok(await generate());
+  expect(shown.staged).toContain('depth-tracks-1-source');
+  expect(shown.depthFrameBuilds).toBe(1);
+  const hidden = ok(await generate({ show_depth: false }));
+  expect(hidden.svg).not.toBe(shown.svg);
+  const again = ok(await generate({ show_depth: true }));
+  expect(again.staged).toEqual([]);
+  expect(again.depthFrameBuilds).toBe(0);
+  expect(again.svg).toBe(shown.svg);
+  // An edit while hidden, then Show Depth: still nothing staged and no Depth frame built.
+  ok(await generate({ show_depth: false }));
+  ok(await generate({ suppress_gc: true }));
+  const afterEdit = ok(await generate({ show_depth: true }));
+  expect(afterEdit.staged).toEqual([]);
+  expect(afterEdit.depthFrameBuilds).toBe(0);
+
+  // Removing the file while hidden releases it: adding it back stages it again.
+  ok(await generate({ show_depth: false }));
+  await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
+  ok(await generate());
+  ok(await generate());
+  await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = window.__HELD_DEPTH_BIND__([window.__HELD_DEPTH_FILE__]); });
+  const restaged = ok(await generate({ show_depth: true }));
+  expect(restaged.staged).toContain('depth-tracks-1-source');
+  expect(restaged.depthFrameBuilds).toBe(1);
+
+  // An invalid Depth setup with Show Depth off still Generates: a second track without a source.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.adv.depth_tracks.splice(0, app.adv.depth_tracks.length,
+      { label: 'Reads', color: '#112233', large_tick_interval: null, small_tick_interval: null, tick_font_size: null },
+      { label: 'Unsourced', color: '#445566', large_tick_interval: null, small_tick_interval: null, tick_font_size: null });
+  });
+  ok(await generate({ show_depth: false }));
+});

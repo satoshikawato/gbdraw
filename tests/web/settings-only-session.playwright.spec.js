@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
-const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, NEWEST_READ_SESSION_VERSION, assertDiagramWorkerIdle, generateAndWaitForResult, getDiagramWorkerActivity, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, NEWEST_READ_SESSION_VERSION, assertDiagramWorkerIdle, assertLegacyLoadConvertedOnce, generateAndWaitForResult, openApp, reveal, answerChoicePrompt, answerLoadRepairs, answerSessionTitle, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
 const { capture, assertCoherent, settle } = require('./helpers/visual-state.cjs');
 const path = require('node:path');
 const { showDrawing } = require('./helpers/drawing-bar.cjs');
@@ -317,17 +317,14 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
   }
-  const priorActivity = await getDiagramWorkerActivity(page);
   await loadFile(page, path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
   const replaced = await snapshot(page);
   assertSourceFree(replaced);
   expect(replaced.config.form.labels_mode).toBe('both');
   expect(replaced.config.form.track_type).toBe('middle');
   expect(await page.locator('.origin-top svg').count()).toBe(0);
-  const replacedActivity = await getDiagramWorkerActivity(page);
-  for (const field of ['constructions', 'initializations', 'helpers', 'runs']) {
-    expect(replacedActivity[field], `settings-only Load starts no Worker work: ${field}`).toBe(priorActivity[field]);
-  }
+  // A Session 27-44 Load makes one Python conversion and no render run.
+  await assertLegacyLoadConvertedOnce(page);
   const saved = await save(page, testInfo, 'replacement');
   expect(shownSavedDrawing(saved.document).renderRequest).toBeNull();
   expect(saved.document.resources).toEqual({});
