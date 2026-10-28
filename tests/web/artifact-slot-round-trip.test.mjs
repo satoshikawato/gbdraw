@@ -23,6 +23,7 @@ installFakeSvgDom();
 globalThis.File = File;
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 
 test('a round trip gives the artifact of the other mode back to its own drawing', async () => {

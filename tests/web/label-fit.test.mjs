@@ -18,6 +18,7 @@ globalThis.window = {
 globalThis.document = {};
 
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { draftFieldsForConfigValues } = await import('../../gbdraw/web/js/services/session-request.js');
 const { normalizeLabelFitFailure, normalizeLabelFitRow, normalizeResultLabelFits } = await import(
   '../../gbdraw/web/js/services/label-fit.js'

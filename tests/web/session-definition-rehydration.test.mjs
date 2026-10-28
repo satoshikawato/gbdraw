@@ -31,6 +31,7 @@ setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const session = await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',

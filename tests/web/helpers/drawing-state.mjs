@@ -182,6 +182,18 @@ const withSliceHandles = (drawing) => {
   return Object.defineProperty(drawing, 'slices', { value: Object.freeze(slices), configurable: true });
 };
 
+// A new Session holds one Circular drawing (PD-OI-090); a test that works on
+// the Circular and Linear pair adds the Linear drawing to the real store, as
+// the store held it before the offer tab (a drawing of its mode at
+// `createDrawingState`, named "Linear", after the Circular tab), with no
+// History step. Call it once the test has set up `window` and imported state.js.
+export const addStartLinearDrawing = async () => {
+  const { state, createDrawingState } = await import('../../../gbdraw/web/js/state.js');
+  const id = drawingIdOfMode('linear');
+  if (state.drawingTabs.value.some((tab) => tab.id === id)) return;
+  state.addDrawing(createDrawingState(id, 'linear'), 'Linear', state.drawingTabs.value.length);
+};
+
 // The drawing of a diagram mode in a `state`-shaped value (the real state or a
 // fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
 // mode names.

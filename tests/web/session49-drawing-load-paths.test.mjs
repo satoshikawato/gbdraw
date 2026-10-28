@@ -9,6 +9,7 @@ import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import { callerSession } from './helpers/session-caller.mjs';
 import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
+import { createHistoryRouter } from '../../gbdraw/web/js/services/history.js';
 
 globalThis.window = {
   Vue: {
@@ -40,6 +41,45 @@ const load = async (session) => {
 };
 const rowsAt = (loaded, part) => loaded.repairs.filter((repair) => repair.path.includes(part))
   .map((repair) => `${repair.code} ${repair.path}`).sort();
+
+// OV-2131: a Load whose drawings the page does not hold (a second Circular
+// drawing, on a page that starts with one Circular drawing) installs them with
+// their tabs and gives each a History at the store commit, so a reader of the
+// shown drawing's History before the Load's baseline finds it.
+test('a Session 49 Load of two Circular drawings and a Linear one into one Circular drawing installs every drawing, its tab and its History', async () => {
+  assert.deepEqual(state.drawingTabs.value.map((tab) => tab.id), ['circular'], 'the page starts with one Circular drawing');
+  const router = createHistoryRouter({
+    drawingIds: state.drawingTabs.value.map((tab) => tab.id),
+    activeDrawingId: () => state.activeDrawingId.value,
+    maxBytes: Number.MAX_SAFE_INTEGER,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    estimateFileBytes: () => 0,
+    retainOnlyFiles: () => {},
+    managerOptions: () => ({ buildIntent: () => ({}), applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {} })
+  });
+  const routed = callerSession(sessionConfig, state, await sessionRollbackPort(state, router));
+  const session = v49Session('drawings-circular-linear');
+  const [circular, linear] = session.drawings;
+  session.drawings = [circular, { ...structuredClone(circular), id: 'circular-2', name: 'Plasmid map' }, linear];
+  session.ui.activeDrawingId = 'circular-2';
+  /** @type {string[]} */
+  const historyAtAfterImport = [];
+  const loaded = await routed.importSession({
+    target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+  }, {
+    confirmLoadRepairs: async () => true,
+    afterImport: async () => {
+      router.canUndo();
+      for (const tab of state.drawingTabs.value) historyAtAfterImport.push(router.managerOf(tab.id) ? tab.id : '');
+    }
+  });
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const stored = session.drawings.map(({ id, name }) => ({ id, name }));
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })), stored);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), stored.map(({ id }) => id), 'every tab names a drawing');
+  assert.equal(state.activeDrawing().id, 'circular-2', 'the stored shown drawing is shown');
+  assert.deepEqual(historyAtAfterImport, stored.map(({ id }) => id), 'each loaded drawing has a History before the baseline');
+});
 
 for (const opened of ['circular', 'linear']) {
   test(`a Session 49 Load lists the opened drawing's editor-state fault once, at its drawings[i] path (${opened} opened)`, async () => {

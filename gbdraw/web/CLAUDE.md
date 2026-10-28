@@ -1066,10 +1066,6 @@ one drawing never reaches another (PD-OI-090).
   slot, and History restores it through its slot port (R11); none of them
   writes it to the shown Result.
 - Each drawing has its own History (R11).
-- Until the Session format holds a list of drawings, the store holds exactly
-  the drawings `circular` and `linear` (read through `state.drawingList()`,
-  `state.drawingOf(id)`, and `state.drawingOfMode(mode)`), and Save writes them as
-  `modes.circular` and `modes.linear`.
 - Once the Session format holds a list of drawings (Session 49), a new Session starts with
   one Circular drawing. Save Session writes, as one document, every drawing that has a
   file, a changed setting, an edit, or a Result, the drawing that is shown, and only the

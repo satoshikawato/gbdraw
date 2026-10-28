@@ -6,6 +6,7 @@ globalThis.window = { Vue: {
   computed: getter => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { buildConfigData, applyCapturedConfigData, installShownDrawing } = await import('../../gbdraw/web/js/services/config.js');
 const { createHistoryManager, createHistoryRouter } = await import('../../gbdraw/web/js/services/history.js');
 // One History per drawing, as the app has (PD-OI-090): the router walks the shown drawing's.

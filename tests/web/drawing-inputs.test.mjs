@@ -10,6 +10,7 @@ globalThis.window = { Vue: {
   computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
 } };
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const {
   bindInputFile, bindLoadedInputs, boundInputFileIds, registerInputFiles, retainHistoryAndBoundFiles
 } = await import('../../gbdraw/web/js/services/drawing/inputs.js');

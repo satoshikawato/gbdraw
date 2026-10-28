@@ -60,6 +60,7 @@ const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/s
 const { validateSessionAuthorityInventory } = await import('../../gbdraw/web/js/services/session-authority.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 // The composition root's transform of an older Session's Results (R13 port).
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');

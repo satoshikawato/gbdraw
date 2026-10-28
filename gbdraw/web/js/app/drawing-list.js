@@ -233,6 +233,7 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * default name ("Circular", "Linear 2") in the UI language, any other name as
  * stored. The tab's accessible name is its label.
  * @typedef {object} DrawingBarTab
+ * @property {'drawing'} kind
  * @property {DrawingId} id
  * @property {string} label
  * @property {ModeProfileName} mode
@@ -242,13 +243,25 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * @property {boolean} canDelete false for the last drawing, which a Session always keeps (R11)
  */
 /**
+ * The Linear offer tab (PD-OI-090: a new Session starts with one Circular
+ * drawing, and Linear is made from a tab that offers an empty Linear drawing).
+ * It follows the drawing tabs while the project has no Linear drawing (T-B4-5);
+ * choosing it is New Linear.
+ * @typedef {object} DrawingBarOffer
+ * @property {'offer'} kind
+ * @property {ModeProfileName} mode
+ * @property {string} label the mode's name in the UI language
+ */
+/**
  * @typedef {(drawingId: DrawingId) => ModeProfileName} ReadDrawingMode
  * @typedef {(drawingId: DrawingId, name: string) => DrawingListOutcome} RenameDrawingStep
  *   The list's Rename: one History step, or a typed refusal (`stage: 'drawing-list'`).
  * @typedef {(drawingId: DrawingId, index: number) => DrawingListOutcome} MoveDrawingStep The list's Move.
  * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DeleteDrawingStep The list's Delete.
  * @typedef {(drawingId: DrawingId) => boolean} NeedsDeleteConfirmation
+ * @typedef {(mode: ModeProfileName) => DrawingListOutcome} NewDrawingStep The list's New.
  * @typedef {object} DrawingBarPorts
+ * @property {NewDrawingStep} newDrawing
  * @property {RenameDrawingStep} renameDrawing
  * @property {MoveDrawingStep} moveDrawing
  * @property {DeleteDrawingStep} deleteDrawing
@@ -293,21 +306,24 @@ export const moveTabFocus = (event) => {
 };
 
 /**
- * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs, and
- * the tab menu's Rename, Move, and Delete, each one list operation (one History step).
+ * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs with
+ * the Linear offer tab, and the tab menu's New Circular, New Linear, Rename,
+ * Move, and Delete, each one list operation (one History step).
  * @param {DrawingBarPorts} ports
  */
 export const createDrawingBar = ({
-  renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
+  newDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
   drawingTabs, shownDrawingId, modeOf, askText, askChoice
 }) => {
-  /** @returns {DrawingBarTab[]} */
+  /** @returns {Array<DrawingBarTab | DrawingBarOffer>} */
   const tabs = () => {
     const all = drawingTabs();
     const shown = shownDrawingId();
-    return all.map(({ id, name }, index) => {
+    /** @type {Array<DrawingBarTab | DrawingBarOffer>} */
+    const bar = all.map(({ id, name }, index) => {
       const mode = modeOf(id);
       return {
+        kind: /** @type {const} */ ('drawing'),
         id,
         mode,
         label: name === defaultDrawingName(mode, id) ? defaultDrawingName(mode, id, tm(MODE_LABELS[mode])) : name,
@@ -317,6 +333,8 @@ export const createDrawingBar = ({
         canDelete: all.length > 1
       };
     });
+    if (!bar.some((tab) => tab.mode === 'linear')) bar.push({ kind: 'offer', mode: 'linear', label: tm(MODE_LABELS.linear) });
+    return bar;
   };
 
   /**
@@ -363,7 +381,7 @@ export const createDrawingBar = ({
    */
   const deleteDrawing = async (drawingId) => {
     if (needsDeleteConfirmation(drawingId)) {
-      const name = tabs().find((tab) => tab.id === drawingId)?.label ?? drawingId;
+      const name = tabs().find((tab) => tab.kind === 'drawing' && tab.id === drawingId)?.label ?? drawingId;
       const choice = await askChoice({
         title: t('Delete {name}?', { name }),
         description: t('Its settings, edits, and Result are removed from this Session. Undo brings the drawing back.'),
@@ -375,5 +393,5 @@ export const createDrawingBar = ({
     return deleteStep(drawingId);
   };
 
-  return { tabs, renameDrawing, moveDrawing, deleteDrawing };
+  return { tabs, newDrawing, renameDrawing, moveDrawing, deleteDrawing };
 };

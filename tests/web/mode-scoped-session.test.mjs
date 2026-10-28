@@ -43,6 +43,7 @@ sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: 
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 
 const MODES = ['circular', 'linear'];

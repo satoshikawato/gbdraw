@@ -111,6 +111,7 @@ test('the Features list reads the selected types the displayed Result was drawn 
     computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
   } };
   const { state } = await import('../../gbdraw/web/js/state.js');
+  await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
   const { admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
   const {
     admitCurrentSessionResults,

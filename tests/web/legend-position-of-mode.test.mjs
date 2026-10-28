@@ -20,6 +20,7 @@ globalThis.window = {
 
 const webRoot = join(process.cwd(), 'gbdraw', 'web');
 const { state, createDefaultForm } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const layout = await import('../../gbdraw/web/js/services/layout-preferences.js');
 const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
 const { LEGEND_POSITIONS } = await import('../../gbdraw/web/js/contracts/schema.generated.js');

@@ -49,12 +49,14 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { setStoredProteinResultFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
 const { readSessionResourceText } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
 const rollbackPort = await sessionRollbackPort(state);
 const { exportSession, importSession } = callerSession(sessionConfig, state, rollbackPort);
 // The real port, with a note when the Load captures or restores.
 const spyOnPort = (onCapture, onRestore = () => {}) => ({
   capture: () => { onCapture(); return rollbackPort.capture(); },
+  replaceHistoryMembers: rollbackPort.replaceHistoryMembers,
   restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');

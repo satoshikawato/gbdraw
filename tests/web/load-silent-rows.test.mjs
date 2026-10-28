@@ -38,6 +38,7 @@ setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validate
 const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 

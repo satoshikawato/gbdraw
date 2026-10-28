@@ -4,8 +4,10 @@
 // and its tab menu renames a drawing as one History step.
 const { test, expect } = require('@playwright/test');
 const path = require('node:path');
+const { readFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { openApp, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { drawingIds, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
+const { drawingIds, drawingTab, offerTab, shownDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 
 const loadGallerySession = (page, filename) => evaluateWithRetainedPromise(page, async (path) => {
   const name = path.split('/').pop();
@@ -158,6 +160,33 @@ test.describe('390 px', () => {
 // 195 x 422 is a 390 x 844 phone at 200 % zoom (Owner R17-12, OV-1802 and OV-1772): the page scrolls as a whole,
 // so the header, the drawing bar and the tabs scroll away and the figure of a Result can be brought into view
 // above the fixed Generate bar, whose short label keeps one line.
+test.describe('390 px offer', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('a new Session has one Circular drawing; the Linear offer in the picker makes the Linear drawing as one step', async ({ page }) => {
+    test.setTimeout(180_000);
+    await openApp(page);
+    expect(await drawingIds(page), 'a new Session starts with one Circular drawing').toEqual(['circular']);
+    const picker = page.locator('.drawing-bar .drawing-picker');
+    await picker.locator('summary').click();
+    const items = picker.locator('.action-menu-item');
+    await expect(items).toHaveText(['Circular', 'Linear']);
+    await expect(items.nth(1).locator('.ph-plus'), 'the offer item carries the plus').toHaveCount(1);
+    await items.nth(1).click();
+    await expect.poll(() => drawingIds(page)).toEqual(['circular', 'linear']);
+    expect((await shownDrawing(page)).id, 'the new Linear drawing is shown').toBe('linear');
+    expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('New drawing');
+    await picker.locator('summary').click();
+    await expect(items, 'no offer once a Linear drawing exists').toHaveText(['Circular', 'Linear']);
+    await expect(items.locator('.ph-plus')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: 'Undo', exact: true }).first().click();
+    await expect.poll(() => drawingIds(page)).toEqual(['circular']);
+    expect((await shownDrawing(page)).id, 'Undo shows the drawing shown before').toBe('circular');
+  });
+});
+
 test.describe('195 px', () => {
   test.use({ viewport: { width: 195, height: 422 }, hasTouch: true });
 
@@ -203,9 +232,8 @@ test('Rename in the tab menu is one History step that Undo restores; a repeated 
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 900 });
   await openApp(page);
-  const [first, second] = await drawingIds(page);
-  await drawingTab(page, second).click();
-  await expect.poll(async () => (await shownDrawing(page)).id).toBe(second);
+  const [first] = await drawingIds(page);
+  const second = await takeLinearOffer(page);
   const name = await tabName(page, second);
   const firstName = await tabName(page, first);
   const menu = page.locator('.drawing-bar-menu');
@@ -242,9 +270,8 @@ test('Delete in the tab menu removes the shown drawing as one step that Undo res
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
-  const [first, second] = await drawingIds(page);
-  await drawingTab(page, second).click();
-  await expect.poll(async () => (await shownDrawing(page)).id).toBe(second);
+  const [first] = await drawingIds(page);
+  const second = await takeLinearOffer(page);
   const menu = page.locator('.drawing-bar-menu');
   const deleteItem = menu.getByRole('button', { name: 'Delete drawing', exact: true });
 
@@ -262,4 +289,53 @@ test('Delete in the tab menu removes the shown drawing as one step that Undo res
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   expect(await drawingIds(page)).toEqual([first, second]);
   expect((await shownDrawing(page)).id, 'Undo shows the restored drawing').toBe(second);
+});
+
+test('Save then a fresh Load keeps the drawings, their names, and their tab order', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  await expect(offerTab(page)).toHaveAccessibleName('Linear');
+  await takeLinearOffer(page);
+  await expect(offerTab(page)).toHaveCount(0);
+  const menu = page.locator('.drawing-bar-menu');
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'New Circular drawing', exact: true }).click();
+  await expect.poll(() => drawingIds(page)).toEqual(['circular', 'linear', 'circular-2']);
+  expect((await shownDrawing(page)).id).toBe('circular-2');
+  // Save keeps a drawing with a changed setting (PD-OI-090): each drawing gets a title.
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    for (const drawing of state.drawingList()) drawing.form.plot_title = `Title of ${drawing.id}`;
+  });
+  const dialog = page.getByRole('dialog', { name: 'Rename drawing' });
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Rename…', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'Drawing name' }).fill('Plasmid map');
+  await dialog.getByRole('button', { name: 'Rename', exact: true }).click();
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Move left', exact: true }).click();
+  const tabsBefore = await page.evaluate(async () => (await import('./js/state.js')).state.drawingTabs.value
+    .map(({ id, name }) => ({ id, name })));
+  expect(tabsBefore).toEqual([
+    { id: 'circular', name: 'Circular' }, { id: 'circular-2', name: 'Plasmid map' }, { id: 'linear', name: 'Linear' }]);
+
+  // A titled Session saves without the title question.
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'drawings'; });
+  const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle()))
+    .toMatchObject({ status: 'saved' });
+  const saved = gunzipSync(readFileSync(await (await downloadPromise).path())).toString('utf8');
+  const fresh = await page.context().newPage();
+  await openApp(fresh);
+  expect(await drawingIds(fresh)).toEqual(['circular']);
+  const outcome = await evaluateWithRetainedPromise(fresh, async (text) => {
+    const file = new File([text], 'drawings.gbdraw-session.json', { type: 'application/json' });
+    return window.__GBDRAW_APP__.importSession({ target: { files: [file], value: 'selected' } });
+  }, saved);
+  expect(outcome.status).toBe('ok');
+  expect(await fresh.evaluate(async () => (await import('./js/state.js')).state.drawingTabs.value
+    .map(({ id, name }) => ({ id, name })))).toEqual(tabsBefore);
+  expect((await shownDrawing(fresh)).id, 'the drawing shown at Save is shown').toBe('circular-2');
+  await expect(drawingTab(fresh, 'circular-2')).toHaveAccessibleName('Plasmid map');
 });

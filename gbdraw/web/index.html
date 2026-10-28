@@ -2430,27 +2430,35 @@
 
     <!-- PD-OI-090: the drawing bar, under the header and above both panes. One tab per drawing in tab order, named by
          the drawing (a default name in the UI language). Arrow keys, Home and End move the focus; Enter or Space shows
-         the focused drawing (manual activation). The tab menu acts on the shown drawing; each item is one History step. -->
+         the focused drawing (manual activation). While the project has no Linear drawing, the Linear offer tab follows the
+         tabs; choosing it makes an empty Linear drawing (New Linear). The tab menu holds New Circular and New Linear, and
+         acts on the shown drawing; each item is one History step. -->
     <div class="drawing-bar shrink-0 flex items-center gap-1 px-4 py-1 border-b border-slate-200 bg-white/90">
         <!-- At <= 768 px the tabs give way to one picker: the shown drawing's name, opening a list of every drawing. -->
         <template v-for="tab in drawingBarTabs" :key="'picker-' + tab.id">
             <action-menu v-if="tab.selected" :icon="tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler'" class="drawing-picker" close-on-run
                          :label="tab.label" :aria-label="t('Shown drawing: {name}', { name: tab.label })" :title="drawingSwitchAvailable ? tab.label : drawingSwitchBusyReason"
-                         :items="drawingBarTabs.map((item) => ({ label: item.label, icon: item.selected ? 'ph-check' : (item.mode === 'circular' ? 'ph-circle' : 'ph-ruler'), disabled: !drawingSwitchAvailable, run: () => selectDrawing(item.id) }))"></action-menu>
+                         :items="drawingBarTabs.map((item) => (item.kind === 'offer'
+                             ? { label: item.label, icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing(item.mode) }
+                             : { label: item.label, icon: item.selected ? 'ph-check' : (item.mode === 'circular' ? 'ph-circle' : 'ph-ruler'), disabled: !drawingSwitchAvailable, run: () => selectDrawing(item.id) }))"></action-menu>
         </template>
         <div class="drawing-bar-tabs flex bg-slate-100 p-1 rounded-lg min-w-0 overflow-x-auto" role="tablist" :aria-label="t('Drawings')" @keydown="moveTabFocus">
-            <button v-for="tab in drawingBarTabs" :key="tab.id" type="button" role="tab" data-history-ignore :data-drawing-id="tab.id"
-                    :aria-selected="tab.selected ? 'true' : 'false'" :tabindex="tab.selected ? 0 : -1" @click="selectDrawing(tab.id)"
-                    :disabled="!drawingSwitchAvailable" :title="drawingSwitchAvailable ? null : drawingSwitchBusyReason"
-                    :class="tab.selected ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'"
+            <button v-for="tab in drawingBarTabs" :key="tab.kind === 'offer' ? 'offer-' + tab.mode : tab.id" type="button" role="tab" data-history-ignore
+                    :data-drawing-id="tab.kind === 'offer' ? null : tab.id" :data-drawing-offer="tab.kind === 'offer' ? tab.mode : null"
+                    :aria-selected="tab.selected ? 'true' : 'false'" :tabindex="tab.selected ? 0 : -1"
+                    @click="tab.kind === 'offer' ? drawingBar.newDrawing(tab.mode) : selectDrawing(tab.id)"
+                    :disabled="!drawingSwitchAvailable" :title="drawingSwitchAvailable ? (tab.kind === 'offer' ? t('New Linear drawing') : null) : drawingSwitchBusyReason"
+                    :class="tab.selected ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : (tab.kind === 'offer' ? 'text-slate-400 hover:text-slate-700' : 'text-slate-500 hover:text-slate-700')"
                     class="drawing-tab shrink-0 px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5 max-w-[14rem]">
-                <i :class="['ph', tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler']" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span>
+                <i :class="['ph', tab.kind === 'offer' ? 'ph-plus' : (tab.mode === 'circular' ? 'ph-circle' : 'ph-ruler')]" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span>
             </button>
         </div>
         <template v-for="tab in drawingBarTabs" :key="tab.id">
             <action-menu v-if="tab.selected" icon="ph-dots-three-vertical" class="drawing-bar-menu shrink-0" close-on-run
                          :label="t('Drawing')" :aria-label="t('Drawing menu for {name}', { name: tab.label })" :title="t('Drawing menu for {name}', { name: tab.label })"
                          :items="[
+                             { label: t('New Circular drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('circular') },
+                             { label: t('New Linear drawing'), icon: 'ph-plus', disabled: !drawingSwitchAvailable, run: () => drawingBar.newDrawing('linear') },
                              { label: t('Rename…'), icon: 'ph-pencil-simple', disabled: !drawingSwitchAvailable, run: () => drawingBar.renameDrawing(tab.id) },
                              { label: t('Move left'), icon: 'ph-arrow-left', disabled: !drawingSwitchAvailable || !tab.canMoveLeft, run: () => drawingBar.moveDrawing(tab.id, -1) },
                              { label: t('Move right'), icon: 'ph-arrow-right', disabled: !drawingSwitchAvailable || !tab.canMoveRight, run: () => drawingBar.moveDrawing(tab.id, 1) },
