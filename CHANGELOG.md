@@ -28,9 +28,9 @@ write-up of a release.
 - Fixed: label text and Label visibility typed in the Web feature popup and
   not yet applied stay when the labels are placed again while the popup is
   open (OV-1984, #1417).
-- Fixed (web app): a Legend row's stroke shows on the Result at once when a color rule edit renames
-  the row, removes it, or changes which features it holds, as Generate draws it. Before, a renamed
-  row showed the default line until Generate (OV-1985, OV-1986, #1433).
+- Fixed: in the Web app, a Legend row's stroke stays on the Result when a color rule edit gives the row
+  another key (for example a caption edit of another rule that leaves the row's color alone in it), as
+  Generate draws it. Before, the row showed the default line until the next Generate (OV-1985, #1433).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
