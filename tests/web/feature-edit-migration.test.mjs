@@ -7,12 +7,24 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import {
+  RENDERED_ID_FEATURE_EDIT_FIELDS,
   migrateRenderedIdFeatureEdits,
-  migrateSessionFeatureEdits,
   migrateSessionFeaturePlacements
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
 import { unscopedDraftRows } from '../../gbdraw/web/js/services/mode-scoped-migration.js';
+
+// A Session's `features` as the rendered-ID migration leaves them (Python's `migrate_session_feature_edits`
+// is the production owner; this wraps the JS reader these cases pin).
+const migrateSessionFeatureEdits = ({ features, mode, catalog = null, legacy = null }) => {
+  const source = features !== null && typeof features === 'object' ? features : {};
+  const migration = migrateRenderedIdFeatureEdits({ features: source, mode, catalog, legacy });
+  const migrated = { ...source };
+  RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete migrated[field]);
+  migrated.featureOverrides = migration.featureOverrides;
+  if (migration.migratedLabelEdits) migrated.labelOverrideRows = [];
+  return { features: migrated, droppedCount: migration.droppedCount, narrowedVisibilityCount: migration.narrowedVisibilityCount };
+};
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 // Migrated rows name the mode of the Session's diagram (R2).

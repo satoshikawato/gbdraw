@@ -7,7 +7,6 @@ import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-co
 import {
   createGallerySessionPublication, galleryPublicationDocument, galleryPublicationView
 } from '../gbdraw/web/js/services/gallery-session-publication.js';
-import { promoteGallerySessionToCurrent } from '../gbdraw/web/js/services/gallery-session-migration.js';
 import {
   assertCanonicalRenderRequestsEquivalent,
   buildCanonicalRenderRequest,
@@ -23,7 +22,6 @@ const {
   prepareGallerySessionForPublication,
   validateGalleryPublicationReadiness
 } = createGallerySessionPublication({
-  promoteSession: promoteGallerySessionToCurrent,
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,

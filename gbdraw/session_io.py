@@ -2638,9 +2638,8 @@ def migrate_session_feature_edits(
     When a label map is migrated the saved label table (``labelOverrideRows``)
     is cleared, as it was built from those maps.
 
-    This is the twin of ``migrateSessionFeatureEdits`` in the Web
-    ``feature-edit-migration.js``;
-    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. Without
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins it and the
+    Web ``migrateRenderedIdFeatureEdits`` in ``feature-edit-migration.js``. Without
     a catalog or ``legacy`` every edit is dropped.
     """
 

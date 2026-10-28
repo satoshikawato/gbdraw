@@ -775,16 +775,16 @@ test('a Session older than 27 is refused as an old version (B51)', async () => {
   assert.notEqual(other.error.context.reason, 'SESSION_TOO_OLD');
 });
 
-// PLAN 12.2: Gallery publication never loads through the dialog; it reads the
-// tables strictly, so a Session with a row Load would repair is refused.
-test('Gallery publication refuses a Session with a table row Load would repair', () => {
+// Gallery publication never loads through the dialog and admits Sessions 46-49 only; a Session 39 with a row
+// Load would repair is refused with the way to convert it.
+test('Gallery publication refuses a Session 39 with a table row Load would repair', () => {
   const out = join(mkdtempSync(join(tmpdir(), 'gbdraw-publish-')), 'session.json');
   const run = spawnSync(process.execPath, [
     new URL('../../tools/publish_gallery_session.mjs', import.meta.url).pathname, 'prepare',
     new URL('../fixtures/sessions/whitelist-tab-keyword.v39.gbdraw-session.json.gz', import.meta.url).pathname, out
   ], { encoding: 'utf8' });
   assert.equal(run.status, 1);
-  assert.match(run.stderr, /TABLE_INVALID/);
+  assert.match(run.stderr, /Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app/);
 });
 
 // B37, B43: the settings' readers of `applyConfigData` lose an out-of-set

@@ -139,9 +139,8 @@ in the same change.
 | The displayed Result's text: marking its mounted root changed, the one write of the root into the Result, and the reader of the Results (R1) | `js/app/preview-runtime.js` (`commitActiveResultEdit`, `currentResults`) |
 | When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
-| Historical Gallery session migration; its Session 27–44 conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/gallery-session-migration.js` until then |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows (Python alone converts the `hash=` annotation targets and the drawn-hash `hash` color rules); this conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/feature-edit-migration.js` until then (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`; the CLI replay of a request also uses `migrate_session_annotation_targets`, `migrate_session_hash_rules`, and their mapper `source_hash_selector_value`) |
+| Feature placement rows of a Session 41–44, read per mode by Load's first pass (Main rows both, a lane row its side's) | `js/services/feature-edit-migration.js` (`migrateSessionFeaturePlacements`; Python `_migrate_session_feature_placements`); Python alone converts the rest of a Session 27–44 |
 | Check of scoped Feature placements in the current writer's config (`validateScopedFeaturePlacements`; not a migration, so it stays when the migrations go) | `js/services/feature-edit-migration.js` (imported by `services/session-active-config-contract.js`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
@@ -1158,9 +1157,8 @@ concerns: normalize supported old data once, then use the current model. Do not
 write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
-contract used by normal restore and Gallery publication. Historical Gallery
-migration stays in `services/gallery-session-migration.js` until the Session format holds a
-list of drawings, then Python alone converts a Session 27–44, once at Load; it does not clean up
+contract used by normal restore and Gallery publication. Python alone converts a
+historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–49. It does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.

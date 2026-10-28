@@ -101,7 +101,7 @@
         "gbdraw/web/js/services/session-request.js:projectCanonicalSessionRequest"
       ],
       "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateSessionFeatureEdits (function row).",
+      "reason": "Partly shared: the Web reads the source-read cases through projectCanonicalSessionRequest; the edit cases run through migrateRenderedIdFeatureEdits in feature-edit-migration.test.mjs.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "inventory C section B (placement drafts, rendered-ID edits, annotation targets; OV-102, OV-114, OV-133)"
     },
@@ -481,20 +481,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:migrateLegacyLinearComparisonDraft",
-      "concern": "Legacy Linear comparison draft rows to current comparisons",
-      "pythonOwner": [
-        "gbdraw/session_io.py:_migrate_legacy_linear_comparison_draft"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/gallery-session-migration.js:migrateLegacyLinearComparisonDraft"
-      ],
-      "vector": null,
-      "reason": "Both Load paths migrate; each side has its own test and no shared vector.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
       "id": "function:migratePersistedWebOptionValues",
       "concern": "Retired Session 27-39 option values",
       "pythonOwner": [
@@ -535,20 +521,6 @@
       "reason": "Partly the same: Python also migrates Linear visibility and placement rows; no vector covers the renames on both sides.",
       "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
-    },
-    {
-      "id": "function:migrateSessionFeatureEdits",
-      "concern": "Session 31-44 rendered-ID feature edits to feature identity",
-      "pythonOwner": [
-        "gbdraw/session_io.py:migrate_session_feature_edits"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/feature-edit-migration.js:migrateSessionFeatureEdits"
-      ],
-      "vector": "tests/fixtures/feature-edit-migration-vectors.json",
-      "reason": "Both Load paths migrate; the 15 edit cases of the shared vector pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (rendered-ID edits; OV-114)"
     },
     {
       "id": "function:migrateSessionFeaturePlacements",

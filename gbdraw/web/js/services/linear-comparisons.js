@@ -117,7 +117,7 @@ export const LINEAR_COMPARISON_SOURCES = Object.freeze({
 /**
  * The fields of a Session 27-44 draft that held its comparisons before the
  * comparison plan: the migration to the plan reads them and removes them
- * (`migrateLegacyLinearComparisonDraft`, Python's `session_io`), so no
+ * (Python's `_migrate_legacy_linear_comparison_draft` in `session_io`), so no
  * settings reader reads them (dotted paths in the draft `config`).
  * @type {readonly string[]}
  */

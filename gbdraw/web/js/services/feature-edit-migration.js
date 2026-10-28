@@ -83,11 +83,6 @@ export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
  */
 
 /**
- * The input of `migrateSessionFeatureEdits`: an older Session has no `features`.
- * @typedef {Omit<FeatureEditMigrationInput, 'features'> & { features: Record<string, unknown> | null | undefined }} SessionFeatureEditMigrationInput
- */
-
-/**
  * @param {unknown} value
  * @returns {value is Record<string, any>}
  */
@@ -441,32 +436,6 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
     }
   });
   return { featureOverrides: rows, droppedCount, narrowedVisibilityCount, migratedLabelEdits };
-};
-
-/**
- * The Session 46 `features` of an older Session's `features`: the edit maps
- * become `featureOverrides`. When a label map is migrated, the saved label
- * table is cleared: it was the copy of those maps built at the last Generate
- * (the same invariant the editor keeps when label edits change).
- * @param {SessionFeatureEditMigrationInput} input
- * @returns {{
- *   features: Record<string, any>,
- *   droppedCount: number,
- *   narrowedVisibilityCount: number
- * }}
- */
-export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, legacy = null }) => {
-  const source = isObject(features) ? features : {};
-  const migration = migrateRenderedIdFeatureEdits({ features: source, mode, catalog, legacy });
-  const migrated = { ...source };
-  RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete migrated[field]);
-  migrated.featureOverrides = migration.featureOverrides;
-  if (migration.migratedLabelEdits) migrated.labelOverrideRows = [];
-  return {
-    features: migrated,
-    droppedCount: migration.droppedCount,
-    narrowedVisibilityCount: migration.narrowedVisibilityCount
-  };
 };
 
 /** @param {number} count */
