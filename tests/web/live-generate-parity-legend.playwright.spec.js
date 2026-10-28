@@ -1947,3 +1947,28 @@ for (const [name, edit] of [
     await expectLiveEqualsGenerate(page, { label: `${name} after a GC row was moved first` });
   });
 }
+
+// OV-2187 (release-tier random walk, seed 20261101): "Use existing color" on
+// a CDS of the first batch Result writes a rule named CDS in the CDS palette
+// color, which colors no feature the second Result draws. There Python draws
+// the palette's CDS row, not the rule's. A rule edit while the second Result
+// is shown took that row for the rule's (same name, same color) and hid it;
+// Generate draws it.
+for (const [name, field, value] of [
+  ['the same name entered again', 'cap', 'CDS'],
+  ['a new color', 'color', '#7b2cbf']
+]) {
+  test(`a rule edit (${name}) on a batch Result the rule does not color keeps its CDS row, live = Generate (OV-2187)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await popupEdit(page, 'TESTA_0006', { fill: '#123456', scope: 'useExisting' });
+    const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
+    expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
+    await showResult(page, 1);
+    await evaluateWithRetainedPromise(page, ({ field, value }) => window.__GBDRAW_APP__.setSpecificRuleField(0, field, value), { field, value });
+    await settleLive(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.key === 'CDS');
+    expect(row, 'the second Result still shows its CDS row').toBeTruthy();
+    await expectLiveEqualsGenerate(page, { label: `a rule edit (${name}) on the Result the rule does not color` });
+  });
+}
