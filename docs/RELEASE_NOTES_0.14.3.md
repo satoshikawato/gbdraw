@@ -52,8 +52,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   first. Before, it had no line until the next Generate.
 - A color rule edit in the Web app, made while a batch Result is shown on
   which the rule colors no feature, keeps that Result's Legend row of the
-  rule's name and color (for example the CDS row after **Use existing color**
-  on a CDS of the other Result). The same holds on one Result when the rule
+  rule's name and color (for example the CDS row after **Use the "CDS"
+  Legend color** on a CDS of the other Result). The same holds on one Result when the rule
   colors only features that Feature visibility hides. Before, the row
   disappeared until the next **Generate Diagram**.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
