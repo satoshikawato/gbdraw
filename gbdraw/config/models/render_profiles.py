@@ -19,21 +19,12 @@ class _RenderProfile:
     config: GbdrawConfig
     # An identity-addressed feature override shows a label (label_visibility "on").
     identity_label_overrides: bool = False
-    strandedness: bool = field(init=False)
-    resolve_overlaps: bool = field(init=False)
-    feature_overlap_tolerance_bp: int = field(init=False)
-    label_rendering: LabelRenderingPolicy = field(init=False)
     # A per-feature override shows its label outside the label display scope.
     forced_labels: bool = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.config, GbdrawConfig):
             raise ValidationError("render profile config must be GbdrawConfig")
-        canvas = self.config.canvas
-        object.__setattr__(self, "feature_overlap_tolerance_bp", canvas.feature_overlap_tolerance_bp)
-        object.__setattr__(self, "strandedness", bool(canvas.strandedness))
-        object.__setattr__(self, "resolve_overlaps", bool(canvas.resolve_overlaps))
-        object.__setattr__(self, "label_rendering", self.config.labels.rendering)
         object.__setattr__(
             self,
             "forced_labels",
@@ -42,12 +33,28 @@ class _RenderProfile:
         )
 
     # A render stage keys a profile field by value, whether it reads it or not,
-    # and the config by the sections it declares (gbdraw.render_stages). The
-    # track switches are read through the config, so a GC, skew or Depth toggle
-    # rebuilds only the stages that declare ``canvas``, not every content that
-    # takes the profile (OV-1309). The other fields stay values: ``canvas`` also
-    # holds the switches, so a content that read its strands through the config
-    # would rebuild on every toggle.
+    # and the config by the sections and leaves it declares (gbdraw.render_stages).
+    # The settings below are read through the config, so changing one rebuilds
+    # only the stages that declare it (``canvas.strandedness``, or all of
+    # ``canvas``), not every content that takes the profile (OV-1309).
+    # ``forced_labels`` stays a field: it is derived from all of
+    # ``labels.filtering``, which a stage that reads it would have to declare.
+    @property
+    def strandedness(self) -> bool:
+        return bool(self.config.canvas.strandedness)
+
+    @property
+    def resolve_overlaps(self) -> bool:
+        return bool(self.config.canvas.resolve_overlaps)
+
+    @property
+    def feature_overlap_tolerance_bp(self) -> int:
+        return self.config.canvas.feature_overlap_tolerance_bp
+
+    @property
+    def label_rendering(self) -> LabelRenderingPolicy:
+        return self.config.labels.rendering
+
     @property
     def show_gc(self) -> bool:
         return bool(self.config.canvas.show_gc)

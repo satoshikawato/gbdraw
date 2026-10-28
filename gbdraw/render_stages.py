@@ -9,15 +9,18 @@ earlier successful transaction (the fifth layer of
 
 Keys follow a closed table (``_key``): plain values (with tuples, lists,
 sets, dicts and read-only dict views of them) by value; a frozen dataclass by
-its fields; a module-level class by its qualified name; a ``GbdrawConfig`` by the leaves of the sections the
-stage declares in ``RENDER_STAGE_SETTINGS``; a configurator by its attributes;
+its fields; a module-level class by its qualified name; a ``GbdrawConfig`` by the leaves of the sections (and
+the single leaves) the stage declares in ``RENDER_STAGE_SETTINGS``; a configurator by its attributes;
 a record, a decoded table or another stage's result by the identity registered
 for it in the transaction. Anything else makes the call uncacheable for that
 request.
 
 Settings view: in a transaction the function receives a copy of each config
-whose undeclared sections flag a read. A flagged result is returned but not
-stored, gets no identity, and is counted.
+whose undeclared sections and leaves flag a read. A view that outlives its
+build (the result, or anything else, holds a part of it) also flags the build,
+and a copy of a view section reads the section: a stored result never hands a
+later reader the sections its key left out. A flagged result is returned but
+not stored, gets no identity, and is counted.
 """
 
 from __future__ import annotations
@@ -28,6 +31,7 @@ import inspect
 import logging
 import re
 import typing
+import weakref
 from contextvars import ContextVar
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -96,7 +100,10 @@ RenderStageName = Literal[
 
 # The sections of GbdrawConfig each stage reads (design 2.2). A section is a
 # top node ("canvas", "labels", "objects": its direct values) or one of the
-# dataclasses below it ("labels.filtering", "objects.features", ...).
+# dataclasses below it ("labels.filtering", "objects.features", ...). A stage
+# that reads one direct value of a top node declares that leaf alone
+# ("canvas.strandedness"), so a change of the node's other values (the track
+# switches in ``canvas``) does not rebuild it.
 _CIRCULAR_LABEL_SECTIONS = frozenset(
     {
         "canvas",
@@ -111,8 +118,8 @@ _CIRCULAR_LABEL_SECTIONS = frozenset(
     }
 )
 # The Circular tick group sizes itself from the length threshold and the
-# preset track table.
-_CIRCULAR_TRACK_SECTIONS = frozenset({"canvas.circular", "labels.length_threshold"})
+# preset track table, and places its ring by the strand setting.
+_CIRCULAR_TRACK_SECTIONS = frozenset({"canvas.circular", "canvas.strandedness", "labels.length_threshold"})
 RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "color_rules": frozenset(),
     "default_colors": frozenset(),
@@ -141,15 +148,24 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     # the tick ring (the tick group's sections) are the settings that paint reads (OV-2088).
     "definition_track_overlaps": _CIRCULAR_TRACK_SECTIONS
     | {"objects.conservation", "objects.scale", "objects.text", "objects.ticks"},
-    # Linear: the record group draws the axis, the ruler, features and labels (with their style).
+    # Linear: the record group draws the axis, the ruler, features (on one or two strands) and labels (with
+    # their style).
     "record_content": frozenset(
-        {"labels.linear", "labels.stroke_color", "objects.axis", "objects.scale", "objects.text"}
+        {
+            "canvas.strandedness",
+            "labels.linear",
+            "labels.stroke_color",
+            "objects.axis",
+            "objects.scale",
+            "objects.text",
+        }
     ),
-    # Circular: the record group sizes features and embedded labels (the label
-    # drawer reads the preset track factors).
+    # Circular: the record group sizes features (on one or two strands) and
+    # embedded labels (the label drawer reads the preset track factors).
     "circular_record_content": frozenset(
         {
             "canvas.circular",
+            "canvas.strandedness",
             "labels.font_size",
             "labels.length_threshold",
             "objects.text",
@@ -179,8 +195,16 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "conservation_content": frozenset({"objects.conservation"}),
     # The leaders end on their underlines, which the text layer draws with the leader's stroke.
     "label_leaders_content": frozenset({"labels.circular", "labels.stroke_color"}),
+    # The text layer places embedded labels on their strand's lane.
     "label_text_content": frozenset(
-        {"labels.circular", "labels.font_size", "labels.length_threshold", "labels.stroke_color", "objects.text"}
+        {
+            "canvas.strandedness",
+            "labels.circular",
+            "labels.font_size",
+            "labels.length_threshold",
+            "labels.stroke_color",
+            "objects.text",
+        }
     ),
     "record_part": frozenset(),
     "record_merge": frozenset(),
@@ -191,7 +215,7 @@ _TOP_SECTIONS = ("canvas", "labels", "objects")
 
 
 def _validate_stage_settings(table: Mapping[RenderStageName, frozenset[str]]) -> None:
-    """Every stage is a ``RenderStageName`` and every section names a config node."""
+    """Every stage is a ``RenderStageName`` and every section names a config node or a top node's leaf."""
 
     stage_names = frozenset(typing.get_args(RenderStageName))
     top_hints = typing.get_type_hints(GbdrawConfig)
@@ -200,10 +224,9 @@ def _validate_stage_settings(table: Mapping[RenderStageName, frozenset[str]]) ->
             raise ValueError(f"Unknown render stage {stage!r} in RENDER_STAGE_SETTINGS.")
         for section in sections:
             top, _dot, child = section.partition(".")
-            node_type = top_hints.get(top) if top in _TOP_SECTIONS else None
-            if node_type is not None and child:
-                node_type = typing.get_type_hints(node_type).get(child)
-            if not (isinstance(node_type, type) and dataclasses.is_dataclass(node_type)) or "." in child:
+            top_type = top_hints.get(top) if top in _TOP_SECTIONS else None
+            known = top_type is not None and (not child or child in typing.get_type_hints(top_type))
+            if not known or "." in child:
                 raise ValueError(f"Render stage {stage!r} declares unknown section {section!r}.")
 
 
@@ -258,12 +281,15 @@ def _pre_keyed(items: Iterable[_T]) -> _PreKeyed[_T]:
 
 @dataclass(eq=False)
 class _StageFrame:
-    """One stage build in progress: the inner stage keys and the read flag."""
+    """One stage build in progress: its declarations, its views, the inner stage keys and the read flag."""
 
     name: str
+    declared: frozenset[str]
     active: bool = True
     undeclared_sections: set[str] = field(default_factory=set)
     inner_keys: set[Hashable] = field(default_factory=set)
+    # The views built for this stage (each config and section copy), held weakly.
+    views: list[weakref.ref[object]] = field(default_factory=list)
 
 
 _FRAMES: ContextVar[tuple[_StageFrame, ...]] = ContextVar(
@@ -305,8 +331,10 @@ def _flag_state(value: object) -> _FlagState | None:
 
 
 def _mark(frames: tuple[_StageFrame, ...], section: str) -> None:
+    """Flag a read of ``section`` (a section or a top node's leaf) in each build that did not declare it."""
+
     for frame in frames:
-        if frame.active:
+        if frame.active and section not in frame.declared:
             frame.undeclared_sections.add(section)
 
 
@@ -317,15 +345,17 @@ def _flagging_class(cls: type, top: bool) -> type:
 
     def __getattribute__(self: object, name: str) -> object:
         value = object.__getattribute__(self, name)
-        if name.startswith("__"):
+        if name.startswith("__") and name != "__dict__":
             return value
         state = object.__getattribute__(self, "__dict__").get(_FLAG_STATE)
         if not isinstance(state, _FlagState):
             return value
-        if state.top and (name not in state.field_names or _is_dataclass_value(value)):
-            # A top node flags its direct values; a child section flags itself.
-            return value
-        _mark(state.frames, state.section)
+        if not state.top or name == "__dict__":
+            # ``vars()`` hands over every value of the node.
+            _mark(state.frames, state.section)
+        elif name in state.field_names and not _is_dataclass_value(value):
+            # A top node flags its direct values, each as its leaf; a child section flags itself.
+            _mark(state.frames, f"{state.section}.{name}")
         return value
 
     def __eq__(self: object, other: object) -> bool:
@@ -345,6 +375,14 @@ def _flagging_class(cls: type, top: bool) -> type:
             _mark(state.frames, state.section)
         return hash(_section_source(self))
 
+    def __reduce_ex__(self: object, protocol: int) -> object:
+        # A copy (copy.copy, copy.deepcopy) holds every value of the section
+        # without keeping the view alive: making it reads the section.
+        state = _flag_state(self)
+        if state is not None:
+            _mark(state.frames, state.section)
+        return object.__reduce_ex__(self, protocol)
+
     sub = type(
         cls.__name__,
         (cls,),
@@ -353,6 +391,7 @@ def _flagging_class(cls: type, top: bool) -> type:
             "__eq__": __eq__,
             "__ne__": __ne__,
             "__hash__": __hash__,
+            "__reduce_ex__": __reduce_ex__,
         },
     )
     _FLAGGING_CLASSES[(cls, top)] = sub
@@ -443,35 +482,34 @@ def _settings_view(
                 top=True,
                 overrides=children,
             )
+        frame.views.extend(weakref.ref(copied) for copied in (top_values[top_name], *children.values()))
     view = copy.copy(config)
     for top_name, node in top_values.items():
         object.__setattr__(view, top_name, node)
+    frame.views.append(weakref.ref(view))
     return view
 
 
 def _section_leaves(config: GbdrawConfig, section: str) -> Hashable:
-    """Key the leaves of one section; reading through a view flags its frames."""
+    """Key the leaves of one section, or one leaf; reading through a view flags its frames."""
 
-    path = section.split(".")
-    node: object = config
-    for part in path:
-        node = object.__getattribute__(node, part)
-        state = _flag_state(node)
-        if state is not None and not state.top:
-            _mark(state.frames, state.section)
+    top_name, _dot, child_name = section.partition(".")
+    node = object.__getattribute__(config, top_name)
+    if child_name:
+        # Through a top node's view, the attribute read flags a leaf.
+        node = getattr(node, child_name)
+        if not _is_dataclass_value(node):
+            return _key(node, config_path=None)
     state = _flag_state(node)
-    source = _section_source(node)
-    if len(path) == 1:
-        if state is not None:
-            _mark(state.frames, state.section)
-        values = {
-            name: value
-            for name, value in _raw_fields(source).items()
-            if not _is_dataclass_value(value)
-        }
-    else:
-        values = _raw_fields(source)
-    return tuple((name, _key(value, config_path=None)) for name, value in values.items())
+    if state is not None:
+        _mark(state.frames, state.section)
+    values = _raw_fields(_section_source(node))
+    return tuple(
+        (name, _key(value, config_path=None))
+        for name, value in values.items()
+        # A top node's own leaves; its child sections are keyed when declared.
+        if child_name or not _is_dataclass_value(value)
+    )
 
 
 def _config_key(config: GbdrawConfig, declared: frozenset[str]) -> Hashable:
@@ -786,17 +824,6 @@ def _register_hit(
         register(child, name, ("field", key, name))
 
 
-def _holds_settings(value: object) -> bool:
-    """A config, a view section, or a dataclass with a config field (a profile)."""
-
-    if isinstance(value, GbdrawConfig) or _flag_state(value) is not None:
-        return True
-    return _is_dataclass_value(value) and any(
-        isinstance(child, GbdrawConfig) or _flag_state(child) is not None
-        for child in _raw_fields(value).values()
-    )
-
-
 def _metric(kind: str, name: str) -> None:
     from gbdraw.api import prepared
 
@@ -869,7 +896,7 @@ def render_stage(
     prepared.cancel_checkpoint()
     if prepared.key_names_record(key):
         prepared.mark_record_touched(transaction)
-    frame = _StageFrame(name)
+    frame = _StageFrame(name, declared)
     views = {path: _settings_view(config, declared, frame) for path, config in configs}
     call_args = tuple(_with_views(arg, (index,), views) for index, arg in enumerate(args))
     call_kwargs = {
@@ -884,10 +911,10 @@ def render_stage(
     _metric("Build", name)
     # The views and profile copies the function received count as arguments.
     locators = {**_argument_locators(call_args, call_kwargs), **_argument_locators(args, kwargs)}
-    if _holds_settings(result) or any(
-        _holds_settings(child) for _name, child in _direct_children(result)
-    ):
-        frame.undeclared_sections.add("(a config in the result)")
+    # Released, the views live on only where the build left them (in the result, at any depth, OV-2105).
+    del views, call_args, call_kwargs
+    if any(view() is not None for view in frame.views):
+        frame.undeclared_sections.add("(a settings view held after the build)")
     if frame.undeclared_sections:
         logger.debug(
             "render stage %s read undeclared sections %s",
