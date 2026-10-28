@@ -459,16 +459,16 @@ HMMTDNA = TEST_INPUTS / "HmmtDNA.gbk"
 
 
 def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tuple[object, ...]]:
-    """Draw a figure and return the radial layout and the paint the definition check read for its record."""
+    """Draw a figure and return the resolved slots and the paint the definition check read for its record."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     captured: list[tuple[object, tuple[object, ...]]] = []
     original = assemble_module._record_track_ink
 
-    def capture(layout, sources, labels):
-        inks = original(layout, sources, labels)
-        captured.append((layout, inks))
+    def capture(axis, slots, sources, labels):
+        inks = original(axis, slots, sources, labels)
+        captured.append((slots, inks))
         return inks
 
     monkeypatch.setattr(assemble_module, "_record_track_ink", capture)
@@ -479,8 +479,8 @@ def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tup
     return captured[-1]
 
 
-def _slot(layout, renderer: str):
-    return next(slot for slot in layout.slots if str(slot.renderer) == renderer)
+def _slot(slots, renderer: str):
+    return next(slot for slot in slots if str(slot.renderer) == renderer)
 
 
 def _lines_at(inks, radius: float, turn: float) -> int:
@@ -518,14 +518,14 @@ def test_a_depth_track_counts_its_area_and_axis_not_its_band(monkeypatch: pytest
     depth = pd.DataFrame(
         {"reference_name": record.id, "position": positions, "depth": [80 if p <= length // 4 else 0 for p in positions]}
     )
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(
             depth_table=depth, depth_window=100, depth_step=100,
             circular_track_slots=["features:features", "depth:depth"], circular_track_axis_index=1,
         ),
     )
-    slot = _slot(layout, "depth")
+    slot = _slot(slots, "depth")
     band, drawn = slot.own_reserved_band_px, slot.draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     # Where there is no coverage the area is bare: inside the band, off the paint.
@@ -546,7 +546,7 @@ def test_a_conservation_ring_counts_its_hits_and_its_background(monkeypatch: pyt
 
     record = SeqIO.read(str(HMMTDNA), "genbank")
     hit = ("query1", record.id, 90.0, 4000, 0, 0, 1, 4000, 1, 4000, 1e-20, 100.0)
-    slots = ["features:features", "conservation_1:sequence_conservation@source_index=0"]
+    track_slots = ["features:features", "conservation_1:sequence_conservation@source_index=0"]
 
     def ring(show_background: bool):
         return _drawn_track_ink(
@@ -555,16 +555,16 @@ def test_a_conservation_ring_counts_its_hits_and_its_background(monkeypatch: pyt
                 overrides={"objects.conservation.show_background": show_background},
                 conservation_dataframes=[pd.DataFrame([hit], columns=COMPARISON_COLUMNS)],
                 conservation_reference="subject",
-                circular_track_slots=slots, circular_track_axis_index=1,
+                circular_track_slots=track_slots, circular_track_axis_index=1,
             ),
         )
 
-    layout, inks = ring(False)
-    drawn = _slot(layout, "sequence_conservation").draw_band_px
+    slots, inks = ring(False)
+    drawn = _slot(slots, "sequence_conservation").draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     assert _lines_at(inks, middle, 0.6) == 0
     assert _lines_at(inks, middle, 0.1) == 1
-    layout, inks = ring(True)
+    slots, inks = ring(True)
     assert _lines_at(inks, middle, 0.6) == 1
 
 
@@ -577,7 +577,7 @@ def test_an_annotation_track_counts_its_marks_not_its_band(monkeypatch: pytest.M
     region = RegionAnnotation(
         "block", CoordinateSpan(None, 1, length // 4), mark="band", style=RegionAnnotationStyle(fill="#cccccc")
     )
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(
             annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
@@ -585,7 +585,7 @@ def test_an_annotation_track_counts_its_marks_not_its_band(monkeypatch: pytest.M
             circular_track_axis_index=1,
         ),
     )
-    drawn = _slot(layout, "annotations").draw_band_px
+    drawn = _slot(slots, "annotations").draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     assert _lines_at(inks, middle, 0.6) == 0
     assert _lines_at(inks, middle, 0.1) == 1
@@ -597,11 +597,11 @@ def test_a_tick_track_counts_its_marks_and_labels_not_its_band(monkeypatch: pyte
 
     record = SeqIO.read(str(HMMTDNA), "genbank")
     length = len(record.seq)
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(circular_track_slots=["features:features", "ticks:ticks"], circular_track_axis_index=1),
     )
-    tick_layout = _slot(layout, "ticks").payload
+    tick_layout = _slot(slots, "ticks").payload
     large, _ = get_circular_tick_intervals(length)
     marks = 0.5 * (tick_layout.tick_band_px.inner_px + tick_layout.tick_band_px.outer_px)
     # Between two ticks there is neither a mark nor a label.
@@ -781,9 +781,9 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
     drawn: list[tuple[tuple[object, ...], int]] = []
     original = assemble_module.definition_lines_over_tracks
 
-    def capture(lines, layout, sources, labels):
-        captured.append((layout, sources, labels))
-        count = original(lines, layout, sources, labels)
+    def capture(lines, axis, slots, sources, labels):
+        captured.append((axis, slots, sources, labels))
+        count = original(lines, axis, slots, sources, labels)
         drawn.append((tuple(lines), count))
         return count
 
@@ -807,14 +807,14 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
             ],
         )()
     assert captured, "the definition count did not run"
-    layout, sources, labels = captured[-1]
-    inks = assemble_module._record_track_ink(layout, sources, labels)
+    axis, slots, sources, labels = captured[-1]
+    inks = assemble_module._record_track_ink(axis, slots, sources, labels)
     # The count drawn at the stage boundary is the full count, once per captured call.
     assert len(drawn) == len(captured)
     for lines, count in drawn:
         assert count == assemble_module._definition_lines_on_tracks(inks, list(lines)), (lines, count)
     monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", original)
-    band_floor = min(float(slot.draw_band_px.inner_px) for slot in layout.slots if slot.draw_band_px is not None)
+    band_floor = min(float(slot.draw_band_px.inner_px) for slot in slots if slot.draw_band_px is not None)
     # The GC% border, half its 6 px stroke inside every band: the paint a band floor would have missed.
     nearest = min((ink for ink in inks if isinstance(ink, CircularInkRing)), key=lambda ink: ink.nearest_px)
     assert nearest.nearest_px < band_floor - 1.0, (nearest.nearest_px, band_floor)
@@ -824,7 +824,7 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
         radius = nearest.nearest_px + 0.25 * step
         box = _box_at(radius, turn, 0.75)
         full = assemble_module._definition_lines_on_tracks(inks, [box])
-        assert assemble_module.definition_lines_over_tracks((box,), layout, sources, labels) == full, radius
+        assert assemble_module.definition_lines_over_tracks((box,), axis, slots, sources, labels) == full, radius
         counts[radius] = (full, math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y))))
     # A line whose farthest corner stays more than 1 px inside every band still meets the stroke.
     assert any(full == 1 and reach < band_floor - 1.0 for full, reach in counts.values()), counts

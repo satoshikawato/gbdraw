@@ -801,12 +801,16 @@ class CircularTrackInkSources:
 
 
 def _record_track_ink(
-    radial_layout: CircularRadialLayout,
+    axis: CircularAxisLayout,
+    slots: Sequence[CircularResolvedSlot],
     sources: CircularTrackInkSources,
     annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
 ) -> tuple[CircularInk, ...]:
     """What the record's tracks paint, from the owners that draw them (D-18), read with the same slot sources
     the drawing reads (``_draw_resolved_circular_slot``).
+
+    It reads the radial layout's axis and resolved slots only, not the centre band or the outer content radius
+    (OV-2111).
 
     The GC content, GC skew and depth areas and their axes come from their drawers, the feature blocks from the
     intervals the labels clear (``feature_radius_intervals``), the conservation hits and background from the
@@ -820,8 +824,8 @@ def _record_track_ink(
     cfg = sources.profile.config
     font_family = str(cfg.objects.text.font_family)
     record_transform = sources.record_transform
-    inks: list[CircularInk] = [CircularInkRing(radial_layout.axis.paint_band_px)]
-    for slot in radial_layout.slots:
+    inks: list[CircularInk] = [CircularInkRing(axis.paint_band_px)]
+    for slot in slots:
         renderer = str(slot.renderer)
         if slot.draw_band_px is None:
             continue
@@ -905,19 +909,20 @@ def _record_track_ink(
 
 def definition_lines_over_tracks(
     definition_lines: tuple[Aabb, ...],
-    radial_layout: CircularRadialLayout,
+    axis: CircularAxisLayout,
+    slots: tuple[CircularResolvedSlot, ...],
     sources: CircularTrackInkSources,
     annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
 ) -> int:
     """How many centre definition lines meet a track's paint (stage ``definition_track_overlaps``, OV-2088).
 
-    Every call builds every track's paint and counts against all of it; the stage key (the lines, the layout,
-    the paint sources and the annotation labels) lets a Generate that changes none of them reuse the count.
+    Every call builds every track's paint and counts against all of it; the stage key (the lines, the radial
+    layout's axis and slots, the paint sources and the annotation labels) lets a Generate that changes none of
+    them reuse the count. The centre band a species change moves beside a plot title (OV-1710) is not an input:
+    the paint does not read it (OV-2111).
     """
 
-    return _definition_lines_on_tracks(
-        _record_track_ink(radial_layout, sources, annotation_labels), definition_lines
-    )
+    return _definition_lines_on_tracks(_record_track_ink(axis, slots, sources, annotation_labels), definition_lines)
 
 
 def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Sequence[Aabb]) -> int:
@@ -2978,7 +2983,8 @@ def add_record_on_circular_canvas(
             "definition_track_overlaps",
             definition_lines_over_tracks,
             tuple(definition_lines),
-            layout,
+            layout.axis,
+            layout.slots,
             CircularTrackInkSources(
                 gb_record=gb_record,
                 geometry=canvas_config.geometry(),

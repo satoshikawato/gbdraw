@@ -496,14 +496,15 @@ def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definit
     assert "circular_definition_content" not in outcome.stages.builds
 
 
-def test_a_species_change_beside_a_plot_title_that_moves_no_track_keeps_the_circular_labels(
+def test_a_species_change_beside_a_plot_title_that_moves_no_track_builds_nothing(
     tables: Path, tmp_path: Path
 ) -> None:
-    """OV-2103: beside a plot title the tracks keep the band of the untitled definition (OV-1710).
+    """OV-2103, OV-2111: beside a plot title the tracks keep the band of the untitled definition (OV-1710).
 
-    A species change that moves no track draws the same labels, so the labels
-    stage, which reads that band only where it reaches past the inside tracks,
-    stays a hit.
+    A species change that moves no track draws the same figure. The labels
+    stage reads that band only where it reaches past the inside tracks, and
+    the definition-over-track count reads the axis and the slots, not the
+    band, so both stay hits and nothing builds.
     """
 
     case = CASES["C1"]
@@ -515,7 +516,25 @@ def test_a_species_change_beside_a_plot_title_that_moves_no_track_keeps_the_circ
     outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
     assert outcome.error is None
     assert outcome.reply == before.reply
-    assert "circular_labels" not in outcome.stages.builds
+    assert not outcome.stages.builds, outcome.stages.builds
+
+
+def test_a_track_move_beside_an_unchanged_definition_rebuilds_the_definition_over_track_count(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2111, no stale hit: the count reads where each slot draws. Widening the GC skew track moves the slots
+    and nothing else the count reads (both widths are explicit), so the count builds again."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    before = harness.warm([*base, "--gc_skew_width", "40"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--gc_skew_width", "90"])
+    assert outcome.error is None
+    assert outcome.reply["results"] != before.reply["results"]
+    assert outcome.stages.builds.get("definition_track_overlaps") == 1, outcome.stages.builds
 
 
 @pytest.mark.parametrize("case_id", ["L2", "L3"])
