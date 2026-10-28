@@ -1229,47 +1229,115 @@ def search_frame_protein_resources(
     """The new bytes of the stored protein resources of ``payload`` that ``converted`` changed.
 
     ``request`` is ``payload`` decoded and ``converted`` its results in the
-    search frame (OV-1145); see :func:`_search_frame_resources`.
+    search frame (OV-1145); see :func:`_search_frame_items`. Each changed
+    item's bytes go under its stored resource ID, so the request and every
+    other resource stay as stored; a resource whose items changed to
+    different bytes is refused.
     """
 
-    return _search_frame_resources(payload, request, converted, _STORED_PROTEIN_RESULT_KINDS)
+    changed: dict[str, bytes] = {}
+    for item in _search_frame_items(payload, request, converted, _STORED_PROTEIN_RESULT_KINDS):
+        if item.content is None:
+            continue
+        if changed.get(item.resource_id, item.content) != item.content:
+            raise ValidationError(f"Stored resource {item.resource_id!r} holds two different comparison results.")
+        changed[item.resource_id] = item.content
+    return changed
 
 
 _STORED_NUCLEOTIDE_TABLE_KINDS = frozenset({"nucleotideBlast"})
+
+
+@dataclass(frozen=True)
+class SearchFrameNucleotideTables:
+    """The resources of a main Session with its nucleotide tables in the search frame.
+
+    ``pair_resources`` names, by the (query, subject) record keys of a
+    request item, the resource that holds that item's rows when it is not
+    the item's stored resource; the Web comparison card of that record pair
+    names it too.
+    """
+
+    resources: dict[str, SessionResourceDescriptor]
+    pair_resources: dict[tuple[str, str], str]
 
 
 def search_frame_nucleotide_resources(
     payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
-) -> dict[str, bytes]:
-    """The new bytes of the stored nucleotide tables of ``payload`` that ``converted`` changed.
+    resources: Mapping[str, SessionResourceDescriptor],
+) -> SearchFrameNucleotideTables:
+    """``resources`` with the stored nucleotide tables of ``payload`` in the search frame.
 
     ``request`` is ``payload`` decoded and ``converted`` its rows in the
-    search frame (a main Session up to 42, PD-OI-073). The converted rows keep
-    their stored resource ID, so a Web file card that names the table reads
-    the rows the request draws (OV-2080); see :func:`_search_frame_resources`.
+    search frame (a main Session up to 42, PD-OI-073). A stored table keeps
+    its resource ID for the items whose rows did not change, or, when every
+    item that names it changed, for the first item by record pair, which
+    then holds its converted rows. Each other distinct converted table gets
+    a new resource as the request encoder allocates one, so the request item
+    and the Web comparison card of every record pair read that pair's rows
+    (OV-2080, OV-2097).
     """
 
-    return _search_frame_resources(payload, request, converted, _STORED_NUCLEOTIDE_TABLE_KINDS)
+    from gbdraw.session_resources import SessionResourceTable
+
+    by_resource: dict[str, list[_SearchFrameItem]] = {}
+    for item in _search_frame_items(payload, request, converted, _STORED_NUCLEOTIDE_TABLE_KINDS):
+        by_resource.setdefault(item.resource_id, []).append(item)
+    tables = dict(resources)
+    moved: list[tuple[_SearchFrameItem, bytes]] = []
+    for resource_id, items in by_resource.items():
+        items.sort(key=lambda item: item.record_pair)
+        kept = None if any(item.content is None for item in items) else items[0].content
+        if kept is not None:
+            tables[resource_id] = replace_resource_bytes(resources[resource_id], kept)
+        moved.extend((item, item.content) for item in items if item.content not in (None, kept))
+    table = SessionResourceTable(tables)
+    pair_resources: dict[tuple[str, str], str] = {}
+    for item, content in moved:
+        stored = resources[item.resource_id]
+        resource_id = table.request().add_bytes(
+            item.resource_id, kind=stored.get("kind", ""), name=stored.get("name", ""), content=content,
+        )
+        if resource_id not in tables:
+            name = table.descriptors()[resource_id]["name"]
+            tables[resource_id] = replace_resource_bytes({**stored, "name": str(name)}, content)
+        query_key, subject_key = (request.records[index].record_key for index in item.record_pair)
+        if query_key is not None and subject_key is not None:
+            pair_resources[(query_key, subject_key)] = resource_id
+    return SearchFrameNucleotideTables(tables, pair_resources)
 
 
-def _search_frame_resources(
+@dataclass(frozen=True)
+class _SearchFrameItem:
+    """One stored comparison result: its stored resource and the bytes the conversion gave it.
+
+    ``content`` is ``None`` when the conversion kept the stored bytes;
+    ``record_pair`` is the (query, subject) record indices of a
+    record-pair result, ``(-1, -1)`` for one of the request.
+    """
+
+    resource_id: str
+    record_pair: tuple[int, int]
+    content: bytes | None
+
+
+def _search_frame_items(
     payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
     kinds: frozenset[str],
-) -> dict[str, bytes]:
-    """The new bytes of the stored ``kinds`` resources of ``payload`` that ``converted`` changed.
+) -> list[_SearchFrameItem]:
+    """The stored ``kinds`` items of ``payload``, each with its bytes in ``converted``.
 
-    Both requests are encoded alone; each ``kinds`` item whose bytes the
-    conversion changed gets the converted bytes under its stored resource ID,
-    so the request and every other resource stay as stored.
+    Both requests are encoded alone and their items meet the stored ones by
+    identity (:func:`_comparison_items`).
     """
 
     stored = _comparison_items(payload.get("comparisons"), kinds)
     if not stored:
-        return {}
+        return []
 
     from gbdraw.session_request_codec import encode_canonical_request
     from gbdraw.session_resources import SessionResourceTable
@@ -1288,17 +1356,19 @@ def _search_frame_resources(
     (before, before_resources), (after, after_resources) = items_of(as_stored), items_of(converted)
     if not stored.keys() == before.keys() == after.keys():
         raise ValidationError("Stored comparison results do not match their decoded request.")
-    changed: dict[str, bytes] = {}
+    items: list[_SearchFrameItem] = []
     for identity, item in stored.items():
         old, new = before[identity], after[identity]
         content = _embedded_resource_bytes(after_resources[_comparison_resource_id(new)])
-        if content == _embedded_resource_bytes(before_resources[_comparison_resource_id(old)]):
-            continue
-        resource_id = _comparison_resource_id(item)
-        if changed.get(resource_id, content) != content:
-            raise ValidationError(f"Stored resource {resource_id!r} holds two different comparison results.")
-        changed[resource_id] = content
-    return changed
+        query, subject = (identity[1], identity[2]) if len(identity) == 4 else (-1, -1)
+        if not isinstance(query, int) or not isinstance(subject, int):
+            raise ValidationError("A stored comparison result requires integer record indices.")
+        items.append(_SearchFrameItem(
+            _comparison_resource_id(item),
+            (query, subject),
+            None if content == _embedded_resource_bytes(before_resources[_comparison_resource_id(old)]) else content,
+        ))
+    return items
 
 
 _RECORD_PAIR_RESULT_KINDS = frozenset({"nucleotideBlast", "precomputedProteinComparison"})
@@ -1970,6 +2040,7 @@ __all__ = [
     "DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION",
     "MAIN_DISPLAY_FRAME_SESSION_VERSION",
     "AdaptedSessionRequest",
+    "SearchFrameNucleotideTables",
     "SessionMigrationReport",
     "adapt_session_request",
     "build_session_compatible_request_diagram",

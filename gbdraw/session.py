@@ -69,6 +69,7 @@ if TYPE_CHECKING:
         RequestRenderResult,
     )
     from gbdraw.api.requests import DiagramRequest
+    from gbdraw.api.session_compat import SearchFrameNucleotideTables
     from gbdraw.session_migration import DraftMigrationRepair, DraftMigrationReport
 
 
@@ -1730,16 +1731,21 @@ def _project_adjunct(
     *,
     report: DraftMigrationReport | None,
     source_features: Mapping[str, Any] | None = None,
-    resources: Mapping[str, SessionResourceDescriptor] | None = None,
+    tables: SearchFrameNucleotideTables | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """The current drawing state and Web file inventory of a Session 27-44;
-    its Web file cards hold ``resources`` when given (the converted ones)."""
+    """The current drawing state and Web file inventory of a Session 27-44.
+
+    With ``tables`` (its nucleotide tables in the search frame) its Web file
+    cards hold the converted resources, and the Linear comparison card of a
+    record pair whose rows moved to a resource of their own names that
+    resource, found by the endpoint record keys of the card's edge.
+    """
 
     from gbdraw.session_migration import project_session_adjunct_for_current_write
 
     try:
-        return project_session_adjunct_for_current_write(
-            loaded._data if resources is None else {**loaded._data, "resources": resources},
+        state, inventory = project_session_adjunct_for_current_write(
+            loaded._data if tables is None else {**loaded._data, "resources": tables.resources},
             source_version=loaded.version,
             source_features=source_features,
             report=report,
@@ -1748,6 +1754,33 @@ def _project_adjunct(
         raise
     except ValidationError as exc:
         raise SessionConversionError(str(exc)) from exc
+    if tables is None or not tables.pair_resources or inventory is None:
+        return state, inventory
+    from gbdraw.session_drawings import drawing_draft_config
+
+    plan = drawing_draft_config(state, "linear").get("linearComparisonPlan")
+    edges = plan.get("edges") if isinstance(plan, Mapping) else None
+    edge_pairs = {
+        edge.get("id"): (edge.get("queryUid"), edge.get("subjectUid"))
+        for edge in (edges if isinstance(edges, list) else ())
+        if isinstance(edge, Mapping)
+    }
+    cards = inventory.get("linearComparisons")
+
+    def rebound(card: object) -> object:
+        if not isinstance(card, Mapping) or not isinstance(card.get("file"), Mapping):
+            return card
+        query, subject = edge_pairs.get(card.get("id"), (None, None))
+        resource_id = (tables.pair_resources.get((query, subject))
+                       if isinstance(query, str) and isinstance(subject, str) else None)
+        if resource_id is None:
+            return card
+        return {**card, "file": {**card["file"], "resourceId": resource_id,
+                                 "descriptor": tables.resources[resource_id]}}
+
+    if isinstance(cards, list):
+        inventory["linearComparisons"] = [rebound(card) for card in cards]
+    return state, inventory
 
 
 def _request_less_data(
@@ -1892,12 +1925,11 @@ def _upgrade_to_current(
         request = _decode_drawing(materialized, drawing, stored_request_schema=stored_request_schema)
         try:
             adapted = adapt_session_request(request, drawing.artifacts)
-            # The rows a main Session stored in the display frame keep their
-            # stored resource ID in the search frame, so a Web file card that
-            # names the table reads the rows the request draws (OV-2080).
-            resources = _with_resource_bytes(
-                source["resources"],
-                search_frame_nucleotide_resources(drawing.request, request, adapted.request),
+            # The rows a main Session stored in the display frame move to the
+            # search frame; the request item and the Web file card of each
+            # record pair read that pair's rows (OV-2080, OV-2097).
+            tables = search_frame_nucleotide_resources(
+                drawing.request, request, adapted.request, source["resources"],
             )
         except SessionError:
             raise
@@ -1907,8 +1939,9 @@ def _upgrade_to_current(
         # Rendered-ID edits without a saved catalog are named through the
         # sources read again, as Web Load reads them.
         state, web_file_inventory = _project_adjunct(
-            loaded, report=report, source_features=source_features, resources=resources,
+            loaded, report=report, source_features=source_features, tables=tables,
         )
+        resources = tables.resources
         state = with_current_artifacts(
             state,
             losat_cache_entries=adapted.artifacts.losat_cache_entries,
