@@ -851,3 +851,31 @@ test('the replacement sites are found by drawing ID, slot, row uid, and comparis
   ]);
   assert.deepEqual(projectInputReplacement(drawings, card.fileId), [], 'a card file is never a site');
 });
+
+test('replacing a multi-record file for every drawing expands it into records in the Linear drawing and its Duplicate (OV-2148)', async () => {
+  const app = createAppSetup();
+  const genbank = (name, ids) => new File([ids.map((id) => (
+    `LOCUS       ${id} 40 bp DNA linear\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`
+  )).join('')], name);
+  const settle = async () => { for (let i = 0; i < 40; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  app.selectDrawing('linear');
+  const linear = state.drawingOf('linear');
+  linear.inputType.value = 'gb'; // an earlier case leaves GFF3
+  const one = state.inputFiles.registerFile(genbank('one.gb', ['ONE']));
+  await window.__GBDRAW_HISTORY__.runUndoable('Change uploaded file', () => { app.setLinearSeqPrimaryFile(0, 'gb', one); });
+  await settle();
+  // The card keeps its uid, and an expansion gives its first record that uid.
+  const { uid } = linear.linearSeqs[0];
+  const { drawingId: copyId } = app.drawingList.duplicateDrawing('linear');
+  const copy = state.drawingOf(copyId);
+  const recordsOf = (drawing, file) => drawing.linearSeqs
+    .filter((seq) => seq.gb?.fileId === file.fileId).map((seq) => seq.region_record_id);
+  assert.deepEqual(recordsOf(copy, one), recordsOf(linear, one), 'the Duplicate binds the same rows');
+  const multi = genbank('multi.gb', ['REC_A', 'REC_B']);
+  assert.equal(app.replaceInputFile(one.fileId, multi, 'all').status, 'ok');
+  await settle();
+  const replaced = linear.linearSeqs.find((seq) => seq.uid === uid)?.gb;
+  assert.ok(replaced && replaced.fileId !== one.fileId, 'the shown drawing binds the new file');
+  assert.deepEqual(recordsOf(linear, replaced), ['REC_A', 'REC_B'], 'the shown drawing expands the new file into its records');
+  assert.deepEqual(recordsOf(copy, replaced), ['REC_A', 'REC_B'], 'so does its Duplicate');
+});

@@ -344,6 +344,11 @@ const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
  * @template T
  * @typedef {{ byOwner: WeakMap<object, Map<string, T>>, limit: number }} FileReadCache
  */
+/**
+ * A settled discovery of a Circular drawing's input, for the drawing it ran for.
+ * @typedef {{ drawingId: DrawingId, primaryFile: InputFileRef | null, pairedFile: InputFileRef | null,
+ *   recordCount: number }} CircularRecordsDiscovered
+ */
 // What Generate reads from an input File is kept per File in `services/record-discovery.js` (`readOncePerFile`,
 // OV-1587): each sequence file parsed once by format (OV-1556), the LOSAT FASTA of a record and region and,
 // once a search needs it, its SHA-256, the blastp protein extraction, and the Circular similarity ring reference
@@ -1504,8 +1509,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
  * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
  * @property {(() => string[]) | null} [omittedAnnotationRecordKeys] The record-catalog keys of the drawing's OFF records.
- * @property {((discovered: { primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }) => void) | null}
- *   [onCircularRecordsDiscovered] A discovery of the Circular input settled (success or error).
+ * @property {((discovered: CircularRecordsDiscovered) => void) | null}
+ *   [onCircularRecordsDiscovered] A discovery of a Circular drawing's input settled (success or error).
  * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {((drawing: DrawingState) => Promise<RecordIdentitySources>) | null} [readRecordIdentitySources]
  *   The record discovery owner's record lists of the Generate's drawing's inputs, awaited (DESIGN A4): the
@@ -2448,7 +2453,7 @@ export const createRunAnalysis = ({
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
       if (nextRecords.length > 0) releaseSourceInputFailure(drawing);
-      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: nextRecords.length });
+      onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: nextRecords.length });
     } catch (error) {
       if (
         refreshGeneration !== currentGeneration() ||
@@ -2469,7 +2474,7 @@ export const createRunAnalysis = ({
       drawing.circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length);
       releaseSourceInputFailure(drawing);
-      onCircularRecordsDiscovered?.({ primaryFile, pairedFile, recordCount: 0 });
+      onCircularRecordsDiscovered?.({ drawingId: drawing.id, primaryFile, pairedFile, recordCount: 0 });
     }
   };
 

@@ -26,6 +26,7 @@
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
+/** @import { CircularRecordsDiscovered } from './run-analysis.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
@@ -1400,12 +1401,10 @@ export const createAppSetup = () => {
     }
     if (draft) setLinearComparisonFile(draft.id, file);
   };
-  /** @param {string} uid @param {number} fallback */
-  const linearRecordRowFor = (uid, fallback) => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return fallback;
-    return drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback;
-  };
+  /** @param {DrawingState} drawing @param {string} uid @param {number} fallback */
+  const linearRecordRowFor = (drawing, uid, fallback) => (
+    drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback
+  );
   const linearLayoutTokens = computed(() => {
     const drawing = state.activeDrawing();
     return (
@@ -1420,32 +1419,49 @@ export const createAppSetup = () => {
       .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
   ));
 
-  // The Linear rows whose next record discovery may expand them, each with
-  // whether the row's own names were entered for the file being read. They
-  // were not when the file replaced another: those names belong to that file.
-  /** @type {Map<string, boolean>} */
-  const pendingLinearRecordExpansions = new Map();
-  // The Linear Files and the Circular input just uploaded: their first record
-  // discovery infers record definitions (Linear GenBank) and opens the record
-  // list of a file with many records (D-04). A Session load, a rollback, and a
-  // History step never add one.
-  /** @type {Set<string>} */
-  const pendingLinearUploads = new Set();
-  /** @type {InputFileRef | null} */
-  let pendingCircularUpload = null;
-  /** @type {RecordListRequest[]} */
-  const recordListRequests = reactive([]);
-  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount */
-  const requestRecordListAfterUpload = (listMode, sourceKey, recordCount) => {
-    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) recordListRequests.push({ mode: listMode, sourceKey });
+  /**
+   * What a drawing's next record discoveries do, for the rows and input of
+   * that drawing only (OV-2148: a Duplicate keeps its row uids, so a uid alone
+   * names a row of several drawings).
+   * - `expansions`: the Linear rows whose next discovery may expand them, each
+   *   with whether the row's own names were entered for the file being read.
+   *   They were not when the file replaced another: those names belong to it.
+   * - `uploads`, `circularUpload`: the Linear Files and the Circular input just
+   *   uploaded: their first discovery infers record definitions (Linear
+   *   GenBank) and asks for the record list of a file with many records (D-04).
+   *   A Session load, a rollback, and a History step never add one.
+   * - `listRequests`: those asks, in upload order; the drawing's panel opens them.
+   * @typedef {{ expansions: Map<string, boolean>, uploads: Set<string>, circularUpload: InputFileRef | null,
+   *   listRequests: RecordListRequest[] }} PendingRecordDiscovery
+   */
+  /** @type {WeakMap<DrawingState, PendingRecordDiscovery>} */
+  const pendingDiscoveries = new WeakMap();
+  /** @param {DrawingState} drawing @returns {PendingRecordDiscovery} */
+  const pendingDiscoveryOf = (drawing) => {
+    const known = pendingDiscoveries.get(drawing);
+    if (known) return known;
+    /** @type {PendingRecordDiscovery} */
+    const pending = { expansions: new Map(), uploads: new Set(), circularUpload: null, listRequests: reactive([]) };
+    pendingDiscoveries.set(drawing, pending);
+    return pending;
+  };
+  /**
+   * @param {DrawingState} drawing
+   * @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount
+   */
+  const requestRecordListAfterUpload = (drawing, listMode, sourceKey, recordCount) => {
+    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) {
+      pendingDiscoveryOf(drawing).listRequests.push({ mode: listMode, sourceKey });
+    }
   };
   /**
    * @param {DrawingState} drawing
    * @param {{ uid: string, records: SequenceRecord[], inferDefinitions?: boolean }} discovered
    */
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
-    const namesOfThisFile = pendingLinearRecordExpansions.get(uid);
-    pendingLinearRecordExpansions.delete(uid);
+    const { expansions } = pendingDiscoveryOf(drawing);
+    const namesOfThisFile = expansions.get(uid);
+    expansions.delete(uid);
     const index = drawing.linearSeqs.findIndex((seq) => seq.uid === uid);
     if (index < 0) return;
     const source = drawing.linearSeqs[index];
@@ -1455,7 +1471,7 @@ export const createAppSetup = () => {
       }
       return;
     }
-    const row = linearRecordRowFor(uid, index + 1);
+    const row = linearRecordRowFor(drawing, uid, index + 1);
     // Expanded records keep only File-level values. A crop or record display
     // value of the replaced File does not apply to the new records (IN-04).
     // A name entered on the card of this file before it had several records
@@ -1484,35 +1500,40 @@ export const createAppSetup = () => {
     const drawing = state.drawingOf(drawingId);
     // Only an upload infers record definitions and opens the record list; a
     // loaded Session keeps its own.
-    const fromUpload = !state.sessionImportRollbackInProgress.value && pendingLinearUploads.delete(uid);
+    const fromUpload = !state.sessionImportRollbackInProgress.value && pendingDiscoveryOf(drawing).uploads.delete(uid);
     const expanded = expandDiscoveredLinearRecords(drawing, {
       uid, records, inferDefinitions: fromUpload && drawing.inputType.value === 'gb'
     });
-    if (fromUpload) requestRecordListAfterUpload('linear', uid, records.length);
+    if (fromUpload) requestRecordListAfterUpload(drawing, 'linear', uid, records.length);
     // After the expansion, which gives records 2..n of the file new keys: an
     // expansion rebinds in its source edit (`applyLinearSeqMutation`).
     if (!expanded) rebindAnnotationRecords();
     return expanded;
   };
   /**
-   * The Circular input's first discovery after its upload (success or error).
-   * @param {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }} discovered
+   * A Circular drawing's discovery settled (success or error): the first after
+   * its input's upload asks for the record list.
+   * @param {CircularRecordsDiscovered} discovered
    */
-  const handleCircularRecordsDiscovered = ({ primaryFile, pairedFile, recordCount }) => {
+  const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
     rebindAnnotationRecords();
-    if (!pendingCircularUpload || (pendingCircularUpload !== primaryFile && pendingCircularUpload !== pairedFile)) return;
-    pendingCircularUpload = null;
-    requestRecordListAfterUpload('circular', 'circular', recordCount);
+    // A drawing deleted while its discovery ran asks for nothing.
+    if (!state.drawingTabs.value.some((tab) => tab.id === drawingId)) return;
+    const drawing = state.drawingOf(drawingId);
+    const pending = pendingDiscoveryOf(drawing);
+    const upload = pending.circularUpload;
+    if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
+    pending.circularUpload = null;
+    requestRecordListAfterUpload(drawing, 'circular', 'circular', recordCount);
   };
   /** @param {DrawingState} drawing */
   const materializeAutomaticLinearRecords = async (drawing) => {
     if (drawing.mode !== 'linear') return;
     // A row that already waits for its discovery keeps what its writer said
     // about its names (a replacing file does not own the row's record name).
+    const { expansions } = pendingDiscoveryOf(drawing);
     drawing.linearSeqs.forEach((seq) => {
-      if (!seq.region_record_id && !pendingLinearRecordExpansions.has(seq.uid)) {
-        pendingLinearRecordExpansions.set(seq.uid, true);
-      }
+      if (!seq.region_record_id && !expansions.has(seq.uid)) expansions.set(seq.uid, true);
     });
     await linearRecordSelector.refresh(drawing);
   };
@@ -6450,7 +6471,7 @@ export const createAppSetup = () => {
     if (previous === nextRef) return;
     const previousRecordCount = drawing.circularRecordList.value.length;
     changeRecordSources(drawing, () => { bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, field, nextValue); });
-    if (nextRef) pendingCircularUpload = nextRef;
+    if (nextRef) pendingDiscoveryOf(drawing).circularUpload = nextRef;
     void discoverDrawingRecords(drawing);
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
@@ -6653,11 +6674,13 @@ export const createAppSetup = () => {
       changeRecordSources(drawing, () => replaceLinearSeqs(drawing.slices.inputs, next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
-    pendingLinearRecordExpansions.forEach((_, uid) => {
-      if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
+    // A removed row of this drawing no longer waits; another drawing's rows are its own.
+    const pending = pendingDiscoveryOf(drawing);
+    pending.expansions.forEach((_, uid) => {
+      if (!activeUids.has(uid)) pending.expansions.delete(uid);
     });
-    pendingLinearUploads.forEach((uid) => {
-      if (!activeUids.has(uid)) pendingLinearUploads.delete(uid);
+    pending.uploads.forEach((uid) => {
+      if (!activeUids.has(uid)) pending.uploads.delete(uid);
     });
     const nextRows = reconcileLinearRecordLayout(drawing.linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
@@ -6840,8 +6863,9 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
     if (keepSource) {
-      pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
-      pendingLinearUploads.add(replacement.uid);
+      const pending = pendingDiscoveryOf(drawing);
+      pending.expansions.set(replacement.uid, !seq[field]);
+      pending.uploads.add(replacement.uid);
     }
   };
   /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
@@ -7063,7 +7087,7 @@ export const createAppSetup = () => {
       if (!drawing) return null;
       return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
     },
-    autoOpenRequests: recordListRequests
+    autoOpenRequests: () => pendingDiscoveryOf(state.activeDrawing()).listRequests
   });
 
   /** @param {DrawingState} drawing @param {number} sourceIndex @param {number} direction */

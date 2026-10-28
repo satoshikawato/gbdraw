@@ -41,7 +41,7 @@ const makeOwner = ({ sources, recordsOff = { linear: [], circular: [] }, request
     removeSource: (mode, key) => { log.push(`remove:${mode}:${key}`); return true; },
     deleteRecordSettings: (mode, keys) => { log.push(`delete:${mode}:${keys.join(',')}`); return true; },
     prepareRecords: async (mode) => { await prepareRecords(mode); log.push(`prepare:${mode}`); },
-    autoOpenRequests: requests
+    autoOpenRequests: () => requests
   });
   return { owner, offLists, log, choice };
 };
