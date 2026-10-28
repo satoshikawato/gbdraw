@@ -1926,3 +1926,73 @@ test('a palette switch recolors the CDS row a rule of a hidden feature names, li
   expect(cdsRow?.fill, 'the live CDS row shows the new palette color').toBe(earthtonesCds);
   await expectLiveEqualsGenerate(page, { label: 'a palette switch after a rule of a hidden feature' });
 });
+
+// OV-2188 (release-tier random walk, seeds 20261102 and 20261106): a Legend
+// name given in the popup, or a Legend rename of a feature type's row, shows
+// the rule's row at once. The row copies Python's first row; once the user
+// order puts a GC row first, the copy took that row's stroke (`none`), while
+// Python draws a rule row with the block stroke (`gray`).
+for (const [name, edit] of [
+  ['a popup Legend name', (page) => popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' })],
+  ['a Legend rename', (page) => renameRow(page, 'repeat_region', 'Walk group').then(() => settleLive(page))]
+]) {
+  test(`${name} shows its row with the block stroke after a GC row was moved first, live = Generate (OV-2188)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const gcContent = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+    await appAction(page, 'moveLegendEntry', gcContent, 0);
+    await edit(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.caption === 'Walk group');
+    expect(row?.stroke, 'the new row is drawn with the block stroke').toBe('#808080');
+    await expectLiveEqualsGenerate(page, { label: `${name} after a GC row was moved first` });
+  });
+}
+
+// OV-2187 (release-tier random walk, seed 20261101): "Use existing color" on
+// a CDS of the first batch Result writes a rule named CDS in the CDS palette
+// color, which colors no feature the second Result draws. There Python draws
+// the palette's CDS row, not the rule's. A rule edit while the second Result
+// is shown took that row for the rule's (same name, same color) and hid it;
+// Generate draws it.
+for (const [name, field, value] of [
+  ['the same name entered again', 'cap', 'CDS'],
+  ['a new color', 'color', '#7b2cbf']
+]) {
+  test(`a rule edit (${name}) on a batch Result the rule does not color keeps its CDS row, live = Generate (OV-2187)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await popupEdit(page, 'TESTA_0006', { fill: '#123456', scope: 'useExisting' });
+    const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
+    expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
+    await showResult(page, 1);
+    await evaluateWithRetainedPromise(page, ({ field, value }) => window.__GBDRAW_APP__.setSpecificRuleField(0, field, value), { field, value });
+    await settleLive(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.key === 'CDS');
+    expect(row, 'the second Result still shows its CDS row').toBeTruthy();
+    await expectLiveEqualsGenerate(page, { label: `a rule edit (${name}) on the Result the rule does not color` });
+  });
+}
+
+// OV-2189 (release-tier random walk, seed 20261108): a popup Legend name on
+// the only feature of a rule row renames the row in its place (OV-158). The
+// rule Python writes for it only re-captions the rule the feature took, so it
+// takes that rule's place in the table, and Generate draws the row there too.
+// The edit is one History step (PD-OI-088).
+test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['^alpha protein$', 'alpha', '#e63946'], ['^dup alpha$', 'gamma', '#2a9d8f']], undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
+});

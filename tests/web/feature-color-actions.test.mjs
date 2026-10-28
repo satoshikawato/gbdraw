@@ -1212,6 +1212,25 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual(fixture.committed, [], `${name} writes no rules`);
   }
 
+  // OV-2189 (Owner 2026-10-29): a popup Legend name on the only feature of a
+  // rule row asks Python for its rules, which keep the renamed rule in its
+  // place in the table (the old rule colored the feature there), so the row
+  // keeps its place at Generate (OV-158).
+  {
+    const alphaRule = { feat: 'tRNA', qual: 'product', val: '^alpha$', color: '#e63946', cap: 'alpha' };
+    const betaRule = { feat: 'tRNA', qual: 'product', val: '^beta$', color: '#2a9d8f', cap: 'beta' };
+    const alpha = { ...trna, product: 'alpha', qualifiers: { product: ['alpha'] }, legendCaption: 'alpha' };
+    const beta = { ...trna, id: 't2', svg_id: 't2', product: 'beta', qualifiers: { product: ['beta'] }, start: 101, end: 170, legendCaption: 'beta' };
+    const fixture = build({ entries: [{ caption: 'alpha', color: '#e63946', featureIds: ['t1'] }, { caption: 'beta', color: '#2a9d8f', featureIds: ['t2'] }],
+      order: ['alpha', 'beta'], rules: [alphaRule, betaRule], features: [alpha, beta],
+      clicked: { svg_id: 't2', feat: beta, color: '#2a9d8f', legendName: 'gamma', appliedLegendName: 'beta' } });
+    await fixture.renameActions.handleLegendNameCommit();
+    assert.equal(fixture.errorLog.value, null);
+    assert.deepEqual(fixture.committed.at(-1).map(({ val, cap, color }) => [val, cap, color]),
+      [['^alpha$', 'alpha', '#e63946'], ['^beta$', 'gamma', '#2a9d8f']], 'the renamed rule keeps its place');
+    assert.deepEqual(fixture.commitOptions.at(-1).legendPlacement, { name: 'gamma', color: '#2a9d8f', at: 'beta', replaces: true });
+  }
+
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the
   // Legend owner's `keepBothNamesOf`). A row renamed whole keeps its place and
   // its key's records; a feature split off its row is placed right after the

@@ -4,6 +4,8 @@
 
 **件数**: 固有の問題 3 件（P2 3: OV-1985、OV-1987、OV-1988）。#1433 の review で同じ経路の OV-1986 を追加（再現せず）。どの run でも `Promotion audit / random-walk` だけが失敗し、その原因は run 40634318370 では OV-1985、run 40648501950 では OV-1987、run 40655413787 では OV-1988 である。修正は OV-1985 が #1433（`fix/ov1985-legend-stroke-caption`）、OV-1987 が #1438（`fix/ov1987-legend-stroke-leave`）、OV-1988 が #1441（`fix/ov1988-legend-fill-palette`）。
 
+追加の乱歩（dev `d08c1878e`、seed 20261101 から 20261108、fixture ごとに 30 step）で 3 件（P2 3: OV-2187、OV-2188、OV-2189）。8 seed のうち 4 seed が失敗し、すべて live と Generate の Legend の差。修正は 3 件とも #1445（`fix/rw-legend-parity-0143`）。OV-2189 は Owner の判断（2026-10-29、A）に従い、Python の rule 合成が、置き換える rule と同じ条件・同じ色で名前だけを変える rule をその rule の表の位置に書く形にした。3 件とも 0.14.2 からの回帰ではない。OV-2187 と OV-2189 は v0.14.2 で同じ seed を再生し、同じ step で失敗した（seed 20261101、20261108）。OV-2188 は v0.14.2 で再生しておらず、関係するコード（追加する行の複製元を選ぶ行）が v0.14.2 と同一であることから判断した。
+
 ## 方法と表記
 
 - 手順は `docs/internal/WEB_PERIODIC_AUDIT.md` に従う。`random-walk` は seed 付きの乱歩（`tests/web/live-generate-random-walk.promotion.spec.js`）で、各 step で live 表示と Generate 結果を比べる。
@@ -45,10 +47,35 @@
 - OV-1988: 同じ spec に 1 件（base `6ea8b36ca` で失敗）と、`tests/web/palette-default-colors.test.mjs` に `draftLegendRowColors` と `draftLegendPanelColors` の 1 件（base で失敗）を追加した。乱歩の seed 40655413787 も修正後に成功する。work guard の行は変わらない。
 - work guard（`tests/web/helpers/live-work-allowlist.mjs` の `WORK_ALLOWLIST`）: setup が CDS 行に stroke を付けた後の fill を表示する 12 行（color rule commit、palette の変更、Apply to all、Save、Legend rename など）に `strokes` の stage を記録した。
 
+## 追加の乱歩（dev `d08c1878e`、30 step）
+
+| ジョブ | 結果 | 項目 |
+|---|---|---|
+| seed 20261101（fixture "Circular, two-Result batch" の step 8） | 失敗 | OV-2187 |
+| seed 20261102（fixture "Circular, one Result" の step 21） | 失敗 | OV-2188 |
+| seed 20261106（fixture "Circular, one Result" の step 12） | 失敗 | OV-2188 |
+| seed 20261108（fixture "Linear, one Result" の step 18 と 19） | 失敗 | OV-2189 |
+| seed 20261103、20261104、20261105、20261107 | 成功 | なし |
+
+| ID | 重大度 | 症状 | 原因 |
+|---|---|---|---|
+| OV-2187 | P2 | batch の 1 つ目の Result の CDS に feature popup の "Use existing color" で色を付ける（caption `CDS`、CDS の palette 色の rule）。この rule は 2 つ目の Result の feature を塗らないので、2 つ目の Result では Python は palette の `CDS` 行を描く。2 つ目の Result を表示したまま rule を編集すると（caption の再入力、色の変更）、live ではその `CDS` 行が消え、Generate では描かれる。1 つの Result でも、rule が Feature visibility で隠した feature だけを塗るときに同じことが起きる | rule commit が退かせる行（`candidateLegendIntents` in `app/feature-editor/rule-actions.js` の `previousIntents`）に、caption を持つ rule をすべて入れた。表示中の Result で描かれる feature を 1 つも塗らない rule も含めた。Legend の準備（`prepareFileLegendEntries` in `app/legend/entry-actions.js`）は、名前と色が一致する行を rule の行と見なすので、palette の `CDS` 行を退かせた。関係するコードは v0.14.2 と同一で、v0.14.2 でも同じ seed が同じ step で失敗する |
+| OV-2188 | P2 | Legend の並びを変えて GC content、GC skew、Depth のいずれかの行を先頭にした後（Sort、行の移動）、feature popup の Legend name や Legend の rename で rule の行を作ると、新しい行の枠線が live では無し（`none`）、Generate では block stroke の灰色（`#808080`）になる | rule の行をすぐ表示するとき、executor（`applyLegendOperations` in `services/svg-result-ingestion.js`）は表示中の並びで先頭の行を複製した。並びを変えると先頭は GC content の行（枠線なし）になる。Python は rule の行を block stroke で描き、Generate の executor は Python の並びの先頭（feature の行）を複製する。関係するコードは v0.14.2 と同一（v0.14.2 での再生はしていない） |
+| OV-2189 | P2 | product の rule 2 つ（`alpha`、`beta`）の後、`beta` 行の唯一の feature に feature popup で Legend name `gamma` を付けると、live では `gamma` が `beta` の位置に残り（OV-158）、Generate では先頭に描かれる。乱歩の Sort（step 12）は並びを変えておらず、関係しない | 色の編集の rule 表は Python が作り（OV-244）、この編集ではその feature の rule を表の先頭に置く。Python は rule の行を表の順に描く。live の commit は OV-158（Owner 2026-10-07: 名前を変えた行はその位置に残る）に従い、行と生成時の並びの記録の両方を同じ位置で新しい key に移すので、並びは編集されたものと見なされず、Generate は Python の並びのまま描く。v0.14.2 でも同じ seed が同じ step で失敗する。#1445 で修正: Python の rule 合成は、feature がこれまで取っていた rule と同じ条件・同じ色で名前だけを変える rule を、その rule の表の位置に書く。それ以外の合成（hash rule の追加など）は変えない |
+
+**修正（OV-2188、#1445）**: 追加する行は Python の並びの最初の行の複製にする。「feature Legend group の Python の並び」の owner を `pythonOrderedLegendRows`（`services/legend-svg.js`）1 つにした。editor の行（`direct-editor`）を除く行を、group が記録した Python の並び（`LEGEND_ORDER_RECORD`）の順に、記録がなければ描かれた順に返す。rule commit の行（`specific-color-file`）は、Python が次に描く rule の行の代わりとして含める（並びの記録はもともとそう数えている）。executor の行の追加（複製元）、並びの記録の書き込み（`orderLegendGroup`）、`legendRowTakesPlace` がこれを読む。`restoreLegendStructure` は記録をそのまま読む（`recordedGroupOrder`）。Generate の結果は変わらない。
+
+**修正（OV-2187、#1445）**: rule commit が退かせる行は、表示中の Result で描かれる feature が最初の rule として取る rule の行だけにする（#1441 の `drawnRuleMatches` の `groupTaken`）。match が分からない間は従来どおりすべての rule の行。Legend editor が追加した行の記録（`addedLegendCaptions`）から rule の caption を外す処理は、従来どおりすべての rule の行で行う（`ownedCaptions`）。Generate の結果は変わらない。
+
+**OV-2189（未修正）**: Product Contract に該当する行がなく、Owner の決定 OV-158（`tests/web/source-legend-reconciliation.playwright.spec.js` の M15: 行は live でも Generate でも位置を保つ）は live 側を意図した結果としている。直すには Generate の結果（または rule 表の順）を変える必要があり、Owner の判断を待つ。選択肢と推奨は handoff `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md` にある。
+
+guard: `tests/web/live-generate-parity-legend.playwright.spec.js` に OV-2188 の 2 件（popup の Legend name、Legend の rename。base で失敗）、OV-2187 の 2 件（caption の再入力、色の変更。base で失敗）、OV-2189 の `test.fail` 1 件（前提の rule の順と live の並びを case の中で確かめる。`test.fail` を外した実行では並びの差だけで失敗する）を追加した。`tests/web/specific-color-actions.test.mjs` に OV-2187 の 1 件（rule が塗らない Result では行を持たず、追加した行の記録からは caption を外す。base と前の head で失敗）を追加した。seed 20261101、20261102、20261106 は修正後に成功する。
+
 ## 証拠と再現方法
 
 - run 40634318370（dev `33d9e234c`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40634318370-failed.log`。
 - 再現: `GBDRAW_RANDOM_WALK_SEED=40634318370 npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "Linear, one Result"`。
 - run 40648501950（dev `e7b3c3a06`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40648501950-failed.log`。再現は上と同じコマンドで seed 40648501950。
 - run 40655413787（dev `639de764a`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40655413787-failed.log`。再現は seed 40655413787 で `-g "Circular, two-Result batch"`。
-- 調査メモ: `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1985.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1987.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1988.md`。
+- 追加の乱歩（dev `d08c1878e`）: ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/rw/seed-<seed>.log`。再現: `GBDRAW_RANDOM_WALK_STEPS=30 GBDRAW_RANDOM_WALK_SEED=<seed> npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "<fixture>"`。
+- 調査メモ: `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1985.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1987.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1988.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md`。

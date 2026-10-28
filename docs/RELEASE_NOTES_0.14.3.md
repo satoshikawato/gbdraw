@@ -46,6 +46,21 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   rule colors no drawn feature (for example **Use the "CDS" Legend color** on
   a CDS feature that a visibility rule hides), as **Generate Diagram** draws
   it. Before, the row kept the rule's color until the next Generate.
+- A Legend row that a popup Legend name or a Legend rename adds in the Web
+  app is drawn with the feature line, as **Generate Diagram** draws it, also
+  after a Legend sort or move has put a GC content, GC skew, or Depth row
+  first. Before, it had no line until the next Generate.
+- A color rule edit in the Web app, made while a batch Result is shown on
+  which the rule colors no feature, keeps that Result's Legend row of the
+  rule's name and color (for example the CDS row after **Use the "CDS"
+  Legend color** on a CDS of the other Result). The same holds on one Result when the rule
+  colors only features that Feature visibility hides. Before, the row
+  disappeared until the next **Generate Diagram**.
+- A popup Legend name in the Web app on the only feature of a color
+  rule's Legend row keeps the row in its place at **Generate Diagram**, as
+  the live Legend shows it: when the new rule only gives that rule's
+  condition a new name, it takes that rule's place in the color rule table.
+  Before, Generate could draw the row ahead of rows it followed live.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only

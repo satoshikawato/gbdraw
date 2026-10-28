@@ -1044,6 +1044,31 @@ test('an added Legend row carries no record of the row it copies', () => {
   assert.match(rows.CDS, /data-gbdraw-base-stroke="" stroke="#445566"/);
 });
 
+// A Result an older build saved can lead Python's order with a rule commit's
+// row that copied a GC row's "no line" (OV-2188 before its fix); a new row is
+// copied from Python's own first row instead.
+test('a new Legend row copies Python\'s own first row, not a rule commit\'s row of an older Result', () => {
+  const { admission } = currentFixture();
+  const operations = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Manual row', originalCaption: 'Manual row', color: '#7b2cbf' }
+    ],
+    originalLegendOrder: ['CDS']
+  }).operationsByResult[0];
+  const mounted = buildSvgRoot();
+  const group = mounted.querySelector('g[data-legend-key]').parentElement;
+  group.querySelector('g[data-legend-key]').querySelector('path').setAttribute('stroke', '#123456');
+  const ruleRow = new FakeElement('g', { 'data-legend-key': 'Old rule', 'data-legend-owner': 'specific-color-file' });
+  ruleRow.appendChild(new FakeElement('path', { fill: '#e63946', stroke: 'none' }));
+  group.insertBefore(ruleRow, group.children[0]);
+  reconcileMountedResult(mounted, operations);
+  const rows = Object.fromEntries([...serializeNode(mounted).matchAll(/<g data-legend-key="([^"]+)"[^>]*><path ([^>]*)>/g)]
+    .map(([, caption, path]) => [caption, path]));
+  assert.match(rows['Manual row'], /stroke="#123456"/);
+});
+
 test('a requested Legend addition reuses an exact renderer-produced caption', () => {
   const { response, admission } = currentFixture();
   const plan = compileDirectEditorMutationPlan({

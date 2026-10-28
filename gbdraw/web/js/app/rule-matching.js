@@ -436,7 +436,8 @@ export const createRulePreparation = ({
       features: targets.map((feature) => ruleFeaturePayload(feature)),
       selected: picked,
       labels: picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []),
-      rules: rules.map((rule) => ({ feat: String(rule.feat ?? ''), qual: String(rule.qual ?? ''), val: String(rule.val ?? '') })),
+      rules: rules.map((rule) => ({ feat: String(rule.feat ?? ''), qual: String(rule.qual ?? ''), val: String(rule.val ?? ''),
+        color: String(rule.color ?? ''), cap: String(rule.cap ?? '') })),
       color,
       caption
     });

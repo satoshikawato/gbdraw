@@ -13,8 +13,8 @@ import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-util
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
-  rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
+  buildLegendIntents, createRuleLegendCaptions, drawnRuleMatches, legendColorCopies, legendRowRules, listedRuleRowRemoval,
+  prepareSpecificColorImport, rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -176,11 +176,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // The legend rows the candidate rules draw on the features the displayed
   // Result draws (OV-344: not on another batch Result's features or a hidden
   // feature, where Generate draws no row), and the rows
-  // the commit retires: those the current rules draw (so it retires the row
-  // Generate drew), the listed rows of the Python rows the rules take (by key,
-  // `takenKeys`, with the caption and the swatch they show, OV-310), and
-  // `retiredLegendIntents`, rows this commit replaces, which are no
-  // renderer rows for the N-06 caption allocation. `removedRuleRows` are
+  // the commit retires: those the current rules draw on the displayed Result
+  // (so it retires the row Generate drew; a rule that colors no feature there
+  // draws no row, and a palette row of its name and color is not its own,
+  // OV-2187; while a match is not known, every current rule's row), the
+  // listed rows of the Python rows the rules take (by key, `takenKeys`, with
+  // the caption and the swatch they show, OV-310), and `retiredLegendIntents`, rows this commit replaces, which are no
+  // renderer rows for the N-06 caption allocation. `ownedCaptions` are the
+  // captions of those rows with every current rule's row, drawn or not: the
+  // rows the rules leave in the Legend editor's record of added rows
+  // (`addedLegendCaptions`). `removedRuleRows` are
   // the rows of current rules that no candidate rule names, drawn or not;
   // `rekeyed` are the rows both rule tables hold under another key (OV-645).
   /**
@@ -198,9 +203,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
     const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
-    /** @type {Array<{ caption: PythonLegendKey, color: string }>} */
-    const ruleRows = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap)
-      .map((/** @type {SpecificColorRule} */ rule) => ({ caption: currentCaption(rule), color: rule.color }));
+    /** @type {SpecificColorRule[]} */
+    const captioned = drawing.manualSpecificRules.filter((/** @type {SpecificColorRule} */ rule) => rule.cap);
+    /** @param {SpecificColorRule} rule @returns {{ caption: PythonLegendKey, color: string }} */
+    const rowOf = (rule) => ({ caption: currentCaption(rule), color: rule.color });
+    const ruleRows = captioned.map(rowOf);
+    const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features });
+    const drawnRuleRows = currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows;
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
@@ -210,7 +219,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
-      previousIntents: [...ruleRows, ...takenRows, ...retiredLegendIntents],
+      previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
+      ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
       rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
     };
@@ -484,8 +494,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
-    const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -526,7 +535,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       replaceColorRules(drawing.slices.colorRules, /** @type {readonly SpecificColorRule[]} */ (candidate.rules), sourceRows);
       patternDrafts.reconcile();
       replaceAddedLegendCaptions(drawing.slices.paint, [
-        ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+        ...[...drawing.addedLegendCaptions.value].filter(caption => !ownedCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
       refreshFeatureOverrides(drawing, extractedFeatures.value);
