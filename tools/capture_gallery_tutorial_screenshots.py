@@ -684,8 +684,8 @@ def apply_capture_action(page, action: dict[str, Any]) -> None:
         page.wait_for_timeout(int(action.get("ms") or 250))
     elif action_type == "resetSettings":
         page.get_by_role("button", name="Reset Settings", exact=True).click()
-        confirm = page.get_by_role("dialog", name="Reset all settings?")
-        confirm.get_by_role("button", name="Reset all settings", exact=True).click()
+        confirm = page.get_by_role("dialog", name="Reset settings?")
+        confirm.get_by_role("button", name="Reset all drawings", exact=True).click()
         confirm.wait_for(state="hidden")
         # Reset redraws the shown Result ("Updating diagram"); the mode buttons, Undo, and
         # other History-backed controls stay disabled until that update ends.

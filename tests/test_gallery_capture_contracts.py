@@ -856,7 +856,7 @@ def test_reset_settings_waits_for_the_diagram_update_to_finish() -> None:
 
     capture_tool.apply_capture_action(FakePage(), {"type": "resetSettings"})
 
-    assert events[:3] == ["click Reset Settings", "click Reset all settings", "wait_for hidden"]
+    assert events[:3] == ["click Reset Settings", "click Reset all drawings", "wait_for hidden"]
     waits = [event for event in events[3:] if "labelReflowProcessing" in event]
     assert len(waits) == 1
     assert "processing" in waits[0].replace("labelReflowProcessing", "")

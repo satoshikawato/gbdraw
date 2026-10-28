@@ -2945,12 +2945,10 @@ export const createAppSetup = () => {
   });
   // Each drawing holds a series for each of its own mode's Depth sources. A
   // new drawing holds its mode default's one series (`createDefaultAdv`,
-  // OV-1901); Reset Settings, which keeps the Depth files, fits the reset
-  // series to them. Each Depth control fits its drawing itself; Load and
-  // History restore install the saved or captured series (OV-1164).
-  const fitDepthSeriesToSources = () => {
-    state.drawingList().forEach((drawing) => ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing)));
-  };
+  // OV-1901); a drawing's Reset, which keeps the Depth files, fits the reset
+  // series to them (`resetDrawing`). Each Depth control fits its drawing
+  // itself; Load and History restore install the saved or captured series
+  // (OV-1164).
   /** @param {DrawingState} drawing */
   const isCircularConservationUploadSource = (drawing) => (
     String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -5470,34 +5468,49 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
-  // Reset Settings resets both drawings (PD-OI-070); the Linear records and
-  // comparisons are the Linear drawing's. The button asks first and says what
-  // the reset keeps; `resetSettings` itself does not ask.
+  // Reset Settings asks first (PD-OI-090 〔Reset〕): Reset this drawing resets
+  // the shown drawing as its step, Reset all drawings every drawing and the
+  // one-per-Session values as one project step (R17-5), and Cancel changes
+  // nothing and records no step. One list says what both reset; the items
+  // only a Linear drawing has, and the values only Reset all drawings resets,
+  // are marked (T-B4-4). `resetShownDrawing` and `resetSettings` do not ask.
   const requestResetSettings = async () => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const choice = await askChoice({
-      title: t('Reset all settings?'),
-      description: joinSentences(t('Circular and Linear both return to their default settings.'), t('This also removes your edits:')),
+      title: t('Reset settings?'),
+      description: joinSentences(
+        t('Reset this drawing returns the shown drawing to its default settings.'),
+        t('Reset all drawings returns every drawing to its default settings.'),
+        t('This also removes your edits:')
+      ),
       items: [
         t('Colors, color rules, and the palette'),
         t('Labels, Feature visibility, and Feature placements'),
         t('Legend names, deleted Legend rows, Similarity group names, and Region Annotations'),
-        t('Linear record definitions, subtitles, regions, reverse complement, and alignment'),
-        t('Linear comparisons, which turn off; their uploaded tables stay'),
-        t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded')
+        t('Record definitions, subtitles, regions, reverse complement, and alignment (Linear drawings)'),
+        t('Comparisons, which turn off; their uploaded tables stay (Linear drawings)'),
+        t('The Default colors, Specific rules, Blacklist, Whitelist, and Priority files, with the settings they loaded'),
+        t('LOSAT execution and threads, Rich Feature Popup, Auto Reflow, PNG DPI, and Instant Preview (Reset all drawings only)')
       ],
       note: joinSentences(t('Input files (genome, Depth, and comparison files for circular diagrams), the records you chose, and File defaults stay.'), t('Undo brings the settings back.')),
-      actions: [{ id: 'reset', label: t('Reset all settings'), tone: 'danger' }],
-      cancelLabel: t('Keep settings')
+      actions: [
+        { id: 'reset-drawing', label: t('Reset this drawing'), tone: 'danger' },
+        { id: 'reset', label: t('Reset all drawings'), tone: 'danger' }
+      ]
     });
-    if (choice !== 'reset') return false;
-    return resetSettings();
+    if (choice === 'reset-drawing') return resetShownDrawing();
+    if (choice === 'reset') return resetSettings();
+    return false;
   };
   // What a drawing's reset changes beyond its slices, by its mode.
   /** @type {Readonly<Record<DiagramMode, (drawing: DrawingState) => void>>} */
   const RESET_FOLLOW_UPS = Object.freeze({
     circular: (drawing) => {
+      // The track menu's new-track choice and the Depth control's count are
+      // one per mode; they return to a new drawing's with the drawing.
+      circularTrackNewRenderer.value = 'dinucleotide_skew';
+      depthTrackUiCounts.circular = 1;
       // OV-1249: the loaded Circular records keep a Record Order row each, at
       // their defaults; Reset resets settings, not the records.
       drawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(drawing));
@@ -5506,6 +5519,7 @@ export const createAppSetup = () => {
       reconcileCircularConservation(drawing);
     },
     linear: (drawing) => {
+      linearTrackNewRenderer.value = 'dinucleotide_skew';
       // Linear records return to their File defaults and inferred
       // definitions; Files, record selections, File defaults, and depth stay.
       // The mutation also clears the alignment plan (D-15).
@@ -5531,8 +5545,17 @@ export const createAppSetup = () => {
       ? artifact
       : { ...artifact, similarityAlignmentResetReceipt: null });
     RESET_FOLLOW_UPS[drawing.mode](drawing);
+    // The reset Depth series fit the kept Depth files (OV-1164).
+    ensureDepthTrackConfigCount(drawing);
   };
-  const resetSettings = () => {
+  // Both Reset buttons reset the shown drawing: `resetDrawings` resets it (and
+  // for Reset all drawings, every other drawing and the Session values) inside
+  // the step `runStep` opens, and the shown Result shows the reset draft.
+  /**
+   * @param {(reset: () => Promise<boolean>) => unknown} runStep The History step
+   * @param {() => void} resetDrawings
+   */
+  const runReset = (runStep, resetDrawings) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     // A notice (a loaded Session's warnings, a table import) described the
@@ -5551,9 +5574,8 @@ export const createAppSetup = () => {
     // the Legend list follows the Result. The reset itself runs at once, so a
     // caller reads the reset settings right after resetSettings(). One
     // rerender follows the step: the rerender requests wait until it ends
-    // (OV-1076). Reset is one project step (D-15-51): one Undo restores every
-    // drawing.
-    return holdAutomaticRerender(() => history.runProjectStep(msg('Reset settings'), () => followRuleEdits(state.activeDrawing(), async () => {
+    // (OV-1076).
+    return holdAutomaticRerender(() => runStep(() => followRuleEdits(state.activeDrawing(), async () => {
       featureActions.clearSpecificRulePatternDrafts();
       const shown = Boolean(svgContainer.value?.querySelector?.('svg'));
       const palette = { ...appliedPaletteColors.value };
@@ -5562,15 +5584,8 @@ export const createAppSetup = () => {
       const returning = state.activeDrawing().deletedLegendEntries.value
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
-      resetProject(state);
-      // OV-1166 (Q-DR-6 A): every drawing's multi-record layout takes a new
-      // drawing's defaults (its sides unset), whatever the canvas was before.
-      state.drawingList().forEach((drawing) => resetDrawing(drawing));
-      matchSequenceRegistry?.reset?.();
-      circularTrackNewRenderer.value = 'dinucleotide_skew';
-      linearTrackNewRenderer.value = 'dinucleotide_skew';
-      depthTrackUiCounts.circular = 1;
-      fitDepthSeriesToSources();
+      resetDrawings();
+      matchSequenceRegistry.reset();
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
@@ -5586,6 +5601,18 @@ export const createAppSetup = () => {
       return true;
     })));
   };
+  // Reset all drawings is one project step (D-15-51): one Undo restores every
+  // drawing and the Session values. OV-1166 (Q-DR-6 A): every drawing's
+  // multi-record layout takes a new drawing's defaults (its sides unset),
+  // whatever the canvas was before.
+  const resetSettings = () => runReset((reset) => history.runProjectStep(msg('Reset settings'), reset), () => {
+    resetProject(state);
+    state.drawingList().forEach((drawing) => resetDrawing(drawing));
+  });
+  // Reset this drawing is a step of the shown drawing (R17-5): the other
+  // drawings, their Histories, and the Session values stay.
+  const resetShownDrawing = () => runReset((reset) => history.runUndoable(msg('Reset this drawing'), reset),
+    () => resetDrawing(state.activeDrawing()));
 
   // OV-1160 (Owner R15-23 Q-DR-5 A): turned on, the Instant Preview toggle
   // applies every drawing's queued palette, so it is one project step whose
@@ -7926,6 +7953,7 @@ export const createAppSetup = () => {
     runInfoReproducibilityText,
     runInfoHasCliHelperFiles,
     resetSettings,
+    resetShownDrawing,
     requestResetSettings,
     saveSessionWithTitle,
     editSessionTitle,

@@ -688,8 +688,7 @@ or Reset Settings).
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is one of:
   an operation on the drawing list (adding, duplicating, renaming, moving, or
-  deleting a drawing); Reset all drawings (until the Reset dialog offers Reset
-  this drawing, Reset Settings resets all drawings); until each drawing binds
+  deleting a drawing); Reset all drawings; until each drawing binds
   its own auxiliary file cards, a card's import, Remove, and Retry (R10); once
   a genome input file can be replaced for every drawing that uses it, that
   replacement (PD-OI-090); or a step that changes only Session-level values

@@ -142,6 +142,97 @@ test('Reset all drawings is one project step: one Undo restores every drawing', 
   assert.equal(hashOf('linear'), linearBefore, 'and Linear');
 });
 
+// R17-5, T-B4-4 (PD-OI-090 〔Reset〕): the Reset dialog offers Reset this
+// drawing, Reset all drawings, and Cancel. Reset this drawing is one step of
+// the shown drawing: it removes that drawing's card files only (D-15-78), and
+// the other drawing, its History, and the one-per-Session values stay.
+const sessionValues = () => JSON.parse(JSON.stringify({
+  losat: state.losatExecution, popup: state.richFeaturePopup.value, reflow: state.autoLabelReflowEnabled.value,
+  dpi: state.downloadDpi.value, instant: state.paletteInstantPreviewEnabled.value
+}));
+/** @param {import('../../gbdraw/web/js/state.js').DrawingState} drawing */
+const colorsCard = (drawing) => DRAWING_SLICES.inputs.capture(drawing.slices.inputs).files.d_color?.name ?? null;
+/** @param {ReturnType<typeof createAppSetup>} app @param {string} answer */
+const answerReset = async (app, answer) => {
+  const asked = app.requestResetSettings();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const prompt = { show: app.choicePrompt.show, actions: app.choicePrompt.actions.map(({ id, label }) => ({ id, label })),
+    cancelLabel: app.choicePrompt.cancelLabel };
+  app.resolveChoicePrompt(answer);
+  return { prompt, result: await asked };
+};
+
+test('Reset this drawing is one step of the shown drawing; the other drawing, its History, and the Session values stay', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { bindInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const { PALETTE_SLICE } = await import('../../gbdraw/web/js/services/drawing/palette.js');
+  const { normalizePaletteColors } = await import('../../gbdraw/web/js/utils/color-utils.js');
+  const circular = modeDrawing(state, 'circular');
+  const linear = modeDrawing(state, 'linear');
+  [circular, linear].forEach((drawing) => PALETTE_SLICE.install(drawing.slices.palette, {
+    currentColors: normalizePaletteColors(PALETTE_SLICE.capture(drawing.slices.palette).currentColors)
+  }));
+  if (state.activeDrawingId.value !== 'linear') app.selectDrawing('linear');
+  await history.runUndoable('Linear prefix', () => {
+    linear.form.prefix = 'linear-prefix';
+    bindInputFile(state.inputFiles, linear.slices.inputs, 'd_color', new File(['a\tb'], 'linear-colors.tsv'));
+  });
+  const linearUndo = { count: history.getUndoCount(), label: history.undoLabel() };
+  app.selectDrawing('circular');
+  await history.runUndoable('Circular prefix', () => {
+    circular.form.prefix = 'circular-prefix';
+    bindInputFile(state.inputFiles, circular.slices.inputs, 'd_color', new File(['a\tb'], 'circular-colors.tsv'));
+  });
+  state.autoLabelReflowEnabled.value = true;
+  state.richFeaturePopup.value = false;
+  state.downloadDpi.value = 600;
+  state.paletteInstantPreviewEnabled.value = true;
+  state.losatExecution.executionMode = 'single';
+  await history.runProjectStep('Change setting', () => { state.downloadDpi.value = 601; });
+  const session = sessionValues();
+  const circularBefore = hashOf('circular');
+  const linearBefore = hashOf('linear');
+  const undoCount = history.getUndoCount();
+
+  const { prompt } = await answerReset(app, 'reset-drawing');
+  assert.equal(prompt.show, true);
+  assert.deepEqual(prompt.actions, [{ id: 'reset-drawing', label: 'Reset this drawing' }, { id: 'reset', label: 'Reset all drawings' }]);
+  assert.equal(prompt.cancelLabel, 'Cancel');
+  assert.notEqual(circular.form.prefix, 'circular-prefix', 'the shown drawing is reset');
+  assert.equal(colorsCard(circular), null, 'and loses its card file');
+  assert.equal(hashOf('linear'), linearBefore, 'the other drawing is unchanged');
+  assert.equal(colorsCard(linear), 'linear-colors.tsv', 'and keeps its card file');
+  assert.deepEqual(sessionValues(), session, 'the one-per-Session values stay (R17-5)');
+  assert.equal(history.getUndoCount(), undoCount + 1, 'one step');
+  assert.equal(history.undoLabel(), 'Reset this drawing');
+  const circularReset = hashOf('circular');
+
+  app.selectDrawing('linear');
+  assert.deepEqual({ count: history.getUndoCount(), label: history.undoLabel() }, { count: linearUndo.count + 1, label: 'Change setting' },
+    'the other drawing\'s History holds no Reset step');
+  app.selectDrawing('circular');
+  await app.undoHistory();
+  assert.equal(hashOf('circular'), circularBefore, 'one Undo restores the shown drawing');
+  assert.equal(hashOf('linear'), linearBefore);
+  await app.redoHistory();
+  assert.equal(hashOf('circular'), circularReset);
+  assert.equal(hashOf('linear'), linearBefore);
+});
+
+test('Cancel in the Reset dialog changes nothing and records no step', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const circular = modeDrawing(state, 'circular');
+  if (state.activeDrawingId.value !== 'circular') app.selectDrawing('circular');
+  await history.runUndoable('Circular prefix', () => { circular.form.prefix = 'kept-prefix'; });
+  const before = { circular: hashOf('circular'), linear: hashOf('linear'), session: sessionValues(), undo: history.getUndoCount() };
+  const { result } = await answerReset(app, 'cancel');
+  assert.equal(result, false);
+  assert.deepEqual({ circular: hashOf('circular'), linear: hashOf('linear'), session: sessionValues(), undo: history.getUndoCount() }, before);
+  assert.equal(circular.form.prefix, 'kept-prefix');
+});
+
 test('a switch settles the departing drawing\'s open step in that drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

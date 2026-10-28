@@ -856,8 +856,8 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
-  const reset = page.getByRole('dialog', { name: 'Reset all settings?', exact: true });
-  await expect(reset).toContainText('Linear comparisons, which turn off; their uploaded tables stay');
-  await reset.getByRole('button', { name: 'Reset all settings', exact: true }).click();
+  const reset = page.getByRole('dialog', { name: 'Reset settings?', exact: true });
+  await expect(reset).toContainText('Comparisons, which turn off; their uploaded tables stay (Linear drawings)');
+  await reset.getByRole('button', { name: 'Reset all drawings', exact: true }).click();
   await expect(notice).toHaveCount(0);
 });
