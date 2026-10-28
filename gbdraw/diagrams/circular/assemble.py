@@ -66,6 +66,7 @@ from ...labels.circular import (
     circular_label_shape,
     minimum_bbox_gap_px,
     prepare_label_list,
+    radial_label_layout,
     x_overlap,
     y_overlap,
 )
@@ -2940,7 +2941,8 @@ def add_record_on_circular_canvas(
             profile,
             total_length=len(gb_record.seq),
             geometry=canvas_config.geometry(),
-            radial_layout=radial_layout,
+            # The labels read the centre band only as their inner reserve (OV-2103).
+            radial_layout=radial_label_layout(radial_layout),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,
