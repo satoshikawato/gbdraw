@@ -98,6 +98,8 @@ const historyCounts = (page) => page.evaluate(() => [
 // R11, PD-OI-090: a drawing switch writes no setting and records no step in
 // either drawing's History.
 const drawingRoundTrip = async (page) => {
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.drawingList().length),
+    'the round trip switches between drawings the project holds').toBe(2);
   const records = await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length);
   const counts = await historyCounts(page);
   await switchMode(page, 'linear');
@@ -105,6 +107,14 @@ const drawingRoundTrip = async (page) => {
   expect(await historyCounts(page), 'a drawing round trip records no step').toEqual(counts);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(records);
   await settle(page);
+};
+
+// A new Session holds one Circular drawing. The round trip's Linear drawing is
+// made in the setup, the way a user makes it (the Linear offer tab), so the
+// observed operation only switches; making it is a project step of its own.
+const makeLinearDrawing = async (page) => {
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
 };
 
 const ROWS = [
@@ -175,6 +185,7 @@ const ROWS = [
       await openWithGenBank(page, HMMT);
       await generateAndWaitForResult(page);
       await settle(page);
+      await makeLinearDrawing(page);
     },
     operation: drawingRoundTrip
   },
@@ -191,6 +202,7 @@ const ROWS = [
       ))).toEqual(['#2', '#1']);
       await generateAndWaitForResult(page);
       await settle(page);
+      await makeLinearDrawing(page);
     },
     operation: drawingRoundTrip
   },
@@ -225,6 +237,7 @@ const ROWS = [
     setup: async (page) => {
       await openWithGenBank(page, HMMT, labelsOut);
       await generateAndWaitForResult(page);
+      await makeLinearDrawing(page);
       const start = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
       await editFirstCdsLabel(page, 'UNDO_REDO_CHAIN');
       // A `ui` edit: the canvas padding.
