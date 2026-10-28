@@ -22,8 +22,40 @@ const drawingIds = (page) => page.evaluate(async () =>
 const drawingTab = (page, drawingId) => page.locator(`.drawing-bar [role="tab"][data-drawing-id="${drawingId}"]`);
 
 /**
+ * The Linear offer tab, which follows the drawing tabs while the project has
+ * no Linear drawing (a new Session starts with one Circular drawing).
+ * @param {import('@playwright/test').Page} page
+ */
+const offerTab = (page) => page.locator('.drawing-bar [role="tab"][data-drawing-offer="linear"]');
+
+/**
+ * Make the Linear drawing the way a user does in a new Session: choose the
+ * Linear offer tab (at <= 768 px, the offer in the picker's list). Waits until
+ * the new drawing is shown.
+ * @param {import('@playwright/test').Page} page
+ * @returns {Promise<string>} the new drawing's ID
+ */
+const takeLinearOffer = async (page) => {
+  const before = await drawingIds(page);
+  if (await offerTab(page).isVisible()) {
+    await offerTab(page).click();
+  } else {
+    const picker = page.locator('.drawing-bar .drawing-picker');
+    await picker.locator('summary').click();
+    // The picker lists every drawing in tab order, then the offer.
+    await picker.locator('.action-menu-item').nth(before.length).click();
+  }
+  await expect.poll(async () => (await drawingIds(page)).length).toBe(before.length + 1);
+  const [drawingId] = (await drawingIds(page)).filter((id) => !before.includes(id));
+  await expect.poll(async () => (await shownDrawing(page)).id).toBe(drawingId);
+  return drawingId;
+};
+
+/**
  * Show a drawing and wait until the app shows it. `kind` names the first
  * drawing of that kind in tab order, `name` the drawing with that stored name.
+ * A Linear `kind` in a project with no Linear drawing makes it through the
+ * offer tab, as a user reaches Linear in a new Session.
  * @param {import('@playwright/test').Page} page
  * @param {{ kind?: 'circular' | 'linear', name?: string }} target
  * @returns {Promise<string>} the shown DrawingId
@@ -35,6 +67,7 @@ const showDrawing = async (page, { kind, name }) => {
       wantedName === undefined ? state.drawingOf(item.id).mode === wantedKind : item.name === wantedName));
     return tab ? tab.id : null;
   }, { wantedKind: kind, wantedName: name });
+  if (!drawingId && name === undefined && kind === 'linear') return takeLinearOffer(page);
   if (!drawingId) throw new Error(`showDrawing: no drawing of kind ${kind} or named ${name}`);
   if (await drawingTab(page, drawingId).isVisible()) {
     await drawingTab(page, drawingId).click();
@@ -67,4 +100,4 @@ const showPhonePane = async (page, pane) => {
  */
 const paneTop = (page) => page.locator('.drawing-bar').evaluate((bar) => bar.getBoundingClientRect().bottom);
 
-module.exports = { showPhonePane, showDrawing, drawingTab, drawingIds, shownDrawing, paneTop };
+module.exports = { showPhonePane, showDrawing, takeLinearOffer, offerTab, drawingTab, drawingIds, shownDrawing, paneTop };

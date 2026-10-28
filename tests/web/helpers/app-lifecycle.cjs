@@ -630,15 +630,23 @@ const GENERATE_GLOBALS = ['__GBDRAW_LAST_LOSAT_TELEMETRY__', '_origPairwiseMin',
 // that saved a Session after it booted serves no later case (OV-1001).
 const SESSION_FILE = /session\.json\.gz$/;
 
-// What the restore compares: both drawings' user-owned state, the inputs and
-// Results, the Session files saved, and what a case can leave in the page
-// outside the app.
+// Each drawing's user-owned state, by drawing ID in tab order.
+const snapshotDrawings = async (page) => {
+  const ids = await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state
+    .drawingList().map((drawing) => drawing.id));
+  const snapshots = [];
+  for (const id of ids) snapshots.push([id, await snapshotUserOwnedState(page, { mode: id })]);
+  return snapshots;
+};
+
+// What the restore compares: the drawings (a new Session has one Circular
+// drawing) and their user-owned state, the inputs and Results, the Session
+// files saved, and what a case can leave in the page outside the app.
 const readWarmFacts = async (page) => ({
   url: page.url(),
   viewport: page.viewportSize(),
   savedSessions: [...warmPages.get(page).savedSessions],
-  circular: (await snapshotUserOwnedState(page, { mode: 'circular' })),
-  linear: (await snapshotUserOwnedState(page, { mode: 'linear' })),
+  drawings: await snapshotDrawings(page),
   page: await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const app = window.__GBDRAW_APP__;
@@ -658,8 +666,9 @@ const readWarmFacts = async (page) => ({
       choicePrompt: Boolean(document.querySelector('[data-choice-prompt]')),
       zoom: app.zoom,
       pan: { ...app.canvasPan },
-      inputs: describe(state.drawingOfMode('circular').files),
-      linearSources: state.drawingOfMode('linear').linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth })),
+      inputs: state.drawingList().map((drawing) => (drawing.mode === 'linear'
+        ? drawing.linearSeqs.map(({ gb, gff, fasta, depth }) => describe({ gb, gff, fasta, depth }))
+        : describe(drawing.files))),
       openSections: [...document.querySelectorAll('details[open] > summary')].map((summary) => summary.textContent.trim()),
       globals: Object.fromEntries(Object.keys(window).sort().map((key) => [key, typeof window[key]])),
       testHooks: Object.entries(window.__GBDRAW_TEST_HOOKS__ || {}).map(([name, hook]) => `${name}: ${hook}`).sort(),
@@ -676,9 +685,9 @@ const readWarmBaseline = async (page) => ({
     const config = await import('/gbdraw/web/js/services/config.js');
     return JSON.parse(JSON.stringify({
       shownDrawing: state.activeDrawing().id,
-      drawings: Object.fromEntries(['circular', 'linear'].map((mode) => [mode, {
-        config: config.buildConfigData(state.drawingOf(mode)),
-        ui: config.buildUiStateData(state.drawingOf(mode), { includePreviewNavigation: false })
+      drawings: Object.fromEntries(state.drawingList().map((drawing) => [drawing.id, {
+        config: config.buildConfigData(drawing),
+        ui: config.buildUiStateData(drawing, { includePreviewNavigation: false })
       }])),
       // The test-owned lists an init script starts (`__AUDIT_LIFECYCLE__`).
       testLists: Object.fromEntries(Object.keys(window)
@@ -723,9 +732,9 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
     const app = window.__GBDRAW_APP__;
     // The source setter acts on the shown drawing, so the Linear drawing is
     // shown while its sources are removed.
-    const linear = state.drawingOfMode('linear');
-    const linearSeqs = linear.linearSeqs;
-    if (linearSeqs.some((seq) => seq.gb || seq.gff || seq.fasta)) {
+    for (const linear of state.drawingList().filter((drawing) => drawing.mode === 'linear')) {
+      const linearSeqs = linear.linearSeqs;
+      if (!linearSeqs.some((seq) => seq.gb || seq.gff || seq.fasta)) continue;
       app.selectDrawing(linear.id);
       for (let index = linearSeqs.length - 1; index >= 0; index -= 1) {
         for (const field of ['gb', 'gff', 'fasta']) {
@@ -736,12 +745,12 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
       await window.Vue.nextTick();
     }
     await app.resetSettings();
-    for (const [mode, { config: settings }] of Object.entries(drawings)) {
-      config.applyCapturedConfigData(state.drawingOf(mode), settings, { resolveTrackPlacements: false });
+    for (const [drawingId, { config: settings }] of Object.entries(drawings)) {
+      config.applyCapturedConfigData(state.drawingOf(drawingId), settings, { resolveTrackPlacements: false });
     }
     await window.Vue.nextTick();
-    for (const [mode, { ui }] of Object.entries(drawings)) {
-      config.applyUiStateData(state.drawingOf(mode), ui, { restorePreviewNavigation: false });
+    for (const [drawingId, { ui }] of Object.entries(drawings)) {
+      config.applyUiStateData(state.drawingOf(drawingId), ui, { restorePreviewNavigation: false });
     }
   }, { drawings: restorePoint.drawings, shownAtBoot });
   await settleLive(page);
