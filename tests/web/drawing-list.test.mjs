@@ -159,6 +159,32 @@ const tabNameOf = (drawingId) => state.drawingTabs.value.find((tab) => tab.id ==
 const listRefusal = (reason) => (error) => (
   error.code === 'INPUT_INVALID' && error.stage === 'drawing-list' && error.context.reason === reason);
 
+// OV-2151: a switch names an existing drawing; an unknown ID is a programming
+// error, not a switch to nothing (a spec that "switched to Linear" tested Circular).
+test('selecting an unknown drawing ID throws and changes nothing; the shown drawing returns false', () => {
+  const app = createAppSetup();
+  const shown = state.activeDrawingId.value;
+  const order = tabIds();
+  assert.throws(() => app.selectDrawing('no-such-drawing'), /Unknown drawing: no-such-drawing/);
+  assert.equal(state.activeDrawingId.value, shown);
+  assert.deepEqual(tabIds(), order);
+  assert.equal(app.selectDrawing(shown), false);
+});
+
+// E1 (PD-OI-079) after a Delete: the error's Generate no longer has its
+// drawing to show, so it runs in the shown drawing, as for an error that names
+// no drawing (OV-2151), instead of throwing.
+test('an error naming a deleted drawing generates in the shown drawing', async () => {
+  const app = createAppSetup();
+  const { drawingId: gone } = app.drawingList.newDrawing('linear');
+  const { drawingId: shown } = app.drawingList.newDrawing('circular');
+  app.drawingList.deleteDrawing(gone);
+  assert.equal(state.activeDrawingId.value, shown);
+  app.errorLog.value = { code: 'SESSION_SAVE_REQUIRES_GENERATE', actions: ['generate'], context: { drawingId: gone } };
+  await app.generateFromError();
+  assert.equal(state.activeDrawingId.value, shown);
+});
+
 test('New is one project step: its Undo shows the drawing shown before, its Redo the new drawing', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

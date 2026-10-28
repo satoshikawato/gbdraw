@@ -57,8 +57,8 @@ const expectIntact = async page => {
 
 // Each case represents an independently reachable owner, rather than a disabled
 // template assertion. Invalid arguments deliberately ensure busy wins admission.
-// `selectDrawing` names a drawing that exists (an unknown one is refused before
-// the busy check), so each case fills in the Linear drawing it makes.
+// `selectDrawing` names a drawing that exists (an unknown one throws before
+// the busy check, OV-2151), so each case fills in the Linear drawing it makes.
 const blockedActions = (linearId) => [
   ['selectResult', [0]], ['setOptionalNumberInputValue', [null, 'label_rotation', '45', true]],
   ['selectDrawing', [linearId]], ['setCircularInputType', ['gff']],
