@@ -2792,12 +2792,10 @@ const readDraftOverCommittedRequest = (projection, storedConfig, keepsOtherMode)
     delete read.linearRecordLayout;
   }
   if (!keepsOtherMode) return read;
-  // A schema-2 Session's other-mode settings as Load read them while the Web
+  // A schema-2 Session's other-mode setting as Load read it while the Web
   // promotion rebuilt its draft from the request: the stored tick font of a
-  // Linear request (OV-2075) and no Linear Multi-Record Canvas for a Circular
-  // request. They leave with this first pass.
+  // Linear request (OV-2075). It leaves with this first pass.
   const mode = /** @type {DiagramMode} */ (projection.mode);
-  if (mode === 'circular') delete read.linearRecordLayout;
   return /** @type {Record<string, unknown>} */ (withFieldsFrom(read, storedConfig, OTHER_MODE_OWN_FIELDS[mode].filter((at) => at === 'adv.tick_label_font_size')));
 };
 
