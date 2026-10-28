@@ -10,8 +10,8 @@ cannot fit before spending minutes on them, makes the command line fail
 clearly when a requested image format is unavailable, and renames the palette
 `hearbal_garden` to `herbal_garden`. A new Circular **Show Definition**
 setting hides the center definition. gbdraw 0.14.3 saves Sessions as session
-version 49, with canonical `renderRequest` schema 9, to store that setting:
-Sessions saved by 0.14.2 open as before, and gbdraw 0.14.0 to 0.14.2 cannot
+version 49 to store that setting (the canonical `renderRequest` schema stays
+9): Sessions saved by 0.14.2 open as before, and gbdraw 0.14.0 to 0.14.2 cannot
 open a Session saved by 0.14.3.
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) gives the
 publication date, [PyPI](https://pypi.org/project/gbdraw/) lists the published
@@ -26,7 +26,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Multi-record canvas, and a Linear File card that draws all of its records or
   one of them. Before, they stopped applying after a **Generate Diagram** that
   drew the record under another key. Undo of that Generate puts them back. The
-  `hash` value of such a color in **Specific color rules** names the record key
+  `hash` value of such a color in **Specific rules** names the record key
   of the current view, so it changes with the view. The fix does not change
   Session files; a Session saved by 0.14.2 or earlier moves its edits at its
   first Generate.
@@ -37,16 +37,15 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   as **Generate Diagram** draws it. Before, the row showed the default line
   until the next Generate.
 - A Legend row's stroke in the Web app no longer comes back on the features
-  of the row's color after its row has left the Legend (for example the CDS row that becomes "other
-  proteins" when a color rule takes a CDS feature under another caption).
-  Before, a later rule edit or Legend delete stroked those features again
+  of the row's color after its row has left the Legend (for example the CDS
+  row that becomes "other proteins" when a color rule takes a CDS feature under
+  another caption). Before, a later Legend delete stroked those features again
   until the next **Generate Diagram**.
 - After a palette switch or a Default colors change in the Web app, a Legend
   row whose name a color rule also uses takes its new color while the
-  rule colors no drawn feature (for example **Use existing color** on a CDS
-  feature that a visibility rule hides), as **Generate Diagram** draws it.
-  Before, the row kept the rule's color until the next Generate.
-
+  rule colors no drawn feature (for example **Use the "CDS" Legend color** on
+  a CDS feature that a visibility rule hides), as **Generate Diagram** draws
+  it. Before, the row kept the rule's color until the next Generate.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only
@@ -59,9 +58,14 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - **Circular labels that cannot fit.** Horizontal labels that need more than 1.5
   times the room around the map, when no single fix makes room, stop at once
   with the ways to make room, instead of after minutes of placing and searching
-  (AP027078 at 8 pt: about 1.5 s). Labels that need 0.8 times the room or more
-  warn before they are placed (`LabelsMayNotFitWarning`); the Web app shows the
-  warning while Generate runs and a **Labels may not fit** dialog after a stop.
+  (AP027078 `--labels out` at 8 pt: about 1.4 s instead of 28 s; MG1655
+  `--labels out`: about 8 s instead of about 37 min). Labels that need 0.8
+  times the room or more warn before they are placed (`LabelsMayNotFitWarning`);
+  the Web app shows the warning under **Labels may not fit** while Generate
+  runs, and after a stop the **Labels do not fit** dialog lists the ways to make
+  room. Python raises `LabelsDoNotFitError` with no rows and a `capacity`
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was
+  not placed, and warns with `LabelsMayNotFitWarning`.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
   write no file, and print one error that names the formats and the install
@@ -76,9 +80,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   older records still load.
 - **Building from source.** Building gbdraw needs setuptools 77 or newer. The
   package lists Python 3.13.
-- **Web header.** In the one-row header from 769 to 1000 px, where every button
-  already shows only its icon, the Session block hides its "Session" caption so
-  the Session title keeps its width.
+- **Web header.** In the one-row header (769 px and wider), where every button
+  already shows only its icon and the Session title would still be narrowed
+  (for example from 769 to 1000 px in most languages), the Session block hides
+  its "Session" caption and the toolbar gaps close to 2 px, so the Session
+  title is wider (French at 900 px: about 83 px instead of 28 px).
 
 ## Added
 
@@ -95,16 +101,16 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   example**, and a link in the notice of a loaded example.
 - `SECURITY.md` names the supported versions and how to report a vulnerability.
 - The README and the Quickstart give two commands that draw a Circular map and a
-  Linear comparison from the inputs in `gbdraw/web/tutorial-data/` of a source
-  checkout.
+  Linear comparison from the inputs in `gbdraw/web/tutorial-data/`. The README
+  commands find that folder in the installed package, so they work after a
+  `pip install` and in a source checkout.
 
 ## Faster
 
 - **Circular labels.** Label placement and the label-fit search on large label
-  sets do less repeated work and hold less memory, with the same SVG.
-  AP027078 `--labels out` (562 labels) takes about 11 s instead of 28 s.
-  Radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
-  about 4 s instead of 25 s.
+  sets do less repeated work and hold less memory, with the same SVG. Radial
+  labels of MG1655 take about 8 s instead of 166 s, and of NC_002745 about 4 s
+  instead of 25 s.
 - **Web app redraws.** A Generate or live redraw that only moves or restyles
   what is drawn keeps the feature catalog the page holds instead of rebuilding
   it. On a Multi-record Circular canvas, a change to some records copies and
@@ -113,18 +119,24 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   no longer redraw when a definition or record label changes. The Worker
   parses each Depth file once and keeps it while **Show Depth** is off, so
   showing Depth again does not parse the file again. A Circular Species change
-  that moves no track keeps the placed labels and the record definitions, and
-  a Linear change that moves rows without changing a comparison keeps its
-  ribbons. In a warm Generate of
-  the vibrio Gallery Session, the prepared-input check takes 155 ms of CPU
-  instead of 331 ms.
+  that moves no track keeps the placed labels, and keeps the record definitions
+  and the plot title where they do not draw the species (for example a typed
+  plot title or the record-summary profile), and a Linear change that moves rows without changing a comparison keeps its
+  ribbons. Turning the GC content or GC skew track on or off no longer redraws
+  the feature contents, the Linear records, or the Circular ticks, and a Depth
+  Legend label change keeps the drawn Depth paths. In a warm Generate of the
+  vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
+  of 331 ms in CPython.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).
 
 ## Installation and compatibility
 
-Installation is unchanged; see [Installation](./INSTALL.md). gbdraw 0.14.3
+Installation from PyPI and Bioconda is unchanged; building from source needs
+setuptools 77 or newer, and a source checkout needs `gbdraw setup-losat` for
+LOSAT (see [Changed behavior](#changed-behavior)). See
+[Installation](./INSTALL.md). gbdraw 0.14.3
 supports the same Python versions as 0.14.2 (3.10, 3.11, and 3.12; 3.13 is
 listed and tested on `dev`). A Session saved by 0.14.2 opens in 0.14.3. gbdraw
 0.14.3 saves Sessions as version 49, which gbdraw 0.14.0 to 0.14.2 refuse;
@@ -146,7 +158,8 @@ Carried from 0.14.1:
 
 Carried from 0.14.0:
 
-- After a palette switch, or **Apply to all** on a palette Legend row, a color
+- After a palette switch, or the **Legend item** choice on a palette Legend
+  row, a color
   rule in the row's earlier color can show as one Legend row until the next
   **Generate Diagram**, which draws two.
 
