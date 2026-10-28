@@ -12,6 +12,7 @@ import { loadPageVue } from './helpers/vue-runtime.mjs';
 const Vue = loadPageVue();
 globalThis.window = { Vue, setTimeout, clearTimeout };
 const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
+await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
 const { createSvgStyles } = await import('../../gbdraw/web/js/app/svg-styles.js');
 
 /** A displayed Result with one drawn Depth group. */

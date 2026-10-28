@@ -160,7 +160,7 @@ globalThis.window = {
   },
   DOMPurify: { sanitize: (value) => value }
 };
-const { createDefaultAdv, createDefaultForm, createDefaultLosat, state } = await import(
+const { createDefaultAdv, createDefaultForm, createDefaultLosat, createDrawingState, state } = await import(
   pathToFileURL(join(tempDir, 'js', 'state.js'))
 );
 const { installShownDrawing } = await import(pathToFileURL(join(tempDir, 'js', 'services', 'config.js')));
@@ -172,6 +172,8 @@ assert.equal(
 // Each mode has its own drawing (PR-1). A drawing starts from its mode's
 // profile, and its `form.legend` and `adv.plot_title_position` read and write
 // its own mode's layout slot, whichever mode is shown.
+const linearId = 'linear';
+state.addDrawing(createDrawingState(linearId, 'linear'), 'Linear', state.drawingTabs.value.length);
 const circularDrawing = modeDrawing(state, 'circular');
 const linearDrawing = modeDrawing(state, 'linear');
 assert.notEqual(circularDrawing, linearDrawing);
