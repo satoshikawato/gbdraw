@@ -3,6 +3,7 @@
 // current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   HMMT_SESSION,
   featurePresentation,
@@ -790,9 +791,9 @@ test('a This feature only fill colors one of two Linear cards of the same file, 
   test.setTimeout(600_000);
   await openFresh(page);
   const genbank = await fs.readFile('tests/fixtures/forced_label_underlay.gb', 'utf8');
+  await showDrawing(page, { kind: 'linear' });
   await evaluateWithRetainedPromise(page, async (text) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.lInputType = 'gb';
     for (const index of [0, 1]) {
       if (index) app.addLinearSeq();

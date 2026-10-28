@@ -25,9 +25,9 @@ const SECOND_RECORD_TEXT = `${BATCH_TEXT.split(/^\/\/\s*$/m)[1].trim()}\n//\n`;
 
 const openLinear = async (page) => {
   await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false });
   });
   await settle(page);

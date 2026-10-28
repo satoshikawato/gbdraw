@@ -6,6 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const source = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
@@ -121,10 +122,9 @@ test('status, selection, and input build no tables; each Generate builds its lab
   test.setTimeout(300_000);
   await install(page);
   await openApp(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async (content) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
-    await window.Vue.nextTick();
     while (app.linearSeqs.length < 2) app.addLinearSeq();
     for (let index = 0; index < 2; index += 1) {
       app.setLinearSeqPrimaryFile(index, 'gb', new File([content], `record-${index}.gbk`, { type: 'text/plain' }));
