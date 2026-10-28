@@ -50,7 +50,7 @@ import {
   readColorRules, readFileImports, readFilterMode, readQualifierPriorityRules, readRichFeaturePopup, readSessionUiMode, readStringMap, readWhitelistRules,
   featurePlacementsReader, notedLossRepairs, readFeatureOverrides, readPalette, recordsOffReader, resolvedTrackStacks, sessionUiFieldRepairs, sliceFieldRepairs,
   unreadFieldRepairs, valueRepairs, LOSAT_EXECUTION_ROWS, readDownloadDpi, readFeatureColorEdits, readLabelOverrideRows, readLinearSeqFields,
-  readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withoutFieldsAt
+  readSessionInputType, readSimilarityAlignment, readSingleDraftValues, withFieldsFrom, withoutFieldsAt
 } from './config-field-readers.js';
 import { drawnLinearSequences, isRecordDrawKey } from './record-draw-selection.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
@@ -153,7 +153,6 @@ import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
-import { promoteReadGallerySession } from './gallery-session-migration.js';
 import {
   compressSessionData,
   largeSessionDownloadMegabytes
@@ -2319,35 +2318,16 @@ const readStoredSetRequests = (rawData, stored, project, repairs) => {
 };
 
 /**
- * Whether Load rebuilds a Session's projected request by its Gallery
- * migration: a Session 31-44 that stored a schema-2 request.
+ * Whether a Session's stored draft keeps the other mode's settings over its
+ * request's projection: a Session 31-44 that stored a schema-2 request (a
+ * Gallery writer's), whose request holds one mode's settings and whose draft
+ * holds both (D-15-166).
  * @param {{ sourceSessionVersion: number, currentSession: boolean,
  *   requestRead: { storedSchemas: StoredRequestSchemas } }} read `readSessionImportParts`'s
  * @returns {boolean}
  */
-const rebuildsGalleryRequest = ({ sourceSessionVersion, currentSession, requestRead }) => !currentSession
+const keepsOtherModeDraft = ({ sourceSessionVersion, currentSession, requestRead }) => !currentSession
   && sourceSessionVersion >= CANONICAL_SESSION_MIN_VERSION && Number(requestRead.storedSchemas['']) === 2;
-
-/**
- * A schema-2 Gallery Session's request, rebuilt by its migration, read like
- * any stored request: a row here is a defect of that migration.
- * @template {{ renderRequest?: unknown, editorState?: unknown, orthogroupState?: unknown, resources?: unknown }} T
- * @param {T} data
- * @param {LoadRepair[]} repairs
- * @returns {T}
- */
-const readRebuiltGalleryRequest = (data, repairs) => {
-  const read = readStoredRenderRequest(data.renderRequest, {
-    featureCatalog: /** @type {UnvalidatedFields<'featureCatalog'>} */ (data.editorState)?.featureCatalog ?? null,
-    legacyOrthogroupState: data.orthogroupState ?? null,
-    resourceIds: new Set(isPlainObject(data.resources) ? Object.keys(/** @type {object} */ (data.resources)) : []),
-    path: 'renderRequest'
-  });
-  // The migration rebuilt a request the reader cannot read: nothing is committed unread.
-  if ('kind' in read) throw SESSION_FIELDS_ERROR();
-  repairs.push(...read.repairs);
-  return read.value === data.renderRequest ? data : { ...data, renderRequest: read.value };
-};
 
 /**
  * K19: a settings-only Session's shown mode, read before its checks read that
@@ -2692,8 +2672,7 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
 
 /**
  * A Session's committed request as Load projects it, from the parts
- * `readSessionImportParts` read: the Session in the current names (a Gallery
- * Session's request rebuilt), the classification of its comparisons, its
+ * `readSessionImportParts` read: the Session in the current names, the classification of its comparisons, its
  * stored draft, and its request's projection. The one reader for the preflight
  * of a Session 46-49 and the first pass of a Session 31-39 (OV-2011).
  * @param {Awaited<ReturnType<typeof readSessionImportParts>>} read
@@ -2703,15 +2682,9 @@ const readSessionImportParts = async (stored, sessionData, repairs, uncomposedSe
 const readCommittedRequestProjection = (read, sessionData, repairs) => {
   const { sourceSessionVersion, drawingsBand, requestRead, currentSession, currentResourceTable, data: cacheData } = read;
   let { upgrade } = read;
-  const normalizedData = cacheData;
-  // A Gallery Session that stored a schema-2 request (31-33) is rebuilt by
-  // its promotion from the request its reader read.
-  const promotedData = rebuildsGalleryRequest(read)
-    ? readRebuiltGalleryRequest(promoteReadGallerySession(normalizedData), repairs)
-    : normalizedData;
   const data = adoptPromotedPreservedSettings(currentSession
     ? cacheData
-    : migrateSessionDataToCurrent(promotedData, sourceSessionVersion), repairs);
+    : migrateSessionDataToCurrent(cacheData, sourceSessionVersion), repairs);
   // The Session 49 of a Session 46-48 (DESIGN §4.2): each drawing's part of
   // the file is its own entry, found by drawing ID, and so is where the file
   // holds its saved Result set (`setSources`). Its Legend edits were read by
@@ -2721,10 +2694,8 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
   }
   const storedRequest = /** @type {UnvalidatedFields<'mode'>
     & UnvalidatedFields<'diagramOptions', UnvalidatedFields<'config' | 'configOverrides'>>} */ (data.renderRequest);
-  // A Gallery migration rebuilt its request, which is classified as rebuilt.
-  const comparisonClassification = promotedData === normalizedData && requestRead.comparisonClassification
-    ? requestRead.comparisonClassification
-    : classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
+  const comparisonClassification = requestRead.comparisonClassification
+    ?? classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
         renderRequest: data.renderRequest,
         resources: data.resources
       }));
@@ -2795,11 +2766,13 @@ const readCommittedRequestProjection = (read, sessionData, repairs) => {
  * route read it (OV-2011): its committed request's projection owns the drawn
  * values, the draft keeps the state the request does not hold, and its rules
  * keep their provenance. Python converts the read draft.
- * @param {NonNullable<ReturnType<typeof readCommittedRequestProjection>['canonicalProjection']>} projection
+ * @param {SessionRequestProjection} projection
  * @param {unknown} storedConfig The stored draft (unvalidated).
+ * @param {boolean} keepsOtherMode `keepsOtherModeDraft`: the fields the other
+ *   mode owns (`OTHER_MODE_OWN_FIELDS`) are the stored draft's, not the projection's.
  * @returns {Record<string, unknown>}
  */
-const readDraftOverCommittedRequest = (projection, storedConfig) => {
+const readDraftOverCommittedRequest = (projection, storedConfig, keepsOtherMode) => {
   /** @type {Record<string, unknown>} */
   const read = withCurrentLinearLabelVisibility({
     ...restoreStoredNonCanonicalConfig(
@@ -2818,7 +2791,14 @@ const readDraftOverCommittedRequest = (projection, storedConfig) => {
   if (!isPlainObject(/** @type {UnvalidatedFields<'linearRecordLayout'>} */ (storedConfig)?.linearRecordLayout)) {
     delete read.linearRecordLayout;
   }
-  return read;
+  if (!keepsOtherMode) return read;
+  // A schema-2 Session's other-mode settings as Load read them while the Web
+  // promotion rebuilt its draft from the request: the stored tick font of a
+  // Linear request (OV-2075) and no Linear Multi-Record Canvas for a Circular
+  // request. They leave with this first pass.
+  const mode = /** @type {DiagramMode} */ (projection.mode);
+  if (mode === 'circular') delete read.linearRecordLayout;
+  return /** @type {Record<string, unknown>} */ (withFieldsFrom(read, storedConfig, OTHER_MODE_OWN_FIELDS[mode].filter((at) => at === 'adv.tick_label_font_size')));
 };
 
 /**
@@ -6209,7 +6189,7 @@ const RESULT_FEATURE_METADATA_FIELDS = Object.freeze([
  *   layout (`readStoredLayoutUi`), listed where Load lists the drawings' layouts; `drawnWith`: what a Session
  *   27-30's Result was drawn with (OV-1953), else null; `comparisonClassification`: the Comparisons
  *   classification of the file's stored request (C-OD14), which its Linear drawings hold, as the Load before
- *   the Worker route held it; null when Load reads no stored request or rebuilds it (`rebuildsGalleryRequest`)
+ *   the Worker route held it; null when Load reads no stored request
  */
 /**
  * What a loaded Result set was drawn with, at the paths of the document Load
@@ -6397,7 +6377,7 @@ const importSessionDocument = async (e, options = {}) => {
         ? committedRead.canonicalProjection : null;
       if (requestProjection) fileRepairs.push(...(requestProjection.legacyTableRepairs || []));
       const draft = requestProjection && committedRead
-        ? readDraftOverCommittedRequest(requestProjection, committedRead.runtimeStoredConfig)
+        ? readDraftOverCommittedRequest(requestProjection, committedRead.runtimeStoredConfig, keepsOtherModeDraft(fileParts))
         : migrateSessionFeatureRenderingConfig(isPlainObject(storedDraft)
         && fileDocument.version < TYPED_DRAFT_SESSION_VERSION && Object.hasOwn(storedDraft, 'recordDisplayDrafts')
         ? { ...storedDraft, recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(storedDraft.recordDisplayDrafts) }
@@ -6503,7 +6483,7 @@ const importSessionDocument = async (e, options = {}) => {
         featureMetadata,
         layoutRepairs: layoutRead ? layoutRead.repairs : [],
         drawnWith: legacyResult ? fileDrawnWith : null,
-        comparisonClassification: rebuildsGalleryRequest(fileParts) ? null : fileParts.requestRead.comparisonClassification
+        comparisonClassification: fileParts.requestRead.comparisonClassification
       };
     }
     recordSessionLifecycleEvent('current-session-preflight-start');
