@@ -92,7 +92,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/losat-cache.js': 8,
   'services/losat.js': 2,
   'services/match-sequences.js': 11,
-  'services/mode-scoped-migration.js': 26,
+  'services/mode-scoped-migration.js': 2,
   'services/result-normalization.js': 1,
   'services/right-drawer-state.js': 8,
   'services/rule-matchers.js': 10,

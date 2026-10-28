@@ -3,7 +3,7 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
-import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { validateModeSliceFields } from './mode-scoped-migration.js';
 import { drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
@@ -267,17 +267,18 @@ const publicationLayout = (session, config, projection) => {
 };
 // The published Session 46: the Session's mode's slice holds the rebuilt
 // configuration and its layout slot; the other slice is absent, so it takes
-// that mode's defaults. An older Session's flat draft is split by the registry
-// (plan 4.2); a Session 46 keeps the rest of its slice. The layout has one
-// home, so the older `ui` layout fields go.
+// that mode's defaults. The rebuilt draft is split by the registry through
+// Python's split (`owners.splitDraft`); a Session 46 keeps the rest of its
+// slice. The layout has one home, so the older `ui` layout fields go.
 /**
  * @param {PublicationSession} session
  * @param {PublishedConfig} config
  * @param {LayoutPreferences} layout
  * @param {PublicationProjection} projection
  * @param {Record<string, unknown>} features
+ * @param {PublicationDraftSplit} splitDraft
  */
-const publishedSession = (session, config, layout, projection, features) => {
+const publishedSession = async (session, config, layout, projection, features, splitDraft) => {
   const mode = projection.mode;
   const flat = !holdsSliceDraft(session);
   // Display drafts that carry no scope (those projected from a CLI request and
@@ -290,7 +291,8 @@ const publishedSession = (session, config, layout, projection, features) => {
   // Load reads a stored draft's edits from the draft.
   const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
   // Override colors merge into the committed request's colors.
-  const split = splitDraftIntoModes(draft, { committedMode: mode, modeProfiles: null, paletteColors: projection.config?.colors || null });
+  // Only the committed mode's slice is published, so no mode profile feeds the split.
+  const split = await splitDraft(draft, { committedMode: mode, paletteColors: projection.config?.colors || null });
   const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };
   const published = flat ? split : { ...session };
   const ui = Object.fromEntries(Object.entries(isObject(published.ui) ? published.ui : {})
@@ -425,8 +427,25 @@ const mergeReplayResources = (prepared, replayed) => {
   return resources;
 };
 /**
+ * What the draft split reads besides the draft.
+ * @typedef {object} PublicationDraftSplitContext
+ * @property {'circular' | 'linear'} committedMode The saved Result's mode.
+ * @property {Record<string, unknown> | null} paletteColors The colors of the draft's palette, which override colors
+ *   merge into.
+ */
+/**
+ * A Web draft with a `config` split into Session 46 mode slices: the draft's other fields, its app-level settings
+ * moved to the top level, and a slice per mode (empty when the mode takes no value).
+ * @typedef {Record<string, unknown> & { ui?: Record<string, unknown>, modes: Record<'circular' | 'linear', PublicationModeSlice> }} PublicationSplitDraft
+ */
+/**
+ * The one split of a flat Web draft into mode slices: Python's `split_draft_into_modes`
+ * (`gbdraw/session_io.py`), which the publication bridge (`tools/publish_gallery_session.mjs`) runs.
+ * @typedef {(draft: Record<string, unknown>, context: PublicationDraftSplitContext) => Promise<PublicationSplitDraft>} PublicationDraftSplit
+ */
+/**
  * The owners a publication calls: the Session and request owners
- * (`services/session-request.js`) and
+ * (`services/session-request.js`), the draft split, and
  * the Linear comparison planner. Each takes and returns unvalidated documents.
  * @typedef {object} GallerySessionPublicationOwners
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
@@ -439,6 +458,7 @@ const mergeReplayResources = (prepared, replayed) => {
  *   request (`readPublishedRenderRequest`), refusing any repair.
  * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
+ * @property {PublicationDraftSplit} splitDraft
  */
 
 /**
@@ -470,7 +490,7 @@ export const createGallerySessionPublication = (owners) => {
     const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const cards = publishedCardBindings(admitted);
     const session = {
-      ...publishedSession(admitted, config, layout, projection, features),
+      ...(await publishedSession(admitted, config, layout, projection, features, owners.splitDraft)),
       renderRequest: rebuilt.renderRequest,
       resources: rebuilt.resources,
       webFiles: cards ? { ...rebuilt.webFiles, bindings: cards } : rebuilt.webFiles,

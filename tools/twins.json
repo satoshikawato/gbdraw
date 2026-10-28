@@ -759,34 +759,6 @@
       "source": "twin.unregistered.v1 on origin/dev 927b658b"
     },
     {
-      "id": "function:splitDraftIntoModes",
-      "concern": "Session 27-44 flat draft into Session 46 mode slices",
-      "pythonOwner": [
-        "gbdraw/session_io.py:split_draft_into_modes"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitDraftIntoModes"
-      ],
-      "vector": null,
-      "reason": "Both Load paths split; 41 cases in tests/fixtures/sessions/mode-split-vectors.json and the generated registry (--check) pin them.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
-    },
-    {
-      "id": "function:splitSetting",
-      "concern": "One setting of a flat draft into mode slices",
-      "pythonOwner": [
-        "gbdraw/session_io.py:_split_setting"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/mode-scoped-migration.js:splitSetting"
-      ],
-      "vector": null,
-      "reason": "Run through splitDraftIntoModes and its 41 shared cases.",
-      "retireWhen": "the JS Session 27-44 migrations are deleted and Python alone migrates a legacy Session at Load (BA-D02, multi-drawing X step)",
-      "source": "inventory C section B (Session 27-44 to mode split; OV-157)"
-    },
-    {
       "id": "concern:circular-ring-subject-database",
       "concern": "Circular similarity ring subject database (every record of the reference file that has a sequence, uncropped, as LOSAT FASTA text and its hash)",
       "pythonOwner": [
@@ -1075,7 +1047,7 @@
     },
     {
       "id": "vector:tests/fixtures/sessions/mode-split-vectors.json",
-      "concern": "Session 27-44 flat draft into Session 46 mode slices (cases of function:splitDraftIntoModes)",
+      "concern": "Session 27-44 flat draft into Session 46 mode slices (cases of Python's split_draft_into_modes)",
       "pythonOwner": [
         "gbdraw/session_io.py:split_draft_into_modes"
       ],

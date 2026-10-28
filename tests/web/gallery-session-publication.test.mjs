@@ -8,6 +8,14 @@ import { gunzipSync } from 'node:zlib';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+const { pythonDraftSplit } = await import('./helpers/python-evaluator.mjs');
+// Publication's draft split is Python's (the bridge runs `split_draft_into_modes`); each call's context is kept.
+const splitContexts = [];
+const splitDraft = async (draft, context) => {
+  splitContexts.push(context);
+  return pythonDraftSplit(draft, context);
+};
+
 const { resolveLinearComparisonPlan } = await import(
   '../../gbdraw/web/js/services/linear-comparisons.js'
 );
@@ -42,7 +50,8 @@ const {
   buildRequestState: buildCanonicalRequestState,
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
-  resolveComparisonPlan: resolveLinearComparisonPlan
+  resolveComparisonPlan: resolveLinearComparisonPlan,
+  splitDraft
 });
 
 const sessionRoot = 'gbdraw/web/gallery/sessions';
@@ -71,7 +80,10 @@ const loadReleasedSession = (name) => loadSessionFile(`tests/fixtures/sessions/$
 for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
+  splitContexts.length = 0;
   const result = await prepareGallerySessionForPublication(source);
+  // The draft is split once, by the injected owner, in the committed mode.
+  assert.deepEqual(splitContexts.map(({ committedMode }) => committedMode), [result.session.renderRequest.mode], name);
   assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
   assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
   // Publication writes the slice of the Session's mode only; the other mode
@@ -644,7 +656,8 @@ assert.rejects(
         buildRequestState: buildCanonicalRequestState,
         readRequest: readPublishedRenderRequest,
         projectRequest: projectCanonicalSessionRequest,
-        resolveComparisonPlan: resolveLinearComparisonPlan
+        resolveComparisonPlan: resolveLinearComparisonPlan,
+        splitDraft
       });
       await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
         (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);

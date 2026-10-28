@@ -250,10 +250,11 @@ def _run_publication_bridge(
             "Missing Gallery publication bridge: "
             f"{SESSION_PUBLICATION_BRIDGE.relative_to(REPO_ROOT)}"
         )
+    # The bridge runs Python's draft split with this interpreter.
     subprocess.run(
         [node, str(SESSION_PUBLICATION_BRIDGE), command, *(str(path) for path in paths)],
         cwd=REPO_ROOT,
-        env=dict(env),
+        env={**env, "PYTHON": sys.executable},
         check=True,
     )
 

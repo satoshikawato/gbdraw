@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { spawn } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-comparisons.js';
 import {
@@ -17,6 +19,40 @@ import {
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
+// The publication's draft split is Python's `split_draft_into_modes`
+// (gbdraw/session_io.py). `tools/refresh_gallery_sessions.py` names its own
+// interpreter in PYTHON.
+const SPLIT_DRAFT = `
+import json, sys
+from gbdraw.session_io import split_draft_into_modes
+payload = json.load(sys.stdin)
+context = payload['context']
+json.dump(split_draft_into_modes(
+    payload['draft'],
+    committed_mode=context['committedMode'],
+    palette_colors=context['paletteColors'],
+), sys.stdout)
+`;
+
+/** @type {import('../gbdraw/web/js/services/gallery-session-publication.js').PublicationDraftSplit} */
+const pythonDraftSplit = (draft, context) => new Promise((resolve, reject) => {
+  const child = spawn(process.env.PYTHON || 'python', ['-c', SPLIT_DRAFT], {
+    cwd: REPO_ROOT,
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8').on('data', (chunk) => { stdout += chunk; });
+  child.stderr.setEncoding('utf8').on('data', (chunk) => { stderr += chunk; });
+  child.on('error', reject);
+  child.on('close', (code) => {
+    if (code === 0) resolve(JSON.parse(stdout));
+    else reject(new Error(`Python's draft split failed (exit ${code}):\n${stderr}`));
+  });
+  child.stdin.end(JSON.stringify({ draft, context }));
+});
+
 const {
   finalizeGallerySessionPublication,
   prepareGallerySessionForPublication,
@@ -27,7 +63,8 @@ const {
   buildRequestState: buildCanonicalRequestState,
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
-  resolveComparisonPlan: resolveLinearComparisonPlan
+  resolveComparisonPlan: resolveLinearComparisonPlan,
+  splitDraft: pythonDraftSplit
 });
 
 // A Session file as the publication reads it: the one-drawing view of the

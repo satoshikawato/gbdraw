@@ -133,7 +133,7 @@ in the same change.
 | The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
 | Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
 | Registry of what a drawing holds in a Session, by mode | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
-| Session 46 mode slices and the split of a Session 27–44 draft into them; once the Session format holds a list of drawings, Python alone converts a Session 27–44, once at Load | `js/services/mode-scoped-migration.js` until then (Python: `split_draft_into_modes` in `gbdraw/session_io.py`) |
+| Session 46 mode slices (the registry's slice shape); Python alone converts a Session 27–44, once at Load (`split_draft_into_modes`) | `js/services/mode-scoped-migration.js` (the conversion: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | The displayed Result's text: marking its mounted root changed, the one write of the root into the Result, and the reader of the Results (R1) | `js/app/preview-runtime.js` (`commitActiveResultEdit`, `currentResults`) |
@@ -1083,10 +1083,8 @@ one drawing never reaches another (PD-OI-090).
   `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
   rebuilds each drawing from the projection of its committed request,
   then its stored values, then its mode's defaults.
-  Until the Session format holds a list of drawings, `services/mode-scoped-migration.js`
-  splits a Session 27–44 draft into the two slices, and `split_draft_into_modes` in
-  `gbdraw/session_io.py` is its Python twin; then Python alone converts a Session 27–44,
-  once at Load. Once the Session format holds a list of drawings, a Session 46, 47, or 48
+  Python alone converts a Session 27–44, once at Load (`split_draft_into_modes` in
+  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46, 47, or 48
   moves to the list without Python, and Load makes the drawing of a mode that has no
   Result only when the Session shows that mode was used
   (its input files, a Save while it was shown, or a setting that differs from the default
@@ -1109,7 +1107,7 @@ values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing
 the current format, a Session 46 read into its drawings, and a Session 45 or a field
 outside the registry rejected);
 `tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
-(the Web Load of a Session 27–44 and Python's split agree on shared vectors);
+(the Web Load installs Python's split of a Session 27–44 as it loads that Session 49);
 `tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
 equal to its Python source); and
 `tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,

@@ -1,5 +1,5 @@
 // Python's split of a Session 27-44 draft into Session 46 mode slices,
-// against the vectors it shares with the Web split
+// against the vectors it shares with the Web Load
 // (tests/fixtures/sessions/mode-split-vectors.json, tests/test_mode_split_vectors.py).
 //
 // A flat-draft case runs Python's `split_draft_into_modes` on its input and checks its

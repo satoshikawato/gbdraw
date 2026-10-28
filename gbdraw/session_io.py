@@ -3647,9 +3647,8 @@ def split_draft_into_modes(
     ``webFiles.bindings``, else in the legacy ``files``. The draft's own mode
     (``_profile_active_mode``) holds the flat values of the mode-profile fields.
 
-    This is the twin of ``splitDraftIntoModes`` in the Web
-    ``services/mode-scoped-migration.js``;
-    ``tests/fixtures/sessions/mode-split-vectors.json`` pins both.
+    The Web Load and Gallery publication run this split; Python alone owns it.
+    ``tests/fixtures/sessions/mode-split-vectors.json`` pins it.
     """
 
     committed = _diagram_mode(committed_mode)
