@@ -126,7 +126,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   the feature contents, the Linear records, or the Circular ticks, and a Depth
   Legend label change keeps the drawn Depth paths. In a warm Generate of the
   vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
-  of 331 ms in CPython.
+  of 331 ms in CPython. A change of Separate strands, Resolve overlaps, or
+  Label rendering rebuilds fewer render stages, and a warm Generate of a Linear
+  similarity-groups or collinear figure with a reversed record is faster.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).
