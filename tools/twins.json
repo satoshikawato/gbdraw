@@ -1242,20 +1242,6 @@
       "reason": "Python names the remedies of a capacity stop by id, in its order; the Web admits a report only with ids among the keys of its words map and lists them in Python's order. The keys copy the ids by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
       "retireWhen": "the ids are generated into contracts/schema.generated.js and the Web words map is keyed by the generated ids, so the Web keeps no hand copy",
       "source": "PR #1402 review S1 (bigdata-perf-20261026, D-16); the detector does not see it"
-    },
-    {
-      "id": "constant:HorizontalLabelKind",
-      "concern": "Label kinds whose room a capacity check reads (circular_outer, circular_inner) and their order, in a capacity stop's report and a capacity notice",
-      "pythonOwner": [
-        "gbdraw/labels/fit.py:HorizontalLabelKind"
-      ],
-      "jsOwner": [
-        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_KIND_WORDS"
-      ],
-      "vector": null,
-      "reason": "Python names the side of a capacity stop record, a capacity notice, and the LABEL_LAYOUT context key by label kind; the Web admits a capacity only with a kind among the keys of its words map and words the room in that kind's sentence. The keys copy the kinds by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
-      "retireWhen": "the kinds are generated into contracts/schema.generated.js and the Web words map is keyed by the generated kinds, so the Web keeps no hand copy",
-      "source": "PR #1447 review F1 (release-0143-20261027, OV-2179); the detector does not see it"
     }
   ]
 }
