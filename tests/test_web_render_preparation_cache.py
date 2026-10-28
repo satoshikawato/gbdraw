@@ -1587,7 +1587,7 @@ def test_a_request_compares_each_cached_feature_once_only_when_a_record_stage_bu
     _render(tmp_path, cache, document, request_id=1)
 
     walked: list[int] = []
-    original = prepared_module._feature_stamp
+    original = prepared_module._feature_hash_bytes
 
     def counting(feature: object) -> object:
         walked.append(id(feature))
@@ -1596,7 +1596,7 @@ def test_a_request_compares_each_cached_feature_once_only_when_a_record_stage_bu
     def whole_stamp(value: object, *, walk_features: bool) -> object:
         pytest.fail("a check of a cached entry built its whole stamp")
 
-    monkeypatch.setattr(prepared_module, "_feature_stamp", counting)
+    monkeypatch.setattr(prepared_module, "_feature_hash_bytes", counting)
     # The checks compare each part with the stored stamp; only a build stamps a value whole.
     monkeypatch.setattr(prepared_module, "_owner_stamp", whole_stamp)
     # O-2: a warm repeat builds no record entry and no stage that takes a record.
@@ -2513,7 +2513,26 @@ def test_a_single_record_title_change_reuses_the_gc_percent(
 
 def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
     feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
-    assert len(prepared_module._feature_stamp(feature)) == len(prepared_module._FEATURE_STAMP_FIELDS)
+    assert len(prepared_module._feature_hash_bytes(feature)) == 8 * len(prepared_module._FEATURE_STAMP_FIELDS)
+
+
+def test_a_feature_hash_reads_a_qualifier_dict_without_its_sorted_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-2087: a dict of str keys (every GenBank qualifier mapping) hashes pair by pair, in any key order."""
+
+    feature = SeqFeature(
+        FeatureLocation(1, 9, strand=1), type="CDS", qualifiers={"locus_tag": ["a"], "product": ["p"], "pseudo": ""}
+    )
+    before = prepared_module._feature_field_hashes([feature], {})
+    feature.qualifiers["locus_tag"] = feature.qualifiers.pop("locus_tag")
+
+    def sorted_stamp(value: object) -> object:
+        pytest.fail("a qualifier dict of str keys built its sorted stamp")
+
+    monkeypatch.setattr(prepared_module, "_shallow_value_stamp", sorted_stamp)
+    # As the sorted stamp, the hash does not see the key order.
+    assert prepared_module._feature_field_hashes([feature], {}) == before
+    feature.qualifiers["product"].append("q")
+    assert prepared_module._feature_field_hashes([feature], {})[-8:] != before[-8:]
 
 
 def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_never(

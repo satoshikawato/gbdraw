@@ -459,16 +459,16 @@ HMMTDNA = TEST_INPUTS / "HmmtDNA.gbk"
 
 
 def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tuple[object, ...]]:
-    """Draw a figure and return the radial layout and the paint the definition check read for its record."""
+    """Draw a figure and return the resolved slots and the paint the definition check read for its record."""
 
     import gbdraw.diagrams.circular.assemble as assemble_module
 
     captured: list[tuple[object, tuple[object, ...]]] = []
     original = assemble_module._record_track_ink
 
-    def capture(layout, **kwargs):
-        inks = original(layout, **kwargs)
-        captured.append((layout, inks))
+    def capture(axis, slots, sources, labels):
+        inks = original(axis, slots, sources, labels)
+        captured.append((slots, inks))
         return inks
 
     monkeypatch.setattr(assemble_module, "_record_track_ink", capture)
@@ -479,8 +479,8 @@ def _drawn_track_ink(monkeypatch: pytest.MonkeyPatch, draw) -> tuple[object, tup
     return captured[-1]
 
 
-def _slot(layout, renderer: str):
-    return next(slot for slot in layout.slots if str(slot.renderer) == renderer)
+def _slot(slots, renderer: str):
+    return next(slot for slot in slots if str(slot.renderer) == renderer)
 
 
 def _lines_at(inks, radius: float, turn: float) -> int:
@@ -518,14 +518,14 @@ def test_a_depth_track_counts_its_area_and_axis_not_its_band(monkeypatch: pytest
     depth = pd.DataFrame(
         {"reference_name": record.id, "position": positions, "depth": [80 if p <= length // 4 else 0 for p in positions]}
     )
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(
             depth_table=depth, depth_window=100, depth_step=100,
             circular_track_slots=["features:features", "depth:depth"], circular_track_axis_index=1,
         ),
     )
-    slot = _slot(layout, "depth")
+    slot = _slot(slots, "depth")
     band, drawn = slot.own_reserved_band_px, slot.draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     # Where there is no coverage the area is bare: inside the band, off the paint.
@@ -546,7 +546,7 @@ def test_a_conservation_ring_counts_its_hits_and_its_background(monkeypatch: pyt
 
     record = SeqIO.read(str(HMMTDNA), "genbank")
     hit = ("query1", record.id, 90.0, 4000, 0, 0, 1, 4000, 1, 4000, 1e-20, 100.0)
-    slots = ["features:features", "conservation_1:sequence_conservation@source_index=0"]
+    track_slots = ["features:features", "conservation_1:sequence_conservation@source_index=0"]
 
     def ring(show_background: bool):
         return _drawn_track_ink(
@@ -555,16 +555,16 @@ def test_a_conservation_ring_counts_its_hits_and_its_background(monkeypatch: pyt
                 overrides={"objects.conservation.show_background": show_background},
                 conservation_dataframes=[pd.DataFrame([hit], columns=COMPARISON_COLUMNS)],
                 conservation_reference="subject",
-                circular_track_slots=slots, circular_track_axis_index=1,
+                circular_track_slots=track_slots, circular_track_axis_index=1,
             ),
         )
 
-    layout, inks = ring(False)
-    drawn = _slot(layout, "sequence_conservation").draw_band_px
+    slots, inks = ring(False)
+    drawn = _slot(slots, "sequence_conservation").draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     assert _lines_at(inks, middle, 0.6) == 0
     assert _lines_at(inks, middle, 0.1) == 1
-    layout, inks = ring(True)
+    slots, inks = ring(True)
     assert _lines_at(inks, middle, 0.6) == 1
 
 
@@ -577,7 +577,7 @@ def test_an_annotation_track_counts_its_marks_not_its_band(monkeypatch: pytest.M
     region = RegionAnnotation(
         "block", CoordinateSpan(None, 1, length // 4), mark="band", style=RegionAnnotationStyle(fill="#cccccc")
     )
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(
             annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
@@ -585,7 +585,7 @@ def test_an_annotation_track_counts_its_marks_not_its_band(monkeypatch: pytest.M
             circular_track_axis_index=1,
         ),
     )
-    drawn = _slot(layout, "annotations").draw_band_px
+    drawn = _slot(slots, "annotations").draw_band_px
     middle = 0.5 * (drawn.inner_px + drawn.outer_px)
     assert _lines_at(inks, middle, 0.6) == 0
     assert _lines_at(inks, middle, 0.1) == 1
@@ -597,11 +597,11 @@ def test_a_tick_track_counts_its_marks_and_labels_not_its_band(monkeypatch: pyte
 
     record = SeqIO.read(str(HMMTDNA), "genbank")
     length = len(record.seq)
-    layout, inks = _drawn_track_ink(
+    slots, inks = _drawn_track_ink(
         monkeypatch,
         _assemble(circular_track_slots=["features:features", "ticks:ticks"], circular_track_axis_index=1),
     )
-    tick_layout = _slot(layout, "ticks").payload
+    tick_layout = _slot(slots, "ticks").payload
     large, _ = get_circular_tick_intervals(length)
     marks = 0.5 * (tick_layout.tick_band_px.inner_px + tick_layout.tick_band_px.outer_px)
     # Between two ticks there is neither a mark nor a label.
@@ -743,3 +743,165 @@ def test_tracks_narrowed_around_the_definition_leave_no_notice(
     narrowed = any(track.compressed for track in fits[0].layout.tracks)
     notice = "definition line does not fit" in capsys.readouterr().err
     assert narrowed and not notice, (narrowed, notice)
+
+
+# --- The count is a render stage over every track's paint (OV-2088) -----------------------------------------------
+
+
+def _box_at(radius: float, turn: float, half: float):
+    import math
+
+    from gbdraw.layout.spatial import Aabb
+
+    angle = 2.0 * math.pi * turn - 0.5 * math.pi
+    x, y = radius * math.cos(angle), radius * math.sin(angle)
+    return Aabb(x - half, y - half, x + half, y + half)
+
+
+@pytest.mark.circular
+def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review 1 of OV-2088: a GC skew stroke, a GC% border and an annotation band stroke paint half their width
+    past their bands, which the radial layout does not reserve. A line just past that paint counts, and the
+    production count (``definition_lines_over_tracks``) equals the count over every track's paint for each line,
+    nearer or farther than the band's inner edge."""
+
+    import math
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from gbdraw.api import AnnotationOptions, AnnotationSet, CoordinateSpan, RegionAnnotation, RegionAnnotationStyle
+    from gbdraw.layout.circular_ink import CircularInkRing
+
+    record = SeqIO.read(str(HMMTDNA), "genbank")
+    length = len(record.seq)
+    region = RegionAnnotation(
+        "block", CoordinateSpan(None, 1, length // 4), mark="band",
+        style=RegionAnnotationStyle(fill="#cccccc", stroke="#202020", stroke_width=3.0),
+    )
+    captured: list[tuple[object, object, object]] = []
+    drawn: list[tuple[tuple[object, ...], int]] = []
+    original = assemble_module.definition_lines_over_tracks
+
+    def capture(lines, axis, slots, sources, labels):
+        captured.append((axis, slots, sources, labels))
+        count = original(lines, axis, slots, sources, labels)
+        drawn.append((tuple(lines), count))
+        return count
+
+    monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", capture)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LabelLeadersCrossWarning)
+        _assemble(
+            overrides={
+                "objects.gc_skew.stroke_color": "#000000",
+                "objects.gc_skew.stroke_width": 3,
+                "objects.gc_content.mode": "percent",
+                "objects.gc_content.percent_border_width": 6,
+            },
+            annotation_options=AnnotationOptions(sets=(AnnotationSet("regions", (region,)),)),
+            # The GC% track innermost: its border is the paint nearest the centre.
+            circular_track_slots=[
+                "features:features",
+                "gc_skew:dinucleotide_skew",
+                "regions:annotations@side=inside,set_id=regions,w=20px",
+                "gc_content:dinucleotide_content",
+            ],
+        )()
+    assert captured, "the definition count did not run"
+    axis, slots, sources, labels = captured[-1]
+    inks = assemble_module._record_track_ink(axis, slots, sources, labels)
+    # The count drawn at the stage boundary is the full count, once per captured call.
+    assert len(drawn) == len(captured)
+    for lines, count in drawn:
+        assert count == assemble_module._definition_lines_on_tracks(inks, list(lines)), (lines, count)
+    monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", original)
+    band_floor = min(float(slot.draw_band_px.inner_px) for slot in slots if slot.draw_band_px is not None)
+    # The GC% border, half its 6 px stroke inside every band: the paint a band floor would have missed.
+    nearest = min((ink for ink in inks if isinstance(ink, CircularInkRing)), key=lambda ink: ink.nearest_px)
+    assert nearest.nearest_px < band_floor - 1.0, (nearest.nearest_px, band_floor)
+    turn = 0.5 * (nearest.start_turn + nearest.end_turn)
+    counts = {}
+    for step in range(-8, 9):
+        radius = nearest.nearest_px + 0.25 * step
+        box = _box_at(radius, turn, 0.75)
+        full = assemble_module._definition_lines_on_tracks(inks, [box])
+        assert assemble_module.definition_lines_over_tracks((box,), axis, slots, sources, labels) == full, radius
+        counts[radius] = (full, math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y))))
+    # A line whose farthest corner stays more than 1 px inside every band still meets the stroke.
+    assert any(full == 1 and reach < band_floor - 1.0 for full, reach in counts.values()), counts
+    assert any(full == 0 for full, _reach in counts.values()), counts
+
+
+@pytest.mark.circular
+def test_a_generate_that_changes_nothing_reuses_the_definition_count(tmp_path: Path) -> None:
+    """OV-2088: the count over every track's paint is the ``definition_track_overlaps`` stage, so a Generate that
+    changes nothing builds no track paint."""
+
+    from tests.utils.render_stage_equivalence import CASES, EquivalenceHarness, Placeholders, write_tables
+
+    case = CASES["C1"]
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    arguments = Placeholders(write_tables(tmp_path / "tables")).expand(case, case.base)
+    first = harness.warm(arguments)
+    assert first.error is None
+    assert first.stages.builds.get("definition_track_overlaps"), dict(first.stages.builds)
+    again = harness.warm(arguments)
+    assert again.error is None
+    assert "definition_track_overlaps" not in again.stages.builds
+    assert again.stages.hits.get("definition_track_overlaps"), dict(again.stages.hits)
+    assert not again.stages.uncacheable_total and not again.stages.undeclared_read_total
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("placement", ["horizontal", "radial"])
+def test_the_tracks_keep_the_definition_band_the_labels_stage_reads_only_as_a_reserve(
+    placement: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Review 1 of OV-2103: the labels stage takes the inner reserve as a number, so the layout drawn after the
+    labels keeps the centre band the tracks were placed around (the untitled definition's, beside a plot title);
+    the labels hand back only a layout their radial growth replanned."""
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from tests.utils.render_stage_equivalence import CASES, EquivalenceHarness, Placeholders, write_tables
+
+    fits: list[object] = []
+    drawn: list[object] = []
+    placements: list[object] = []
+    fit_of = assemble_module._resolve_radial_layout_fitting_definition
+    overlaps_of = assemble_module._region_labels_on_other_tracks
+    labels_of = assemble_module.circular_labels
+
+    def fitting(*args, **kwargs):
+        fits.append(fit_of(*args, **kwargs))
+        return fits[-1]
+
+    def overlaps(layout, labels):
+        drawn.append(layout)
+        return overlaps_of(layout, labels)
+
+    def placing(*args, **kwargs):
+        placements.append(labels_of(*args, **kwargs))
+        return placements[-1]
+
+    monkeypatch.setattr(assemble_module, "_resolve_radial_layout_fitting_definition", fitting)
+    monkeypatch.setattr(assemble_module, "_region_labels_on_other_tracks", overlaps)
+    monkeypatch.setattr(assemble_module, "circular_labels", placing)
+    case = CASES["C1"]
+    arguments = [
+        *Placeholders(write_tables(tmp_path / "tables")).expand(case, case.base),
+        "--species", "<i>Homo sapiens</i>", "--label_placement", placement,
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LabelLeadersCrossWarning)
+        assert EquivalenceHarness(case.mode, tmp_path / "C1").uncached(arguments).error is None
+    [placed] = placements
+    [layout] = drawn
+    if placed.radial_layout is None:
+        # The labels kept the layout they were given: the drawing reads the tracks' own centre band.
+        band = fits[0].layout.definition_reserved_band_px
+        assert band is not None and layout.definition_reserved_band_px == band
+    else:
+        assert layout is placed.radial_layout
+    # The reserve the labels read is the one owner's value for the layout they read.
+    assert placed.state.inner_reserve_px == assemble_module.radial_label_inner_reserve_px(
+        layout if placed.radial_layout is not None else fits[0].layout
+    )

@@ -115,12 +115,14 @@ from ...layout.composition import (
 )
 from ...layout.spatial import Aabb, union_aabbs
 from ...layout.linear_multi_record import (
+    LinearFeatureAttachment,
     LinearRecordMeasurement,
     LinearRecordPlacement,
     RecordKey,
     place_record_vertically,
     solve_linear_horizontal_layout,
     solve_linear_layout,
+    comparison_frame_px,
     stable_record_keys,
 )
 from ...layout.record_coordinates import RecordDisplayTransform
@@ -1885,16 +1887,8 @@ def _collect_linear_primary_bounds(
     for comparison in normalized_comparisons:
         query = record_placements[comparison.query_record_index]
         subject = record_placements[comparison.subject_record_index]
-        query_y = (
-            query.comparison_bottom_y
-            if query.row < subject.row
-            else query.comparison_top_y
-        )
-        subject_y = (
-            subject.comparison_bottom_y
-            if subject.row < query.row
-            else subject.comparison_top_y
-        )
+        query_y = query.facing_comparison_anchor_y(subject)
+        subject_y = subject.facing_comparison_anchor_y(query)
         bounds.append(
             Aabb(
                 horizontal_offset + min(query.x, subject.x) - comparison_half_stroke,
@@ -2743,7 +2737,8 @@ def assemble_linear_diagram(
     )
     # Row spacing reserves labels, but ribbon endpoints attach to track paint.
     # Resolve this after both layout paths have fixed every slot and record.
-    feature_attachment_bands: dict[str, VerticalBand] = {}
+    # A feature's attachment is kept as its offset from the record's anchors, so moving rows leaves it as it is.
+    feature_attachments: dict[int, dict[str, LinearFeatureAttachment]] = {}
     for record_index, placement in record_placements.items():
         plan = record_vertical_plans[record_index]
         attachment_band = plan.axis_band
@@ -2793,11 +2788,10 @@ def assemble_linear_diagram(
                 band = lane.band.translate(plan_slot.origin_y)
                 if non_feature_band is not None:
                     band = band.union(non_feature_band)
-                feature_attachment_bands[dom_id] = VerticalBand(
-                    placement.axis_y + band.top_y - comparison_endpoint_gap_px,
-                    placement.axis_y + band.bottom_y + comparison_endpoint_gap_px,
+                feature_attachments.setdefault(record_index, {})[dom_id] = LinearFeatureAttachment(
+                    comparison_frame_px(band.top_y - attachment_band.top_y),
+                    comparison_frame_px(band.bottom_y - attachment_band.bottom_y),
                 )
-    feature_dom_index = replace(feature_dom_index, attachment_bands=feature_attachment_bands)
 
     if draw_length_bar:
         min_record_x = min(
@@ -2851,6 +2845,7 @@ def assemble_linear_diagram(
             feature_dom_index=feature_dom_index,
             record_transforms=record_transforms,
             record_keys=record_keys,
+            feature_attachments=feature_attachments,
         )
 
     # Each record's drawn definition text, in its feature labels' coordinates (OV-1395).

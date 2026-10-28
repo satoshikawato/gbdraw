@@ -16,7 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.render.group_content import GroupContent, GroupKind, content_leaves, held_group
+from gbdraw.render.group_content import GroupContent, GroupKind, held_group, leaf_groups
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -2189,7 +2189,9 @@ def _reference_reconstructible_nucleotide_sequences(
 # groups, with the record source span), comparison ribbons and annotations.
 # The Circular axis circle (AXIS_CIRCLE) holds neither.
 # A Circular conservation ring carries the hits the catalog binds to features.
-# RECORD: a Multi-Record Circular record, whose parts (its placed groups) are read.
+# RECORD: a Multi-Record Circular record whose parts are not all placed
+# contents; otherwise each part is read by its own kind, as at the top level
+# (a definition, tick or GC part reads nothing, OV-2108).
 _CATALOG_GROUP_KINDS = frozenset(
     {
         GroupKind.AXIS,
@@ -2210,8 +2212,10 @@ _CATALOG_CONTENTS_ROOT = (
 def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
     """The contents whose elements the catalog reads, in document order.
 
-    ``None`` when a top-level element other than ``defs`` is not a placed
-    content: the catalog then reads the SVG.
+    A record group adds no reads of its own: its parts (``leaf_groups``) are
+    read, each when its kind is one the catalog reads. ``None`` when a
+    top-level element other than ``defs`` is not a placed content: the catalog
+    then reads the SVG.
     """
 
     contents: list[GroupContent] = []
@@ -2221,9 +2225,7 @@ def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
         group = held_group(element)
         if group is None:
             return None
-        if group.key.kind in _CATALOG_GROUP_KINDS:
-            # A record group adds no reads of its own: its parts are read.
-            contents.extend(content_leaves(group.content))
+        contents.extend(leaf.content for leaf in leaf_groups(group) if leaf.key.kind in _CATALOG_GROUP_KINDS)
     return tuple(contents)
 
 

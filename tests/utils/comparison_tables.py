@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from gbdraw.layout.linear_multi_record import LinearRecordPlacement, RecordKey
+from gbdraw.layout.linear_multi_record import LinearComparisonEndpoint
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 
 
@@ -22,25 +22,20 @@ def converted_pair_rows(pair: Mapping[str, Any]) -> list[dict[str, Any]]:
     return pd.read_csv(io.StringIO(pair["canonicalTsv"]), sep="\t").to_dict(orient="records")
 
 
-def ribbon_placement(record_index: int, *, px_per_bp: float, x: float = 0.0) -> LinearRecordPlacement:
-    """A record's placement for comparison ribbons drawn outside the assembler: record ``n`` on
-    row ``n`` at ``x``, scaled by ``px_per_bp``. Ribbons place their ends only through it."""
+def ribbon_placement(
+    record_index: int, *, px_per_bp: float, x: float = 0.0, anchor_y: float = 0.0
+) -> LinearComparisonEndpoint:
+    """A record's end of comparison ribbons drawn outside the assembler: record ``n`` on row ``n`` at
+    ``x``, scaled by ``px_per_bp``, its ribbon ends at ``anchor_y``. Ribbons place their ends only
+    through it."""
 
-    return LinearRecordPlacement(
+    return LinearComparisonEndpoint(
         record_index=record_index,
-        record_key=RecordKey(f"record-{record_index + 1}"),
         row=record_index,
-        column=0,
         x=x,
-        axis_y=0.0,
-        sequence_width=0.0,
-        left_inset=0.0,
-        right_inset=0.0,
-        top_extent=0.0,
-        bottom_extent=0.0,
-        comparison_top_y=0.0,
-        comparison_bottom_y=0.0,
         px_per_bp=px_per_bp,
+        anchor_y=anchor_y,
+        attachment_offsets_px={},
     )
 
 
@@ -84,14 +79,11 @@ def ribbon_group(
     return PairWiseMatchGroup(
         {},
         comparison if comparison is not None else pd.DataFrame(columns=["identity", "qstart", "qend", "sstart", "send"]),
-        height,
         1,
         ribbon_config(**config),
         records,
-        query_y=0.0,
-        subject_y=height,
         feature_dom_index=feature_dom_index,
         record_transforms=None,
         query_placement=ribbon_placement(query_index, px_per_bp=px_per_bp),
-        subject_placement=ribbon_placement(subject_index, px_per_bp=px_per_bp, x=subject_x),
+        subject_placement=ribbon_placement(subject_index, px_per_bp=px_per_bp, x=subject_x, anchor_y=height),
     )

@@ -64,7 +64,7 @@ _DEPTH = (
     "depth_tick_font_size",
 )
 P1_P2_OPTIONS: Mapping[str, frozenset[str]] = {
-    "C1": frozenset((*_CIRCULAR_COMMON, "hide_scale", "species (no plot title)",
+    "C1": frozenset((*_CIRCULAR_COMMON, "hide_scale", "species", "species (no plot title)",
                      "keep_full_definition_with_plot_title")),
     "C2": frozenset((*_CIRCULAR_COMMON, "line_stroke_width", "definition_font_size", "plot_title_position",
                      "legend", "hide_scale", "multi_record_column_gap_ratio", "multi_record_row_gap_ratio")),
@@ -135,6 +135,9 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
     **dict.fromkeys(("plot_title", "plot_title_font_size"), _TITLE),
+    # "species" builds nothing: beside a typed plot title neither the title (OV-2110) nor the record summary
+    # (OV-2109) draws it, and the tracks keep the band of the untitled definition (OV-1710), which the labels read
+    # only where it reaches past the inside tracks (OV-2103).
 }
 
 # The options a record content reads, per mode: the Linear record draws the
@@ -299,6 +302,16 @@ _CATALOG_KEPT_OPTIONS = frozenset(
 )
 
 
+# The Circular definition-over-track count reads the centre definition lines, the radial layout and every track's
+# paint (OV-2088): it rebuilds with any stage that holds one of them.
+_DEFINITION_COUNT_INPUTS = frozenset(
+    {
+        "circular_definition_content", "circular_labels", "feature_layers", "axis_content", "ticks_content",
+        "gc_content_content", "gc_skew_content", "depth_content", "conservation_content", "annotation_content",
+    }
+)
+
+
 # The composition plan is keyed by the bounds of the primary content, the
 # legend and the title, and by their placements. These stages hold those bounds.
 _BOUNDS_STAGES = (
@@ -342,6 +355,8 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if allowed & _DEFINITION_COUNT_INPUTS:
+        allowed |= {"definition_track_overlaps"}
     if allowed & _PLACED_LABELS:
         allowed |= {"circular_record_content"}
     if allowed & _RECORD_MERGE_INPUTS:
@@ -443,17 +458,26 @@ def test_a_p1_or_p2_option_builds_only_the_stages_of_its_content(
     assert not failures, "\n".join(failures)
 
 
-def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tables: Path, tmp_path: Path) -> None:
-    """The definition and the title take the canvas geometry, not the canvas switches."""
+@pytest.mark.parametrize("option_id", ["gc", "skew"])
+@pytest.mark.parametrize("case_id", ["C1", "L1"])
+def test_a_track_toggle_rebuilds_no_definition_title_record_content_or_ticks(
+    case_id: str, option_id: str, tables: Path, tmp_path: Path
+) -> None:
+    """The definition and the title take the canvas geometry, not the canvas switches; the
+    record and feature contents and the ticks take the render profile, whose track
+    switches are read through the config (OV-1309)."""
 
-    case = CASES["C1"]
+    case = CASES[case_id]
     placeholders = Placeholders(tables)
-    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
     assert harness.warm(placeholders.expand(case, case.base)).error is None
-    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    [(option, variant)] = matrix_variants(case, option_ids=[option_id], first_variant_only=True)
     outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
     assert outcome.error is None
-    assert not {"circular_definition_content", "circular_plot_title_content"} & set(outcome.stages.builds)
+    assert not {
+        "circular_definition_content", "circular_plot_title_content", "definition_content", "plot_title_content",
+        "record_content", "circular_record_content", "ticks_content",
+    } & set(outcome.stages.builds)
 
 
 def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definition(
@@ -470,6 +494,66 @@ def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definit
     assert outcome.error is None
     assert "circular_plot_title_content" in outcome.stages.builds
     assert "circular_definition_content" not in outcome.stages.builds
+
+
+def test_a_species_change_beside_a_plot_title_that_moves_no_track_builds_nothing(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2103, OV-2111: beside a plot title the tracks keep the band of the untitled definition (OV-1710).
+
+    A species change that moves no track draws the same figure. The labels
+    stage reads that band only where it reaches past the inside tracks, and
+    the definition-over-track count reads the axis and the slots, not the
+    band, so both stay hits and nothing builds.
+    """
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    assert outcome.reply == before.reply
+    assert not outcome.stages.builds, outcome.stages.builds
+
+
+def test_a_track_move_beside_an_unchanged_definition_rebuilds_the_definition_over_track_count(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2111, no stale hit: the count reads where each slot draws. Widening the GC skew track moves the slots
+    and nothing else the count reads (both widths are explicit), so the count builds again."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    before = harness.warm([*base, "--gc_skew_width", "40"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--gc_skew_width", "90"])
+    assert outcome.error is None
+    assert outcome.reply["results"] != before.reply["results"]
+    assert outcome.stages.builds.get("definition_track_overlaps") == 1, outcome.stages.builds
+
+
+@pytest.mark.parametrize("case_id", ["L2", "L3"])
+def test_a_gc_toggle_that_moves_rows_rebuilds_no_comparison_ribbon(case_id: str, tables: Path, tmp_path: Path) -> None:
+    """OV-2089: a GC toggle moves the rows but not the ribbons' shape; each comparison draws in its own frame.
+
+    The comparison stage takes its ends in that frame (each record's anchor
+    less the comparison's top) and the feature attachment as offsets from the
+    record's anchor, so moving rows changes only where the group is placed.
+    """
+
+    case = CASES[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "comparison_content" not in outcome.stages.builds
 
 
 @pytest.mark.parametrize("case_id", ["C3", "L2"])
@@ -523,6 +607,19 @@ def test_a_multi_record_circular_layout_change_copies_only_the_record_parts_it_r
     rebuilt_parts = sum(count for name, count in builds.items() if name in _RECORD_MERGE_INPUTS)
     assert 0 < builds.get("record_part", 0) == rebuilt_parts
     assert outcome.stages.hits.get("record_part", 0) > 0
+
+
+def test_a_multi_record_gc_toggle_keeps_every_feature_content(tmp_path: Path) -> None:
+    """Hiding GC keeps every record's feature content and ticks (OV-1309)."""
+
+    base = _hmmt_regions(tmp_path / "records.tsv")
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    before = harness.warm(base)
+    assert before.error is None
+    outcome = harness.warm(["--no-gc" if argument == "--gc" else argument for argument in base])
+    assert outcome.error is None and outcome.reply != before.reply
+    assert not {"circular_record_content", "ticks_content"} & set(outcome.stages.builds)
+    assert outcome.stages.hits.get("circular_record_content") == 2
 
 
 @pytest.mark.parametrize(
@@ -582,3 +679,95 @@ def test_a_linear_definition_change_keeps_the_ribbons(change: tuple[str, ...], t
     assert outcome.error is None and outcome.reply != before.reply
     assert "comparison_content" not in outcome.stages.builds
     assert outcome.stages.hits.get("comparison_content") == 1
+
+
+def test_a_species_change_on_a_multi_record_circular_canvas_builds_no_catalog_snapshot(
+    tables: Path, tmp_path: Path
+) -> None:
+    """OV-2108: the catalog reads a record part only when its kind holds what the catalog reads.
+
+    With the full definition kept beside the plot title, a species change
+    redraws each record's definition part, which reads nothing for the catalog,
+    so it builds no ``catalog_snapshot``; a palette change repaints the feature
+    parts, whose snapshots rebuild with the new fills (no stale hit).
+    """
+
+    case = CASES["C2"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C2")
+    base = [*placeholders.expand(case, case.base), "--keep_full_definition_with_plot_title"]
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    species = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert species.error is None
+    assert species.reply["results"] != before.reply["results"]
+    assert "record_part" in species.stages.builds
+    assert "catalog_snapshot" not in species.stages.builds
+    assert species.reply["featureCatalog"] == before.reply["featureCatalog"]
+    palette = harness.warm([*base, "--species", "<i>Homo sapiens</i> X", "-p", "soft_pastels"])
+    assert palette.error is None
+    assert "catalog_snapshot" in palette.stages.builds
+    assert palette.reply["featureCatalog"] != species.reply["featureCatalog"]
+
+
+def _without_typed_plot_title(arguments: list[str]) -> list[str]:
+    at = arguments.index("--plot_title")
+    return [*arguments[:at], *arguments[at + 2:]]
+
+
+@pytest.mark.parametrize(
+    ("keep_full", "drawn"),
+    [pytest.param(False, False, id="record-summary"), pytest.param(True, True, id="full-definition")],
+)
+def test_a_species_change_rebuilds_the_record_definitions_only_where_they_draw_it(
+    keep_full: bool, drawn: bool, tables: Path, tmp_path: Path
+) -> None:
+    """OV-2109: beside a plot title each record draws its summary (no species, no strain), so a species change
+    rebuilds no record definition, record part or record group. Kept in full, the definitions draw the
+    species and rebuild (no stale hit)."""
+
+    case = CASES["C2"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C2")
+    base = [*placeholders.expand(case, case.base), *(["--keep_full_definition_with_plot_title"] if keep_full else [])]
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    builds = outcome.stages.builds
+    if drawn:
+        assert outcome.reply["results"] != before.reply["results"]
+        assert builds.get("circular_definition_content") == 3
+        assert builds.get("record_part", 0) >= 3
+    else:
+        assert outcome.reply == before.reply
+        assert not {"circular_definition_content", "record_part", "record_merge"} & set(builds), builds
+
+
+@pytest.mark.parametrize(
+    ("typed_title", "drawn"),
+    [pytest.param(True, False, id="typed-title"), pytest.param(False, True, id="name-title")],
+)
+def test_a_species_change_rebuilds_the_plot_title_only_where_it_draws_the_name(
+    typed_title: bool, drawn: bool, tables: Path, tmp_path: Path
+) -> None:
+    """OV-2110: a typed plot title replaces the name, so a species change rebuilds neither the title nor the
+    composition plan that places it. Without a typed title the title draws the species and rebuilds (no
+    stale hit)."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    base = placeholders.expand(case, case.base)
+    base = list(base) if typed_title else _without_typed_plot_title(list(base))
+    before = harness.warm([*base, "--species", "<i>Homo sapiens</i>"])
+    assert before.error is None
+    outcome = harness.warm([*base, "--species", "<i>Homo sapiens</i> X"])
+    assert outcome.error is None
+    builds = outcome.stages.builds
+    if drawn:
+        assert outcome.reply["results"] != before.reply["results"]
+        assert "circular_plot_title_content" in builds
+    else:
+        assert outcome.reply == before.reply
+        assert not {"circular_plot_title_content", "composition_plan"} & set(builds), builds

@@ -30,6 +30,15 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Generate.
 - Label text and **Label visibility** typed in the Web feature popup and not
   yet applied stay when the labels are placed again while the popup is open.
+- A Legend row's stroke in the Web app stays on the Result when a color rule
+  edit gives the row another key (for example a caption edit of another rule),
+  as **Generate Diagram** draws it. Before, the row showed the default line
+  until the next Generate.
+- A Legend row's stroke in the Web app no longer comes back on the features
+  of the row's color after its row has left the Legend (for example the CDS row that becomes "other
+  proteins" when a color rule takes a CDS feature under another caption).
+  Before, a later rule edit or Legend delete stroked those features again
+  until the next **Generate Diagram**.
 
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
@@ -89,9 +98,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   definition font or the center radius changes, and Linear comparison ribbons
   no longer redraw when a definition or record label changes. The Worker
   parses each Depth file once and keeps it while **Show Depth** is off, so
-  showing Depth again does not parse the file again. In a warm Generate of the
-  vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
-  of 331 ms.
+  showing Depth again does not parse the file again. A Circular Species change
+  that moves no track keeps the placed labels, and a Linear change that moves
+  rows without changing a comparison keeps its ribbons. In a warm Generate of
+  the vibrio Gallery Session, the prepared-input check takes 155 ms of CPU
+  instead of 331 ms.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).

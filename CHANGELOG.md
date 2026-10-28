@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
+  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
+  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
 - Patch release of 0.14.2. Session files are unchanged (Session version 48).
@@ -28,6 +32,13 @@ write-up of a release.
 - Fixed: label text and Label visibility typed in the Web feature popup and
   not yet applied stay when the labels are placed again while the popup is
   open (OV-1984, #1417).
+- Fixed: in the Web app, a Legend row's stroke stays on the Result when a color rule edit gives the row
+  another key (for example a caption edit of another rule that leaves the row's color alone in it), as
+  Generate draws it. Before, the row showed the default line until the next Generate (OV-1985, #1433).
+- Fixed: in the Web app, a Legend row stroke whose row the Result no longer draws (for example the `CDS`
+  row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
+  strokes no feature by its color after a later edit, as Generate draws it. Before, a later rule edit or Legend delete
+  stroked the features of the row's old color again until the next Generate (OV-1987, #1438).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
@@ -70,6 +81,9 @@ write-up of a release.
   same. AP027078 `--labels out` (562 labels) takes about 11 s instead of 28 s;
   radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
   about 4 s instead of 25 s, with less memory (#1396, #1400).
+- Performance (web app): turning the GC content or GC skew track on or off no longer redraws the feature
+  contents, the Linear records or the Circular ticks; only the tracks, labels and legend that move redraw. The
+  drawn bytes are unchanged (#1431).
 - Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
   tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
   Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the
@@ -90,6 +104,15 @@ write-up of a release.
 - Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
   and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
   warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
+- Performance (web app): beside a plot title, a Circular Species change that moves no track keeps the placed labels,
+  the record content and the catalog snapshot (tobacco: 6 stage builds to 3, about 190 ms to 70 ms in CPython).
+  A Circular Generate that changes neither the centre definition nor the tracks reuses the check of the definition
+  over the tracks instead of building every track's paint again (Vnig: about 20 ms less per Generate). The commit
+  check of the cached records hashes each feature field directly (Vnig about 40-85 ms to 32-39 ms). A GC toggle or
+  another change that moves Linear rows without changing a comparison ribbon keeps the ribbons (Hepatoplasmataceae
+  orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
+  Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
+  including an exact tie, could in principle move by 0.001 px (#1434).
 
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 

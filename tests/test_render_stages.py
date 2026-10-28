@@ -17,6 +17,7 @@ from gbdraw.api.prepared import (
     PreparedResourceIdentity,
     register_prepared_resource_value,
 )
+from gbdraw.config.models.render_profiles import CircularRenderProfile, LinearRenderProfile, RenderProfile
 from gbdraw.config.models.root import GbdrawConfig
 from gbdraw.core import fonts
 from gbdraw.core.text import measurement_font_file
@@ -540,6 +541,81 @@ def test_container_subclasses_and_signed_zeros_have_their_own_keys() -> None:
         render_stage("gc_skew_data", double, 0.0)
         render_stage("gc_skew_data", double, -0.0)
     assert CALLS == ["count", "count", "double", "double"]
+
+
+# --- render profiles (OV-1309) ----------------------------------------------------
+
+_TRACK_SWITCHES = ("show_gc", "show_skew", "show_depth")
+_PROFILE_TYPES = (CircularRenderProfile, LinearRenderProfile)
+
+
+def profile_strands(profile: RenderProfile) -> bool:
+    CALLS.append("profile_strands")
+    return profile.strandedness
+
+
+def profile_track_switch(profile: RenderProfile, switch: str) -> bool:
+    CALLS.append("profile_track_switch")
+    return bool(getattr(profile, switch))
+
+
+def _flipped(profile_type: type[RenderProfile], switch: str) -> tuple[RenderProfile, RenderProfile]:
+    base = profile_type(_config(**{f"canvas.{switch}": False}))
+    return base, profile_type(_config(**{f"canvas.{switch}": True}))
+
+
+@pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
+@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
+def test_a_track_switch_does_not_key_a_stage_that_takes_the_profile_without_reading_it(
+    switch: str, profile_type: type[RenderProfile]
+) -> None:
+    base, flipped = _flipped(profile_type, switch)
+    cache = PreparedBiologicalInputCache()
+    with _transaction(cache):
+        render_stage("ticks_content", profile_strands, base)
+    metrics: dict[str, object] = {}
+    with _transaction(cache, metrics):
+        render_stage("ticks_content", profile_strands, flipped)
+    assert _metrics(metrics)["renderStageHit:ticks_content"] == 1
+    assert CALLS == ["profile_strands"]
+
+
+@pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
+@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
+def test_a_stage_that_reads_a_track_switch_without_declaring_canvas_is_never_stored(
+    switch: str, profile_type: type[RenderProfile]
+) -> None:
+    base, flipped = _flipped(profile_type, switch)
+    cache = PreparedBiologicalInputCache()
+    for profile, expected in ((base, False), (flipped, True), (base, False)):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            assert render_stage("ticks_content", profile_track_switch, profile, switch) is expected
+        assert _metrics(metrics)["renderStageUndeclaredRead:ticks_content"] == 1
+    assert CALLS == ["profile_track_switch"] * 3
+
+
+@pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
+@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
+def test_a_stage_that_declares_canvas_rebuilds_when_a_track_switch_changes(
+    switch: str, profile_type: type[RenderProfile], declared
+) -> None:
+    declared(ticks_content=frozenset({"canvas"}))
+    base, flipped = _flipped(profile_type, switch)
+    cache = PreparedBiologicalInputCache()
+    results = []
+    for profile in (base, flipped, base, flipped):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            results.append(render_stage("ticks_content", profile_track_switch, profile, switch))
+        assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 0
+    assert results == [False, True, False, True]
+    # The cache keeps the entries the last transaction used, so each flip builds again.
+    assert CALLS == ["profile_track_switch"] * 4
+    metrics = {}
+    with _transaction(cache, metrics):
+        assert render_stage("ticks_content", profile_track_switch, flipped, switch) is True
+    assert _metrics(metrics)["renderStageHit:ticks_content"] == 1
 
 
 def test_the_settings_table_names_only_existing_sections() -> None:

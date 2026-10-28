@@ -260,14 +260,14 @@ def test_radial_growth_replans_copies_of_the_feature_layers(
 
     import gbdraw.diagrams.circular.assemble as assemble
 
-    layouts: list[int] = []
+    measured: list[Any] = []
     layout_features = assemble._radial_layout_feature_dict
     built: list[tuple[Any, dict[str, tuple[int, object]]]] = []
     create = assemble.create_feature_layers
 
-    def counted(*args: Any, **kwargs: Any) -> Any:
-        layouts.append(1)
-        return layout_features(*args, **kwargs)
+    def counted(feature_layers: Any) -> Any:
+        measured.append(feature_layers)
+        return layout_features(feature_layers)
 
     def kept(*args: Any, **kwargs: Any) -> Any:
         result = create(*args, **kwargs)
@@ -281,8 +281,10 @@ def test_radial_growth_replans_copies_of_the_feature_layers(
         [*placeholders.expand(case, case.base), *_RADIAL_GROWTH]
     )
     assert outcome.error is None, outcome.error
-    assert len(layouts) == 2, "the case must grow the radius and replan once"
     [(layers, before)] = built
+    # The radial layout and the definition count measure the stage's layers; a replan measures its copies.
+    replans = [feature_layers for feature_layers in measured if feature_layers is not layers]
+    assert len(replans) == 1, "the case must grow the radius and replan once"
     assert _placements(layers) == before
 
 

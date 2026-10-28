@@ -1,7 +1,7 @@
 """Exact rendered identities shared by Linear features, labels, and matches."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from ....features.ids import (
     DrawnFeatureHash,
@@ -9,18 +9,16 @@ from ....features.ids import (
     make_linear_rendered_feature_id,
 )
 from ....features.objects import FeatureObject
-from ....layout.linear import VerticalBand
 from ....svg.ids import instance_svg_id
 from ...drawers.linear.features import FeatureDrawer
 
 
 @dataclass(frozen=True)
 class LinearFeatureDomIndex:
-    """Source-bound DOM identities and final feature attachment geometry."""
+    """Source-bound DOM identities of the drawn features."""
 
     by_source_index: Mapping[tuple[int, int], str]
     by_view_id: Mapping[tuple[int, DrawnFeatureHash], tuple[str, ...]]
-    attachment_bands: Mapping[str, VerticalBand] = field(default_factory=dict)
 
 
 def build_linear_feature_dom_index(

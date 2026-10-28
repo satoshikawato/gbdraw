@@ -60,17 +60,26 @@ def test_chloroplast_placement_preserves_lanes_and_clears_labels_and_legend(
         })
     assert len(selected) == 4
     measured = []
+    drawn = []
     original = assemble.prepare_label_list
+    overlaps = assemble._region_labels_on_other_tracks
 
     def capture(features, *args, **kwargs):
         labels = original(features, *args, **kwargs)
-        measured.append((features, kwargs["radial_layout"], labels))
+        measured.append((features, labels))
         return labels
 
+    def capture_layout(layout, labels):
+        # The layout drawn after the labels: the one they were placed on (the labels take its parts).
+        drawn.append(layout)
+        return overlaps(layout, labels)
+
     monkeypatch.setattr(assemble, "prepare_label_list", capture)
+    monkeypatch.setattr(assemble, "_region_labels_on_other_tracks", capture_layout)
     drawing = _build(document, tmp_path)
     result = drawing._gbdraw_circular_assembly_result
-    features, radial, labels = measured[-1]
+    features, labels = measured[-1]
+    radial = drawn[-1]
     step = radial.features.width_px + radial.axis.radius_px * 0.01
     for feature in features.values():
         assignment = feature.placement

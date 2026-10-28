@@ -106,6 +106,32 @@ LEADER_LABEL_RADIAL_STEP_PX = 1.0
 LEADER_LABEL_MAX_RADIAL_SHIFT_HEIGHTS = 2.0
 
 
+def radial_label_inner_reserve_px(radial_layout: CircularRadialLayout) -> float:
+    """The radius inner radial labels keep outside: the centre definition's band and the inside tracks' bands.
+
+    The labels read the centre band only through this value, which the labels stage takes instead of the band:
+    beside a plot title the tracks keep the band of the untitled definition (OV-1710), and a band that stays
+    inside those tracks leaves the stage key unchanged (OV-2103).
+    """
+
+    reserve = 0.0
+    definition_band = radial_layout.definition_reserved_band_px
+    if definition_band is not None:
+        reserve = max(reserve, float(definition_band.outer_px))
+    feature_inner_radius = (
+        float(radial_layout.features.all_band_px.inner_px) if radial_layout.features is not None else float("inf")
+    )
+    for resolved_slot in radial_layout.slots:
+        if resolved_slot.renderer in {"features", "feature_labels"}:
+            continue
+        reserved_band = resolved_slot.reserved_band_px
+        if reserved_band is None:
+            continue
+        if float(reserved_band.outer_px) <= feature_inner_radius + 1e-6:
+            reserve = max(reserve, float(reserved_band.outer_px))
+    return reserve
+
+
 def _normalize_circular_track_preset(raw: object) -> str:
     preset = str(raw or "tuckin").strip().lower()
     return preset if preset in get_args(CircularTrackPreset) else "tuckin"
@@ -5211,7 +5237,8 @@ def prepare_label_list(
     outer_arena: tuple[float, float] | None = None,
     feature_track_ratio_factor_override: float | None = None,
     feature_layout: CircularFeatureLayout | None = None,
-    radial_layout: CircularRadialLayout | None = None,
+    outer_content_radius_px: float | None = None,
+    inner_reserve_px: float = 0.0,
     track_preset: str | None = None,
     feature_lane_direction: str | None = None,
     label_font_size: float | None = None,
@@ -5229,6 +5256,8 @@ def prepare_label_list(
     overlaps, because such a layout does not fit. Otherwise slight defects of
     the final horizontal layout are repaired locally (LP-D57); ``definition_text``
     is the centre definition's lines, in the labels' coordinates.
+    Radial labels keep past ``outer_content_radius_px`` (the radial layout's
+    content) and outside ``inner_reserve_px`` (``radial_label_inner_reserve_px``).
     ``label_filtering``: the compiled maps when the caller holds them.
     With ``record_id`` (a drawn placement, not a probe), horizontal outer and
     inner labels are first read against the room around the map
@@ -5501,36 +5530,8 @@ def prepare_label_list(
         outer_reserved_radius_px = 0.0
         if outer_arena is not None:
             outer_reserved_radius_px = max(float(outer_arena[0]), float(outer_arena[1]))
-        if radial_layout is not None:
-            outer_reserved_radius_px = max(
-                outer_reserved_radius_px,
-                float(radial_layout.outer_content_radius_px),
-            )
-
-        inner_reserved_outer_radius_px = 0.0
-        if radial_layout is not None:
-            definition_band = radial_layout.definition_reserved_band_px
-            if definition_band is not None:
-                inner_reserved_outer_radius_px = max(
-                    inner_reserved_outer_radius_px,
-                    float(definition_band.outer_px),
-                )
-            feature_inner_radius = (
-                float(radial_layout.features.all_band_px.inner_px)
-                if radial_layout.features is not None
-                else float("inf")
-            )
-            for resolved_slot in radial_layout.slots:
-                if resolved_slot.renderer in {"features", "feature_labels"}:
-                    continue
-                reserved_band = resolved_slot.reserved_band_px
-                if reserved_band is None:
-                    continue
-                if float(reserved_band.outer_px) <= feature_inner_radius + 1e-6:
-                    inner_reserved_outer_radius_px = max(
-                        inner_reserved_outer_radius_px,
-                        float(reserved_band.outer_px),
-                    )
+        if outer_content_radius_px is not None:
+            outer_reserved_radius_px = max(outer_reserved_radius_px, float(outer_content_radius_px))
 
         radial_result = place_radial_labels(
             outer_labels,
@@ -5538,7 +5539,7 @@ def prepare_label_list(
             total_length=total_length,
             spacing_px=label_spacing_px,
             outer_reserved_radius_px=outer_reserved_radius_px,
-            inner_reserved_outer_radius_px=inner_reserved_outer_radius_px,
+            inner_reserved_outer_radius_px=float(inner_reserve_px),
         )
         external_labels = [label.copy() for label in radial_result.labels]
         for label in external_labels:
@@ -5824,6 +5825,7 @@ def prepare_label_list(
 
 __all__ = [
     "minimum_bbox_gap_px",
+    "radial_label_inner_reserve_px",
     "CircularLabelProbeStopped",
     "calculate_angle_degrees",
     "circular_label_fits",
