@@ -983,19 +983,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
       return result;
     }
   },
-  [DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME]: {
-    keys: ['tableText', 'queryFrame', 'subjectFrame'],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'main_session_table_text_to_search_frame_json',
-      [
-        String(payload.tableText || ''),
-        jsonArgument(payload.queryFrame, {}),
-        jsonArgument(payload.subjectFrame, {})
-      ]
-    )
-  },
   // A Session up to 47 stored the protein results of a reversed Linear record
   // in the drawn frame: Python returns their bytes in the search frame by
   // stored resource ID (OV-1145), from the drawing's request and its staged files.

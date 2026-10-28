@@ -26,8 +26,6 @@ import { DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION } from '../contracts/schema.
 /** @typedef {UnvalidatedFields<keyof CanonicalRecord>} StoredRecord */
 /** @typedef {UnvalidatedFields<keyof CanonicalGenbankRecordSource | keyof CanonicalGffFastaRecordSource>} StoredSource */
 /** @typedef {UnvalidatedFields<keyof RawSessionResourceDescriptor>} StoredResource */
-/** @typedef {{ length: number, reverse: boolean }} EndpointFrame */
-/** @typedef {{ tableText: string, queryFrame: EndpointFrame, subjectFrame: EndpointFrame }} TableConversion */
 /** @typedef {Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>>} DrawingResources */
 /**
  * One drawing's committed request and the resources it names, as the Worker
@@ -36,14 +34,7 @@ import { DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION } from '../contracts/schema.
  */
 /** @typedef {{ renderRequest?: unknown, resources?: DrawingResources }} StoredDrawing A committed drawing. */
 /** @typedef {{ data: string, size: number }} ConvertedResource The base64 bytes and size Python returned. */
-// The app injects the Worker table conversion, like the configuration validator.
-/** @type {((request: TableConversion) => Promise<unknown>) | null} */
-let tableConverter = null;
-/** @param {typeof tableConverter} converter */
-export const setMainSessionComparisonFrameConverter = (converter) => {
-  tableConverter = typeof converter === 'function' ? converter : null;
-};
-// And the Worker protein result conversion (OV-1145).
+// The app injects the Worker protein result conversion (OV-1145), like the configuration validator.
 /** @type {((request: ProteinResultConversion) => Promise<unknown>) | null} */
 let proteinResultConverter = null;
 /** @param {typeof proteinResultConverter} converter */

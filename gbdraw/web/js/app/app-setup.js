@@ -95,7 +95,7 @@ import {
   ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
 } from '../services/alignment-review-view.js';
 import {
-  setMainSessionComparisonFrameConverter, setStoredProteinResultFrameConverter
+  setStoredProteinResultFrameConverter
 } from '../services/main-session-comparison-frame.js';
 import { setLegacySessionUpgrader } from '../services/legacy-session-upgrade.js';
 import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
@@ -458,10 +458,6 @@ export const createAppSetup = () => {
   provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
-    payload
-  ));
-  setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
-    DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
     payload
   ));
   setStoredProteinResultFrameConverter((payload) => runDiagramHelperOperation(
@@ -2175,7 +2171,6 @@ export const createAppSetup = () => {
     featureActions.dispose();
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
-    setMainSessionComparisonFrameConverter(null);
     setStoredProteinResultFrameConverter(null);
     setLegacySessionUpgrader(null);
     setDiagramWorkerFontSource(null);

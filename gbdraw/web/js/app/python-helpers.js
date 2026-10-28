@@ -1091,17 +1091,6 @@ def build_protein_losat_cache_keys_json(
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='buildProteinLosatCacheKeys', stage="helper")})
 
-def main_session_table_text_to_search_frame_json(table_text, query_frame_json, subject_frame_json):
-    """Rewrite one origin/main Session nucleotide table to the search frame."""
-    from gbdraw.linear_comparison import reverse_endpoint_table_text
-
-    endpoints = []
-    for frame_json in (query_frame_json, subject_frame_json):
-        frame = json.loads(str(frame_json))
-        endpoints.append((int(frame.get("length") or 0), frame.get("reverse") is True))
-    text = reverse_endpoint_table_text(str(table_text), endpoints[0], endpoints[1])
-    return json.dumps({"tsv": text})
-
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
     """Hydrate one internal schema-4 protein TSV for user download."""
     try:
@@ -1878,7 +1867,6 @@ _WEB_JSON_HELPERS = {
     "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
     "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
     "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
-    "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
     "stored_protein_results_to_search_frame_json": (
         _with_prepared_input_lookup(stored_protein_results_to_search_frame_json, 1), "convertStoredProteinResultFrames"
     ),
