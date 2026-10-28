@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
+  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
+  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
 - Patch release of 0.14.2. Session files are unchanged (Session version 48).

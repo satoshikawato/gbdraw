@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Literal, NamedTuple, Optional, cast
+from typing import TYPE_CHECKING, Dict, Literal, NamedTuple, cast
 
 from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
@@ -156,6 +156,54 @@ def definition_record_facts(record: SeqRecord, *, gc_percent: bool = True) -> De
     )
 
 
+class DefinitionNameLines(NamedTuple):
+    """The name lines a Circular definition draws, as text with ``<i>`` (an empty line draws nothing).
+
+    ``of`` works them out from the record, the profile and the typed text, so a
+    render stage keyed by them holds what the definition draws: the record
+    summary draws no species, strain or organelle line (OV-2109), and a typed
+    plot title replaces the name (OV-2110).
+    """
+
+    taxon: str
+    strain: str
+    organelle: str
+    replicon: str
+    # The typed plot title, which the shared-common profile draws in place of the name.
+    title: str | None
+
+    @classmethod
+    def of(
+        cls,
+        metadata: RecordSourceMetadata,
+        profile: CircularDefinitionProfile,
+        *,
+        species: str | None = None,
+        strain: str | None = None,
+        plot_title: str | None = None,
+        record_presentation: RecordPresentation | None = None,
+    ) -> DefinitionNameLines:
+        replicon = metadata.replicon or ""
+        if profile == "record_summary":
+            return cls("", "", "", replicon, None)
+        if profile == "shared_common" and isinstance(plot_title, str) and plot_title.strip():
+            return cls("", "", "", "", plot_title)
+        explicit_label = str((record_presentation.label if record_presentation else None) or "").strip()
+        explicit_subtitle = str((record_presentation.subtitle if record_presentation else None) or "").strip()
+        # One owner chooses the two name lines from the record and the typed
+        # text (the request's label and subtitle win over Species and Strain;
+        # only a typed Species is cut by the Auto rule).
+        lines = organism_name_lines(
+            metadata,
+            typed_taxon=species or "",
+            typed_strain=explicit_subtitle or strain or "",
+            record_label=explicit_label,
+        )
+        if profile == "shared_common":
+            return cls(lines.taxon, lines.strain, "", "", None)
+        return cls(lines.taxon, lines.strain, metadata.organelle or "", replicon, None)
+
+
 class DefinitionGroup:
     """
     Responsible for creating and managing a group for displaying genomic definition information on a circular canvas.
@@ -167,30 +215,21 @@ class DefinitionGroup:
         geometry: CircularCanvasGeometry,
         *,
         style: CircularDefinitionStyle,
-        species: Optional[str] = None,
-        strain: Optional[str] = None,
-        plot_title: Optional[str] = None,
+        names: DefinitionNameLines,
         definition_group_id: str | None = None,
         record_index: int = 0,
         record_count: int = 1,
-        record_presentation: RecordPresentation | None = None,
     ) -> None:
-        self.record_presentation = record_presentation
         self.record_facts: DefinitionRecordFacts = (
             gb_record
             if isinstance(gb_record, DefinitionRecordFacts)
             else definition_record_facts(gb_record)
         )
         self.geometry = geometry
-        self.species: str | None = species
-        self.strain: str | None = strain
-        self.plot_title: str | None = plot_title
+        self.names = names
         self.definition_profile: CircularDefinitionProfile = style.profile
         self.record_index = int(record_index)
         self.record_count = int(record_count)
-        self.replicon: str | None = None
-        self.organelle: str | None = None
-        self.record_name: str = ""
         self.style = style
         self.font_size = style.font_size
         self.font = style.font_family
@@ -215,7 +254,8 @@ class DefinitionGroup:
             self.definition_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
         self.radius: float = geometry.radius
         self.calculate_coordinates()
-        self.find_organism_name()
+        self.species_parts: list[_TextPart] = parse_mixed_content_text(names.taxon)
+        self.strain_parts: list[_TextPart] = parse_mixed_content_text(names.strain)
         self.add_circular_definitions()
         # Painted text bounds in group-local coordinates: one box per text line, and their union.
         self.line_bounds = self._measure_line_bounds()
@@ -231,36 +271,6 @@ class DefinitionGroup:
         self.title_x: float = (self.end_x_1 + self.end_x_2) / 2
         self.title_y: float = (self.end_y_1 + self.end_y_2) / 2
 
-    def find_organism_name(self) -> None:
-        metadata = self.record_facts.metadata
-        presentation = self.record_presentation
-        explicit_label = str((presentation.label if presentation else None) or "").strip()
-        explicit_subtitle = str((presentation.subtitle if presentation else None) or "").strip()
-        self.replicon = metadata.replicon
-        self.organelle = metadata.organelle
-        # One owner chooses the two name lines from the record and the typed
-        # text (the request's label and subtitle win over Species and Strain;
-        # only a typed Species is cut by the Auto rule).
-        lines = organism_name_lines(
-            metadata,
-            typed_taxon=self.species or "",
-            typed_strain=explicit_subtitle or self.strain or "",
-            record_label=explicit_label,
-        )
-        self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.taxon)
-        self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(lines.strain)
-        self.record_name = explicit_label or str(metadata.organism).strip() or self.record_facts.record_id
-
-        if self.replicon:
-            self.replicon_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.replicon)
-        else:
-            self.replicon_parts = parse_mixed_content_text("")
-
-        if self.organelle:
-            self.organelle_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.organelle)
-        else:
-            self.organelle_parts = parse_mixed_content_text("")
-
     def add_circular_definitions(self) -> None:
         record_length: int = self.record_facts.length
         accession: str = self.record_facts.record_id
@@ -268,23 +278,20 @@ class DefinitionGroup:
         show_length = True
         show_gc = True
 
+        # Which lines draw is the names' (``DefinitionNameLines.of``); the plot title runs the two name lines
+        # into one unless a typed title replaces them.
+        names = self.names
         species_parts = self.species_parts
         strain_parts = self.strain_parts
-        organelle_parts = self.organelle_parts
-        replicon_parts = self.replicon_parts
+        organelle_parts = parse_mixed_content_text(names.organelle)
+        replicon_parts = parse_mixed_content_text(names.replicon)
 
-        if self.definition_profile == "record_summary":
-            species_parts = parse_mixed_content_text("")
-            strain_parts = parse_mixed_content_text("")
-            organelle_parts = parse_mixed_content_text("")
-        elif self.definition_profile == "shared_common":
-            if isinstance(self.plot_title, str) and self.plot_title.strip():
-                species_parts = parse_mixed_content_text(self.plot_title)
+        if self.definition_profile == "shared_common":
+            if names.title is not None:
+                species_parts = parse_mixed_content_text(names.title)
             else:
                 species_parts = _merge_name_parts_with_single_space(species_parts, strain_parts)
             strain_parts = parse_mixed_content_text("")
-            organelle_parts = parse_mixed_content_text("")
-            replicon_parts = parse_mixed_content_text("")
             show_accession = False
             show_length = False
             show_gc = False
@@ -413,6 +420,7 @@ class DefinitionGroup:
 __all__ = [
     "CircularDefinitionProfile",
     "DefinitionGroup",
+    "DefinitionNameLines",
     "DefinitionRecordFacts",
     "definition_record_facts",
 ]

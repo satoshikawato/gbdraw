@@ -43,7 +43,8 @@ from gbdraw.core.text import (
 )
 from gbdraw.diagrams.circular.assemble import _definition_reserved_radius_px
 from gbdraw.exceptions import ValidationError
-from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup
+from gbdraw.core.record_metadata import infer_record_source_metadata
+from gbdraw.render.groups.circular.definition import CircularDefinitionStyle, DefinitionGroup, DefinitionNameLines
 from gbdraw.web_support.error_adapter import serialize_web_error
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -550,7 +551,12 @@ def test_the_definition_band_holds_the_farthest_ink_of_every_line(organism: str,
     band = _definition_reserved_radius_px(
         record, geometry, species, None, cfg=cfg, plot_title=None, definition_profile="full"
     )
-    definition = DefinitionGroup(record, geometry, style=CircularDefinitionStyle.of(cfg, "full"), species=species)
+    definition = DefinitionGroup(
+        record,
+        geometry,
+        style=CircularDefinitionStyle.of(cfg, "full"),
+        names=DefinitionNameLines.of(infer_record_source_metadata(record), "full", species=species),
+    )
     bounds = definition.local_bounds
     # place_definition_group_on_canvas centres the line boxes' union on the record's centre.
     reach = _outline_reach(

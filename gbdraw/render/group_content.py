@@ -372,19 +372,20 @@ def placed_content(element: BaseElement) -> GroupContent | None:
     return None
 
 
-def content_leaves(content: GroupContent) -> tuple[GroupContent, ...]:
-    """``content``, or, when every child is a content group that still holds
-    its content's children, the leaves of those contents in document order.
+def leaf_groups(group: ContentGroup) -> tuple[ContentGroup, ...]:
+    """``group``, or, when every child of its content is a content group that
+    still holds its content's children, the leaf groups of those in document
+    order, each with its own key.
 
-    A leaf's text holds its own group's start tag, so the leaves hold every
-    element of ``content`` but its own group.
+    A leaf's content text holds its own group's start tag, so the leaves hold
+    every element of ``group``'s content but its own group.
     """
 
-    groups = [held_group(child) for child in content.children]
-    parts = [group.content for group in groups if group is not None]
-    if not groups or len(parts) < len(groups):
-        return (content,)
-    return tuple(leaf for part in parts for leaf in content_leaves(part))
+    children = [held_group(child) for child in group.content.children]
+    parts = [child for child in children if child is not None]
+    if not children or len(parts) < len(children):
+        return (group,)
+    return tuple(leaf for part in parts for leaf in leaf_groups(part))
 
 
 class BuildsGroup(Protocol):
@@ -484,12 +485,12 @@ __all__ = [
     "RenderedGroup",
     "add_content_definitions",
     "build_group_content",
-    "content_leaves",
     "copy_element_tree",
     "element_text",
     "empty_element_markup",
     "group_manifest",
     "held_group",
+    "leaf_groups",
     "place_content",
     "placed_content",
     "require_element_markup",
