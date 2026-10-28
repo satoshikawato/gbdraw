@@ -26,6 +26,8 @@ import { msg, t, tm } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 /** @import { RecordDisplaySource } from '../services/feature-identity.js' */
 /** @import { LinearSeq } from '../state.js' */
+/** @import { RecordSelectorStatus } from './linear-record-selector.js' */
+/** @import { SequenceRecord } from '../services/record-discovery.js' */
 /** @import { InputFileRef } from '../services/history-files.js' */
 /** @import { AnchorIntent, RecordDisplayDraft, RecordDisplayDraftIdentity, RecordDisplayRow, RecordDisplayScope } from '../services/record-display-model.js' */
 /** @import { RecordEntryInput } from '../services/record-options.js' */
@@ -119,9 +121,9 @@ const recordTargetError = (kind, message) => Object.assign(new Error(message), {
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
  * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
- * @property {(sequence: Record<string, any>) => Record<string, any>[]} linearRecordsFor
- * @property {(sequence: Record<string, any> | undefined) => string} linearRecordStatusFor
- * @property {(sequence: Record<string, any> | undefined) => any} linearRecordErrorFor
+ * @property {(drawing: DrawingState, sequence: LinearSeq) => SequenceRecord[]} linearRecordsFor a card's records, read in the drawing that holds it
+ * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => RecordSelectorStatus} linearRecordStatusFor
+ * @property {(drawing: DrawingState, sequence: LinearSeq | undefined) => string} linearRecordErrorFor the card's error text, '' when none
  * @property {(label: string, apply: () => any) => any} runUndoable History's one undoable step
  * @property {() => Record<string, any> | null} getCommittedRequest
  * @property {() => Record<string, any> | null} getCommittedSession
@@ -157,7 +159,7 @@ export const createRecordDisplayControls = ({
     : drawing.linearSeqs.map((/** @type {LinearSeq} */ seq) => ({ scope: 'linear', drawingId: drawing.id, sourceUid: seq.uid,
         source: drawing.inputType.value === 'gff' ? seq.gff : seq.gb,
         paired: drawing.inputType.value === 'gff' ? seq.fasta : null,
-        records: linearRecordsFor(seq), selector: seq.region_record_id,
+        records: linearRecordsFor(drawing, seq), selector: seq.region_record_id,
         cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse })));
   // The sources of every drawing, in the drawings' order.
   const sources = computed(() => {
@@ -416,8 +418,9 @@ export const createRecordDisplayControls = ({
   /** @param {DrawingRecordSource} source */
   const discoveryFor = (source) => {
     if (source.scope === 'circular') return circularDiscoveryForInput(state.drawingOf(source.drawingId));
-    const sequence = state.drawingOf(source.drawingId).linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
-    return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
+    const drawing = state.drawingOf(source.drawingId);
+    const sequence = drawing.linearSeqs.find((/** @type {LinearSeq} */ seq) => seq.uid === source.sourceUid);
+    return { status: linearRecordStatusFor(drawing, sequence), error: linearRecordErrorFor(drawing, sequence) };
   };
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.

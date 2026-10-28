@@ -62,7 +62,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/linear-track-slots.js': 4,
   'app/orthogroups.js': 4,
   'app/preview-runtime.js': 20,
-  'app/record-display-options.js': 15,
+  'app/record-display-options.js': 10,
   'app/record-display/feature-record-rotation.js': 14,
   'app/results.js': 1,
   'app/right-drawer.js': 2,

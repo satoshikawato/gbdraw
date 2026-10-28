@@ -78,15 +78,15 @@ test('OV-379: an unread Linear record select says Not inspected', async () => {
     recordReader: () => new Promise((resolve) => { resolveRead = resolve; }),
     logger: { warn: () => {} }
   });
-  assert.deepEqual(controller.optionsFor(rows[0]), [
+  assert.deepEqual(controller.optionsFor(state.activeDrawing(), rows[0]), [
     { value: '', label: 'Not inspected', synthetic: false }
   ]);
   // A read in progress still says so.
   const refresh = controller.refresh(state.activeDrawing());
-  assert.equal(controller.optionsFor(rows[0])[0].label, 'Loading records...');
+  assert.equal(controller.optionsFor(state.activeDrawing(), rows[0])[0].label, 'Loading records...');
   resolveRead([{ selector: '#1', recordId: 'Rec', recordLength: 9 }]);
   await refresh;
-  assert.equal(controller.statusFor(rows[0]), 'ready');
+  assert.equal(controller.statusFor(state.activeDrawing(), rows[0]), 'ready');
 });
 
 // Auto window and step values name their rule until the genome length is
