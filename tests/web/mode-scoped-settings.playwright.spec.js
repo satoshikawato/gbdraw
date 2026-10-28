@@ -169,6 +169,9 @@ const saveAndLoadFresh = async (page, browser, path) => {
 test('OV-82 G5: a round trip through a mode without Depth keeps Circular Show Depth on and records no History step', async ({ page }) => {
   test.setTimeout(180_000);
   await openCircular(page);
+  // Making the Linear drawing is a project step of its own: make it before the round trip is counted.
+  await switchMode(page, 'linear');
+  await switchMode(page, 'circular');
   await setDepthFile(page, 'circular', 0, 'depth.tsv', depthTsv());
   expect((await readDrawings(page, { showDepth: 'form.show_depth' })).circular.showDepth, 'Circular Show Depth after its file').toBe(true);
 

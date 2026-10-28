@@ -315,10 +315,18 @@ test('settings-only Load replaces existing work, and canceled or refused candida
     } else {
       error = (await loadFile(page, file, expected)) ?? null;
     }
-    expect(await snapshot(page), `${name}: complete state at Load completion`).toEqual({ ...before, error });
+    // A Load that succeeds opens the saved drawings only; the unused Linear drawing made above is not saved (R16-8),
+    // so the loaded project holds none until the next case makes it again.
+    const loaded = expected === 'Session loaded';
+    expect(await snapshot(page), `${name}: complete state at Load completion`)
+      .toEqual({ ...before, error, ...(loaded ? { linearSources: [] } : {}) });
     const after = await capture(page, testInfo, `kept-${name}`);
     await assertCoherent(after, `${name}: canceled, refused or same Load`);
     expect(after.completed.selected).toEqual(visual.completed.selected);
+    if (loaded) {
+      await showDrawing(page, { kind: 'linear' });
+      await showDrawing(page, { kind: 'circular' });
+    }
   }
   await loadFile(page, path.join(process.cwd(), 'tests/fixtures/sessions/settings-only.v42.json.gz'));
   const replaced = await snapshot(page);
