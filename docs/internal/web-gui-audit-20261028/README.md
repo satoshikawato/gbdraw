@@ -2,7 +2,7 @@
 
 対象は `origin/dev` の `33d9e234c`（0.14.3 の promotion head）。release tier の `Tests`（`workflow_dispatch`、`tier=release`）run 40634318370 の結果をまとめる。seed は run ID（40634318370）。
 
-**件数**: 固有の問題 1 件（P2 1）。`Promotion audit / random-walk` だけが失敗し、その原因が OV-1985 である。修正は本 PR（`fix/ov1985-legend-stroke-caption`）。
+**件数**: 固有の問題 1 件（P2 1）。`Promotion audit / random-walk` だけが失敗し、その原因が OV-1985 である。修正は #1433（`fix/ov1985-legend-stroke-caption`）。
 
 ## 方法と表記
 
