@@ -1225,42 +1225,77 @@ def search_frame_protein_resources(
     request: DiagramRequest,
     converted: DiagramRequest,
 ) -> dict[str, bytes]:
-    """The new bytes of the stored resources of ``payload`` that ``converted`` changed.
+    """The new bytes of the stored protein resources of ``payload`` that ``converted`` changed.
 
     ``request`` is ``payload`` decoded and ``converted`` its results in the
-    search frame. Both are encoded alone; each protein item whose bytes the
-    conversion changed gets the converted bytes under its stored resource ID,
-    so the request and every other resource stay as stored (OV-1145).
+    search frame (OV-1145); see :func:`_search_frame_resources`.
     """
+
+    return _search_frame_resources(payload, request, converted, _STORED_PROTEIN_RESULT_KINDS)
+
+
+_STORED_NUCLEOTIDE_TABLE_KINDS = frozenset({"nucleotideBlast"})
+
+
+def search_frame_nucleotide_resources(
+    payload: Mapping[str, Any],
+    request: DiagramRequest,
+    converted: DiagramRequest,
+) -> dict[str, bytes]:
+    """The new bytes of the stored nucleotide tables of ``payload`` that ``converted`` changed.
+
+    ``request`` is ``payload`` decoded and ``converted`` its rows in the
+    search frame (a main Session up to 42, PD-OI-073). The converted rows keep
+    their stored resource ID, so a Web file card that names the table reads
+    the rows the request draws (OV-2080); see :func:`_search_frame_resources`.
+    """
+
+    return _search_frame_resources(payload, request, converted, _STORED_NUCLEOTIDE_TABLE_KINDS)
+
+
+def _search_frame_resources(
+    payload: Mapping[str, Any],
+    request: DiagramRequest,
+    converted: DiagramRequest,
+    kinds: frozenset[str],
+) -> dict[str, bytes]:
+    """The new bytes of the stored ``kinds`` resources of ``payload`` that ``converted`` changed.
+
+    Both requests are encoded alone; each ``kinds`` item whose bytes the
+    conversion changed gets the converted bytes under its stored resource ID,
+    so the request and every other resource stay as stored.
+    """
+
+    stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
+              and item.get("kind") in kinds]
+    if not stored:
+        return {}
 
     from gbdraw.session_request_codec import encode_canonical_request
     from gbdraw.session_resources import SessionResourceTable
     from gbdraw.session_io import _embedded_resource_bytes
 
-    def protein_items(value: DiagramRequest) -> tuple[list[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]]:
+    def items_of(value: DiagramRequest) -> tuple[list[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]]:
         table = SessionResourceTable()
         encoded = encode_canonical_request(value, table=table).payload
-        return [item for item in encoded["comparisons"] if item.get("kind") in _STORED_PROTEIN_RESULT_KINDS], \
-            table.descriptors()
+        return [item for item in encoded["comparisons"] if item.get("kind") in kinds], table.descriptors()
 
-    stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
-              and item.get("kind") in _STORED_PROTEIN_RESULT_KINDS]
     # ``request`` as stored: its tables encode to the bytes they were read from.
     as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
                  if isinstance(request, LinearDiagramRequest) else request)
-    (before, before_resources), (after, after_resources) = protein_items(as_stored), protein_items(converted)
+    (before, before_resources), (after, after_resources) = items_of(as_stored), items_of(converted)
     if not len(stored) == len(before) == len(after):
-        raise ValidationError("Stored protein results do not match their decoded request.")
+        raise ValidationError("Stored comparison results do not match their decoded request.")
     changed: dict[str, bytes] = {}
     for item, old, new in zip(stored, before, after, strict=True):
         if not item["kind"] == old["kind"] == new["kind"]:
-            raise ValidationError("Stored protein results do not match their decoded request.")
+            raise ValidationError("Stored comparison results do not match their decoded request.")
         content = _embedded_resource_bytes(after_resources[new["resourceId"]])
         if content == _embedded_resource_bytes(before_resources[old["resourceId"]]):
             continue
         resource_id = str(item["resourceId"])
         if changed.get(resource_id, content) != content:
-            raise ValidationError(f"Stored resource {resource_id!r} holds two different protein results.")
+            raise ValidationError(f"Stored resource {resource_id!r} holds two different comparison results.")
         changed[resource_id] = content
     return changed
 
@@ -1903,6 +1938,7 @@ __all__ = [
     "replace_resource_bytes",
     "resolve_session_write_request",
     "search_frame_protein_resources",
+    "search_frame_nucleotide_resources",
     "stores_protein_results",
     "project_legacy_similarity_alignment_for_current_write",
     "promote_legacy_session_similarity_alignment_request",
