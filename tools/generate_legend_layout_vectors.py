@@ -482,6 +482,7 @@ def _is_frozen(case: dict[str, Any]) -> bool:
     return case["mode"] == "circular" and any(row["type"] == "gradient" for row in case["rows"])
 
 
+# The frozen gradient cases pin the JS layout of saved Results; their `expected` values are copied, not recomputed (edits to them are not verified on the Python side).
 def _frozen_cases() -> dict[tuple[str, str], dict[str, Any]]:
     stored = json.loads(TARGET.read_text(encoding="utf-8")) if TARGET.is_file() else {"layout": []}
     return {(case["name"], case["edit"]): case for case in stored["layout"] if _is_frozen(case)}
