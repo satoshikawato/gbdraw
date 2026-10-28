@@ -108,7 +108,7 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   no longer redraw when a definition or record label changes. The Worker
   parses each Depth file once and keeps it while **Show Depth** is off, so
   showing Depth again does not parse the file again. A Circular Species change
-  that moves no track keeps the placed labels, and a Linear change that moves
+  that moves no track keeps the placed labels and the record definitions, and a Linear change that moves
   rows without changing a comparison keeps its ribbons. In a warm Generate of
   the vibrio Gallery Session, the prepared-input check takes 155 ms of CPU
   instead of 331 ms.
