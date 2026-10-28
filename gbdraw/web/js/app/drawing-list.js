@@ -1,5 +1,5 @@
 // @ts-check
-// The operations on the drawing list (PD-OI-090, R11): New, Duplicate, Rename,
+// The operations on the drawing list (PD-OI-090, R11): New, New with a style, Duplicate, Rename,
 // Move, and Delete. Each is one project step of the History router (`runListStep`), and
 // these are the only callers of the drawing store's list writers. A step that
 // adds or deletes a drawing shows the drawing shown after it, and its Undo the
@@ -27,6 +27,8 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingState} CreateDrawing A new drawing at its defaults.
  * @typedef {(drawingId: DrawingId) => DrawingState} ReadDrawing A drawing the store holds.
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
+ * @typedef {(sourceId: DrawingId, drawingId: DrawingId, mode: ModeProfileName) => DrawingState} StyleDrawing
+ *   A new drawing of `mode` at its defaults with the style of a drawing the store holds (PD-OI-090 〔作成〕(3)).
  * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot }} CopyDrawing
  *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
@@ -56,6 +58,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {ReadDrawingHas} drawingHasEdits
  * @property {ReadBoundFileIds} boundFileIdsOf
  * @property {CreateDrawing} createDrawing
+ * @property {StyleDrawing} styleDrawing
  * @property {CopyDrawing} copyDrawing
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
@@ -70,8 +73,8 @@ import { msg, t, tm } from '../utils/i18n.js';
 
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, copyDrawing, addDrawing,
-  removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, styleDrawing, copyDrawing,
+  addDrawing, removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
   /** @param {string} operation @param {string} reason @param {DrawingId} drawingId */
@@ -98,18 +101,20 @@ export const createDrawingList = ({
    * A new drawing of `mode` at the end of the tabs, with the ID and name of
    * its kind (`linear-2` is "Linear 2") and an empty History, shown (R11).
    * Its Undo shows the drawing shown before; its Redo shows it again (R16-2).
+   * @param {string} label The project step's.
    * @param {ModeProfileName} mode
+   * @param {(drawingId: DrawingId) => DrawingState} make The new drawing's state.
    */
-  const newDrawing = (mode) => unlessBusy(() => {
+  const addNewDrawing = (label, mode, make) => unlessBusy(() => {
     const before = shownDrawingId();
     const drawingId = allocateDrawingId(mode, drawingTabs().map((tab) => tab.id));
-    const drawing = createDrawing(drawingId, mode);
+    const drawing = make(drawingId);
     const name = defaultDrawingName(mode, drawingId);
     // Redo gets the drawing's History back from the router, which holds it,
     // and its slot (a Result it got before the Undo) from this step.
     /** @type {HeldSlot} */
     let slot = null;
-    runListStep('New drawing', {
+    runListStep(label, {
       apply: () => {
         addDrawing(drawing, name, drawingTabs().length);
         addDrawingHistory(drawingId);
@@ -127,6 +132,22 @@ export const createDrawingList = ({
     });
     return drawingId;
   });
+
+  /** @param {ModeProfileName} mode */
+  const newDrawing = (mode) => addNewDrawing('New drawing', mode, (drawingId) => createDrawing(drawingId, mode));
+
+  /**
+   * A new drawing of `mode` with the style of a drawing (PD-OI-090 〔作成〕(3),
+   * R17-4: its settings that `mode` has and the table rows the user entered),
+   * as New adds one.
+   * @param {DrawingId} sourceId
+   * @param {ModeProfileName} mode
+   * @returns {DrawingListOutcome}
+   */
+  const newDrawingWithStyle = (sourceId, mode) => {
+    tabIndexOf('newDrawingWithStyle', sourceId);
+    return addNewDrawing('New drawing with this style', mode, (drawingId) => styleDrawing(sourceId, drawingId, mode));
+  };
 
   /**
    * A copy of a drawing at the end of the tabs (PD-OI-090 〔作成〕): the ID of
@@ -258,7 +279,7 @@ export const createDrawingList = ({
     return drawingHasResult(drawingId) || drawingHasEdits(drawingId);
   };
 
-  return { newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
+  return { newDrawing, newDrawingWithStyle, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
 };
 
 /**
