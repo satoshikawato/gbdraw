@@ -61,6 +61,16 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   the live Legend shows it: when the new rule only gives that rule's
   condition a new name, it takes that rule's place in the color rule table.
   Before, Generate could draw the row ahead of rows it followed live.
+- The Web app's header from 769 to about 970 px stays inside the window and
+  keeps the Session title in view. Before, it ran past the right edge by up to
+  32 px in French (and up to 8 px in English, Spanish, Portuguese, and
+  Indonesian), cutting off the translation feedback link, and below about
+  810 px it narrowed the Session title to nothing. Where the title still
+  narrows, the closed Language menu now takes the width of the shown
+  language's name (in browsers that support CSS `field-sizing`, such as
+  Chrome and Edge); where the title would be narrower than 5rem, the header
+  takes the two-row layout it has in a window 768 px wide or narrower. 0.14.2
+  had both problems.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only
@@ -99,7 +109,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   already shows only its icon and the Session title would still be narrowed
   (for example from 769 to 1000 px in most languages), the Session block hides
   its "Session" caption and the toolbar gaps close to 2 px, so the Session
-  title is wider (French at 900 px: about 83 px instead of 28 px).
+  title is wider (French at 900 px: its full 128 px, with the Language menu
+  change under Fixed, instead of 28 px in 0.14.2).
 
 ## Added
 

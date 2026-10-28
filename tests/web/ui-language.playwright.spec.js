@@ -569,9 +569,12 @@ test('in every language, the link beside the menu opens the feedback form with o
     expect(href.origin + href.pathname).toBe('https://github.com/satoshikawato/gbdraw/issues/new');
     expect([...href.searchParams]).toEqual([['template', 'translation-feedback.yml'], ['language', tag], ['version', version], ['title', `[Translation] ${tag}: `]]);
     // The header keeps one row inside the window, with the menu and the link in view (OV-1495: es, fr and pt at 1440 px).
-    for (const width of [1024, 1440, 1280]) {
+    // OV-2177, OV-2178: from 769 px the header stays inside the window and keeps the Session title 5rem wide or more,
+    // on one row or, where that row cannot, on two (en overflowed at 769 px and left the title 10 px wide to 810 px).
+    for (const width of [1024, 1440, 1280, 769, 800, 850]) {
       await page.setViewportSize({ width, height: 800 });
-      const fit = await page.locator('header').evaluate((header) => {
+      // The header chooses its state in the frame after a resize (app/header-fit.js).
+      await expect.poll(() => page.locator('header').evaluate((header) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
         // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
         // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
@@ -595,10 +598,10 @@ test('in every language, the link beside the menu opens the feedback form with o
         return {
           inside: right <= document.documentElement.clientWidth,
           scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          sessionInside: Math.max(...parts) <= limit + 0.5
+          sessionInside: Math.max(...parts) <= limit + 0.5,
+          titleUsable: header.querySelector('.app-session-button').getBoundingClientRect().width >= 80
         };
-      });
-      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false, sessionInside: true });
+      }), { message: `${tag} at ${width} px` }).toEqual({ inside: true, scrolls: false, sessionInside: true, titleUsable: true });
     }
   }
   expect(errors).toEqual([]);

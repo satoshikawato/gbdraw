@@ -1498,6 +1498,16 @@
             .app-header[data-session-title-alone] .app-session-label { display: none; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
+            /* OV-2177, OV-2178: where the title still narrows, the closed Language menu takes the width of the shown
+               name, not of the longest one (a browser without field-sizing keeps the longest); where the title would
+               still be under 5rem, the header wraps: the logo's row, then the toolbar's, as below 769 px. A mode name
+               keeps one line (vi and th split theirs from 769 to about 930 px), so the title, which header-fit.js
+               measures, takes the whole shortfall. */
+            .app-header .app-mode-button { white-space: nowrap; }
+            .app-header[data-language-narrow] .app-language-select { field-sizing: content; }
+            .app-header[data-header-wrapped] { height: auto; }
+            .app-header[data-header-wrapped] .app-header-inner { flex-wrap: wrap; row-gap: 0.25rem; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+            .app-header[data-header-wrapped] .app-toolbar { flex-basis: 100%; justify-content: space-between; }
         }
         @media (max-width: 768px) {
             .app-header-inner { position: relative; }

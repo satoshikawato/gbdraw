@@ -79,3 +79,15 @@ guard: `tests/web/live-generate-parity-legend.playwright.spec.js` に OV-2188 �
 - run 40655413787（dev `639de764a`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40655413787-failed.log`。再現は seed 40655413787 で `-g "Circular, two-Result batch"`。
 - 追加の乱歩（dev `d08c1878e`）: ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/rw/seed-<seed>.log`。再現: `GBDRAW_RANDOM_WALK_STEPS=30 GBDRAW_RANDOM_WALK_SEED=<seed> npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "<fixture>"`。
 - 調査メモ: `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1985.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1987.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1988.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md`。
+
+## GUI 監査（dev `d08c1878e`、2026-10-28）: ヘッダー
+
+0.14.3 の候補 `d08c1878e` を実ブラウザで調べた（証拠は `/home/kawato/gbdraw-baselines/release-0143-20261027/evidence/gui-audit/FINDINGS.md`）。ヘッダーの 2 件はどちらも v0.14.2 にもある（v0.14.2 の Web bundle を同じ probe で測った。v0.14.2 では en の overflow が 10 px、Session 名は 769〜910 px で 64 px 未満）。#1409 の Gallery & tutorials ボタンが原因ではない。
+
+| ID | 重大度 | 症状 | 原因 | 修正と guard |
+|---|---|---|---|---|
+| OV-2177 | P3 | 1 段のヘッダーが 769〜790 px で window からはみ出す（en 769〜776 px で最大 8 px、fr 769〜800 px で最大 32 px、es・pt・id も数 px）。右端の翻訳 feedback リンクが切れ、ページが横にスクロールする | header の状態を選ぶ `chooseHeaderFit`（`app/header-fit.js`）は、最後の状態（アイコンだけ、「Session」の小見出しなし）でも足りないときに次の手がなかった。Session 名のボタンが 10 px まで縮んだ後は toolbar がはみ出す | 同じ owner に 2 つの状態を足した。Session 名がまだ縮むとき、閉じた Language メニューを表示中の言語名の幅にする（CSS `field-sizing: content`）。それでも Session 名が 5rem（`SESSION_TITLE_MIN_WIDTH`）より狭いとき、ヘッダーを 2 段にする（ロゴの行、toolbar の行。768 px 以下と同じ並び）。Circular と Linear の名前は 1 行に保つ（vi と th は 769〜930 px で 2 行に割れていた）。guard: `tests/web/ui-language.playwright.spec.js` の feedback リンクの case が 11 言語の 769、800、850 px で、はみ出しがなく Session 名が 80 px 以上であることを確かめる（base で en 769 px が失敗）。`tests/web/header-fit.test.mjs` が状態の順と 5rem の境を確かめる（base では export がなく失敗） |
+| OV-2178 | P3 | Session 名の欄が 810 px 付近から 769 px まで 0 px になる（en で 900 px 84 px、850 px 34 px、810 px 以下 0 px。10 px のボタンだけが残る）。名前が見えず編集もしにくい | OV-2177 と同じ。release notes の「小見出しを隠すので Session 名が幅を保つ」は 1 段のヘッダーの一部の幅でしか正しくなかった | OV-2177 と同じ修正。1 段のヘッダーの Session 名は 11 言語の 769〜1000 px で 80 px 以上、2 段では 108 px 以上。1000〜1440 px は base と同じ。release notes の主張を「小見出しを隠すので Session 名が広くなる」に直した |
+| OV-2186 | P3（未修正） | 768 px 以下の 2 段のヘッダーで、閉じた Language メニューが矢印だけになる（ja 480〜496 px、en 504〜520 px と 640〜660 px など、toolbar の行が折り返す幅のすぐ下。11 言語すべて） | `.app-language` の flex-basis 4.5rem が globe と feedback リンクを含むため、行の詰まる幅ではメニューに 28〜32 px しか残らない。v0.14.2 も同じ | basis を 7.25rem にするとメニューは "English" の幅を保つが、ヘッダーが 1 行増える幅がある（en 360〜376 px、fr 360〜392 px で 135 → 173 px、ja 616〜648 px で 96 → 135 px）。製品の判断が要るので直していない |
+
+Show Definition と Default font size（Record Labels）が Generate まで図を変えないことは、R1（`gbdraw/web/CLAUDE.md`）と OIC-024 のとおり。両者は `data-setting="titles"`（`Applies on Generate`）の scope にあり、その card の先頭に注記がある。`tests/web/setting-application.test.mjs` は Generate の scope ごとに注記を 1 つ求め、control ごとには求めない。行ごとの注記を求める規則はない。
