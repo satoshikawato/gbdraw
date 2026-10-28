@@ -51,7 +51,7 @@ def _table(captions: tuple[str, ...]) -> dict[str, dict[str, object]]:
 
 
 def _drawn(text: str, family: str, size: float = FONT_SIZE) -> float:
-    return float(calculate_svg_bbox_dimensions(text, family, size, 96)[0])
+    return float(calculate_svg_bbox_dimensions(text, family, size)[0])
 
 
 @pytest.mark.parametrize("family", FAMILIES)

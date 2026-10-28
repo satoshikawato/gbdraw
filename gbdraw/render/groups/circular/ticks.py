@@ -65,7 +65,6 @@ class TickGroup:
         self.label_side = str(label_side or "legacy").strip().lower()
         self.tick_side = str(tick_side or "legacy").strip().lower()
         self.tick_length_px = tick_length_px
-        self.dpi = geometry.dpi
         self.set_tick_size()
         self.add_elements_to_group()
 
@@ -107,7 +106,6 @@ class TickGroup:
             self.font_family,
             self.track_type,
             self.separate_strands,
-            self.dpi,
             label_side=self.label_side,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,
@@ -156,7 +154,6 @@ class TickGroup:
             self.font_family,
             self.track_type,
             self.separate_strands,
-            self.dpi,
             label_side=self.label_side,
             tick_side=self.tick_side,
             tick_length_px=self.tick_length_px,

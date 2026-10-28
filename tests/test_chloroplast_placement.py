@@ -129,14 +129,16 @@ def _bands(layout):
 
 
 def test_published_chloroplast_stack_keeps_its_bands(chloroplast_session, monkeypatch, tmp_path):
-    # The bands that dev 98d4bc13 resolves for the published Session (after the label reflow).
-    # The region tint spans from the GC track's inner edge to the feature row's outer edge.
+    # The bands that dev 98d4bc13 resolves for the published Session (after the label reflow), as moved by
+    # laying labels and tick labels out in their drawn box (OV-165: the feature row +0.78 px, the GC row
+    # 0.03 px wider on each side). The region tint spans from the GC track's inner edge to the feature row's
+    # outer edge.
     layout = _render_layouts(chloroplast_session, monkeypatch, tmp_path)[-1]
     expected = {
-        "features": (406.7216, 386.1630, 427.2802),
-        "plastome_tint": (314.7057, 202.1311, 427.2802),
+        "features": (407.4970, 386.9346, 428.0595),
+        "plastome_tint": (315.0798, 202.1001, 428.0595),
         "plastome_regions": (253.5, 243.5, 263.5),
-        "gc_content": (218.4, 202.1311, 234.6689),
+        "gc_content": (218.4, 202.1001, 234.6999),
     }
     observed = _bands(layout)
     assert observed.keys() == expected.keys()

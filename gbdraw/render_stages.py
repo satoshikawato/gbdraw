@@ -51,7 +51,7 @@ RenderStageName = Literal[
     "label_filter_maps",
     "gc_skew_data",
     "depth_frame",
-    "depth_track_data",
+    "depth_track_config",
     "legend_table",
     "legend_measurement",
     "legend_content",
@@ -70,6 +70,7 @@ RenderStageName = Literal[
     "comparison_content",
     "interactive_context",
     "catalog_normalization",
+    "catalog_snapshot",
     "catalog_item",
     "comparison_rows",
     "protein_extraction",
@@ -87,6 +88,7 @@ RenderStageName = Literal[
     "conservation_content",
     "label_leaders_content",
     "label_text_content",
+    "record_part",
     "record_merge",
     "record_gc_percent",
 ]
@@ -117,7 +119,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "label_filter_maps": frozenset(),
     "gc_skew_data": frozenset(),
     "depth_frame": frozenset(),
-    "depth_track_data": frozenset(),
+    "depth_track_config": frozenset(),
     "legend_table": frozenset(),
     "legend_measurement": frozenset(),
     "legend_content": frozenset(),
@@ -151,6 +153,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "comparison_content": frozenset(),
     "interactive_context": frozenset(),
     "catalog_normalization": frozenset(),
+    "catalog_snapshot": frozenset(),
     "catalog_item": frozenset(),
     "comparison_rows": frozenset(),
     "protein_extraction": frozenset(),
@@ -174,6 +177,7 @@ RENDER_STAGE_SETTINGS: Mapping[RenderStageName, frozenset[str]] = {
     "label_text_content": frozenset(
         {"labels.circular", "labels.font_size", "labels.length_threshold", "labels.stroke_color", "objects.text"}
     ),
+    "record_part": frozenset(),
     "record_merge": frozenset(),
     "record_gc_percent": frozenset(),
 }

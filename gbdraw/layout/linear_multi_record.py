@@ -61,6 +61,31 @@ class LinearRecordMeasurement:
         object.__setattr__(self, "collision_bands", tuple(self.collision_bands))
 
 
+def _x_for_position(x: float, px_per_bp: float, position: float) -> float:
+    return x + (float(position) * px_per_bp)
+
+
+@dataclass(frozen=True)
+class LinearComparisonEndpoint:
+    """What a comparison reads of one record's placement (the ``comparison_content`` key).
+
+    The record, its row, its X scale and its comparison anchors: the record's
+    own extents and axis do not reach the ribbons.
+    """
+
+    record_index: int
+    row: int
+    x: float
+    px_per_bp: float
+    comparison_top_y: float
+    comparison_bottom_y: float
+
+    def x_for_position(self, position: float) -> float:
+        """Return the canvas-local X coordinate for a display-local bp position."""
+
+        return _x_for_position(self.x, self.px_per_bp, position)
+
+
 @dataclass(frozen=True)
 class LinearRecordPlacement:
     """Resolved geometry for one displayed Linear record."""
@@ -83,7 +108,13 @@ class LinearRecordPlacement:
     def x_for_position(self, position: float) -> float:
         """Return the canvas-local X coordinate for a display-local bp position."""
 
-        return self.x + (float(position) * self.px_per_bp)
+        return _x_for_position(self.x, self.px_per_bp, position)
+
+    @property
+    def comparison_endpoint(self) -> LinearComparisonEndpoint:
+        return LinearComparisonEndpoint(
+            self.record_index, self.row, self.x, self.px_per_bp, self.comparison_top_y, self.comparison_bottom_y
+        )
 
 
 @dataclass(frozen=True)
@@ -464,6 +495,7 @@ def solve_linear_layout(
 
 
 __all__ = [
+    "LinearComparisonEndpoint",
     "LinearHorizontalLayout",
     "LinearLayoutPlan",
     "LinearRecordMeasurement",

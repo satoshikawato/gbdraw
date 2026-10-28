@@ -12,6 +12,7 @@ from Bio.SeqFeature import ExactPosition
 from Bio.SeqRecord import SeqRecord
 
 from .numeric import parse_ascii_integer
+from ..features.ids import feature_instances
 from ..features.overrides import feature_override_lookup
 from ..features.visibility import should_render_feature
 from .record_metadata import _source_feature_anchor_profile
@@ -38,6 +39,7 @@ def check_feature_presence(
         override_of = feature_override_lookup(
             record, record_features[index].overrides if record_features else None
         )
+        instance_of = feature_instances(record)
         for feature in record.features:
             if not should_render_feature(
                 feature,
@@ -46,6 +48,7 @@ def check_feature_presence(
                 record_id=record.id,
                 specific_color_rules=specific_color_rules,
                 feature_override=override_of(feature),
+                instance=instance_of(feature),
             ):
                 continue
             if feature.type in seen_feature_types:

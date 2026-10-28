@@ -335,7 +335,6 @@ def _with_mock_circular_result(
             font_weight="normal",
             font_size=0.0,
             color_rect_size=0.0,
-            dpi=96,
             legend_width=0.0,
             legend_height=0.0,
             total_feature_legend_width=0.0,
@@ -1064,7 +1063,6 @@ def test_multi_record_mixed_lengths_force_long_tick_channel_for_short_record(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **kwargs: Any,
     ) -> list[Any]:
         captured_tick_label_channels[int(total_len)] = determine_length_parameter(
@@ -1124,7 +1122,6 @@ def test_circular_tick_label_font_size_reaches_tick_label_generator(
         font_family: str,
         track_type: str,
         strandedness: bool,
-        dpi: int,
         **_kwargs: Any,
     ) -> list[Any]:
         captured_font_sizes[int(total_len)] = font_size
@@ -4498,12 +4495,17 @@ def test_multi_record_grid_layout_never_serializes_subcanvases(
 
 
 def test_the_record_merge_renames_ids_of_earlier_records_without_changing_the_contents() -> None:
-    """A record's merge takes the previous record's result: its ids are unique
-    against every earlier record (M9), and the stored contents are copied, not
-    changed."""
+    """The id plan names each record's ids against every earlier record (M9) from the ids alone;
+    each part is copied by its plan, and the stored contents are copied, not changed."""
 
-    from gbdraw.api.diagram import merge_circular_record
-    from gbdraw.render.group_content import GroupContent
+    from gbdraw.api.diagram import (
+        _placed_record_ids,
+        _record_element_ids,
+        merge_circular_record,
+        merge_circular_record_part,
+        plan_circular_record_ids,
+    )
+    from gbdraw.render.group_content import GroupContent, GroupKey, GroupKind
     from gbdraw.svg.elements import Group, Path
 
     def content() -> GroupContent:
@@ -4512,66 +4514,249 @@ def test_the_record_merge_renames_ids_of_earlier_records_without_changing_the_co
         pattern = Drawing().pattern(id="hatch")
         return GroupContent.of(group, (pattern,))
 
-    first_content, second_content = content(), content()
+    contents = (content(), content())
     placed_attributes = (("id", "Axis"), ("data-gbdraw-composition-role", "primary"))
-    first = merge_circular_record(
-        ((first_content, placed_attributes),),
-        ((0, 0),),
-        record_index=0,
-        record_id="A",
-        bind_record_identity=False,
-        previous=None,
-    )
-    second = merge_circular_record(
-        ((second_content, placed_attributes),),
-        ((0, 0),),
-        record_index=1,
-        record_id="A",
-        bind_record_identity=False,
-        previous=first,
-    )
+    key = GroupKey("record", GroupKind.AXIS_CIRCLE)
+    planned = [
+        (
+            (tuple(_record_element_ids(stored.definitions[0])),),
+            (_placed_record_ids(stored, placed_attributes, index),),
+        )
+        for index, stored in enumerate(contents)
+    ]
+    plans = plan_circular_record_ids(planned)
+    merged = []
+    for index, (stored, plan, (definition_ids, part_ids)) in enumerate(zip(contents, plans, planned, strict=True)):
+        part = merge_circular_record_part(
+            stored,
+            placed_attributes,
+            record_index=index,
+            bind_record_identity=False,
+            planned_ids=part_ids[0],
+            renames=plan.part_renames[0],
+            renamed=plan.renamed,
+        )
+        merged.append(
+            merge_circular_record(
+                ((part, key),),
+                ((stored, 0),),
+                record_index=index,
+                record_id="A",
+                bind_record_identity=False,
+                definition_ids=definition_ids,
+                plan=plan,
+            )
+        )
+    first, second = merged
+    # A copy whose ids are not the ones the plan named fails instead of renaming the wrong elements.
+    with pytest.raises(RuntimeError, match="record id plan does not match the copied tree at id 0"):
+        merge_circular_record_part(
+            contents[1],
+            placed_attributes,
+            record_index=1,
+            bind_record_identity=False,
+            planned_ids=("Axis_0", "shared"),
+            renames=plans[1].part_renames[0],
+            renamed=plans[1].renamed,
+        )
 
-    assert first.content.attributes == {
+    assert dict(first.attributes) == {
         "id": "record_0",
         "data-gbdraw-record-id": "A",
         "data-gbdraw-record-index": "0",
     }
-    (second_axis,) = second.content.children
+    (second_axis,) = second.children
     assert second_axis.attribs == {"id": "Axis_1"}
     (second_path,) = second_axis.elements
     assert second_path.attribs["id"] == "shared__record_2"
     assert second_path.attribs["fill"] == "url(#hatch__record_2)"
-    assert second.content.definition_ids == ("hatch__record_2",)
-    assert {"record_0", "record_1", "Axis_0", "Axis_1", "shared", "hatch"} <= second.used_ids
+    assert second.definition_ids == ("hatch__record_2",)
+    # The record's text is its part's stored text, placed.
+    assert second.children_text == (
+        '<g id="Axis_1"><path d="M0,0" fill="url(#hatch__record_2)" id="shared__record_2" /></g>'
+    )
     # The stored contents keep their ids and roles.
-    for stored in (first_content, second_content):
+    for stored in contents:
         (path,) = stored.children
         assert path.attribs["id"] == "shared"
         assert stored.definitions[0].attribs["id"] == "hatch"
 
 
-def _captured_record_merges(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any, dict[str, Any]]]:
-    """The ``record_merge`` inputs of two records with one id, radial labels on
-    (text on paths, clip paths, record identity binding)."""
+def _record_part_content() -> Any:
+    """One placed content with a bound feature (a stage function: module level, so it is keyed)."""
 
-    calls: list[tuple[Any, Any, dict[str, Any]]] = []
-    real = diagram_api_module.merge_circular_record
+    from gbdraw.render.group_content import GroupContent
+    from gbdraw.svg.elements import Group, Path
 
-    def capture(placed: Any, positions: Any, **kwargs: Any) -> Any:
-        calls.append((placed, positions, kwargs))
-        return real(placed, positions, **kwargs)
+    group = Group(id="part")
+    path = Path(d="M0,0", id="shared")
+    path.attribs["data-gbdraw-feature-id"] = "f1"
+    group.add(path)
+    return GroupContent.of(group)
 
-    monkeypatch.setattr(diagram_api_module, "merge_circular_record", capture)
+
+def test_a_record_part_is_keyed_by_its_record_index_and_its_renames() -> None:
+    """The same content with the same planned ids builds again in another record (its feature
+    identity is bound to the record) and with other renames; the same call hits."""
+
+    from gbdraw.api.diagram import _placed_record_ids, merge_circular_record_part
+    from gbdraw.api.prepared import PreparedBiologicalInputCache
+    from gbdraw.render_stages import render_stage
+
+    attributes = (("id", "part"),)
+    diagnostics: dict[str, object] = {}
+    with PreparedBiologicalInputCache().transaction(resource_paths={}, diagnostics=diagnostics):
+        content = render_stage("circular_record_content", _record_part_content)
+        planned = _placed_record_ids(content, attributes, 0)
+        assert planned == _placed_record_ids(content, attributes, 1) == ("part", "shared")
+
+        def part(record_index: int, renames: tuple[tuple[int, str], ...]) -> Any:
+            return render_stage(
+                "record_part",
+                merge_circular_record_part,
+                content,
+                attributes,
+                record_index=record_index,
+                bind_record_identity=True,
+                planned_ids=planned,
+                renames=renames,
+                renamed=(),
+            )
+
+        first = part(0, ())
+        assert part(0, ()) is first
+        other_record = part(1, ())
+        other_renames = part(0, ((1, "shared__record_2"),))
+    metrics = diagnostics["metrics"]
+    assert isinstance(metrics, dict)
+    assert (metrics["renderStageBuild:record_part"], metrics["renderStageHit:record_part"]) == (3, 1)
+    assert 'data-gbdraw-record-index="0"' in first.children_text
+    assert 'data-gbdraw-record-index="1"' in other_record.children_text
+    assert 'id="shared__record_2"' in other_renames.children_text
+
+
+# The record id plans of the merge that ``record_part`` replaced, recorded on its last
+# commit (893fc77eb): per record, each tree's (ordinal, new id) renames and the
+# record's renamed map, as canonical JSON (sha256), and the renames per record.
+_GOLDEN_RECORD_ID_PLANS = {
+    "whole + region": ("4468945bcd3d089e62a18f8d1bba4010001688935b3327b56341afecb63c10ae", [0, 22]),
+    "lambda twice, radial labels": ("bc424518f794bcdb3f9dff3b34778699b2e65d2be50e2f006ce36888dc81259e", [0, 85]),
+}
+
+
+def test_the_record_id_plan_names_the_ids_the_merge_named(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two records whose ids collide: the plan from the ids alone gives the renames the
+    merge with the ``previous`` chain gave (definitions first, then the parts in order)."""
+
+    import hashlib
+
+    gbk = Path("tests/test_inputs/HmmtDNA.gbk").resolve()
+    table = tmp_path / "records.tsv"
+    table.write_text(f"gbk\tregion\treverse_complement\n{gbk}\t1-16569\t0\n{gbk}\t1-9000\t0\n")
+    lambda_gb = str(Path("tests/test_inputs/NC_001416.gb").resolve())
+    cases = {
+        "whole + region": ["--records_table", str(table), "--multi_record_canvas"],
+        "lambda twice, radial labels": [
+            "--gbk", lambda_gb, lambda_gb, "--multi_record_canvas", "--labels", "both", "--label_placement", "radial",
+        ],
+    }
+    plans: list[Any] = []
+    real = diagram_api_module.plan_circular_record_ids
+
+    def capture(records: Any) -> Any:
+        plans.extend(real(records))
+        return plans[-len(records):]
+
+    monkeypatch.setattr(diagram_api_module, "plan_circular_record_ids", capture)
+    for label, arguments in cases.items():
+        plans.clear()
+        circular_cli_module.circular_main([*arguments, "-o", str(tmp_path / "out"), "-f", "svg", "--overwrite"])
+        tables = [
+            [
+                [[list(rename) for rename in renames] for renames in (*plan.definition_renames, *plan.part_renames)],
+                [list(pair) for pair in plan.renamed],
+            ]
+            for plan in plans
+        ]
+        digest = hashlib.sha256(json.dumps(tables, separators=(",", ":")).encode()).hexdigest()
+        counts = [sum(len(renames) for renames in (*plan.definition_renames, *plan.part_renames)) for plan in plans]
+        assert (digest, counts) == _GOLDEN_RECORD_ID_PLANS[label], label
+
+
+def test_the_record_id_plan_keeps_every_id_unique_and_names_renames_by_record() -> None:
+    """Random id lists with collisions, ``__record_`` suffix collisions and ``_2`` chains."""
+
+    import random
+
+    from gbdraw.api.diagram import plan_circular_record_ids
+
+    rng = random.Random(1311)
+    pool = ["a", "b", "c", "a__record_2", "a__record_2_2", "b__record_3", "record_1", "record_2"]
+    for _round in range(200):
+        records = [
+            (
+                tuple(tuple(rng.choice(pool) for _ in range(rng.randint(0, 3))) for _ in range(rng.randint(0, 2))),
+                tuple(tuple(rng.choice(pool) for _ in range(rng.randint(0, 5))) for _ in range(rng.randint(0, 3))),
+            )
+            for _ in range(rng.randint(1, 4))
+        ]
+        plans = plan_circular_record_ids(records)
+        # Every name in use: the record groups' ids too, which an element of an earlier record may hold.
+        final: set[str] = set()
+        for record_index, ((definitions, parts), plan) in enumerate(zip(records, plans, strict=True)):
+            final.add(f"record_{record_index}")
+            renamed: dict[str, str] = {}
+            for ids, renames in zip((*definitions, *parts), (*plan.definition_renames, *plan.part_renames), strict=True):
+                new_ids = dict(renames)
+                for ordinal, raw_id in enumerate(ids):
+                    name = new_ids.get(ordinal, raw_id)
+                    if ordinal in new_ids:
+                        assert raw_id in final
+                        assert re.fullmatch(re.escape(f"{raw_id}__record_{record_index + 1}") + r"(_[0-9]+)?", name)
+                        renamed.setdefault(raw_id, name)
+                    else:
+                        assert raw_id not in final
+                    assert name not in final
+                    final.add(name)
+            assert dict(plan.renamed) == renamed and list(dict(plan.renamed)) == list(renamed)
+
+
+def _captured_record_placements(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
+    """The placed contents of two records with one id, radial labels on
+    (text on paths, clip paths, record identity binding), and their definitions."""
+
+    calls: list[tuple[Any, Any]] = []
+    real = diagram_api_module.placed_record_contents
+
+    def capture(drawing: Any) -> Any:
+        result = real(drawing)
+        calls.append(result)
+        return result
+
+    binds: list[bool] = []
+    real_part = diagram_api_module.merge_circular_record_part
+
+    def part(*args: Any, **kwargs: Any) -> Any:
+        binds.append(kwargs["bind_record_identity"])
+        return real_part(*args, **kwargs)
+
+    monkeypatch.setattr(diagram_api_module, "placed_record_contents", capture)
+    monkeypatch.setattr(diagram_api_module, "merge_circular_record_part", part)
+    _assemble_lambda_twice_radial()
+    monkeypatch.setattr(diagram_api_module, "placed_record_contents", real)
+    monkeypatch.setattr(diagram_api_module, "merge_circular_record_part", real_part)
+    assert len(calls) == 2 and binds and all(binds)
+    return calls
+
+
+def _assemble_lambda_twice_radial() -> Drawing:
     record = next(SeqIO.parse(Path("tests/test_inputs") / "NC_001416.gb", "genbank"))
-    assemble_circular_diagram_from_records(
+    return assemble_circular_diagram_from_records(
         [record, record],
         cfg=apply_config_overrides(
             None, {"labels.circular.scope": "both", "labels.circular.placement": "radial"}
         ),
     )
-    monkeypatch.setattr(diagram_api_module, "merge_circular_record", real)
-    assert len(calls) == 2 and all(kwargs["bind_record_identity"] for _p, _d, kwargs in calls)
-    return calls
 
 
 def _element_pairs(original: Any, copied: Any):
@@ -4591,8 +4776,8 @@ def test_an_element_tree_copy_shares_no_state_with_its_source(monkeypatch: pytes
 
     sources = [
         child
-        for placed, _positions, _kwargs in _captured_record_merges(monkeypatch)
-        for content, _attributes in placed
+        for placed, _positions in _captured_record_placements(monkeypatch)
+        for content, _attributes, _key in placed
         for child in (*content.children, *content.definitions)
     ]
     root = Group(id="sources")
@@ -4645,34 +4830,27 @@ def test_the_record_merge_copy_gives_what_a_deep_copy_gives(monkeypatch: pytest.
 
     import copy
 
-    from gbdraw.render.group_content import element_text
+    from gbdraw.render.group_content import ContentGroup, GroupKind, element_text
 
-    calls = _captured_record_merges(monkeypatch)
-    stored_before = [
-        element_text(child) for placed, _p, _k in calls for content, _a in placed for child in content.children
-    ]
-
-    def merged(copier: Any) -> list[tuple[str, tuple[str, ...], frozenset[str]]]:
+    def merged(copier: Any) -> list[tuple[str, tuple[str, ...]]]:
         monkeypatch.setattr(diagram_api_module, "copy_element_tree", copier)
-        previous = None
-        results = []
-        for placed, positions, kwargs in calls:
-            previous = diagram_api_module.merge_circular_record(placed, positions, **{**kwargs, "previous": previous})
-            results.append(
-                (
-                    previous.content.text,
-                    tuple(element_text(definition) for definition in previous.content.definitions),
-                    previous.used_ids,
-                )
-            )
-        return results
+        drawing = _assemble_lambda_twice_radial()
+        return [
+            (element.content.text, tuple(element_text(definition) for definition in element.content.definitions))
+            for element in drawing.elements
+            if isinstance(element, ContentGroup) and element.key.kind is GroupKind.RECORD
+        ]
 
+    calls = _captured_record_placements(monkeypatch)
+    stored_before = [
+        element_text(child) for placed, _p in calls for content, _a, _k in placed for child in content.children
+    ]
     real = diagram_api_module.copy_element_tree
     deep_copied = merged(copy.deepcopy)
     copied = merged(real)
 
-    assert copied == deep_copied
+    assert len(copied) == 2 and copied == deep_copied
     assert "__record_2" in copied[1][0]
     assert [
-        element_text(child) for placed, _p, _k in calls for content, _a in placed for child in content.children
+        element_text(child) for placed, _p in calls for content, _a, _k in placed for child in content.children
     ] == stored_before

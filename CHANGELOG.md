@@ -12,6 +12,86 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
+  the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
+  again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
+  keeps the drawn Depth paths (#1422).
+- Performance (web app): on a Multi-Record Circular canvas, a change that moves or restyles only some records
+  copies and re-reads only those records' parts; label leaders and texts no longer redraw when a definition font
+  or center radius changes, and Linear comparison ribbons no longer redraw when a definition or
+  record label changes. The drawn bytes are unchanged.
+- Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
+  a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
+  the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
+  a fresh Generate's (#1418).
+- Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
+  button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
+  **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
+  loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
+  four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
+  button's icon beside the logo (PD-OI-108, #1383).
+- Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
+  fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
+  (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed
+  (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs). See
+  [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
+- Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
+  Security Advisories (#1403).
+- Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
+  inputs in `gbdraw/web/tutorial-data/` of a source checkout; the Quickstart also links the web app (#1407).
+- Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
+  the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
+  Before, they wrote only the SVG with a warning and exited 0 (#1404).
+- Changed: each LOSAT or BLAST+ search logs one `INFO: Running ...` line that names the backend, its source, the
+  executable, and its version. New Session runtime records no longer carry the `cli` field; older records still
+  load (#1406).
+- Changed: building gbdraw from source needs setuptools 77 or newer. The package lists Python 3.13, which the
+  `dev` CI tier tests. CI actions are pinned to commits, and Dependabot proposes grouped monthly updates (#1403).
+- Changed: the installation notes state what CI and each release check instead of a 0.14.0 claim (#1407).
+- Removed: the LOSAT development build tracked at `gbdraw/bin/linux-x86_64/losat`, and the resolver step that
+  preferred it over `losat` on `PATH`. In a source checkout, run `gbdraw setup-losat` or put `losat` on `PATH`.
+  The automatic order is now: the explicit option, conda, the managed install (`gbdraw setup-losat`), `losat` on
+  `PATH`, then NCBI BLAST+ on `PATH` (#1406).
+- Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
+  `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
+  only `herbal_garden`, and new requests name it (#1407).
+- Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
+  and Windows have no LOSAT binary (#1406).
+- Fixed: per-feature edits in the Web app (a "This feature only" color, label
+  text and visibility, Feature visibility, stroke, Feature placements, and
+  annotations of selected features) keep applying when the view of their
+  record changes: a Circular record drawn alone or on the Multi-record canvas,
+  a Linear File card that draws all of its records or one of them. Before,
+  they stopped applying after a Generate that drew the record under another
+  key. Undo of that Generate puts them back; Session files are unchanged
+  (OV-1949). Edits made on an "all records" card of a 0.13.0 Session do not
+  follow its records after the first Generate splits the card.
+- Fixed: label text and Label visibility typed in the Web feature popup and
+  not yet applied stay when the labels are placed again while the popup is
+  open (OV-1984).
+- Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
+  and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
+  warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
+
+## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
+
+- Patch release of 0.14.1. Session files are unchanged (Session version 48).
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.2.md).
+- Fixed: a "This feature only" color in the Web app colors only the clicked
+  feature of the clicked File card and record, live and after Generate. Before,
+  the same feature in another record with the same ID (the same file in two
+  Linear File cards, or two records that share an ID) took the color as well.
+  The rule's `hash` value now names the feature instance
+  (`<feature id>@<record key>`), which a `hash` value must match whole; the Run
+  Info Source recipe writes it with the CLI record key `record-<n>` and leaves
+  out a row whose record is not drawn. Resetting one copy leaves the others as
+  they are, and **Delete settings** of a record removes its rows. Other `hash`
+  values keep their meaning (PD-OI-069 revision 2). Like the other
+  per-feature edits, the color belongs to the record key, so it does not apply
+  while the record is drawn under another key.
+- Fixed: two identical `source` features of a record, one shown by its own
+  Feature visibility, now have the same feature IDs in the Web feature list as
+  in the drawing and in a feature identity table.
 - Changed: the aminoglycoside BGC Gallery tutorial (BGC0000708-BGC0000713)
   shows the antiSMASH `gene_kind` qualifier in a step of its own before the
   color step, and says that its colors follow the scheme of the MIBiG website
@@ -93,6 +173,24 @@ write-up of a release.
   Species / Strain…** shows that record's name field, and Cancel reads **Keep
   as drawn** over a drawn figure. A label-fit warning for one record now names
   that record, so records drawn to separate files can be told apart (OV-1836).
+- Changed (CLI, Python, web app): feature labels, tick labels, the Linear
+  ruler and scale bar, and the Circular centre definition are laid out at the
+  box their text is drawn in, as the Legend already is. A Circular label keeps
+  0.30 em of room beside its text and a Linear label 0.126 em above it, so the
+  same labels sit outside and inside their features as before and Linear label
+  rows keep their spacing; stacked Circular labels sit slightly closer, tick
+  labels and the inside tracks under them move about 2 px outward, and
+  canvases change by a few pixels. The room kept for the Circular definition,
+  its warning and the smaller-font remedy all measure the letters as painted,
+  in each line's weight and at its place, so tracks narrowed for the
+  definition no longer leave a line touching them (OV-1854): of the 175
+  figures measured, only MERS-CoV, whose name the 30 px floor cannot clear,
+  still warns. The room is a little wider than the line boxes gave, so more
+  figures narrow their GC rows (MjeNMV at the Web defaults: 46.5 to 35.5 px),
+  and definitions that were drawn over the innermost track now clear it
+  (OV-1820, OV-1824, OV-1826). An embedded label sits at the same depth
+  whether or not its letters have descenders (OV-1743). Saved Results are not
+  migrated: they keep their drawing until Generate redraws them (OV-165).
 - SVG output: every path writes its coordinates with at most 3 decimals in the shortest form (no trailing zeros, no
   `-0`, no exponent), so a point moves by at most 0.0005 SVG px. A Circular arc is drawn in pieces none of which is
   within 30 degrees of 180 or near 360, so a drawn arc stays within about 0.005 SVG px of its circle (equal halves of a
@@ -265,6 +363,30 @@ write-up of a release.
   times. Replaying the Vibrio collinearity Gallery Session used 12.7 s of CPU
   time instead of 16.8 s (21.3 s instead of 26.4 s with `--session_output`);
   the SVG and the saved Session are unchanged (#1359).
+- Performance (CLI, Python, web app): GC content and GC skew count bases
+  without an array of every base position, and the counted sequence is one
+  bytes copy instead of three or four string copies. A 52 Mb Circular diagram
+  with defaults drops its Python allocation peak from 521.7 MiB to 363.3 MiB
+  and its process RSS from 750 MiB to 576 MiB; the drawing is byte-identical
+  (#1393).
+- Performance (CLI, Python, web app): Similarity group inference for LOSATP
+  protein comparisons runs about 2.5 times faster and needs about a third less
+  memory on the Vibrio Gallery input. LOSATP output is parsed without a regex
+  attempt at every character, HSP aggregation and the bitscore fit work on
+  whole columns, directional hits stay numpy columns over integer protein
+  codes, and the per-protein score thresholds are plain floats freed before the
+  memory peak. Similarity groups, edges and names are identical (#1347, #1350,
+  #1351, #1353).
+- Performance (web app): a live edit (for example a Legend color) no longer
+  serializes the whole SVG into the displayed Result. The Result's text is
+  written once, when Save, a History checkpoint, Generate, a Load rollback, or a
+  Result or drawing switch reads it. On the Vibrio Gallery Session one Legend
+  color edit took 25 ms instead of 71 ms. Saved Sessions, exports, History and
+  the drawn SVG do not change (#1374).
+- Fixed (web app): installing a drawing's layout preferences no longer merges a
+  `__proto__` key into `Object.prototype` (CodeQL alert 61, OV-1915). No saved
+  file reached the merge, because Session Load already rejects such keys
+  (#1390, #1391).
 
 ## [0.14.1](./docs/RELEASE_NOTES_0.14.1.md)
 

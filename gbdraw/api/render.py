@@ -80,14 +80,7 @@ def _cairosvg_module(formats: Sequence[str]) -> ModuleType | None:
             "Binary file export is not available under WebAssembly (pyodide); "
             "browser-side conversion does not create local output paths."
         )
-    try:
-        return _export.get_cairosvg()
-    except ImportError as exc:
-        missing_formats = ", ".join([f.upper() for f in formats])
-        raise ValidationError(
-            f"Cannot generate {missing_formats}: CairoSVG is not installed. "
-            "Install with: pip install gbdraw[export]"
-        ) from exc
+    return _export.require_cairosvg(formats)
 
 
 def save_figure_to(
@@ -216,13 +209,7 @@ def render_to_bytes(
     if "pyodide" in sys.modules:
         raise ValidationError("Binary export is not available under WebAssembly (pyodide).")
 
-    try:
-        cairosvg_module = _export.get_cairosvg()
-    except ImportError as exc:
-        raise ValidationError(
-            "CairoSVG is not installed. Install with: pip install gbdraw[export]"
-        ) from exc
-
+    cairosvg_module = _export.require_cairosvg((fmt_norm,))
     svg_string = write_svg_document(canvas).body.encode("utf-8")
     try:
         rendered = _export.convert_svg_with_cairosvg(

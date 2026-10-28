@@ -440,6 +440,52 @@ export const rekeyedRuleRows = (before, after, rendererRows = []) => {
     createRuleLegendCaptions([...before], rendererRows), createRuleLegendCaptions([...after], rendererRows));
 };
 
+// The Legend rows a take-back of rules removes from a drawing (Delete
+// settings: rows that name a feature instance of a turned-off record, which
+// no Result draws), and the rows it re-keys, read from the keys the drawing's
+// Legend stores (OV-1280). Python's fills and swatch lines of those rows are
+// not read, and no key is allocated again from the colors its rows list: a Legend
+// recolor, or a type row drawn in a rule's fill with its own line (D-13),
+// would read as a rule row. A rule group's row is its allocated key
+// ("<cap> [<fill>]", or "<cap> [<fill>] (n)") when the drawing lists one,
+// else its caption. `listedKeys` are the keys of every row the drawing lists,
+// deleted and dormant rows too, which Python still draws. `gone`: the rows
+// only removed groups drew; `rekeyed`: a kept group whose caption is now
+// written in one color moves to the caption, unless a row that is no rule
+// row has it (as `rekeyedRuleRows` allocates).
+/**
+ * @param {readonly Partial<SpecificColorRule>[]} before
+ * @param {readonly Partial<SpecificColorRule>[]} after The rules of `before` that stay.
+ * @param {Iterable<string>} listedKeys
+ * @returns {{ gone: RuleRowColor[], rekeyed: Map<PythonLegendKey, PythonLegendKey> }}
+ */
+export const listedRuleRowRemoval = (before, after, listedKeys) => {
+  const listed = [...listedKeys].map(captionRowKey);
+  /** @param {readonly Partial<SpecificColorRule>[]} rules @returns {Map<string, SpecificColorRule>} */
+  const groupsOf = (rules) => new Map(rules.map((rule) => normalizeSpecificRule(rule))
+    .filter((rule) => rule.cap).map((rule) => [legendGroupKey(rule), rule]));
+  const removed = groupsOf(before);
+  const kept = groupsOf(after);
+  kept.forEach((_group, id) => removed.delete(id));
+  const captions = new Set([...removed.values(), ...kept.values()].map((group) => group.cap));
+  /** @param {SpecificColorRule} group @returns {PythonLegendKey} */
+  const storedKey = (group) => captionRowKey(listed.find((key) => !captions.has(key) && isAllocatedRow(key, group)) ?? group.cap);
+  const ruleRows = new Set([...removed.values(), ...kept.values()].map(storedKey));
+  const fills = captionFills([...kept.values()]);
+  /** @type {Map<PythonLegendKey, PythonLegendKey>} */
+  const rekeyed = new Map();
+  kept.forEach((group) => {
+    const from = storedKey(group);
+    if (from !== group.cap && fills.get(group.cap)?.size === 1 && !listed.some((key) => key === group.cap && !ruleRows.has(key))) {
+      rekeyed.set(from, captionRowKey(group.cap));
+    }
+  });
+  const held = new Set([...[...kept.values()].map(storedKey), ...rekeyed.values()]);
+  const gone = [...removed.values()].map((group) => ({ caption: storedKey(group), color: group.color }))
+    .filter(({ caption }) => !held.has(caption));
+  return { gone, rekeyed };
+};
+
 /**
  * A rule row: its Legend key and the color its rules draw it in.
  * @typedef {{ caption: PythonLegendKey, color: string }} RuleRowColor

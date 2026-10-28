@@ -220,9 +220,9 @@ test('a Generate keeps the held catalog only while its build is current', async 
     const c1Json = await keepShown(page, 'c1');
 
     console.log('STEP Pw-5', Date.now());
-    // Pw-5: a drawn-feature change sends a new catalog; Undo and Redo restore
-    // each object; only the newest one's builds are current.
-    await undoable(page, 'Set the block stroke width', { fields: { 'adv.block_stroke_width': 3 } });
+    // Pw-5: a drawn-feature fill change (a catalog read) sends a new catalog;
+    // Undo and Redo restore each object; only the newest one's builds are current.
+    await undoable(page, 'Set the CDS color', { fields: { 'currentColors.CDS': '#123456' } });
     const changed = await observeGenerate(page);
     expect(changed.transports).toEqual([HELD_SENT]);
     expect(changed.admission).toBe(1);
@@ -240,6 +240,24 @@ test('a Generate keeps the held catalog only while its build is current', async 
     const older = await observeGenerate(page);
     expect(older.transports).toEqual([HELD_SENT]);
     expect(older.admission).toBe(1);
+    expect(await shownJson(page)).toBe(c1Json);
+    await keepShown(page, 'c1');
+
+    console.log('STEP Pw-11', Date.now());
+    // Pw-11: a block stroke width change draws a new figure but changes no
+    // catalog read (feature ids and fills): Python keeps the build and the page
+    // keeps the object, which equals a fresh Generate's catalog (a new Worker
+    // sends it).
+    await undoable(page, 'Set the block stroke width', { fields: { 'adv.block_stroke_width': 3 } });
+    const restroked = await observeGenerate(page);
+    expect(restroked.transports).toEqual([KEPT]);
+    expect({ admission: restroked.admission, reuse: restroked.reuse }).toEqual({ admission: 0, reuse: 1 });
+    expect(await shownIs(page, 'c1')).toBe(true);
+    await page.evaluate(async () => {
+      (await import('./js/services/diagram-generation.js')).disposeDiagramGenerationWorker();
+    });
+    const freshStroke = await observeGenerate(page);
+    expect(freshStroke.transports).toEqual([HELD_SENT]);
     expect(await shownJson(page)).toBe(c1Json);
 
     console.log('STEP Pw-6', Date.now());

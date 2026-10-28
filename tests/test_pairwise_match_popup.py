@@ -48,7 +48,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "utils" / "color-utils.js")
         .read_text(encoding="utf-8")
         .replace("./named-colors.js", "./named-colors.mjs")
-        .replace("./i18n.js", "./i18n.mjs"),
+        .replace("./i18n.js", "./i18n.mjs")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs"),
+        encoding="utf-8",
+    )
+    # color-utils.js reads the generated palette name aliases.
+    (tmp_path / "schema.generated.mjs").write_text(
+        (WEB_ROOT / "js" / "contracts" / "schema.generated.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "named-colors.mjs").write_text(
@@ -90,6 +96,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         (WEB_ROOT / "js" / "services" / "record-draw-selection.js")
         .read_text(encoding="utf-8")
         .replace("../utils/download-names.js", "./download-names.mjs")
+        .replace("../contracts/schema.generated.js", "./schema.generated.mjs")
         .replace("./drawing/feature-edits.js", "./drawing-feature-edits.mjs")
         .replace("./drawing/paint.js", "./drawing-paint.mjs"),
         encoding="utf-8",

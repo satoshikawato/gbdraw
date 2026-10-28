@@ -711,8 +711,8 @@ _RECORDED_PROTEIN_REPLY_DIGESTS = {
     # Updated again when the duplicate match attribute stopped being written
     # (perf-audit D-41): only that attribute and the segment byte counts and
     # revision hashes derived from the segment text moved.
-    "similarity_groups": "d43ebe46b19f3e40a10b90e58e72eecdf689ba0c73a9aa692097c09a12549f90",
-    "collinear": "357a95a175463246c5f9e2395cac5c40201e6e608fa31b158104b84fd0d2cddb",
+    "similarity_groups": "36b644c3ec0d30d2d52492cf44b364460c7f91e4e4e1d4dc8bd2b39f54506859",
+    "collinear": "b6565b0e35e87726aa0753638eaaa0aeac7673bc19202e30e45d7dd0eb5e074e",
 }
 
 

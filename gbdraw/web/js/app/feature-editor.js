@@ -47,6 +47,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {import('./feature-editor/rule-actions.js').MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records (Delete settings' take-back of rule rows).
  * @property {import('./candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282), which the rule owner's commit owns rows by.
  * @property {FeatureSelectionPort | null} [featureSelection]
@@ -101,6 +103,7 @@ export const createFeatureEditor = ({
   isCurrentFeature,
   nextTick,
   prepareFileLegendEntries,
+  moveLegendRecords,
   readLegendRowColors,
   featureSelection = null,
   commitActiveResultEdit = null,
@@ -135,7 +138,7 @@ export const createFeatureEditor = ({
   // created before it call them through this object only.
   const editorPorts = /** @type {FeatureEditorPorts} */ ({});
   const ruleActions = createFeatureRuleActions({
-    state, prepareFileLegendEntries, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
     ports: editorPorts, editDefaultColors, getCommittedRequest, ref, computed, watch, isPatternEditAvailable, askChoice, showNotice,
     revealSetting
   });
@@ -245,6 +248,7 @@ export const createFeatureEditor = ({
     ruleWritePending: ruleActions.ruleWritePending,
     importSpecificRules: ruleActions.importSpecificRules,
     removeImportedSpecificRules: ruleActions.removeImportedSpecificRules,
+    takeBackRuleRows: ruleActions.takeBackRuleRows,
     followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
@@ -315,6 +319,7 @@ export const createFeatureEditor = ({
     closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
     closeHiddenLabelTextDialog: labelActions.closeHiddenLabelTextDialog,
     clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
+    moveDrawnLabelVisibility: labelActions.moveDrawnLabelVisibility,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,

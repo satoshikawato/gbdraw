@@ -35,8 +35,9 @@ const recordLegendRowColor = (...write) => { legendRowColorWrites.push(write); }
 const setup = (evaluate = evaluatePythonRules, { createHistory = null, linear = null, synthesize = synthesizePythonColorRules, ...options } = {}) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
-      { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
-      { type: 'CDS', svg_id: 'b', qualifiers: { gene: ['b'] } }
+      // Catalog features, each with its catalog identity.
+      { type: 'CDS', svg_id: 'a', record_key: 'record-1', biological_feature_id: 'a', qualifiers: { gene: ['a'] } },
+      { type: 'CDS', svg_id: 'b', record_key: 'record-1', biological_feature_id: 'b', qualifiers: { gene: ['b'] } }
     ] },
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
     svgResultIdentity: { value:'before' }, addedLegendCaptions: { value:new Set() },
@@ -1297,7 +1298,8 @@ test('a rule commit writes its own drawing and is pending until it ends', async 
   await pending;
   assert.equal(s.actions.ruleWritePending(), false);
   assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['B'], 'the Circular rules');
-  assert.equal(s.state.featureColorOverrides.b?.color, '#112233', 'the Circular fill');
+  // A catalog feature's fill is keyed by its identity (record key, feature id).
+  assert.equal(s.state.featureColorOverrides['record-1\u0000b']?.color, '#112233', 'the Circular fill');
   assert.deepEqual(linear.manualSpecificRules, []);
   assert.deepEqual(linear.featureColorOverrides, { b: { color: '#abcdef', caption: 'Linear fill' } }, 'the Linear fill is kept');
 });
@@ -1389,7 +1391,7 @@ test('a group edit whose catalog changed during the synthesis is synthesized aga
   const pending = s.actions.commitSpecificRules(s.actions.groupColorRules([feature], '#ff0000', 'Picked', 'group'));
   await held.running;
   // A source-replacing Generate adds a feature that the exact gene rule would also color.
-  const added = { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['a'] } };
+  const added = { type: 'CDS', svg_id: 'c', record_key: 'record-1', biological_feature_id: 'c', qualifiers: { gene: ['a'] } };
   s.state.extractedFeatures.value = [feature, other, added];
   held.release();
   assert.equal(await pending, true);
@@ -1410,7 +1412,7 @@ test('a group edit whose rows a Generate reinstalled as equal clones during the 
   // A Generate's activation installs cloned rows of the same content and replaces the catalog.
   const clones = JSON.parse(JSON.stringify(s.state.manualSpecificRules));
   s.state.manualSpecificRules.splice(0, s.state.manualSpecificRules.length, ...clones);
-  s.state.extractedFeatures.value = [feature, other, { type: 'CDS', svg_id: 'c', qualifiers: { gene: ['a'] } }];
+  s.state.extractedFeatures.value = [feature, other, { type: 'CDS', svg_id: 'c', record_key: 'record-1', biological_feature_id: 'c', qualifiers: { gene: ['a'] } }];
   held.release();
   assert.equal(await pending, true);
   assert.equal(held.calls(), 2);

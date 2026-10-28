@@ -11,7 +11,7 @@ from gbdraw.svg.path_data import path_point
 
 from ..auto_sizes import circular_tick_intervals, determine_length_parameter
 from ..core.numeric import scaled_tick_text
-from ..core.text import calculate_bbox_dimensions
+from ..core.text import drawn_text_box
 from .ids import stable_svg_id
 
 
@@ -203,7 +203,6 @@ def get_circular_tick_label_radius_bounds(
     strandedness: bool,
     font_size: float,
     font_family: str,
-    dpi: int,
     manual_interval: int | None = None,
     label_side: str = "legacy",
     tick_side: str = "legacy",
@@ -238,7 +237,6 @@ def get_circular_tick_label_radius_bounds(
             font_family=font_family,
             track_type=track_type,
             strandedness=strandedness,
-            dpi=dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -355,7 +353,6 @@ def resolve_circular_tick_label_geometry(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -379,7 +376,7 @@ def resolve_circular_tick_label_geometry(
     if label_radius_base is None:
         return CircularTickLabelGeometry(0.0, 0.0, 0.0, 0.0, 0.0)
 
-    bbox_width_px, bbox_height_px = calculate_bbox_dimensions(label_text, font_family, font_size, dpi)
+    bbox_width_px, bbox_height_px = drawn_text_box(label_text, font_family, font_size)
     anchor_value, dominant_baseline = set_tick_label_anchor_value(total_len, tick)
     angle = 360.0 * (tick / total_len)
     reverse_path = 90 <= angle < 270
@@ -569,7 +566,6 @@ def circular_tick_labels(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -600,7 +596,6 @@ def circular_tick_labels(
             font_family=font_family,
             track_type=track_type,
             strandedness=strandedness,
-            dpi=dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,
@@ -624,7 +619,6 @@ def generate_circular_tick_labels(
     font_family: str,
     track_type: str,
     strandedness: bool,
-    dpi: int,
     label_side: str = "legacy",
     tick_side: str = "legacy",
     tick_length_px: float | None = None,
@@ -648,7 +642,6 @@ def generate_circular_tick_labels(
             font_family,
             track_type,
             strandedness,
-            dpi,
             label_side=label_side,
             tick_side=tick_side,
             tick_length_px=tick_length_px,

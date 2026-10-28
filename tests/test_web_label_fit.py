@@ -19,7 +19,7 @@ from gbdraw.api import (
     RecordInput,
     RenderOutputRequest,
 )
-from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
+from gbdraw.exceptions import LabelsDoNotFitError, LabelsMayNotFitWarning, ValidationError
 from gbdraw.labels.circular_fit import ROW_KINDS
 from gbdraw.labels.fit import (
     DEFINITION_FONT_PATH,
@@ -29,6 +29,7 @@ from gbdraw.labels.fit import (
     SEPARATE_FEATURES_PATH,
     SEPARATE_FEATURES_VALUES,
     Y_OFFSET_PATH,
+    LabelCapacityRecord,
     LabelFit,
     LabelFitRecord,
     LabelFitReport,
@@ -40,9 +41,11 @@ from tests.utils.session_drawing_view import drawing_view
 from gbdraw.web_support.label_fit import (
     WEB_ROW_SEARCH_SECONDS,
     LabelFitRowSearches,
+    label_capacity_notices,
     label_fit_failure,
     label_fit_report_payload,
 )
+from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.request_render import render_canonical_web_request
 
 TEST_INPUTS = Path(__file__).parent / "test_inputs"
@@ -69,9 +72,10 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert payload["records"] == [{
         "recordId": "rec-1", "recordIndex": None, "labelKind": "circular_outer", "labelKindTitle": "outer labels",
         "labelCount": 111, "fontSize": 14.0, "overlapPairs": 20, "crossingPairs": 21,
-        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False,
+        "definitionOverlaps": 0, "regionOverlaps": 0, "refused": False, "capacityRatio": None,
         "counts": "20 label pairs overlap, 21 leader pairs cross",
     }]
+    assert payload["remedies"] == []
     vertical, font, tighter, combination = payload["rows"]
     assert vertical == {
         "kind": "outward_vertical", "title": "outward, vertical only", "status": "found",
@@ -85,6 +89,47 @@ def test_report_payload_carries_counts_rows_and_python_wording() -> None:
     assert tighter["status"] == "not_found" and tighter["values"] is None and tighter["settings"] == []
     assert tighter["reason"] == "Does not fit down to 0.1 px label spacing"
     assert combination["status"] == "not_computed" and combination["canvasSize"] is None
+
+
+def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reason() -> None:
+    """CAPACITY-STOP: the dialog lists Python's sentence per record and the remedies; the banner has its own reason."""
+
+    capacity = LabelCapacityRecord(562, 6.0, 2.49, ("filter", "label_text", "linear"))
+    report = LabelFitReport(
+        records=(LabelFitRecord("AP027078.1", "circular_outer", 562, 6.0, LabelFit(0, 0), capacity=capacity),),
+        rows=(),
+        drawn=False,
+    )
+    payload = label_fit_report_payload(report, "circular")
+
+    (record,) = payload["records"]
+    assert record["capacityRatio"] == 2.49
+    assert record["counts"] == "need about 2.5 times the room around the map"
+    assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
+    error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
+    assert error["context"] == {
+        "reason": "LABEL_CAPACITY",
+        "labelFitCounts": "Outer labels need about 2.5 times the room around the map.",
+    }
+    # Nothing to compute: the failure keeps no row token.
+    searches = LabelFitRowSearches()
+    failure = LabelsDoNotFitError("PRIVATE", report=report)
+    assert searches.retain_failure("circular", failure) is None
+
+
+def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> None:
+    notices: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with label_capacity_notices(notices.append):
+            capacity = LabelCapacityRecord(195, 14.0, 1.36, ())
+            warnings.warn(
+                LabelsMayNotFitWarning("SENTENCE", record_id="NC_005859.1", label_kind="circular_outer", capacity=capacity)
+            )
+            warnings.warn(LabelsMayNotFitWarning("AGAIN", record_id="r", label_kind="circular_inner", capacity=capacity))
+            warnings.warn(UserWarning("other"))
+    assert notices == ["SENTENCE", "AGAIN"]
+    assert [str(item.message) for item in caught] == ["other"]
 
 
 def test_a_row_with_an_unknown_config_path_is_an_error() -> None:
@@ -209,14 +254,15 @@ def _sars_request(overrides: dict[str, object]) -> dict:
     ).to_dict())
 
 
-# Lambda with outer labels at 16 pt and no blacklist: 11 leader pairs cross and no labels overlap, so
-# the figure is drawn with the notice. (SARS-CoV-2 with external labels only at 14 pt crossed only
-# because labels next to the origin could wrap past their neighbours, OV-1366; it fits now.)
+# Lambda with outer labels at 17 pt and no blacklist: 10 leader pairs cross and no labels overlap, so
+# the figure is drawn with the notice. (16 pt did while labels were laid out in point-mode boxes, OV-165.
+# SARS-CoV-2 with external labels only at 14 pt crossed only because labels next to the origin could wrap
+# past their neighbours, OV-1366; it fits now.)
 CROSSING_OVERRIDES: dict[str, object] = {
     "labels.circular.scope": "outer",
     "labels.filtering.blacklist_keywords": [],
-    "labels.font_size.short": 16.0,
-    "labels.font_size.long": 16.0,
+    "labels.font_size.short": 17.0,
+    "labels.font_size.long": 17.0,
 }
 
 
@@ -300,14 +346,21 @@ def test_with_separate_strands_the_resolve_overlaps_row_leaves_crossings_and_dra
     assert (entry["report"]["overlapPairs"], entry["report"]["crossingPairs"]) == (0, 15)
 
 
-def _mers_request(center_reserved_radius: float | None = None, *, track_narrowing: bool = True) -> dict:
+def _mers_request(
+    center_reserved_radius: float | None = None, *, track_narrowing: bool = True, definition_font: float | None = None
+) -> dict:
     record = SeqIO.read(str(TEST_INPUTS / "MERS-CoV.gbk"), "genbank")
+    overrides: dict[str, object] = {}
+    if not track_narrowing:
+        overrides["canvas.circular.track_narrowing"] = False
+    if definition_font is not None:
+        overrides[DEFINITION_FONT_PATH] = definition_font
     return drawing_view(build_session_document(
         CircularDiagramRequest(
             records=(RecordInput(source=InMemoryRecordSource(record)),),
             options=CircularDiagramOptions(
                 tracks=CircularRequestTrackOptions(center_reserved_radius=center_reserved_radius),
-                config_overrides=None if track_narrowing else {"canvas.circular.track_narrowing": False},
+                config_overrides=overrides or None,
             ),
             output=RenderOutputRequest(output_prefix="fit", formats=("svg",)),
         )
@@ -315,17 +368,20 @@ def _mers_request(center_reserved_radius: float | None = None, *, track_narrowin
 
 
 def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_narrows_them(tmp_path) -> None:
-    """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. By default the inside tracks are
-    narrowed around it already (DF-D36), so only the font row is offered. With track narrowing off, the font row
-    offers the size at which that line clears the tracks; the narrow row writes the radius the definition reserves
-    as Center Reserved Radius and says the text still overlaps; drawn with it, the figure still has the notice."""
+    """PD-OI-097 (N-a): MERS-CoV's definition is drawn on one line over a track. At 18 pt its band (the farthest
+    corner of the bold line's ink, OV-1854) is cleared neither by the floor nor by any Center Reserved Radius, so the
+    narrow row finds nothing and the font row offers 17 pt. At 17.5 pt with track narrowing off, the font row offers
+    the size at which that line clears the tracks at their widths, and the narrow row writes the radius the
+    definition reserves as Center Reserved Radius; drawn with it, the figure has no notice."""
 
-    (narrowed_by_default,) = _web_render(_mers_request(), tmp_path / "default")["metadata"]["labelFitReports"]
-    assert narrowed_by_default["report"]["drawn"] is True
-    assert [row["kind"] for row in narrowed_by_default["report"]["rows"]] == ["smaller_definition_font"]
+    (default,) = _web_render(_mers_request(), tmp_path / "default")["metadata"]["labelFitReports"]
+    assert default["report"]["drawn"] is True
+    assert [row["kind"] for row in default["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
 
     searches = LabelFitRowSearches()
-    (entry,) = _web_render(_mers_request(track_narrowing=False), tmp_path, searches)["metadata"]["labelFitReports"]
+    (entry,) = _web_render(_mers_request(track_narrowing=False, definition_font=17.5), tmp_path, searches)[
+        "metadata"
+    ]["labelFitReports"]
     assert entry["report"]["drawn"] is True
     # The record is named by its drawn index too: "Edit Species / Strain…" finds its definition by it.
     assert [(record["recordId"], record["recordIndex"], record["labelKind"]) for record in entry["report"]["records"]] == [
@@ -333,28 +389,26 @@ def test_a_definition_over_the_tracks_offers_the_center_reserved_radius_that_nar
     ]
     assert [row["kind"] for row in entry["report"]["rows"]] == ["smaller_definition_font", "narrow_tracks"]
     font = searches.row(entry["rowToken"], "smaller_definition_font")
-    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 12.5})
+    assert (font["status"], font["values"]) == ("found", {DEFINITION_FONT_PATH: 13.0})
     narrow = searches.row(entry["rowToken"], "narrow_tracks")
     # The radius is a track option of the request, not a config path: the Web writes it by the request's name.
     assert (narrow["status"], narrow["values"], narrow["trackOptions"]) == (
-        "found_with_notice", {}, {"centerReservedRadius": 231.99}
+        "found", {}, {"centerReservedRadius": 247.31}
     )
     assert font["trackOptions"] == {}
-    assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 231.99}]
-    assert narrow["note"] == "1 definition line still overlaps a track"
+    assert narrow["settings"] == [{"name": "Center Reserved Radius", "unit": "px", "value": 247.31}]
+    assert narrow["note"] is None
 
-    (narrowed,) = _web_render(_mers_request(231.99, track_narrowing=False), tmp_path / "narrowed")["metadata"][
-        "labelFitReports"
-    ]
-    assert narrowed["report"]["notice"] == ["The definition text overlaps a track (1 line)."]
-    # An explicit Center Reserved Radius is never offered again: only the font row is left.
-    assert [row["kind"] for row in narrowed["report"]["rows"]] == ["smaller_definition_font"]
+    narrowed = _web_render(
+        _mers_request(247.31, track_narrowing=False, definition_font=17.5), tmp_path / "narrowed"
+    )["metadata"]["labelFitReports"]
+    assert narrowed == []
 
 
-@pytest.mark.parametrize("radius", [231.99, 100.0])
+@pytest.mark.parametrize("radius", [200.0, 100.0])
 def test_an_explicit_center_reserved_radius_leaves_out_the_narrow_row(tmp_path, radius: float) -> None:
-    """PD-OI-097 (N-a): the narrow row writes ``center_reserved_radius`` only when none is set; with one set (the
-    row's own value or a smaller one), the definition over a track offers the smaller font alone."""
+    """PD-OI-097 (N-a): the narrow row writes ``center_reserved_radius`` only when none is set; with one set that
+    leaves the definition over a track, the notice offers the smaller font alone."""
 
     (entry,) = _web_render(_mers_request(radius), tmp_path)["metadata"]["labelFitReports"]
     assert entry["report"]["drawn"] is True

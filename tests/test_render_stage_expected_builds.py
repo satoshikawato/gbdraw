@@ -26,12 +26,15 @@ from tests.utils.render_stage_equivalence import (
     Mode,
     OptionSpec,
     Placeholders,
+    TEST_INPUTS,
     Variant,
     base_arguments,
     cost_chunks,
     error_rule_failures,
     matrix_variants,
     state_arguments,
+    synthetic_record,
+    write_genbank,
     write_tables,
 )
 
@@ -84,7 +87,7 @@ _TITLE = frozenset({"plot_title_content", "circular_plot_title_content"})
 _FEATURE_PLACEMENT = frozenset({"feature_layers", "feature_dom_index"})
 _LABEL_FILTER = _FEATURE_PLACEMENT | {"label_filter_maps"}
 _FEATURE_EDIT = _FEATURE_PLACEMENT | _LEGEND | {"catalog_normalization", "interactive_context"}
-_DEPTH_DATA = frozenset({"depth_track_data", "depth_content"})
+_DEPTH_DATA = frozenset({"depth_track_config", "depth_content"})
 _DEPTH_FRAME = _DEPTH_DATA | {"depth_frame"}
 
 # The stages that hold the content each option changes. An option not named builds nothing.
@@ -126,7 +129,8 @@ EXPECTED_BUILDS: Mapping[str, frozenset[str]] = {
         _DEPTH_DATA,
     ),
     **dict.fromkeys(("depth_track_tick_font_size", "depth_tick_font_size"), _DEPTH_DATA | _LEGEND_LAYOUT),
-    "depth_track_label": _DEPTH_DATA | _LEGEND,
+    # The Depth config is keyed by the style fields it reads, not the label (OV-1229).
+    "depth_track_label": _LEGEND,
     "conservation_labels": _LEGEND,
     # The pairwise identity legend is computed from the filtered comparisons.
     **dict.fromkeys(("evalue", "bitscore", "alignment_length"), _LEGEND),
@@ -184,7 +188,8 @@ _RADIAL_LAYOUT_STAGES = _CIRCULAR_LABELS | {
     "conservation_content", "annotation_content",
 }
 
-# The per-record Circular contents a Multi-Record merge takes: it rebuilds with any of them.
+# The per-record Circular contents a Multi-Record merge takes: the record part that copies
+# a rebuilt content, and the record group over its parts, rebuild with any of them.
 _RECORD_MERGE_INPUTS = frozenset(
     {
         "axis_content", "circular_record_content", "ticks_content", "gc_content_content", "gc_skew_content",
@@ -262,15 +267,34 @@ CONTENT_BUILDS: Mapping[str, frozenset[str]] = {
 
 # The Circular record content draws the embedded labels of the placed labels: it rebuilds with them.
 _PLACED_LABELS = frozenset({"circular_labels", "circular_radial_labels"})
-# The ribbons take the feature DOM index and both whole record placements,
-# whose comparison extents these track contents set; they rebuild with them.
+# The ribbons take the feature DOM index and both records' comparison endpoints,
+# whose comparison anchors these track contents set; they rebuild with them.
 _RIBBON_INPUTS = frozenset({"feature_dom_index", "gc_content_content", "depth_content", "annotation_content"})
 # The stages whose results the catalog item reads: it rebuilds when one of them does
-# (Circular: the rings and the merged Multi-Record records too; not the axis circle).
+# (Circular: the rings and the record parts of a Multi-Record record too; not the axis circle).
 _CATALOG_INPUTS = frozenset(
     {
         "record_content", "circular_record_content", "annotation_content", "comparison_content",
-        "interactive_context", "conservation_content", "record_merge",
+        "interactive_context", "conservation_content", "record_part", "record_merge",
+    }
+)
+# The catalog contents: each rebuilt one builds its ``catalog_snapshot`` (the
+# reads the item is keyed by); an ``interactive_context`` rebuild alone builds none.
+_CATALOG_CONTENTS = _CATALOG_INPUTS - {"interactive_context"}
+# Options that change no catalog read (feature and match ids and fills): the
+# catalog item must be a hit even when a content it reads rebuilds, so the page
+# keeps its catalog. Options a case does not have are skipped.
+_CATALOG_KEPT_OPTIONS = frozenset(
+    {
+        # Strokes.
+        "axis_stroke_color", "axis_stroke_width", "line_stroke_color", "line_stroke_width",
+        "scale_stroke_color", "scale_stroke_width",
+        # Fonts.
+        "definition_font_size", "scale_font_size", "ruler_label_font_size",
+        # Scale, comparison height, track heights and radii.
+        "scale_interval", "comparison_height", "feature_height", "track_axis_gap",
+        # GC toggles.
+        "gc_content_mode", "show_gc_content_axis", "show_gc_content_ticks",
     }
 )
 
@@ -321,10 +345,14 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
     if allowed & _PLACED_LABELS:
         allowed |= {"circular_record_content"}
     if allowed & _RECORD_MERGE_INPUTS:
-        allowed |= {"record_merge"}
+        allowed |= {"record_part", "record_merge"}
     if _moves_bounds(option_id, allowed):
         allowed |= {"composition_plan"}
-    return allowed | ({"catalog_item"} if allowed & _CATALOG_INPUTS else frozenset())
+    if allowed & _CATALOG_CONTENTS:
+        allowed |= {"catalog_snapshot"}
+    if allowed & _CATALOG_INPUTS and option_id not in _CATALOG_KEPT_OPTIONS:
+        allowed |= {"catalog_item"}
+    return allowed
 
 
 def p1_p2_variants(case_id: str, *, include_slow: bool) -> list[tuple[OptionSpec, Variant]]:
@@ -442,3 +470,115 @@ def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definit
     assert outcome.error is None
     assert "circular_plot_title_content" in outcome.stages.builds
     assert "circular_definition_content" not in outcome.stages.builds
+
+
+@pytest.mark.parametrize("case_id", ["C3", "L2"])
+def test_a_depth_label_change_rebuilds_no_depth_path(case_id: str, tables: Path, tmp_path: Path) -> None:
+    """OV-1229: the label is a legend input; the Depth config and path do not read it."""
+
+    case = CASES[case_id]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["depth_track_label"], first_variant_only=True)
+    outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
+    assert outcome.error is None
+    assert "depth_content" not in outcome.stages.builds
+    assert set(outcome.stages.builds) <= allowed_builds("depth_track_label", case.mode)
+
+
+# --- Record parts and narrowed drawer keys -----------------------------------------------------
+
+
+def _hmmt_regions(path: Path) -> list[str]:
+    """Two HmmtDNA records on one Multi-Record Canvas (whole, 1-9000): the second renames shared ids."""
+
+    gbk = TEST_INPUTS / "HmmtDNA.gbk"
+    path.write_text(f"gbk\tregion\n{gbk}\t1-16569\n{gbk}\t1-9000\n")
+    return ["--records_table", str(path), "--multi_record_canvas", "--gc", "--skew"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(("--definition_font_size", "10"), id="definition-font"),
+        pytest.param(("--scale_interval", "4000"), id="scale-interval"),
+        pytest.param(("--center_reserved_radius", "150"), id="custom-stack"),
+    ],
+)
+def test_a_multi_record_circular_layout_change_copies_only_the_record_parts_it_rebuilds(
+    change: tuple[str, ...], tmp_path: Path
+) -> None:
+    """The feature contents read the feature lanes alone, not the definition band or
+    the other slots, so they hit; each record copies only the parts that rebuilt."""
+
+    base = _hmmt_regions(tmp_path / "records.tsv")
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    before = harness.warm(base)
+    assert before.error is None
+    outcome = harness.warm([*base, *change])
+    assert outcome.error is None and outcome.reply != before.reply
+    builds = outcome.stages.builds
+    assert "circular_record_content" not in builds
+    rebuilt_parts = sum(count for name, count in builds.items() if name in _RECORD_MERGE_INPUTS)
+    assert 0 < builds.get("record_part", 0) == rebuilt_parts
+    assert outcome.stages.hits.get("record_part", 0) > 0
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(("--definition_font_size", "10"), id="definition-font"),
+        pytest.param(("--scale_interval", "4000"), id="scale-interval"),
+        pytest.param(("--center_reserved_radius", "150"), id="custom-stack"),
+    ],
+)
+def test_a_circular_layout_change_that_moves_no_label_keeps_the_label_contents(
+    change: tuple[str, ...], tmp_path: Path
+) -> None:
+    """The external label leaders and text read the render profile, not the radial layout."""
+
+    base = [*_hmmt_regions(tmp_path / "records.tsv"), "--labels", "out"]
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    before = harness.warm(base)
+    assert before.error is None
+    outcome = harness.warm([*base, *change])
+    assert outcome.error is None and outcome.reply != before.reply
+    # The placement may run again (it avoids the centre definition); it places the same labels.
+    assert not {"label_leaders_content", "label_text_content"} & set(outcome.stages.builds)
+
+
+def _two_compared_records(directory: Path) -> list[str]:
+    """Two synthetic records and three tblastx-style hits between them."""
+
+    first = write_genbank(directory / "a.gb", [synthetic_record("rec_a", seed=1, gc=0.3)])
+    second = write_genbank(directory / "b.gb", [synthetic_record("rec_b", seed=2, gc=0.6)])
+    hits = directory / "a_b.blast"
+    hits.write_text(
+        "".join(
+            f"rec_a\trec_b\t{identity}\t300\t0\t0\t{start}\t{start + 299}\t{start + 99}\t{start + 398}\t1e-30\t200\n"
+            for identity, start in ((95.0, 100), (80.0, 1000), (70.0, 2200))
+        )
+    )
+    return ["--gbk", str(first), str(second), "-b", str(hits), "--show_labels", "all"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(("--definition_font_size", "20"), id="definition-font"),
+        pytest.param(("--record_label", "Label A", "--record_label", "Label B"), id="record-label"),
+    ],
+)
+def test_a_linear_definition_change_keeps_the_ribbons(change: tuple[str, ...], tmp_path: Path) -> None:
+    """The ribbons read each record's row, X scale and comparison anchors, not the
+    record's own extents, which a definition change moves."""
+
+    base = _two_compared_records(tmp_path)
+    harness = EquivalenceHarness("linear", tmp_path / "out")
+    before = harness.warm(base)
+    assert before.error is None
+    outcome = harness.warm([*base, *change])
+    assert outcome.error is None and outcome.reply != before.reply
+    assert "comparison_content" not in outcome.stages.builds
+    assert outcome.stages.hits.get("comparison_content") == 1

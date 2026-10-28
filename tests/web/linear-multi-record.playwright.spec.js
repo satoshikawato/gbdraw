@@ -2704,6 +2704,8 @@ ${origin}
     return {
       defaultColor,
       targetId: target.svg_id,
+      // The feature instance Python composes from the catalog identity.
+      targetInstance: `${target.biological_feature_id}@${target.record_key}`,
       rules: app.manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({
         feat, qual, val, color, cap
       }))
@@ -2712,7 +2714,8 @@ ${origin}
   expect(reset.rules).toContainEqual({
     feat: 'CDS',
     qual: 'hash',
-    val: reset.targetId.replace(/_record_\d+$/i, ''),
+    // PD-OI-069 revision 2: "this" names the feature instance.
+    val: `^${reset.targetInstance}$`,
     color: reset.defaultColor,
     cap: 'other proteins'
   });

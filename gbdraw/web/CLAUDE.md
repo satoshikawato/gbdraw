@@ -72,6 +72,14 @@ resources and parsed sources they built for the files they staged, unless they
 changed them; any other helper lookup publishes nothing. A build that failed is never kept. Release every cache fill with the Worker; never reuse a final
 reply.
 
+While a drawing's draft holds an input file that its request omits (a hidden
+Depth file), the page keeps the file's bytes staged until the draft no longer
+holds the file. The cache may also keep, for that drawing only, the file's
+parsed source and the stage results of the last render that used it; these are
+released when the draft no longer holds the file, when a render of that drawing
+uses the file again, or when another drawing renders. Held files never enter
+the request or the Session.
+
 The reply carries a piece's children text only when the request did not name
 its revision among the segments the page holds (`heldSegments`). The page
 sanitizes each children text once per revision, keeps the sanitized text on the
@@ -308,14 +316,27 @@ Guards:
 
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
 Import, Undo or Redo, a Session replacement, the owner reconcile inside a
-successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
+successful Generate (`pruneUnmatchedFeatureOverrides` in
 `services/feature-visibility.js`), **Remove N unmatched feature edits**
 (`removeUnresolvedFeatureEdits`), or **Delete settings** of a record whose
 drawing is turned off, which deletes that record's per-feature edits, Feature
 placements, and the annotations that target that record. Result selection,
 mount, record selection (including turning a record's drawing on or off), a
 drawing switch, hiding, and reflow never touch them. A source-replacing Generate keeps
-the rows of records that are turned off. Per-feature edits
+the rows of records that are turned off. The owner reconcile prunes only in a
+source-replacing Generate; in every successful Generate it moves the rows of a
+record whose request key changed with its view (a Circular record drawn alone or
+on the Multi-Record Canvas, a Linear File card that draws all of its records or
+one of them) to its new key, and keeps the rows of a record that the request does
+not draw under that record's identity (`recordKeyMoves` in
+`services/record-draw-selection.js`): its per-feature edits, Feature placements,
+feature strokes, and annotation targets. It also brings the rows a drawn
+record has under its other keys (its key drawn alone or on the Multi-Record
+Canvas, or its identity) into its key, field by field: the row moved from its previous key, or else the
+row already under its key, wins. The `hash` color rules of those records move
+with the specific rules the Generate commits (`moveInstanceRuleRecords` in
+`services/feature-selector.js`); of two rules that then name one feature
+instance, the record's own stays and the other is dropped. Per-feature edits
 (`featureOverrides`) and Feature placements live in the drawing they were made
 in (R15) and are keyed by
 `JSON.stringify([recordKey, biologicalFeatureId])`. Two drawings can use the
@@ -344,8 +365,9 @@ change through `showEditorIntent` (R3):
   and colors the rules draw;
 - a Change Scope choice;
 - until each drawing binds its own auxiliary file cards, the Specific rules file card Remove for a drawing that is not shown, which
-  calls `moveLegendRecords` (`takeBackFileRulesOfHiddenDrawing` in
-  `app/feature-editor/rule-actions.js`);
+  calls `moveLegendRecords` (`takeBackRuleRows` in
+  `app/feature-editor/rule-actions.js`, which Delete settings also uses for the
+  `hash` color rows of a turned-off record's feature instances);
 - a Legend rename, the Restore of deleted Legend rows, and the Sort and Move
   of Legend rows (a rename of a row that no rule or feature names writes the
   row's name in the step the Legend name input or the popup's rename action
@@ -359,7 +381,8 @@ change through `showEditorIntent` (R3):
 
 Undo and Redo, a Session load or replacement, Reset Settings, Generate, and the
 binding of a Result install or rebuild it outside these steps (Python's Legend
-rows and colors, and the edits a source-replacing Generate prunes). The Legend
+rows and colors, the edits a source-replacing Generate prunes, and the feature
+strokes a Generate moves to a record's new key). The Legend
 name input also writes an unchanged copy of the list outside a step, so that it
 shows the row's name again after a refused or cancelled rename. No other code
 calls the paint slice's writers; a new caller, or a caller that moves to
@@ -540,7 +563,7 @@ that number, and anything else is a typed `INPUT_INVALID`
 thresholds before LOSAT) evaluates the domains generated from
 `gbdraw/mode_profiles.py` into `js/mode-profiles.generated.js`
 (`resolveComparisonThresholds` in `js/mode-profiles.js`). Generate never rewrites
-the draft.
+the draft settings; the editor edits it moves to a record's new key are R2's.
 
 Guards: `tests/web/option-input-integrity.test.mjs` (every projected numeric
 draft field either rejects `NaN`, `1e-50x`, `-5`, `0`, and `12.5` with a typed

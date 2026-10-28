@@ -935,7 +935,6 @@ def test_feature_width_75_keeps_outer_labels_outside_local_feature_tracks() -> N
     geometry = CircularCanvasGeometry(
         radius=base_radius,
         track_ratio=base_track_ratio,
-        dpi=int(cfg.canvas.dpi),
         length_param="short",
         track_ratio_factors=tuple(cfg.canvas.circular.track_ratio_factors["short"]),
     )

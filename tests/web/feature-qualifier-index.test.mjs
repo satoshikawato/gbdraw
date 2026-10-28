@@ -27,11 +27,12 @@ const create = (features) => {
   return { actions, extractedFeatures };
 };
 
-// FE-09 (D-14, PD-OI-069): Python matches a color rule only by the stable hash
-// (gbdraw/features/selector_values.py), so "This feature only" writes the
-// stable hash even when duplicate record IDs give several rendered instances
-// one hash. Those duplicates then share the rule.
-test('This feature only writes the stable hash Python matches, including for duplicate record IDs', () => {
+// FE-09: a feature's single-feature condition is its stable hash, also when
+// duplicate record IDs give several rendered instances one hash. It only
+// prepares the matches of a color action; the rule "This feature only" writes
+// is Python's and names the feature instance (PD-OI-069 revision 2,
+// tests/test_web_rule_synthesis.py).
+test('the single-feature condition is the stable hash, including for duplicate record IDs', () => {
   const first = feature('CDS', 'same_record_1');
   const second = feature('CDS', 'same_record_2');
   const otherType = feature('tRNA', 'same_record_3');

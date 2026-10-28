@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "676ff36bb23523664bc2413d874a01eec9170e1c",
+  "release": "v0.14.2",
+  "writer": "gbdraw/circular.py --session_output (CLI sidecar), run from `git archive v0.14.2 gbdraw` on PYTHONPATH",
+  "command": "PYTHONPATH=<git archive v0.14.2 gbdraw> python -c 'from gbdraw.cli import main; main()' circular --gbk HmmtDNA.gbk -p hearbal_garden -o hmmtdna_hearbal -f svg --session_output hmmtdna_hearbal.gbdraw-session.json.gz",
+  "workingDirectory": "a directory holding only HmmtDNA.gbk",
+  "inputs": {
+    "gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk": "7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f"
+  },
+  "sha256": "95dc079703a97b4a77992e20e2a262b4f3956771ff4b55dda2db49aa07abafd5",
+  "compression": "gzip -n -9",
+  "sessionVersion": 48,
+  "requestSchema": 9,
+  "palette": "renderRequest.diagramOptions.colors.defaultColorsPalette and cliInvocation.args name the former palette name hearbal_garden"
+}

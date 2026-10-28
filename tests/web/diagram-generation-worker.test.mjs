@@ -371,6 +371,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     const helperCalls = [];
     let interruptBuffer = null;
     let helperReply = () => 'null';
+    let wrapperNotice = null;
     const fs = new Proxy({ analyzePath: () => ({ exists: false }), readdir: () => [] }, {
       get: (target, name) => target[name] ?? (() => {})
     });
@@ -387,7 +388,11 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
             helperCalls.push(name);
             return helperReply(name, ...args);
           },
-          run_canonical_request_wrapper: () => ({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } })
+          // CAPACITY-WARN: Python calls its last argument with each sentence while it renders.
+          run_canonical_request_wrapper: (...args) => {
+            if (wrapperNotice) args.at(-1)(wrapperNotice);
+            return { error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } };
+          }
         })[name]
       }
     };
@@ -406,6 +411,21 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     run(10);
     await settle();
     assert.deepEqual(replies.filter(({ type }) => type === 'run').map(({ requestId, ok }) => [requestId, ok]), [[10, true]]);
+    // A notice Python sends while it renders goes out as a progress message of that run, before its result.
+    replies.length = 0;
+    wrapperNotice = 'NC_1: 195 outer labels at 14 pt need about 1.4 times the room around the map, so they may not fit.';
+    run(13);
+    await settle();
+    assert.deepEqual(replies.filter(({ type }) => type !== 'test-lifecycle').map(({ type, requestId, stage, notice }) => (
+      [type, requestId, stage, notice]
+    )), [
+      ['progress', 13, 'preparing-resources', undefined],
+      ['progress', 13, 'rendering', undefined],
+      ['progress', 13, 'rendering', wrapperNotice],
+      ['progress', 13, 'finalizing', undefined],
+      ['run', 13, undefined, undefined]
+    ]);
+    wrapperNotice = null;
     replies.length = 0;
     run(11);
     booted[0] = 2;

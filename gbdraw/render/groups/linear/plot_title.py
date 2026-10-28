@@ -15,7 +15,6 @@ def plot_title_content(
     *,
     font_family: str,
     font_size: float,
-    dpi: int,
 ) -> GroupContent:
     """The ``plot_title_content`` stage: one centered, mixed-style title line."""
 
@@ -26,7 +25,7 @@ def plot_title_content(
         if (part_text := part.get("text"))
     ]
     # The painted box of the drawn tspans, as Circular titles measure theirs (OV-1608).
-    width, height = measure_mixed_text_line(styled or [(" ", "normal")], font_family, float(font_size), dpi)
+    width, height = measure_mixed_text_line(styled or [(" ", "normal")], font_family, float(font_size))
     text = Text(
         "",
         insert=(0, 0),

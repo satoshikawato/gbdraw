@@ -50,7 +50,6 @@ for query_id in ids(query):
 
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime_module, "_CLI_DIALECTS", {})
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
     monkeypatch.setattr(runtime_module, "_TASK_VALUES", {}, raising=False)
 

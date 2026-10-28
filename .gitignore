@@ -21,6 +21,8 @@ wheels/
 share/python-wheels/
 *.egg
 MANIFEST
+# Native LOSAT is installed by `gbdraw setup-losat`, never kept in the package tree.
+/gbdraw/bin/
 
 # --- Pyodide / Web Artifacts ---
 gbdraw/web/*.whl

@@ -31,6 +31,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
   join(tempRoot, 'mode-profiles.generated.js')
 );
+// color-utils.js reads the generated palette name aliases.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'contracts', 'schema.generated.js'),
+  join(tempRoot, 'contracts', 'schema.generated.js')
+);
 // The track-slot leaves the slot editors import.
 for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js', 'circular-track-slot-model.js']) {
   await cp(

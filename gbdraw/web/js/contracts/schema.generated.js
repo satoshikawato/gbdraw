@@ -120,6 +120,15 @@ export const LEGEND_POSITIONS = Object.freeze({
   linear: Object.freeze(['left', 'right', 'top', 'bottom', 'none'])
 });
 
+// gbdraw/features/ids.py: FEATURE_INSTANCE_SEPARATOR
+export const FEATURE_INSTANCE_SEPARATOR = '@';
+
+// gbdraw/api/record_planning.py: CLI_RECORD_KEY_PREFIX
+export const CLI_RECORD_KEY_PREFIX = 'record-';
+
+// gbdraw/api/record_planning.py: EXPANDED_RECORD_KEY_SEPARATOR
+export const EXPANDED_RECORD_KEY_SEPARATOR = ':';
+
 // gbdraw/config/models/objects.py: UNSET_NUMBER_SPELLINGS
 /** @type {readonly string[]} */
 export const CONFIG_UNSET_NUMBER_SPELLINGS = Object.freeze(['', 'auto', 'none', 'null']);
@@ -156,6 +165,12 @@ export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologica
 /** @type {Readonly<Record<'data-gbdraw-pairwise-match-id', string>>} */
 export const LEGACY_SVG_ATTRIBUTE_RENAMES = Object.freeze({
   "data-gbdraw-pairwise-match-id": 'data-gbdraw-match-id'
+});
+
+// gbdraw/io/colors.py: PALETTE_NAME_ALIASES
+/** @type {Readonly<Record<'hearbal_garden', string>>} */
+export const PALETTE_NAME_ALIASES = Object.freeze({
+  hearbal_garden: 'herbal_garden'
 });
 
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()

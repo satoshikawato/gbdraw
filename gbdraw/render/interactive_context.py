@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Sequence, TypeVar, cast
 
 from Bio.SeqRecord import SeqRecord
@@ -43,6 +44,72 @@ def require_interactive_svg_metadata(
         raise ExportError(
             f"Interactive SVG metadata generation failed{suffix}"
         ) from exc
+
+
+@dataclass(frozen=True)
+class InteractiveAnnotationRow:
+    """What the interactive context reads from one resolved Region Annotation.
+
+    No style and no display parts: the context draws nothing, so a style
+    change keeps every row (and the ``interactive_context`` keyed by them).
+    """
+
+    id: str
+    set_id: str
+    record_index: int
+    segments: tuple[tuple[int, int], ...]
+    midpoint_bp: float
+    span_bp: int
+    label: str
+    mark: str
+    lane: int | None
+    legend_label: str | None
+    # Ordered pairs, not a mapping: the payload keeps the key order, so the
+    # stage key must tell two orders apart (a mapping is keyed sorted).
+    metadata: tuple[tuple[str, str], ...]
+
+    def payload(self) -> dict[str, object]:
+        """The context's annotation payload for this row."""
+
+        return {
+            "id": self.id,
+            "set_id": self.set_id,
+            "track_id": "",
+            "record_index": self.record_index,
+            "segments": [list(segment) for segment in self.segments],
+            "midpoint_bp": self.midpoint_bp,
+            "span_bp": self.span_bp,
+            "label": self.label,
+            "mark": self.mark,
+            "lane": self.lane,
+            "legend_label": self.legend_label,
+            "metadata": dict(self.metadata),
+        }
+
+
+def interactive_annotation_rows(
+    bundle: ResolvedAnnotationBundle | None,
+) -> tuple[InteractiveAnnotationRow, ...]:
+    """The rows the interactive context reads from resolved annotations, in order."""
+
+    if bundle is None:
+        return ()
+    return tuple(
+        InteractiveAnnotationRow(
+            id=item.id,
+            set_id=item.set_id,
+            record_index=item.record_index,
+            segments=item.segments,
+            midpoint_bp=item.midpoint_bp,
+            span_bp=item.span_bp,
+            label=item.label,
+            mark=item.mark,
+            lane=item.lane,
+            legend_label=item.legend_label,
+            metadata=tuple(item.metadata.items()),
+        )
+        for item in bundle.annotations
+    )
 
 
 def build_interactive_svg_context(
@@ -88,16 +155,62 @@ def build_interactive_svg_context(
     resolved_color_rules = specific_color_rules
     if resolved_color_rules is None and color_table is not None and default_colors is not None:
         resolved_color_rules, _ = preprocess_color_tables(color_table, default_colors)
+    resolved_annotations = (
+        annotations
+        if annotations is None or isinstance(annotations, ResolvedAnnotationBundle)
+        else resolve_annotations(
+            annotations,
+            list(records),
+            mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),
+            record_transforms=record_transforms,
+        )
+    )
+    return interactive_svg_context(
+        records,
+        selected_features_set=selected_features_set,
+        feature_visibility_rules=resolved_visibility_rules,
+        record_features=record_features,
+        specific_color_rules=resolved_color_rules,
+        orthogroups=orthogroups,
+        linear_rendered_feature_ids=linear_rendered_feature_ids,
+        annotation_rows=interactive_annotation_rows(resolved_annotations),
+        mode=mode,
+        comparison_sequence_records=comparison_sequence_records,
+        collinearity_search_scope=collinearity_search_scope,
+        record_transforms=record_transforms,
+    )
+
+
+def interactive_svg_context(
+    records: Sequence[SeqRecord],
+    *,
+    selected_features_set: Sequence[str] | None,
+    feature_visibility_rules: list[dict[str, Any]] | None,
+    record_features: Sequence[ResolvedRecordFeatureInputs],
+    specific_color_rules: Mapping[str, Any] | None,
+    orthogroups: object | None,
+    linear_rendered_feature_ids: bool,
+    annotation_rows: tuple[InteractiveAnnotationRow, ...],
+    mode: str | None,
+    comparison_sequence_records: Sequence[Sequence[SeqRecord]] | None,
+    collinearity_search_scope: str | None,
+    record_transforms: Sequence[RecordDisplayTransform] | None,
+) -> InteractiveSvgContext:
+    """The ``interactive_context`` stage: the context from resolved rules and annotation rows.
+
+    Keyed by the rows the context reads (``interactive_annotation_rows``), not
+    by the resolved annotations, whose style it never reads.
+    """
 
     record_list = list(records)
     record_prepared_input_metric("interactiveFeatureTraversalCount")
     payload = extract_features_from_records_payload(
         record_list,
         selected_features=selected_features_set,
-        feature_visibility_rules=resolved_visibility_rules,
+        feature_visibility_rules=feature_visibility_rules,
         record_features=record_features,
         # The extractor is annotated dict but only reads the mapping.
-        specific_color_rules=cast("dict[Any, Any] | None", resolved_color_rules),
+        specific_color_rules=cast("dict[Any, Any] | None", specific_color_rules),
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
     )
@@ -127,31 +240,7 @@ def build_interactive_svg_context(
                 orthogroup_payload,
             )
 
-    annotation_payload: list[dict[str, object]] = []
-    if annotations is not None:
-        resolved = annotations if isinstance(annotations, ResolvedAnnotationBundle) else resolve_annotations(
-            annotations,
-            record_list,
-            mode=mode or ("linear" if linear_rendered_feature_ids else "circular"),
-            record_transforms=record_transforms,
-        )
-        annotation_payload = [
-            {
-                "id": item.id,
-                "set_id": item.set_id,
-                "track_id": "",
-                "record_index": item.record_index,
-                "segments": [list(segment) for segment in item.segments],
-                "midpoint_bp": item.midpoint_bp,
-                "span_bp": item.span_bp,
-                "label": item.label,
-                "mark": item.mark,
-                "lane": item.lane,
-                "legend_label": item.legend_label,
-                "metadata": dict(item.metadata),
-            }
-            for item in resolved.annotations
-        ]
+    annotation_payload = [row.payload() for row in annotation_rows]
 
     resolved_mode = mode or ("linear" if linear_rendered_feature_ids else "circular")
     sequence_sources: list[dict[str, object]] = []
@@ -210,6 +299,9 @@ def build_interactive_svg_context(
 
 
 __all__ = [
+    "InteractiveAnnotationRow",
     "build_interactive_svg_context",
+    "interactive_annotation_rows",
+    "interactive_svg_context",
     "require_interactive_svg_metadata",
 ]

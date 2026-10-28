@@ -31,7 +31,7 @@ from functools import partial
 from .api.request_render import _without_derived_losat_entries
 from .circular import circular_main
 from .linear import linear_main
-from .exceptions import LabelLeadersCrossWarning, GbdrawError
+from .exceptions import LabelLeadersCrossWarning, LabelsMayNotFitWarning, GbdrawError
 from .render.output_paths import CLI_OVERWRITE_OPTION, OutputExistsError
 from .version import __version_display__
 
@@ -161,7 +161,7 @@ def _gui_parser() -> argparse.ArgumentParser:
 
 
 class _CliWarningPrinter:
-    """Print gbdraw's label fit warning like its errors; pass other warnings on."""
+    """Print gbdraw's label fit warnings like its errors; pass other warnings on."""
 
     def __init__(self, show_other: Callable[..., None]) -> None:
         self._show_other = show_other
@@ -175,7 +175,7 @@ class _CliWarningPrinter:
         file: TextIO | None = None,
         line: str | None = None,
     ) -> None:
-        if issubclass(category, LabelLeadersCrossWarning):
+        if issubclass(category, (LabelLeadersCrossWarning, LabelsMayNotFitWarning)):
             print(f"WARNING: {message}", file=sys.stderr)
             return
         self._show_other(message, category, filename, lineno, file, line)
@@ -208,6 +208,8 @@ def main() -> None:
     with warnings.catch_warnings(), _without_derived_losat_entries():
         # Crossing outer leaders draw the figure and print their report (LP-D46).
         warnings.simplefilter("always", LabelLeadersCrossWarning)
+        # Labels near the room around the map warn before they are placed (CAPACITY-WARN).
+        warnings.simplefilter("always", LabelsMayNotFitWarning)
         warnings.showwarning = _CliWarningPrinter(warnings.showwarning)
         try:
             if command == "circular":

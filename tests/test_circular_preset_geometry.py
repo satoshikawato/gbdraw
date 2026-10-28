@@ -9,6 +9,8 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+# Captured on 5dd1b69f; the values that moved when tick labels were laid out in their drawn box were
+# re-captured on 2026-10-25 (OV-165, the fixture's "recaptured" note).
 ORACLE_COMMIT = "5dd1b69fe066bc0b39cff7e072bec003c6e654ae"
 ORACLE_PATH = REPO_ROOT / "tests" / "fixtures" / "circular_preset_oracle" / f"{ORACLE_COMMIT}.json"
 

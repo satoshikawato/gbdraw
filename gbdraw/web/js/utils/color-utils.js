@@ -1,6 +1,7 @@
 // @ts-check
 import { namedColorHex } from './named-colors.js';
 import { t } from './i18n.js';
+import { PALETTE_NAME_ALIASES } from '../contracts/schema.generated.js';
 /**
  * @param {string} hex
  * @returns {{ r: number, g: number, b: number }}
@@ -313,6 +314,17 @@ export const normalizePaletteColors = (colors = {}) => {
 };
 
 /**
+ * The current name of the palette `name` names: a former name
+ * (`PALETTE_NAME_ALIASES` of gbdraw/io/colors.py) reads as its current one.
+ * @param {string} name
+ * @returns {string}
+ */
+export const currentPaletteName = (name) => (Object.hasOwn(PALETTE_NAME_ALIASES, name)
+  ? PALETTE_NAME_ALIASES[/** @type {keyof typeof PALETTE_NAME_ALIASES} */ (name)] : name);
+
+/**
+ * The palettes by current name. A former name looks its palette up too but is
+ * not enumerable, so lists show only current names (as `packaged_color_palettes`).
  * @param {Record<string, Record<string, string> | string> | null} [palettes] the palette file: palette tables and a `title`
  * @returns {Record<string, Record<string, string>>}
  */
@@ -323,6 +335,11 @@ export const normalizePaletteDefinitions = (palettes = {}) => {
     if (name === 'title') return;
     // Every entry but `title` is a palette table.
     normalized[name] = normalizePaletteColors(/** @type {Record<string, string>} */ (colors || {}));
+  });
+  Object.entries(PALETTE_NAME_ALIASES).forEach(([former, current]) => {
+    if (Object.hasOwn(normalized, current)) {
+      Object.defineProperty(normalized, former, { value: normalized[current], enumerable: false });
+    }
   });
   return normalized;
 };

@@ -1,17 +1,18 @@
 """One LOSAT runtime owner for LOSATN, TLOSATX, and LOSATP.
 
-Resolution order, CLI dialect, argv, raw-cache args, and the runtime record
-are program data in ``gbdraw.comparisons.losat_runtime``. The integration
-tests at the end run whichever native LOSAT resolves (the bundled build in a
-source checkout) and reproduce the tracked tutorial evidence. Set
-``GBDRAW_TEST_LOSAT_BIN`` to run them against another LOSAT executable.
+Resolution order, argv, raw-cache args, and the runtime record are program
+data in ``gbdraw.comparisons.losat_runtime``. The integration tests at the end
+run whichever native LOSAT resolves (in CI, the managed release that
+``gbdraw setup-losat`` installs) and reproduce the tracked tutorial evidence.
+Set ``GBDRAW_TEST_LOSAT_BIN`` to run them against another LOSAT executable.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from contextlib import ExitStack
+import importlib.resources
 import json
+import logging
 import os
 from pathlib import Path
 import sys
@@ -38,7 +39,6 @@ from gbdraw.comparisons.losat_runtime import (
     LosatRuntime,
     LosatSearchArgs,
     build_losat_command,
-    detect_losat_cli_dialect,
     losat_cache_args,
     losat_runtime_record,
     resolve_losat_runtime,
@@ -64,16 +64,14 @@ log = os.environ.get("GBDRAW_FAKE_RUNTIME_LOG")
 if log:
     with open(log, "a", encoding="utf-8") as handle:
         handle.write(json.dumps([os.path.basename(sys.argv[0]), *args]) + "\\n")
-DIALECT = {dialect!r}
 if args in (["--version"], ["-version"]):
     print({version!r})
     sys.exit(0)
 if len(args) == 2 and args[1] == "--help":
-    print("      --query-gencode <QUERY_GENCODE>" if DIALECT == "v1" else "      -query_gencode <QUERY_GENCODE>")
+    print("      -query_gencode <QUERY_GENCODE>")
     sys.exit(0)
-rejected = "-query_gencode" if DIALECT == "v1" else "--query-gencode"
-if rejected in args:
-    sys.stderr.write("error: unexpected argument " + rejected + "\\n")
+if "--query-gencode" in args:
+    sys.stderr.write("error: unexpected argument --query-gencode\\n")
     sys.exit(2)
 def first_id(path):
     with open(path, encoding="utf-8") as handle:
@@ -89,12 +87,11 @@ print(query + "\\t" + subject + "\\t100.000\\t10\\t0\\t0\\t1\\t10\\t1\\t10\\t1e-
 def _fake_runtime(
     path: Path,
     *,
-    dialect: str = "v2",
     version: str = "losat 0.1.0",
 ) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        _FAKE_RUNTIME.format(python=sys.executable, dialect=dialect, version=version),
+        _FAKE_RUNTIME.format(python=sys.executable, version=version),
         encoding="utf-8",
     )
     path.chmod(0o755)
@@ -109,13 +106,12 @@ def _logged_calls(log: Path) -> list[list[str]]:
 
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime_module, "_CLI_DIALECTS", {})
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
 
 
-# Resolution order (design 3.6): explicit, conda, managed, bundled, PATH losat,
+# Resolution order (design 3.6): explicit, conda, managed, PATH losat,
 # PATH NCBI <program>, else unavailable. Identical for every program.
-RESOLUTION_ORDER = ("conda", "managed", "bundled", "path-losat", "path-ncbi")
+RESOLUTION_ORDER = ("conda", "managed", "path-losat", "path-ncbi")
 
 
 @pytest.fixture
@@ -125,7 +121,6 @@ def runtime_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     candidates = {
         "conda": tmp_path / "conda" / "bin" / "losat",
         "managed": tmp_path / "managed" / "LOSAT",
-        "bundled": tmp_path / "bundled" / "losat",
         "path-losat": tmp_path / "path" / "losat",
     }
     path_dir = tmp_path / "path"
@@ -135,7 +130,6 @@ def runtime_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PATH", str(path_dir))
     monkeypatch.setattr(runtime_module.sys, "prefix", str(venv_prefix))
     monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
-    monkeypatch.setattr(runtime_module, "_bundled_losat_resource", lambda: None)
 
     def enable(source: str, program: str) -> str:
         if source == "conda":
@@ -145,10 +139,6 @@ def runtime_sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         if source == "managed":
             binary = _fake_runtime(candidates["managed"])
             monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: binary)
-            return str(binary)
-        if source == "bundled":
-            binary = _fake_runtime(candidates["bundled"])
-            monkeypatch.setattr(runtime_module, "_bundled_losat_resource", lambda: binary)
             return str(binary)
         if source == "path-losat":
             return str(_fake_runtime(candidates["path-losat"]))
@@ -171,14 +161,12 @@ def test_every_program_resolves_runtimes_in_one_order(
     }
     winner = RESOLUTION_ORDER[winner_index]
 
-    with ExitStack() as stack:
-        runtime = resolve_losat_runtime(program, stack=stack)
+    runtime = resolve_losat_runtime(program)
 
     expected_kind = "ncbi-blast" if winner == "path-ncbi" else "losat"
     expected_source = {
         "conda": "conda",
         "managed": "managed",
-        "bundled": "bundled",
         "path-losat": "path",
         "path-ncbi": "path",
     }[winner]
@@ -187,6 +175,29 @@ def test_every_program_resolves_runtimes_in_one_order(
         expected_source,
         executables[winner],
     )
+
+
+def test_a_losat_binary_left_in_a_checkout_package_is_not_selected(
+    runtime_sources,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # gbdraw/bin/<platform>/losat was a tracked development build that
+    # outranked PATH. A copy left in a checkout is no longer a runtime source.
+    package_root = tmp_path / "package"
+    _fake_runtime(package_root / "bin" / "linux-x86_64" / "losat")
+    _fake_runtime(package_root / "bin" / "linux-x86_64" / "losat.exe")
+    original_files = importlib.resources.files
+    monkeypatch.setattr(
+        importlib.resources,
+        "files",
+        lambda package: package_root if package == "gbdraw" else original_files(package),
+    )
+    path_losat = runtime_sources("path-losat", "losatp")
+
+    runtime = resolve_losat_runtime("losatp")
+
+    assert runtime == LosatRuntime("losat", path_losat, "path")
 
 
 @pytest.mark.parametrize("program", PROGRAMS)
@@ -198,24 +209,20 @@ def test_explicit_runtimes_bypass_discovery_for_every_program(
         raise AssertionError("automatic discovery ran")
 
     monkeypatch.setattr(runtime_module, "_conda_losat_runtime", fail)
-    monkeypatch.setattr(runtime_module, "_bundled_losat_resource", fail)
     monkeypatch.setattr(runtime_module, "_path_executable", fail)
     monkeypatch.setattr(losat_setup_module, "managed_losat", fail)
 
-    with ExitStack() as stack:
-        explicit_losat = resolve_losat_runtime(program, losat_bin="/opt/losat", stack=stack)
-        explicit_ncbi = resolve_losat_runtime(
+    explicit_losat = resolve_losat_runtime(program, losat_bin="/opt/losat")
+    explicit_ncbi = resolve_losat_runtime(
+        program,
+        ncbi_blast_bin=f"/opt/ncbi/{NCBI_EXECUTABLES[program]}",
+    )
+    with pytest.raises(ValidationError, match="not both"):
+        resolve_losat_runtime(
             program,
-            ncbi_blast_bin=f"/opt/ncbi/{NCBI_EXECUTABLES[program]}",
-            stack=stack,
+            losat_bin="/opt/losat",
+            ncbi_blast_bin="/opt/ncbi/blast",
         )
-        with pytest.raises(ValidationError, match="not both"):
-            resolve_losat_runtime(
-                program,
-                losat_bin="/opt/losat",
-                ncbi_blast_bin="/opt/ncbi/blast",
-                stack=stack,
-            )
 
     assert explicit_losat == LosatRuntime("losat", "/opt/losat", "explicit")
     assert explicit_ncbi == LosatRuntime(
@@ -233,42 +240,35 @@ def test_unavailable_runtime_names_the_program_specific_ncbi_fallback(
     other = next(name for key, name in NCBI_EXECUTABLES.items() if key != program)
     _fake_runtime(tmp_path / "path" / other, version="2.16.0+")
 
-    with ExitStack() as stack, pytest.raises(ValidationError) as exc_info:
-        resolve_losat_runtime(program, stack=stack)
+    with pytest.raises(ValidationError) as exc_info:
+        resolve_losat_runtime(program)
 
     message = str(exc_info.value)
     assert "needs LOSAT or NCBI BLAST+" in message
     assert "`losat` was not found on PATH" in message
     assert f"`{NCBI_EXECUTABLES[program]}` was not found on PATH" in message
     assert "--losat_bin" in message and "--ncbi_blast_bin" in message
+    assert "gbdraw setup-losat" in message
+    assert "bundled" not in message
 
 
-# Argv goldens. LOSATP argv is byte-identical to the pre-owner builders for
-# both LOSAT dialects; only TLOSATX gencode flags differ between CLI v1 and v2.
+# Argv goldens. LOSATP argv is byte-identical to the pre-owner builders. LOSAT
+# and NCBI BLAST+ spell every option the same way (LOSAT CLI v2).
 _Q = Path("q.fasta")
 _S = Path("s.fasta")
 _IO = ["-query", "q.fasta", "-subject", "s.fasta", "-outfmt", "6"]
 ARGV_GOLDENS = {
     ("losatn", "v2"): ["/opt/losat", "blastn", *_IO, "-task", "megablast", "-num_threads", "4"],
-    ("losatn", "v1"): ["/opt/losat", "blastn", *_IO, "-task", "megablast", "-num_threads", "4"],
     ("losatn", "ncbi"): ["/opt/ncbi/blastn", *_IO, "-task", "megablast", "-num_threads", "4"],
     ("tlosatx", "v2"): [
         "/opt/losat", "tblastx", *_IO,
         "-query_gencode", "5", "-db_gencode", "2", "-num_threads", "4",
-    ],
-    ("tlosatx", "v1"): [
-        "/opt/losat", "tblastx", *_IO,
-        "--query-gencode", "5", "--db-gencode", "2", "-num_threads", "4",
     ],
     ("tlosatx", "ncbi"): [
         "/opt/ncbi/tblastx", *_IO,
         "-query_gencode", "5", "-db_gencode", "2", "-num_threads", "4",
     ],
     ("losatp", "v2"): [
-        "/opt/losat", "blastp", *_IO,
-        "-max_hsps", "1", "-max_target_seqs", "5", "-num_threads", "4",
-    ],
-    ("losatp", "v1"): [
         "/opt/losat", "blastp", *_IO,
         "-max_hsps", "1", "-max_target_seqs", "5", "-num_threads", "4",
     ],
@@ -279,22 +279,18 @@ ARGV_GOLDENS = {
 }
 
 
-@pytest.mark.parametrize(("program", "dialect"), sorted(ARGV_GOLDENS))
-def test_argv_goldens_for_losat_dialects_and_ncbi(program: str, dialect: str) -> None:
-    if dialect == "ncbi":
+@pytest.mark.parametrize(("program", "kind"), sorted(ARGV_GOLDENS))
+def test_argv_goldens_for_losat_and_ncbi(program: str, kind: str) -> None:
+    if kind == "ncbi":
         runtime = LosatRuntime("ncbi-blast", f"/opt/ncbi/{NCBI_EXECUTABLES[program]}", "path")
-        command = build_losat_command(
-            runtime, program, query_path=_Q, subject_path=_S,
-            options=OPTIONS[program], threads=4,
-        )
     else:
         runtime = LosatRuntime("losat", "/opt/losat", "explicit")
-        command = build_losat_command(
-            runtime, program, query_path=_Q, subject_path=_S,
-            options=OPTIONS[program], threads=4, dialect=dialect,
-        )
+    command = build_losat_command(
+        runtime, program, query_path=_Q, subject_path=_S,
+        options=OPTIONS[program], threads=4,
+    )
 
-    assert command == ARGV_GOLDENS[(program, dialect)]
+    assert command == ARGV_GOLDENS[(program, kind)]
 
 
 def test_losatp_argv_omits_unset_options_like_the_previous_builder() -> None:
@@ -303,43 +299,28 @@ def test_losatp_argv_omits_unset_options_like_the_previous_builder() -> None:
     options = LosatSearchArgs(max_hsps=None, max_target_seqs=None)
 
     assert build_losat_command(
-        losat, "losatp", query_path=_Q, subject_path=_S, options=options, dialect="v1"
+        losat, "losatp", query_path=_Q, subject_path=_S, options=options
     ) == ["losat", "blastp", *_IO]
     assert build_losat_command(
         ncbi, "losatp", query_path=_Q, subject_path=_S, options=options
     ) == ["blastp", *_IO]
 
 
-def test_cli_dialect_is_probed_once_per_executable_and_only_when_flags_differ(
+def test_building_an_argv_never_probes_the_executable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     log = tmp_path / "calls.jsonl"
     monkeypatch.setenv("GBDRAW_FAKE_RUNTIME_LOG", str(log))
-    v1 = _fake_runtime(tmp_path / "v1" / "losat", dialect="v1")
-    v2 = _fake_runtime(tmp_path / "v2" / "losat", dialect="v2")
+    binary = _fake_runtime(tmp_path / "losat")
 
-    for program in ("losatn", "losatp"):
+    for program in PROGRAMS:
         build_losat_command(
-            LosatRuntime("losat", str(v1), "explicit"), program,
+            LosatRuntime("losat", str(binary), "explicit"), program,
             query_path=_Q, subject_path=_S, options=OPTIONS[program],
         )
+
     assert _logged_calls(log) == []
-
-    v1_command = build_losat_command(
-        LosatRuntime("losat", str(v1), "explicit"), "tlosatx",
-        query_path=_Q, subject_path=_S, options=OPTIONS["tlosatx"],
-    )
-    v2_command = build_losat_command(
-        LosatRuntime("losat", str(v2), "explicit"), "tlosatx",
-        query_path=_Q, subject_path=_S, options=OPTIONS["tlosatx"],
-    )
-    assert detect_losat_cli_dialect(str(v1)) == "v1"
-    assert detect_losat_cli_dialect(str(v2)) == "v2"
-
-    assert "--query-gencode" in v1_command and "-query_gencode" not in v1_command
-    assert "-query_gencode" in v2_command and "--query-gencode" not in v2_command
-    assert _logged_calls(log) == [["losat", "tblastx", "--help"]] * 2
 
 
 CACHE_ARG_GOLDENS = {
@@ -400,12 +381,8 @@ def test_moved_runtime_paths_leave_no_shims_in_protein_colinearity() -> None:
         assert not hasattr(protein_colinearity_module, name), name
 
 
-@pytest.mark.parametrize("dialect", ["v1", "v2"])
-def test_tlosatx_search_runs_in_the_detected_dialect_and_records_the_runtime(
-    tmp_path: Path,
-    dialect: str,
-) -> None:
-    binary = _fake_runtime(tmp_path / dialect / "losat", dialect=dialect)
+def test_tlosatx_search_records_the_runtime(tmp_path: Path) -> None:
+    binary = _fake_runtime(tmp_path / "losat")
     records: list[dict[str, object]] = []
 
     text = run_losat_search(
@@ -428,12 +405,11 @@ def test_tlosatx_search_runs_in_the_detected_dialect_and_records_the_runtime(
             # user's directories (D-02, 2026-10-08).
             "path": "losat",
             "program": "tblastx",
-            "cli": dialect,
         }
     ]
 
 
-def test_ncbi_runtime_record_has_version_and_no_losat_dialect(tmp_path: Path) -> None:
+def test_ncbi_runtime_record_has_its_version(tmp_path: Path) -> None:
     binary = _fake_runtime(
         tmp_path / "ncbi" / "blastn",
         version="blastn: 2.16.0+\n Package: blast 2.16.0, build Jun 25 2024",
@@ -460,23 +436,39 @@ def test_ncbi_runtime_record_has_version_and_no_losat_dialect(tmp_path: Path) ->
     ]
 
 
-def test_bundled_runtime_record_uses_the_package_relative_path(
-    tmp_path: Path,
+def test_each_search_logs_one_info_line_naming_its_backend(
+    runtime_sources,
+    caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    binary = _fake_runtime(tmp_path / "checkout" / "losat", dialect="v1")
-    monkeypatch.setattr(runtime_module, "_bundled_platform_dir", lambda: "linux-x86_64")
+    managed = runtime_sources("managed", "losatp")
+    log = tmp_path / "calls.jsonl"
+    monkeypatch.setenv("GBDRAW_FAKE_RUNTIME_LOG", str(log))
+    records: list[runtime_module.LosatRuntimeRecord] = []
 
-    record = losat_runtime_record(LosatRuntime("losat", str(binary), "bundled"), "losatp")
+    def search() -> list[str]:
+        caplog.clear()
+        with caplog.at_level(logging.INFO, logger=runtime_module.__name__):
+            run_losat_search("losatp", ">q\nM\n", ">s\nM\n", runtime_callback=records.append)
+        return [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == runtime_module.__name__ and record.levelno == logging.INFO
+        ]
 
-    assert record == {
-        "kind": "losat",
-        "version": "0.1.0",
-        "source": "bundled",
-        "path": "gbdraw/bin/linux-x86_64/losat",
-        "program": "blastp",
-        "cli": "v1",
-    }
+    expected = [
+        "INFO: Running LOSAT blastp for protein colinearity "
+        f"(backend losat, source managed, executable {managed}, version 0.1.0)."
+    ]
+    # The first search of a process already names the version.
+    assert search() == expected
+    assert search() == expected
+    # One version probe per executable serves both log lines and both records.
+    assert [call for call in _logged_calls(log) if call[1:] == ["--version"]] == [
+        ["LOSAT", "--version"]
+    ]
+    assert [record["version"] for record in records] == ["0.1.0", "0.1.0"]
 
 
 @pytest.mark.linear
@@ -567,18 +559,13 @@ def _native_losat_bin() -> str | None:
 
 @pytest.fixture(scope="module")
 def native_losat() -> dict[str, object]:
-    with ExitStack() as stack:
-        try:
-            runtime = resolve_losat_runtime(
-                "tlosatx",
-                losat_bin=_native_losat_bin(),
-                stack=stack,
-            )
-        except ValidationError as error:
-            pytest.skip(f"No native LOSAT runtime resolves: {error}")
-        if runtime.kind != "losat":
-            pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
-        return losat_runtime_record(runtime, "tlosatx")
+    try:
+        runtime = resolve_losat_runtime("tlosatx", losat_bin=_native_losat_bin())
+    except ValidationError as error:
+        pytest.skip(f"No native LOSAT runtime resolves: {error}")
+    if runtime.kind != "losat":
+        pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
+    return losat_runtime_record(runtime, "tlosatx")
 
 
 def _fasta(path: Path, *, width: int | None = None) -> str:
@@ -614,7 +601,6 @@ def test_native_losat_records_its_runtime_identity(native_losat: dict[str, objec
     assert native_losat["kind"] == "losat"
     assert native_losat["version"] == "0.1.0"
     assert native_losat["program"] == "tblastx"
-    assert native_losat["cli"] in {"v1", "v2"}
 
 
 @pytest.mark.linear

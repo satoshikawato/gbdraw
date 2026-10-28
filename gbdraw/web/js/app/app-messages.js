@@ -50,6 +50,13 @@ import { t } from '../utils/i18n.js';
  * @property {string[]} [items] Warnings listed under the text.
  * @property {NoticeTone} [tone]
  *
+ * A line under the notice's text with a link that opens in a new tab: `text`
+ * says what the link offers, `label` names it.
+ * @typedef {object} NoticeLink
+ * @property {string} text
+ * @property {string} label
+ * @property {string} href
+ *
  * The notice one `ShowNotice` call showed: `dismiss` ends it while it still
  * shows, and leaves a later notice.
  * @typedef {{ dismiss: () => void }} NoticeHandle
@@ -127,10 +134,11 @@ export const createChoicePrompt = ({ reactive }) => {
  */
 export const createNoticeBanner = ({ reactive }) => {
   const notice = reactive({
-    text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info'), announcement: ''
+    text: '', items: /** @type {string[]} */ ([]), tone: /** @type {NoticeTone} */ ('info'), announcement: '',
+    link: /** @type {NoticeLink | null} */ (null)
   });
   let shownCount = 0;
-  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '' }); };
+  const dismiss = () => { Object.assign(notice, { text: '', items: [], tone: 'info', announcement: '', link: null }); };
   /** @type {(request: NoticeRequest) => NoticeHandle} */
   const show = ({ text, items = [], tone }) => {
     shownCount += 1;
@@ -143,9 +151,17 @@ export const createNoticeBanner = ({ reactive }) => {
       tone: tone || (shown.length ? 'warning' : 'info'),
       // The status region speaks a change of its text only: a notice that
       // repeats the shown one differs from it by a trailing no-break space.
-      announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken
+      announcement: notice.announcement === spoken ? `${spoken}\u00A0` : spoken,
+      link: null
     });
     return { dismiss: () => { if (shownCount === id) dismiss(); } };
   };
-  return { notice, show, dismiss };
+  // #1383 (PD-OI-108): the notice of a loaded Gallery example offers its
+  // tutorial. The link joins the notice that shows and goes with it.
+  /** @param {NoticeLink} link */
+  const addLink = (link) => {
+    if (!notice.text) return;
+    Object.assign(notice, { link, announcement: `${notice.announcement} ${link.text}` });
+  };
+  return { notice, show, dismiss, addLink };
 };

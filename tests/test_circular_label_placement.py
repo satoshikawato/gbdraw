@@ -1,7 +1,7 @@
 import copy
 import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TypeVar
@@ -40,6 +40,9 @@ from gbdraw.labels.circular import (
 from gbdraw.labels.filtering import get_label_text, preprocess_label_filtering
 from gbdraw.labels.fit import crossing_pairs
 from gbdraw.labels.circular_types import CircularLabelCandidate
+from gbdraw.labels.label_ink import circular_label_ink, segment_through_box
+from gbdraw.labels.label_style import FeatureLabelStyle
+from gbdraw.render.drawers.label_backing import feature_label_drawn_parts
 from gbdraw.render.drawers.circular.features import FeaturePathGenerator
 from gbdraw.render.drawers.circular.labels import LabelDrawer as CircularLabelDrawer
 from gbdraw.svg.arrows import calculate_circular_arrow_length
@@ -235,6 +238,382 @@ def test_circular_label_reach_boxes_keep_every_overlapping_peer() -> None:
                     labels, total_length, idx, label, use_min_gap=use_min_gap, peers=peers
                 ) == full
     assert checked > 0
+
+
+def _dense_arc_labels(seed: int, count: int) -> tuple[list[dict], int]:
+    """A dense outer label set as the legacy packer leaves it: many labels for little arc."""
+    rng = random.Random(seed)
+    total_length = 600000
+    labels = []
+    for _ in range(count):
+        middle = rng.uniform(0, total_length)
+        angle = math.radians(360 * middle / total_length - 90)
+        labels.append(
+            {
+                "middle": middle,
+                "feature_middle_x": 300.0 * math.cos(angle),
+                "feature_middle_y": 300.0 * math.sin(angle),
+                "width_px": rng.choice([20.0, 45.5, 80.0]),
+                "height_px": rng.choice([8.0, 9.94]),
+                "is_inner": False,
+            }
+        )
+    arc = (0.0, 0.0, 420.0, 430.0, 0, 360, total_length)
+    placed = circular_labels_module._legacy_place_labels_on_arc_fc(
+        sorted(labels, key=lambda label: label["middle"]), *arc, spacing_px=0.1
+    )
+    return placed, total_length
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("seed, count", [(1, 60), (2, 150), (3, 400)])
+def test_circular_legacy_optimizer_equals_its_full_passes(seed: int, count: int) -> None:
+    """Visiting only labels whose own or neighbours' positions changed gives the full passes' result."""
+    module = circular_labels_module
+    labels, total_length = _dense_arc_labels(seed, count)
+    arc = dict(center_x=0.0, center_y=0.0, x_radius=420.0, y_radius=430.0, feature_radius=300.0)
+
+    def optimize(label_list: list[dict], max_iterations: int) -> list[dict]:
+        return module._legacy_improved_label_placement_fc(
+            label_list,
+            arc["center_x"],
+            arc["center_y"],
+            arc["x_radius"],
+            arc["y_radius"],
+            arc["feature_radius"],
+            total_length,
+            0,
+            360,
+            y_margin=0.1,
+            max_iterations=max_iterations,
+        )
+
+    # One pass of the optimizer visits every label, so repeating single passes until one moves
+    # nothing is the full-pass loop.
+    full = copy.deepcopy(labels)
+    for passes in range(10000):
+        before = [(label["start_x"], label["start_y"]) for label in full]
+        full = optimize(full, 1)
+        if [(label["start_x"], label["start_y"]) for label in full] == before:
+            break
+    assert passes > 2
+    fast = optimize(copy.deepcopy(labels), 10000)
+    assert [(label["start_x"], label["start_y"]) for label in fast] == [
+        (label["start_x"], label["start_y"]) for label in full
+    ]
+
+
+@pytest.mark.circular
+def test_circular_local_overlap_count_equals_the_pair_test() -> None:
+    """`_count_local_label_overlaps` (with or without kept peer bounds) counts what `_labels_overlap` says."""
+    module = circular_labels_module
+    for seed in range(4):
+        labels, total_length = _dense_arc_labels(seed, 120)
+        peer_bounds: dict = {}
+        rng = random.Random(seed)
+        for _ in range(40):
+            idx = rng.randrange(len(labels))
+            candidate = dict(labels[idx], start_x=labels[idx]["start_x"] + rng.uniform(-30.0, 30.0))
+            for use_min_gap in (False, True):
+                expected = sum(
+                    module._labels_overlap(candidate, other, total_length, use_min_gap=use_min_gap)
+                    for other_idx, other in enumerate(labels)
+                    if other_idx != idx
+                )
+                for kept in (None, peer_bounds):
+                    count = module._count_local_label_overlaps(
+                        labels, total_length, idx, candidate, use_min_gap=use_min_gap, peer_bounds=kept
+                    )
+                    assert count == expected
+
+
+@pytest.mark.circular
+def test_circular_label_bounds_test_equals_the_pair_test() -> None:
+    """The box test of the counts (`_label_bounds_overlap`, a twin kept for speed) equals `_labels_overlap_at`."""
+    module = circular_labels_module
+    agreed = {True: 0, False: 0}
+    for seed in range(60):
+        rng = random.Random(seed)
+        labels, total_length, _ = _random_label_set(seed, max_labels=30)
+        for label in labels:
+            label["start_x"] += rng.choice([0.0, rng.uniform(-40.0, 40.0)])
+        for _ in range(200):
+            label_a, label_b = rng.choice(labels), rng.choice(labels)
+            margins = rng.choice([module.PLAIN_OVERLAP_MARGINS, (rng.uniform(0.0, 12.0), rng.uniform(0.0, 12.0))])
+            expected = module._labels_overlap_at(label_a, label_b, total_length, margins)
+            assert (
+                module._label_bounds_overlap(
+                    module._label_bounds(label_a, total_length, margins),
+                    module._label_bounds(label_b, total_length, margins),
+                )
+                == expected
+            )
+            agreed[expected] += 1
+    assert min(agreed.values()) > 100
+
+
+@pytest.mark.circular
+def test_circular_pair_gaps_equal_the_pair_minimum_gap() -> None:
+    """`_PairGaps` answers `minimum_bbox_gap_px` for every pair, with one spacing and with mixed spacings."""
+    module = circular_labels_module
+    mixed_sets = 0
+    for seed in range(120):
+        labels, _, _ = _random_label_set(seed, max_labels=14)
+        if seed % 2 == 0:
+            for label in labels:
+                label["_spacing_px"], label["_enforce_spacing_px"] = 1.5, True
+        for base in (None, 0.1, 2.5):
+            # Without a base, the labels' own spacings decide; `_random_label_set` mixes them.
+            mixed_sets += base is None and len({module._resolve_label_spacing_px(label) for label in labels}) > 1
+            gaps = module._PairGaps(labels, base_margin_px=base)
+            table = {
+                (i, j): minimum_bbox_gap_px(labels[i], labels[j], base_margin_px=base)
+                for i in range(len(labels))
+                for j in range(i + 1, len(labels))
+            }
+            for (i, j), gap in table.items():
+                assert gaps.gap(i, j) == gap
+                assert gaps.gap(j, i) == gap
+            assert gaps.largest == max(table.values(), default=0.0)
+    assert mixed_sets > 20
+
+
+@pytest.mark.circular
+def test_circular_min_gap_count_of_mixed_spacings_takes_no_gap_per_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With mixed spacings the min-gap count asks for the gaps of its candidate pairs only, not of all pairs.
+
+    Outer labels from the legacy packer carry no spacing and inner ones from the improved
+    placement carry theirs; the largest pair gap, which visits every pair, is not needed.
+    """
+    module = circular_labels_module
+    count = 600
+    labels = []
+    for idx in range(count):
+        angle = 2 * math.pi * idx / count
+        label = {
+            "middle": idx * 1000.0,
+            "start_x": 2000 * math.cos(angle),
+            "start_y": 2000 * math.sin(angle),
+            "width_px": 30.0,
+            "height_px": 8.0,
+            "is_inner": idx % 2 == 1,
+        }
+        if idx % 2:
+            label["_spacing_px"], label["_enforce_spacing_px"] = 1.5, True
+        labels.append(label)
+    gaps = 0
+    original = module.minimum_bbox_gap_px
+
+    def counting(*args: object, **kwargs: object) -> float:
+        nonlocal gaps
+        gaps += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, "minimum_bbox_gap_px", counting)
+    overlaps = module._count_label_overlaps(labels, count * 1000, use_min_gap=True)
+    monkeypatch.setattr(module, "minimum_bbox_gap_px", original)
+    assert overlaps == sum(
+        module._labels_overlap(labels[i], labels[j], count * 1000, use_min_gap=True)
+        for i in range(count)
+        for j in range(i + 1, count)
+    )
+    assert gaps < count * (count - 1) // 2 // 10
+
+
+def _pile_label_set(seed: int, count: int, center: float, spread: float) -> tuple[list[dict], int, float]:
+    """`_random_label_set` with every feature moved into `center` +/- `spread` (fractions of the record)."""
+    rng = random.Random(seed)
+    labels, total_length, radius = _random_label_set(seed, max_labels=count)
+    feature_radius = radius * 0.8
+    for label in labels:
+        label["middle"] = ((center + rng.uniform(-spread, spread)) % 1.0) * total_length
+        angle = math.radians(360 * label["middle"] / total_length - 90)
+        label_radius = (feature_radius * 0.7 if label["is_inner"] else radius) * rng.uniform(0.97, 1.06)
+        label["start_x"], label["start_y"] = label_radius * math.cos(angle), label_radius * math.sin(angle)
+        label["feature_middle_x"] = label["feature_anchor_x"] = feature_radius * math.cos(angle)
+        label["feature_middle_y"] = label["feature_anchor_y"] = feature_radius * math.sin(angle)
+    labels.sort(key=lambda label: label["middle"])
+    return labels, total_length, radius
+
+
+# Label sets for the comparisons with direct computations: clustered sets, a dense pile, and a pile across the origin.
+_PLACEMENT_CASES = [
+    *((seed, lambda seed: _random_label_set(seed, max_labels=12)) for seed in range(4)),
+    (11, lambda seed: _pile_label_set(seed, 10, 0.4, 0.01)),
+    (12, lambda seed: _pile_label_set(seed, 14, 0.0, 0.01)),
+    (18, lambda seed: _random_label_set(seed, max_labels=8)),  # moves a single label between two requests
+]
+
+
+def _placement_runs(seed: int, make: Callable[[int], tuple[list[dict], int, float]]) -> tuple[list[dict], ...]:
+    """Arc placement, improved placement and the hemisphere refinement of one label set."""
+    module = circular_labels_module
+    rng = random.Random(seed)
+    labels, total_length, radius = make(seed)
+    x_radius, y_radius = radius * 1.05, radius * 1.1
+    arc = (0.0, 0.0, x_radius, y_radius, 0, 360, total_length)
+    placed = module.place_labels_on_arc_fc(copy.deepcopy(labels), *arc, spacing_px=rng.choice([None, 0.5, 2.0]))
+    improved = module.improved_label_placement_fc(
+        copy.deepcopy(placed),
+        0.0,
+        0.0,
+        x_radius,
+        y_radius,
+        radius * 0.8,
+        total_length,
+        0,
+        360,
+        max_iterations=rng.choice([3, 60]),
+        spacing_px=rng.choice([None, 1.0]),
+    )
+    refined = module._refine_labels_to_preferred_hemisphere(
+        copy.deepcopy(labels), total_length, 0.0, 0.0, x_radius, y_radius
+    )
+    return placed, improved, refined
+
+
+@pytest.mark.circular
+def test_circular_improved_placement_skips_only_evaluations_that_move_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Skipping settled label evaluations gives the result of evaluating every label in every pass."""
+    module = circular_labels_module
+    original = module._SettledEvaluations.needs_evaluation
+    skipped = 0
+
+    def counting(self: object, label_idx: int) -> bool:
+        nonlocal skipped
+        needed = original(self, label_idx)
+        skipped += not needed
+        return needed
+
+    monkeypatch.setattr(module._SettledEvaluations, "needs_evaluation", counting)
+    skipping = [_placement_runs(*case)[1] for case in _PLACEMENT_CASES]
+    monkeypatch.setattr(module._SettledEvaluations, "needs_evaluation", lambda self, label_idx: True)
+    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == skipping
+    assert skipped > 0
+
+
+@pytest.mark.circular
+def test_circular_improved_placement_pair_cache_equals_recounts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At every request, the overlapping pairs kept for unchanged positions equal a fresh recount."""
+    module = circular_labels_module
+    positions = module._label_positions
+    count_pairs = module._overlapping_label_pairs
+    recounts: list[list[tuple[int, int]]] = []
+    call: list[tuple[int, dict]] = []  # the arguments of the last recount (same for every request of one run)
+    requests: list[tuple[int, list[tuple[int, int]] | None]] = []  # (recounts so far, fresh recount of that moment)
+    keys: list[tuple[tuple[float, float], ...]] = []
+
+    def counting(labels: list[dict], total_length: int, **kwargs: object) -> Iterator[tuple[int, int]]:
+        pairs = list(count_pairs(labels, total_length, **kwargs))  # type: ignore[arg-type]
+        if getattr(kwargs["margins"], "__name__", "") == "pair_margins":  # improved placement's own request
+            call[:] = [(total_length, kwargs)]
+            recounts.append(pairs)
+        return iter(pairs)
+
+    def recording(labels: list[dict]) -> tuple[tuple[float, float], ...]:
+        # `overlapping_pairs` is the only reader, so this runs once per request, before it answers from its cache.
+        fresh = list(count_pairs(labels, call[0][0], **call[0][1])) if call else None  # type: ignore[arg-type]
+        requests.append((len(recounts), fresh))
+        keys.append(positions(labels))
+        return keys[-1]
+
+    monkeypatch.setattr(module, "_label_positions", recording)
+    monkeypatch.setattr(module, "_overlapping_label_pairs", counting)
+    results = []
+    for case in _PLACEMENT_CASES:
+        call.clear()
+        first = len(requests)
+        results.append(_placement_runs(*case)[1])
+        run = requests[first:]
+        for (_, fresh), (answered, _) in zip(run, [*run[1:], (len(recounts), None)]):
+            assert fresh is None or recounts[answered - 1] == fresh  # the answer after this request's recount, if any
+    assert any(key == before for before, key in zip(keys, keys[1:]))  # some request was answered from the cache
+    moved = [
+        sum(a != b for a, b in zip(before, key)) for before, key in zip(keys, keys[1:]) if len(before) == len(key)
+    ]
+    assert 1 in moved  # one label moved between two requests
+    monkeypatch.setattr(module, "_label_positions", lambda labels: (object(),))  # never equal: always recount
+    assert [_placement_runs(*case)[1] for case in _PLACEMENT_CASES] == results
+
+
+@pytest.mark.circular
+def test_circular_placement_peer_lookups_equal_full_scans(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The placement passes give the same labels when every peer lookup (`_LabelPeers.near`) returns every label."""
+    module = circular_labels_module
+    pruned = [_placement_runs(*case) for case in _PLACEMENT_CASES]
+    monkeypatch.setattr(
+        module._LabelPeers,
+        "near",
+        lambda self, box, *, skip=None: [idx for idx in range(len(self._index.boxes)) if idx != skip],
+    )
+    scanned = [_placement_runs(*case) for case in _PLACEMENT_CASES]
+    assert scanned == pruned
+
+
+@pytest.mark.circular
+def test_circular_label_peers_follow_moved_labels() -> None:
+    """Counts over `_LabelPeers.near` equal full scans while labels move and join."""
+    module = circular_labels_module
+    checked = 0
+    for seed in range(40):
+        rng = random.Random(seed)
+        labels, total_length, _ = _random_label_set(seed, max_labels=40)
+        pad = module._reach_pad(module._PairGaps(labels).largest)
+        peers = module._LabelPeers.of(labels[:-3], pad)
+        for label in labels[-3:]:
+            peers.add(label)
+        for _ in range(30):
+            idx = rng.randrange(len(labels))
+            labels[idx] = dict(labels[idx], start_x=labels[idx]["start_x"] + rng.gauss(0, 20))
+            if rng.random() < 0.05:
+                labels[idx]["start_y"] = float("nan")
+            peers.move(idx, labels[idx])
+            probe = labels[rng.randrange(len(labels))]
+            near = peers.near(peers.box(probe))
+            for use_min_gap in (False, True):
+                full = module._count_local_label_overlaps(labels, total_length, -1, probe, use_min_gap=use_min_gap)
+                checked += full
+                assert module._count_local_label_overlaps(
+                    labels, total_length, -1, probe, use_min_gap=use_min_gap, peers=near
+                ) == full
+    assert checked > 0
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("use_min_gap", [False, True])
+def test_circular_overlap_count_holds_no_pair_set(use_min_gap: bool) -> None:
+    """Counting a pile of labels holds neither all pairs nor a box per pair margin (OV-1937).
+
+    The widths differ, so the min-gap margin differs from pair to pair.
+    """
+    import tracemalloc
+
+    module = circular_labels_module
+    labels = [
+        {
+            "middle": float(idx),
+            "start_x": 300.0 + (idx % 7),
+            "start_y": float(idx % 11),
+            "width_px": 400.0 + 0.37 * (idx % 97),
+            "height_px": 9.0,
+        }
+        for idx in range(900)
+    ]
+    module._count_label_overlaps(labels, 10000, use_min_gap=use_min_gap)  # fills the bounded offset caches
+    tracemalloc.start()
+    try:
+        count = module._count_label_overlaps(labels, 10000, use_min_gap=use_min_gap)
+        peak = tracemalloc.get_traced_memory()[1]
+    finally:
+        tracemalloc.stop()
+    assert count == sum(
+        module._labels_overlap(labels[i], labels[j], 10000, use_min_gap=use_min_gap)
+        for i in range(len(labels))
+        for j in range(i + 1, len(labels))
+    )
+    assert peak < 4 * 2**20
 
 
 @pytest.mark.circular
@@ -532,11 +911,13 @@ _Loaded = TypeVar("_Loaded")
 def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]:
     """Run ``load`` and count the label pair overlap tests it makes.
 
-    Counts ``y_overlap`` and ``_labels_overlap``: the pair test inlines its interval
-    tests (OV-870), so ``y_overlap`` alone no longer sees the resolver's pair tests.
+    Counts the axis tests ``x_overlap`` and ``y_overlap`` and the box test ``_label_bounds_overlap``,
+    which inlines its interval tests (OV-870), so a pair test counts once or twice.
     """
     calls = 0
-    originals = {name: getattr(circular_labels_module, name) for name in ("y_overlap", "_labels_overlap")}
+    originals = {
+        name: getattr(circular_labels_module, name) for name in ("x_overlap", "y_overlap", "_label_bounds_overlap")
+    }
 
     def counting(original):
         def wrapper(*args, **kwargs):
@@ -556,9 +937,10 @@ def _with_pair_overlap_calls(load: Callable[[], _Loaded]) -> tuple[_Loaded, int]
     return loaded, calls
 
 
-# The crowded MjeNMV inner fixture keeps one overlapping pair (hypothetical protein / tyrosine
-# recombinase next to the origin) since OV-1366: it may no longer spread by wrapping past the origin.
-MJENMV_INNER_TUCKIN_OVERLAPS = 1
+# The crowded MjeNMV inner fixture kept one overlapping pair (hypothetical protein / tyrosine
+# recombinase next to the origin) from OV-1366, when it could no longer spread by wrapping past the
+# origin, until its labels were laid out in their drawn boxes (OV-165): none now, drawn or modelled.
+MJENMV_INNER_TUCKIN_OVERLAPS = 0
 
 
 @pytest.fixture(scope="module")
@@ -1908,7 +2290,7 @@ def test_mjenmv_inner_labels_keep_feature_order(
     assert min(deltas) > 0.0
 
 
-def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
+def test_mjenmv_wsv209_hypothetical_leader_lines_do_not_cross(
     mjenmv_inner_tuckin_labels: tuple[list[dict], int, GbdrawConfig, int],
 ) -> None:
     external_labels, _total_length, _, _y_overlap_calls = mjenmv_inner_tuckin_labels
@@ -1927,7 +2309,8 @@ def test_mjenmv_wsv209_hypothetical_leader_lines_keep_current_crossing(
     assert wsv209 is not None
     assert near_hypothetical is not None
 
-    assert circular_labels_module._segments_properly_intersect(
+    # They crossed while the labels were laid out in point-mode boxes; in their drawn boxes they do not (OV-165).
+    assert not circular_labels_module._segments_properly_intersect(
         circular_labels_module._primary_leader_segment(wsv209),
         circular_labels_module._primary_leader_segment(near_hypothetical),
     )
@@ -2178,7 +2561,7 @@ def test_nc001879_inner_dense_keeps_y_overlap_calls_under_regression_cap() -> No
     assert y_overlap_calls < 2500000
 
 
-def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision() -> None:
+def test_nc001879_inner_dense_keeps_the_legacy_inner_layout_without_leader_collisions() -> None:
     improved_calls = 0
     original_improved = circular_labels_module.improved_label_placement_fc
 
@@ -2197,7 +2580,10 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
 
     inner_labels = [label for label in external_labels if label.get("is_inner")]
     assert len(inner_labels) >= circular_labels_module.LEGACY_PLACEMENT_LABEL_THRESHOLD
-    assert improved_calls == 2
+    # OV-165: in their drawn boxes the dense inner labels' legacy layout has no leader collision, so it is kept
+    # and only the outer side runs the current solver (before, the point-mode boxes left 1 collision and both
+    # sides ran it).
+    assert improved_calls == 1
     assert _count_overlaps(inner_labels, total_length) == 0
     assert (
         circular_labels_module._count_label_leader_line_collisions(
@@ -2205,7 +2591,7 @@ def test_nc001879_inner_dense_uses_current_solver_path_with_one_leader_collision
             total_length,
             margin_px=circular_labels_module.LEADER_LABEL_COLLISION_MARGIN_PX,
         )
-        == 1
+        == 0
     )
 
 
@@ -2947,6 +3333,30 @@ def test_hmmtdna_resolve_overlaps_middle_has_no_label_leader_line_collisions() -
     assert collision_count == 0
 
 
+def test_hmmtdna_resolve_overlaps_middle_draws_no_leader_through_another_label() -> None:
+    """OV-1823: no drawn leader runs through another label's letters (the ATP8 leader under tRNA-Lys)."""
+    external_labels, total_length, _ = _load_hmmtdna_external_labels_with_config(
+        label_font_size=14.0,
+        strandedness=False,
+        resolve_overlaps=True,
+        track_type="middle",
+    )
+    assert external_labels
+
+    inks = [circular_label_ink(label, total_length, FeatureLabelStyle("none", "none")) for label in external_labels]
+    through = [
+        (label["label_text"], other["label_text"])
+        for label, own_ink in zip(external_labels, inks)
+        for other, ink in zip(external_labels, inks)
+        if other is not label
+        and any(
+            segment_through_box(ink.to_label_frame(start), ink.to_label_frame(end), ink.ink)
+            for start, end in zip(own_ink.leader, own_ink.leader[1:])
+        )
+    ]
+    assert through == []
+
+
 def test_resolve_label_leader_line_collisions_reduces_fixture_collisions() -> None:
     labels, total_length = _make_label_leader_collision_fixture()
     labels = [label.copy() for label in labels]
@@ -3453,10 +3863,17 @@ def test_label_legend_collision_keeps_feature_order_by_moving_neighbor_block() -
     assert abs(labels[1]["start_y"] - initial_high_y) > 0.1
 
 
-def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -> None:
+@pytest.mark.parametrize(
+    "style",
+    [FeatureLabelStyle(line="none", protection="none"), FeatureLabelStyle(line="under", protection="box")],
+    ids=["plain", "underline_box"],
+)
+def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas(style: FeatureLabelStyle) -> None:
     total_length = 4000
     labels = [
         {
+            "label_text": "hypothetical protein",
+            "font_family": "Liberation Sans",
             "middle": 1000,
             "start_x": 470.0,
             "start_y": 0.0,
@@ -3482,6 +3899,7 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         legend_offset_x=0.0,
         legend_offset_y=0.0,
         length_param="short",
+        profile=SimpleNamespace(label_style=style),
     )
     original_canvas = vars(canvas_config).copy()
     original_labels = copy.deepcopy(labels)
@@ -3492,12 +3910,20 @@ def test_external_label_fitting_returns_paint_bounds_without_mutating_canvas() -
         canvas_config,
     )
 
+    # The letters' ink (and what the style draws with them), not the layout box, bounds the label.
+    ink = circular_label_ink(labels[0], total_length, style)
+    drawn = [point for part in feature_label_drawn_parts(ink, style) for point in part]
     assert len(obstacles) == 1
-    assert obstacles[0].max_x == pytest.approx(1090.0)
+    assert obstacles[0].max_x == pytest.approx(500.0 + max([ink.ink.max_x, *(x for x, _y in drawn)]))
+    assert obstacles[0].min_y == pytest.approx(500.0 + min([ink.ink.min_y, *(y for _x, y in drawn)]))
+    assert obstacles[0].max_x != pytest.approx(500.0 + 470.0 + 120.0)
     assert obstacles[0].min_x == pytest.approx(889.3)
     assert obstacles[0].max_x > canvas_config.total_width
     assert vars(canvas_config) == original_canvas
     assert labels == original_labels
+    # The layout box does not reach the paint bounds.
+    resized = [{**labels[0], "width_px": 999.0, "height_px": 99.0}]
+    assert circular_assemble_module._external_label_obstacles_on_canvas(resized, total_length, canvas_config) == obstacles
 
 
 def test_hmmtdna_label_override_keeps_current_embedded_flags() -> None:

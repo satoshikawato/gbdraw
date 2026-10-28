@@ -18,13 +18,18 @@ runs the CLI entry and renders its typed request inside a cache transaction
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import contextlib
+import io
+import re
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from typing import Any, cast
 
 import pytest
 
+import gbdraw.circular as circular_cli
+import gbdraw.linear as linear_cli
 from gbdraw.api.request_render import DiagramRequest
 from tests.utils import render_stage_equivalence
 from tests.utils.render_stage_equivalence import (
@@ -37,6 +42,7 @@ from tests.utils.render_stage_equivalence import (
     assert_same_outcome,
     declaration_failures,
     equivalence_failures,
+    first_difference,
     full_chain_chunks,
     matrix_steps,
     matrix_variants,
@@ -125,6 +131,41 @@ def test_the_harness_renders_without_the_label_fit_warning_search(monkeypatch: p
     outcome = render_captured(captured, None)
     assert outcome.error == ("RuntimeError", "stop")
     assert seen.get("label_fit_warn_search_seconds") == 0.0
+
+
+def _table_options(get_args: Callable[[list[str]], object]) -> set[str]:
+    help_text = io.StringIO()
+    with contextlib.redirect_stdout(help_text), pytest.raises(SystemExit):
+        get_args(["--help"])
+    return set(re.findall(r"--\w+_table\b", help_text.getvalue()))
+
+
+def test_the_harness_stages_every_file_a_table_names(tmp_path: Path) -> None:
+    """A Worker stages the files a table names, so a warm render can hit on them: every
+    table option of either mode is a file table, staged by its reader, or a table of values."""
+
+    assert _table_options(circular_cli._get_args) | _table_options(linear_cli._get_args) == (
+        set(render_stage_equivalence.TABLE_FILE_READERS) | render_stage_equivalence.VALUE_TABLE_OPTIONS
+    )
+    tables = write_tables(tmp_path / "tables")
+    gbk = (render_stage_equivalence.TEST_INPUTS / "HmmtDNA.gbk").resolve()
+    hits = tmp_path / "hits.tsv"
+    hits.write_text("")
+    written = {
+        "--records_table": ("gbk\n", gbk),
+        "--comparisons_table": ("blast\tquery\tsubject\n", hits),
+        "--conservation_table": ("blast\n", hits),
+    }
+    for option, (header, named) in written.items():
+        table = tmp_path / f"{option[2:]}.tsv"
+        cells = f"{named}\t1\t2" if option == "--comparisons_table" else str(named)
+        table.write_text(f"{header}{cells}\n")
+        assert render_stage_equivalence.input_files([option, str(table)]) == (table.resolve(), named.resolve())
+    # A track table names no file today; its reader would list one if it did.
+    track_table = tables / "tracks_hmmt.tsv"
+    assert render_stage_equivalence.input_files(["--circular_track_table", str(track_table)]) == (
+        track_table.resolve(),
+    )
 
 
 def test_matrix_warm_equals_cold(chain: list[StepResult]) -> None:
@@ -365,3 +406,94 @@ def test_identity_shared_depth_axis_on_a_multi_record_canvas(tmp_path: Path) -> 
             ("shared again", [*common, "--depth_track", str(low), "--share_depth_axis"]),
         ],
     )
+
+
+# --- Record parts of a Multi-Record Canvas ----------------------------------------------------
+
+
+def records_table(path: Path, rows: Sequence[tuple[str, int]]) -> list[str]:
+    """A Multi-Record Canvas of HmmtDNA regions: (region, reverse complement) per row."""
+
+    gbk = render_stage_equivalence.TEST_INPUTS / "HmmtDNA.gbk"
+    path.write_text(
+        "gbk\tregion\treverse_complement\n" + "".join(f"{gbk}\t{region}\t{flag}\n" for region, flag in rows)
+    )
+    return ["--records_table", str(path), "--multi_record_canvas"]
+
+
+_C4_PARTS = ("--labels", "out", "--gc", "--skew")
+
+
+def hatch_table(path: Path, second_color: str) -> list[str]:
+    """One hatched highlight per record (``#1``, ``#2``); record 1's hatch is red."""
+
+    path.write_text(
+        "set_id\tid\tmark\trecord\tstart\tend\tlabel\thatch_color\n"
+        "s1\ta1\thighlight\t#1\t1000\t5000\tA\t#cc0000\n"
+        f"s1\ta2\thighlight\t#2\t2000\t6000\tB\t{second_color}\n"
+    )
+    return ["--annotation_table", str(path)]
+
+
+def test_record_parts_of_two_records_whose_ids_collide_warm_equal_cold(tmp_path: Path) -> None:
+    """C4: HmmtDNA whole and HmmtDNA 1-9000, so the second record renames the ids it
+    shares with the first. Rows swap and change, one record is reverse-complemented,
+    then each input of the record parts and of the projected drawer keys changes
+    (label rendering, track preset, feature lanes, definition font, scale interval,
+    stroke, custom stack, GC toggle, window). A hatch table gives both records the
+    same hatch pattern, which record 2 renames, until record 2's hatch color
+    changes. Last, HmmtDNA and lambda share no record id, so feature identities are
+    not bound to records. A part whose key misses an input it reads would be a
+    stale hit: warm would differ from cold. Each step draws new bytes."""
+
+    whole_region = records_table(tmp_path / "a.tsv", (("1-16569", 0), ("1-9000", 0)))
+    base = [*whole_region, *_C4_PARTS]
+    steps: list[tuple[str, list[str]]] = [
+        ("whole + region", base),
+        ("rows swapped", [*records_table(tmp_path / "b.tsv", (("1-9000", 0), ("1-16569", 0))), *_C4_PARTS]),
+        ("back", base),
+        ("region row changed", [*records_table(tmp_path / "c.tsv", (("1-16569", 0), ("1-8000", 0))), *_C4_PARTS]),
+        ("swapped again", [*records_table(tmp_path / "d.tsv", (("1-8000", 0), ("1-16569", 0))), *_C4_PARTS]),
+        ("back again", base),
+        ("record 1 reverse-complemented", [*records_table(tmp_path / "e.tsv", (("1-16569", 1), ("1-9000", 0))), *_C4_PARTS]),
+        ("back from the reverse complement", base),
+        ("label rendering", [*base, "--label_rendering", "embedded_only"]),
+        ("track preset", [*base, "--track_type", "middle"]),
+        ("feature lanes", [*base, "--feature_width", "120"]),
+        ("definition font", [*base, "--definition_font_size", "10"]),
+        ("scale interval", [*base, "--scale_interval", "4000"]),
+        ("stroke", [*base, "--block_stroke_color", "red"]),
+        ("custom stack", [*base, "--center_reserved_radius", "150"]),
+        ("GC toggle", [*whole_region, "--labels", "out", "--no-gc", "--skew"]),
+        ("window", [*base, "-w", "500"]),
+        ("hatch shared by both records", [*base, *hatch_table(tmp_path / "h1.tsv", "#cc0000")]),
+        ("record 2 hatch color", [*base, *hatch_table(tmp_path / "h2.tsv", "#0000cc")]),
+        ("back to the base", base),
+        (
+            "HmmtDNA and lambda, identities not bound",
+            [
+                "--gbk",
+                str(render_stage_equivalence.TEST_INPUTS / "HmmtDNA.gbk"),
+                str(render_stage_equivalence.TEST_INPUTS / "NC_001416.gb"),
+                "--multi_record_canvas",
+                *_C4_PARTS,
+            ],
+        ),
+    ]
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    failures = []
+    previous = None
+    for label, arguments in steps:
+        warm, cold = harness.warm(arguments), harness.cold(arguments)
+        assert cold.error is None, f"{label}: {cold.error}"
+        if previous is not None and first_difference(previous.reply, warm.reply) is None:
+            failures.append(f"{label}: draws the bytes of the step before it")
+        previous = warm
+        uncacheable = sorted(name for name, count in warm.stages.uncacheable.items() if count)
+        if uncacheable:
+            failures.append(f"{label}: uncacheable {uncacheable}")
+        try:
+            assert_same_outcome(warm, cold, label)
+        except AssertionError as error:
+            failures.append(str(error))
+    assert not failures, "\n".join(failures)

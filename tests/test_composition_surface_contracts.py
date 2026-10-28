@@ -456,7 +456,7 @@ def test_legend_reflow_carries_the_exact_python_layout_inputs(
         "maxY": primary.max_y,
     }
     assert reflow["fontFile"] == "LiberationSans-Regular"
-    assert reflow["dpi"] == 96
+    assert "dpi" not in reflow
     assert reflow["fontSize"] > 0.0
 
 

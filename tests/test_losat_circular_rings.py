@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-from contextlib import ExitStack
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -76,13 +75,12 @@ def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:
 
 @pytest.fixture(scope="module")
 def native_losat() -> None:
-    with ExitStack() as stack:
-        try:
-            runtime = resolve_losat_runtime("tlosatx", stack=stack)
-        except ValidationError as error:
-            pytest.skip(f"No native LOSAT runtime resolves: {error}")
-        if runtime.kind != "losat":
-            pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
+    try:
+        runtime = resolve_losat_runtime("tlosatx")
+    except ValidationError as error:
+        pytest.skip(f"No native LOSAT runtime resolves: {error}")
+    if runtime.kind != "losat":
+        pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
 
 
 # Acceptance with the resolved native LOSAT (design 4 PR-4).

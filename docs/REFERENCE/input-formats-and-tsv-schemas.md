@@ -305,6 +305,20 @@ Selector qualifiers may also use the documented synthetic keys `location`,
 without the `~<n>` suffix), so it names the same feature on a cropped or
 reverse-complemented record; `location` and `record_location` are the drawn
 coordinates.
+In a specific color table, a `hash` value is searched in the feature's hash and
+must match the whole of its feature instance `<feature id>@<record key>`: the
+feature's biological feature ID (with its `~<n>` suffix) in the record with
+that record key. So `f1a2b3c4d@record-2`, bare or as the exact pattern
+`^f1a2b3c4d@record-2$`, names one feature instance, and it does not name
+`f1a2b3c4d@record-20`. The Web app writes the exact pattern for a "This feature
+only" color, so the same feature in another record with the same ID, or in the
+same file drawn twice, keeps its color. The CLI record key of the n-th record
+input is `record-<n>` (`record-<n>:<k>` for the k-th record that one input
+expands to). The Run Info Source recipe writes the Web record keys in that
+form, leaves out a row whose record the render does not draw (it colors
+nothing), and is unavailable for another `hash` pattern with `@`, which matches
+by the Web record keys. A `hash` value without `@` still colors every feature
+whose hash it matches.
 Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 

@@ -262,8 +262,9 @@ def test_turning_narrowing_off_keeps_the_auto_widths_of_a_custom_stack() -> None
 def test_an_explicit_center_reserved_radius_narrows_auto_widths_below_the_floor() -> None:
     # DF-D05: the user's own radius narrows the inside tracks to their readable minimums, below the floor; the
     # definition's band of the same size leaves their widths.
-    explicit = _by_id(_layout(245.0, center_reserved_radius_explicit=True))
-    definition = _by_id(_layout(245.0))
+    # 247 px: the floor clears a 246 px band since the tick labels reserve their drawn box (OV-165; 245 px before).
+    explicit = _by_id(_layout(247.0, center_reserved_radius_explicit=True))
+    definition = _by_id(_layout(247.0))
     for slot_id in GC_ROWS:
         assert explicit[slot_id].compressed, slot_id
         assert explicit[slot_id].resolved_width_px < 30.0
@@ -372,14 +373,15 @@ def test_the_cli_width_shortcuts_are_typed_widths(
 def test_a_typed_depth_width_is_kept_under_rule_l(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, width_args: list[str], narrows: bool
 ) -> None:
-    # At a 16 pt definition the MjeNMV name narrows the inside rows down to the 30 px floor: the Auto Depth row
-    # (37 px) narrows with them, a typed --depth_width stays.
+    # At a 14 pt definition the MjeNMV name narrows the inside rows down to the 30 px floor: the Auto Depth row
+    # (37 px) narrows with them, a typed --depth_width stays. (16 pt until the band held the drawn ink, OV-1854: its
+    # band is now 208.7 px, which the floor does not clear.)
     depth = tmp_path / "depth.tsv"
     depth.write_text("".join(f"LC738868.1\t{position}\t{10 + position % 7}\n" for position in range(1, 306008, 500)))
     layout = _cli_fit(
         monkeypatch,
         [
-            "--gbk", str(MJENMV), "--separate_strands", "--depth_track", str(depth), "--definition_font_size", "16",
+            "--gbk", str(MJENMV), "--separate_strands", "--depth_track", str(depth), "--definition_font_size", "14",
             *width_args, "-o", str(tmp_path / "depth"),
         ],
     )

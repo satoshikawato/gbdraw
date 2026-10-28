@@ -32,22 +32,38 @@ How to record a take that can be repeated, review it with
   the pane in English, the menu pick, then the same pane in the target
   language, at one framing (Owner 2026-10-23). Captions name controls exactly
   as that locale's catalog names them. Never call a translation reviewed.
+  The whole switch takes about 3 s: the menu pick at normal speed, the holds
+  before and after it fast-forwarded with the badge (Owner 2026-10-27).
 
 ## Structure
 
 1. **Highlights first (Owner 2026-10-23).** Open with the strongest results
    before the title card. A promotion opens with a montage of the features'
    results, one short label per highlight, in about 5-10 s. A tutorial opens
-   with its finished figure for 2-3 s. Cut the highlights from the same
+   with a close read of its finished figure for about 1 s, then a change
+   sequence of its own results: at least four versions in the order the
+   tutorial makes them, one framing, about 0.7 s each, hard cuts, under one
+   label; about 5 s in all (Owner 2026-10-27, after the RedNote analysis of the
+   posted synteny tutorial, where the 5 s completion rate was the only metric
+   under its median). Cut the highlights from the same
    recording; they need no second recording.
    - **Show a change as it happens (Owner 2026-10-23).** A highlight of a
      setting that changes the figure, such as the start position or lanes, is
      a sequence of at least four versions, each with a different gene. Show
      them at one framing, about 0.5 s each, with hard cuts under one label.
      The change must be obvious at phone size.
+   - **Hook and headline lines state the outcome in plain words (Owner
+     2026-10-27).** The opening label and the outro headline say what the
+     viewer gets and the facts that matter, for example "nothing to install"
+     and the minutes it takes. No counts, no proper nouns such as a database
+     or an organism name, and no rhetorical questions. Example: "Gene cluster
+     synteny, nothing to install, done in 3 minutes"; headline "A paper figure
+     in 3 minutes".
 2. A short title card (about 2 s).
 3. The steps, numbered as in the tutorial or the caption sheet.
-4. An outro over the final figure, with where to get gbdraw.
+4. An outro over the final figure: a headline row that states the outcome (see
+   item 1), then where to get gbdraw. The covers are cut from the outro, so the
+   headline is on the cover too (Owner 2026-10-27).
 
 ## Pacing: fast-forward what is redundant (Owner 2026-10-23, every video)
 
@@ -56,6 +72,7 @@ Fast-forward these, with the fast-forward badge on screen:
 - Waiting: runtime start, example and Session loads, uploads, LOSAT runs, every
   Generate except the one that shows the Generate stages, and rerenders.
 - Navigation: scrolling, opening sections and popups, and long pointer travel.
+- The holds of the language switch, before and after the pick.
 - The file picker, and typing after the first few characters.
 - Any repeat of an operation the viewer has already seen once, such as a second
   example load, the same control in another record, or an undo before the

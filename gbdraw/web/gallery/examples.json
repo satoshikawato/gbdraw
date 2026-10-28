@@ -17,7 +17,7 @@
     "featureSources": [
       "HmmtDNA.gbk"
     ],
-    "fileSizeLabel": "416 KB",
+    "fileSizeLabel": "417 KB",
     "command": "gbdraw circular --gbk HmmtDNA.gbk -o HmmtDNA_basic_circular -f interactive_svg --separate_strands --track_type middle --labels out --species '<i>Homo sapiens</i>'",
     "commandKind": "runnable",
     "commandNote": "Download HmmtDNA.gbk from the Files tab, then run this command in the same directory.",
@@ -46,7 +46,7 @@
     "featureSources": [
       "NC_001416.gb"
     ],
-    "fileSizeLabel": "849 KB",
+    "fileSizeLabel": "850 KB",
     "command": "gbdraw linear --gbk NC_001416.gb -o lambda_basic_linear -f interactive_svg --separate_strands --show_labels all --scale_style ruler --legend left",
     "commandKind": "runnable",
     "commandNote": "Download NC_001416.gb from the Files tab, then run this command in the same directory.",

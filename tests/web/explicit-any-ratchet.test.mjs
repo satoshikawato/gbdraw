@@ -38,7 +38,7 @@ const EXPLICIT_ANY_BASELINE = {
   'app/candidate-render.js': 1,
   'app/circular-track-slots.js': 4,
   'app/feature-editor.js': 21,
-  'app/feature-editor/color-actions.js': 40,
+  'app/feature-editor/color-actions.js': 30,
   'app/feature-editor/feature-edit-table.js': 7,
   'app/feature-editor/label-actions.js': 16,
   'app/feature-editor/placement-actions.js': 10,

@@ -14,6 +14,8 @@ await writeFile(tempModulePath, await readFile(sourceUrl, 'utf8'));
 await writeFile(join(tempDir, 'services', 'track-slot-display.js'), await readFile(displaySourceUrl, 'utf8'));
 // The series reader reads colors and numbers with the shared leaves.
 await cp(new URL('../../gbdraw/web/js/utils', import.meta.url), join(tempDir, 'utils'), { recursive: true });
+// color-utils.js reads the generated palette name aliases.
+await cp(new URL('../../gbdraw/web/js/contracts/schema.generated.js', import.meta.url), join(tempDir, 'contracts', 'schema.generated.js'));
 // track-slot-display.js reads the generated size-class boundaries.
 await writeFile(
   join(tempDir, 'mode-profiles.generated.js'),

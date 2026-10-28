@@ -303,9 +303,9 @@ def test_linear_multi_row_track_metadata_uses_final_primary_translation() -> Non
 def test_linear_plot_title_box_is_its_painted_width(title: str, parts: list[tuple[str, str]]) -> None:
     """OV-1608: the title's composition box is the painted width of its styled parts."""
     family = "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif"
-    content = plot_title_content(title, font_family=family, font_size=32.0, dpi=96)
+    content = plot_title_content(title, font_family=family, font_size=32.0)
     sizes = [
-        calculate_svg_bbox_dimensions(text, family, 32.0, 96, font_style=style)
+        calculate_svg_bbox_dimensions(text, family, 32.0, font_style=style)
         for text, style in parts
     ]
     width = sum(size[0] for size in sizes)

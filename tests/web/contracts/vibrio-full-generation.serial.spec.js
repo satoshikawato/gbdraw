@@ -513,6 +513,13 @@ const generationPhaseAttribution = (outcome, probe) => {
       )
     },
     featureCatalogStructural: {
+      // One catalog_snapshot build parses one content; one catalog_item build indexes them.
+      catalogSnapshotBuildCount: Number(
+        pythonMetrics['renderStageBuild:catalog_snapshot'] || 0
+      ),
+      catalogItemBuildCount: Number(
+        pythonMetrics['renderStageBuild:catalog_item'] || 0
+      ),
       featureCatalogSvgParseCount: Number(
         pythonMetrics.featureCatalogSvgParseCount || 0
       ),
@@ -1309,29 +1316,33 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     .parsedSourceCacheHitCount).toBeGreaterThan(0);
   expect(secondPhaseAttribution.preparedInputCacheStructural
     .preparedInputCacheRetainedBytes).toBeGreaterThan(0);
-  expect(firstPhaseAttribution.featureCatalogStructural).toMatchObject({
-    featureCatalogSvgParseCount: 1,
-    featureCatalogFullDomTraversalCount: 1,
-    featureCatalogRenderedFeatureCollectionCount: 1,
-    featureCatalogCatalogOnlyDomMutationCount: 0
-  });
-  expect(secondPhaseAttribution.featureCatalogStructural).toMatchObject({
-    featureCatalogSvgParseCount: 1,
-    featureCatalogFullDomTraversalCount: 1,
-    featureCatalogRenderedFeatureCollectionCount: 1,
-    featureCatalogCatalogOnlyDomMutationCount: 0
-  });
+  // The catalog parses only the contents whose reads it builds again (one
+  // parse and traversal per catalog_snapshot build) and indexes them once per
+  // catalog_item build; a reused snapshot or item parses and counts nothing.
   for (const phase of [firstPhaseAttribution, secondPhaseAttribution]) {
     const catalog = phase.featureCatalogStructural;
-    expect(catalog.featureCatalogDomElementCount).toBeGreaterThan(0);
-    expect(catalog.featureCatalogFeatureCandidateCount).toBeGreaterThan(0);
-    expect(catalog.featureCatalogUniqueRenderedFeatureCount).toBeGreaterThan(0);
-    expect(catalog.featureCatalogFeatureCandidateCount).toBeGreaterThanOrEqual(
-      catalog.featureCatalogUniqueRenderedFeatureCount
-    );
+    expect(catalog.featureCatalogSvgParseCount).toBe(catalog.catalogSnapshotBuildCount);
+    expect(catalog.featureCatalogFullDomTraversalCount).toBe(catalog.catalogSnapshotBuildCount);
+    expect(catalog.featureCatalogRenderedFeatureCollectionCount).toBe(catalog.catalogItemBuildCount);
+    expect(catalog.featureCatalogCatalogOnlyDomMutationCount).toBe(0);
     expect(catalog.featureCatalogMatchCandidateCount).toBeGreaterThanOrEqual(0);
     expect(catalog.featureCatalogAnnotationCandidateCount).toBeGreaterThanOrEqual(0);
   }
+  // The first Generate after Load reads every catalog content and builds the item.
+  const coldCatalog = firstPhaseAttribution.featureCatalogStructural;
+  expect(coldCatalog.catalogSnapshotBuildCount).toBeGreaterThan(0);
+  expect(coldCatalog.catalogItemBuildCount).toBe(1);
+  expect(coldCatalog.featureCatalogDomElementCount).toBeGreaterThan(0);
+  expect(coldCatalog.featureCatalogFeatureCandidateCount).toBeGreaterThan(0);
+  expect(coldCatalog.featureCatalogUniqueRenderedFeatureCount).toBeGreaterThan(0);
+  expect(coldCatalog.featureCatalogFeatureCandidateCount).toBeGreaterThanOrEqual(
+    coldCatalog.featureCatalogUniqueRenderedFeatureCount
+  );
+  // The second rebuilds the interactive context (OV-279 above), so the item
+  // builds again; it counts the candidates of the contents it parsed again only.
+  expect(secondPhaseAttribution.featureCatalogStructural.catalogItemBuildCount).toBe(1);
+  expect(secondPhaseAttribution.featureCatalogStructural
+    .featureCatalogUniqueRenderedFeatureCount).toBeGreaterThan(0);
   expect(secondProbe.lifecycle.filter(({ name }) => name === 'python-diagnostics')).toHaveLength(1);
   expect(structural).toMatchObject({
     canonicalReplayFullSerializationCount: 0,

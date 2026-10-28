@@ -231,6 +231,13 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "transforms", tuple(transforms))
 
 
+# The record key of the n-th record input when it names none (`record-<n>`),
+# and the separator before the source record number of each record an ALL
+# input expands to (`<key>:<k>`). The Web Source recipe names a CLI record by
+# them (gbdraw/web/js/contracts/schema.generated.js).
+CLI_RECORD_KEY_PREFIX = "record-"
+EXPANDED_RECORD_KEY_SEPARATOR = ":"
+
 _SOURCE_BINDING_COLUMNS = frozenset(
     f"{role}_{name}" for role in ("query", "subject") for name in ("feature_index", "feature_svg_id")
 )
@@ -1406,9 +1413,9 @@ def resolve_record_inputs(
                 except ValueError as exc:
                     raise ValidationError(str(exc)) from exc
                 reverse = False
-            base_key = record_input.record_key or f"record-{input_index + 1}"
+            base_key = record_input.record_key or f"{CLI_RECORD_KEY_PREFIX}{input_index + 1}"
             record_key = (
-                f"{base_key}:{source_record_index + 1}"
+                f"{base_key}{EXPANDED_RECORD_KEY_SEPARATOR}{source_record_index + 1}"
                 if expands
                 else base_key
             )
@@ -1557,7 +1564,7 @@ def record_input_manifest_from_paths(
                 presentation=RecordPresentation(
                     reverse_complement=parse_cli_bool(reverse_values[index]),
                 ),
-                record_key=f"record-{index + 1}",
+                record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
             )
         )
     return RecordInputManifest(
@@ -1601,7 +1608,7 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
                     grid_row=row.row,
                     grid_column=row.column,
                 ),
-                record_key=f"record-{index + 1}",
+                record_key=f"{CLI_RECORD_KEY_PREFIX}{index + 1}",
             )
         )
     return RecordInputManifest(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Callable
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -10,6 +11,7 @@ from gbdraw.core.record_metadata import (
     _iter_source_features,
     _mapped_feature_location_parts,
     _read_coord_map,
+    _source_feature_index,
     _source_feature_location_parts,
     _stamped_source_feature_hash,
 )
@@ -335,6 +337,85 @@ def compute_feature_hash_from_location_parts(
     return _hash_feature_parts_key(feature_type, parts, record_id=record_id)
 
 
+def _indexed_feature_id(base: str, index: int | None) -> str:
+    """The biological feature ID of one of identical features: the shared
+    hash with its source feature index."""
+    return f"{base}~{index}"
+
+
+# Between the biological feature ID and the record key of a feature instance;
+# the Web reads it from gbdraw/web/js/contracts/schema.generated.js.
+FEATURE_INSTANCE_SEPARATOR = "@"
+
+
+def feature_instance(biological_feature_id: str, record_key: str) -> str:
+    """The feature instance: one biological feature in one request record.
+
+    A `hash` color rule whose pattern matches it colors that feature only,
+    while its stable hash names every feature with the same record ID, type,
+    and location (the same file drawn twice, identical features of one
+    record). The renderer's rule matcher (``feature_instances``) and the Web's
+    rule matching and synthesis (``gbdraw.web_support.rule_matching``, from the
+    catalog's ``biologicalFeatureId`` and ``recordKey``) compose it here, and no
+    other code does.
+    """
+    return f"{biological_feature_id}{FEATURE_INSTANCE_SEPARATOR}{record_key}"
+
+
+_FEATURE_INSTANCES_ATTR = "_gbdraw_feature_instances"
+
+
+def feature_instances(record: SeqRecord) -> Callable[[SeqFeature], str | None]:
+    """The feature instance of each feature of ``record``.
+
+    The record key is the one request planning gives the record
+    (``gbdraw_record_key``); the biological feature ID is the one
+    ``disambiguate_feature_ids`` gives the record's source features, as the
+    source feature catalog (``SourceFeatureCatalog.entries``) and the feature
+    identity table name it. A record without a record key, a feature without a
+    source hash, and a feature outside the record's features have no instance.
+
+    The instances of a record are computed once, in one pass over its source
+    features, and kept on the record while its record key and features are the
+    same: several render stages read them.
+    """
+
+    record_key = (getattr(record, "annotations", None) or {}).get("gbdraw_record_key")
+    if not record_key:
+        return lambda feature: None
+    key, features = str(record_key), record.features
+    identity = tuple(map(id, features))
+    cached = getattr(record, _FEATURE_INSTANCES_ATTR, None)
+    # Valid for the same record key and the same feature objects: a copy of the
+    # record (its features are new objects) computes its own.
+    if cached is None or cached[0] != key or cached[1] != identity:
+        # The source features and indexes ``capture_source_features`` reads.
+        hashed = [
+            (feature, feature_hash, position if index is None else index)
+            for position, feature in enumerate(_iter_source_features(features))
+            if (feature_hash := compute_source_feature_hash(feature, record))
+            for index in (_source_feature_index(feature),)
+        ]
+        biological_ids = disambiguate_feature_ids(
+            ((key, feature_hash, index) for _, feature_hash, index in hashed),
+            description="Feature instances",
+        )
+        # Each entry holds its feature, so no other object can take its id.
+        by_feature: dict[int, tuple[SeqFeature, str | None]] = {
+            id(feature): (feature, feature_instance(biological_id, key))
+            for (feature, _, _), biological_id in zip(hashed, biological_ids, strict=True)
+        }
+        cached = (key, identity, by_feature)
+        setattr(record, _FEATURE_INSTANCES_ATTR, cached)
+    by_feature = cached[2]
+
+    def instance_of(feature: SeqFeature) -> str | None:
+        entry = by_feature.get(id(feature))
+        return entry[1] if entry is not None and entry[0] is feature else None
+
+    return instance_of
+
+
 def disambiguate_feature_ids(
     identities: Iterable[tuple[str, str, int | None]],
     *,
@@ -352,7 +433,7 @@ def disambiguate_feature_ids(
                 f"{description} contains duplicate biological source identity {identity!r}."
             )
     resolved = tuple(
-        f"{base}~{index}" if counts[(record_key, base)] > 1 else base
+        _indexed_feature_id(base, index) if counts[(record_key, base)] > 1 else base
         for record_key, base, index in rows
     )
     if len({(row[0], value) for row, value in zip(rows, resolved)}) != len(rows):
@@ -411,6 +492,8 @@ __all__ = [
     "compute_feature_hash_from_location_parts",
     "compute_feature_object_hash",
     "compute_source_feature_hash",
+    "feature_instance",
+    "feature_instances",
     "source_feature_location_parts",
     "make_linear_dom_id",
     "make_linear_rendered_feature_id",

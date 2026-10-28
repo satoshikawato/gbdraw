@@ -15,6 +15,7 @@ import functools
 from contextlib import contextmanager
 from contextvars import ContextVar
 from importlib import resources
+from types import MappingProxyType
 from typing import Iterator, Mapping, Optional
 
 import pandas as pd
@@ -330,9 +331,42 @@ def read_default_color_overrides(user_defined_default_colors: str) -> DataFrame:
     return user_df
 
 
+# A former name of a packaged palette, by the name it has now. A lookup by the
+# former name (CLI ``-p/--palette``, ``FeatureOptions``, a Session or request)
+# finds the palette; lists show only the current name. ``hearbal_garden``
+# shipped through 0.14.2. The Web reads this table through
+# tools/generate_web_contracts.py.
+PALETTE_NAME_ALIASES: Mapping[str, str] = MappingProxyType({"hearbal_garden": "herbal_garden"})
+
+
+def current_palette_name(name: str) -> str:
+    """The current name of the palette ``name`` names (a former name reads as it)."""
+
+    return PALETTE_NAME_ALIASES.get(name, name)
+
+
+class _PaletteCatalog(Mapping[str, Mapping[str, str]]):
+    """The packaged palettes by current name; a former name looks one up too."""
+
+    def __init__(self, palettes: Mapping[str, Mapping[str, str]]) -> None:
+        self._palettes = palettes
+
+    def __getitem__(self, name: str) -> Mapping[str, str]:
+        return self._palettes[current_palette_name(name)]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._palettes)
+
+    def __len__(self) -> int:
+        return len(self._palettes)
+
+
 @functools.cache
 def packaged_color_palettes() -> Mapping[str, Mapping[str, str]]:
-    """The packaged palettes of ``gbdraw/data/color_palettes.toml`` by name."""
+    """The packaged palettes of ``gbdraw/data/color_palettes.toml`` by name.
+
+    Iteration lists the current names; ``PALETTE_NAME_ALIASES`` also look up.
+    """
 
     try:
         toml_path = resources.files("gbdraw.data").joinpath("color_palettes.toml")
@@ -340,11 +374,11 @@ def packaged_color_palettes() -> Mapping[str, Mapping[str, str]]:
             palettes_dict = tomllib.load(fh)
     except Exception as exc:
         raise ParseError(f"Failed to read color_palettes.toml: {exc}") from exc
-    return {
+    return _PaletteCatalog({
         str(name): {str(key): str(value) for key, value in colors.items()}
         for name, colors in palettes_dict.items()
         if isinstance(colors, Mapping)
-    }
+    })
 
 
 def require_palette_name(palette: str) -> str:
@@ -515,8 +549,10 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 
 __all__ = [
+    "PALETTE_NAME_ALIASES",
     "USER_COLOR_FORMS",
     "check_user_color",
+    "current_palette_name",
     "is_user_color",
     "load_default_colors",
     "merge_default_colors",

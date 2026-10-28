@@ -347,8 +347,7 @@ def _validate_legend_reflow_metrics(
     """Validate the Legend layout inputs written as ``legendReflow``.
 
     ``fontFile`` and ``fontSize`` are what the Legend layout measured captions
-    with, and ``wrapWidth`` the exact width it wrapped rows in. ``dpi`` is still
-    written and validated, but no Legend layout reads it.
+    with, and ``wrapWidth`` the exact width it wrapped rows in.
     """
     if value is None:
         if required:
@@ -356,17 +355,13 @@ def _validate_legend_reflow_metrics(
         return None
     if not required:
         raise ValueError("legend reflow metrics require a legend target")
-    required_keys = {*_LEGEND_REFLOW_POSITIVE_FIELDS, "dpi", "fontFile", "wrapWidth"}
+    required_keys = {*_LEGEND_REFLOW_POSITIVE_FIELDS, "fontFile", "wrapWidth"}
     if set(value) != required_keys:
         raise ValueError("legend reflow metrics have an invalid field set")
     normalized: dict[str, object] = {
         field: _reflow_number(value[field], field, positive=True)
         for field in _LEGEND_REFLOW_POSITIVE_FIELDS
     }
-    dpi = value["dpi"]
-    if isinstance(dpi, bool) or not isinstance(dpi, int) or dpi <= 0:
-        raise ValueError("legend reflow metric dpi must be a positive integer")
-    normalized["dpi"] = dpi
     font_file = value["fontFile"]
     if font_file is not None and (not isinstance(font_file, str) or not font_file.strip()):
         raise ValueError("legend reflow metric fontFile must be a non-empty string or None")

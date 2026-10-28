@@ -60,6 +60,7 @@ from gbdraw.layout.record_coordinates import RecordDisplayTransform
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import RecordPresentation
+    from gbdraw.config.models import CircularRenderProfile
 
 P = ParamSpec("P")
 
@@ -406,7 +407,7 @@ def add_record_group_on_canvas(
         geometry=canvas_config.geometry(),
         feature_config=feature_config,
         feature_layers=feature_layers,
-        render_context=render_context,
+        render_context=render_context.feature_context,
         precalculated_labels=precalculated_labels,
         feature_track_ratio_factor_override=feature_track_ratio_factor_override,
         feature_anchor_radius_px=feature_anchor_radius_px,
@@ -477,7 +478,7 @@ def add_labels_group_on_canvas(
     canvas_config: CircularCanvasConfigurator,
     *,
     group_key: GroupKey,
-    render_context: CircularRecordRenderContext,
+    profile: CircularRenderProfile,
     precalculated_labels: Sequence[CircularLabel],
     phase: Literal["leaders", "text"],
 ) -> Drawing:
@@ -494,7 +495,7 @@ def add_labels_group_on_canvas(
         LabelsGroup,
         len(gb_record.seq),
         canvas_config.geometry(),
-        render_context,
+        profile,
         precalculated_labels=(
             precalculated_labels if isinstance(precalculated_labels, tuple) else tuple(precalculated_labels)
         ),

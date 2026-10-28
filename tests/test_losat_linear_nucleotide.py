@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import ExitStack
 import json
 from pathlib import Path
 import sys
@@ -60,7 +59,6 @@ for query in ids(args[args.index("-query") + 1]):
 
 @pytest.fixture(autouse=True)
 def _fresh_probe_caches(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(runtime_module, "_CLI_DIALECTS", {})
     monkeypatch.setattr(runtime_module, "_RUNTIME_VERSIONS", {})
     monkeypatch.setattr(runtime_module, "_TASK_VALUES", {}, raising=False)
 
@@ -97,13 +95,12 @@ def _diagnostic(excinfo: pytest.ExceptionInfo) -> dict:
 
 @pytest.fixture(scope="module")
 def native_losat() -> None:
-    with ExitStack() as stack:
-        try:
-            runtime = resolve_losat_runtime("losatn", stack=stack)
-        except ValidationError as error:
-            pytest.skip(f"No native LOSAT runtime resolves: {error}")
-        if runtime.kind != "losat":
-            pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
+    try:
+        runtime = resolve_losat_runtime("losatn")
+    except ValidationError as error:
+        pytest.skip(f"No native LOSAT runtime resolves: {error}")
+    if runtime.kind != "losat":
+        pytest.skip(f"Resolved runtime is {runtime.kind}, not native LOSAT.")
 
 
 @pytest.mark.linear

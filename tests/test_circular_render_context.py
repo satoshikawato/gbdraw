@@ -104,9 +104,10 @@ def test_circular_record_render_context_deep_freezes_layout_collections() -> Non
     assert context.radial_layout.slots[0].params["nested"]["values"] == (1, 2)
 
 
-@pytest.mark.parametrize("group_type", [SeqRecordGroup, LabelsGroup])
-def test_circular_record_render_groups_require_explicit_context(group_type: type) -> None:
-    render_context = signature(group_type).parameters["render_context"]
+# The feature group reads the feature projection of the render context; the labels read its profile.
+@pytest.mark.parametrize(("group_type", "name"), [(SeqRecordGroup, "render_context"), (LabelsGroup, "profile")])
+def test_circular_record_render_groups_require_explicit_context(group_type: type, name: str) -> None:
+    render_context = signature(group_type).parameters[name]
 
     assert render_context.default is Parameter.empty
 
@@ -124,8 +125,8 @@ def test_circular_canvas_geometry_is_a_frozen_value_of_the_configurator() -> Non
     canvas = CircularCanvasConfigurator("test", _profile(), "none", record)
     geometry = canvas.geometry()
 
-    assert (geometry.radius, geometry.track_ratio, geometry.dpi, geometry.length_param) == (
-        canvas.radius, canvas.track_ratio, canvas.dpi, canvas.length_param,
+    assert (geometry.radius, geometry.track_ratio, geometry.length_param) == (
+        canvas.radius, canvas.track_ratio, canvas.length_param,
     )
     assert geometry.track_ratio_factors == tuple(canvas.track_ratio_factors)
     assert hash(geometry) == hash(canvas.geometry())

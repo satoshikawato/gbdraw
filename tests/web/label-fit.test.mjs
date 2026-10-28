@@ -39,8 +39,9 @@ const report = (rows, { drawn = false } = {}) => ({
   notice: drawn ? ['Leader lines cross (5 pairs).'] : [],
   records: [{ recordId: 'NC_1', recordIndex: 0, labelKind: 'circular_outer', labelKindTitle: 'outer labels',
     labelCount: 80, fontSize: 18, overlapPairs: drawn ? 0 : 3, crossingPairs: 5, definitionOverlaps: 0,
-    regionOverlaps: 0, refused: false, counts: '3 label pairs overlap, 5 leader pairs cross' }],
-  rows
+    regionOverlaps: 0, refused: false, capacityRatio: null, counts: '3 label pairs overlap, 5 leader pairs cross' }],
+  rows,
+  remedies: []
 });
 const failure = (value, rowToken = null) => JSON.stringify({ report: value, rowToken });
 const normalizeReport = (value) => normalizeLabelFitFailure(failure(value)).report;
@@ -122,7 +123,7 @@ const regionReport = () => ({
   notice: ['Region labels overlap other labels or lines (1).'],
   records: [{ recordId: 'adjacent', recordIndex: null, labelKind: 'linear_region', labelKindTitle: 'region label', labelCount: 1,
     fontSize: 10, overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 1, refused: false,
-    counts: '1 region label overlap' }]
+    capacityRatio: null, counts: '1 region label overlap' }]
 });
 
 test('a region label report carries its count, and its notice offers no fix without rows (LP-D82)', async () => {
@@ -239,7 +240,7 @@ const dialogHarness = ({ computeRow = async () => ({}), onWrite = () => {} } = {
 
 const definitionRecord = (recordId, recordIndex) => ({
   recordId, recordIndex, labelKind: 'circular_definition', labelKindTitle: 'definition lines', labelCount: 1, fontSize: 18,
-  overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false,
+  overlapPairs: 0, crossingPairs: 0, definitionOverlaps: 0, regionOverlaps: 0, refused: false, capacityRatio: null,
   counts: '1 line overlaps a track'
 });
 
@@ -281,7 +282,7 @@ test('over a drawn figure the dialog\'s Cancel reads Keep as drawn (K-a), and Ed
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
   const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
-  assert.match(markup, /data-label-fit-keep @click="resolveLabelFitChoice\('cancel'\)"[^>]*>\{\{ labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
+  assert.match(markup, /data-label-fit-keep @click="resolveLabelFitChoice\('cancel'\)"[^>]*>\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
   assert.match(markup, /v-for="record in labelFitDialog\.definitionRecords" :key="record\.recordIndex"[^>]*:data-label-fit-edit-record="record\.recordIndex" @click="editLabelFitRecordText\(record\.recordIndex\)"/);
   const setup = await readFile(new URL('../../gbdraw/web/js/app/app-setup.js', import.meta.url), 'utf8');
   assert.match(setup, /showRecordText: \(recordIndex\) => previewItemPopup\.showRecordTextSettings\(recordIndex\)/);
@@ -403,6 +404,86 @@ test('rows Generate did not search are computed one after another when the dialo
   assert.deepEqual(dialog.labelFitDialog.rows.map((item) => item.status), ['found', 'failed', 'not_found']);
   assert.equal(dialog.labelFitDialog.rows[1].reason, 'The row could not be computed.');
   assert.equal(dialog.labelFitDialog.selectedKind, 'outward_vertical');
+});
+
+// CAPACITY-STOP (PD-OI-097): labels that need much more room than the map has
+// were not placed, so there are no rows. Python names the ways to make room; the
+// Web words each with its own controls, and the dialog offers only Close.
+const CAPACITY_REMEDIES = ['filter', 'label_text', 'font', 'linear'];
+const capacityReport = (remedies = CAPACITY_REMEDIES, capacityRatio = 2.5) => {
+  const value = report([]);
+  return { ...value, overlapPairs: 0, crossingPairs: 0, remedies,
+    records: [{ ...value.records[0], recordId: 'AP027078.1', labelCount: 562, fontSize: 8, overlapPairs: 0,
+      crossingPairs: 0, capacityRatio, counts: 'need about 2.5 times the room around the map' }] };
+};
+
+test('a capacity stop carries each record\'s ratio and Python\'s remedies; an unknown remedy is RESULT_INVALID', () => {
+  const parsed = normalizeReport(capacityReport());
+  assert.equal(parsed.records[0].capacityRatio, 2.5);
+  assert.equal(parsed.records[0].counts, 'need about 2.5 times the room around the map');
+  assert.deepEqual(parsed.remedies, CAPACITY_REMEDIES);
+  assert.ok(Object.isFrozen(parsed.remedies));
+  assert.deepEqual(parsed.rows, []);
+  assert.equal(normalizeReport(report([])).records[0].capacityRatio, null);
+  assert.deepEqual(normalizeReport(report([])).remedies, []);
+  const invalid = (error) => error.code === 'RESULT_INVALID';
+  for (const remedies of [['shrink'], ['Filter'], 'filter', [3], undefined, null]) {
+    assert.throws(() => normalizeReport({ ...capacityReport(), remedies }), invalid, JSON.stringify(remedies));
+  }
+  for (const ratio of [undefined, '2.5', -1, 0, true]) {
+    const value = capacityReport();
+    value.records = [{ ...value.records[0], capacityRatio: ratio }];
+    assert.throws(() => normalizeReport(value), invalid, String(ratio));
+  }
+});
+
+test('the Web words exactly the remedies Python can name, in Python\'s order', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { LABEL_CAPACITY_REMEDY_WORDS } = await import('../../gbdraw/web/js/services/label-fit.js');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  const literal = fit.match(/^LabelCapacityRemedy: TypeAlias = Literal\[([^\]]+)\]$/m)?.[1] || '';
+  const ids = [...literal.matchAll(/"([a-z_]+)"/g)].map(([, id]) => id);
+  assert.deepEqual(ids, CAPACITY_REMEDIES);
+  assert.deepEqual(Object.keys(LABEL_CAPACITY_REMEDY_WORDS), ids);
+  assert.ok(Object.isFrozen(LABEL_CAPACITY_REMEDY_WORDS));
+});
+
+test('the dialog over a capacity stop lists the remedies in Python\'s order, no rows, and only Close', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { dialog, steps, writes, generates } = dialogHarness();
+  await dialog.openLabelFitDialog(normalizeReport(capacityReport(['filter', 'label_text', 'linear'])), { mode: 'circular' });
+  const state = dialog.labelFitDialog;
+  assert.equal(state.show, true);
+  assert.equal(state.capacity, true);
+  assert.deepEqual(state.remedies, [
+    'Label fewer features: Blacklist or Whitelist under LABEL FILTERING.',
+    'Shorten the label text: a priority rule, for example gene before product.',
+    'Draw a Linear map.'
+  ]);
+  assert.deepEqual(state.rows, []);
+  assert.deepEqual(state.records.map((record) => [record.recordId, record.labelCount, record.labelKindTitle, record.fontSize,
+    record.counts, record.capacity]), [['AP027078.1', 562, 'outer labels', 8, 'need about 2.5 times the room around the map', true]]);
+  assert.equal(state.selectedKind, '');
+  await dialog.resolveLabelFitChoice('cancel');
+  assert.equal(state.show, false);
+  assert.deepEqual([steps, writes, generates], [[], [], []]);
+  // A report with rows has no remedies.
+  await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
+  assert.equal(state.capacity, false);
+  assert.deepEqual(state.remedies, []);
+  assert.deepEqual(state.records.map((record) => record.capacity), [false]);
+
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
+  const markup = html.slice(start, html.indexOf('</choice-dialog>', start));
+  assert.match(markup, /\{\{ labelFitDialog\.capacity\s+\? t\('Nothing was drawn\. These labels need much more room than the map has, so placing them was not tried\.'\)/);
+  assert.match(markup, /<div v-if="labelFitDialog\.capacity"[^>]*data-label-fit-remedies>\s*<p[^>]*>\{\{ t\('To make room:'\) \}\}<\/p>\s*<ul[^>]*>\s*<li v-for="remedy in labelFitDialog\.remedies" :key="remedy">\{\{ tm\(remedy\) \}\}<\/li>/);
+  // No rows section and no Apply over a capacity stop; the one button reads Close.
+  assert.match(markup, /<p v-else-if="!labelFitDialog\.rows\.length"/);
+  assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
+  assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
+  // A record not placed for lack of room reads as Python's sentence; other records keep their counts in brackets.
+  assert.match(markup, / pt <template v-if="record\.capacity">\{\{ record\.counts \}\}<\/template><template v-else>\(\{\{ record\.counts \}\}\)<\/template>/);
 });
 
 // The status line the shared choice dialog shows, from the label fit dialog's

@@ -791,7 +791,9 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """LP-D46 CROSS-WARN: lambda at 14 pt has 2 crossing leader pairs and no overlaps (with the repair off)."""
+    """LP-D46 CROSS-WARN: lambda at 15 pt has 2 crossing leader pairs and no overlaps (with the repair off).
+
+    14 pt had them while labels were laid out in point-mode boxes; in their drawn boxes 14 pt fits (OV-165)."""
 
     from gbdraw import cli
 
@@ -801,14 +803,14 @@ def test_cli_draws_crossing_leaders_and_prints_the_warning(
     monkeypatch.setattr(circular_fit_module.time, "monotonic", lambda: 0.0)
     output = tmp_path / "lambda"
     monkeypatch.setattr(
-        sys, "argv", ["gbdraw", "circular", *LAMBDA_ARGS, "-o", str(output), "-f", "svg"]
+        sys, "argv", ["gbdraw", "circular", *LAMBDA_ARGS, "--label_font_size", "15", "-o", str(output), "-f", "svg"]
     )
     cli.main()
 
     assert output.with_suffix(".svg").is_file()
     stderr = capsys.readouterr().err
     assert stderr.startswith(
-        "WARNING: NC_001416.1: 71 outer labels do not fit at 14 pt (0 label pairs overlap, 2 leader pairs cross). "
+        "WARNING: NC_001416.1: 71 outer labels do not fit at 15 pt (0 label pairs overlap, 2 leader pairs cross). "
         "Drawn anyway.\nRun again with one of:\n"
     )
     assert "--outer_label_y_radius_offset 1.025" in stderr
@@ -819,6 +821,7 @@ def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monk
     """The Web reads the report from the success result and asks for one row at a time.
 
     The local repair (LP-D57) clears lambda's 2 crossings; it is off here, as for crossings it cannot clear.
+    Lambda at 15 pt (14 pt while labels were laid out in point-mode boxes; OV-165).
     """
 
     from gbdraw.api.diagram import build_circular_diagram, label_fit_report, label_fit_row
@@ -834,6 +837,8 @@ def test_drawing_with_crossing_leaders_carries_the_report_and_computes_rows(monk
             "labels.circular.scope": "outer",
             "canvas.strandedness": True,
             "canvas.circular.track_type": "tuckin",
+            "labels.font_size.short": 15.0,
+            "labels.font_size.long": 15.0,
         },
     )
     record = SeqIO.read(str(TEST_INPUTS / "NC_001416.gb"), "genbank")
@@ -895,8 +900,10 @@ def test_dense_map_that_fits_with_legacy_rows_draws_as_before(
         ],
     )
 
-    # Digest of the same run on origin/dev 3d748b78 (before OV-479).
-    assert digest == (179, "0572c0627b4b8c86f078ddb1cb6f6d61aff7573ac48c985635ed074ffa71237b")
+    # Digest of the same run with labels laid out in their drawn boxes (OV-165; the 179 labels keep their order,
+    # with no drawn overlap and no leader through another label's letters; OV-1823 moves two labels 1-2 px out).
+    # Before, the digest of origin/dev 3d748b78 (before OV-479) was 0572c062...
+    assert digest == (179, "beb197dace5ea1dc78a1811febe973c733c2db35661d82f41a0f5ce32b00cd94")
 
 
 @pytest.mark.circular
@@ -918,5 +925,7 @@ def test_dense_map_whose_spaced_rows_cross_draws_as_before(
         ],
     )
 
-    # Digest of the same run on origin/dev 3d748b78 (before OV-479).
-    assert digest == (108, "cf67ec842c42201cd9f796657db30a5acb65b37c1e30f826380ea837cf15cf83")
+    # Digest of the same run with labels laid out in their drawn boxes (OV-165; the 108 labels keep their order,
+    # with no drawn overlap). OV-1823 steps six labels out, so 1 leader runs through another label's letters
+    # (origin/dev f5992e64a: 3). Before, the digest of origin/dev 3d748b78 (before OV-479) was cf67ec84...
+    assert digest == (108, "b5b4275737da5e3af8fa8a8a48964c13769ad0950df6d1a17e406bb74d86bbbe")

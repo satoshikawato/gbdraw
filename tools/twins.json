@@ -987,6 +987,21 @@
       "source": "inventory C section B (request record cardinality; OV-149)"
     },
     {
+      "id": "concern:exact-value-pattern",
+      "concern": "Exact-value pattern of a rule (^, the value with regex specials escaped, $)",
+      "pythonOwner": [
+        "gbdraw/web_support/rule_matching.py:exact_value_pattern"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:escapeRegexLiteral",
+        "gbdraw/web/js/services/feature-selector.js:exactRegexValue"
+      ],
+      "vector": null,
+      "reason": "Python's color rule synthesis writes exact conditions, and retires hash rows, in the spelling the Web writes for an exact value, so a rule either side wrote reads as the same condition. tests/test_web_rule_synthesis.py and tests/web/feature-selector.test.mjs pin the same literals; no shared vector.",
+      "retireWhen": "the Web writes exact-value rules through the Python owner (Worker) instead of its own copy",
+      "source": "PR #1348 (OV-244 (a), Python color rule synthesis); the detector does not see it (the two functions have different names)"
+    },
+    {
       "id": "constant:LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION",
       "concern": "Last Session version with legacy Linear track slots (32)",
       "pythonOwner": [
@@ -1227,6 +1242,36 @@
       "reason": "The Web fast path and Python Load of a Session 46-48 must make the same drawings in the same order (R17-1, R17-2, R17-7); the upgrades vectors pin both.",
       "retireWhen": "Session 46-48 is no longer read",
       "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)"
+    },
+    {
+      "id": "concern:feature-instance-record-key",
+      "concern": "Feature instance text (<biological feature ID>@<record key>) and the CLI record key of a record input (record-<n>, record-<n>:<k> for an input that expands to several records)",
+      "pythonOwner": [
+        "gbdraw/features/ids.py:feature_instance",
+        "gbdraw/api/record_planning.py:resolve_record_inputs"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:namedFeatureInstance",
+        "gbdraw/web/js/services/record-draw-selection.js:expandedRecordKey"
+      ],
+      "vector": null,
+      "reason": "A \"This feature only\" hash rule names one feature instance, which Python composes and matches whole. The Web reads the record key out of a rule at the separator and composes a rule naming another record key in the same function (namedFeatureInstance: Delete settings, Run Info, and a Generate that moves a record's rows to its new key), composes the CLI key record-<n> of the n-th record input in one function (cliRecordKey in services/record-draw-selection.js, which the Circular canvas key also uses), and composes the <key>:<k> record key of an expanding input in one function (expandedRecordKey: a Linear record identity, the request split of an ALL card, and the CLI record key that Run Info writes in the Source recipe -t table). The separator and the record key prefix and expansion separator are generated constants (tools/generate_web_contracts.py: FEATURE_INSTANCE_SEPARATOR, CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR); the order of the parts is copied. tests/web/run-info.test.mjs runs the CLI on the rewritten table for a plain and an expanded record and checks that it colors one copy; no shared vector.",
+      "retireWhen": "Python writes the CLI form of the specific color table for the Source recipe and names the record of an instance row, so the Web neither parses nor composes an instance",
+      "source": "PR #1395 (feature-color-leak-20261026, REVIEW-2 item 1); the detector does not see it"
+    },
+    {
+      "id": "constant:LabelCapacityRemedy",
+      "concern": "Capacity remedy ids (filter, label_text, font, linear) and their order, in a capacity stop's report",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:LabelCapacityRemedy"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_REMEDY_WORDS"
+      ],
+      "vector": null,
+      "reason": "Python names the remedies of a capacity stop by id, in its order; the Web admits a report only with ids among the keys of its words map and lists them in Python's order. The keys copy the ids by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
+      "retireWhen": "the ids are generated into contracts/schema.generated.js and the Web words map is keyed by the generated ids, so the Web keeps no hand copy",
+      "source": "PR #1402 review S1 (bigdata-perf-20261026, D-16); the detector does not see it"
     }
   ]
 }

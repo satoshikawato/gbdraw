@@ -41,6 +41,15 @@ comparison match by `data-gbdraw-pairwise-match-id`. The web app renames it to
 `data-gbdraw-match-id`, the only name gbdraw writes now, when it loads such a
 Session, so match popups and selection work as before.
 
+The palette `herbal_garden` was named `hearbal_garden` through gbdraw 0.14.2.
+`-p/--palette`, `FeatureOptions(palette=...)`, `ColorOptions`, and a Session or
+request that names `hearbal_garden` draw `herbal_garden`, and a Session that the
+CLI or the Python API saves names `herbal_garden`; a CLI Session keeps the
+command line as typed. The web app loads the drawing's palette and a queued
+palette as `herbal_garden`. Until the next **Generate**, a Session it saves
+keeps the former name in the palette of the shown Result and in its render
+request; both still draw `herbal_garden`.
+
 Session 44 documents written with canonical request schema 7 or 8 remain
 readable. Current saves promote that request to schema 9 and the Session to 48,
 and keep the saved preview until the next Generate. Schema 9 adds
@@ -118,7 +127,10 @@ per original-source feature, named by `recordKey` and `biologicalFeatureId`, as
 in the request. Feature placement drafts and the `featureIdentity` targets of
 annotations made from selected features are kept per mode the same way. Both
 modes can use the same record key, so a request carries only the rows and
-targets of its own mode. The feature catalog is schema 5. It records the
+targets of its own mode. A row keeps the record key of the view it was last
+drawn in; the next Generate that draws the record under another key moves the
+row to it, so a Session saved by 0.14.2 or earlier keeps its edits when the
+view changes. The feature catalog is schema 5. It records the
 selector values each drawn feature had (`drawnSelector`).
 
 When you load an older Session, the Web app moves its per-feature edits onto

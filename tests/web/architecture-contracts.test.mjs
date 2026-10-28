@@ -5862,6 +5862,36 @@ test('the reserved PR template is guard-only', () => {
   );
 });
 
+test('every file under .github/actions/ is a guard and authority path like a workflow', () => {
+  const action = '.github/actions/example/action.yml';
+  const actionYaml = 'name: Example\nruns:\n  using: composite\n  steps: []\n';
+  const actionOnly = runChangeBudgetCase((write) => write(action, actionYaml));
+  assert.equal(actionOnly.status, 0, actionOnly.output);
+  assert.match(
+    reportSection(actionOnly.output, 'Review reasons'),
+    /Governance and authority: registered governance or authority files changed \(\.github\/actions\/example\/action\.yml\)/
+  );
+  assert.equal(reportSection(actionOnly.output, 'Guard files touched').trim(), `- ${action}`);
+
+  // An action, like the workflow that runs it, does not change with Web runtime or the checker.
+  const withRuntime = runChangeBudgetCase((write) => {
+    write(action, actionYaml);
+    write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+  });
+  assert.equal(withRuntime.status, 1, withRuntime.output);
+  assert.match(withRuntime.output, /production runtime files and Web guard\/CI files changed together/);
+  const withChecker = runChangeBudgetCase((write) => {
+    write(action, actionYaml);
+    write('tools/web-architecture-evaluation.mjs', reservedPathContent('tools/web-architecture-evaluation.mjs'));
+  });
+  assert.equal(withChecker.status, 1, withChecker.output);
+  assert.match(withChecker.output, /Web checker\/source parser and authority policy\/workflow files changed together/);
+
+  // A look-alike outside the prefix stays unregistered.
+  const lookalike = runChangeBudgetCase((write) => write('.github/actions-notes.md', '# Notes\n'));
+  assert.doesNotMatch(lookalike.output, /registered governance or authority files changed/);
+});
+
 test('an unregistered path acquires no guard or authority classification', () => {
   const unregisteredPath = 'docs/internal/UNREGISTERED_ARCHITECTURE_NOTE.md';
   const runtimeChange = runChangeBudgetCase((write) => {

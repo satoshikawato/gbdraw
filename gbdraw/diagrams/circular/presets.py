@@ -240,7 +240,6 @@ def _tick_slot_for_preset(
             strandedness=bool(context.strandedness),
             font_size=float(context.cfg.objects.ticks.tick_labels.font_size),
             font_family=str(context.cfg.objects.text.font_family),
-            dpi=int(context.geometry.dpi),
             manual_interval=context.cfg.objects.scale.interval,
             tick_width=float(context.cfg.objects.ticks.tick_width),
             tick_side=tick_side,
@@ -375,7 +374,6 @@ def circular_auto_slot_sizes(cfg: GbdrawConfig) -> CircularAutoSlotSizes:
         geometry = CircularCanvasGeometry(
             radius=circular.radius,
             track_ratio=circular.track_ratio,
-            dpi=cfg.canvas.dpi,
             length_param=size,
             track_ratio_factors=tuple(circular.track_ratio_factors[size]),
         )

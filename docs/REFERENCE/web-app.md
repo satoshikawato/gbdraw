@@ -230,7 +230,18 @@ the loaded Session; **Reset Settings** and a switch between Circular and Linear
 clear it. Popups open below the notice while it is in the upper half of the window, so it stays readable. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
-changes. The local `gbdraw gui` ships no Gallery and shows neither button.
+changes. The local `gbdraw gui` ships no Gallery and shows neither button. On gbdraw.app the empty Preview also shows a **Learn with tutorials** card,
+each row of the example list has a **Tutorial** link, and the notice of an
+example loaded with **Load example** links to that example's tutorial; each
+opens the Interactive Gallery's tutorial, which is in English, in a new tab.
+**Gallery & tutorials** in the header opens the Interactive Gallery at
+gbdraw.app in every build, the local `gbdraw gui` included. Where the one-row
+header lacks room, the button shows only its icon, and where even that would
+narrow the Session title, **Reset Settings**, **Save Session**, **Load
+Session**, and **Load example** show only their icons too and the header's
+groups move closer together; where the title would still narrow, the
+**Session** caption before it is hidden. In the two-row header of a window 768 px wide or
+narrower, the button shows only its icon, at the end of the logo's row.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,
@@ -1237,13 +1248,27 @@ under **All features with the same**, the matching **Color rule**, **Legend item
 with their feature counts. **Label** and **Source label** become
 one anchored qualifier rule only when the selected features share one feature
 type, qualifier, and value and that rule matches exactly the intended loaded
-features. Otherwise the editor keeps one exact `hash` rule per biological
-feature, also when two records share a record ID. The hash is the feature's
-hash in its source record, so the rule keeps matching the feature when the
-region or orientation of its Linear record changes. Identical duplicate records can
-share the same hash, so a regenerated diagram cannot preserve a one-instance-only
-rule for indistinguishable duplicates: a **This feature only** color then
-applies to both copies. A one-feature rule uses a qualifier value only when no other
+features. Otherwise the editor keeps one exact `hash` rule per feature
+instance: the feature's biological feature ID in its record, written
+`^<feature id>@<record key>$`. It colors that feature of that File card and
+record only, also when two records share a record ID or the same file is drawn
+twice, live and after Generate. The feature ID comes from the feature's hash in
+its source record, so the rule keeps matching the feature when the region or
+orientation of its Linear record changes. Like the other per-feature edits,
+the rule follows the record when the view changes: a Generate that draws the
+record under another key (a Circular record drawn alone or on the
+**Multi-record canvas**, a Linear File card that draws all of its records or
+one of them) moves the rule, the label, visibility, and stroke edits, the
+Feature placements, and the annotation targets of that record to its new key,
+and a record that the Generate does not draw keeps them until it is drawn
+again. A Generate that also replaces or removes the record's file moves none of
+its edits. **Undo** of that Generate puts them back. Edits made on an "all
+records" card of a gbdraw 0.13.0 Session do not follow its records after the
+first Generate splits the card. Resetting **This feature only** on
+one copy leaves the other copies as they are: a rule that names the shared
+hash is narrowed to the copies it still colors. **Delete settings** of a record
+that is turned off removes the `hash` rules that name its feature instances;
+turning the record off keeps them. A one-feature rule uses a qualifier value only when no other
 feature of that record and type has the same value ignoring case, because the
 Python matcher ignores case; `orfA` and `ORFA` are one value.
 

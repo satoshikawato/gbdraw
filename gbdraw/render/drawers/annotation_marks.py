@@ -115,7 +115,7 @@ def label_ink_offsets(
 
     offsets = text_ink_offsets(text, font_family, font_size, dominant_baseline=baseline, text_anchor=anchor)
     if offsets is None:
-        # The fallback width of calculate_bbox_dimensions.
+        # The no-font estimate: 0.6 em per character.
         width = 0.6 * len(text) * font_size
         origin = -TEXT_ANCHOR_SHARE[anchor] * width
         top, bottom = _FALLBACK_EM_BOX[baseline]

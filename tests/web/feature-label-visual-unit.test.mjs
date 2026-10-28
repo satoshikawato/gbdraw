@@ -1053,3 +1053,26 @@ test('a curved Circular region label is never an editable feature label (OV-1210
   assert.equal(byId('region-label').getAttribute('data-label-feature-id'), null);
   assert.deepEqual(harness.state.editableLabels.value.map((entry) => entry.featureId), ['labeled']);
 });
+
+// OV-1984: a label rerender, or another projection, syncs the open popup
+// again; the label text and visibility typed there and not applied stay, and
+// a value the sync last gave follows the label intent.
+test('a popup sync keeps the label text and visibility typed and not applied (OV-1984)', () => {
+  const harness = buildHarness();
+  const popup = harness.state.clickedFeature.value;
+  harness.actions.syncLabelEditor({ queueIncompleteVisibility: false });
+  popup.labelText = 'TYPING';
+  popup.labelVisibility = 'on';
+  harness.actions.syncLabelEditor({ queueIncompleteVisibility: false });
+  assert.equal(popup.labelText, 'TYPING');
+  assert.equal(popup.labelVisibility, 'on');
+  // A field the user did not change follows the intent.
+  const other = buildHarness();
+  const otherPopup = other.state.clickedFeature.value;
+  other.actions.syncLabelEditor({ queueIncompleteVisibility: false });
+  otherPopup.labelText = 'TYPING';
+  other.state.featureOverrides[keyFor(otherPopup.svg_id)] = rowFor(otherPopup.svg_id, { labelVisibility: 'off' });
+  other.actions.syncLabelEditor({ queueIncompleteVisibility: false });
+  assert.equal(otherPopup.labelText, 'TYPING');
+  assert.equal(otherPopup.labelVisibility, 'off');
+});

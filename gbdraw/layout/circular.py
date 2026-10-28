@@ -242,6 +242,19 @@ class CircularRadialLayout:
 
 
 @dataclass(frozen=True)
+class CircularFeatureRenderContext:
+    """What a record's feature group reads of its render context (the ``circular_record_content`` key).
+
+    The feature group places features and embedded labels by the feature lanes
+    alone: the other slots and the definition band do not reach it.
+    """
+
+    profile: CircularRenderProfile
+    track_preset: str
+    feature_layout: CircularFeatureLayout | None
+
+
+@dataclass(frozen=True)
 class CircularRecordRenderContext:
     """Resolved layout state required to render one Circular record."""
 
@@ -253,6 +266,10 @@ class CircularRecordRenderContext:
     @property
     def feature_layout(self) -> CircularFeatureLayout | None:
         return self.radial_layout.features
+
+    @property
+    def feature_context(self) -> CircularFeatureRenderContext:
+        return CircularFeatureRenderContext(self.profile, self.track_preset, self.feature_layout)
 
 
 def band_union(bands: Sequence[RadialBand]) -> RadialBand | None:
@@ -431,6 +448,7 @@ __all__ = [
     "CircularFeatureLaneDirection",
     "CircularFeatureLane",
     "CircularFeatureLayout",
+    "CircularFeatureRenderContext",
     "CircularFeatureStackMetrics",
     "CircularRadialLayout",
     "CircularRecordRenderContext",

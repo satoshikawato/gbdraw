@@ -67,8 +67,8 @@ compressed with `gzip -n -9`. Its decompressed SHA-256 is
 `cli-linear-protein.v30.gbdraw-session.json.gz` (see its `.provenance.json`) with
 `gbdraw linear --session ... -o replay -f svg` before the LOSATP option rename. The
 rename must not change it. It was redrawn when the Legend took the drawn text width
-(Owner V-D03, 2026-10-24; only the Legend moved). SHA-256:
-`31d2a92e76d7f864a278f70a59d175f03d5e608d8fc483755f269baf568fe81a`.
+(Owner V-D03, 2026-10-24; only the Legend moved) and again for the OV-165 labels, ticks, definition and canvas change. SHA-256:
+`d10b2c96e88477a1b1ae6b53988591fb143a7c86eced9129dcab132517370e55`.
 
 `conservation-fasta.v39.gbdraw-session.json.gz` is a version 39 Circular CLI
 session written by first-parent `main` commit
@@ -324,7 +324,7 @@ added white boxes to its turned labels, whose text is unchanged, once more for f
 owner placed the Linear records, when `above_feature` labels kept their row gap, and when the
 gradient Legend block took its title's width and the plot title its painted width, and both
 replays when the composition metadata recorded the Linear scale bounds and when the
-Legend took the drawn text width (`.v47.provenance.json`), and `tests/test_api_session.py`
+Legend took the drawn text width and once more for the OV-165 labels, ticks, definition and canvas change (`.v47.provenance.json`), and `tests/test_api_session.py`
 upgrades and re-saves the BGC Session.
 
 `BGC0000708-BGC0000709-rc.v39.gbdraw-session.json.gz` and
@@ -348,6 +348,23 @@ Circular holds no genome, the five file cards, and hand edits made before and
 after each load. It pins the rows each card marks, the Default colors and
 Blacklist words in `config.fileImports`, and the rows a hand edit made the
 user's. The steps and inputs are in `file-card-imports.provenance.json`.
+
+`HmmtDNA-hearbal-garden-cli.v48.gbdraw-session.json.gz` is the CLI sidecar that
+release v0.14.2 wrote for `-p hearbal_garden`, the former name of the palette
+`herbal_garden`, compressed with `gzip -n -9`. Its command, input hash, and
+decompressed SHA-256 are in `HmmtDNA-hearbal-garden-cli.v48.provenance.json`;
+`tests/test_palette_name_alias.py` replays it.
+
+`record-identity-circular-single.v48.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from release tag `v0.14.2` (Session 48).
+Circular draws record 2 of a two-record GenBank File alone (Multi-Record Canvas
+off), and four features of that record carry a "This feature only" fill, a
+label edit, Feature visibility Off and a stroke, all keyed by the record key
+0.14.2 gave a record drawn alone (`circular-BGC0000709-#2`). It is the positive
+fixture of the Generate that moves a record's rows to the key of its new view
+(OV-1949): `record-identity-moves.playwright.spec.js` loads it, turns the canvas
+on, and expects the four edits on record 2. The steps, edited features
+and hashes are in `record-identity-circular-single.provenance.json`.
 
 `two-mode-linear-shown.v48.gbdraw-session.json.gz` is a Web **Save Session**
 download of the released v0.14.0 app (Session 48, tag `v0.14.0`) with both

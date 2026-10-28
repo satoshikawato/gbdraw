@@ -7,13 +7,13 @@
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { msg, t } from '../../utils/i18n.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { runWhenPrepared } from '../rule-matching.js';
+import { runWhenPrepared, synthesizedRuleTable } from '../rule-matching.js';
 import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { appliedFeatureColorOf, resolveColorToHex } from '../../utils/color-utils.js';
 import { isCardRow, parseSpecificRules, serializeSpecificRules, withoutImportedRows } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, prepareSpecificColorImport,
+  buildLegendIntents, createRuleLegendCaptions, legendColorCopies, legendRowRules, listedRuleRowRemoval, prepareSpecificColorImport,
   rekeyedRuleRows, ruleCommitLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -93,10 +93,21 @@ import {
  */
 
 /**
+ * The Legend owner's move of a drawing's Legend records to the re-keyed keys
+ * (`moveLegendRecords` in app/legend/entry-actions.js); with `takenBack`, it
+ * also drops the records of the `removed` rows (with the Legend colors that
+ * copy them, `legendColorCopies`) and writes the drawing's Legend list.
+ * @typedef {(drawing: DrawingState, entries: readonly LegendRow[], moves: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+ *   takenBack?: { removed: readonly RuleRowColor[] } | null) => unknown} MoveLegendRecordsPort
+ */
+
+/**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(intents: Record<string, any>[], options?: { drawing?: DrawingState, previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
+ * @property {MoveLegendRecordsPort} moveLegendRecords
+ *   The Legend owner's move of a drawing's Legend records; this owner calls it only for Delete settings' take-back.
  * @property {import('../candidate-render.js').ReadLegendRowColorsPort} readLegendRowColors
  *   The root's colors of a drawing's Legend rows as they show (OV-282): a commit owns a listed row in that color.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
@@ -120,7 +131,7 @@ import {
  */
 
 /** @param {FeatureRuleActionsOptions} options */
-export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, moveLegendRecords, readLegendRowColors, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, editDefaultColors, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true, askChoice = async () => 'cancel', showNotice = () => {}, revealSetting = (setting) => setting.focus() }) => {
   const {
     newColorFeat,
     newColorVal,
@@ -850,6 +861,30 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, read
     if (!drawing.manualSpecificRules.some((/** @type {SpecificColorRule} */ rule) => isCardRow(rule, 't_color'))) return Promise.resolve(true);
     return commitSpecificRules((current) => withoutImportedRows(current, 't_color'), msg('Remove specific rules file'), { drawing });
   };
+  // Delete settings takes back, inside its History step, the rows that name a
+  // feature instance of a record whose drawing is turned off (R2): no Result
+  // draws what they color. They are written at once, as History restores
+  // them, from nothing the shown figure holds (REVIEW-1 B1): the rows, and
+  // the Legend records of the rows only the removed rules drew, found by the
+  // keys the drawing stores for them (`listedRuleRowRemoval`); a kept rule's
+  // row whose key changes moves to it (REVIEW-3 R3-B1). The Legend owner
+  // writes the Legend records, with the Legend color copies of the removed
+  // rows (`moveLegendRecords`). So a Save, an Undo or a Redo finds the whole
+  // change.
+  /**
+   * @param {DrawingState} drawing The drawing of the turned-off records.
+   * @param {(rules: SpecificColorRule[]) => SpecificColorRule[]} keep The rows that stay.
+   */
+  const takeBackRuleRows = (drawing, keep) => {
+    /** @type {SpecificColorRule[]} */
+    const before = [...drawing.manualSpecificRules];
+    const kept = keep(before);
+    const entries = drawing.legendEntries.value;
+    const listedKeys = [...entries, ...drawing.deletedLegendEntries.value, ...drawing.dormantLegendEntries.value].map(legendEntryKey);
+    const { gone, rekeyed } = listedRuleRowRemoval(before, kept, listedKeys);
+    replaceColorRules(drawing.slices.colorRules, kept);
+    moveLegendRecords(drawing, entries, rekeyed, { removed: gone });
+  };
 
   const applySpecificRulePreset = async () => {
     const drawing = state.activeDrawing();
@@ -967,8 +1002,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, read
       : override;
   };
 
-  // Python matches a single-feature color rule only by the stable generation
-  // hash, so duplicate record instances that share one hash share the rule.
+  // A feature that has a stable hash can take a single-feature color rule. The
+  // rule a color edit writes is Python's (`groupColorRules`): it names the
+  // feature instance, which Python composes from the catalog identity
+  // (PD-OI-069 revision 2). This stable-hash condition only prepares the rule
+  // matches a color action reads before it commits.
   /** @param {ColorFeature} feat */
   const getFeatureQualifier = (feat) => {
     const colorRuleHash = getFeatureColorRuleHash(feat);
@@ -978,7 +1016,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, read
   // OV-244: the next table of a color edit is Python's. A group takes exact
   // rules on the feature type and its product, gene, or a label text the
   // features show, matching no unselected feature, and `hash` rules for the
-  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule.
+  // rest (Owner R-07); `scope` "features" gives each feature its `hash` rule,
+  // and "reset" takes back the `hash` rules that name the features, each
+  // feature that another rule still colors taking `color` unless it is empty.
   /**
    * @param {readonly ColorFeature[]} features
    * @param {string} color
@@ -989,7 +1029,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, read
   const groupColorRules = (features, color, caption, scope) => async (current) => {
     const labels = features.map((feature) => [getDisplayedFeatureLabel(feature), getIndividualFeatureLabel(feature)]);
     const { table } = await rulePreparation.synthesizeGroup({ scope, features, labels, color, caption }, current);
-    return table.map((row) => (typeof row === 'number' ? current[row] : row));
+    return synthesizedRuleTable(table, current);
   };
 
   /** @param {DrawingState} drawing @param {ColorFeature[] | null | undefined} features */
@@ -1114,6 +1154,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, read
     ruleWritePending: () => writesOnLine.value > 0,
     importSpecificRules,
     removeImportedSpecificRules,
+    takeBackRuleRows,
     followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,

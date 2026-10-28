@@ -1,0 +1,41 @@
+name: Managed LOSAT runtime
+description: >-
+  Install the verified LOSAT release that `gbdraw setup-losat` pins in
+  gbdraw/data/losat-release.json. Every job that installs gbdraw from the
+  checkout runs this step after the install, so a test or tool that reaches
+  native LOSAT through the CLI or the Python API finds the same runtime. The
+  cache, keyed by the release lock, downloads the binary only when the lock
+  changes.
+inputs:
+  optional:
+    description: >-
+      "true" reports a failed install in the `installed` output instead of
+      failing the job.
+    default: "false"
+outputs:
+  installed:
+    description: '"true" when the managed runtime is installed.'
+    value: ${{ steps.setup.outputs.installed }}
+runs:
+  using: composite
+  steps:
+    - name: Restore the managed LOSAT runtime
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.cache/gbdraw/losat
+        key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}
+
+    - name: Install the managed LOSAT runtime
+      id: setup
+      shell: bash
+      env:
+        OPTIONAL: ${{ inputs.optional }}
+      run: |
+        if python -m gbdraw.cli setup-losat; then
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+        elif [[ "$OPTIONAL" == true ]]; then
+          echo "installed=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::gbdraw setup-losat failed; the managed LOSAT runtime is not installed."
+        else
+          exit 1
+        fi

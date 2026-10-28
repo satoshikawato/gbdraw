@@ -45,6 +45,7 @@ import { createSettingsPaneController } from './settings-pane.js';
 import { createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED } from './record-display-options.js';
 import { createPreviewItemPopup, defaultColorScopeLine } from './preview-item-popup.js';
 import { colorRuleLegendGroups, groupLegendRowKeys, legendRowRules } from '../services/specific-color-rules.js';
+import { namedFeatureInstance } from '../services/feature-selector.js';
 import { drawnTracks, hiddenTrackLegendKeys, loadedTracks, trackLegendRows } from '../services/track-legend-rows.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
 import {
@@ -286,7 +287,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
-import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, uiLocale } from '../utils/i18n.js';
+import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
@@ -473,6 +474,7 @@ export const createAppSetup = () => {
   const {
     processing,
     processingStatus,
+    labelCapacityNotices,
     sessionSavePending,
     sessionImportPending,
     generationCancelRequested,
@@ -2035,6 +2037,7 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
+    moveLegendRecords: legendActions.moveLegendRecords,
     readLegendRowColors,
     featureSelection,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
@@ -3476,6 +3479,20 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
+    // DESIGN A4: Generate reads its requests' record identities from the
+    // discovered record lists, awaited here (a Linear card whose list is still
+    // deferred after a Load); the Circular list is the one Generate awaited.
+    readRecordIdentitySources: async (drawing) => {
+      if (drawing.mode === 'circular') return { mode: drawing.mode, circular: circularRecordEntries(drawing) };
+      if (drawing.linearSeqs.some((seq) => linearRecordSelector.statusFor(seq) === 'deferred')) {
+        const outcome = linearRecordSelector.refresh(drawing);
+        if (outcome instanceof Promise) await outcome;
+      }
+      return {
+        mode: drawing.mode,
+        linear: new Map(drawing.linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))]))
+      };
+    },
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -3483,6 +3500,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
     // A Generate that adopts a Circular LOSAT result reconciles its drawing's
@@ -3888,6 +3906,14 @@ export const createAppSetup = () => {
         // The import resolves after the shown Result's preview is mounted.
         const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
         if (status === 'ok' || status === 'legacy') {
+          // #1383 (PD-OI-108): the notice of the loaded example offers its tutorial, found by the example's Gallery id.
+          if (example.tutorialUrl) {
+            noticeBanner.addLink({
+              text: t('This diagram has a step-by-step tutorial.'),
+              label: tx('English-only Gallery tutorial', 'Open the tutorial'),
+              href: example.tutorialUrl
+            });
+          }
           await nextTick();
           fitPreviewToViewport();
         }
@@ -6755,6 +6781,13 @@ export const createAppSetup = () => {
     paint: drawing.slices.paint,
     annotationSets: drawing.annotationSets,
     removeAnnotation: (/** @type {object} */ annotation) => removeAnnotations(drawing.slices.annotationSets, [annotation]),
+    colorRuleEdits: drawing.manualSpecificRules.flatMap((row) => {
+      const instance = namedFeatureInstance(row);
+      return instance ? [{
+        recordKey: instance.recordKey,
+        remove: () => featureActions.takeBackRuleRows(drawing, (rules) => rules.filter((rule) => rule !== row))
+      }] : [];
+    }),
     recordDisplayDrafts: drawing.recordDisplayDrafts,
     comparisonEdges: drawing.mode === 'linear' ? drawing.linearComparisonPlan.edges : [],
     annotationBindingField: ANNOTATION_RECORD_BINDING_KEY
@@ -6809,7 +6842,10 @@ export const createAppSetup = () => {
     const owners = listMode === 'circular'
       ? circularRecordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key))
       : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map((seq) => linearRecordSettingsOwner(drawing, seq));
+    const ruleCount = drawing.manualSpecificRules.length;
     retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
+    // The color rows it took back color nothing drawn; the rule matches follow the table.
+    if (drawing.manualSpecificRules.length !== ruleCount) void projectPaletteAndRules();
     if (listMode === 'linear') {
       applyLinearSeqMutation(drawing, drawing.linearSeqs.map((seq) => (
         deleted.has(seq.uid) ? { ...seq, ...RECORD_SETTINGS_DEFAULTS } : seq
@@ -7058,6 +7094,7 @@ export const createAppSetup = () => {
     sessionSaveNeedsGenerate,
     processing,
     processingStatus,
+    labelCapacityNotices,
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,

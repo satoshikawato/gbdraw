@@ -3,6 +3,7 @@
 // per evaluation made the Web JavaScript tests spend minutes on start-up.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { synthesizedRuleTable } from '../../../gbdraw/web/js/app/rule-matching.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const STDERR_TAIL_BYTES = 16 * 1024;
@@ -136,7 +137,7 @@ result = synthesize_color_rules_json(json.dumps(payload))
  */
 export const groupColorRulesOver = (preparation, labelsOf = () => []) => (features, color, caption, scope) => async (current) => {
   const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption }, current);
-  return table.map((row) => (typeof row === 'number' ? current[row] : row));
+  return synthesizedRuleTable(table, current);
 };
 
 // Load of a Session 27-44 (DESIGN 4.3): the Worker port as the composition

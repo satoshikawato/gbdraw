@@ -72,7 +72,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
+import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -1492,6 +1492,26 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     circularSourceCount: recordSelectors.length || records.length,
     circularPresentedCount: recordSet.presentedCount || records.length
   };
+};
+
+/**
+ * The records the next Generate's request names for a drawing (its keys,
+ * cardinalities, selectors, and regions), before the request is built: the
+ * record plan of `buildCanonicalRenderRequest`, whose descriptors hold no
+ * bytes. A Generate matches them with the committed request's records by
+ * identity before it projects the per-feature rows (`recordKeyMoves`). An
+ * ALL card of several records keeps its one record here; the request may
+ * split it into its `<uid>:<k>` records, whose features have those keys either
+ * way. Null when the drafts name no complete request (Generate then reports why).
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData }} input
+ * @returns {RequestDraftRecord[] | null}
+ */
+export const requestRecordPlan = ({ state, drawing, filesData }) => {
+  try {
+    return buildRecords({ state, drawing, filesData, resources: createResourceBuilder({ encode: false }) }).records;
+  } catch {
+    return null;
+  }
 };
 
 // The label rendering a Generate draws (OV-159): Auto while the mode shows no
@@ -3184,7 +3204,7 @@ const projectCanonicalRenderInput = ({
       if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((/** @type {RecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
-          recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
+          recordKey: expandedRecordKey(record.recordKey, Number(row.selector.slice(1))),
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
             reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
@@ -4262,20 +4282,37 @@ export const decodeCanonicalResourceText = (resources, resourceId) => {
 const sourceRecordCounts = new WeakMap();
 
 /**
+ * The File that holds a resource's bytes, or null when its descriptor holds them.
+ * @param {unknown} descriptor
+ * @returns {WeakKey | null}
+ */
+const resourceFileOwner = (descriptor) => {
+  const owner = getResourcePayloadOwner(descriptor);
+  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
+  return owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+};
+
+/**
+ * The text of a committed Session resource, read from its File or its encoded payload.
+ * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
+ * @param {string} resourceId
+ * @returns {Promise<string>}
+ */
+export const readCanonicalResourceText = async (resources, resourceId) => {
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
+  return fileOwner ? readFileText(fileOwner) : decodeCanonicalResourceText(resources, resourceId);
+};
+
+/**
  * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
  * @param {string} resourceId
  * @param {'genbank' | 'fasta'} kind
  */
 export const readCanonicalResourceRecordCount = async (resources, resourceId, kind) => {
-  const descriptor = resources?.[resourceId];
-  const owner = getResourcePayloadOwner(descriptor);
-  // A set owner other than the descriptor is a value `setResourcePayloadOwner` stored: a WeakKey.
-  const fileOwner = owner && owner !== descriptor ? /** @type {WeakKey} */ (owner) : null;
+  const fileOwner = resourceFileOwner(resources?.[resourceId]);
   let counts = fileOwner ? sourceRecordCounts.get(fileOwner) : undefined;
   if (!counts) {
-    const text = fileOwner
-      ? await readFileText(fileOwner)
-      : decodeCanonicalResourceText(resources, resourceId);
+    const text = await readCanonicalResourceText(resources, resourceId);
     counts = {
       genbank: countGenBankRecords(text),
       fasta: (text.match(/^>/gm) || []).length

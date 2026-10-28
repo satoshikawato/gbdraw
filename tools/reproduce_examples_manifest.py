@@ -1343,7 +1343,6 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "--collinear_max_diagonal_drift", "2",
                 "--collinear_color_mode", "orientation_identity",
                 "--pairwise_match_style", "curve",
-                "--losat_bin", "gbdraw/bin/linux-x86_64/losat",
                 "--losat_threads", "8",
                 "--plot_title", "Vibrio nigripulchritudo replicons: LOSATP collinear blocks",
                 "--plot_title_position", "top",
