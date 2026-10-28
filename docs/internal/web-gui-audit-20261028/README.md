@@ -2,7 +2,7 @@
 
 対象は 0.14.3 の promotion 前の `origin/dev` 3 点。release tier の `Tests`（`workflow_dispatch`、`tier=release`）run 40634318370（`33d9e234c`、seed 40634318370）、run 40648501950（`e7b3c3a06`、seed 40648501950）と run 40655413787（`639de764a`、seed 40655413787）の結果をまとめる。seed は run ID。
 
-**件数**: 固有の問題 3 件（P2 3: OV-1985、OV-1987、OV-1988）。#1433 の review で同じ経路の OV-1986 を追加（再現せず）。どの run でも `Promotion audit / random-walk` だけが失敗し、その原因は run 40634318370 では OV-1985、run 40648501950 では OV-1987、run 40655413787 では OV-1988 である。修正は OV-1985 が #1433（`fix/ov1985-legend-stroke-caption`）、OV-1987 が #1438（`fix/ov1987-legend-stroke-leave`）、OV-1988 が #PRNUM（`fix/ov1988-legend-fill-palette`）。
+**件数**: 固有の問題 3 件（P2 3: OV-1985、OV-1987、OV-1988）。#1433 の review で同じ経路の OV-1986 を追加（再現せず）。どの run でも `Promotion audit / random-walk` だけが失敗し、その原因は run 40634318370 では OV-1985、run 40648501950 では OV-1987、run 40655413787 では OV-1988 である。修正は OV-1985 が #1433（`fix/ov1985-legend-stroke-caption`）、OV-1987 が #1438（`fix/ov1987-legend-stroke-leave`）、OV-1988 が #1441（`fix/ov1988-legend-fill-palette`）。
 
 ## 方法と表記
 
@@ -35,7 +35,7 @@
 
 **修正（OV-1987、#1438）**: Result が描かない行の stroke は、draft がその key にどの色を与えても色では feature に届かない（`legendRowFeatureIds`）。color の編集で行に名指しされた feature や古い Session が行に列挙した feature には、live でも Generate でも従来どおり届く。Generate の結果は変わらない。
 
-**修正（OV-1988、#PRNUM）**: rule が行に色を与えるのは、表示中の Result が描く feature のうち、その rule の group（caption と色）を最初の rule として取るものがあるときだけ（`ruleGroupDrawn` in `services/specific-color-rules.js`、`draftLegendRowColors` が読む）。描かれる feature の match がまだ分からない間は、従来どおりすべての rule が行に色を与える。Legend パネルの swatch 色（`draftLegendPanelColors`）と行の stroke が届く feature も同じ色を読む。Generate の結果は変わらない。
+**修正（OV-1988、#1441）**: rule が行に色を与えるのは、表示中の Result が描く feature のうち、その rule の group（caption と色）を最初の rule として取るものがあるときだけ（`ruleGroupDrawn` in `services/specific-color-rules.js`、`draftLegendRowColors` が読む）。描かれる feature の match がまだ分からない間は、従来どおりすべての rule が行に色を与える。Legend パネルの swatch 色（`draftLegendPanelColors`）と行の stroke が届く feature も同じ色を読む。Generate の結果は変わらない。
 
 ## guard の判断
 

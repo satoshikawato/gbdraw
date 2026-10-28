@@ -39,7 +39,7 @@ write-up of a release.
 - Fixed: in the Web app, after a palette switch, a Legend row whose name a color rule also uses takes the new
   palette color while the rule colors no drawn feature (for example "Use existing color" on a CDS feature that a
   visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next Generate
-  (OV-1988, #PRNUM).
+  (OV-1988, #1441).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
