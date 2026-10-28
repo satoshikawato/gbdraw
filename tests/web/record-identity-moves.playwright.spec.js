@@ -54,8 +54,9 @@ const startCircular = async (page, content = twoRecords, form = {}) => {
   await page.evaluate(({ content, form }) => {
     const app = window.__GBDRAW_APP__;
     app.selectDrawing('circular');
-    app.cInputType = 'gb';
-    app.files.c_gb = new File([content], 'two-records.gbk', { type: 'text/plain', lastModified: 1 });
+    app.setCircularInputType('gb');
+    // The File transition runs the record discovery the record list waits for (R10).
+    app.setCircularSourceFile('c_gb', new File([content], 'two-records.gbk', { type: 'text/plain', lastModified: 1 }));
     Object.assign(app.form, { multi_record_canvas: true, suppress_gc: true, suppress_skew: true, labels_mode: 'out' }, form);
     app.sessionTitle = 'record-identity-moves';
   }, { content, form });
