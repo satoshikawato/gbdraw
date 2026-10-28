@@ -294,6 +294,10 @@ test('each discrete control change records one step for every input means and fo
   page.on('pageerror', (error) => errors.push(error.message));
   await preparePage(page);
   await loadSession(page, seed);
+  // Showing Linear the first time takes the Linear offer and makes a drawing, a project step (R16-2).
+  // Make it before the baseline so the later switch is pure navigation.
+  await showDrawing(page, { kind: 'linear' });
+  await showDrawing(page, { kind: 'circular' });
   const [baseline] = await historyCounts(page);
   const states = [await controlState(page)];
   // Each change is one expected step, applied in order.
