@@ -79,7 +79,7 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentReference,
 )
 from gbdraw.config.models import GbdrawConfig
-from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH
+from gbdraw.config.models.objects import CONSERVATION_COLOR_SCHEME_PATH, ConservationColorScheme
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
     ComparisonThresholds,
@@ -350,8 +350,9 @@ class ComparisonRingOptions:
     ``color_scheme`` colors the rings without a color of their own by drawn
     position from the outermost ring: ``"same"`` (the default color),
     ``"ten"`` (ten colors, repeating from ring 11) or ``"per_five"`` (one
-    color per five rings, repeating from ring 31). ``"same"`` keeps the
-    config's ``objects.conservation.color_scheme``.
+    color per five rings, repeating from ring 31). ``None`` (the default)
+    keeps the config's ``objects.conservation.color_scheme``; a value
+    overrides it.
     """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
@@ -364,7 +365,7 @@ class ComparisonRingOptions:
     losat_executable: str | None = None
     ncbi_blast_executable: str | None = None
     threads: int | None = None
-    color_scheme: Literal["same", "ten", "per_five"] = "same"
+    color_scheme: ConservationColorScheme | None = None
 
 
 # Compatibility aliases for the original package-root names.
@@ -935,7 +936,7 @@ def _circular_options(
                 )
             values["conservation_labels"] = labels
         values.update(_ring_color_values(comparison_rings.tracks))
-    if comparison_rings.color_scheme != "same":
+    if comparison_rings.color_scheme is not None:
         values["config_overrides"] = {
             **(options.config_overrides or {}),
             CONSERVATION_COLOR_SCHEME_PATH: comparison_rings.color_scheme,

@@ -13,6 +13,7 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.config.models.objects import ConservationColorScheme
 from gbdraw.core.color import normalize_hex_color, tint_color
 from gbdraw.annotations.resolve import _source_interval_to_local
 from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
@@ -259,7 +260,6 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-ConservationColorScheme: TypeAlias = Literal["same", "ten", "per_five"]
 # The legend's identity band when the drawn rings differ in colour: a neutral grey with the OKLab lightness of the
 # default ring colour, drawn with the ring gradient rule (PD-OI-110, D-07).
 CONSERVATION_MIXED_BAND_COLOR = "#9c9c9c"
@@ -664,7 +664,6 @@ def normalize_conservation_tracks_for_record(
 __all__ = [
     "CONSERVATION_COLOR_SCHEMES",
     "CONSERVATION_MIXED_BAND_COLOR",
-    "ConservationColorScheme",
     "ConservationInput",
     "ConservationLegendSource",
     "ConservationLoadResult",

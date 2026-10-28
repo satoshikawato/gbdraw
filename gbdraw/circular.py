@@ -14,6 +14,7 @@ from .labels.label_style import DEFAULT_LABEL_LINE, DEFAULT_LABEL_PROTECTION, LA
 from .io.cli_tables import (
     read_circular_track_table,
 )
+from .config.models.objects import CONSERVATION_COLOR_SCHEME_NAMES
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.options import (
@@ -367,7 +368,7 @@ def _get_args(
             'ring: same (every ring the default color), ten (ten colors, repeating from ring 11), or per_five '
             '(one color per five rings, repeating from ring 31) (default: same).'
         ),
-        choices=('same', 'ten', 'per_five'),
+        choices=CONSERVATION_COLOR_SCHEME_NAMES,
         default=None)
     parser.add_argument(
         '--conservation_ring_width',

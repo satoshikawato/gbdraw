@@ -8,6 +8,7 @@ ring 31). A ring's position is its place among the drawn rings, outermost first.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+from typing import get_args
 
 import pandas as pd
 import pytest
@@ -22,6 +23,7 @@ from gbdraw.analysis.conservation import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_circular_diagram_from_record, assemble_circular_diagram_from_records
+from gbdraw.config.models.objects import ConservationColorScheme
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.tracks import CircularTrackSlot
@@ -197,6 +199,14 @@ def test_cli_scheme_and_auto_ring_colours(tmp_path, monkeypatch) -> None:
     assert _ring_colours(svg) == [TEN[0], "#123456", TEN[2]]
 
 
+def test_scheme_names_have_one_owner() -> None:
+    from gbdraw.circular import _get_args
+
+    assert tuple(CONSERVATION_COLOR_SCHEMES) == get_args(ConservationColorScheme)
+    for scheme in get_args(ConservationColorScheme):
+        assert _get_args(["--gbk", "dummy.gb", "--conservation_color_scheme", scheme]).conservation_color_scheme == scheme
+
+
 def test_cli_parses_the_scheme_choices() -> None:
     from gbdraw.circular import _get_args
 
@@ -235,6 +245,25 @@ def test_python_api_scheme_and_rings_without_a_colour() -> None:
     diagram = gbdraw.draw_circular(_record(), options=gbdraw.CircularOptions(comparison_rings=rings, legend="none"))
 
     assert _ring_colours(diagram.to_svg()) == [TEN[0], "#123456", TEN[2]]
+
+
+@pytest.mark.parametrize(
+    ("color_scheme", "expected"), [(None, [TEN[0], TEN[1]]), ("same", [None, None]), ("per_five", [HUES[0], HUES[0]])]
+)
+def test_python_api_scheme_none_keeps_the_config_scheme_and_a_value_overrides_it(
+    color_scheme: str | None, expected: list[str | None]
+) -> None:
+    import gbdraw
+
+    rings = gbdraw.ComparisonRingOptions(
+        tracks=[gbdraw.ComparisonRingTrackOptions(source=_frame()), gbdraw.ComparisonRingTrackOptions(source=_frame())],
+        reference="subject",
+        color_scheme=color_scheme,
+    )
+    options = gbdraw.CircularOptions(comparison_rings=rings, legend="none", config_overrides={SCHEME_PATH: "ten"})
+    diagram = gbdraw.draw_circular(_record(), options=options)
+
+    assert [color or None for color in _ring_colours(diagram.to_svg())] == expected
 
 
 def test_python_api_rejects_an_unknown_scheme() -> None:
