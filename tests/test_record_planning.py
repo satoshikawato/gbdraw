@@ -1168,6 +1168,72 @@ def test_a_projected_typed_result_is_keyed_by_identity_and_rebuilds_on_a_changed
     assert repr(rebuilt.options.orthogroups) == repr(expected.options.orthogroups)
 
 
+def test_a_projected_collinearity_result_hits_its_stage_and_rebuilds_on_a_changed_input(tmp_path: Path) -> None:
+    # OV-1582: the projection is a render stage, so a warm repeat reuses it
+    # (the unmatched items included) and a changed collinearity input is rebuilt.
+    from gbdraw.analysis.collinearity import CollinearityBlock, CollinearityResult
+    from gbdraw.analysis.protein_colinearity import OrthogroupResult
+    from gbdraw.api.prepared import (
+        PreparedBiologicalInputCache,
+        PreparedResourceIdentity,
+        register_prepared_resource_value,
+    )
+    from gbdraw.api.record_planning import (
+        ComparisonRecordBinding,
+        comparison_record_binding,
+        project_source_bound_results,
+    )
+    from gbdraw.features.source import capture_source_features
+
+    record = _frame_test_record()
+    binding = comparison_record_binding(record, capture_source_features(record), False)
+    other = ComparisonRecordBinding({}, {}, {}, 50, {}, {}, False)
+    members = [_member(index, binding.opposite_spans[index]) for index in (0, 1, 2)]
+    members.append(_member(3, (1, 2, 1)))  # matches no feature: unmatched
+    groups = OrthogroupResult(orthogroups={"og1": members},
+                              member_by_protein_id={member.protein_id: member for member in members})
+
+    def collinearity_for(end: int) -> CollinearityResult:
+        anchor = _anchor(binding, 0, binding.opposite[0], 170, end, -1)
+        return CollinearityResult(blocks=(CollinearityBlock("b1", 0, 1, "plus", 1.0, (anchor,)),),
+                                  orthogroups=groups)
+
+    resource = tmp_path / "collinearity.bin"
+    resource.write_text("stored collinearity", encoding="utf-8")
+    identities = {resource: PreparedResourceIdentity("collinearity", "token-1", 19)}
+    cache = PreparedBiologicalInputCache()
+
+    def project(result: CollinearityResult):
+        diagnostics: dict[str, object] = {"metrics": {}}
+        with cache.transaction(resource_paths=identities, diagnostics=diagnostics):
+            register_prepared_resource_value(result, resource)
+            projected = project_source_bound_results(
+                LinearDiagramOptions(collinearity_blocks=result), (binding, other))
+        return projected, diagnostics["metrics"]
+
+    first = collinearity_for(141)
+    cold, cold_metrics = project(first)
+    warm, warm_metrics = project(first)
+    expected = project_source_bound_results(LinearDiagramOptions(collinearity_blocks=first), (binding, other))
+
+    assert cold_metrics["renderStageBuild:comparison_rows"] == 1
+    assert warm_metrics["renderStageHit:comparison_rows"] == 1
+    assert "renderStageBuild:comparison_rows" not in warm_metrics
+    assert repr(warm.options.collinearity_blocks) == repr(cold.options.collinearity_blocks)
+    assert repr(warm.options.collinearity_blocks) == repr(expected.options.collinearity_blocks)
+    assert warm.unmatched and warm.unmatched == cold.unmatched == expected.unmatched
+
+    # A changed collinearity input (new resource token and content): rebuilt, no stale hit.
+    identities[resource] = PreparedResourceIdentity("collinearity", "token-2", 19)
+    changed_input = collinearity_for(150)
+    rebuilt, rebuilt_metrics = project(changed_input)
+    assert rebuilt_metrics["renderStageBuild:comparison_rows"] == 1
+    assert "renderStageHit:comparison_rows" not in rebuilt_metrics
+    assert repr(rebuilt.options.collinearity_blocks) != repr(warm.options.collinearity_blocks)
+    assert repr(rebuilt.options.collinearity_blocks) == repr(project_source_bound_results(
+        LinearDiagramOptions(collinearity_blocks=changed_input), (binding, other)).options.collinearity_blocks)
+
+
 @pytest.mark.parametrize("cropped", [False, True])
 def test_web_protein_map_binding_equals_the_planned_search_frame_binding(tmp_path: Path, cropped: bool) -> None:
     # OV-1145: the Web builds each record's binding from its protein map with
