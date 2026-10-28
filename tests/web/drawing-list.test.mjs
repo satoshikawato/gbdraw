@@ -350,6 +350,50 @@ test('Duplicate copies a drawing as one step; its Undo shows the source and its 
   assert.equal(tabNameOf(tabIds().at(-1)), `${name} copy 2`, 'a second copy takes the next free name');
 });
 
+// New drawing with this style (PD-OI-090 〔作成〕(3), R17-4): a new drawing of
+// the chosen mode at its defaults, with the source's settings that its mode
+// has and the table rows the user entered; no files, edits, or card rows.
+test('New drawing with this style copies the settings its mode has and the user rows, as one step', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(source);
+  const linearDefaults = withNewDrawingDefaults(state, createDrawingState('linear-9', 'linear'));
+  drawing.form.plot_title = 'Source title';
+  drawing.adv.def_font_size = 31;
+  drawing.adv.feature_width_circular = linearDefaults.adv.feature_width_circular + 7;
+  drawing.manualPriorityRules.splice(0, drawing.manualPriorityRules.length,
+    { feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product', importedFrom: 'qualifier_priority' });
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: { 'feature-1': { visible: false } } });
+  const before = tabIds();
+
+  const outcome = app.drawingList.newDrawingWithStyle(source, 'linear');
+  assert.equal(outcome.status, 'ok');
+  const { drawingId } = outcome;
+  assert.equal(drawingId, allocateDrawingId('linear', before));
+  assert.deepEqual(tabIds(), [...before, drawingId], 'its tab comes last');
+  assert.equal(state.activeDrawingId.value, drawingId, 'it is shown');
+  const styled = state.drawingOf(drawingId);
+  assert.equal(styled.mode, 'linear');
+  assert.equal(styled.form.plot_title, 'Source title', 'a setting both modes have');
+  assert.equal(styled.adv.def_font_size, 31, 'a style both modes have');
+  assert.equal(styled.adv.feature_width_circular, linearDefaults.adv.feature_width_circular,
+    'a Circular-only setting keeps the Linear default');
+  assert.deepEqual(JSON.parse(JSON.stringify(styled.manualPriorityRules)), [{ feat: 'CDS', order: 'gene' }],
+    'the Priority row the user entered, not the one a card file loaded');
+  assert.deepEqual(JSON.parse(JSON.stringify(styled.featureOverrides)), {}, 'no feature edit');
+  assert.equal(history.managerOf(drawingId).getUndoCount(), 0, 'with an empty History');
+  assert.equal(drawing.manualPriorityRules.length, 2, 'the source keeps its rows');
+  assert.equal(history.undoLabel(), 'New drawing with this style');
+
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, source, 'Undo shows the source');
+  assert.deepEqual(tabIds(), before);
+  await history.redo();
+  assert.equal(state.activeDrawingId.value, drawingId, 'Redo shows the new drawing');
+  assert.equal(state.drawingOf(drawingId), styled);
+});
+
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

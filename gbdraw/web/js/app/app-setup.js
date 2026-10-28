@@ -90,7 +90,8 @@ import {
   applyLabelFitValues,
   setHeldPreviewViewportReader,
   installShownDrawing,
-  duplicateDrawingState
+  duplicateDrawingState,
+  applyDrawingStyle
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
@@ -4567,6 +4568,11 @@ export const createAppSetup = () => {
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
     boundFileIdsOf: (drawingId) => boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] }),
     createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
+    styleDrawing: (sourceId, drawingId, mode) => {
+      const source = state.drawingOf(sourceId);
+      return applyDrawingStyle(withNewDrawingDefaults(state, createDrawingState(drawingId, mode)), source,
+        resultsManager.paletteColorsOf(source));
+    },
     // The copy's Result is its source's slot under the copy's ID: the shown
     // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
     copyDrawing: (sourceId, copyId) => {
