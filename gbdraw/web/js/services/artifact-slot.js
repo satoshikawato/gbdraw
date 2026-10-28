@@ -129,6 +129,16 @@ const withArtifactSlotValues = (slot, drawing, values) => createArtifactSlot({
 });
 
 /**
+ * `slot`'s artifact as `drawing`'s (Duplicate: the copy shows its source's
+ * Result without a Generate). The artifact's values are shared, as a slot
+ * keeps them by reference; only the drawing it belongs to differs.
+ * @param {Readonly<ArtifactSlot>} slot
+ * @param {DrawingIdentity} drawing
+ * @returns {Readonly<ArtifactSlot>}
+ */
+export const artifactSlotAs = (slot, drawing) => withArtifactSlotValues(slot, drawing, {});
+
+/**
  * What `ArtifactSlotStore.snapshot` returns for `restore`.
  * @typedef {readonly Readonly<ArtifactSlot>[]} ArtifactSlotSnapshot
  */

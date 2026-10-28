@@ -5339,21 +5339,21 @@ const commitLoadedDrawings = (plan) => {
 };
 
 /**
- * The legacy configuration Load's commit (D-15-112): a new drawing state of
- * the shown drawing's ID and mode replaces it in the store and takes its
- * slices, each through its capture and install (the per-feature edits and
+ * A new drawing state of `copyId` with `source`'s mode and every slice of
+ * `source`, each through its capture and install (the per-feature edits and
  * paint through Load's installs, `applyDrawingFeatureData` and
- * `applyDrawingEditorData`), so the configuration applies to the copy and the
- * rollback puts the drawing back unchanged (`restoreSessionImportSnapshot`).
- * @param {DrawingState} drawing The shown drawing.
- * @returns {DrawingState} The copy, shown.
+ * `applyDrawingEditorData`), so the copy shares no member object with its
+ * source. The one copy of a drawing: Duplicate (PD-OI-090 〔作成〕) and the
+ * legacy configuration Load's commit (`commitDrawingCopy`).
+ * @param {DrawingState} source
+ * @param {DrawingId} copyId
+ * @returns {DrawingState}
  */
-const commitDrawingCopy = (drawing) => {
-  const copy = createDrawingState(drawing.id, drawing.mode);
-  state.replaceDrawings(state.drawingList().map((each) => (each.id === drawing.id ? copy : each)), state.drawingTabs.value);
-  const { slices } = drawing;
-  applyDrawingFeatureData(copy, drawingFeatureData(drawing));
-  applyDrawingEditorData(copy, normalizeEditorStateData(buildEditorStateData(drawing)));
+export const duplicateDrawingState = (source, copyId) => {
+  const copy = createDrawingState(copyId, source.mode);
+  const { slices } = source;
+  applyDrawingFeatureData(copy, drawingFeatureData(source));
+  applyDrawingEditorData(copy, normalizeEditorStateData(buildEditorStateData(source)));
   // The slices the two installs above leave out, and the exact feature edits
   // (with the Feature placements) and label tables.
   SETTINGS_SLICE.install(copy.slices.settings, SETTINGS_SLICE.capture(slices.settings));
@@ -5365,6 +5365,20 @@ const commitDrawingCopy = (drawing) => {
   GROUP_NAMES_SLICE.install(copy.slices.groupNames, GROUP_NAMES_SLICE.capture(slices.groupNames));
   FEATURE_EDITS_SLICE.install(copy.slices.featureEdits, FEATURE_EDITS_SLICE.capture(slices.featureEdits));
   LABEL_TABLES_SLICE.install(copy.slices.labelTables, LABEL_TABLES_SLICE.capture(slices.labelTables));
+  return copy;
+};
+
+/**
+ * The legacy configuration Load's commit (D-15-112): a copy of the shown
+ * drawing under its own ID (`duplicateDrawingState`) replaces it in the store,
+ * so the configuration applies to the copy and the rollback puts the drawing
+ * back unchanged (`restoreSessionImportSnapshot`).
+ * @param {DrawingState} drawing The shown drawing.
+ * @returns {DrawingState} The copy, shown.
+ */
+const commitDrawingCopy = (drawing) => {
+  const copy = duplicateDrawingState(drawing, drawing.id);
+  state.replaceDrawings(state.drawingList().map((each) => (each.id === drawing.id ? copy : each)), state.drawingTabs.value);
   return installShownDrawing(drawing.id);
 };
 

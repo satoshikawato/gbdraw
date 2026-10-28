@@ -300,6 +300,56 @@ test('Delete shows the next tab, else the previous; its Undo restores the drawin
   assert.deepEqual(state.results.value.map((result) => result.name), ['first.svg']);
 });
 
+// Duplicate (PD-OI-090 〔作成〕, R16-2): the copy takes the source's files,
+// settings, edits, and Result, with an empty History, and shares no member.
+test('Duplicate copies a drawing as one step; its Undo shows the source and its Redo the copy', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const { drawingId: source } = app.drawingList.newDrawing('linear');
+  const drawing = state.drawingOf(source);
+  await history.runUndoable('Plot title', () => { drawing.form.plot_title = 'Source title'; });
+  FEATURE_EDITS_SLICE.install(drawing.slices.featureEdits, { featureOverrides: { 'feature-1': { visible: false } } });
+  state.results.value = [resultOf('source.svg')];
+  const before = tabIds();
+  const name = tabNameOf(source);
+
+  const outcome = app.drawingList.duplicateDrawing(source);
+  assert.equal(outcome.status, 'ok');
+  const { drawingId: copyId } = outcome;
+  assert.equal(copyId, allocateDrawingId('linear', before), 'the ID of its kind over the live drawings');
+  assert.deepEqual(tabIds(), [...before, copyId], 'its tab comes last');
+  assert.equal(tabNameOf(copyId), `${name} copy`);
+  assert.equal(state.activeDrawingId.value, copyId, 'the copy is shown');
+  const copy = state.drawingOf(copyId);
+  assert.equal(copy.mode, 'linear');
+  assert.equal(copy.form.plot_title, 'Source title', 'with its settings');
+  assert.deepEqual(copy.featureOverrides, drawing.featureOverrides, 'and its edits');
+  assert.deepEqual(state.results.value.map((result) => result.name), ['source.svg'], 'and its Result, without Generate');
+  assert.equal(history.managerOf(copyId).getUndoCount(), 0, 'with an empty History');
+  for (const key of Object.keys(drawing)) {
+    const member = /** @type {Record<string, unknown>} */ (drawing)[key];
+    if (member && typeof member === 'object') {
+      assert.notEqual(/** @type {Record<string, unknown>} */ (copy)[key], member, `the copy shares no ${key}`);
+    }
+  }
+  copy.form.plot_title = 'Copy title';
+  assert.equal(drawing.form.plot_title, 'Source title', 'a write to the copy leaves the source');
+  copy.form.plot_title = 'Source title';
+  assert.equal(history.undoLabel(), 'Duplicate drawing');
+
+  await history.undo();
+  assert.equal(state.activeDrawingId.value, source, 'Undo shows the source');
+  assert.deepEqual(tabIds(), before);
+  assert.deepEqual(state.results.value.map((result) => result.name), ['source.svg']);
+
+  await history.redo();
+  assert.equal(state.activeDrawingId.value, copyId, 'Redo shows the copy');
+  assert.equal(state.drawingOf(copyId), copy, 'the same copy comes back');
+  assert.deepEqual(state.results.value.map((result) => result.name), ['source.svg'], 'with its Result');
+  assert.equal(app.drawingList.duplicateDrawing(source).status, 'ok');
+  assert.equal(tabNameOf(tabIds().at(-1)), `${name} copy 2`, 'a second copy takes the next free name');
+});
+
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

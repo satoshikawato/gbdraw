@@ -291,6 +291,30 @@ test('Delete in the tab menu removes the shown drawing as one step that Undo res
   expect((await shownDrawing(page)).id, 'Undo shows the restored drawing').toBe(second);
 });
 
+// PD-OI-090 〔作成〕, R16-2: Duplicate is one project step; its Undo shows the source.
+test('Duplicate in the tab menu shows a named copy as one step that Undo takes back to the source', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openApp(page);
+  const [first] = await drawingIds(page);
+  const name = await tabName(page, first);
+  const menu = page.locator('.drawing-bar-menu');
+
+  await menu.locator('summary').click();
+  await menu.getByRole('button', { name: 'Duplicate drawing', exact: true }).click();
+  const ids = await drawingIds(page);
+  expect(ids).toHaveLength(2);
+  const copy = ids[1];
+  expect(ids[0]).toBe(first);
+  await expect(drawingTab(page, copy)).toHaveAccessibleName(`${name} copy`);
+  expect((await shownDrawing(page)).id, 'the copy is shown').toBe(copy);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('Duplicate drawing');
+
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  expect(await drawingIds(page)).toEqual([first]);
+  expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(first);
+});
+
 // D-15-120: a Load of a one-mode Session makes no drawing of the other mode. The bar lists the
 // Session's drawings; the Linear offer tab, or the menu's New Circular drawing, makes the other
 // mode's drawing at its defaults.

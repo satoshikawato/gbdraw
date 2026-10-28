@@ -89,8 +89,10 @@ import {
   setPreviewRuntime,
   applyLabelFitValues,
   setHeldPreviewViewportReader,
-  installShownDrawing
+  installShownDrawing,
+  duplicateDrawingState
 } from '../services/config.js';
+import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
   ALIGNMENT_REFERENCE_KEY, alignmentOverlayRecords, buildAlignmentReviewView
 } from '../services/alignment-review-view.js';
@@ -4565,6 +4567,14 @@ export const createAppSetup = () => {
     drawingHasEdits: (drawingId) => drawingHasEdits(state.drawingOf(drawingId)),
     boundFileIdsOf: (drawingId) => boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] }),
     createDrawing: (drawingId, mode) => withNewDrawingDefaults(state, createDrawingState(drawingId, mode)),
+    // The copy's Result is its source's slot under the copy's ID: the shown
+    // drawing's through `captureArtifactSlot` (it reads `currentResults`, R1).
+    copyDrawing: (sourceId, copyId) => {
+      const drawing = duplicateDrawingState(state.drawingOf(sourceId), copyId);
+      const slot = artifactSlots.readOfDrawing(sourceId, state.activeDrawingId.value,
+        () => historySnapshots.captureArtifactSlot(), (kept) => kept);
+      return { drawing, slot: slot ? artifactSlotAs(slot, drawing) : null };
+    },
     addDrawing: state.addDrawing,
     removeDrawing: (drawingId) => state.removeDrawing(drawingId, artifactSlots),
     putSlot: artifactSlots.putSlot,
@@ -4579,6 +4589,7 @@ export const createAppSetup = () => {
   // New Circular, New Linear, Rename, Move, and Delete (B4a-5, B4b).
   const drawingBar = createDrawingBar({
     newDrawing: drawingList.newDrawing,
+    duplicateDrawing: drawingList.duplicateDrawing,
     renameDrawing: drawingList.renameDrawing,
     moveDrawing: drawingList.moveDrawing,
     deleteDrawing: drawingList.deleteDrawing,

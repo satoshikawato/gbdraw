@@ -1,11 +1,11 @@
 // @ts-check
-// The operations on the drawing list (PD-OI-090, R11): New, Rename, Move, and
-// Delete. Each is one project step of the History router (`runListStep`), and
+// The operations on the drawing list (PD-OI-090, R11): New, Duplicate, Rename,
+// Move, and Delete. Each is one project step of the History router (`runListStep`), and
 // these are the only callers of the drawing store's list writers. A step that
 // adds or deletes a drawing shows the drawing shown after it, and its Undo the
 // drawing shown before (R16-2). A step that takes a drawing out holds it, its
 // Result slot, and (through the router) its History, for its Undo (R16-3).
-import { allocateDrawingId, defaultDrawingName, drawingNamesProblem } from '../services/drawing-view.js';
+import { allocateDrawingId, copyDrawingName, defaultDrawingName, drawingNamesProblem } from '../services/drawing-view.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
@@ -25,6 +25,8 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingState} CreateDrawing A new drawing at its defaults.
  * @typedef {(drawingId: DrawingId) => DrawingState} ReadDrawing A drawing the store holds.
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
+ * @typedef {(sourceId: DrawingId, copyId: DrawingId) => { drawing: DrawingState, slot: HeldSlot }} CopyDrawing
+ *   A copy of a drawing the store holds, under `copyId`, with its Result slot (null: it has no Result).
  * @typedef {(drawing: DrawingState, name: string, index: number) => void} AddDrawingToStore
  * @typedef {(drawingId: DrawingId) => HeldSlot} RemoveDrawingFromStore
  *   Removes a drawing that is not shown, and hands over its slot.
@@ -52,6 +54,7 @@ import { msg, t, tm } from '../utils/i18n.js';
  * @property {ReadDrawingHas} drawingHasEdits
  * @property {ReadBoundFileIds} boundFileIdsOf
  * @property {CreateDrawing} createDrawing
+ * @property {CopyDrawing} copyDrawing
  * @property {AddDrawingToStore} addDrawing
  * @property {RemoveDrawingFromStore} removeDrawing
  * @property {PutSlot} putSlot
@@ -65,7 +68,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 
 /** @param {DrawingListPorts} ports */
 export const createDrawingList = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, addDrawing,
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, drawingHasResult, drawingHasEdits, boundFileIdsOf, createDrawing, copyDrawing, addDrawing,
   removeDrawing, putSlot, renameDrawing: renameInStore, moveDrawing: moveInStore, addDrawingHistory,
   removeDrawingHistory, runListStep, showDrawingNow
 }) => {
@@ -122,6 +125,46 @@ export const createDrawingList = ({
     });
     return drawingId;
   });
+
+  /**
+   * A copy of a drawing at the end of the tabs (PD-OI-090 〔作成〕): the ID of
+   * its kind, the name "<name> copy" (`copyDrawingName`), the source's files,
+   * settings, edits, and Result, and an empty History, shown (R11). Its Undo
+   * shows the drawing shown before; its Redo shows the copy again (R16-2).
+   * @param {DrawingId} sourceId
+   * @returns {DrawingListOutcome}
+   */
+  const duplicateDrawing = (sourceId) => {
+    const tabs = drawingTabs();
+    const index = tabIndexOf('duplicateDrawing', sourceId);
+    return unlessBusy(() => {
+      const before = shownDrawingId();
+      const { mode } = drawingOf(sourceId);
+      const drawingId = allocateDrawingId(mode, tabs.map((tab) => tab.id));
+      const name = copyDrawingName(tabs[index].name, tabs.map((tab) => tab.name));
+      const { drawing, slot: copied } = copyDrawing(sourceId, drawingId);
+      /** @type {HeldSlot} */
+      let slot = copied;
+      runListStep('Duplicate drawing', {
+        apply: () => {
+          addDrawing(drawing, name, drawingTabs().length);
+          addDrawingHistory(drawingId);
+          if (slot) putSlot(slot);
+          showDrawingNow(drawingId);
+        },
+        redo: () => {
+          addDrawing(drawing, name, drawingTabs().length);
+          if (slot) putSlot(slot);
+          showDrawingNow(drawingId);
+        },
+        undo: () => {
+          showDrawingNow(before);
+          slot = removeDrawing(drawingId);
+        }
+      });
+      return drawingId;
+    });
+  };
 
   /**
    * A drawing's new name: refused when blank or when another drawing has it,
@@ -213,7 +256,7 @@ export const createDrawingList = ({
     return drawingHasResult(drawingId) || drawingHasEdits(drawingId);
   };
 
-  return { newDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
+  return { newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
 };
 
 /**
@@ -260,8 +303,10 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DeleteDrawingStep The list's Delete.
  * @typedef {(drawingId: DrawingId) => boolean} NeedsDeleteConfirmation
  * @typedef {(mode: ModeProfileName) => DrawingListOutcome} NewDrawingStep The list's New.
+ * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DuplicateDrawingStep The list's Duplicate.
  * @typedef {object} DrawingBarPorts
  * @property {NewDrawingStep} newDrawing
+ * @property {DuplicateDrawingStep} duplicateDrawing
  * @property {RenameDrawingStep} renameDrawing
  * @property {MoveDrawingStep} moveDrawing
  * @property {DeleteDrawingStep} deleteDrawing
@@ -307,12 +352,12 @@ export const moveTabFocus = (event) => {
 
 /**
  * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs with
- * the Linear offer tab, and the tab menu's New Circular, New Linear, Rename,
- * Move, and Delete, each one list operation (one History step).
+ * the Linear offer tab, and the tab menu's New Circular, New Linear, Duplicate,
+ * Rename, Move, and Delete, each one list operation (one History step).
  * @param {DrawingBarPorts} ports
  */
 export const createDrawingBar = ({
-  newDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
+  newDrawing, duplicateDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
   drawingTabs, shownDrawingId, modeOf, askText, askChoice
 }) => {
   /** @returns {Array<DrawingBarTab | DrawingBarOffer>} */
@@ -393,5 +438,5 @@ export const createDrawingBar = ({
     return deleteStep(drawingId);
   };
 
-  return { tabs, newDrawing, renameDrawing, moveDrawing, deleteDrawing };
+  return { tabs, newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing };
 };
