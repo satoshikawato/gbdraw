@@ -59,10 +59,10 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
   test.setTimeout(300_000);
   await openFresh(page);
   const examples = path.join(root, 'examples');
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second, table }) => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));

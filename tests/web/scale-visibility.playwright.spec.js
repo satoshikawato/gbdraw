@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { evaluateWithRetainedPromise, openApp, expectSessionLoadedWithoutWarnings } = require('./helpers/app-lifecycle.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
@@ -42,10 +43,10 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
 
   await openApp(page);
 
+  await showDrawing(page, { kind: 'circular' });
   await page.evaluate(async (genbankText) => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularInputType('gb');
     app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -111,9 +112,9 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
   });
   await expect(page.getByLabel('Circular scale interval')).toBeDisabled();
 
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -164,10 +165,10 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await openApp(page);
 
+  await showDrawing(page, { kind: 'circular' });
   await page.evaluate(async (genbankText) => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('circular');
     app.setCircularInputType('gb');
     app.files.c_gb = bound(new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -241,9 +242,9 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     return svg.querySelectorAll('path[data-gbdraw-feature-part="block"]').length;
   })).toBeGreaterThan(0);
 
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.setLinearInputType('gb');
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -336,8 +337,8 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   expect(await page.evaluate((expectedPath) => (
     String(window.__GBDRAW_APP__.currentResults()[0]?.content || '').includes(expectedPath)
   ), linearGeometry.d)).toBe(true);
+  await showDrawing(page, { kind: 'circular' });
   await page.evaluate(async () => {
-    window.__GBDRAW_APP__.selectDrawing('circular');
     await window.Vue.nextTick();
   });
   expect(await arrowSettings()).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
