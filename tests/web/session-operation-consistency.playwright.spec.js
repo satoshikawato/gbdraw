@@ -3,6 +3,7 @@ const { readFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 const { shownSavedDrawing } = require('./helpers/saved-session.cjs');
+const { showDrawing, takeLinearOffer } = require('./helpers/drawing-bar.cjs');
 
 const fixture = (name = 'HmmtDNA_basic_circular') => ({
   name: `${name}.gbdraw-session.json`, mimeType: 'application/json',
@@ -56,9 +57,11 @@ const expectIntact = async page => {
 
 // Each case represents an independently reachable owner, rather than a disabled
 // template assertion. Invalid arguments deliberately ensure busy wins admission.
-const blockedActions = [
+// `selectDrawing` names a drawing that exists (an unknown one is refused before
+// the busy check), so each case fills in the Linear drawing it makes.
+const blockedActions = (linearId) => [
   ['selectResult', [0]], ['setOptionalNumberInputValue', [null, 'label_rotation', '45', true]],
-  ['selectDrawing', ['linear']], ['setCircularInputType', ['gff']],
+  ['selectDrawing', [linearId]], ['setCircularInputType', ['gff']],
   ['runAnalysis', []], ['cancelGeneration', []],
   ['setLabelFilterMode', ['Whitelist']], ['addWhitelistRule', []],
   ['removeWhitelistRule', [0]], ['removePriorityRule', [0]], ['resetSettings', []], ['resetLayout', []],
@@ -80,6 +83,9 @@ const blockedActions = [
 for (const operation of ['save', 'load']) {
   test(`${operation} occupies all semantic owners and keeps browsing available`, async ({ page }, info) => {
     await setup(page);
+    // The Session holds one Circular drawing; the switch target is a Linear one.
+    const linearId = await takeLinearOffer(page);
+    await showDrawing(page, { kind: 'circular' });
     await capture(page);
     await page.evaluate(async operation => {
       const service = (await import('/tests/web/helpers/session-caller.mjs')).callerSession(await import('/gbdraw/web/js/services/config.js'), (await import('/gbdraw/web/js/state.js')).state, window.__GBDRAW_APP__.sessionImportRollbackState);
@@ -111,7 +117,7 @@ for (const operation of ['save', 'load']) {
         ? await service.importSession({ target: { files: [new File(['{}'], 'other.json')], value: '' } }, { confirmLoadRepairs: async () => false })
         : await service.exportSession('cross-save')]);
       return values;
-    }, blockedActions);
+    }, blockedActions(linearId));
     for (const [name, result] of outcomes) {
       expect(result?.status, name).toBe('busy');
       expect(result.reason, name).toMatch(/Retry after/);
@@ -314,11 +320,11 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   page.on('dialog', dialog => dialog.accept());
   await openApp(page);
   const text = readFileSync('tests/fixtures/sessions/cli-web-mito.gb', 'utf8');
+  await takeLinearOffer(page);
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, (await import('./js/state.js')).state.inputFiles);
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     app.sessionTitle = 'Private draft';
     app.linearSeqs[0].gb = bound(new File([text, text], 'two-records.gb'));
     window.draftSource = app.linearSeqs[0];
