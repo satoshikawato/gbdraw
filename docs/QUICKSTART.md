@@ -5,15 +5,15 @@
 To draw without installing anything, open the web app at
 [https://gbdraw.app/](https://gbdraw.app/).
 
-With gbdraw installed and a source checkout
-(`git clone https://github.com/satoshikawato/gbdraw.git`), draw two figures
-from the inputs in its `gbdraw/web/tutorial-data/` folder: a circular map of
+With gbdraw installed (from PyPI or a source checkout), draw two figures
+from the inputs in the package's `gbdraw/web/tutorial-data/` folder: a circular map of
 the human mitochondrial genome (NCBI `NC_012920.1`), and the phage Lambda
 (`NC_001416.1`) and DE3 (`NC_042057.1`) genomes joined by their LOSATN
-comparison. Run in the directory that holds the `gbdraw` checkout:
+comparison. The first line finds that folder in the installed package. Run in
+any directory where you want the SVG files:
 
 ```bash
-data=gbdraw/gbdraw/web/tutorial-data
+data=$(python -c "import gbdraw, pathlib; print(pathlib.Path(gbdraw.__file__).parent / 'web' / 'tutorial-data')")
 gbdraw circular \
   --gbk "$data/human-mitochondrion/HmmtDNA.gbk" \
   --separate_strands \
