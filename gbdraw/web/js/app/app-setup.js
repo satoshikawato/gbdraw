@@ -4614,12 +4614,13 @@ export const createAppSetup = () => {
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
   };
-  // `false` when the drawing is unknown or already shown, the busy reason
-  // when a switch waits, else `{ status: 'ok' }`.
-  /** @param {unknown} drawingId */
+  // `false` when the drawing is already shown, the busy reason when a switch
+  // waits, else `{ status: 'ok' }`. An unknown ID throws (`state.drawingOf`):
+  // the tabs and the drawing menu offer only existing drawings (OV-2151).
+  /** @param {DrawingId} drawingId */
   const selectDrawing = (drawingId) => {
-    const arriving = state.drawingList().find((drawing) => drawing.id === drawingId);
-    if (!arriving || arriving === state.activeDrawing()) return false;
+    const arriving = state.drawingOf(drawingId);
+    if (arriving === state.activeDrawing()) return false;
     const busy = drawingSwitchBusy();
     if (busy) return busy;
     showDrawingNow(arriving.id);
@@ -5114,10 +5115,13 @@ export const createAppSetup = () => {
   };
   // E1 (PD-OI-079): an error about another drawing's Result (Save of a
   // legacy Result kept in that drawing) offers Generate there: the action
-  // shows that drawing first.
+  // shows that drawing first. A drawing deleted since the error is no
+  // longer a target: the action generates the shown drawing, as for an error
+  // that names no drawing (OV-2151).
   const generateFromError = () => {
     const target = errorLog.value?.context?.drawingId;
-    if (target !== undefined && target !== state.activeDrawingId.value) {
+    const targetListed = state.drawingTabs.value.some((tab) => tab.id === target);
+    if (targetListed && target !== undefined && target !== state.activeDrawingId.value) {
       const switched = selectDrawing(target);
       if (switched && switched.status === 'busy') return switched;
     }
