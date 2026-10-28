@@ -3469,7 +3469,7 @@ Status: active Product authority
   record when OFF, and the layout then reserves no center room for it. The
   replies come from the Product Decision Owner `satoshikawato` of
   `2026-10-28` in the Claude Code session of the campaign
-  `hide-definition-20261028` (decisions HD-D01, HD-D02, and HD-R01), given to
+  `hide-definition-20261028` (decisions HD-D01, HD-D02, HD-R01, and HD-D08), given to
   questions the session asked because the choices are the Product Decision
   Owner's. Each reply is quoted as written.
   - HD-D01 (`2026-10-28`). With a screenshot of a Circular Result, the Owner
@@ -3485,6 +3485,13 @@ Status: active Product authority
     receipt (HD-R01) confirms it.
   - HD-R01 (`2026-10-28`). The session showed the complete receipt below.
     Reply: 「承認」
+  - HD-D08 (`2026-10-28`). After review, the session reported that a
+    **Center Reserved Radius** set in the sidebar (typed, or written by the
+    label-fit action that narrows the inside tracks) still reserves the center
+    while the definition is hidden:
+    「サイドバーの Center Reserved Radius に値が入っていると、Definition を消しても中央の空きはその値のまま残ります」.
+    Reply: 「OK」. The receipt is unchanged; this confirmation is recorded in
+    the `PD-OI-109` record.
   - The receipt and JSON reproduce the approved fields without translation or
     additional terms.
   - New receipt SHA-256: `PD-OI-109` scenario revision `1`
@@ -9888,6 +9895,9 @@ Decision date: 2026-10-27
   evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
   `206f551751107725ba2cdbeac873cb3aaefb9f9aee216be00b4f74eb78bb105e`.
+- Owner confirmation (HD-D08 of the Revision 96 entry above): a **Center
+  Reserved Radius** (`--center_reserved_radius`) that the user set still
+  reserves the center while the definition is hidden.
 
 ```text
 PRODUCT_DECISION
