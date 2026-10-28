@@ -140,6 +140,8 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
     [changeCircularMeasureUnit({ value: '1e-3', unit: 'factor' }, 'px'), { value: 0.001, unit: 'px' }],
     [writeCircularMeasureValue('65%', 'px'), { value: 0.65, unit: 'factor' }]
   );
+  // The test installs each mode's drawing; a Load makes only its own (D-15-120), so the offer tab's drawing is added.
+  (await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder())();
   for (const [mode, enabled] of [['circular', true], ['circular', false], ['linear', false]]) {
     installShownDrawing(mode);
     const slot = state.activeDrawing().adv.circular_track_slots[0];

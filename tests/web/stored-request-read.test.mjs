@@ -411,10 +411,9 @@ test('a Linear comparison in a Session 49 Circular request is dropped with no no
   session.renderRequest.comparisons = linearComparison();
   const { result } = await load(session);
   assert.equal(result.status, 'ok', JSON.stringify(result.error));
-  for (const mode of ['circular', 'linear']) {
-    const intent = modeDrawing(state, mode).importedComparisonIntent;
-    assert.notEqual(intent?.disposition, 'DECISION_REQUIRED', mode);
-  }
+  // A one-mode Load makes no Linear drawing (D-15-120), so no Linear drawing holds a decision either.
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.mode), ['circular']);
+  assert.notEqual(modeDrawing(state, 'circular').importedComparisonIntent?.disposition, 'DECISION_REQUIRED');
   assert.deepEqual((result.repairs || []).filter(requestRow), []);
 });
 

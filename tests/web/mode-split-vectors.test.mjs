@@ -103,11 +103,17 @@ const load = async (session) => {
   assert.equal(outcome?.status, 'ok', JSON.stringify(outcome?.error));
 };
 // The drawings as Save writes them (complete slices).
-const savedModes = () => Object.fromEntries(MODES.map((mode) => [mode, JSON.parse(JSON.stringify(
-  buildModeSliceData(modeDrawing(state, mode), mode, {
-    selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
-  })
-))]));
+// A one-mode Load made no drawing of the other mode (D-15-120); the offer tab makes it at its defaults,
+// which Load used to fill.
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
+const savedModes = () => {
+  addPairDrawings();
+  return Object.fromEntries(MODES.map((mode) => [mode, JSON.parse(JSON.stringify(
+    buildModeSliceData(modeDrawing(state, mode), mode, {
+      selectedFeatureRecordIdx: mode === state.mode.value ? Number(state.selectedFeatureRecordIdx.value) || 0 : 0
+    })
+  ))]));
+};
 
 // A Session 46 that carries a flat-draft case's split and nothing else: Load
 // fills each slice from the mode's defaults.

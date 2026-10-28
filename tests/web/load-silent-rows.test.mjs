@@ -39,6 +39,9 @@ const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-s
 const { describeLoadRepairs } = await import('../../gbdraw/web/js/utils/load-repairs.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 await (await import('./helpers/drawing-state.mjs')).addStartLinearDrawing();
+// A one-mode Load makes no drawing of the other mode (D-15-120); a case that needs the pair adds it as the offer tab does.
+const addPairDrawings = await (await import('./helpers/drawing-state.mjs')).modeDrawingsAdder();
+const drawnModes = () => state.drawingList().map((drawing) => drawing.mode);
 const { exportSession, importSession } = callerSession(sessionConfig, state, await sessionRollbackPort(state));
 const { orderedConservationSources } = await import('../../gbdraw/web/js/services/conservation-series.js');
 
@@ -85,22 +88,22 @@ const LINEAR_SEQ = 'webFiles.bindings.linearSeqs.0';
 const CASES = [
   // OV-568: a Linear card's crop and genetic code, read once by the Files reader.
   ['so46', `${LINEAR_SEQ}.region_start`, 'abc', ['setting-replaced webFiles.bindings.linearSeqs[0].region_start'],
-    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_start, null)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.region_end`, [1], ['setting-replaced webFiles.bindings.linearSeqs[0].region_end'],
-    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_end, null)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.losat_gencode`, 'x', ['setting-replaced webFiles.bindings.linearSeqs[0].losat_gencode'],
-    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].losat_gencode, 1)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   // An orientation that is no boolean is not used (D1b: changed, U false), its text included.
   ['so46', `${LINEAR_SEQ}.region_reverse`, 'true', ['setting-replaced webFiles.bindings.linearSeqs[0].region_reverse'],
-    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].region_reverse, false)],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['so46', `${LINEAR_SEQ}.definition`, 5, ['setting-replaced webFiles.bindings.linearSeqs[0].definition'],
-    () => assert.equal(modeDrawing(state, 'linear').linearSeqs[0].definition, '')],
+    () => assert.deepEqual(drawnModes(), ['circular'], 'a Circular Load makes no Linear drawing to hold the card')],
   ['v30', 'files.linearSeqs.0.losat_gencode', 0, ['setting-replaced files.linearSeqs[0].losat_gencode']],
   // OV-595: the PNG DPI is one of the choices the DPI menu lists.
   ['g47L', 'ui.downloadDpi', 'abc', ['setting-replaced ui.downloadDpi'], () => assert.equal(Number(state.downloadDpi.value), 300)],
   ['g47L', 'ui.downloadDpi', '600', [], () => assert.equal(Number(state.downloadDpi.value), 600)],
   // OV-594: an input type of no kind; the request's own type wins without a row.
-  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
+  ['g47L', 'ui.cInputType', 5, ['setting-replaced ui.cInputType'], () => assert.deepEqual(drawnModes(), ['linear'], 'a Linear Load makes no Circular drawing to hold the type')],
   ['g47L', 'ui.lInputType', 5, [], () => assert.equal(modeDrawing(state, 'linear').inputType.value, 'gb')],
   ['v44', 'ui.cInputType', 'fasta', [], () => assert.equal(modeDrawing(state, 'circular').inputType.value, 'gb')],
   // K19: a settings-only Session's mode of no mode (the request's mode wins in a full one).
@@ -170,6 +173,7 @@ test('K14: record display drafts of no list are listed before the dialog and app
   await load(BASES.g47L());
   for (const [name, base, path, mode] of cases) {
     for (const value of [{}, 'x', 5, true]) {
+      addPairDrawings();
       const drawing = modeDrawing(state, mode);
       drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, {
         sourceUid: 'held', selector: '#1', recordId: 'held', topologyOverride: null, startCoordinate: null,
