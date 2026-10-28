@@ -869,8 +869,7 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     'Render request': [
       { path: 'app/run-analysis.js', count: 1 },
-      { path: 'services/config.js', count: 1 },
-      { path: 'services/gallery-session-migration.js', count: 1 }
+      { path: 'services/config.js', count: 1 }
     ],
     'Resource staging': [
       { path: 'services/config.js', count: 3 },
@@ -887,7 +886,6 @@ test('shared privileged detectors preserve the characterized current-source fact
     Session: [
       { path: 'app/app-setup.js', count: 2 },
       { path: 'services/config.js', count: 5 },
-      { path: 'services/gallery-session-migration.js', count: 3 },
       { path: 'services/session-file.js', count: 1 }
     ]
   });

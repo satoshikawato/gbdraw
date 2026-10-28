@@ -8,6 +8,14 @@ import { gunzipSync } from 'node:zlib';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
+const { pythonDraftSplit } = await import('./helpers/python-evaluator.mjs');
+// Publication's draft split is Python's (the bridge runs `split_draft_into_modes`); each call's context is kept.
+const splitContexts = [];
+const splitDraft = async (draft, context) => {
+  splitContexts.push(context);
+  return pythonDraftSplit(draft, context);
+};
+
 const { resolveLinearComparisonPlan } = await import(
   '../../gbdraw/web/js/services/linear-comparisons.js'
 );
@@ -26,9 +34,6 @@ const {
   readPublishedRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
-const { promoteGallerySessionToCurrent } = await import(
-  '../../gbdraw/web/js/services/gallery-session-migration.js'
-);
 const { FEATURE_CATALOG_SCHEMA } = await import('../../gbdraw/web/js/services/feature-catalog.js');
 const { SESSION_VERSION: CURRENT_SESSION_VERSION } = await import(
   '../../gbdraw/web/js/contracts/schema.generated.js'
@@ -40,13 +45,13 @@ const {
   prepareGallerySessionForPublication,
   validateGalleryPublicationReadiness
 } = createGallerySessionPublication({
-  promoteSession: promoteGallerySessionToCurrent,
   assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
   buildRequest: buildCanonicalRenderRequest,
   buildRequestState: buildCanonicalRequestState,
   readRequest: readPublishedRenderRequest,
   projectRequest: projectCanonicalSessionRequest,
-  resolveComparisonPlan: resolveLinearComparisonPlan
+  resolveComparisonPlan: resolveLinearComparisonPlan,
+  splitDraft
 });
 
 const sessionRoot = 'gbdraw/web/gallery/sessions';
@@ -75,7 +80,10 @@ const loadReleasedSession = (name) => loadSessionFile(`tests/fixtures/sessions/$
 for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
+  splitContexts.length = 0;
   const result = await prepareGallerySessionForPublication(source);
+  // The draft is split once, by the injected owner, in the committed mode.
+  assert.deepEqual(splitContexts.map(({ committedMode }) => committedMode), [result.session.renderRequest.mode], name);
   assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
   assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
   // Publication writes the slice of the Session's mode only; the other mode
@@ -158,32 +166,18 @@ for (const name of sessionNames) {
   assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
 }
 
-// D-OD08 (5): a historical Session is promoted through the one request
-// reader; one whose request Load would repair is not published.
-{
-  const historical = await loadReleasedSession('lambda_basic_linear.v31-schema1.gbdraw-session.json.gz');
-  assert.equal(admitGallerySession(structuredClone(historical)).renderRequest.schema, 9);
-  historical.renderRequest.diagramOptions.config.canvas.linear.comparison_height = 0;
-  assert.throws(() => admitGallerySession(historical),
-    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } });
+// Gallery publication admits Sessions 46-49 only; an older Session is refused with the way to convert it.
+for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz']) {
+  const released = await loadReleasedSession(name);
+  assert.throws(() => admitGallerySession(released),
+    /Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it \(Python converts it at Load\), or refresh it with tools\/refresh_gallery_sessions\.py/);
 }
 
-const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
+const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedLambda.results, lambda.results);
-assert.equal(lambda.version, 44);
-assert.equal(lambda.editorState.featureCatalog.schema, 4);
-const releasedCurrent = await loadReleasedSession('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
-assert.equal(releasedCurrent.version, 44);
-assert.equal(releasedCurrent.renderRequest.schema, 8);
-assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
-const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
-// Admission promotes the released schema-8 request to the current writer.
-assert.equal(admittedReleasedCurrent.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
-assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
-assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
@@ -308,7 +302,7 @@ for (const [webShape, equivalent] of [['arrow', true], ['rectangle', false]]) {
 }
 
 const ungeneratedDraft = structuredClone(lambda);
-ungeneratedDraft.config.adv.arrow_shaft_width_ratio = 0.5;
+ungeneratedDraft.modes.linear.config.adv.arrow_shaft_width_ratio = 0.5;
 await assert.rejects(
   prepareGallerySessionForPublication(ungeneratedDraft),
   /shaft_width_ratio/
@@ -316,17 +310,17 @@ await assert.rejects(
 
 for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
   const invalid = structuredClone(lambda);
-  invalid.config.adv[field] = [];
+  invalid.modes.linear.config.adv[field] = [];
   assert.throws(
     () => admitGallerySession(invalid),
-    new RegExp(`config\\.adv.*${field}`)
+    { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
   );
 }
 
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    new RegExp(`supports current version ${CURRENT_SESSION_VERSION} or historical versions 31-33/39-44/46-${CURRENT_SESSION_VERSION - 1}`)
+    /Gallery publication supports Sessions 46-49;/
   );
 }
 
@@ -653,7 +647,6 @@ assert.rejects(
       [(rebuilt) => { rebuilt.circularTrackAxisIndex = 1; }, /circularTrackAxisIndex/]
     ]) {
       const tampered = createGallerySessionPublication({
-        promoteSession: promoteGallerySessionToCurrent,
         assertRequestsEquivalent: assertCanonicalRenderRequestsEquivalent,
         buildRequest: (input) => {
           const built = buildCanonicalRenderRequest(input);
@@ -663,7 +656,8 @@ assert.rejects(
         buildRequestState: buildCanonicalRequestState,
         readRequest: readPublishedRenderRequest,
         projectRequest: projectCanonicalSessionRequest,
-        resolveComparisonPlan: resolveLinearComparisonPlan
+        resolveComparisonPlan: resolveLinearComparisonPlan,
+        splitDraft
       });
       await assert.rejects(tampered.prepareGallerySessionForPublication(structuredClone(source)),
         (error) => at.test(String(error?.message)) && error.comparison?.equivalent === false);

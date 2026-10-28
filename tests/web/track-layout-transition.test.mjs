@@ -219,7 +219,6 @@ const WRITERS = {
   'app/run-analysis.js': { runAnalysisInternal: 'reconcile' },
   'services/config.js': { applyConfigData: 'restore',
     reconcileDepthTrackStateAfterSessionFiles: 'restore', restoreStoredNonCanonicalConfig: 'payload' },
-  'services/gallery-session-migration.js': { migratePersistedGalleryConfig: 'payload' },
   'services/reset.js': { resetSettings: 'restore' }
 };
 const FIELD = '(?:track_type|linear_track_layout|separate_strands|(?:circular|linear)_track_slots(?:_enabled|_axis_index)?)';

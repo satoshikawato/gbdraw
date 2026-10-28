@@ -120,6 +120,25 @@ result = validate_web_config_overrides_json(payload['mode'], json.dumps(payload[
 `, payload));
 
 /**
+ * Python's split of a flat Web draft into Session 46 mode slices.
+ * @param {unknown} input the flat draft
+ * @param {{ committedMode: unknown, modeProfiles?: unknown, depthSources?: unknown, paletteColors?: unknown }} context
+ * @returns {Promise<any>}
+ */
+export const pythonDraftSplit = async (input, context) => JSON.parse(await evaluatePython(`
+import json
+from gbdraw.session_io import split_draft_into_modes
+context = payload['context']
+result = json.dumps(split_draft_into_modes(
+    payload['input'],
+    committed_mode=context['committedMode'],
+    mode_profiles=context.get('modeProfiles'),
+    depth_sources=context.get('depthSources'),
+    palette_colors=context.get('paletteColors'),
+))
+`, { input, context }));
+
+/**
  * The Worker's `synthesizeColorRules` helper (OV-244), for a rule preparation's `synthesize`.
  * @param {unknown} request
  */

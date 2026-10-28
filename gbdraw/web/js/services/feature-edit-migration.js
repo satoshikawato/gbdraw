@@ -1,16 +1,13 @@
 // @ts-check
-/** @import { FeatureOverrideDraft, FeaturePlacementDraft, FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeaturePlacementDraft } from './feature-placement.js' */
 /** @import { FeatureOverrideDraftRow } from '../contracts/session.generated.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKey,
-  normalizeFeatureOverrideLabelText,
-  recordKeyBelongsToRequest
+  normalizeFeatureOverrideLabelText
 } from './feature-placement.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { tn } from '../utils/i18n.js';
-
-/** @import { AnnotationRecordSelector, AnnotationSet, AnnotationTarget } from './annotation-state.js' */
 
 /**
  * A feature of a Session's saved feature catalog (schema 3, 4, or 5), unvalidated.
@@ -83,11 +80,6 @@ export const RENDERED_ID_FEATURE_EDIT_FIELDS = Object.freeze([
  * @property {string} mode
  * @property {Record<string, any> | null} [catalog]
  * @property {Record<string, any> | null} [legacy]
- */
-
-/**
- * The input of `migrateSessionFeatureEdits`: an older Session has no `features`.
- * @typedef {Omit<FeatureEditMigrationInput, 'features'> & { features: Record<string, unknown> | null | undefined }} SessionFeatureEditMigrationInput
  */
 
 /**
@@ -287,148 +279,6 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
  * its source index, and its one-based record position in its Result.
  * @typedef {{ key: string, stableId: string, sourceIndex: number | null, recordOrdinal: number }} IndexedFeature
  */
-/**
- * A feature a saved diagram drew: its source hash, the hash it was drawn with,
- * its source index, and its one-based record position in its Result.
- * @typedef {{ sourceHash: string, drawnHash: string, sourceIndex: number | null, recordOrdinal: number }} DrawnFeature
- */
-
-/**
- * @param {IndexedFeature[]} index
- * @returns {DrawnFeature[]}
- */
-const drawnFeaturesOfIndex = (index) => index.map(({ key, stableId, sourceIndex, recordOrdinal }) => ({
-  sourceHash: String(JSON.parse(key)[2]).replace(/~\d+$/, ''), drawnHash: stableId, sourceIndex, recordOrdinal
-}));
-
-// Each feature a saved catalog (schema 3 or 4) drew, by the hash it was drawn
-// with: the hash in its rendered ID (`svgId`), and the record position of that
-// ID or of the row in its item's records. The twin of `_catalog_drawn_features`
-// in gbdraw/session_io.py.
-/**
- * @param {unknown} catalog
- * @param {string} mode
- * @returns {IndexedFeature[]}
- */
-const catalogDrawnFeatures = (catalog, mode) => {
-  /** @type {IndexedFeature[]} */
-  const drawn = [];
-  const items = /** @type {unknown[]} */ (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []);
-  items.filter(isObject).forEach((item) => {
-    const recordKeys = Array.isArray(item.recordKeys) ? item.recordKeys.map(text) : [];
-    const features = /** @type {unknown[]} */ (Array.isArray(item.features) ? item.features : []);
-    features.filter(isObject).forEach((feature) => {
-      const recordKey = text(feature.recordKey);
-      const key = scopedIdentityKey(mode, recordKey, text(feature.biologicalFeatureId));
-      const rendered = parseRenderedId(feature.svgId);
-      if (!key || !rendered.stableId) return;
-      drawn.push({
-        key,
-        stableId: rendered.stableId,
-        sourceIndex: rendered.sourceIndex,
-        recordOrdinal: rendered.recordOrdinal ?? recordKeys.indexOf(recordKey) + 1
-      });
-    });
-  });
-  return drawn;
-};
-
-/**
- * OV-401, release D-39: a Session 44 or older matched `hash=` against the hash
- * of the drawn feature, so on a cropped or reverse-complemented record its
- * value is not the source hash `hash=` names now. The value, written as
- * `<hash>` or `^<hash>$` and maybe with the rendered ID's record and instance
- * suffixes, names the features of `drawn` drawn with that hash, ignoring case
- * as the matchers do, in the record and with the source index its suffixes
- * give. Returns the value naming their one source hash, in the same form
- * without the suffixes, and the number of their source hashes. The value is
- * null unless they have one source hash, and when that is the value's own hash
- * (a record drawn untransformed) and the value has no Linear record suffix
- * `_record_<n>`, which no matcher reads (OV-416): such a value means what it
- * meant and stays as saved. The twin of
- * `source_hash_selector_value` in gbdraw/session_io.py.
- * @param {unknown} value
- * @param {DrawnFeature[]} drawn
- * @returns {{ value: string | null, sourceCount: number }}
- */
-export const sourceHashSelectorValue = (value, drawn) => {
-  const saved = text(value);
-  const anchored = saved.match(/^\^([\s\S]*)\$$/);
-  const { stableId, recordOrdinal, sourceIndex } = parseRenderedId(anchored ? anchored[1] : saved);
-  const wanted = stableId.toLowerCase();
-  const sources = new Set(drawn.filter((feature) => wanted && feature.drawnHash.toLowerCase() === wanted
-    && (recordOrdinal === null || feature.recordOrdinal === recordOrdinal)
-    && (sourceIndex === null || feature.sourceIndex === sourceIndex)).map((feature) => feature.sourceHash));
-  if (sources.size !== 1) return { value: null, sourceCount: sources.size };
-  const [source] = sources;
-  if (source.toLowerCase() === wanted && !LINEAR_RECORD_SUFFIX.test(saved)) return { value: null, sourceCount: 1 };
-  return { value: anchored ? `^${source}$` : source, sourceCount: 1 };
-};
-
-// Whether a request record is drawn cropped or reverse-complemented, so the
-// drawn hashes of its features differ from their source hashes (a rotation or
-// a region that only selects a record changes no hash). The twin of
-// `_hash_frame_changed` in gbdraw/session_io.py.
-/** @param {Record<string, unknown>} record */
-const hashFrameChanged = (record) => {
-  const { region, presentation } = record;
-  return Boolean((isObject(region) && (nonnegativeInteger(region.start) !== null
-    || nonnegativeInteger(region.end) !== null || region.reverseComplement))
-    || (isObject(presentation) && presentation.reverseComplement));
-};
-
-/**
- * Whether specific color rules (`qual` and `val`) hold a `hash` rule. The twin
- * of `has_hash_color_rules` in gbdraw/session_io.py.
- * @param {unknown} rules
- */
-const hasHashColorRules = (rules) => Array.isArray(rules)
-  && rules.some((rule) => text(rule?.qual).toLowerCase() === 'hash');
-
-/**
- * S6 of the one feature-hash builder: the `hash` color rules (`rules`, `qual`
- * and `val`) of a Session 44 or older, which release 0.13.0 and main wrote with
- * the drawn feature's hash, get the source hash of the features drawn with
- * their hash, through the saved `catalog` or else `legacy` (as
- * `migrateRenderedIdFeatureEdits` reads them), so each matches the features it
- * matched; a value whose features have its own hash as source hash (an
- * untransformed record) is kept. A value naming features of several source
- * hashes is kept and counted as unmapped; so is a value naming no indexed feature when a request
- * record is drawn cropped or reverse-complemented but `legacy` holds no drawn
- * hashes (its features are not the sources read again). A list without a
- * change is returned as saved. The twin of `migrate_session_hash_rules` in
- * gbdraw/session_io.py.
- * @param {{
- *   rules?: unknown,
- *   mode: string,
- *   catalog?: Record<string, unknown> | null,
- *   legacy?: Record<string, unknown> | null,
- *   records?: unknown
- * }} input
- * @returns {{ rules: unknown, unmappedCount: number }}
- */
-export const migrateSessionHashRules = ({ rules, mode, catalog = null, legacy = null, records = [] }) => {
-  if (!hasHashColorRules(rules)) return { rules, unmappedCount: 0 };
-  const drawn = drawnFeaturesOfIndex(catalog ? catalogDrawnFeatures(catalog, mode) : legacyIndex({ ...legacy, mode }).biological);
-  const legacyFeatures = /** @type {unknown[]} */ (Array.isArray(legacy?.features) ? legacy.features : []);
-  const drawnHashesUnknown = !catalog
-    && (Array.isArray(records) ? records : []).some((record) => isObject(record) && hashFrameChanged(record))
-    && !legacyFeatures.some((feature) => isObject(feature) && isObject(feature.drawn_selector ?? feature.drawnSelector));
-  let unmappedCount = 0;
-  let changed = false;
-  const migrated = /** @type {unknown[]} */ (rules).map((rule) => {
-    if (!isObject(rule) || text(rule.qual).toLowerCase() !== 'hash' || !text(rule.val)) return rule;
-    const resolved = sourceHashSelectorValue(rule.val, drawn);
-    if (resolved.value === null) {
-      if (resolved.sourceCount > 1 || (resolved.sourceCount === 0 && drawnHashesUnknown)) unmappedCount += 1;
-      return rule;
-    }
-    changed = true;
-    return { ...rule, val: resolved.value };
-  });
-  return { rules: changed ? migrated : rules, unmappedCount };
-};
-
 // Rule 1: the old key is a rendered ID of the saved catalog, so it names every
 // identity drawn with that ID (the live projection reached all of them).
 // Rule 2: otherwise it names the one feature with its hash in the record
@@ -588,132 +438,10 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
   return { featureOverrides: rows, droppedCount, narrowedVisibilityCount, migratedLabelEdits };
 };
 
-/**
- * The Session 46 `features` of an older Session's `features`: the edit maps
- * become `featureOverrides`. When a label map is migrated, the saved label
- * table is cleared: it was the copy of those maps built at the last Generate
- * (the same invariant the editor keeps when label edits change).
- * @param {SessionFeatureEditMigrationInput} input
- * @returns {{
- *   features: Record<string, any>,
- *   droppedCount: number,
- *   narrowedVisibilityCount: number
- * }}
- */
-export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, legacy = null }) => {
-  const source = isObject(features) ? features : {};
-  const migration = migrateRenderedIdFeatureEdits({ features: source, mode, catalog, legacy });
-  const migrated = { ...source };
-  RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete migrated[field]);
-  migrated.featureOverrides = migration.featureOverrides;
-  if (migration.migratedLabelEdits) migrated.labelOverrideRows = [];
-  return {
-    features: migrated,
-    droppedCount: migration.droppedCount,
-    narrowedVisibilityCount: migration.narrowedVisibilityCount
-  };
-};
-
 /** @param {number} count */
 export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => tn(count,
   '{count} annotation from an older Session named a feature by hash=. It now names that feature by its source, so it stays on the feature when the crop or orientation changes.',
   '{count} annotations from an older Session named a feature by hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.');
-
-// The records the renderer binds an annotation target in (the request's drawn
-// records in order, gbdraw/annotations/resolve.py::_bind_record) and the
-// source features by source hash, from the Session's saved feature catalog.
-/**
- * @param {SavedCatalog | null | undefined} catalog
- */
-const annotationCatalogIndex = (catalog) => {
-  /** @type {Map<string, Set<string>>} */
-  const recordIds = new Map();
-  /** @type {Map<string, Map<string, { recordKey: string, biologicalFeatureId: string }>>} */
-  const featuresByHash = new Map();
-  (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
-    (Array.isArray(item?.recordKeys) ? item.recordKeys : []).forEach((recordKey) => {
-      if (!recordIds.has(text(recordKey))) recordIds.set(text(recordKey), new Set());
-    });
-    (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach((feature) => {
-      const recordKey = text(feature?.recordKey);
-      const biologicalFeatureId = text(feature?.biologicalFeatureId);
-      if (!recordKey || !biologicalFeatureId) return;
-      recordIds.get(recordKey)?.add(text(feature?.record_id ?? feature?.recordId));
-      const hash = text(feature?.stableFeatureId) || biologicalFeatureId.replace(/~\d+$/, '');
-      if (!featuresByHash.has(hash)) featuresByHash.set(hash, new Map());
-      /** @type {Map<string, { recordKey: string, biologicalFeatureId: string }>} */ (featuresByHash.get(hash)).set(JSON.stringify([recordKey, biologicalFeatureId]), { recordKey, biologicalFeatureId });
-    });
-  });
-  return { recordKeys: [...recordIds.keys()], recordIds, featuresByHash };
-};
-
-/**
- * @param {AnnotationRecordSelector | null | undefined} selector
- * @param {ReturnType<typeof annotationCatalogIndex>} index
- * @returns {string}
- */
-const boundRecordKey = (selector, { recordKeys, recordIds }) => {
-  if (selector == null) return recordKeys.length === 1 ? recordKeys[0] : '';
-  if (selector.kind === 'recordIndex') return recordKeys[selector.index] || '';
-  if (selector.kind !== 'recordId') return '';
-  // A record without catalog features has no known ID, so the binding is not certain.
-  if (recordKeys.some((recordKey) => /** @type {Set<string>} */ (recordIds.get(recordKey)).size !== 1)) return '';
-  const matches = recordKeys.filter((recordKey) => /** @type {Set<string>} */ (recordIds.get(recordKey)).has(text(selector.value)));
-  return matches.length === 1 ? matches[0] : '';
-};
-
-/**
- * R-7 (Owner decision 2026-10-05): a Session before 46 named a selected
- * feature in an annotation by `hash=<hash>` (a featureSpan target), which the
- * renderer matches in the drawn record, and a hand-written target looks the
- * same. Load moves such a target to the feature's source identity, in the mode
- * of the Session's diagram (`mode`), only when the figure cannot change: the
- * record it binds is drawn without a crop, reverse complement, or rotation, and
- * the hash names exactly one feature of the saved catalog, in that record.
- * Every other target stays as saved. Returns the annotation sets and the
- * number of moved targets.
- * @param {{
- *   annotationSets: unknown,
- *   mode: string,
- *   catalog?: Record<string, any> | null,
- *   records?: Array<FeatureRequestRecord & Record<string, any>>
- * }} input
- * @returns {{ annotationSets: any, migratedCount: number }}
- */
-export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog = null, records = [] }) => {
-  const index = annotationCatalogIndex(catalog);
-  const requestRecords = Array.isArray(records) ? records : [];
-  let migratedCount = 0;
-  // A missing target gives no selector, so the reads after the `selector` check
-  // never reach it: the casts below state that.
-  /** @param {Partial<AnnotationTarget> | null | undefined} target */
-  const identityTarget = (target) => {
-    const selector = target?.kind === 'featureSpan' && Array.isArray(target.selectors) && target.selectors.length === 1
-      ? target.selectors[0] : null;
-    if (selector?.key !== 'hash') return null;
-    const recordKey = boundRecordKey(/** @type {Partial<AnnotationTarget>} */ (target).record, index);
-    const matches = [...(index.featuresByHash.get(text(selector.value))?.values() || [])];
-    const request = requestRecords.find((record) => recordKeyBelongsToRequest(recordKey, [record]));
-    if (!recordKey || matches.length !== 1 || matches[0].recordKey !== recordKey
-      || !request || drawnTransformed(request)) return null;
-    const migrated = { kind: 'featureIdentity', scope: mode, ...matches[0],
-      envelope: /** @type {Partial<AnnotationTarget>} */ (target).envelope,
-      circularPath: /** @type {Partial<AnnotationTarget>} */ (target).circularPath };
-    return scopedIdentityKeyOf(migrated) ? migrated : null;
-  };
-  const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((/** @type {Partial<AnnotationSet> | null | undefined} */ set) => (
-    !Array.isArray(set?.annotations) ? set : {
-      ...set,
-      annotations: set.annotations.map((annotation) => {
-        const target = identityTarget(annotation?.target);
-        if (!target) return annotation;
-        migratedCount += 1;
-        return { ...annotation, target };
-      })
-    }
-  ));
-  return { annotationSets: migratedCount > 0 ? migratedSets : annotationSets, migratedCount };
-};
 
 const LANE_MODES = new Map([['outward', 'circular'], ['inward', 'circular'], ['above', 'linear'], ['below', 'linear']]);
 

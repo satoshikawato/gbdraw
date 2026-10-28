@@ -1375,12 +1375,19 @@ const withFieldAt = (value, at, leaf) => {
   return withContainerAt(value, parentAt, parent);
 };
 /**
+ * `value` with the fields at `ats` (dotted) as `source` holds them, left out
+ * where `source` holds none; a field already equal is no copy.
+ * @param {unknown} value @param {unknown} source @param {readonly string[]} ats
+ * @returns {unknown}
+ */
+export const withFieldsFrom = (value, source, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === valueAt(source, at)
+  ? draft : withFieldAt(draft, at, valueAt(source, at))), value);
+/**
  * `value` without the fields at `ats` (dotted); a field it does not hold is no copy.
  * @param {unknown} value @param {readonly string[]} ats
  * @returns {unknown}
  */
-export const withoutFieldsAt = (value, ats) => ats.reduce((draft, at) => (valueAt(draft, at) === undefined
-  ? draft : withFieldAt(draft, at, undefined)), value);
+export const withoutFieldsAt = (value, ats) => withFieldsFrom(value, undefined, ats);
 
 /**
  * A Session 27-44's one draft (`config`, at `path`) as the draft field

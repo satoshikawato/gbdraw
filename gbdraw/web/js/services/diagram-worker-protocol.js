@@ -46,7 +46,6 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
   COMPUTE_LABEL_FIT_ROW: 'computeLabelFitRow',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
-  CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   CONVERT_RING_TABLES_TO_SEARCH_FRAME: 'convertRingTablesToSearchFrame',
   CONVERT_STORED_PROTEIN_RESULT_FRAMES: 'convertStoredProteinResultFrames',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',

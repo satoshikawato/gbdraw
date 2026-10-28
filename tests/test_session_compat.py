@@ -1635,7 +1635,7 @@ def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_re
     case: dict[str, Any],
 ) -> None:
     # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionFeatureEdits.
+    # migrateRenderedIdFeatureEdits.
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_feature_edits(

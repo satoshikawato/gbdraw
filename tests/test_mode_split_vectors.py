@@ -1,14 +1,14 @@
 """The Python split of a Session 27-44 draft against the vectors shared with the Web.
 
 ``tests/fixtures/sessions/mode-split-vectors.json`` (Phase E owns its cases) is
-read by this file and by a node test against ``splitDraftIntoModes``. A case
+read by this file and by ``tests/web/mode-split-vectors.test.mjs``. A case
 holds a ``fixture`` (a Session 27-44 in the repository) or an ``input`` (an
 inline Session 27-44, or a flat draft after the OV-102, OV-114 and OV-132
 normalizers), the split ``context``, and JSON pointers into the Session 46
 result: ``expect`` (pointer -> value) and ``expectAbsent``. A fixture case may
 ``omit`` fixture fields (JSON pointers removed before the migration). A case
-may also hold ``expectedModes``, the JavaScript split's two slices, which the
-Python slices must equal.
+may also hold ``expectedModes``, the two recorded slices, which the Python
+slices must equal.
 
 The split writes only migrated values (partial slices); Web Load fills the
 rest, so a value the split does not write is asserted absent.

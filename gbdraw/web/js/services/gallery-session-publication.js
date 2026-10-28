@@ -3,11 +3,8 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import {
   LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
 } from './layout-preferences.js';
-import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
+import { validateModeSliceFields } from './mode-scoped-migration.js';
 import { drawingViewOf, sessionDocumentOfViews, sessionLegendEditsByRowKey } from './session-drawings-upgrade.js';
-import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
-import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
-import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import {
   CANONICAL_REQUEST_SCHEMA as CURRENT_REQUEST_SCHEMA,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
@@ -18,7 +15,6 @@ import {
   SESSION_DRAWINGS_LAYOUT,
   SESSION_VERSION as CURRENT_VERSION
 } from '../contracts/schema.generated.js';
-import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import { storesDrawnFrameProteinResults } from './main-session-comparison-frame.js';
 import { diagnosticError } from '../utils/error-normalization.js';
@@ -26,7 +22,7 @@ import {
   IMPORTED_COMPARISON_DISPOSITIONS, classifyImportedComparisonIntent, inheritCommittedComparisonIntent
 } from './imported-comparison-intent.js';
 import { canonicalAnnotationParams, normalizeAnnotationSlotParams, validateCustomTrackPlan } from './track-slot-validation.js';
-const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 const noComparisonPlan = () => ({ mode: 'none', defaultSource: 'losat', edges: [] });
 /**
@@ -50,7 +46,6 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
-/** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 /** @typedef {Partial<ActiveWebConfig> & Record<string, unknown>} PublicationConfig A Session 46 slice may omit a field; it reads that mode's default (plan 4.1). */
 /** @typedef {PublicationConfig & Pick<ActiveWebConfig, 'form' | 'adv'>} PublishedConfig The configuration the publication rebuilds: it always has `form` and `adv`. */
@@ -272,17 +267,18 @@ const publicationLayout = (session, config, projection) => {
 };
 // The published Session 46: the Session's mode's slice holds the rebuilt
 // configuration and its layout slot; the other slice is absent, so it takes
-// that mode's defaults. An older Session's flat draft is split by the registry
-// (plan 4.2); a Session 46 keeps the rest of its slice. The layout has one
-// home, so the older `ui` layout fields go.
+// that mode's defaults. The rebuilt draft is split by the registry through
+// Python's split (`owners.splitDraft`); a Session 46 keeps the rest of its
+// slice. The layout has one home, so the older `ui` layout fields go.
 /**
  * @param {PublicationSession} session
  * @param {PublishedConfig} config
  * @param {LayoutPreferences} layout
  * @param {PublicationProjection} projection
  * @param {Record<string, unknown>} features
+ * @param {PublicationDraftSplit} splitDraft
  */
-const publishedSession = (session, config, layout, projection, features) => {
+const publishedSession = async (session, config, layout, projection, features, splitDraft) => {
   const mode = projection.mode;
   const flat = !holdsSliceDraft(session);
   // Display drafts that carry no scope (those projected from a CLI request and
@@ -295,7 +291,8 @@ const publishedSession = (session, config, layout, projection, features) => {
   // Load reads a stored draft's edits from the draft.
   const draft = flat ? { ...session, features, config: scoped, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config: scoped, ui: { mode } };
   // Override colors merge into the committed request's colors.
-  const split = splitDraftIntoModes(draft, { committedMode: mode, modeProfiles: null, paletteColors: projection.config?.colors || null });
+  // Only the committed mode's slice is published, so no mode profile feeds the split.
+  const split = await splitDraft(draft, { committedMode: mode, paletteColors: projection.config?.colors || null });
   const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };
   const published = flat ? split : { ...session };
   const ui = Object.fromEntries(Object.entries(isObject(published.ui) ? published.ui : {})
@@ -430,12 +427,27 @@ const mergeReplayResources = (prepared, replayed) => {
   return resources;
 };
 /**
+ * What the draft split reads besides the draft.
+ * @typedef {object} PublicationDraftSplitContext
+ * @property {'circular' | 'linear'} committedMode The saved Result's mode.
+ * @property {Record<string, unknown> | null} paletteColors The colors of the draft's palette, which override colors
+ *   merge into.
+ */
+/**
+ * A Web draft with a `config` split into Session 46 mode slices: the draft's other fields, its app-level settings
+ * moved to the top level, and a slice per mode (empty when the mode takes no value).
+ * @typedef {Record<string, unknown> & { ui?: Record<string, unknown>, modes: Record<'circular' | 'linear', PublicationModeSlice> }} PublicationSplitDraft
+ */
+/**
+ * The one split of a flat Web draft into mode slices: Python's `split_draft_into_modes`
+ * (`gbdraw/session_io.py`), which the publication bridge (`tools/publish_gallery_session.mjs`) runs.
+ * @typedef {(draft: Record<string, unknown>, context: PublicationDraftSplitContext) => Promise<PublicationSplitDraft>} PublicationDraftSplit
+ */
+/**
  * The owners a publication calls: the Session and request owners
- * (`services/session-request.js`, `services/gallery-session-migration.js`) and
+ * (`services/session-request.js`), the draft split, and
  * the Linear comparison planner. Each takes and returns unvalidated documents.
  * @typedef {object} GallerySessionPublicationOwners
- * @property {(session: Record<string, any>, options: { repairs: LoadRepair[] }) => PublicationSession} promoteSession
- *   Promotes a historical Session to the current version; `repairs` receives what its request could not carry.
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
  * @property {(input: Record<string, any>) => { renderRequest: CanonicalRenderRequest, resources: NonNullable<PublicationSession['resources']>, webFiles: Record<string, unknown> }} buildRequest
  * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any>, features: Record<string, unknown> }} buildRequestState
@@ -446,48 +458,13 @@ const mergeReplayResources = (prepared, replayed) => {
  *   request (`readPublishedRenderRequest`), refusing any repair.
  * @property {(input: Record<string, any>) => PublicationProjection} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan
+ * @property {PublicationDraftSplit} splitDraft
  */
 
 /**
  * @param {GallerySessionPublicationOwners} owners
  */
 export const createGallerySessionPublication = (owners) => {
-  /** @param {PublicationSession} session */
-  const promoteVisibilityState = (session) => ({
-    ...session,
-    config: isObject(session?.config) && isObject(session.config.adv)
-      ? {
-          ...session.config,
-          adv: migrateLegacyLinearLabelVisibility(session.config.adv),
-          ...(Array.isArray(session.config.recordDisplayDrafts) ? {
-            // The migration maps an array (tested above) to an array; its declared result is `unknown`.
-            recordDisplayDrafts: /** @type {Record<string, unknown>[]} */ (migrateLegacyRecordDisplayDrafts(
-              session.config.recordDisplayDrafts
-            ))
-          } : {}),
-          ...(has(session.config, 'featurePlacementOverrides') ? {
-            featurePlacementOverrides: migrateSessionFeaturePlacements(session.config.featurePlacementOverrides)
-          } : {})
-        }
-      : session?.config,
-    // The `includes` test is false for an absent catalog, so the catalog exists in the branch.
-    editorState: /** @type {(number | undefined)[]} */ ([3, 4]).includes(session?.editorState?.featureCatalog?.schema)
-      && /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog.schema !== FEATURE_CATALOG_SCHEMA
-      ? {
-          ...session.editorState,
-          featureCatalog: migrateLegacyFeatureCatalog(
-            /** @type {{ featureCatalog: FeatureCatalog }} */ (session.editorState).featureCatalog
-          )
-        }
-      : session?.editorState,
-    // The current writer keys per-feature edits by source identity (design Q4 4.3).
-    // An older Session without `features` is read as empty: `migrateSessionFeatureEdits` tests `isObject(features)`.
-    features: migrateSessionFeatureEdits({
-      features: session?.features,
-      mode: session?.renderRequest?.mode,
-      catalog: session?.editorState?.featureCatalog || null
-    }).features
-  });
   /** @param {PublicationSession} session */
   const admit = (session) => {
     const version = Number(session?.version);
@@ -504,17 +481,7 @@ export const createGallerySessionPublication = (owners) => {
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
-    // An older Session is promoted to the current request and kept as a flat
-    // draft until `prepare` splits it into the Session's mode slice.
-    if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
-      renderRequest: publicationCanonicalRequest(session, owners.readRequest) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44/${MODE_SCOPED_SESSION_VERSION}-${CURRENT_VERSION - 1}; received ${String(session?.version)}.`);
-    /** @type {LoadRepair[]} */
-    const repairs = [];
-    const promoted = owners.promoteSession(session, { repairs });
-    // A published Session must read without a repair, as its request does.
-    if (repairs.length > 0) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
-    return validateCurrent(promoteVisibilityState(promoted));
+    throw new Error('Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it (Python converts it at Load), or refresh it with tools/refresh_gallery_sessions.py; received ' + String(session?.version) + '.');
   };
   /** @param {PublicationSession} session */
   const rebuild = (session) => rebuildIntent(session, owners);
@@ -523,7 +490,7 @@ export const createGallerySessionPublication = (owners) => {
     const admitted = admit(source), { config, features, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const cards = publishedCardBindings(admitted);
     const session = {
-      ...publishedSession(admitted, config, layout, projection, features),
+      ...(await publishedSession(admitted, config, layout, projection, features, owners.splitDraft)),
       renderRequest: rebuilt.renderRequest,
       resources: rebuilt.resources,
       webFiles: cards ? { ...rebuilt.webFiles, bindings: cards } : rebuilt.webFiles,

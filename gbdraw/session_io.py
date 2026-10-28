@@ -2419,8 +2419,7 @@ def source_hash_selector_value(
     Linear record suffix ``_record_<n>``, which no matcher reads (OV-416): such
     a value means what it meant and stays as saved. The
     Session draft (:func:`migrate_session_hash_rules`) and the CLI replay of a
-    request (``gbdraw.api.session_compat``) read with it; the twin of
-    ``sourceHashSelectorValue`` in the Web ``feature-edit-migration.js``.
+    request (``gbdraw.api.session_compat``) read with it.
     """
 
     anchored, stable_id, record_ordinal, source_index = _hash_selector_parts(value)
@@ -2588,8 +2587,7 @@ def migrate_session_hash_rules(
     request record in ``records`` is drawn cropped or reverse-complemented but
     ``legacy`` holds no drawn hashes (its features are not the sources read
     again). Every other value is kept as saved. A list without a change is
-    returned as saved. The twin of ``migrateSessionHashRules`` in the Web
-    ``feature-edit-migration.js``.
+    returned as saved.
     """
 
     if not has_hash_color_rules(rules):
@@ -2640,9 +2638,8 @@ def migrate_session_feature_edits(
     When a label map is migrated the saved label table (``labelOverrideRows``)
     is cleared, as it was built from those maps.
 
-    This is the twin of ``migrateSessionFeatureEdits`` in the Web
-    ``feature-edit-migration.js``;
-    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. Without
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins it and the
+    Web ``migrateRenderedIdFeatureEdits`` in ``feature-edit-migration.js``. Without
     a catalog or ``legacy`` every edit is dropped.
     """
 
@@ -2844,9 +2841,7 @@ def migrate_session_annotation_targets(
     ``envelope`` and ``circularPath`` it has. Every other target stays as
     saved; when none moves, ``annotation_sets`` is returned as is.
 
-    This is the twin of ``migrateSessionAnnotationTargets`` in the Web
-    ``feature-edit-migration.js`` (R-7);
-    ``tests/fixtures/annotation-target-migration-vectors.json`` pins both.
+    R-7; ``tests/fixtures/annotation-target-migration-vectors.json`` pins it.
     Without a catalog nothing moves, as in the Web app, which reads no sources
     again for these targets.
     """
@@ -3652,9 +3647,8 @@ def split_draft_into_modes(
     ``webFiles.bindings``, else in the legacy ``files``. The draft's own mode
     (``_profile_active_mode``) holds the flat values of the mode-profile fields.
 
-    This is the twin of ``splitDraftIntoModes`` in the Web
-    ``services/mode-scoped-migration.js``;
-    ``tests/fixtures/sessions/mode-split-vectors.json`` pins both.
+    The Web Load and Gallery publication run this split; Python alone owns it.
+    ``tests/fixtures/sessions/mode-split-vectors.json`` pins it.
     """
 
     committed = _diagram_mode(committed_mode)

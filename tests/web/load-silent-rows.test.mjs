@@ -420,36 +420,29 @@ test('OV-896: a Load that leaves out every comparison series turns the compariso
 // the committed request names no resource the file lacks, so Save writes the
 // loaded state and the saved file loads with no dialog.
 test('OV-899: a dropped comparison file binding loads as a removed file; Save and reload succeed', async () => {
-  const { setMainSessionComparisonFrameConverter } = await import('../../gbdraw/web/js/services/main-session-comparison-frame.js');
-  // A Session 42's stored tables go through the Worker frame conversion; the table here is in the search frame.
-  setMainSessionComparisonFrameConverter(async ({ tableText }) => ({ result: { tsv: tableText } }));
-  try {
-    const q42 = () => fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
-    const unknownId = q42();
-    unknownId.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
-    const removed = q42();
-    delete removed.resources['comparison-nucleotide-1'];
-    for (const [name, session, rows, comparisons] of [
-      // Python's conversion writes the request's table in the search frame under its stored ID (OV-2080).
-      ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
-        ['comparison-nucleotide-1']],
-      ['resource removed', removed, [
-        'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
-        'request-reference-dropped renderRequest.comparisons[0]'
-      ], []]
-    ]) {
-      assert.deepEqual(await load(session), rows, name);
-      assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
-        { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
-      const saved49 = await saved();
-      const document = savedDrawingView(saved49, 'linear');
-      assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
-      assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
-      comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
-      assert.deepEqual(await load(saved49), [], name);
-    }
-  } finally {
-    setMainSessionComparisonFrameConverter(null);
+  const q42 = () => fixture('q-frame-main-web-upload.v42.gbdraw-session.json.gz');
+  const unknownId = q42();
+  unknownId.webFiles.bindings.linearComparisons[0].file.resourceId = 'zz';
+  const removed = q42();
+  delete removed.resources['comparison-nucleotide-1'];
+  for (const [name, session, rows, comparisons] of [
+    // Python's conversion writes the request's table in the search frame under its stored ID (OV-2080).
+    ['unknown resource id', unknownId, ['file-entry-dropped webFiles.bindings.linearComparisons[0].file'],
+      ['comparison-nucleotide-1']],
+    ['resource removed', removed, [
+      'file-entry-dropped webFiles.bindings.linearComparisons[0].file',
+      'request-reference-dropped renderRequest.comparisons[0]'
+    ], []]
+  ]) {
+    assert.deepEqual(await load(session), rows, name);
+    assert.deepEqual(modeDrawing(state, 'linear').linearComparisonPlan.edges.map(({ file, fileActive, included, source }) => (
+      { file, fileActive, included, source })), [{ file: null, fileActive: false, included: true, source: 'upload' }], name);
+    const saved49 = await saved();
+    const document = savedDrawingView(saved49, 'linear');
+    assert.deepEqual(document.webFiles.bindings.linearComparisons ?? [], [], name);
+    assert.deepEqual(document.renderRequest.comparisons.map(({ resourceId }) => resourceId), comparisons, name);
+    comparisons.forEach((id) => assert.ok(document.resources[id], `${name}: ${id}`));
+    assert.deepEqual(await load(saved49), [], name);
   }
 });
 
