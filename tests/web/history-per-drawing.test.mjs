@@ -929,3 +929,24 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   assert.equal(copy.files.c_gb, null);
   assert.equal(circular.files.c_gb, shared);
 });
+
+// OV-2150: the Linear File card's row input reads `linearRecordRowFor(uid, fallback)`
+// from the template; the shown Linear drawing answers it (a drawing-generic reader
+// exported as is made every render of the card list throw).
+test('the template row reader answers from the shown Linear drawing', async () => {
+  const app = createAppSetup();
+  app.selectDrawing('linear');
+  const linear = state.drawingOf('linear');
+  if (linear.linearSeqs.length < 2) app.addLinearSeq();
+  const second = linear.linearSeqs[1];
+  app.setLinearRecordLayoutEnabled(true);
+  app.setLinearRecordRow(second.uid, 3);
+  assert.equal(app.linearRecordRowFor(second.uid, 2), 3, 'the row the shown drawing holds');
+  assert.equal(app.linearRecordRowFor('no-such-uid', 7), 7, 'a uid without a row reads its position');
+  const { drawingId: copyId } = app.drawingList.duplicateDrawing('linear');
+  app.selectDrawing(copyId);
+  app.setLinearRecordRow(second.uid, 4);
+  assert.equal(app.linearRecordRowFor(second.uid, 2), 4, 'the shown copy answers by the same row uid');
+  app.selectDrawing('linear');
+  assert.equal(app.linearRecordRowFor(second.uid, 2), 3, 'the other drawing keeps its row');
+});
