@@ -6413,6 +6413,16 @@ const importSessionDocument = async (e, options = {}) => {
         invocationMode: legacyResult ? storedInvocation?.mode : null,
         legend: storedForm?.legend, plotTitlePosition: storedAdv?.plot_title_position, canonical: !legacyResult
       };
+      const { orthogroupState: storedGroupState, renderRequest: storedRequest } = /** @type {{ orthogroupState?: unknown,
+        renderRequest?: { records?: unknown, mode?: unknown, grouping?: unknown,
+          diagramOptions?: { output?: { legend?: unknown, plotTitlePosition?: unknown } | null } | null } }} */ (fileParts.data);
+      // A settings-only Session's request is not its committed request.
+      const committedRequest = fileParts.requestRead.settingsOnly || projectsWithoutRequest(fileParts.data, fileDocument.version)
+        ? null : storedRequest ?? null;
+      // The drawn mode is read once, for the Load rows and the layout.
+      const { generatedMode: loadedDrawnMode } = drawnResultModes({
+        ui: fileDrawnWith.ui, committedMode: committedRequest?.mode, invocationMode: storedInvocation?.mode, canonical: committedRequest !== null
+      });
       // Its one draft is read by the draft field readers here, at the file's
       // own path, each mode's settings readers on the whole draft (D-15-138),
       // the drawing of its Result's mode first, as the old Load opened it
@@ -6438,16 +6448,13 @@ const importSessionDocument = async (e, options = {}) => {
         : storedDraft, fileDocument.version);
       const draftRead = isPlainObject(draft) ? readSingleDraftValues(draft, 'config', {
         resolveTrackPlacements: !projectsWithoutRequest(fileParts.data, fileDocument.version),
-        openedMode: drawnResultModes(fileDrawnWith).generatedMode
+        openedMode: loadedDrawnMode
       }) : null;
       if (draftRead) fileRepairs.push(...draftRead.repairs);
       // A Session 27-39's group names are read against its own groups, at
       // the file's path; the groups travel with the Results Python sets
       // aside, and the kept names go to Python (D-15-137). A Session 40-44's
       // groups are its catalog's, read on Python's Session 49.
-      const { orthogroupState: storedGroupState, renderRequest: storedRequest } = /** @type {{ orthogroupState?: unknown,
-        renderRequest?: { records?: unknown, mode?: unknown, grouping?: unknown,
-          diagramOptions?: { output?: { legend?: unknown, plotTitlePosition?: unknown } | null } | null } }} */ (fileParts.data);
       const groupState = fileDocument.version < CURRENT_AUTHORITY_SESSION_MIN_VERSION && isPlainObject(storedGroupState)
         ? storedGroupState : null;
       const orthogroups = groupState
@@ -6465,15 +6472,10 @@ const importSessionDocument = async (e, options = {}) => {
       // The layout is restored as the Load before the Worker route restored
       // it (OV-1967): with the mode of the drawing that opens, the read
       // draft's sides, and a canonical Session's committed request layout.
-      // A settings-only Session's request is not its committed request.
-      const committedRequest = fileParts.requestRead.settingsOnly || projectsWithoutRequest(fileParts.data, fileDocument.version)
-        ? null : storedRequest ?? null;
       const { form: readForm, adv: readAdv } = /** @type {{ form?: { legend?: unknown, multi_record_canvas?: unknown },
         adv?: { plot_title_position?: unknown } }} */ (draftRead ? draftRead.value : {});
       const layoutRead = isPlainObject(storedUi) ? readStoredLayoutUi(storedUi, 'ui', {
-        mode: drawnResultModes({
-          ui: storedUi, committedMode: committedRequest?.mode, invocationMode: storedInvocation?.mode, canonical: committedRequest !== null
-        }).generatedMode,
+        mode: loadedDrawnMode,
         multiRecord: Boolean(readForm?.multi_record_canvas),
         projected: committedRequest ? requestLayoutPreferences(committedRequest) : null,
         active: { legend: readForm?.legend, plotTitlePosition: readAdv?.plot_title_position }
