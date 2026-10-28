@@ -3625,18 +3625,27 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
- * The Depth files of a draft whose request omits them, as the descriptors a Session loaded or an
- * earlier Generate encoded. Nothing is read: a file no request carried is not held
- * (`heldDepthFiles`; gbdraw/web/CLAUDE.md, Runtime data flow).
- * @param {unknown} value A Depth slot value, a row of them, or a matrix of rows.
+ * The Depth files a drawing's draft holds while its request omits them (Show Depth off), as the
+ * descriptors a Session loaded or an earlier Generate encoded: the Worker keeps their bytes while
+ * the draft holds them (gbdraw/web/CLAUDE.md, Runtime data flow). Nothing is read, so a file no
+ * request carried is not held.
+ * @param {string} mode The drawing's mode.
+ * @param {{ files?: { c_depth?: unknown } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
+ *   The project inputs (`state`): the Circular Depth slots and the Linear record cards.
+ * @param {DrawingState} drawing
  * @returns {RawSessionResourceDescriptor[]}
  */
-const knownDepthFileDescriptors = (value) => (Array.isArray(value) ? value : [value])
-  .flat(Infinity)
-  .flatMap((/** @type {unknown} */ file) => {
+export const heldDepthFiles = (mode, sourceState, drawing) => {
+  const linear = mode === 'linear';
+  if (draftDrawsDepth(linear ? 'linear' : 'circular', drawing)) return [];
+  const slots = linear
+    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff)).map((seq) => seq.depth)
+    : sourceState.files?.c_depth;
+  return (Array.isArray(slots) ? slots : [slots]).flat(Infinity).flatMap((/** @type {unknown} */ file) => {
     const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
     return descriptor ? [descriptor] : [];
   });
+};
 
 /**
  * @param {string} mode
@@ -3769,10 +3778,7 @@ export const serializeActiveRenderFiles = async (
     qualifier_priority: null,
     linearSeqs,
     linearComparisons,
-    linearCanonicalComparisons,
-    heldDepthFiles: depthRequested ? [] : knownDepthFileDescriptors(
-      mode === 'linear' ? normalizedLinearSeqs.map((seq) => seq.depth) : sourceFiles.c_depth
-    )
+    linearCanonicalComparisons
   };
 };
 

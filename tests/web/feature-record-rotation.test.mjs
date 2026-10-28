@@ -281,16 +281,13 @@ test('Apply on Generate writes the resolved transform as one History step and ru
   assert.equal(executions, 0);
 });
 
-test('a record transform shares the committed file descriptors and held files instead of cloning them', () => {
-  // A held file and each resource carry a file's base64; a rotation must not copy them.
-  const heldResources = Object.freeze({ 'held-depth-1': { kind: 'depth-track-file', name: 'depth.tsv', data: 'QUJD' } });
-  const envelope = { ...committed, heldResources };
+test('a record transform shares the committed file descriptors instead of cloning them', () => {
+  // Each resource carries a file's base64; a rotation must not copy it (OV-2082).
   const { canonical } = projectCommittedRecordTransform({
-    committed: envelope,
+    committed,
     target,
     transform: { startCoordinate: 101, reverseComplement: true, recordLength: 16569, anchorIntent: null }
   });
-  assert.equal(canonical.heldResources, heldResources);
   for (const [resourceId, descriptor] of Object.entries(committed.resources)) {
     assert.equal(canonical.resources[resourceId], descriptor, resourceId);
   }
@@ -298,10 +295,4 @@ test('a record transform shares the committed file descriptors and held files in
   assert.notEqual(canonical.renderRequest, committed.renderRequest);
   assert.equal(canonical.renderRequest.records[0].display.startCoordinate, 101);
   assert.equal(committed.renderRequest.records[0].display?.startCoordinate ?? null, canonicalRecord.display?.startCoordinate ?? null);
-  const { canonical: loaded } = projectCommittedRecordTransform({
-    committed,
-    target,
-    transform: { startCoordinate: 101, reverseComplement: true, recordLength: 16569, anchorIntent: null }
-  });
-  assert.equal(Object.hasOwn(loaded, 'heldResources'), false);
 });
