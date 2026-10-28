@@ -19,9 +19,6 @@ class _RenderProfile:
     config: GbdrawConfig
     # An identity-addressed feature override shows a label (label_visibility "on").
     identity_label_overrides: bool = False
-    show_gc: bool = field(init=False)
-    show_skew: bool = field(init=False)
-    show_depth: bool = field(init=False)
     strandedness: bool = field(init=False)
     resolve_overlaps: bool = field(init=False)
     feature_overlap_tolerance_bp: int = field(init=False)
@@ -34,9 +31,6 @@ class _RenderProfile:
             raise ValidationError("render profile config must be GbdrawConfig")
         canvas = self.config.canvas
         object.__setattr__(self, "feature_overlap_tolerance_bp", canvas.feature_overlap_tolerance_bp)
-        object.__setattr__(self, "show_gc", bool(canvas.show_gc))
-        object.__setattr__(self, "show_skew", bool(canvas.show_skew))
-        object.__setattr__(self, "show_depth", bool(canvas.show_depth))
         object.__setattr__(self, "strandedness", bool(canvas.strandedness))
         object.__setattr__(self, "resolve_overlaps", bool(canvas.resolve_overlaps))
         object.__setattr__(self, "label_rendering", self.config.labels.rendering)
@@ -46,6 +40,25 @@ class _RenderProfile:
             self.identity_label_overrides
             or has_forced_label_overrides(self.config.labels.filtering.as_dict()),
         )
+
+    # A render stage keys a profile field by value, whether it reads it or not,
+    # and the config by the sections it declares (gbdraw.render_stages). The
+    # track switches are read through the config, so a GC, skew or Depth toggle
+    # rebuilds only the stages that declare ``canvas``, not every content that
+    # takes the profile (OV-1309). The other fields stay values: ``canvas`` also
+    # holds the switches, so a content that read its strands through the config
+    # would rebuild on every toggle.
+    @property
+    def show_gc(self) -> bool:
+        return bool(self.config.canvas.show_gc)
+
+    @property
+    def show_skew(self) -> bool:
+        return bool(self.config.canvas.show_skew)
+
+    @property
+    def show_depth(self) -> bool:
+        return bool(self.config.canvas.show_depth)
 
 
 @dataclass(frozen=True)

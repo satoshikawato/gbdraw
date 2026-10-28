@@ -70,6 +70,9 @@ write-up of a release.
   same. AP027078 `--labels out` (562 labels) takes about 11 s instead of 28 s;
   radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
   about 4 s instead of 25 s, with less memory (#1396, #1400).
+- Performance (web app): turning the GC content or GC skew track on or off no longer redraws the feature
+  contents, the Linear records or the Circular ticks; only the tracks, labels and legend that move redraw. The
+  drawn bytes are unchanged (#1431).
 - Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
   tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
   Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the

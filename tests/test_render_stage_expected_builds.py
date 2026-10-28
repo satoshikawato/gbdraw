@@ -443,17 +443,26 @@ def test_a_p1_or_p2_option_builds_only_the_stages_of_its_content(
     assert not failures, "\n".join(failures)
 
 
-def test_a_gc_toggle_rebuilds_neither_the_circular_definition_nor_the_title(tables: Path, tmp_path: Path) -> None:
-    """The definition and the title take the canvas geometry, not the canvas switches."""
+@pytest.mark.parametrize("option_id", ["gc", "skew"])
+@pytest.mark.parametrize("case_id", ["C1", "L1"])
+def test_a_track_toggle_rebuilds_no_definition_title_record_content_or_ticks(
+    case_id: str, option_id: str, tables: Path, tmp_path: Path
+) -> None:
+    """The definition and the title take the canvas geometry, not the canvas switches; the
+    record and feature contents and the ticks take the render profile, whose track
+    switches are read through the config (OV-1309)."""
 
-    case = CASES["C1"]
+    case = CASES[case_id]
     placeholders = Placeholders(tables)
-    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    harness = EquivalenceHarness(case.mode, tmp_path / case_id)
     assert harness.warm(placeholders.expand(case, case.base)).error is None
-    [(option, variant)] = matrix_variants(case, option_ids=["gc"], first_variant_only=True)
+    [(option, variant)] = matrix_variants(case, option_ids=[option_id], first_variant_only=True)
     outcome = harness.warm(state_arguments(case, {option: variant}, placeholders))
     assert outcome.error is None
-    assert not {"circular_definition_content", "circular_plot_title_content"} & set(outcome.stages.builds)
+    assert not {
+        "circular_definition_content", "circular_plot_title_content", "definition_content", "plot_title_content",
+        "record_content", "circular_record_content", "ticks_content",
+    } & set(outcome.stages.builds)
 
 
 def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definition(
@@ -523,6 +532,19 @@ def test_a_multi_record_circular_layout_change_copies_only_the_record_parts_it_r
     rebuilt_parts = sum(count for name, count in builds.items() if name in _RECORD_MERGE_INPUTS)
     assert 0 < builds.get("record_part", 0) == rebuilt_parts
     assert outcome.stages.hits.get("record_part", 0) > 0
+
+
+def test_a_multi_record_gc_toggle_keeps_every_feature_content(tmp_path: Path) -> None:
+    """Hiding GC keeps every record's feature content and ticks (OV-1309)."""
+
+    base = _hmmt_regions(tmp_path / "records.tsv")
+    harness = EquivalenceHarness("circular", tmp_path / "out")
+    before = harness.warm(base)
+    assert before.error is None
+    outcome = harness.warm(["--no-gc" if argument == "--gc" else argument for argument in base])
+    assert outcome.error is None and outcome.reply != before.reply
+    assert not {"circular_record_content", "ticks_content"} & set(outcome.stages.builds)
+    assert outcome.stages.hits.get("circular_record_content") == 2
 
 
 @pytest.mark.parametrize(
