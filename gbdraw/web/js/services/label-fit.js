@@ -109,7 +109,7 @@ export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
 /**
  * The Web's words for the room each kind of label needs (CAPACITY-STOP, CAPACITY-WARN), by Python's label kind id:
  * its keys are the kinds whose room Python reads before placing them (`HorizontalLabelKind` in
- * gbdraw/labels/circular_capacity.py, in its order). `line` is the dialog's record line, whose `{record}` stays in the
+ * gbdraw/labels/fit.py, in its order). `line` is the dialog's record line, whose `{record}` stays in the
  * text for the dialog's `<i18n-text>` slot (the record ID in bold); `notice` is the processing overlay's sentence. A
  * report or notice naming another kind is invalid. Each form is a whole sentence per kind and count (OV-2179).
  */
