@@ -19,7 +19,7 @@ write-up of a release.
   (default on), `gbdraw circular --hide_definition`, and the config key
   `objects.definition.circular.show`. Off draws no center definition for any
   record and reserves no center room for it; the plot title stays
-  (PD-OI-109). Session files rise to version 49.
+  (PD-OI-109, #1435). Session files rise to version 49.
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
