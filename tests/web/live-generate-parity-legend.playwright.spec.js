@@ -1926,3 +1926,24 @@ test('a palette switch recolors the CDS row a rule of a hidden feature names, li
   expect(cdsRow?.fill, 'the live CDS row shows the new palette color').toBe(earthtonesCds);
   await expectLiveEqualsGenerate(page, { label: 'a palette switch after a rule of a hidden feature' });
 });
+
+// OV-2188 (release-tier random walk, seeds 20261102 and 20261106): a Legend
+// name given in the popup, or a Legend rename of a feature type's row, shows
+// the rule's row at once. The row copies Python's first row; once the user
+// order puts a GC row first, the copy took that row's stroke (`none`), while
+// Python draws a rule row with the block stroke (`gray`).
+for (const [name, edit] of [
+  ['a popup Legend name', (page) => popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' })],
+  ['a Legend rename', (page) => renameRow(page, 'repeat_region', 'Walk group').then(() => settleLive(page))]
+]) {
+  test(`${name} shows its row with the block stroke after a GC row was moved first, live = Generate (OV-2188)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const gcContent = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+    await appAction(page, 'moveLegendEntry', gcContent, 0);
+    await edit(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.caption === 'Walk group');
+    expect(row?.stroke, 'the new row is drawn with the block stroke').toBe('#808080');
+    await expectLiveEqualsGenerate(page, { label: `${name} after a GC row was moved first` });
+  });
+}

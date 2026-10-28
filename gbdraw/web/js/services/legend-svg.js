@@ -114,9 +114,10 @@ export const shownLegendKeys = (svg) => new Set(getAllFeatureLegendGroups(svg).f
   Array.from(group.querySelectorAll('g[data-legend-key]')).filter(legendRowShown).map(pythonLegendKey)
 )));
 
-// The order a feature Legend group recorded as Python's, else null.
+// The order a feature Legend group recorded as Python's (its Python keys,
+// recorded when the rows were first reordered), else null.
 /** @param {Element} group @returns {string[] | null} */
-const recordedGroupOrder = (group) => {
+export const recordedGroupOrder = (group) => {
   const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
   if (!recorded) return null;
   try {
