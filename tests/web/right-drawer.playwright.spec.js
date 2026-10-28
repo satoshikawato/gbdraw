@@ -302,10 +302,9 @@ const MOBILE_VIEWPORTS = [
 
 const centerPreview = async (page) => {
   // The header takes its layout for a new width in the page's resize event, which can run after setViewportSize
-  // returns; scroll by its settled height (one row above 768 px at the widths used here, two at 768 px and below).
-  await expect.poll(() => page.evaluate(() => (
-    document.querySelector('.app-header').hasAttribute('data-header-wrapped') === (innerWidth <= 768)
-  ))).toBe(true);
+  // returns, and refits in the next frame after a size change; two frames later it has settled, so scroll by its
+  // settled height.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await waitForSettledDrawer(page);
   await page.getByRole('region', { name: 'Result Preview' }).evaluate(async (preview) => {
     await document.fonts.ready;
