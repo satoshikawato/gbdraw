@@ -749,3 +749,59 @@ test('a card import, Remove, and Retry are steps of the shown drawing', async ()
   assert.equal(uploader.length, 4, 'a selection and a Remove, each with and without the import step');
   assert.deepEqual(uploader.filter((line) => /runProjectStep/.test(line)), []);
 });
+
+test('replacing a file for every drawing that uses it is one project step that leaves no drawing on the old file', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const genbank = (name) => new File([`LOCUS       ${name} 40 bp DNA\nORIGIN\n        1 ${'a'.repeat(40)}\n//\n`], name);
+  app.selectDrawing('circular');
+  const shared = state.inputFiles.registerFile(genbank('shared.gb'));
+  // The uploader's change is a step of its drawing (history-inputs).
+  await history.runUndoable('Change uploaded file', () => { app.setCircularSourceFile('c_gb', shared); });
+  const { drawingId: copyId } = app.drawingList.duplicateDrawing('circular');
+  const copy = state.drawingOf(copyId);
+  const circular = state.drawingOf('circular');
+  assert.equal(copy.files.c_gb, shared, 'the copy binds the same file');
+  const stepsBefore = history.undoLabel();
+  const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'), 'all');
+  // The project step is recorded when each drawing's part has settled.
+  for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(outcome.status, 'ok');
+  const replaced = circular.files.c_gb;
+  assert.notEqual(replaced?.fileId, shared.fileId);
+  assert.equal(copy.files.c_gb, replaced, 'both drawings bind the new file');
+  const { projectInputReplacement } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const drawings = state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
+  assert.deepEqual(projectInputReplacement(drawings, shared.fileId), [], 'no drawing keeps the old source');
+  assert.equal(history.undoLabel(), 'Replace input file', 'one step');
+  await app.undoHistory();
+  assert.equal(copy.files.c_gb, shared, 'one Undo from the copy restores it');
+  assert.equal(circular.files.c_gb, shared, 'and the other drawing');
+  assert.equal(history.undoLabel(), stepsBefore);
+  await app.redoHistory();
+  assert.equal(circular.files.c_gb?.fileId, replaced?.fileId);
+  app.selectDrawing('circular');
+  assert.equal(history.undoLabel(), 'Replace input file', 'the project step is undoable from the other drawing');
+  await app.undoHistory();
+  assert.equal(circular.files.c_gb, shared);
+  assert.equal(copy.files.c_gb, shared);
+});
+
+test('the replacement sites are found by drawing ID, slot, row uid, and comparison id, never on a card', async () => {
+  const { projectInputReplacement, INPUTS_SLICE, bindDrawingInputFile, bindInputFile } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
+  const store = state.inputFiles;
+  const one = INPUTS_SLICE.create();
+  const genome = bindDrawingInputFile(store, one.handle, 'c_gb', new File(['x'], 'g.gb'));
+  const card = bindInputFile(store, one.handle, 'd_color', new File(['c'], 'c.tsv'));
+  const rows = [{ uid: 'row-1', gb: genome, gff: null, fasta: null, depth: null }];
+  const drawings = [
+    { drawingId: 'circular', drawing: { files: one.view.files, linearSeqs: [], linearComparisonPlan: null } },
+    { drawingId: 'linear', drawing: { files: {}, linearSeqs: rows, linearComparisonPlan: { edges: [{ id: 'edge-1', file: genome }] } } }
+  ];
+  assert.deepEqual(projectInputReplacement(drawings, genome.fileId), [
+    { drawingId: 'circular', slot: 'c_gb', rowUid: null, edgeId: null },
+    { drawingId: 'linear', slot: 'row.gb', rowUid: 'row-1', edgeId: null },
+    { drawingId: 'linear', slot: 'edge', rowUid: null, edgeId: 'edge-1' }
+  ]);
+  assert.deepEqual(projectInputReplacement(drawings, card.fileId), [], 'a card file is never a site');
+});

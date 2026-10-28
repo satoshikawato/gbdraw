@@ -53,7 +53,7 @@ import {
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
-import { createDrawingBar, createDrawingList, moveTabFocus } from './drawing-list.js';
+import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -6407,11 +6407,14 @@ export const createAppSetup = () => {
   /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
   const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
   /**
-   * The Circular source file controls (upload, replace, Remove).
+   * A Circular drawing's source file (upload, replace, Remove), with the
+   * drawing's reactions to its new source: the shown drawing's controls and
+   * the replacement for every drawing that uses a file write through it.
+   * @param {DrawingState} drawing
    * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
-   * @param {File | null} value
+   * @param {InputFileCandidate | InputFileRef} value
    */
-  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => {
+  const replaceCircularSource = (drawing, field, value) => {
     const nextValue = value ?? null;
     const previous = drawing.files[field];
     const nextRef = state.inputFiles.registerFile(nextValue);
@@ -6430,6 +6433,28 @@ export const createAppSetup = () => {
       removed: !nextValue, previousRecordCount
     })) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
+  };
+  /**
+   * The Circular source file controls of the shown drawing.
+   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * @param {File | null} value
+   */
+  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => replaceCircularSource(drawing, field, value));
+  /** @type {Readonly<Record<string, 'c_gb' | 'c_gff' | 'c_fasta'>>} */
+  const CIRCULAR_SOURCE_SLOTS = Object.freeze({ c_gb: 'c_gb', c_gff: 'c_gff', c_fasta: 'c_fasta' });
+  // The replacement of an input file for the shown drawing or every drawing
+  // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`.
+  const inputReplacement = createInputReplacement({
+    drawingTabs: () => state.drawingTabs.value,
+    shownDrawingId: () => state.activeDrawingId.value,
+    switchBusy: drawingSwitchBusy,
+    drawingOf: state.drawingOf,
+    runProjectStep: history.runProjectStep,
+    runDrawingStep: history.runUndoable,
+    applyInputReplacementToDrawings: (sites, file) => sites.forEach((site) => {
+      const field = CIRCULAR_SOURCE_SLOTS[site.slot];
+      if (field) replaceCircularSource(state.drawingOf(site.drawingId), field, file);
+    })
   });
   /** @param {unknown} value */
   const setCircularRecordPresentationSelector = (value) => {
@@ -7666,6 +7691,7 @@ export const createAppSetup = () => {
     setCircularRecordPresentationSelector,
     changeCircularMultiRecordCanvas,
     setCircularSourceFile,
+    replaceInputFile: inputReplacement.replaceInputFile,
     recordSelection,
     circularDrawnRecordCount,
     formatRecordLength,
