@@ -84,7 +84,7 @@ const EXPLICIT_ANY_BASELINE = {
   'services/feature-metadata-extraction.js': 3,
   'services/feature-placement.js': 12,
   'services/feature-utils.js': 2,
-  'services/feature-visibility.js': 4,
+  'services/feature-visibility.js': 2,
   'services/file-imports.js': 1,
   'services/gallery-session-publication.js': 9,
   'services/history-snapshot.js': 22,

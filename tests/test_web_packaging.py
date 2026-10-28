@@ -222,7 +222,7 @@ def _assert_white_gallery_thumbnail(path: Path) -> None:
 @pytest.mark.browser
 def test_web_offline_assets_can_be_prepared_for_packaging() -> None:
     verify_module, expected_wheel_path = ensure_prepared_browser_wheel()
-    expected_wheel_name = "gbdraw-0.14.2-py3-none-any.whl"
+    expected_wheel_name = "gbdraw-0.14.3-py3-none-any.whl"
     assert verify_module._parse_wheel_name() == expected_wheel_name
     assert expected_wheel_path.name == expected_wheel_name
     verify_module.assert_browser_wheel_is_not_recursive(expected_wheel_path)
@@ -1128,7 +1128,7 @@ def test_prepare_browser_wheel_refreshes_open_source_notices(
     repo_root = tmp_path / "repo"
     web_root = repo_root / "gbdraw" / "web"
     web_root.mkdir(parents=True)
-    expected_name = "gbdraw-0.14.2-py3-none-any.whl"
+    expected_name = "gbdraw-0.14.3-py3-none-any.whl"
     pyodide_dir = tmp_path / "pyodide"
     calls: list[object] = []
 
@@ -1509,8 +1509,8 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     )
     assert prepare_index < install_index
     assert "python-build" not in meta_yaml
-    assert re.search(r"^\s+- setuptools\s*$", meta_yaml, re.MULTILINE)
-    assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
+    assert re.search(r"^\s+- setuptools >=77\s*$", meta_yaml, re.MULTILINE)
+    assert not re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
 
 
 def test_losat_installation_ownership_is_split_between_conda_and_pypi() -> None:
@@ -1711,7 +1711,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
     )
 
     wheel_path = next(dist_dir.glob("gbdraw-*.whl"))
-    assert wheel_path.name == "gbdraw-0.14.2-py3-none-any.whl"
+    assert wheel_path.name == "gbdraw-0.14.3-py3-none-any.whl"
     subprocess.run(
         [
             sys.executable,
