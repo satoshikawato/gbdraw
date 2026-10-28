@@ -43,6 +43,7 @@ from gbdraw.session_io import (
     DRAWN_HASH_RULE_SESSION_MAX_VERSION,
     FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
     DrawnFeature,
+    SessionResourceDescriptor,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
     source_hash_selector_value,
@@ -1221,7 +1222,7 @@ def stores_protein_results(payload: Mapping[str, Any] | None) -> bool:
 
 
 def search_frame_protein_resources(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
 ) -> dict[str, bytes]:
@@ -1238,7 +1239,7 @@ _STORED_NUCLEOTIDE_TABLE_KINDS = frozenset({"nucleotideBlast"})
 
 
 def search_frame_nucleotide_resources(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
 ) -> dict[str, bytes]:
@@ -1254,7 +1255,7 @@ def search_frame_nucleotide_resources(
 
 
 def _search_frame_resources(
-    payload: Mapping[str, Any],
+    payload: Mapping[str, object],
     request: DiagramRequest,
     converted: DiagramRequest,
     kinds: frozenset[str],
@@ -1266,8 +1267,7 @@ def _search_frame_resources(
     so the request and every other resource stay as stored.
     """
 
-    stored = [item for item in payload.get("comparisons") or () if isinstance(item, Mapping)
-              and item.get("kind") in kinds]
+    stored = _comparison_items(payload.get("comparisons"), kinds)
     if not stored:
         return {}
 
@@ -1275,10 +1275,10 @@ def _search_frame_resources(
     from gbdraw.session_resources import SessionResourceTable
     from gbdraw.session_io import _embedded_resource_bytes
 
-    def items_of(value: DiagramRequest) -> tuple[list[Mapping[str, Any]], Mapping[str, Mapping[str, Any]]]:
+    def items_of(value: DiagramRequest) -> tuple[list[Mapping[str, object]], Mapping[str, Mapping[str, object]]]:
         table = SessionResourceTable()
         encoded = encode_canonical_request(value, table=table).payload
-        return [item for item in encoded["comparisons"] if item.get("kind") in kinds], table.descriptors()
+        return _comparison_items(encoded.get("comparisons"), kinds), table.descriptors()
 
     # ``request`` as stored: its tables encode to the bytes they were read from.
     as_stored = (_with_drawn_feature_id_marks(request, lambda _comparison: False)
@@ -1290,21 +1290,36 @@ def _search_frame_resources(
     for item, old, new in zip(stored, before, after, strict=True):
         if not item["kind"] == old["kind"] == new["kind"]:
             raise ValidationError("Stored comparison results do not match their decoded request.")
-        content = _embedded_resource_bytes(after_resources[new["resourceId"]])
-        if content == _embedded_resource_bytes(before_resources[old["resourceId"]]):
+        content = _embedded_resource_bytes(after_resources[_comparison_resource_id(new)])
+        if content == _embedded_resource_bytes(before_resources[_comparison_resource_id(old)]):
             continue
-        resource_id = str(item["resourceId"])
+        resource_id = _comparison_resource_id(item)
         if changed.get(resource_id, content) != content:
             raise ValidationError(f"Stored resource {resource_id!r} holds two different comparison results.")
         changed[resource_id] = content
     return changed
 
 
-def replace_resource_bytes(descriptor: Mapping[str, Any], content: bytes) -> dict[str, Any]:
+def _comparison_items(comparisons: object, kinds: frozenset[str]) -> list[Mapping[str, object]]:
+    """The ``kinds`` items of a stored or encoded request's ``comparisons``."""
+
+    return [item for item in (comparisons if isinstance(comparisons, list) else ())
+            if isinstance(item, Mapping) and item.get("kind") in kinds]
+
+
+def _comparison_resource_id(item: Mapping[str, object]) -> str:
+    resource_id = item.get("resourceId")
+    if not isinstance(resource_id, str):
+        raise ValidationError("A stored comparison result requires a resourceId.")
+    return resource_id
+
+
+def replace_resource_bytes(descriptor: SessionResourceDescriptor, content: bytes) -> SessionResourceDescriptor:
     """``descriptor`` holding ``content``: base64 data, size and any checksum."""
 
-    replaced = {**descriptor, "encoding": "base64", "data": base64.b64encode(content).decode("ascii"),
-                "size": len(content)}
+    replaced: SessionResourceDescriptor = {
+        **descriptor, "encoding": "base64", "data": base64.b64encode(content).decode("ascii"), "size": len(content),
+    }
     checksum = descriptor.get("checksum")
     if checksum not in (None, ""):
         prefix = "sha256:" if str(checksum).lower().startswith("sha256:") else ""

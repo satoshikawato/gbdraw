@@ -30,6 +30,7 @@ from gbdraw.session_io import (
     MODE_SCOPED_SESSION_MIN_VERSION,
     ROW_KEYED_LEGEND_SESSION_MIN_VERSION,
     SESSION_FORMAT,
+    SessionResourceDescriptor,
     _read_session_json,
     _attach_current_web_file_bindings,
     _embedded_resource_bytes,
@@ -1542,9 +1543,9 @@ def _upgrade_mode_scoped_session(
 
 
 def _with_resource_bytes(
-    resources: Mapping[str, Mapping[str, Any]],
+    resources: Mapping[str, SessionResourceDescriptor],
     replaced: Mapping[str, bytes],
-) -> dict[str, Any]:
+) -> dict[str, SessionResourceDescriptor]:
     """``resources`` with the bytes of ``replaced`` under their stored IDs."""
 
     from gbdraw.api.session_compat import replace_resource_bytes
@@ -1729,7 +1730,7 @@ def _project_adjunct(
     *,
     report: DraftMigrationReport | None,
     source_features: Mapping[str, Any] | None = None,
-    resources: Mapping[str, Any] | None = None,
+    resources: Mapping[str, SessionResourceDescriptor] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """The current drawing state and Web file inventory of a Session 27-44;
     its Web file cards hold ``resources`` when given (the converted ones)."""

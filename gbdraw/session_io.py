@@ -5352,6 +5352,23 @@ def migrate_legacy_linear_comparison_draft_for_current_writer(
     )
 
 
+class _SessionResourceDescriptorRequired(TypedDict):
+    size: int
+    # Base64 text, or the encoded depth payload under ``DEPTH_FILE_ENCODING``.
+    data: str | Mapping[str, object]
+
+
+class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False):
+    """One entry of a Session's ``resources``: embedded bytes and their file metadata."""
+
+    kind: str
+    name: str
+    type: str
+    lastModified: int
+    encoding: str
+    checksum: str | None
+
+
 def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     encoding = entry.get("encoding")
     data = entry.get("data")
