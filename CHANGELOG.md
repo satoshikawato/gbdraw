@@ -15,15 +15,11 @@ write-up of a release.
 - Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
   the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
   before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
-- Added: a Circular "Show Definition" setting in the Web app's Record Labels
-  (default on), `gbdraw circular --hide_definition`, and the config key
-  `objects.definition.circular.show`. Off draws no center definition for any
-  record and reserves no center room for it; the plot title stays
-  (PD-OI-109, #1435). Session files rise to version 49.
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
 
-- Patch release of 0.14.2. Session files are unchanged (Session version 48).
+- Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
+  cannot open; Sessions saved by 0.14.2 open as before.
   See the [full release notes](./docs/RELEASE_NOTES_0.14.3.md).
 - Fixed: per-feature edits in the Web app (a "This feature only" color, label
   text and visibility, Feature visibility, stroke, Feature placements, and
@@ -31,7 +27,7 @@ write-up of a release.
   record changes: a Circular record drawn alone or on the Multi-record canvas,
   a Linear File card that draws all of its records or one of them. Before,
   they stopped applying after a Generate that drew the record under another
-  key. Undo of that Generate puts them back; Session files are unchanged
+  key. Undo of that Generate puts them back; the fix does not change Session files
   (OV-1949, #1417). Edits made on an "all records" card of a 0.13.0 Session do not
   follow its records after the first Generate splits the card.
 - Fixed: label text and Label visibility typed in the Web feature popup and
@@ -76,6 +72,10 @@ write-up of a release.
   loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
   four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
   button's icon beside the logo (PD-OI-108, #1383).
+- Added: a Circular "Show Definition" setting in the Web app's Record Labels (default on), `gbdraw circular
+  --hide_definition`, and the config key `objects.definition.circular.show`. Off draws no center definition for any
+  record and reserves no center room for it; the plot title stays. Session files rise to version 49 to store it
+  (PD-OI-109, #1435).
 - Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
   Security Advisories (#1403).
 - Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the

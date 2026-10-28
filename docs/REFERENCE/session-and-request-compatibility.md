@@ -14,8 +14,8 @@ Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
 of the request, as earlier writers left it. An older Session reads it as on and
-draws as before. gbdraw 0.14.3 and older read Sessions up to 48 and refuse a
-Session 49 file.
+draws as before. gbdraw 0.14.3 writes Session 49; gbdraw 0.14.0 to 0.14.2 read
+Sessions up to 48 and refuse a Session 49 file.
 
 Session 48 stores the saved protein results (LOSATP tables, Similarity groups,
 Collinear blocks) of a reverse-complemented Linear record in the record's
@@ -653,9 +653,9 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 48, while current readers also accept the
-session-42, session-44, session-46, and session-47 forms. Readers whose maximum
-version is 42, 44, 46, or 47 reject newly written session-48 files.
+settings-only writers emit session 49, while current readers also accept the
+session-42, session-44, and session-46 to session-48 forms. Readers whose
+maximum version is 42, 44, or 46 to 48 reject newly written session-49 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This

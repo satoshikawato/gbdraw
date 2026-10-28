@@ -8,9 +8,11 @@ changes, and redraws after small changes do less work. It also makes Circular
 label placement much faster on large label sets, stops Circular labels that
 cannot fit before spending minutes on them, makes the command line fail
 clearly when a requested image format is unavailable, and renames the palette
-`hearbal_garden` to `herbal_garden`. Session files are unchanged: gbdraw
-0.14.3 saves Sessions as session version 48, with canonical `renderRequest`
-schema 9, and Sessions saved by 0.14.2 open as before.
+`hearbal_garden` to `herbal_garden`. A new Circular **Show Definition**
+setting hides the center definition. gbdraw 0.14.3 saves Sessions as session
+version 49, with canonical `renderRequest` schema 9, to store that setting:
+Sessions saved by 0.14.2 open as before, and gbdraw 0.14.0 to 0.14.2 cannot
+open a Session saved by 0.14.3.
 [GitHub Releases](https://github.com/satoshikawato/gbdraw/releases) gives the
 publication date, [PyPI](https://pypi.org/project/gbdraw/) lists the published
 packages, and [Installation](./INSTALL.md) explains each install route.
@@ -25,9 +27,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   one of them. Before, they stopped applying after a **Generate Diagram** that
   drew the record under another key. Undo of that Generate puts them back. The
   `hash` value of such a color in **Specific color rules** names the record key
-  of the current view, so it changes with the view. Session files are
-  unchanged; a Session saved by 0.14.2 or earlier moves its edits at its first
-  Generate.
+  of the current view, so it changes with the view. The fix does not change
+  Session files; a Session saved by 0.14.2 or earlier moves its edits at its
+  first Generate.
 - Label text and **Label visibility** typed in the Web feature popup and not
   yet applied stay when the labels are placed again while the popup is open.
 - A Legend row's stroke in the Web app stays on the Result when a color rule
@@ -75,6 +77,13 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 
 ## Added
 
+- **Show Definition (Circular).** A **Show Definition** check in **Record
+  Labels** (default on), `gbdraw circular --hide_definition`, and the config
+  key `objects.definition.circular.show`. Off draws no center definition
+  (name, strain, replicon, accession, length, GC) for any record, and the
+  inside tracks keep no room for it; the plot title stays. A **Center Reserved
+  Radius** you set still applies. Sessions store the setting from version 49;
+  an older Session opens with the definition shown.
 - The Web app leads to the Interactive Gallery's tutorials: a **Gallery &
   tutorials** header button, a **Learn with tutorials** card in the empty
   Preview on gbdraw.app, a **Tutorial** link on each example in **Load
@@ -111,7 +120,9 @@ The drawn figures are the same as before, except where listed under
 
 Installation is unchanged; see [Installation](./INSTALL.md). gbdraw 0.14.3
 supports the same Python versions as 0.14.2 (3.10, 3.11, and 3.12; 3.13 is
-listed and tested on `dev`). A Session saved by 0.14.2 opens in 0.14.3. See
+listed and tested on `dev`). A Session saved by 0.14.2 opens in 0.14.3. gbdraw
+0.14.3 saves Sessions as version 49, which gbdraw 0.14.0 to 0.14.2 refuse;
+open them with 0.14.3 or later. See
 [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
 ## Known issues
