@@ -90,13 +90,15 @@ const showHeaderFit = (header, fit) => {
 /** @type {WeakMap<HTMLElement, () => void>} */
 const fitStops = new WeakMap();
 
-// `v-header-fit` on the header: when it mounts, and once per frame after the
-// header, the tagline room, or the Session title changes size (a resize, a
-// font that loads, a status beside the file buttons) or the UI language
-// changes, it lays out the states in order before the frame is painted and
-// keeps the first that fits. Where the stylesheet marks the window as one for
-// two rows (`--app-header-two-row` on the header, at 768 px and below), it
-// keeps the two-row state without measuring.
+// `v-header-fit` on the header lays out the states in order and keeps the
+// first that fits: once the app is shown after it mounts (while `v-cloak`
+// hides the app, the header measures 0 px and is not measured), at once on a
+// window resize, so the new layout is in the same frame as the new width, and
+// once per frame after the header, the tagline room, or the Session title
+// changes size for another reason (a font that loads, a status beside the file
+// buttons) or the UI language changes. Where the stylesheet marks the window
+// as one for two rows (`--app-header-two-row` on the header, at 768 px and
+// below), it keeps the two-row state without measuring.
 export const headerFit = {
   /** @param {HTMLElement} header */
   mounted: (header) => {
@@ -110,17 +112,25 @@ export const headerFit = {
         showHeaderFit(header, TWO_ROWS);
         return;
       }
+      if (!header.getClientRects().length) return;
       showHeaderFit(header, chooseHeaderFit((state) => {
         showHeaderFit(header, state);
         return { room: room.getBoundingClientRect().width, title: title.getBoundingClientRect().width };
       }));
     };
     const schedule = () => { frame ||= requestAnimationFrame(fit); };
+    const fitNow = () => {
+      if (frame) cancelAnimationFrame(frame);
+      fit();
+    };
+    window.addEventListener('resize', fitNow);
     const observer = new ResizeObserver(schedule);
     [header, room, title].forEach((element) => observer.observe(element));
     const stopLanguage = window.Vue.watch(() => uiLocale.value, schedule, { flush: 'post' });
     fit();
+    window.Vue.nextTick(fit);
     fitStops.set(header, () => {
+      window.removeEventListener('resize', fitNow);
       observer.disconnect();
       stopLanguage();
       if (frame) cancelAnimationFrame(frame);

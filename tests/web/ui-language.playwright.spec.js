@@ -576,8 +576,9 @@ test('in every language, the link beside the menu opens the feedback form with o
     // left the title 10 px wide to 810 px). The last steps narrow the window, which the header follows too.
     for (const width of [1024, 1440, 1280, 769, 800, 850, 800]) {
       await page.setViewportSize({ width, height: 800 });
-      // The header chooses its state in the frame after a resize (app/header-fit.js): let it settle at each width
-      // (the same state and title width in two frames), so the next, narrower width starts from that state.
+      // The header chooses its state in the page's resize event (app/header-fit.js), which can run after
+      // setViewportSize returns: let it settle at each width (the same state and title width in two frames), so the
+      // next, narrower width starts from that state.
       await page.evaluate((target) => new Promise((done) => {
         let last = '';
         let frames = 0;
