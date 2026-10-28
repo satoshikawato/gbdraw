@@ -11,7 +11,7 @@ globalThis.window = {
 };
 globalThis.document = {};
 
-const { serializeActiveRenderFiles: serializeDrawingFiles } = await import(
+const { serializeActiveRenderFiles: serializeDrawingFiles, heldDepthFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
 // A fixture state is its own drawing.
@@ -308,3 +308,40 @@ assert.deepEqual(noneSerialized.linearComparisons, []);
 assert.deepEqual(noneSerialized.linearCanonicalComparisons, []);
 assert.equal(inactiveComparison.reads(), 0);
 assert.equal(inactiveCanonical.reads(), 0);
+
+// Show Depth off: `heldDepthFiles` names the Depth files a draft holds while its request omits them,
+// as the descriptors an earlier Generate encoded. No file is read, a file no Generate encoded is
+// not held, and a Linear record the draft does not draw holds nothing.
+{
+  const heldDepth = readableFile('held-depth.tsv', 'record-1\t1\t5\n');
+  const neverShown = unreadableFile('never-shown-depth.tsv');
+  const depthState = (showDepth, cDepth) => ({
+    ...sourceState,
+    form: { show_depth: showDepth },
+    files: { ...sourceState.files, d_color: null, c_depth: cDepth }
+  });
+  const shownState = depthState(true, [heldDepth]);
+  const shown = await serializeActiveRenderFiles('circular', shownState);
+  assert.equal(heldDepth.reads(), 1);
+  assert.deepEqual(heldDepthFiles('circular', shownState, shownState), []);
+  const hiddenState = depthState(false, [[heldDepth, null], [neverShown, heldDepth]]);
+  const hidden = await serializeActiveRenderFiles('circular', hiddenState);
+  assert.equal(hidden.c_depth, null);
+  assert.deepEqual(heldDepthFiles('circular', hiddenState, hiddenState), [shown.c_depth[0], shown.c_depth[0]]);
+  assert.equal(heldDepth.reads(), 1);
+  assert.equal(neverShown.reads(), 0);
+
+  const linearState = (recordsOff) => ({
+    ...hiddenState,
+    recordsOff,
+    linearSeqs: [
+      { uid: 'drawn', gb: inactiveLinear, depth: heldDepth },
+      { uid: 'off', gb: inactiveLinear, depth: neverShown }
+    ]
+  });
+  const drawnOnly = linearState(['off']);
+  assert.deepEqual(heldDepthFiles('linear', drawnOnly, drawnOnly), [shown.c_depth[0]]);
+  const none = linearState(['drawn', 'off']);
+  assert.deepEqual(heldDepthFiles('linear', none, none), []);
+  assert.equal(neverShown.reads(), 0);
+}

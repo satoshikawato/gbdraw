@@ -280,7 +280,7 @@ test('cancel during response handling cannot republish disposed Worker cache kno
 const cachedTexts = worker => worker.fs.cacheFiles().map(([, bytes]) => Buffer.from(bytes).toString()).sort();
 test('alternating drawings transfer nothing again, and a resource no drawing names is released', async () => {
   const committed = [];
-  setDiagramResourceRetainSource(() => committed);
+  setDiagramResourceRetainSource({ readCommittedResourceSets: () => committed, readDraftHeldFiles: () => [] });
   const circular = payload({ 'circular-source': 'CIRCULAR' });
   const linear = payload({ 'linear-first': 'LINEAR 1', 'linear-second': 'LINEAR 2' });
   assert.deepEqual(content(await runDiagramGeneration(circular)), { 'circular-source': 'CIRCULAR' });
@@ -299,6 +299,39 @@ test('alternating drawings transfer nothing again, and a resource no drawing nam
   assert.deepEqual(cachedTexts(worker), ['LINEAR 1', 'LINEAR 2'], 'no drawing names the Circular resource');
   await runDiagramGeneration(circular);
   assert.deepEqual(transferred(worker), ['circular-source']);
+});
+
+// Show Depth off (gbdraw/web/CLAUDE.md, Runtime data flow): the Worker keeps a file while a drawing's
+// draft holds it now, names it as held only to that drawing's renders, and drops it once no draft holds it.
+test('a hidden Depth file stays while its draft holds it and goes at the other drawing\'s next Generate once dropped', async () => {
+  const committed = [];
+  const drafts = { circular: [], linear: [] };
+  setDiagramResourceRetainSource({
+    readCommittedResourceSets: () => committed,
+    readDraftHeldFiles: () => Object.entries(drafts).map(([drawingId, files]) => ({ drawingId, files }))
+  });
+  const shown = payload({ 'circular-source': 'CIRCULAR', 'circular-depth': 'DEPTH' });
+  const hidden = payload({ 'circular-source': 'CIRCULAR' });
+  const linear = payload({ 'linear-source': 'LINEAR' });
+  const heldTokens = worker => worker.latestRun().payload.heldResourceTokens;
+  await runDiagramGeneration(shown, { drawingId: 'circular' });
+  const worker = current();
+  const depthToken = worker.latestRun().payload.resourceManifest[1].cacheToken;
+  drafts.circular = [shown.resources['circular-depth']];
+  await runDiagramGeneration(hidden, { drawingId: 'circular' });
+  assert.deepEqual(heldTokens(worker), [depthToken]);
+  committed[0] = hidden;
+  for (let render = 0; render < 2; render += 1) {
+    await runDiagramGeneration(linear, { drawingId: 'linear' });
+    assert.deepEqual(heldTokens(worker), [], 'Linear holds no Circular file');
+    committed[1] = linear;
+    assert.deepEqual(cachedTexts(worker), ['CIRCULAR', 'DEPTH', 'LINEAR'], 'the Circular draft still holds DEPTH');
+  }
+  drafts.circular = [];
+  await runDiagramGeneration(linear, { drawingId: 'linear' });
+  assert.deepEqual(cachedTexts(worker), ['CIRCULAR', 'LINEAR'], 'no draft holds DEPTH');
+  await runDiagramGeneration(shown, { drawingId: 'circular' });
+  assert.deepEqual(transferred(worker), ['circular-depth']);
 });
 
 test('equal bytes under two resource IDs travel once and share one cache file', async () => {

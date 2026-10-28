@@ -280,3 +280,19 @@ test('Apply on Generate writes the resolved transform as one History step and ru
   }), /Generate again/);
   assert.equal(executions, 0);
 });
+
+test('a record transform shares the committed file descriptors instead of cloning them', () => {
+  // Each resource carries a file's base64; a rotation must not copy it (OV-2082).
+  const { canonical } = projectCommittedRecordTransform({
+    committed,
+    target,
+    transform: { startCoordinate: 101, reverseComplement: true, recordLength: 16569, anchorIntent: null }
+  });
+  for (const [resourceId, descriptor] of Object.entries(committed.resources)) {
+    assert.equal(canonical.resources[resourceId], descriptor, resourceId);
+  }
+  assert.notEqual(canonical.resources, committed.resources);
+  assert.notEqual(canonical.renderRequest, committed.renderRequest);
+  assert.equal(canonical.renderRequest.records[0].display.startCoordinate, 101);
+  assert.equal(committed.renderRequest.records[0].display?.startCoordinate ?? null, canonicalRecord.display?.startCoordinate ?? null);
+});
