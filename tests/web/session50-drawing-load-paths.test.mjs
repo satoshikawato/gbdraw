@@ -11,11 +11,13 @@ import { sessionRollbackPort } from './helpers/session-rollback-port.mjs';
 import { validateWebConfigOverrides } from './helpers/python-evaluator.mjs';
 import { createHistoryRouter } from '../../gbdraw/web/js/services/history.js';
 
+// A case's look at the store at each Vue tick (OV-2132).
+let onNextTick = () => {};
 globalThis.window = {
   Vue: {
     ref: (value) => ({ value }), reactive: (value) => value,
     computed: (getter) => ({ get value() { return getter(); } }),
-    nextTick: async () => {}
+    nextTick: async () => { onNextTick(); }
   },
   DOMPurify: { sanitize: (value) => value }
 };
@@ -79,6 +81,58 @@ test('a Session 50 Load of two Circular drawings and a Linear one into one Circu
   assert.deepEqual(state.drawingList().map((drawing) => drawing.id), stored.map(({ id }) => id), 'every tab names a drawing');
   assert.equal(state.activeDrawing().id, 'circular-2', 'the stored shown drawing is shown');
   assert.deepEqual(historyAtAfterImport, stored.map(({ id }) => id), 'each loaded drawing has a History before the baseline');
+});
+
+// OV-2132: a Load that fails after its commit, whose shown drawing the page
+// did not hold, rolls back to the held drawings, their tabs and the shown
+// drawing; the shown drawing's History is the one the Load found already at
+// the rollback's first tick, in the task that writes the store.
+test('a Load that fails after its commit with a shown drawing the page did not hold rolls back drawings, tabs, shown drawing and Histories in one task', async () => {
+  const tabsBefore = state.drawingTabs.value.map(({ id, name }) => ({ id, name }));
+  const shownBefore = state.activeDrawingId.value;
+  const router = createHistoryRouter({
+    drawingIds: tabsBefore.map(({ id }) => id),
+    activeDrawingId: () => state.activeDrawingId.value,
+    maxBytes: Number.MAX_SAFE_INTEGER,
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    estimateFileBytes: () => 0,
+    retainOnlyFiles: () => {},
+    managerOptions: () => ({ buildIntent: () => ({}), applyIntent: () => {}, buildCheckpoint: () => ({}), applyCheckpoint: () => {} })
+  });
+  const historyBefore = router.managerOf(shownBefore);
+  const routed = callerSession(sessionConfig, state, await sessionRollbackPort(state, router));
+  const session = v49Session('drawings-circular-linear');
+  const [circular, linear] = session.drawings;
+  session.drawings = [circular, { ...structuredClone(circular), id: 'circular-9', name: 'Not held' }, linear];
+  session.ui.activeDrawingId = 'circular-9';
+  assert.ok(!tabsBefore.some(({ id }) => id === 'circular-9'), 'the page does not hold the shown drawing');
+  /** @type {boolean[]} */
+  const shownHistoryIsFound = [];
+  onNextTick = () => {
+    if (!state.sessionImportRollbackInProgress.value) return;
+    // A render that reads the shown drawing's History (it throws for a drawing without one).
+    let history = null;
+    try { history = router.managerOf(state.activeDrawingId.value); } catch { history = null; }
+    shownHistoryIsFound.push(state.activeDrawingId.value === shownBefore && history === historyBefore);
+  };
+  try {
+    const loaded = await routed.importSession({
+      target: { files: [new Blob([JSON.stringify(session)], { type: 'application/json' })], value: 'selected' }
+    }, {
+      confirmLoadRepairs: async () => true,
+      afterImport: async () => { throw new Error('a failure after the commit'); }
+    });
+    assert.equal(loaded.status, 'error');
+  } finally {
+    onNextTick = () => {};
+  }
+  assert.notEqual(state.generationFailureRecovery.value, 'restore-failed');
+  assert.deepEqual(state.drawingTabs.value.map(({ id, name }) => ({ id, name })), tabsBefore);
+  assert.deepEqual(state.drawingList().map((drawing) => drawing.id), tabsBefore.map(({ id }) => id), 'every tab names a drawing');
+  assert.equal(state.activeDrawing().id, shownBefore);
+  assert.ok(shownHistoryIsFound.length > 0, 'the rollback awaits a tick');
+  assert.deepEqual(shownHistoryIsFound, shownHistoryIsFound.map(() => true),
+    'at each rollback tick the shown drawing is the held one with the History the Load found');
 });
 
 for (const opened of ['circular', 'linear']) {

@@ -601,7 +601,7 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     ]
   );
 
-  const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+  const serialized = await serializeActiveRenderFiles(state, state.activeDrawing());
   assert.equal(serialized.linearCanonicalComparisons[0].file.data, btoa(proteinTable));
   assert.equal(serialized.linearCanonicalComparisons[1].file.data, committedData[1]);
   assert.equal(serialized.linearCanonicalComparisons[2].file.data, committedData[2]);
@@ -1045,7 +1045,7 @@ ORIGIN
   assert.equal(state.activeDrawing().circularConservation.series[1].losat_gencode, 4);
 
   installShownDrawing('circular');
-  const serialized = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+  const serialized = await serializeActiveRenderFiles(state, state.activeDrawing());
   assert.equal(serialized.c_conservation_blasts[0].data, '');
   assert.equal(serialized.c_conservation_fastas[0], null);
   assert.equal(serialized.c_conservation_fastas[1].data, btoa(fasta));

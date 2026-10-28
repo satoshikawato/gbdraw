@@ -59,6 +59,7 @@ const { exportSession, importSession } = callerSession(sessionConfig, state, rol
 const spyOnPort = (onCapture, onRestore = () => {}) => ({
   capture: () => { onCapture(); return rollbackPort.capture(); },
   replaceHistoryMembers: rollbackPort.replaceHistoryMembers,
+  restoreHistoryMembers: rollbackPort.restoreHistoryMembers,
   restore: (snapshot) => { onRestore(); return rollbackPort.restore(snapshot); }
 });
 const { describeLoadRepairs, loadRepair } = await import('../../gbdraw/web/js/utils/load-repairs.js');

@@ -129,7 +129,7 @@ in the same change.
 | Vue mount and exports | `js/app.js` |
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
-| The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`, and `drawingOfMode` until B; R15) |
+| The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`; R15) |
 | The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
 | Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
 | Registry of what a drawing holds in a Session, by mode | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
@@ -999,8 +999,7 @@ nothing else.
 
 A project has one or more drawings, held by ID in the drawing store of
 `state.js`, a `ReadonlyMap` that `createDrawingState` fills and only
-`state.drawingList()`, `state.drawingOf(id)`, and, until the Session format holds
-a list of drawings, `state.drawingOfMode(mode)` read. `state.activeDrawingId` names the shown
+`state.drawingList()` and `state.drawingOf(id)` read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
 comes from the kind it is created as (`circular`, `linear`, `linear-2`, …) and never
 changes, and its `mode` is fixed at creation; once the Session format holds a list of
@@ -1042,10 +1041,7 @@ one drawing never reaches another (PD-OI-090).
   reads (Session Save and the legacy configuration Load take it as
   `shownDrawing` from their caller). An owner resolves `state.activeDrawing()`
   once per action, or the drawing its action is about by its `DrawingId`
-  (`state.drawingOf`), and passes it down. No helper resolves it again. Until
-  the Session format holds a list of drawings, a site about the drawing of one
-  mode resolves it through `state.drawingOfMode(mode)`, the one lookup by mode,
-  whose callers may only decrease. Generate resolves its
+  (`state.drawingOf`), and passes it down. No helper resolves it again. Generate resolves its
   drawing once, at the entry of `runAnalysis`; its request, validation, and
   commit use that drawing only. A reflow or rerender of a committed Result uses
   the drawing that Result belongs to, and installs through that drawing's

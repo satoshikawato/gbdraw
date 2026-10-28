@@ -816,7 +816,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     },
     serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
-      return serializeActiveRenderFiles(state.mode.value, state, drawing);
+      return serializeActiveRenderFiles(state, drawing);
     },
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
@@ -1745,7 +1745,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows,
-    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -2762,7 +2762,7 @@ test('the Circular ring subject database, its raw cache key and the ring rows eq
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows: { value: [] },
-    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state.mode.value, state, active),
+    serializeCanonicalFiles: (_snapshot, _catalog, active) => serializeActiveRenderFiles(state, active),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     getCommittedCanonicalSession: () => null,
@@ -3083,7 +3083,7 @@ test('Linear mode none ignores dormant comparison state while active depth and a
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(state.mode.value, state, drawing, snapshot);
+      return serializeActiveRenderFiles(state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
@@ -3457,7 +3457,7 @@ test('a Generate yields one frame wait and two task yields, and a Cancel queued 
       waits.task += 1;
       return afterTask();
     },
-    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state, drawing),
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     adoptCanonicalRenderArtifacts: () => {},
     prepareCandidateCommit: ({ generationResponse, catalogAdmission, featureColorOverrides }) => ({
@@ -3574,7 +3574,7 @@ test('two Linear Generates from one state draw a Depth row at the same height', 
     ...generatedArtifactHandleOptions,
     state,
     serializeCanonicalFiles: (snapshot, recordCatalog, activeDrawing) => (
-      serializeActiveRenderFiles(state.mode.value, state, activeDrawing, snapshot)
+      serializeActiveRenderFiles(state, activeDrawing, snapshot)
     ),
     prepareLinearRecordCatalog: async () => ({ catalog: { mode: 'linear', status: 'ready', records: [] }, error: '' }),
     adoptCanonicalRenderArtifacts: () => {},
@@ -3644,7 +3644,7 @@ test('Circular Generate gives a Depth series without settings its default color'
     recordDisplayRows: { value: [] },
     setCircularConservationEnabled: (drawing, enabled) => { drawing.circularConservation.enabled = enabled; },
     serializeCanonicalFiles: (_snapshot, _catalog, activeDrawing) => (
-      serializeActiveRenderFiles(state.mode.value, state, activeDrawing)
+      serializeActiveRenderFiles(state, activeDrawing)
     ),
     adoptCanonicalRenderArtifacts: () => {},
     validateAnnotationTargets: () => '',

@@ -869,7 +869,7 @@ assert.deepEqual(activeIntentDialogs, [[
 ]]);
 const afterSessionLoadIntent = compactActiveIntentSnapshot();
 const immediatelyBeforeGenerateIntent = compactActiveIntentSnapshot();
-const activeFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+const activeFiles = await serializeActiveRenderFiles(state, state.activeDrawing());
 const firstGeneratedCanonical = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData: activeFiles });
 const firstGeneratedProjection = projectCanonicalSessionRequest(firstGeneratedCanonical);
 
@@ -1005,7 +1005,7 @@ assert.equal(state.activeDrawing().form.show_scale, false);
 assert.equal(state.activeDrawing().adv.axis_stroke_width, 9);
 assert.equal(state.activeDrawing().adv.label_font_size, 29);
 assert.equal(state.activeDrawing().adv.feature_width_circular, 23);
-const legacyActiveFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
+const legacyActiveFiles = await serializeActiveRenderFiles(state, state.activeDrawing());
 const legacyGeneratedCanonical = buildCanonicalRenderRequest({
   state,
   drawing: state.activeDrawing(),
