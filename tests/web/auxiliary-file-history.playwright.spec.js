@@ -144,7 +144,7 @@ test('a Specific rules card changes only the shown drawing, and Undo from either
   const page = await load(browser);
   const rulesOf = (mode) => page.evaluate(async (drawingMode) => {
     const { state } = await import('./js/state.js');
-    const drawing = state.drawingOfMode(drawingMode);
+    const drawing = state.drawingOf(drawingMode);
     return {
       file: drawing.files.t_color?.name ?? null,
       rules: drawing.manualSpecificRules.map((rule) => [rule.val, Boolean(rule.fromFile)])

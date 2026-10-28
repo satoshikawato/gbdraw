@@ -52,7 +52,7 @@ import { LABEL_TABLES_SLICE, labelTextEditsData } from './services/drawing/label
 import { FEATURE_EDITS_SLICE } from './services/drawing/feature-edits.js';
 import { PAINT_SLICE } from './services/drawing/paint.js';
 import { SETTINGS_SLICE } from './services/drawing/settings.js';
-import { allocateDrawingId, defaultDrawingName, drawingIdOfMode } from './services/drawing-view.js';
+import { allocateDrawingId, defaultDrawingName } from './services/drawing-view.js';
 import { FEATURE_EDITOR_STATUS_IDLE } from './services/artifact-slot.js';
 /** @import { FeatureEditorStatus } from './services/artifact-slot.js' */
 import { diagnosticError } from './utils/error-normalization.js';
@@ -1172,16 +1172,6 @@ const renameDrawing = (id, name) => {
   const index = requireDrawingTab('renameDrawing', id);
   drawingTabs.value = freezeTabs(drawingTabs.value.map((tab, i) => (i === index ? { id, name } : tab)));
 };
-/**
- * The drawing of a diagram mode: until a project holds several drawings of one
- * mode, each mode has one, named by the mode. The one mode lookup; like
- * `drawingOf`, it throws for a value that names no drawing. B replaces each
- * call with `activeDrawing()` or the drawing's `DrawingId`
- * (`tests/web/drawing-of-mode-cap.test.mjs` caps the calls).
- * @param {ModeProfileName} mode
- * @returns {DrawingState}
- */
-const drawingOfMode = (mode) => drawingOf(drawingIdOfMode(mode));
 /** @returns {DrawingState} The shown drawing. */
 const activeDrawing = () => drawingOf(activeDrawingId.value);
 
@@ -1231,7 +1221,6 @@ export const state = Object.freeze({
   removeDrawing,
   moveDrawing,
   renameDrawing,
-  drawingOfMode,
   activeDrawing,
   selectedAnnotation,
   losatCacheInfo,

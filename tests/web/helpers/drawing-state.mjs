@@ -141,7 +141,7 @@ export const TRANSIENT_KEYS = Object.freeze([
 // The drawing store itself: the drawings by ID, their tab order and names
 // (`drawingTabs`), and the store writers.
 export const STORE_KEYS = Object.freeze([
-  'drawingTabs', 'drawingTabOf', 'drawingList', 'drawingOf', 'drawingOfMode', 'activeDrawing',
+  'drawingTabs', 'drawingTabOf', 'drawingList', 'drawingOf', 'activeDrawing',
   'replaceDrawings', 'addDrawing', 'removeDrawing', 'moveDrawing', 'renameDrawing'
 ]);
 
@@ -221,7 +221,7 @@ export const modeDrawingsAdder = async () => {
 export const modeDrawing = (state, mode) => state.drawingOf(firstDrawingId(mode));
 
 // The drawing store as state.js builds it: the drawings by ID in creation
-// order, read through `drawingList`, `drawingOf`, and `drawingOfMode`. A fake
+// order, read through `drawingList`, `drawingOf`, and `drawingOf`. A fake
 // `state` spreads it.
 export const drawingStore = (circular, linear) => {
   const drawings = new Map([[firstDrawingId('circular'), circular], [firstDrawingId('linear'), linear]]);
@@ -231,8 +231,7 @@ export const drawingStore = (circular, linear) => {
   };
   return {
     drawingList: () => [...drawings.values()],
-    drawingOf,
-    drawingOfMode: (mode) => drawingOf(firstDrawingId(mode))
+    drawingOf
   };
 };
 

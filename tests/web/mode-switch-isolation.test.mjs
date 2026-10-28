@@ -165,10 +165,10 @@ const functionBody = (name) => {
 };
 // A drawing write: an assignment or an array mutator through a drawing (a
 // `drawing` parameter, `state.drawings.<id>` or `[...]`, `state.drawingOf(...)`,
-// `state.drawingOfMode(...)`, `activeDrawing()`, or a local alias of one of
+// `activeDrawing()`, or a local alias of one of
 // these), or a whole-object writer.
-const DRAWING_RECEIVER = String.raw`\bdrawing|\bstate\.drawings(?:\.\w+|\[[^\]]+\])|\bdrawings\.\w+|\bstate\.drawingOf(?:Mode)?\([^()]*\)|\bactiveDrawing\(\)`;
-const DRAWING_ALIAS = /\b(?:const|let)\s+(\w+)\s*=\s*(?:state\.drawings(?:\.\w+|\[[^\]]+\])|state\.drawingOf(?:Mode)?\([^()]*\)|(?:state\.)?activeDrawing\(\))/g;
+const DRAWING_RECEIVER = String.raw`\bdrawing|\bstate\.drawings(?:\.\w+|\[[^\]]+\])|\bdrawings\.\w+|\bstate\.drawingOf\([^()]*\)|\bactiveDrawing\(\)`;
+const DRAWING_ALIAS = /\b(?:const|let)\s+(\w+)\s*=\s*(?:state\.drawings(?:\.\w+|\[[^\]]+\])|state\.drawingOf\([^()]*\)|(?:state\.)?activeDrawing\(\))/g;
 const WHOLE_OBJECT_WRITE = /\b(replaceReactiveObject|replaceReactiveArray|clearReactiveObject|apply(?:Captured)?ConfigData)\(/;
 /** @param {string} text */
 const writesDrawing = (text) => {

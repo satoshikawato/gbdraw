@@ -683,7 +683,7 @@ const installSimpleCircularInput = (primary, inactive) => {
     primaryFile: bound(primary),
     pairedFile: null
   });
-  state.drawingOfMode('linear').linearSeqs.splice(0, state.drawingOfMode('linear').linearSeqs.length, {
+  state.drawingOf('linear').linearSeqs.splice(0, state.drawingOf('linear').linearSeqs.length, {
     uid: 'inactive-linear-row',
     gb: bound(inactive),
     gff: null,
