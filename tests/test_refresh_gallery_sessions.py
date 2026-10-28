@@ -1269,7 +1269,7 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
 def test_gallery_refresh_refuses_a_session_27_44(
     tmp_path: Path, capfd: pytest.CaptureFixture[str]
 ) -> None:
-    # Gallery publication admits Sessions 46-49; Python converts a Session
+    # Gallery publication admits Sessions 46-50; Python converts a Session
     # 27-44 when the app loads it.
     source = tmp_path / "source.gbdraw-session.json"
     destination = tmp_path / "refreshed.gbdraw-session.json"
@@ -1280,7 +1280,7 @@ def test_gallery_refresh_refuses_a_session_27_44(
     with pytest.raises(subprocess.CalledProcessError):
         _refresh_one_session(source, destination_path=destination)
 
-    assert "Gallery publication supports Sessions 46-49" in capfd.readouterr().err
+    assert "Gallery publication supports Sessions 46-50" in capfd.readouterr().err
     assert not destination.exists()
 
 
