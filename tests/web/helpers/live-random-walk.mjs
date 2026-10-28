@@ -186,7 +186,7 @@ const switchDrawing = async (page, drawingId) => {
   await settleLive(page);
   const outcome = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
   expect(outcome, `the switch to ${drawingId}`).toEqual({ status: 'ok' });
-  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.drawingOfMode('circular').circularRecordDiscovery.status))
+  await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.drawingOf('circular').circularRecordDiscovery.status))
     .not.toBe('loading');
   await page.evaluate(async () => { await window.Vue.nextTick(); });
   await settleLive(page);

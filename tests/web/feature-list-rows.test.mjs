@@ -159,7 +159,7 @@ test('the Features list names Linear records by the drawing it lists for, not by
   const { state } = await import('../../gbdraw/web/js/state.js');
   const shownBefore = state.activeDrawingId.value;
   const generatedBefore = state.generatedDrawingId.value;
-  state.activeDrawingId.value = state.drawingOfMode('linear').id;
+  state.activeDrawingId.value = state.drawingOf('linear').id;
   state.generatedDrawingId.value = state.activeDrawingId.value;
   state.featureCatalog.value = { schema: 5, items: [item(0, 'REC1', [['A', 'CDS']], ['A'])] };
   state.selectedResultIndex.value = 0;

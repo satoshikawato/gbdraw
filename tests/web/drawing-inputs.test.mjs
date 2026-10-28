@@ -26,8 +26,8 @@ test('a bound file that no History step names survives the release and keeps its
   const boundRef = store.registerFile(bound);
   const seqRef = store.registerFile(boundSeq);
   const releasedRef = store.registerFile(released);
-  const rows = state.drawingOfMode('linear').linearSeqs;
-  const hidden = state.drawingOfMode('linear');
+  const rows = state.drawingOf('linear').linearSeqs;
+  const hidden = state.drawingOf('linear');
   const previous = { d_color: hidden.files.d_color, gb: rows[0].gb };
   try {
     bindInputFile(store, hidden.slices.inputs, 'd_color', boundRef);
@@ -268,8 +268,8 @@ test('a card step is the shown drawing\'s: Undo from another drawing never undoe
     managerOptions: (drawingId) => snapshots.drawingHistory(drawingId),
     sessionHistory: snapshots.sessionHistory()
   });
-  const circular = state.drawingOfMode('circular');
-  const linear = state.drawingOfMode('linear');
+  const circular = state.drawingOf('circular');
+  const linear = state.drawingOf('linear');
   installShownDrawing(circular.id);
   await history.initializeIntentBaseline();
   const rules = fileNamed('rules.tsv');
@@ -304,9 +304,9 @@ test('a History intent\'s files are the drawing\'s inputs slice capture', async 
   const snapshots = createHistorySnapshotService({
     state, fileStore: state.inputFiles, currentResults: () => state.results.value, buildConfigData, applyConfigData: applyCapturedConfigData
   });
-  const circular = state.drawingOfMode('circular');
+  const circular = state.drawingOf('circular');
   bindInputFile(state.inputFiles, circular.slices.inputs, 'whitelist', fileNamed('keep.tsv'));
-  for (const drawing of [circular, state.drawingOfMode('linear')]) {
+  for (const drawing of [circular, state.drawingOf('linear')]) {
     const { files, linearSeqs, inputType } = INPUTS_SLICE.capture(drawing.slices.inputs);
     const { linearCanonicalComparisons: _generated, ...bound } = files;
     const intent = snapshots.drawingHistory(drawing.id).buildIntent();
@@ -338,7 +338,7 @@ test('Undo of an input-file step installs the step\'s inputs slice capture', asy
     managerOptions: (drawingId) => snapshots.drawingHistory(drawingId),
     sessionHistory: snapshots.sessionHistory()
   });
-  const linear = state.drawingOfMode('linear');
+  const linear = state.drawingOf('linear');
   const slice = linear.slices.inputs;
   const initial = INPUTS_SLICE.capture(slice);
   installShownDrawing(linear.id);

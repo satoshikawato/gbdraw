@@ -27,10 +27,8 @@
  * The identity of a drawing, its key in `state.drawings`. A drawing's mode is
  * its `mode` member: code never reads a mode from an ID. Until a project holds
  * several drawings of one mode, each mode has one drawing, whose ID is the
- * mode's name, so a writer that knows only a mode (a mode button, a Session's
- * `ui.mode`, a Result's request) names the drawing of that mode through
- * `drawingIdOfMode`, the one constructor of an ID. The brand keeps a mode from
- * standing in for an ID unnoticed.
+ * mode's name; `allocateDrawingId` is the one constructor of an ID. The brand
+ * keeps a mode from standing in for an ID unnoticed.
  * @typedef {string & { readonly __drawingId: true }} DrawingId
  */
 /**
@@ -75,14 +73,6 @@
  *   & GroupNamesView & CanvasView & FeatureEditsView & PaintView & DrawingSettings & InputsView
  *   & { readonly slices: DrawingSlices }} DrawingView
  */
-
-/**
- * The ID of the drawing of `mode`: each mode has one drawing, named by the
- * mode. The one cast to a `DrawingId`.
- * @param {ModeProfileName} mode
- * @returns {DrawingId}
- */
-export const drawingIdOfMode = (mode) => /** @type {DrawingId} */ (mode);
 
 /**
  * The ID a new drawing of `mode` gets beside `takenIds`: the mode when free,

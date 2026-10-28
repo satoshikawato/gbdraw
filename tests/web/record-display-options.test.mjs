@@ -20,7 +20,7 @@ import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 // so each store read returns a view that names them and reads every other member from the fixture's drawing.
 const withSourceDrawings = (state) => {
   const views = new Map(['circular', 'linear'].map((mode) => [mode,
-    Object.create(state.drawingOfMode(mode), { id: { value: mode }, mode: { value: mode } })]));
+    Object.create(state.drawingOf(mode), { id: { value: mode }, mode: { value: mode } })]));
   return Object.defineProperties(state, {
     drawingList: { value: () => [...views.values()], configurable: true },
     drawingOf: { value: (id) => views.get(id), configurable: true },
