@@ -61,7 +61,7 @@ write-up of a release.
   both).
 - Fixed: in the Web app, the room that Circular labels need (the record line of the "Labels do not fit" dialog, the
   Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language. Before,
-  those sentences stayed English in every language (OV-2179, #PRNUM).
+  those sentences stayed English in every language (OV-2179, #1447).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
