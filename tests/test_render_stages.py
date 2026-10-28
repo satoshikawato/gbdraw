@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
+import functools
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, cast
 
 import pandas as pd
 import pytest
@@ -307,6 +309,18 @@ def test_an_inner_read_declared_by_both_marks_neither(declared) -> None:
     assert _metrics(metrics)["renderStageBuildCount"] == 2
 
 
+def test_an_inner_hit_on_a_declared_section_marks_the_outer_stage(declared) -> None:
+    declared(legend_measurement=frozenset({"labels.font_size"}))
+    cache = PreparedBiologicalInputCache()
+    for _ in range(2):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            render_stage("legend_table", outer_font_size, _config())
+        # On the second pass the inner stage hits: only its key reads the section.
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+    assert _metrics(metrics)["renderStageHit:legend_measurement"] == 1
+
+
 def outer_window_through_inner(config: GbdrawConfig) -> tuple[float, int]:
     return render_stage("legend_measurement", font_size_and_gc_window, config)
 
@@ -470,6 +484,149 @@ def test_a_result_that_holds_a_config_is_never_stored() -> None:
         assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
 
 
+@dataclasses.dataclass(frozen=True)
+class Box:
+    profile: RenderProfile
+
+
+class Shelf:
+    """A plain object (not a dataclass) that holds a box."""
+
+    def __init__(self, box: Box) -> None:
+        self.box = box
+
+
+def box_profile_deep(profile: RenderProfile) -> list[tuple[Box, ...]]:
+    # The profile's config is three levels below the result: list, tuple, Box, profile.
+    return [(Box(profile),)]
+
+
+def read_deep_show_gc(boxes: list[tuple[Box, ...]]) -> bool:
+    return boxes[0][0].profile.show_gc
+
+
+def shelve_profile(profile: RenderProfile) -> Shelf:
+    return Shelf(Box(profile))
+
+
+def read_shelved_show_gc(shelf: Shelf) -> bool:
+    return shelf.box.profile.show_gc
+
+
+def bind_show_gc(profile: RenderProfile) -> functools.partial[object]:
+    return functools.partial(getattr, profile, "show_gc")
+
+
+def call_bound(bound: functools.partial[object]) -> object:
+    return bound()
+
+
+def copy_canvas(profile: RenderProfile) -> object:
+    # A copy of a view section is a new object that holds every value of the section.
+    return copy.copy(profile.config.canvas)
+
+
+def deep_copy_profile(profile: RenderProfile) -> RenderProfile:
+    return copy.deepcopy(profile)
+
+
+def read_copied_show_gc(canvas: object) -> bool:
+    return bool(getattr(canvas, "show_gc"))
+
+
+@pytest.mark.parametrize(
+    ("build", "read"),
+    [
+        (box_profile_deep, read_deep_show_gc),
+        (shelve_profile, read_shelved_show_gc),
+        (bind_show_gc, call_bound),
+        (copy_canvas, read_copied_show_gc),
+        (deep_copy_profile, read_copied_show_gc),
+    ],
+)
+def test_a_result_that_holds_a_profile_at_any_depth_is_never_stored(build, read) -> None:
+    # OV-2105: the holder stage does not declare canvas, so a hit across a GC toggle would hand
+    # its reader the old switch through the profile it holds.
+    cache = PreparedBiologicalInputCache()
+    for show_gc in (True, False, True):
+        profile = CircularRenderProfile(_config(**{"canvas.show_gc": show_gc}))
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            holder = render_stage("legend_table", build, profile)
+            assert render_stage("feature_dom_index", read, holder) is show_gc
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
+class HolderError(Exception):
+    def __init__(self, profile: RenderProfile) -> None:
+        super().__init__("holds a profile")
+        self.profile = profile
+
+
+def raise_holding_profile(profile: RenderProfile) -> None:
+    raise HolderError(profile)
+
+
+def outer_returns_inner_result(profile: RenderProfile) -> list[tuple[Box, ...]]:
+    return render_stage("legend_measurement", box_profile_deep, profile)
+
+
+def outer_keeps_inner_error_payload(profile: RenderProfile) -> list[tuple[Box, ...]]:
+    try:
+        render_stage("legend_measurement", raise_holding_profile, profile)
+    except HolderError as error:
+        return [(Box(error.profile),)]
+    return []
+
+
+@pytest.mark.parametrize("outer", [outer_returns_inner_result, outer_keeps_inner_error_payload])
+def test_a_profile_held_through_a_nested_stage_keeps_the_outer_stage_unstored(outer) -> None:
+    # The inner stage declares nothing and the outer one does not declare canvas: the view made
+    # inside the inner build still reaches the outer result, by the return value or by an error.
+    cache = PreparedBiologicalInputCache()
+    for show_gc in (True, False, True):
+        profile = CircularRenderProfile(_config(**{"canvas.show_gc": show_gc}))
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            holder = render_stage("legend_table", outer, profile)
+            assert render_stage("feature_dom_index", read_deep_show_gc, holder) is show_gc
+        counts = _metrics(metrics)
+        assert counts["renderStageUndeclaredRead:legend_table"] == 1
+        assert counts.get("renderStageHit:legend_table", 0) == 0
+
+
+def copy_font_size(config: GbdrawConfig) -> object:
+    return copy.copy(config.labels.font_size)
+
+
+def read_copied_long(font_size: object) -> float:
+    return float(getattr(font_size, "long"))
+
+
+def font_size_values(config: GbdrawConfig) -> dict[str, object]:
+    return dict(vars(config.labels.font_size))
+
+
+def read_long_value(values: dict[str, object]) -> float:
+    return float(cast(float, values["long"]))
+
+
+@pytest.mark.parametrize(
+    ("build", "read"),
+    [(copy_font_size, read_copied_long), (font_size_values, read_long_value)],
+    ids=["copy", "vars"],
+)
+def test_a_result_that_holds_the_values_of_a_view_section_is_never_stored(build, read) -> None:
+    # The result holds plain values only, so no view outlives the build: taking them is the read.
+    cache = PreparedBiologicalInputCache()
+    for long in (16.0, 18.0, 16.0):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            holder = render_stage("legend_table", build, _config(**{"labels.font_size.long": long}))
+            assert render_stage("feature_dom_index", read, holder) == long
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
 def compare_font_size(config: GbdrawConfig, other: object) -> bool:
     return config.labels.font_size == other
 
@@ -545,83 +702,152 @@ def test_container_subclasses_and_signed_zeros_have_their_own_keys() -> None:
 
 # --- render profiles (OV-1309) ----------------------------------------------------
 
-_TRACK_SWITCHES = ("show_gc", "show_skew", "show_depth")
+# The profile settings read through the config: the attribute, its config leaf and two values.
+_PROFILE_SETTINGS = (
+    ("show_gc", "canvas.show_gc", False, True),
+    ("show_skew", "canvas.show_skew", False, True),
+    ("show_depth", "canvas.show_depth", False, True),
+    ("strandedness", "canvas.strandedness", False, True),
+    ("resolve_overlaps", "canvas.resolve_overlaps", False, True),
+    ("feature_overlap_tolerance_bp", "canvas.feature_overlap_tolerance_bp", 0, 10),
+    ("label_rendering", "labels.rendering", "auto", "external_only"),
+)
+_SETTING_IDS = [setting[0] for setting in _PROFILE_SETTINGS]
 _PROFILE_TYPES = (CircularRenderProfile, LinearRenderProfile)
 
 
-def profile_strands(profile: RenderProfile) -> bool:
-    CALLS.append("profile_strands")
-    return profile.strandedness
+def profile_identity_overrides(profile: RenderProfile) -> bool:
+    CALLS.append("profile_identity_overrides")
+    return profile.identity_label_overrides
 
 
-def profile_track_switch(profile: RenderProfile, switch: str) -> bool:
-    CALLS.append("profile_track_switch")
-    return bool(getattr(profile, switch))
+def profile_setting(profile: RenderProfile, attribute: str) -> object:
+    CALLS.append("profile_setting")
+    return getattr(profile, attribute)
 
 
-def _flipped(profile_type: type[RenderProfile], switch: str) -> tuple[RenderProfile, RenderProfile]:
-    base = profile_type(_config(**{f"canvas.{switch}": False}))
-    return base, profile_type(_config(**{f"canvas.{switch}": True}))
+def _profiles(
+    profile_type: type[RenderProfile], setting: tuple[str, str, object, object]
+) -> tuple[RenderProfile, RenderProfile]:
+    _attribute, leaf, before, after = setting
+    return profile_type(_config(**{leaf: before})), profile_type(_config(**{leaf: after}))
 
 
 @pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
-@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
-def test_a_track_switch_does_not_key_a_stage_that_takes_the_profile_without_reading_it(
-    switch: str, profile_type: type[RenderProfile]
+@pytest.mark.parametrize("setting", _PROFILE_SETTINGS, ids=_SETTING_IDS)
+def test_a_profile_setting_does_not_key_a_stage_that_takes_the_profile_without_reading_it(
+    setting: tuple[str, str, object, object], profile_type: type[RenderProfile]
 ) -> None:
-    base, flipped = _flipped(profile_type, switch)
+    base, changed = _profiles(profile_type, setting)
     cache = PreparedBiologicalInputCache()
     with _transaction(cache):
-        render_stage("ticks_content", profile_strands, base)
+        render_stage("legend_table", profile_identity_overrides, base)
     metrics: dict[str, object] = {}
     with _transaction(cache, metrics):
-        render_stage("ticks_content", profile_strands, flipped)
-    assert _metrics(metrics)["renderStageHit:ticks_content"] == 1
-    assert CALLS == ["profile_strands"]
+        render_stage("legend_table", profile_identity_overrides, changed)
+    assert _metrics(metrics)["renderStageHit:legend_table"] == 1
+    assert CALLS == ["profile_identity_overrides"]
 
 
 @pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
-@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
-def test_a_stage_that_reads_a_track_switch_without_declaring_canvas_is_never_stored(
-    switch: str, profile_type: type[RenderProfile]
+@pytest.mark.parametrize("setting", _PROFILE_SETTINGS, ids=_SETTING_IDS)
+def test_a_stage_that_reads_a_profile_setting_without_declaring_it_is_never_stored(
+    setting: tuple[str, str, object, object], profile_type: type[RenderProfile]
 ) -> None:
-    base, flipped = _flipped(profile_type, switch)
+    attribute, _leaf, before, after = setting
+    base, changed = _profiles(profile_type, setting)
     cache = PreparedBiologicalInputCache()
-    for profile, expected in ((base, False), (flipped, True), (base, False)):
+    for profile, expected in ((base, before), (changed, after), (base, before)):
         metrics: dict[str, object] = {}
         with _transaction(cache, metrics):
-            assert render_stage("ticks_content", profile_track_switch, profile, switch) is expected
-        assert _metrics(metrics)["renderStageUndeclaredRead:ticks_content"] == 1
-    assert CALLS == ["profile_track_switch"] * 3
+            assert render_stage("legend_table", profile_setting, profile, attribute) == expected
+        assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+    assert CALLS == ["profile_setting"] * 3
 
 
 @pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
-@pytest.mark.parametrize("switch", _TRACK_SWITCHES)
-def test_a_stage_that_declares_canvas_rebuilds_when_a_track_switch_changes(
-    switch: str, profile_type: type[RenderProfile], declared
+@pytest.mark.parametrize("setting", _PROFILE_SETTINGS, ids=_SETTING_IDS)
+@pytest.mark.parametrize("whole_node", [False, True], ids=["leaf", "node"])
+def test_a_stage_that_declares_a_profile_setting_rebuilds_when_it_changes(
+    setting: tuple[str, str, object, object], profile_type: type[RenderProfile], whole_node: bool, declared
 ) -> None:
-    declared(ticks_content=frozenset({"canvas"}))
-    base, flipped = _flipped(profile_type, switch)
+    attribute, leaf, before, after = setting
+    declared(legend_table=frozenset({leaf.partition(".")[0] if whole_node else leaf}))
+    base, changed = _profiles(profile_type, setting)
     cache = PreparedBiologicalInputCache()
     results = []
-    for profile in (base, flipped, base, flipped):
+    for profile in (base, changed, base, changed):
         metrics: dict[str, object] = {}
         with _transaction(cache, metrics):
-            results.append(render_stage("ticks_content", profile_track_switch, profile, switch))
+            results.append(render_stage("legend_table", profile_setting, profile, attribute))
         assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 0
-    assert results == [False, True, False, True]
-    # The cache keeps the entries the last transaction used, so each flip builds again.
-    assert CALLS == ["profile_track_switch"] * 4
+    assert results == [before, after, before, after]
+    # The cache keeps the entries the last transaction used, so each change builds again.
+    assert CALLS == ["profile_setting"] * 4
     metrics = {}
     with _transaction(cache, metrics):
-        assert render_stage("ticks_content", profile_track_switch, flipped, switch) is True
-    assert _metrics(metrics)["renderStageHit:ticks_content"] == 1
+        assert render_stage("legend_table", profile_setting, changed, attribute) == after
+    assert _metrics(metrics)["renderStageHit:legend_table"] == 1
+
+
+@pytest.mark.parametrize("profile_type", _PROFILE_TYPES)
+def test_a_leaf_declaration_keys_that_leaf_only(profile_type: type[RenderProfile], declared) -> None:
+    declared(legend_table=frozenset({"canvas.strandedness"}))
+    cache = PreparedBiologicalInputCache()
+    for show_gc in (True, False):
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            profile = profile_type(_config(**{"canvas.show_gc": show_gc}))
+            render_stage("legend_table", profile_setting, profile, "strandedness")
+        assert _metrics(metrics)["renderStageUndeclaredReadCount"] == 0
+    # The GC switch is another leaf of canvas: the second render hits.
+    assert _metrics(metrics)["renderStageHit:legend_table"] == 1
+    assert CALLS == ["profile_setting"]
+    # Reading another leaf of the node is an undeclared read.
+    metrics = {}
+    with _transaction(cache, metrics):
+        render_stage("legend_table", profile_setting, profile_type(_config()), "show_gc")
+    assert _metrics(metrics)["renderStageUndeclaredRead:legend_table"] == 1
+
+
+def strandedness_through_inner(profile: RenderProfile) -> object:
+    return render_stage("legend_measurement", profile_setting, profile, "strandedness")
+
+
+@pytest.mark.parametrize(
+    ("outer", "inner", "marked"),
+    [
+        # The outer stage is stored and hits on the second pass.
+        (frozenset({"canvas.strandedness"}), frozenset(), ({"legend_measurement"}, set())),
+        # On the second pass the stored inner stage hits: its key read marks the outer stage.
+        (frozenset(), frozenset({"canvas.strandedness"}), ({"legend_table"}, {"legend_table"})),
+        (frozenset({"canvas"}), frozenset({"canvas.strandedness"}), (set(), set())),
+        # The inner key reads every leaf of canvas.
+        (frozenset({"canvas.strandedness"}), frozenset({"canvas"}), ({"legend_table"}, {"legend_table"})),
+    ],
+)
+def test_a_leaf_read_in_an_inner_stage_marks_each_stage_that_did_not_declare_it(
+    outer: frozenset[str], inner: frozenset[str], marked: tuple[set[str], set[str]], declared
+) -> None:
+    declared(legend_table=outer, legend_measurement=inner)
+    cache = PreparedBiologicalInputCache()
+    for expected in marked:
+        metrics: dict[str, object] = {}
+        with _transaction(cache, metrics):
+            render_stage("legend_table", strandedness_through_inner, CircularRenderProfile(_config()))
+        assert {
+            name.partition(":")[2]
+            for name in _metrics(metrics)
+            if name.startswith("renderStageUndeclaredRead:")
+        } == expected
 
 
 def test_the_settings_table_names_only_existing_sections() -> None:
     stages_module._validate_stage_settings(stages_module.RENDER_STAGE_SETTINGS)
-    with pytest.raises(ValueError):
-        stages_module._validate_stage_settings({"legend_table": frozenset({"labels.no_such_section"})})
+    stages_module._validate_stage_settings({"legend_table": frozenset({"canvas.strandedness"})})
+    for unknown in ("labels.no_such_section", "canvas.no_such_leaf", "canvas.strandedness.x", "nothing"):
+        with pytest.raises(ValueError):
+            stages_module._validate_stage_settings({"legend_table": frozenset({unknown})})
 
 
 # --- record identities (design 2.1, M1) ---------------------------------------
