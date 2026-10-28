@@ -96,7 +96,7 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 49
+CURRENT_SESSION_VERSION = 50
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
@@ -113,10 +113,10 @@ ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
 # From version 48 a Session without a Web draft (CLI, Python API) holds each
 # table only as its file card's file: the Web reads every row as that file's.
 FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION = 48
-# From version 49 a Session lists its drawings in ``drawings``
+# From version 50 a Session lists its drawings in ``drawings``
 # (gbdraw.session_drawings owns the layout).
-DRAWINGS_SESSION_MIN_VERSION = 49
-# The newest mode-scoped (46-48) layout: a Session 46-48 moves from it to
+DRAWINGS_SESSION_MIN_VERSION = 50
+# The newest mode-scoped (46-49) layout: a Session 46-49 moves from it to
 # drawings, and Python's writers build a new document in it before that move
 # (gbdraw.session_drawings.drawings_document_from_mode_scoped).
 MODE_SCOPED_SESSION_MAX_VERSION = DRAWINGS_SESSION_MIN_VERSION - 1
@@ -730,7 +730,7 @@ def _validate_document_body(
     version: int,
     admission: SessionAdmission,
 ) -> None:
-    """Validate a Session 27-48, or one Session 49 drawing seen as one."""
+    """Validate a Session 27-49, or one Session 50 drawing seen as one."""
 
     if "otherModeResult" in session and version < MODE_SCOPED_SESSION_MIN_VERSION:
         raise ValidationError(
@@ -740,7 +740,7 @@ def _validate_document_body(
         render_request = session.get("renderRequest")
         resources = session.get("resources")
         settings_only = is_settings_only_session(session)
-        # A Session 49 drawing not generated yet has no request and no Results.
+        # A Session 50 drawing not generated yet has no request and no Results.
         undrawn = version >= DRAWINGS_SESSION_MIN_VERSION and render_request is None
         if not settings_only and not undrawn:
             if not isinstance(render_request, Mapping):
@@ -864,8 +864,7 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     drawing = version == DRAWINGS_SESSION_MIN_VERSION
     if current and not (drawing or _is_web_draft_version(version, 41, 42, 44)):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, {MODE_SCOPED_SESSION_MIN_VERSION}-"
-            f"{MODE_SCOPED_SESSION_MAX_VERSION} or {DRAWINGS_SESSION_MIN_VERSION}.",
+            f"Web binding schema 2 requires session 41, 42, 44, or {MODE_SCOPED_SESSION_MIN_VERSION} and later.",
             diagnostic=_SESSION_FIELDS_INVALID,
         )
     # A drawings-layout drawing (its one-drawing view names its mode in
@@ -4568,7 +4567,7 @@ def _validated_protein_identity_manifest(
 def _protein_manifest_holders(
     session: MutableMapping[str, object],
 ) -> list[MutableMapping[str, object]]:
-    """Return the mappings that hold a manifest: each drawing of a 49, else the payload."""
+    """Return the mappings that hold a manifest: each drawing of a 50, else the payload."""
 
     drawings = session.get("drawings")
     if isinstance(drawings, list):
@@ -4583,7 +4582,7 @@ def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None
     proof. Only a proof of plain JSON data replaces the value: a manifest that
     fails, or one that holds other Python values, stays as it is, so
     ``validate_session`` checks and reports it as it does for a raw payload.
-    A Session 49 holds a manifest in each drawing: each is sealed.
+    A Session 50 holds a manifest in each drawing: each is sealed.
     """
 
     from .analysis.protein_colinearity import validate_protein_identity_manifest
@@ -4604,7 +4603,7 @@ def seal_protein_identity_manifest(session: MutableMapping[str, object]) -> None
 def thaw_protein_identity_manifest(session: MutableMapping[str, object]) -> None:
     """Replace each proof in the payload by a plain, mutable copy.
 
-    A Session 49 holds a manifest in each drawing: each is thawed.
+    A Session 50 holds a manifest in each drawing: each is thawed.
     """
 
     from .analysis.protein_colinearity import ProteinIdentityManifest
@@ -5791,7 +5790,7 @@ def build_session_json(
         legacy_protein_raw_candidates=legacy_protein_raw_candidates,
         legacy_protein_derived_evidence=legacy_protein_derived_evidence,
     )
-    # One check, of the Session 49 returned (OV-1815): the mode-scoped payload
+    # One check, of the Session 50 returned (OV-1815): the mode-scoped payload
     # is this builder's own and moves unchecked.
     from .session_drawings import drawings_document_from_mode_scoped
 

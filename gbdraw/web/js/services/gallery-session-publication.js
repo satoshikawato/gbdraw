@@ -42,7 +42,7 @@ const clone = (value) => value === undefined ? value : JSON.parse(JSON.stringify
  */
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 /** @import { FeatureCatalog } from './feature-catalog.js' */
-/** @import { Session49 } from './session-drawings-upgrade.js' */
+/** @import { Session50 } from './session-drawings-upgrade.js' */
 /** @import { ActiveWebConfig } from './session-active-config-contract.js' */
 /** @import { LayoutPreferences, StoredLayoutPreferences } from './layout-preferences.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
@@ -97,21 +97,21 @@ const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
  */
 
 /**
- * The drawing a published Session holds: its source's, or its mode's for a Session 27-48 source.
+ * The drawing a published Session holds: its source's, or its mode's for a Session 27-49 source.
  * @typedef {{ id: string, name: string }} PublishedDrawing
  */
 /**
- * @param {PublicationSession | Session49} document
- * @returns {document is Session49} The document lists its drawings (Session 49).
+ * @param {PublicationSession | Session50} document
+ * @returns {document is Session50} The document lists its drawings (Session 50).
  */
 const holdsDrawings = (document) => Array.isArray(document.drawings);
 /**
  * The drawing a Gallery Session shows, as the one-drawing view the publication rebuilds
- * (`drawingViewOf`), and its ID and name. A Gallery Session shows one drawing: a Session 49's only
+ * (`drawingViewOf`), and its ID and name. A Gallery Session shows one drawing: a Session 50's only
  * drawing with a committed render. A Web Save also holds an undrawn drawing of the other mode; the
- * publication leaves it out, as it left out the other mode's slice of a Session 46-48. A Session
- * 27-48 is its own view.
- * @param {PublicationSession | Session49} document A Session file as read, before admission.
+ * publication leaves it out, as it left out the other mode's slice of a Session 46-49. A Session
+ * 27-49 is its own view.
+ * @param {PublicationSession | Session50} document A Session file as read, before admission.
  * @returns {{ view: PublicationSession, drawing: PublishedDrawing | null }}
  */
 export const galleryPublicationView = (document) => {
@@ -127,8 +127,8 @@ export const galleryPublicationView = (document) => {
   return { view, drawing: { id: shown.id, name: shown.name } };
 };
 /**
- * The Session 49 a publication writes of its one-drawing view (`sessionDocumentOfViews`): one drawing,
- * of the source's ID and name, or of its mode's (`drawing` null, a Session 27-48 source).
+ * The Session 50 a publication writes of its one-drawing view (`sessionDocumentOfViews`): one drawing,
+ * of the source's ID and name, or of its mode's (`drawing` null, a Session 27-49 source).
  * @param {PublicationSession} view
  * @param {PublishedDrawing | null} drawing
  */
@@ -171,7 +171,7 @@ const modeSlice = (session) => {
 };
 // The Session holds the Web draft of its mode in that mode's slice, as Session
 // Load reads it (`hasStoredDraft`, services/config.js): a CLI drawing of a
-// Session 49 has a slice without a draft.
+// Session 50 has a slice without a draft.
 /** @param {PublicationSession} session */
 const holdsSliceDraft = (session) => isObject(modeSlice(session)?.config);
 // A CLI-written Session has no Web configuration; publication derives it from
@@ -481,7 +481,7 @@ export const createGallerySessionPublication = (owners) => {
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
-    throw new Error('Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it (Python converts it at Load); received ' + String(session?.version) + '.');
+    throw new Error('Gallery publication supports Sessions 46-50; Load a Session 27-44 in the app and save it (Python converts it at Load); received ' + String(session?.version) + '.');
   };
   /** @param {PublicationSession} session */
   const rebuild = (session) => rebuildIntent(session, owners);

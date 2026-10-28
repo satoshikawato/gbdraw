@@ -1,9 +1,9 @@
-"""The Session 49 drawing layout, tested on documents directly.
+"""The Session 50 drawing layout, tested on documents directly.
 
-``read_session_drawings`` sees each drawing of a Session 49 as the one-drawing
-view that Sessions 46-48 give, and ``write_session_drawings`` is its
+``read_session_drawings`` sees each drawing of a Session 50 as the one-drawing
+view that Sessions 46-49 give, and ``write_session_drawings`` is its
 inverse (DESIGN §1, D-15-79). These tests build and compare documents; the
-admission of 49 is tested in ``tests/test_session_admission_49.py``.
+admission of 49 is tested in ``tests/test_session_admission_50.py``.
 """
 
 from __future__ import annotations
@@ -205,7 +205,7 @@ def test_replacing_a_49_drawing_keeps_the_others_in_place() -> None:
         (lambda view: view["webFiles"].update(unplacedWebFile=[]), "webFiles.unplacedWebFile"),
         (lambda view: view["resources"].update({"unused-gb": {"name": "unused.gb"}}), "unused-gb"),
         (lambda view: view.update(config={}), "config"),
-        # A 46-48 other-mode Result set: SessionChecked49 refuses it, so the writer does not drop it silently.
+        # A 46-49 other-mode Result set: SessionChecked50 refuses it, so the writer does not drop it silently.
         (lambda view: view.update(otherModeResult={"results": []}), "otherModeResult"),
     ],
 )

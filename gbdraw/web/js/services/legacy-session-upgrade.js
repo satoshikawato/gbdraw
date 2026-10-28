@@ -1,5 +1,5 @@
 // @ts-check
-// Load of a Session 27-44 (DESIGN §4.3): Python moves it to a Session 49 in
+// Load of a Session 27-44 (DESIGN §4.3): Python moves it to a Session 50 in
 // one Worker call (`legacy_session_to_drawings_json`,
 // gbdraw/web_support/legacy_session.py); the Web has no converter of its own.
 // This module holds the port the composition root sets and reads the reply.
@@ -9,14 +9,14 @@ import { readSentLoadRepair } from '../utils/load-repairs.js';
 /** @import { LoadRepair } from '../utils/load-repairs.js' */
 
 /**
- * Python's reply: the Session 49, the stored Results a Session 49 cannot
+ * Python's reply: the Session 50, the stored Results a Session 50 cannot
  * hold (Sessions 27-39), by drawing ID, where the file held the Result set
  * each drawing took (`resultSetSources`, by drawing ID: the file's one set is
  * at its top level, `''`), the Load repairs of the draft migrations, and how
  * many `hash=` annotation targets moved to their source feature, which the
  * notice after Load names (`LegacySessionDrawings`,
  * gbdraw/web_support/legacy_session.py). The document is read by Load's
- * band-49 reader, as a file's would be.
+ * band-50 reader, as a file's would be.
  * @typedef {object} LegacySessionUpgrade
  * @property {Record<string, unknown>} document
  * @property {ReadonlyMap<string, readonly unknown[]>} storedResults
@@ -46,7 +46,7 @@ const LEGACY_SESSION_UPGRADE = /** @type {const} */ ({ stage: 'helper', operatio
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * The Session 49 of a Session 27-44, from Python, once. A Worker failure
+ * The Session 50 of a Session 27-44, from Python, once. A Worker failure
  * throws its own diagnostic; a reply of another shape throws RESULT_INVALID
  * of this operation; without the port, HELPER_PROTOCOL.
  * @param {unknown} document The file's document as the Session input reader admitted it.

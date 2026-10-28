@@ -940,7 +940,7 @@ const makeSafeFilename = (name) => {
 // files. Build it outside that scope so it retains only the published artifact,
 // not the pre-Generate rollback handle and, through it, every earlier artifact.
 /**
- * The exact replay is a Session 49 of the drawn drawing alone, under its ID and
+ * The exact replay is a Session 50 of the drawn drawing alone, under its ID and
  * name: its one-drawing view placed by the Save's layout owner
  * (`sessionDocumentOfViews`), so the CLI loads it as it loads a Save (OV-1806).
  * @param {{

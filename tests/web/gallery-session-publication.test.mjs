@@ -63,7 +63,7 @@ const sessionNames = examples.map((example) => String(example.session).split('/'
 assert.equal(sessionNames.length, 10);
 assert.equal(new Set(sessionNames).size, 10);
 
-// A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 49's one
+// A Session file as the publication bridge reads it (`tools/publish_gallery_session.mjs`): a Session 50's one
 // drawn drawing as its one-drawing view, an older Session as it is.
 const loadSessionFile = async (path) => {
   const bytes = await readFile(path);
@@ -166,11 +166,11 @@ for (const name of sessionNames) {
   assert.throws(() => admitGallerySession(stored), /cannot convert the protein results that Session 47 stored/);
 }
 
-// Gallery publication admits Sessions 46-49 only; an older Session is refused with the way to convert it.
+// Gallery publication admits Sessions 46-50 only; an older Session is refused with the way to convert it.
 for (const name of ['lambda_basic_linear.v31-schema1.gbdraw-session.json.gz', 'lambda_basic_linear.v44-schema8.gbdraw-session.json.gz']) {
   const released = await loadReleasedSession(name);
   assert.throws(() => admitGallerySession(released),
-    /Gallery publication supports Sessions 46-49; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
+    /Gallery publication supports Sessions 46-50; Load a Session 27-44 in the app and save it \(Python converts it at Load\); received /);
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
@@ -320,7 +320,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /Gallery publication supports Sessions 46-49;/
+    /Gallery publication supports Sessions 46-50;/
   );
 }
 

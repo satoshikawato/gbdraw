@@ -2,23 +2,25 @@
 
 # Session and request compatibility
 
-Current writers emit session version 49 and canonical `renderRequest` schema 9.
+Current writers emit session version 50 and canonical `renderRequest` schema 9.
 Session 50 lists the drawings of a project in `drawings`. The Web app and Python
 read a Session 46–49 into drawings themselves; a Session 27–44 is converted by
 Python, once, at Load (the Web app waits for it); a Session 45 is not read.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 49 | 27–33, 39–42, 44, and 46–49 |
+| gbdraw session | 50 | 27–33, 39–42, 44, and 46–50 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–49 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46–50 |
 
 Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
 of the request, as earlier writers left it. An older Session reads it as on and
 draws as before. gbdraw 0.14.3 writes Session 49; gbdraw 0.14.0 to 0.14.2 read
-Sessions up to 48 and refuse a Session 49 file.
+Sessions up to 48 and refuse a Session 49 file. Session 50 keeps the setting in
+each Circular drawing's `config.adv.show_definition`; reading a Session 49 moves
+it there.
 
 Sessions 48 and 49 store the saved protein results (LOSATP tables, Similarity groups,
 Collinear blocks) of a reverse-complemented Linear record in the record's
@@ -667,9 +669,10 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 49, while current readers also accept the
-session-42, session-44, and session-46 to session-48 forms. Readers whose
-maximum version is 42, 44, or 46 to 48 reject newly written session-49 files.
+writers emit a session 50 whose drawing holds no request, while current readers
+also accept the session-42, session-44, and session-46 to session-49
+settings-only forms. Readers whose maximum version is 42, 44, or 46 to 49
+reject newly written session-50 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This

@@ -110,6 +110,7 @@ export const MODE_SLICE_DEFAULTS = deepFreeze({
       {"domain":"config.adv","path":"tick_label_font_size","value":null},
       {"domain":"config.adv","path":"plot_title_font_size","value":null},
       {"domain":"config.adv","path":"keep_full_definition_with_plot_title","value":false},
+      {"domain":"config.adv","path":"show_definition","value":true},
       {"domain":"config.adv","path":"center_reserved_radius","value":null},
       {"domain":"config.adv","path":"feature_width_circular","value":null},
       {"domain":"config.adv","path":"depth_width_circular","value":null},

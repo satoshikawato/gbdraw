@@ -196,7 +196,7 @@ const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
 /**
  * One drawing's request and Web metadata, its resource references rewritten
  * to the Session's table, and the bindings of its own mode's inputs and the
- * file cards (a Session 49 drawing's `webFiles`).
+ * file cards (a Session 50 drawing's `webFiles`).
  * @typedef {{
  *   renderRequest: CanonicalRenderEnvelope['renderRequest'] | null,
  *   webFiles: CanonicalRenderEnvelope['webFiles']

@@ -1021,7 +1021,7 @@ DRAWINGS_V49 = SESSION_FIXTURES
 def _linear_pair() -> Path:
     """Drawings ``linear`` (one LOSATN entry) and ``linear-2``, the same request."""
 
-    return DRAWINGS_V49 / "drawings-linear-pair-losat.v49.gbdraw-session.json.gz"
+    return DRAWINGS_V49 / "drawings-linear-pair-losat.v50.gbdraw-session.json.gz"
 
 
 def _circular_pair(tmp_path: Path) -> Path:
@@ -1030,7 +1030,7 @@ def _circular_pair(tmp_path: Path) -> Path:
 
     from gbdraw.session_drawings import write_session_drawings
 
-    only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v49.gbdraw-session.json.gz")
+    only = load_session_document(DRAWINGS_V49 / "drawings-circular-only.v50.gbdraw-session.json.gz")
     view = dict(session_drawing_artifacts(only, "circular").fields)
     path = tmp_path / "circular-pair.v49.gbdraw-session.json"
     write_session_json(path, write_session_drawings([view, view]))

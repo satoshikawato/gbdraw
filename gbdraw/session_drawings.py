@@ -5,7 +5,7 @@ Results, and the editor state that belongs to it. Selection, rendering, the
 CLI, output naming and the Session writers reach a drawing's parts only
 through this module, so a new document layout changes this module alone.
 
-Sessions 46-48 hold at most one drawing of each mode:
+Sessions 46-49 hold at most one drawing of each mode:
 
 - the top-level committed set: ``renderRequest``, ``results``, their catalog,
   ``runMetadata`` and ``cliInvocation``;
@@ -21,11 +21,11 @@ Session 27-30 is one drawing of its declared mode without a canonical
 request. Sessions 31-44 keep one flat draft (``config``, ``features``) for
 their one drawing. A drawing's ID is its mode and its name is the mode's name.
 
-Session 49 lists its drawings in ``drawings`` (tab order), each with its ID,
+Session 50 lists its drawings in ``drawings`` (tab order), each with its ID,
 name and mode; the project keeps only the fields in :data:`PROJECT_FIELDS`,
 the ``ui`` keys in :data:`PROJECT_UI_FIELDS` with ``ui.activeDrawingId``, and
-``webFiles.resourceOriginalNames``. Readers see a Session 49 drawing as the
-same one-drawing view that a Session 46-48 drawing gives
+``webFiles.resourceOriginalNames``. Readers see a Session 50 drawing as the
+same one-drawing view that a Session 46-49 drawing gives
 (:func:`_drawing_view`); the writer is its inverse (:func:`_drawing_of_view`).
 """
 
@@ -42,7 +42,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.session_contract import (
     DRAWING_ID_MAX_LENGTH,
     SESSION_ID_RE,
-    GbdrawSession49,
+    GbdrawSession50,
     SessionDrawing,
     SessionProjectUi,
     SessionProjectWebFiles,
@@ -83,12 +83,12 @@ _LAYOUT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS
 _SET_FIELDS = OTHER_MODE_RESULT_FIELDS - {"editorState", "ui"}
 _SET_EDITOR_FIELDS = OTHER_MODE_RESULT_EDITOR_FIELDS - {"legend"}
 
-# Session 49 (declared in gbdraw.session_contract): the project fields beside
+# Session 50 (declared in gbdraw.session_contract): the project fields beside
 # ``ui``, ``webFiles`` and ``drawings``; the ``ui`` keys of the whole project
 # (a drawing's ``ui`` holds every other view key and its mode slice's ``ui``
 # keys); resource metadata, the only ``webFiles`` key of the project; and the
 # fields a drawing keeps under the names a one-drawing view gives them.
-PROJECT_FIELDS = keys_of(GbdrawSession49) - {"ui", "webFiles", "drawings"}
+PROJECT_FIELDS = keys_of(GbdrawSession50) - {"ui", "webFiles", "drawings"}
 PROJECT_UI_FIELDS = keys_of(SessionProjectUi) - {"activeDrawingId"}
 PROJECT_WEB_FILES_FIELDS = keys_of(SessionProjectWebFiles)
 _DRAWING_FIELDS = keys_of(SessionDrawing) - {
@@ -242,7 +242,7 @@ def _with_key(target: dict[str, Any], key: str, value: Mapping[str, Any], presen
 
 
 def _drawing_view(project: Mapping[str, Any], drawing: Mapping[str, Any]) -> dict[str, Any]:
-    """One Session 49 drawing as the one-drawing view that Sessions 46-48 give.
+    """One Session 50 drawing as the one-drawing view that Sessions 46-49 give.
 
     The inverse of :func:`_drawing_of_view`.
     """
@@ -316,7 +316,7 @@ def active_session_drawing(
     data: Mapping[str, Any],
     drawings: Sequence[SessionDrawingParts],
 ) -> SessionDrawingParts | None:
-    """The drawing the Web app opens: ``ui.activeDrawingId``'s from Session 49,
+    """The drawing the Web app opens: ``ui.activeDrawingId``'s from Session 50,
     the shown mode's before it; else the first."""
 
     ui = _mapping(data.get("ui"))
@@ -395,7 +395,7 @@ def _view_mode(view: Mapping[str, Any]) -> DrawingMode:
 
 
 def _project_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
-    """The Session 49 project fields of a one-drawing view, without ``drawings``."""
+    """The Session 50 project fields of a one-drawing view, without ``drawings``."""
 
     project = _only(view, PROJECT_FIELDS)
     project["ui"] = _only(_mapping(view.get("ui")), PROJECT_UI_FIELDS)
@@ -403,8 +403,8 @@ def _project_of_view(view: Mapping[str, Any]) -> dict[str, Any]:
     return project
 
 
-# A one-drawing view holds no ``otherModeResult``: the 46-48 readers split it
-# off before a view is built, and Session 49 has no place for it.
+# A one-drawing view holds no ``otherModeResult``: the 46-49 readers split it
+# off before a view is built, and Session 50 has no place for it.
 _VIEW_FIELDS = PROJECT_FIELDS | _DRAWING_FIELDS | {"editorState", "ui", "webFiles", "modes"}
 _DRAWING_WEB_FILE_KEYS = PROJECT_WEB_FILES_FIELDS | {"bindings"} | frozenset().union(*_DRAWING_WEB_FILES_FIELDS.values())
 
@@ -429,7 +429,7 @@ def other_mode_fields(state: Mapping[str, Any], mode: str) -> list[str]:
 
 
 def _drawing_of_view(view: Mapping[str, Any], drawing_id: str, name: str) -> dict[str, Any]:
-    """One Session 49 drawing from its one-drawing view; the inverse of :func:`_drawing_view`.
+    """One Session 50 drawing from its one-drawing view; the inverse of :func:`_drawing_view`.
 
     The drawing keeps its own mode's slice, input slots and request metadata;
     the other mode's are not this drawing's and are left out.
@@ -440,7 +440,7 @@ def _drawing_of_view(view: Mapping[str, Any], drawing_id: str, name: str) -> dic
     unplaced = sorted({*(set(view) - _VIEW_FIELDS), *(f"webFiles.{key}" for key in set(web_files) - _DRAWING_WEB_FILE_KEYS)})
     if unplaced:
         raise ValidationError(
-            "Session 49 has no place for " + ", ".join(unplaced) + ".",
+            "Session 50 has no place for " + ", ".join(unplaced) + ".",
             diagnostic=_LAYOUT_INVALID,
         )
     drawing_slice = _mapping(_mapping(view.get("modes")).get(mode))
@@ -480,7 +480,7 @@ def _drawing_of_view(view: Mapping[str, Any], drawing_id: str, name: str) -> dic
 
 
 def _identity_problem(ids: Sequence[str], names: Sequence[str]) -> str | None:
-    """Why ``ids`` and ``names`` cannot name the drawings of a Session 49, if they cannot."""
+    """Why ``ids`` and ``names`` cannot name the drawings of a Session 50, if they cannot."""
 
     if len(set(ids)) != len(ids):
         return "two drawings share an ID"
@@ -507,69 +507,69 @@ def _layout_error(message: str) -> ValidationError:
 def _unknown_keys(value: Mapping[str, Any], allowed: frozenset[str], where: str) -> None:
     unknown = sorted(str(key) for key in value if key not in allowed)
     if unknown:
-        raise _layout_error(f"Session 49 {where} contains unclassified field(s): " + ", ".join(unknown) + ".")
+        raise _layout_error(f"Session 50 {where} contains unclassified field(s): " + ", ".join(unknown) + ".")
 
 
 def _checked_drawing(drawing: object) -> SessionDrawing:
     """One entry of ``drawings``, with its own keys only (``SessionDrawing``)."""
 
     if not isinstance(drawing, Mapping):
-        raise _layout_error("Each Session 49 drawing must be an object.")
+        raise _layout_error("Each Session 50 drawing must be an object.")
     _unknown_keys(drawing, keys_of(SessionDrawing), "drawing")
     missing = sorted(SessionDrawing.__required_keys__ - set(drawing))
     if missing:
-        raise _layout_error("A Session 49 drawing requires " + ", ".join(missing) + ".")
+        raise _layout_error("A Session 50 drawing requires " + ", ".join(missing) + ".")
     drawing_id, mode = drawing["id"], drawing["mode"]
     if (not isinstance(drawing_id, str) or len(drawing_id) > DRAWING_ID_MAX_LENGTH
             or not SESSION_ID_RE.fullmatch(drawing_id)):
-        raise _layout_error(f"Invalid Session 49 drawing ID: {drawing_id!r}.")
+        raise _layout_error(f"Invalid Session 50 drawing ID: {drawing_id!r}.")
     if not isinstance(drawing["name"], str) or not isinstance(mode, str) or mode not in DRAWING_NAMES:
-        raise _layout_error(f"Session 49 drawing {drawing_id} needs a name and a diagram mode.")
+        raise _layout_error(f"Session 50 drawing {drawing_id} needs a name and a diagram mode.")
     if drawing["renderRequest"] is not None and _request_mode(drawing) != mode:
-        raise _layout_error(f"Session 49 drawing {drawing_id} has a request of another mode than {mode}.")
+        raise _layout_error(f"Session 50 drawing {drawing_id} has a request of another mode than {mode}.")
     ui = drawing.get("ui", {})
     if not isinstance(ui, Mapping):
-        raise _layout_error(f"Session 49 drawing {drawing_id} has a ui that is not an object.")
+        raise _layout_error(f"Session 50 drawing {drawing_id} has a ui that is not an object.")
     _unknown_keys(ui, frozenset(ui) - PROJECT_UI_FIELDS - {"mode", "activeDrawingId", *_INPUT_TYPE_FIELDS.values()},
                   f"drawing {drawing_id} ui")
     web_files = drawing.get("webFiles", {})
     if not isinstance(web_files, Mapping):
-        raise _layout_error(f"Session 49 drawing {drawing_id} has webFiles that are not an object.")
+        raise _layout_error(f"Session 50 drawing {drawing_id} has webFiles that are not an object.")
     _unknown_keys(web_files, frozenset({"bindings"}) | _DRAWING_WEB_FILES_FIELDS[mode], f"drawing {drawing_id} webFiles")
     if drawing["renderRequest"] is None and (
         drawing["results"] != [] or drawing.get("runMetadata")
         or _mapping(drawing.get("editorState")).get("featureCatalog") is not None
     ):
-        raise _layout_error(f"Session 49 drawing {drawing_id} has Results without a request.")
+        raise _layout_error(f"Session 50 drawing {drawing_id} has Results without a request.")
     return cast(SessionDrawing, drawing)
 
 
 def checked_drawing_views(data: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
-    """The one-drawing view of each drawing of a Session 49, after checking
-    the layout: the closed project (``GbdrawSession49``), its drawings
+    """The one-drawing view of each drawing of a Session 50, after checking
+    the layout: the closed project (``GbdrawSession50``), its drawings
     (``SessionDrawing``) with unique IDs and names, ``ui.activeDrawingId``,
     and that each resource is some drawing's. ``validate_session`` checks
-    each view as it checks a Session 46-48."""
+    each view as it checks a Session 46-49."""
 
-    _unknown_keys(data, keys_of(GbdrawSession49), "project")
-    missing = sorted(GbdrawSession49.__required_keys__ - set(data))
+    _unknown_keys(data, keys_of(GbdrawSession50), "project")
+    missing = sorted(GbdrawSession50.__required_keys__ - set(data))
     if missing:
-        raise _layout_error("Session 49 requires " + ", ".join(missing) + ".")
+        raise _layout_error("Session 50 requires " + ", ".join(missing) + ".")
     ui, web_files, entries = data["ui"], data.get("webFiles", {}), data["drawings"]
     if not isinstance(ui, Mapping) or not isinstance(web_files, Mapping):
-        raise _layout_error("Session 49 ui and webFiles must be objects.")
+        raise _layout_error("Session 50 ui and webFiles must be objects.")
     _unknown_keys(ui, keys_of(SessionProjectUi), "ui")
     _unknown_keys(web_files, keys_of(SessionProjectWebFiles), "webFiles")
     if not isinstance(entries, list) or not entries:
-        raise _layout_error("Session 49 requires a non-empty drawings list.")
+        raise _layout_error("Session 50 requires a non-empty drawings list.")
     drawings = [_checked_drawing(entry) for entry in entries]
     problem = _identity_problem([drawing["id"] for drawing in drawings], [drawing["name"] for drawing in drawings])
     if problem:
-        raise _layout_error(f"Session 49 cannot hold these drawings: {problem}.")
+        raise _layout_error(f"Session 50 cannot hold these drawings: {problem}.")
     if ui.get("activeDrawingId") not in {drawing["id"] for drawing in drawings}:
-        raise _layout_error("Session 49 ui.activeDrawingId must name one of its drawings.")
+        raise _layout_error("Session 50 ui.activeDrawingId must name one of its drawings.")
     if not isinstance(data["resources"], Mapping):
-        raise _layout_error("Session 49 requires a canonical resources object.")
+        raise _layout_error("Session 50 requires a canonical resources object.")
     unreferenced = _unreferenced_resources(data, [cast(Mapping[str, Any], drawing) for drawing in drawings])
     if unreferenced:
         raise _layout_error("No drawing names the resources " + ", ".join(unreferenced) + ".")
@@ -584,7 +584,7 @@ def _drawings_document(
     project_views: Sequence[Mapping[str, Any]],
     drop_unreferenced: bool = False,
 ) -> dict[str, Any]:
-    """The Session 49 document of ``views``, one one-drawing view per drawing.
+    """The Session 50 document of ``views``, one one-drawing view per drawing.
 
     ``project_views`` give the project fields: the first gives them, and the
     others may repeat but not change them. Each drawing keeps the LOSAT
@@ -597,7 +597,7 @@ def _drawings_document(
         raise ValidationError("Each drawing of a Session needs one ID and one name.", diagnostic=_LAYOUT_INVALID)
     problem = _identity_problem(ids, names)
     if problem:
-        raise ValidationError(f"Session 49 cannot hold these drawings: {problem}.", diagnostic=_LAYOUT_INVALID)
+        raise ValidationError(f"Session 50 cannot hold these drawings: {problem}.", diagnostic=_LAYOUT_INVALID)
     project = _project_of_view(project_views[0])
     envelope = frozenset({"format", "version", "createdAt"})
     first = _pruned(_without(project, envelope))
@@ -609,7 +609,7 @@ def _drawings_document(
         )
         if changed:
             raise ValidationError(
-                "Session 49 drawings share the project's " + ", ".join(changed) + "; give them one value.",
+                "Session 50 drawings share the project's " + ", ".join(changed) + "; give them one value.",
                 diagnostic=_LAYOUT_INVALID,
             )
     drawings = [_drawing_of_view(view, drawing_id, name) for view, drawing_id, name in zip(views, ids, names)]
@@ -634,7 +634,7 @@ def write_session_drawings(
     names: Sequence[str] | None = None,
     active: int | None = None,
 ) -> dict[str, Any]:
-    """The Session 49 document fields that hold ``views``, one one-drawing view per drawing.
+    """The Session 50 document fields that hold ``views``, one one-drawing view per drawing.
 
     The drawings are listed in ``drawings`` in the order of ``views``, with
     ``ids`` and ``names`` (allocated from each mode when omitted,
@@ -661,17 +661,17 @@ def replace_session_drawings(
     data: Mapping[str, Any],
     views: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """The Session 49 ``data`` with the drawings named in ``views`` replaced, in place and order.
+    """The Session 50 ``data`` with the drawings named in ``views`` replaced, in place and order.
 
     Each view is one drawing seen as a one-drawing Session, of the same mode.
     The other drawings stay as they are, and the replaced views give the
-    project fields. A Session 46-48 moves to drawings before it is saved
+    project fields. A Session 46-49 moves to drawings before it is saved
     again (:func:`drawings_document_from_mode_scoped`).
     """
 
     if int(data["version"]) < DRAWINGS_SESSION_MIN_VERSION:
         raise ValidationError(
-            "Only a Session 49 has drawings to replace; move this one to drawings first.",
+            "Only a Session 50 has drawings to replace; move this one to drawings first.",
             diagnostic=_LAYOUT_INVALID,
         )
     drawings = read_session_drawings(data)
@@ -693,7 +693,7 @@ def replace_session_drawings(
 
 
 class ModeScopedSourceFacts(TypedDict):
-    """What a Session 46-48 held that its Session 49 cannot say.
+    """What a Session 46-49 held that its Session 50 cannot say.
 
     These are the only facts that carry a source version past
     :func:`drawings_document_from_mode_scoped`: ``cardRowsAreFileRows`` (a
@@ -870,7 +870,7 @@ def _binds_input(bindings: Mapping[str, object], mode: DrawingMode) -> bool:
 
 
 def _undrawn_view(data: Mapping[str, Any], mode: DrawingMode) -> dict[str, Any]:
-    """The one-drawing view of ``mode`` in a Session 46-48 that holds no Result of it."""
+    """The one-drawing view of ``mode`` in a Session 46-49 that holds no Result of it."""
 
     view = _shared(data)
     view["renderRequest"] = None
@@ -907,8 +907,8 @@ def drawings_document_from_mode_scoped(
     data: Mapping[str, object],
     *,
     stored_result_modes: frozenset[str] = frozenset(),
-) -> tuple[GbdrawSession49, ModeScopedSourceFacts]:
-    """The Session 49 of a validated Session 46-48, and what only the source says.
+) -> tuple[GbdrawSession50, ModeScopedSourceFacts]:
+    """The Session 50 of a validated Session 46-49, and what only the source says.
 
     The rules of the Product Contract (PD-OI-090, the move of an earlier
     Session) as the design lists them: each mode's committed set goes to its
@@ -972,7 +972,7 @@ def drawings_document_from_mode_scoped(
         "cardRowsAreFileRows": version >= FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION and not has_draft,
         "proteinResultsInDrawnFrame": version < FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION,
     }
-    return cast(GbdrawSession49, document), facts
+    return cast(GbdrawSession50, document), facts
 
 
 class SessionDrawingsLayout(TypedDict):
@@ -998,7 +998,7 @@ class SessionDrawingsLayout(TypedDict):
 
 
 def describe_session_drawings_layout() -> SessionDrawingsLayout:
-    """The field sets of the move of a Session 46-48 to drawings, for the Web.
+    """The field sets of the move of a Session 46-49 to drawings, for the Web.
 
     The Web's twin of :func:`drawings_document_from_mode_scoped`
     (``upgradeModeScopedSession``, ``gbdraw/web/js/services/session-drawings-upgrade.js``)

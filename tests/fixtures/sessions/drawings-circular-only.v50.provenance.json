@@ -1,7 +1,7 @@
 {
-  "purpose": "Positive fixture of the Session 49 drawings layout (DESIGN §1, D-15-79, D-15-83)",
-  "source": "tests/utils/two_mode_session.py two_mode_session() (the Circular and Linear Gallery Sessions as one Session 48)",
-  "edits": "none: both drawings written at 49; the Linear drawing is active",
+  "purpose": "Positive fixture of the Session 50 drawings layout (DESIGN §1, D-15-79, D-15-83)",
+  "source": "tests/fixtures/sessions/font-family-preserved.v46.gbdraw-session.json.gz",
+  "edits": "none: Session 46 upgraded to 48, its one Circular drawing written at 49 (renumbered 50)",
   "writer": "gbdraw.session_drawings.write_session_drawings(version=49), resources no drawing names left out",
   "writerCommit": "the commit that adds this file, on 102283614ccfad399253dbdd0b0446c01c899682 (branch wip/drawings-b2a)",
   "script": "/home/kawato/gbdraw-baselines/multi-drawing-project-20261007/b2/write_v49_fixtures.py",
@@ -11,15 +11,11 @@
       "id": "circular",
       "name": "Circular",
       "mode": "circular"
-    },
-    {
-      "id": "linear",
-      "name": "Linear",
-      "mode": "linear"
     }
   ],
-  "activeDrawingId": "linear",
+  "activeDrawingId": "circular",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
-  "decompressedSha256": "b7444360e218d090a6d1b912203413d4a7cc093d9b457030668547199db7aa28",
-  "sessionVersion": 49
+  "decompressedSha256": "f6c78bf8d905abc8f311c192908139850c52cbe8ce65820281ae9dd5171ae242",
+  "sessionVersion": 50,
+  "renumbered": "V50a (D-15-175): the file written at 49 by the script below, with its top-level version set to 50 and nothing else changed; the drawings layout is Session 50."
 }

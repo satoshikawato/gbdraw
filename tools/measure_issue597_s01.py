@@ -43,7 +43,7 @@ def document(path):
 
 def summary(path):
     whole = document(path)
-    # The summary reads the one drawing of a Session 49; the whole-document hash and the version stay the file's.
+    # The summary reads the one drawing of a Session 50; the whole-document hash and the version stay the file's.
     data = whole
     if "drawings" in whole:
         (data,) = checked_drawing_views(whole)

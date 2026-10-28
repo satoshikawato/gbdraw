@@ -1,5 +1,5 @@
 {
-  "purpose": "Positive fixture of the Session 49 drawings layout (DESIGN §1, D-15-79, D-15-83)",
+  "purpose": "Positive fixture of the Session 50 drawings layout (DESIGN §1, D-15-79, D-15-83)",
   "source": "tests/fixtures/sessions/file-card-imports-circular.v48.gbdraw-session.json.gz",
   "edits": "its settings-only Circular drawing written twice, as circular (active, keeps the five file cards) and circular-2 (the five card slots null); neither drawing has a request",
   "writer": "gbdraw.session_drawings.write_session_drawings(version=49), resources no drawing names left out",
@@ -20,6 +20,7 @@
   ],
   "activeDrawingId": "circular",
   "compression": "gzip -n -9 (Python gzip, mtime 0, no file name)",
-  "decompressedSha256": "67513b93734bc39a8a6133955b70f4bacb34258f63ec5ac9a36f18580d6da265",
-  "sessionVersion": 49
+  "decompressedSha256": "960a394ff3df3c1db73bd7c53b5d5c56f1bc05e74742acd35260171fda4cbd98",
+  "sessionVersion": 50,
+  "renumbered": "V50a (D-15-175): the file written at 49 by the script below, with its top-level version set to 50 and nothing else changed; the drawings layout is Session 50."
 }

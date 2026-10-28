@@ -78,12 +78,12 @@
     },
     {
       "id": "drawings_circular_linear",
-      "session": "tests/fixtures/sessions/drawings-circular-linear.v49.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/drawings-circular-linear.v50.gbdraw-session.json.gz",
       "drawings": ["circular", "linear"]
     },
     {
       "id": "drawings_linear_pair",
-      "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v49.gbdraw-session.json.gz",
+      "session": "tests/fixtures/sessions/drawings-linear-pair-losat.v50.gbdraw-session.json.gz",
       "drawings": ["linear-2"]
     }
   ]

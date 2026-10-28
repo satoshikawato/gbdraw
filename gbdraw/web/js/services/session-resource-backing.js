@@ -262,9 +262,9 @@ export const POSITIONAL_BINDING_LISTS = Object.freeze(new Set([
 ]));
 /**
  * The input slot a schema-2 inventory holds (`gbdraw/session_io.py`): `c_gb`
- * for a Session 41-48, which binds both modes' inputs; a Session 49
+ * for a Session 41-49, which binds both modes' inputs; a Session 50
  * drawing's own mode's (its one-drawing view names the mode in `ui.mode`).
- * @param {boolean} drawingView The inventory is a Session 49 drawing's.
+ * @param {boolean} drawingView The inventory is a Session 50 drawing's.
  * @param {unknown} mode The view's `ui.mode`.
  * @returns {'c_gb' | 'linearSeqs'}
  */
@@ -276,8 +276,8 @@ export const webBindingInputSlot = (drawingView, mode) => (drawingView && mode =
  * @param {{ bindings?: unknown } | null | undefined} webFiles
  * @param {{ readonly [resourceId: string]: RawSessionResourceDescriptor | null | undefined } | null} [resources]
  *   The Session's `resources`, unvalidated: read by the id of each binding, and each entry read is checked.
- * @param {'c_gb' | 'linearSeqs'} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-48, the
- *   drawing's mode's for a Session 49 drawing's one-drawing view (`gbdraw/session_io.py`).
+ * @param {'c_gb' | 'linearSeqs'} [inputSlot] The input slot schema 2 holds: `c_gb` for a Session 41-49, the
+ *   drawing's mode's for a Session 50 drawing's one-drawing view (`gbdraw/session_io.py`).
  * @returns {WebFileBindingFault[]}
  */
 export const webFileBindingFaults = (webFiles, resources = {}, inputSlot = 'c_gb') => {

@@ -1,8 +1,8 @@
-"""Worker entry for Web Load of a Session 27-44: one call returns its Session 49.
+"""Worker entry for Web Load of a Session 27-44: one call returns its Session 50.
 
 The Web shows the stored figure and makes this one call; the migrations
 are Python's (:func:`gbdraw.session.drawings_document_from_legacy`). The
-stored Results a Session 49 cannot hold (Sessions 27-39) come back beside
+stored Results a Session 50 cannot hold (Sessions 27-39) come back beside
 the document, by drawing ID; the Web shows them in memory and, as before,
 saves none of them until one Generate (PD-OI-079). The reply also names the
 file Result set each drawing took (``resultSetSources``), so Load keeps a
@@ -17,7 +17,7 @@ import json
 from typing import TypedDict
 
 from gbdraw.session import LegacyResultSetSources, StoredResults, drawings_document_from_legacy
-from gbdraw.session_contract import GbdrawSession49
+from gbdraw.session_contract import GbdrawSession50
 from gbdraw.session_migration import DraftMigrationRepair
 from gbdraw.web_support.error_adapter import serialize_web_error
 
@@ -28,11 +28,11 @@ UPGRADE_LEGACY_SESSION_OPERATION = "upgradeLegacySession"
 
 
 class LegacySessionDrawings(TypedDict):
-    """The Session 49 of a Session 27-44, the stored Results it cannot hold,
+    """The Session 50 of a Session 27-44, the stored Results it cannot hold,
     the file Result set each drawing took, the Load repairs, and the count of
     moved annotation targets."""
 
-    document: GbdrawSession49
+    document: GbdrawSession50
     storedResults: StoredResults
     resultSetSources: LegacyResultSetSources
     warnings: list[DraftMigrationRepair]
@@ -40,7 +40,7 @@ class LegacySessionDrawings(TypedDict):
 
 
 def legacy_session_to_drawings_json(document_json: str, stored_request_schema_json: str = "null") -> str:
-    """``{"document": <Session 49>, "storedResults": {<drawing ID>: [...]},
+    """``{"document": <Session 50>, "storedResults": {<drawing ID>: [...]},
     "resultSetSources": {<drawing ID>: ""}, "warnings": [...],
     "movedAnnotationTargets": <count>}`` for a Session 27-44 as JSON.
 

@@ -31,14 +31,14 @@ globalThis.document = {
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 installSessionImportWorker();
-// A Session 27-44 moves to a Session 49 in Python, as the composition root's
+// A Session 27-44 moves to a Session 50 in Python, as the composition root's
 // Worker port does it (DESIGN 4.3).
 const { setLegacySessionUpgrader } = await import('../../gbdraw/web/js/services/legacy-session-upgrade.js');
 setLegacySessionUpgrader(pythonLegacySessionUpgrader());
 
 const sessionConfig = await import('../../gbdraw/web/js/services/config.js');
 const { SESSION_VERSION, assertDrawingInputs, installShownDrawing, getCommittedCanonicalSession } = sessionConfig;
-// A Session 49 drawing's saved unmanaged overrides are checked as Load checks them (PD-OI-009).
+// A Session 50 drawing's saved unmanaged overrides are checked as Load checks them (PD-OI-009).
 sessionConfig.setUnmanagedConfigOverrideValidator(async (payload) => ({ result: await validateWebConfigOverrides(payload) }));
 const { MODE_SLICE_CONTAINERS } = await import('../../gbdraw/web/js/services/mode-scoped-migration.js');
 const { createDefaultAdv, createDefaultForm } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
@@ -70,7 +70,7 @@ const sliceKeys = (value, container = '') => Object.entries(value).flatMap(([key
     ? sliceKeys(child, path) : [])];
 });
 
-test('Session 49 saves each drawing as its own entry and loads it back into that drawing (S1, S6)', async () => {
+test('Session 50 saves each drawing as its own entry and loads it back into that drawing (S1, S6)', async () => {
   assert.equal(SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version);
   resetDrawings();
   installShownDrawing('circular');
@@ -506,8 +506,8 @@ test('Session 48 keeps what each file card loaded through Load and Save, and the
   assert.deepEqual([colors.CDS, colors.tRNA], ['#111111', '#abcdef']);
 });
 
-// B2d-2: Load builds one drawing per drawing of the Session (its 49 document)
-// and commits them at once; the fast path reads 46-48 without Python.
+// B2d-2: Load builds one drawing per drawing of the Session (its 50 document)
+// and commits them at once; the fast path reads 46-49 without Python.
 const fixtureSession = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.gbdraw-session.json.gz`, import.meta.url))));
 const drawingsVector = (name) => JSON.parse(readFileSync(new URL('../fixtures/sessions/drawings-vectors.json', import.meta.url)))
   .upgrades.find((entry) => entry.name === name);
@@ -584,7 +584,7 @@ test('a Load of a Session with a drawing of one mode keeps a new drawing of the 
   installShownDrawing('circular');
 });
 
-test('Load reads each drawing\'s saved Result set from its own entry of the 49 document, not from `otherModeResult`', () => {
+test('Load reads each drawing\'s saved Result set from its own entry of the 50 document, not from `otherModeResult`', () => {
   // The Load body after preflight reads the upgraded document's drawings; the
   // file's location of a set beside the committed one is only a repair path,
   // which the upgrade gives by drawing ID (`setSources`).
@@ -599,8 +599,8 @@ test('Load reads each drawing\'s saved Result set from its own entry of the 49 d
 });
 
 test('Load reads each drawing\'s draft from its own part of the file by drawing ID, not from mode-keyed slices', () => {
-  // A Session 46-48 drawing's settings, per-feature edits, editor edits and
-  // `ui` come from its entry of the 49 document; a Session 27-44 split is
+  // A Session 46-49 drawing's settings, per-feature edits, editor edits and
+  // `ui` come from its entry of the 50 document; a Session 27-44 split is
   // keyed by its drawings' IDs. The file's one Linear part (comparisons,
   // LOSAT caches, group names) is the drawing the file names for it.
   const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
@@ -669,8 +669,8 @@ test('Load reads each Result set\'s request, reset receipt and catalog where the
   }
 });
 
-// Session 49 (D-15-109): the Web reads the drawings document Python writes.
-const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v49.gbdraw-session.json.gz`, import.meta.url))));
+// Session 50 (D-15-109): the Web reads the drawings document Python writes.
+const v49Session = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}.v50.gbdraw-session.json.gz`, import.meta.url))));
 const loadKeepingSlots = async (session) => {
   const stashed = [];
   let opening = null;
@@ -710,7 +710,7 @@ const assertLoadedDrawings = (session, outcome) => {
   }
 };
 
-test('a Python-written Session 49 loads each drawing\'s request, Results and draft by drawing ID', async () => {
+test('a Python-written Session 50 loads each drawing\'s request, Results and draft by drawing ID', async () => {
   for (const name of ['drawings-circular-only', 'drawings-circular-linear', 'drawings-linear-pair-losat', 'drawings-per-drawing-cards']) {
     const session = v49Session(name);
     // A draft value of its own in each drawing that holds a draft.
@@ -720,7 +720,7 @@ test('a Python-written Session 49 loads each drawing\'s request, Results and dra
   }
 });
 
-test('a Session 49 with two Circular drawings and a Linear one loads all three in tab order and keeps each Result in its own slot', async () => {
+test('a Session 50 with two Circular drawings and a Linear one loads all three in tab order and keeps each Result in its own slot', async () => {
   const session = v49Session('drawings-circular-linear');
   const circular = session.drawings.find((entry) => entry.id === 'circular');
   session.drawings.push({ ...structuredClone(circular), id: 'circular-2', name: 'Circular 2' });
@@ -733,7 +733,7 @@ test('a Session 49 with two Circular drawings and a Linear one loads all three i
   assert.deepEqual([outcome.opening, ...outcome.stashed].filter(Boolean).map((slot) => slot.drawingId).sort(), ['circular', 'linear']);
 });
 
-test('a Session 49 without its drawings or its resources is refused as no Session (OV-1768)', async () => {
+test('a Session 50 without its drawings or its resources is refused as no Session (OV-1768)', async () => {
   for (const field of ['drawings', 'resources']) {
     const session = v49Session('drawings-circular-only');
     delete session[field];
@@ -744,7 +744,7 @@ test('a Session 49 without its drawings or its resources is refused as no Sessio
   }
 });
 
-// B2d-3a-2: each drawing of a Session 49 takes its own files, bindings, LOSAT
+// B2d-3a-2: each drawing of a Session 50 takes its own files, bindings, LOSAT
 // entries and comparison intent by its drawing ID, opened or not.
 // A Circular drawing and two Linear ones, each with files of its own; the
 // Circular drawing's resources are renamed so the two fixtures share none.
@@ -763,7 +763,7 @@ const filesOfDrawings = () => Object.fromEntries(state.drawingList().map((drawin
   linearSeqs: drawing.linearSeqs.map((seq) => seq.gb?.name ?? null)
 }]));
 
-test('a Session 49 gives each drawing its own files by drawing ID, the ones it does not open too', async () => {
+test('a Session 50 gives each drawing its own files by drawing ID, the ones it does not open too', async () => {
   for (const opened of ['linear', 'linear-2', 'circular']) {
     const session = threeDrawingSession();
     session.ui.activeDrawingId = opened;
@@ -777,7 +777,7 @@ test('a Session 49 gives each drawing its own files by drawing ID, the ones it d
   }
 });
 
-test('a Session 49 resource that only a drawing it does not open binds keeps its row when it cannot be read', async () => {
+test('a Session 50 resource that only a drawing it does not open binds keeps its row when it cannot be read', async () => {
   const session = v49Session('drawings-per-drawing-cards');
   session.ui.activeDrawingId = 'circular-2';
   session.resources['resource-0001'] = 5;
@@ -788,7 +788,7 @@ test('a Session 49 resource that only a drawing it does not open binds keeps its
     JSON.stringify(loaded.repairs));
 });
 
-test('a Session 49 whose Linear drawings hold different LOSAT entries keeps each drawing\'s entries', async () => {
+test('a Session 50 whose Linear drawings hold different LOSAT entries keeps each drawing\'s entries', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   const [first, second] = session.drawings;
   const entry = structuredClone(first.losatCache.entries[0]);
@@ -802,7 +802,7 @@ test('a Session 49 whose Linear drawings hold different LOSAT entries keeps each
   }
 });
 
-test('a Session 49 without a Linear drawing gives the Linear drawing the app adds the Linear defaults', async () => {
+test('a Session 50 without a Linear drawing gives the Linear drawing the app adds the Linear defaults', async () => {
   const session = v49Session('drawings-circular-only');
   resetDrawings();
   modeDrawing(state, 'linear').form.plot_title = 'left over';
@@ -815,7 +815,7 @@ test('a Session 49 without a Linear drawing gives the Linear drawing the app add
   assert.equal(linear.adv.linear_track_layout, createDefaultAdv('linear').linear_track_layout);
 });
 
-test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 40-48\'s top-level ones are', async () => {
+test('a Session 50 drawing\'s Web-only artifact fields are dropped as a Session 40-49\'s top-level ones are', async () => {
   const session = v49Session('drawings-circular-linear');
   const index = session.drawings.findIndex((entry) => entry.id !== session.ui.activeDrawingId);
   session.drawings[index].features = { ...session.drawings[index].features, extractedFeatures: [] };
@@ -828,9 +828,9 @@ test('a Session 49 drawing\'s Web-only artifact fields are dropped as a Session 
   assert.equal(paths.some((path) => path.includes('orthogroupState')), false, JSON.stringify(paths));
 });
 
-// B2d-3a-3a: one per-drawing projection. Every Session 49 drawing, opened
+// B2d-3a-3a: one per-drawing projection. Every Session 50 drawing, opened
 // or not, is projected by one function from its own one-drawing view.
-test('one function builds the request projection input of every Session 49 drawing, opened or not', () => {
+test('one function builds the request projection input of every Session 50 drawing, opened or not', () => {
   const source = readFileSync(new URL('../../gbdraw/web/js/services/config.js', import.meta.url), 'utf8');
   // The projection input names the input slot its drawing binds; one builder writes it.
   assert.equal(source.match(/\bbindingInputSlot:/g)?.length ?? 0, 1, 'one projection-input builder');
@@ -838,7 +838,7 @@ test('one function builds the request projection input of every Session 49 drawi
   assert.ok((source.match(/\bdrawingProjectionInputOf\(/g)?.length ?? 0) >= 2, 'the opened drawing and every other drawing call it');
 });
 
-test('a Session 49 drawing Load does not open keeps its dormant Similarity group names', async () => {
+test('a Session 50 drawing Load does not open keeps its dormant Similarity group names', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   const [first, second] = session.drawings;
   second.config.webEdits.orthogroupDormantOverrides = { '["a","b"]': { name: 'Dormant of linear-2' } };
@@ -872,10 +872,10 @@ test('session-authority reads `otherModeResult` only in the Result set enumerati
   assert.deepEqual(outside.filter((line) => /\botherModeResult\b/.test(line)), []);
 });
 
-// OV-1786: Load restores every Session 49 drawing through its own request
+// OV-1786: Load restores every Session 50 drawing through its own request
 // projection, so a drawing gets the same settings whichever drawing opens
 // (DESIGN `drawingViewOf`).
-test('a Session 49 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
+test('a Session 50 drawing gets the same settings whichever drawing Load opens (OV-1786)', async () => {
   const session = v49Session('drawings-circular-linear');
   // The Linear drawing has no feature-edit draft: it takes its request's
   // per-feature edits (OV-220), opened or not.
@@ -908,10 +908,10 @@ test('a Session 49 drawing gets the same settings whichever drawing Load opens (
   assert.deepEqual(differs, []);
 });
 
-// DESIGN §6 (B2-D6): after the Session 46-48 upgrade, a 46-48 file and a 49
-// file are both a Session 49, so no Web reader of a Session compares its
+// DESIGN §6 (B2-D6): after the Session 46-49 upgrade, a 46-49 file and a 50
+// file are both a Session 50, so no Web reader of a Session compares its
 // version with a threshold of 46 or later (the writer's SESSION_VERSION, a
-// band constant, LAYOUT.version, a literal 46-49), lists such versions, or
+// band constant, LAYOUT.version, a literal 46-50), lists such versions, or
 // holds a hand-written Session version of 46 or later. The band of a file is
 // read through the session-authority band predicates, and only the upgrade
 // carries a source version (`sourceFacts`). The sites below read a file's
@@ -919,19 +919,17 @@ test('a Session 49 drawing gets the same settings whichever drawing Load opens (
 // Thresholds of 44 and below serve the Session 27-44 path until Python
 // converts it (B2d-4) and are not counted.
 const BAND_READERS = {
-  'services/session-authority.js versionHoldsDrawings': 'band predicate: a Session 49 is a list of drawings',
+  'services/session-authority.js versionHoldsDrawings': 'band predicate: a Session 50 is a list of drawings',
   'services/session-authority.js versionKeepsModeSlices': 'band predicate: a Session 46 or later keeps mode slices',
   'services/session-authority.js holdsCaptionLegendRows': 'band predicate: a Session 46 or older keys Legend rows by caption',
-  'services/session-authority.js SETTINGS_ONLY_FORM_VERSIONS': 'band list: the versions with a settings-only form',
-  'services/session-authority.js BINDING_SCHEMA_2_VERSIONS': 'band list: the versions whose bindings may be schema 2',
   'services/session-drawings-upgrade.js sessionLegendEditsByRowKey': 'before the upgrade: rekeys a Session 46\'s Legend edits',
-  'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-48, writes sourceFacts',
+  'services/session-drawings-upgrade.js upgradeRowKeyedModeScopedSession': 'the upgrade: admits 46-49, writes sourceFacts',
   'services/session-drawings-upgrade.js sessionSourceFactsOf':
-    'the source facts by version (one owner, shared by the 46-48 upgrade and the 27-44 Load)',
+    'the source facts by version (one owner, shared by the 46-49 upgrade and the 27-44 Load)',
   'services/main-session-comparison-frame.js storesDrawnFrameProteinResults':
-    'Gallery publication, before any conversion: the stored file\'s protein frame (flip: Gallery reads 49)',
-  'services/gallery-session-publication.js validateEnvelope': 'Gallery publication writes the writer\'s version (flip: 49)',
-  'services/gallery-session-publication.js admit': 'Gallery publication admits a stored file by its band (flip: 46-48 via the upgrade)'
+    'Gallery publication, before any conversion: the stored file\'s protein frame (flip: Gallery reads 50)',
+  'services/gallery-session-publication.js validateEnvelope': 'Gallery publication writes the writer\'s version (flip: 50)',
+  'services/gallery-session-publication.js admit': 'Gallery publication admits a stored file by its band (flip: 46-49 via the upgrade)'
 };
 test('no Web reader of a Session compares its version with a Session 46 or later threshold outside the band owner', () => {
   const root = new URL('../../gbdraw/web/js/', import.meta.url);
@@ -940,10 +938,10 @@ test('no Web reader of a Session compares its version with a Session 46 or later
     .map((name) => ({ name, source: readFileSync(new URL(name, root), 'utf8') }));
   const NAMES = String.raw`MODE_SCOPED_SESSION_VERSION|ROW_KEYED_LEGEND_SESSION_VERSION|FILE_IMPORT_ORIGIN_SESSION_VERSION`
     + String.raw`|DRAWN_FRAME_PROTEIN_RESULT_SESSION_VERSION|SESSION_VERSION|CURRENT_VERSION|(?:SESSION_DRAWINGS_)?LAYOUT\.version`;
-  const THRESHOLD = String.raw`(?:${NAMES}|4[6-9])\b`;
+  const THRESHOLD = String.raw`(?:${NAMES}|4[6-9]|50)\b`;
   const compare = new RegExp(String.raw`[Vv]ersion\)?\s*(?:[<>]=?|[!=]==)\s*${THRESHOLD}|\b${THRESHOLD}\s*(?:[<>]=?|[!=]==)\s*\S*[Vv]ersion`, 'g');
-  // A version list: an array that names a band constant, or an `includes` list of a literal 46-49.
-  const list = new RegExp(String.raw`\[[^\][]*\b(?:${NAMES})\b[^\][]*\]|\[[^\][]*\b4[6-9]\b[^\][]*\]\s*\.includes\(`, 'g');
+  // A version list: an array that names a band constant, or an `includes` list of a literal 46-50.
+  const list = new RegExp(String.raw`\[[^\][]*\b(?:${NAMES})\b[^\][]*\]|\[[^\][]*\b(?:4[6-9]|50)\b[^\][]*\]\s*\.includes\(`, 'g');
   const handVersion = /\bconst [A-Z_]*SESSION[A-Z_]*VERSION\s*=\s*(4[6-9]|[5-9]\d)\b/g;
   const declaration = /^(\s*)(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
   /** @param {string} line */
@@ -977,10 +975,10 @@ test('no Web reader of a Session compares its version with a Session 46 or later
   assert.deepEqual(Object.keys(BAND_READERS).filter((site) => !sites.has(site)), [], 'a listed site compares no version: remove it');
 });
 
-// OV-1791: a Session 49 Load lists one row per fault in a drawing's stored
+// OV-1791: a Session 50 Load lists one row per fault in a drawing's stored
 // unmanaged overrides, at the path the file holds (`drawings[i]`), for the
 // opened drawing as for the others.
-test('a Session 49 Load lists each drawing\'s stored override fault once, at its drawings[i] path', async () => {
+test('a Session 50 Load lists each drawing\'s stored override fault once, at its drawings[i] path', async () => {
   const session = v49Session('drawings-circular-linear');
   session.ui.activeDrawingId = 'circular';
   const faulted = session.drawings.flatMap((entry, index) => (entry.config ? [{ entry, index }] : []));
@@ -995,8 +993,8 @@ test('a Session 49 Load lists each drawing\'s stored override fault once, at its
     .map(({ entry, index }) => `setting-replaced drawings[${index}].config.unmanagedConfigOverrides["no_such.${entry.id}.key"]`).sort());
 });
 
-// Save writes Session 49 (B2d-3, DESIGN §4.4): every used drawing in tab order and the shown one.
-test('Save writes each drawing of a Session 49 as its own entry; a fresh Load restores the drawings, each Result and the shown one', async () => {
+// Save writes Session 50 (B2d-3, DESIGN §4.4): every used drawing in tab order and the shown one.
+test('Save writes each drawing of a Session 50 as its own entry; a fresh Load restores the drawings, each Result and the shown one', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   resetDrawings();
   const first = await loadKeepingSlots(session);
@@ -1007,7 +1005,7 @@ test('Save writes each drawing of a Session 49 as its own entry; a fresh Load re
     assert.equal(result.status, 'saved', result.error?.message);
     return JSON.parse(gunzipSync(Buffer.from(await result.blob.arrayBuffer())));
   })();
-  assert.equal(saved.version, 49);
+  assert.equal(saved.version, SESSION_VERSION);
   for (const retired of ['modes', 'otherModeResult', 'renderRequest', 'results', 'config']) assert.equal(Object.hasOwn(saved, retired), false, retired);
   assert.equal(Object.hasOwn(saved.ui, 'mode'), false);
   assert.deepEqual(saved.drawings.map((entry) => entry.id).slice(0, 2), ['linear', 'linear-2']);
@@ -1017,7 +1015,7 @@ test('Save writes each drawing of a Session 49 as its own entry; a fresh Load re
   assertLoadedDrawings(saved, await loadKeepingSlots(saved));
 });
 
-test('Save writes each Session 49 drawing\'s own CLI options, found by drawing ID, the drawing Load does not open too', async () => {
+test('Save writes each Session 50 drawing\'s own CLI options, found by drawing ID, the drawing Load does not open too', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   const optionsOf = (id) => ({ rawArgs: ['--gbk', `${id}.gb`, '-o', id] });
   session.drawings.forEach((entry) => { entry.cliOptions = optionsOf(entry.id); });
@@ -1032,7 +1030,7 @@ test('Save writes each Session 49 drawing\'s own CLI options, found by drawing I
   }
 });
 
-test('Save checks each Session 49 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
+test('Save checks each Session 50 drawing it writes with Save\'s checks, not Load\'s: an input type of no type is refused', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   resetDrawings();
   const first = await loadKeepingSlots(session);
@@ -1045,7 +1043,7 @@ test('Save checks each Session 49 drawing it writes with Save\'s checks, not Loa
   );
 });
 
-test('Save writes into each Session 49 drawing the LOSAT entries of its own Linear rows (K-3)', async () => {
+test('Save writes into each Session 50 drawing the LOSAT entries of its own Linear rows (K-3)', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   const first = session.drawings.find((entry) => entry.id === 'linear');
   const entry = first.losatCache.entries[0];
@@ -1068,7 +1066,7 @@ test('Save writes into each Session 49 drawing the LOSAT entries of its own Line
 // DESIGN §1, B2-D9: a drawing writes the LOSAT entries its request's inputs
 // name. linear-2 binds linear's rows but has no request (no Generate), so it
 // names none; the shown drawing linear keeps its entry.
-test('Save writes no LOSAT entry into a Session 49 drawing without a request, though it binds the entry\'s rows', async () => {
+test('Save writes no LOSAT entry into a Session 50 drawing without a request, though it binds the entry\'s rows', async () => {
   const session = v49Session('drawings-linear-pair-losat');
   const entry = session.drawings.find((candidate) => candidate.id === 'linear').losatCache.entries[0];
   const second = session.drawings.find((candidate) => candidate.id === 'linear-2');
@@ -1141,7 +1139,7 @@ const ringQueryHash = async (text) => {
   const { result } = await readRingInPython('', { files: [{ bytes: Buffer.from(text) }] });
   return createHash('sha256').update(result.fasta, 'utf8').digest('hex');
 };
-// A Session 49 of `synthetic_conservation` (three LOSAT rings and their entries)
+// A Session 50 of `synthetic_conservation` (three LOSAT rings and their entries)
 // with a second Circular drawing `circular-2` whose ring 3 reads other bytes
 // (one base changed) and whose entries are rings 1 and 2's and that ring 3's.
 let conservationSaves = 0;
