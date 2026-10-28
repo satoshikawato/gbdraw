@@ -3625,12 +3625,26 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
+ * The draft's Depth slot values, one owner for the request and the held set: Circular has one slot
+ * (`files.c_depth`), Linear one per drawn record (`seq.depth`, in request order). Callers gate by
+ * `draftDrawsDepth`.
+ * @param {string} mode The drawing's mode.
+ * @param {{ files?: { c_depth?: DeserializedFile } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
+ * @param {DrawingState} drawing
+ * @returns {(DeserializedFile | undefined)[]}
+ */
+const draftDepthSlots = (mode, sourceState, drawing) =>
+  mode === 'linear'
+    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff)).map((seq) => seq.depth)
+    : [sourceState.files?.c_depth];
+
+/**
  * The Depth files a drawing's draft holds while its request omits them (Show Depth off), as the
  * descriptors a Session loaded or an earlier Generate encoded: the Worker keeps their bytes while
  * the draft holds them (gbdraw/web/CLAUDE.md, Runtime data flow). Nothing is read, so a file no
  * request carried is not held.
  * @param {string} mode The drawing's mode.
- * @param {{ files?: { c_depth?: unknown } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
+ * @param {{ files?: { c_depth?: DeserializedFile } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
  *   The project inputs (`state`): the Circular Depth slots and the Linear record cards.
  * @param {DrawingState} drawing
  * @returns {RawSessionResourceDescriptor[]}
@@ -3638,10 +3652,7 @@ export const materializeLinearRecordFiles = (
 export const heldDepthFiles = (mode, sourceState, drawing) => {
   const linear = mode === 'linear';
   if (draftDrawsDepth(linear ? 'linear' : 'circular', drawing)) return [];
-  const slots = linear
-    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff)).map((seq) => seq.depth)
-    : sourceState.files?.c_depth;
-  return (Array.isArray(slots) ? slots : [slots]).flat(Infinity).flatMap((/** @type {unknown} */ file) => {
+  return /** @type {unknown[]} */ (draftDepthSlots(mode, sourceState, drawing)).flat(Infinity).flatMap((/** @type {unknown} */ file) => {
     const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
     return descriptor ? [descriptor] : [];
   });
@@ -3668,13 +3679,14 @@ export const serializeActiveRenderFiles = async (
     ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
     : [];
   const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
+  const depthSlots = draftDepthSlots(mode, sourceState, drawing);
   const serializedLinearSeqs = await Promise.all(
-    normalizedLinearSeqs.map(async (seq) => ({
+    normalizedLinearSeqs.map(async (seq, index) => ({
       uid: seq.uid,
       gb: await serializeFile(seq.gb),
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
-      depth: depthRequested ? await serializeFileValue(seq.depth) : null,
+      depth: depthRequested ? await serializeFileValue(depthSlots[index]) : null,
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
@@ -3756,7 +3768,7 @@ export const serializeActiveRenderFiles = async (
     c_gff: mode === 'circular' ? await serializeFile(sourceFiles.c_gff) : null,
     c_fasta: mode === 'circular' ? await serializeFile(sourceFiles.c_fasta) : null,
     c_depth: mode === 'circular' && depthRequested
-      ? await serializeFileValue(sourceFiles.c_depth)
+      ? await serializeFileValue(depthSlots[0])
       : null,
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(sourceFiles.c_conservation_blasts)

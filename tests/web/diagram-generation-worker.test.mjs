@@ -34,14 +34,19 @@ assert.deepEqual(preparedIdentities, {
 });
 assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
 // A4b: Python keeps each drawing's prepared inputs while the retain set names their resources.
-assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2]), {
+assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2], []), {
   drawing: 'linear', resourceTokens: [TOKEN_1, TOKEN_2], heldTokens: []
 });
-assert.deepEqual(buildPreparedInputRetention('circular', undefined), { drawing: 'circular', resourceTokens: [], heldTokens: [] });
+assert.deepEqual(buildPreparedInputRetention('circular', undefined, []), { drawing: 'circular', resourceTokens: [], heldTokens: [] });
+// A render message without `heldResourceTokens` is a protocol error, not an empty list.
+assert.throws(
+  () => buildPreparedInputRetention('circular', [TOKEN_1]),
+  (error) => error.code === 'HELPER_PROTOCOL' && error.context.reason === 'retention-held'
+);
 assert.equal(buildPreparedInputRetention(null, [TOKEN_1]), null);
 assert.equal(buildPreparedInputRetention(undefined, [TOKEN_1]), null);
 for (const drawingId of ['', 'Circular', 'circular/linear', 7]) {
-  assert.throws(() => buildPreparedInputRetention(drawingId, []), (error) => error.code === 'HELPER_PROTOCOL');
+  assert.throws(() => buildPreparedInputRetention(drawingId, [], []), (error) => error.code === 'HELPER_PROTOCOL');
 }
 // Held tokens reach the prepared input retention; a held token the Worker does not keep is a protocol error.
 assert.deepEqual(buildPreparedInputRetention('circular', [TOKEN_1, TOKEN_2], [TOKEN_2]), {

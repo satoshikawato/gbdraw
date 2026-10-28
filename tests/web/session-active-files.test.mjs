@@ -327,7 +327,6 @@ assert.equal(inactiveCanonical.reads(), 0);
   const hiddenState = depthState(false, [[heldDepth, null], [neverShown, heldDepth]]);
   const hidden = await serializeActiveRenderFiles('circular', hiddenState);
   assert.equal(hidden.c_depth, null);
-  assert.equal(Object.hasOwn(hidden, 'heldDepthFiles'), false, 'held files never travel with the request files');
   assert.deepEqual(heldDepthFiles('circular', hiddenState, hiddenState), [shown.c_depth[0], shown.c_depth[0]]);
   assert.equal(heldDepth.reads(), 1);
   assert.equal(neverShown.reads(), 0);

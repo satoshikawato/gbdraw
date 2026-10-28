@@ -94,8 +94,12 @@ export const buildPreparedInputRetention = (drawingId, retainedResourceTokens, h
   if (typeof drawingId !== 'string' || !RENDER_RESOURCE_ID_RE.test(drawingId)) {
     throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-drawing' });
   }
+  // A render message always names the held tokens (empty when none); only helpers omit them.
+  if (!Array.isArray(heldResourceTokens)) {
+    throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-held' });
+  }
   const resourceTokens = [...(retainedResourceTokens ?? [])];
-  const heldTokens = [...(heldResourceTokens ?? [])];
+  const heldTokens = [...heldResourceTokens];
   if (!heldTokens.every((token) => resourceTokens.includes(token))) {
     throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-held' });
   }

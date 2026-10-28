@@ -285,12 +285,10 @@ const shownDepth = (depth = depthDescriptor()) => ({
   },
   resources: { 'record-1-genbank': descriptor('LOCUS depth\nORIGIN\n//\n'), 'depth-tracks-1-source': depth }
 });
-// A Show Depth off render. Its committed set keeps the held field a committed envelope once
-// carried: the draft, not the committed request, says what is held, so that field retains nothing.
+// A Show Depth off render: the draft, not the committed request, says what is held.
 const hiddenDepth = (shown) => ({
   request: genbankRequest('record-1-genbank'),
-  resources: { 'record-1-genbank': shown.resources['record-1-genbank'] },
-  heldResources: { 'held-depth-1': shown.resources['depth-tracks-1-source'] }
+  resources: { 'record-1-genbank': shown.resources['record-1-genbank'] }
 });
 /** Each drawing's draft held files, as the composition root reads them at every render. */
 const draftTransport = (committed, drafts) => createDiagramResourceTransport({
@@ -385,8 +383,7 @@ test('a held file that was never staged is not held', async () => {
     { arrayBuffer: async () => { throw new Error('a held file is never read'); } }
   );
   const transport = draftTransport([], new Map([['circular', [unread]]]));
-  const { heldResources, ...hidden } = hiddenDepth(shown);
-  const prepared = await transport.prepare({ ...hidden, drawingId: 'circular' });
+  const prepared = await transport.prepare({ ...hiddenDepth(shown), drawingId: 'circular' });
   assert.deepEqual(prepared.heldResourceTokens, []);
   assert.deepEqual(prepared.retainedResourceTokens, []);
   assert.deepEqual(prepared.resourceManifest.map(({ resourceId }) => resourceId), ['record-1-genbank']);
