@@ -620,6 +620,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   lineStrokeColor: 'objects.features.line_stroke_color',
   circularDefinitionFontSize: 'objects.definition.circular.font_size', circularDefinitionInterval: 'objects.definition.circular.interval',
   plotTitleFontSize: 'objects.definition.circular.plot_title_font_size',
+  showDefinition: 'objects.definition.circular.show',
   showGc: 'canvas.show_gc',
   showSkew: 'canvas.show_skew',
   showDepth: 'canvas.show_depth',
@@ -746,6 +747,7 @@ const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize,
   CONFIG_OVERRIDE_PATHS.circularDefinitionInterval,
   CONFIG_OVERRIDE_PATHS.plotTitleFontSize,
+  CONFIG_OVERRIDE_PATHS.showDefinition,
   CONFIG_OVERRIDE_PATHS.circularLabelSpacing,
   CONFIG_OVERRIDE_PATHS.circularLabelPlacement,
   CONFIG_OVERRIDE_PATHS.trackType,
@@ -1840,6 +1842,8 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionInterval, adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
             configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
+          // Only a hidden definition is stated, so a request that shows it is the one an earlier writer wrote.
+          [CONFIG_OVERRIDE_PATHS.showDefinition]: adv.show_definition === false ? false : null,
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
             leaf(CONFIG_OVERRIDE_PATHS.circularLabelSpacing, adv.circular_label_spacing),
           [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
@@ -5705,6 +5709,7 @@ export const projectCanonicalSessionRequest = ({
     linear_length_visibility: renderRequest.mode !== 'linear' ? 'auto'
       : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
+    show_definition: renderRequest.mode !== 'circular' || overrides.show_definition !== false,
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
     gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
@@ -5885,7 +5890,7 @@ const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite'
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 // A request key outside this table reads no default: a JSON value is never an inherited member.
 /** @type {Readonly<Record<string, JsonValue>>} */
-const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
+const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
 /**
  * A resource of a request under comparison: the descriptor a Session stores or
  * the writer built (no reader has checked it), or a backing that reads its bytes.

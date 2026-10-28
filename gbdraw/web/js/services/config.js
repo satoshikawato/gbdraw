@@ -2208,7 +2208,7 @@ const readResultSetRequest = ({ at, set }, project) => {
  * object when a request changed (the parsed file is never changed), the
  * request schemas the file stored (RK-1), and whether the Session loads as
  * settings only because its projected request cannot be read (K22, C-OD07):
- * only a Session version that has a settings-only form (42, 44, 46, 47) and
+ * only a Session version that has a settings-only form (42, 44, and every mode-scoped version) and
  * holds the settings it keeps does; any other is refused (R4, C-OD25). A
  * stored set whose request cannot be read is left out, with its row.
  * The Comparisons notice after Load is classified on the stored projected

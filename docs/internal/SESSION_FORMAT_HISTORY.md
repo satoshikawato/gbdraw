@@ -12,9 +12,9 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
-## Unreleased: Session 49 stores a project and its list of drawings
+## Unreleased: Session 50 stores a project and its list of drawings
 
-Session version 49 replaces the two diagram-mode slices of Sessions 46 to 48
+Session version 50 replaces the two diagram-mode slices of Sessions 46 to 49
 with a list of drawings, so a project can hold several drawings of one mode
 (PD-OI-090). The project keeps `format`, `version`, `createdAt`, `title`,
 `resources`, `ui` (the project's view keys and `ui.activeDrawingId`), and
@@ -31,11 +31,37 @@ Results.
 The owner of the layout is `gbdraw/session_drawings.py`
 (`read_session_drawings`, `write_session_drawings`); the admission band is
 `SessionChecked49` in `gbdraw/session_contract.py`. Python and the Web app read
-Session 49, and Save writes it. Reading a Session 46 to 48 moves each mode's
+Session 50, and Save writes it. Reading a Session 46 to 49 moves each mode's
 part into its own drawing (`circular`, `linear`), the rules of
-`services/session-drawings-upgrade.js` in the Web app and of the 46-48 step of
+`services/session-drawings-upgrade.js` in the Web app and of the 46-49 step of
 `upgrade_session_document` in Python; Sessions 27 to 44 are converted by Python
-once at Load. Fixtures: `tests/fixtures/sessions/`.
+once at Load. A Session 49's Circular `adv.show_definition` becomes the
+Circular drawing's `config.adv.show_definition`. Session 49 reached `main` with
+0.14.3 as the mode-scoped Session above, so the list takes 50 (CLAUDE.md,
+"Persisted-format compatibility"). Fixtures: `tests/fixtures/sessions/`.
+
+## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
+
+Session version 49 adds `adv.show_definition` (boolean, Circular **Show
+Definition**, PD-OI-109) to the Circular slice (`modes.circular.config.adv`),
+an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`). The mode-slice `adv` shape is
+closed and Session 48 reached `main` with 0.14.0, whose reader refuses the key,
+so the key needs a new version. The canonical request carries the setting as
+the config override `objects.definition.circular.show` only when it is `false`
+(the Web writer, `--hide_definition`, or a Python `config_overrides`); a
+request that shows the definition is the request an earlier writer wrote, and
+Gallery publication compares it unchanged. A Session up to 48 has no key and
+loads with the definition shown (`trueUnlessFalse` in
+`services/config-field-readers.js`); no reader converts it. Load projects a
+request's `false` into the slice (`projectCanonicalSessionRequest`).
+
+The checks that listed each Web-draft version by hand (the settings-only form
+and Web binding schema 2, in `gbdraw/session_io.py` and
+`services/session-authority.js`) now accept every version from 46 to the
+current one, so Session 48 keeps its settings-only form. The Gallery and
+test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
+Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
 
 ## Unreleased: LOSAT runtime records without `cli` or `bundled`
 

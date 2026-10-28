@@ -1059,7 +1059,7 @@ def test_session_version_46_keys_feature_edits_by_source_identity_per_mode() -> 
         "linear": {"features": {"featureOverrides": {key("feature-1"): other_mode}}},
     }
 
-    assert payload["version"] == MODE_SCOPED_SESSION_MAX_VERSION == 48
+    assert payload["version"] == MODE_SCOPED_SESSION_MAX_VERSION
     validate_session(payload)
 
     triple_key = json.dumps(["circular", "record-1", "feature-1"], separators=(",", ":"))

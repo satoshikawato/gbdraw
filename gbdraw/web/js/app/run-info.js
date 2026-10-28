@@ -1306,6 +1306,7 @@ const appendConfigOverrides = (args, request) => {
 
   if (request.mode === 'circular') {
     appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
+    appendBooleanOption(args, take('objects.definition.circular.show'), '', '--hide_definition');
     const definitionInterval = take('objects.definition.circular.interval');
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];

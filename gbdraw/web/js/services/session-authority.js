@@ -27,6 +27,7 @@ import {
   FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
   FLAT_DRAFT_TOP_LEVEL_FIELDS,
   MODE_SCOPED_SESSION_VERSION,
+  MODE_SCOPED_SESSION_MAX_VERSION,
   SESSION_DRAWINGS_LAYOUT,
   OTHER_MODE_RESULT_EDITOR_FIELDS,
   OTHER_MODE_RESULT_FIELDS,
@@ -34,7 +35,6 @@ import {
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
   ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
@@ -216,17 +216,6 @@ export const readSessionInput = (value) => {
 export const versionHoldsDrawings = (version) => version >= SESSION_DRAWINGS_LAYOUT.version;
 /** A Session 46 or later keeps each mode's draft in its slice. @param {number} version */
 export const versionKeepsModeSlices = (version) => version >= MODE_SCOPED_SESSION_VERSION;
-// The versions with a settings-only form (`is_settings_only_session`): a
-// Session 49 has none, its drawing without a request holds no Results
-// (`projectsWithoutRequest`; DESIGN §1, §6).
-/** @type {ReadonlySet<unknown>} */
-const SETTINGS_ONLY_FORM_VERSIONS = new Set([42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION]);
-// The versions whose Web bindings may be schema 2 (`_validate_web_file_bindings`),
-// a Session 49 for each drawing's bindings (its one-drawing view).
-/** @type {readonly number[]} */
-const BINDING_SCHEMA_2_VERSIONS = [41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION,
-  FILE_IMPORT_ORIGIN_SESSION_VERSION, SESSION_DRAWINGS_LAYOUT.version];
 /** @param {SessionChecked} document @returns {document is SessionChecked49} */
 export const isDrawingsBand = (document) => versionHoldsDrawings(document.version);
 /** @param {SessionChecked} document @returns {document is SessionChecked31 | SessionChecked39 | SessionChecked40 | SessionChecked46} */
@@ -925,6 +914,17 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 );
 
 /**
+ * Whether `version` is one of `older` or a mode-scoped (`modes`) version
+ * (`is_settings_only_session`, `_validate_web_file_bindings`). A drawings-layout
+ * Session has neither form: its drawing without a request holds no Results
+ * (`projectsWithoutRequest`; DESIGN §1, §6).
+ * @param {unknown} version
+ * @param {readonly number[]} older
+ */
+const isWebDraftVersion = (version, older) => typeof version === 'number'
+  && (older.includes(version) || (version >= MODE_SCOPED_SESSION_VERSION && version <= MODE_SCOPED_SESSION_MAX_VERSION));
+
+/**
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
@@ -935,13 +935,13 @@ export const isSettingsOnlySessionDocument = data => data != null && settingsOnl
  * version has that form and its request is null.
  * @param {SessionInput} data @param {unknown} version
  */
-const settingsOnlyAt = (data, version) => SETTINGS_ONLY_FORM_VERSIONS.has(version)
+const settingsOnlyAt = (data, version) => isWebDraftVersion(version, [42, 44])
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /**
  * Whether Load projects a document of the file it reads without a request: a
  * settings-only Session, or the one-drawing view (`drawingViewOf`) of a
- * Session 49 drawing that holds no request. The band is the file's: Load's
+ * drawings-layout drawing that holds no request. The band is the file's: Load's
  * migration of a Session 27-39 names the writer's version.
  * @param {SessionInput} data
  * @param {number} sourceVersion The version of the file Load reads.
@@ -951,7 +951,7 @@ export const projectsWithoutRequest = (data, sourceVersion) => settingsOnlyAt(da
   || (versionHoldsDrawings(sourceVersion) && data.renderRequest == null);
 
 /**
- * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
+ * Whether a Session's version has a settings-only form (42, 44, and every mode-scoped version): one
  * whose request cannot be read loads as settings only (K22, C-OD07).
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
@@ -1648,10 +1648,11 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  // A Session 49 drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
-  if (bindings?.schema === 2 && !BINDING_SCHEMA_2_VERSIONS.includes(Number(version))) {
-    throw new Error(`Web binding schema 2 requires session version ${BINDING_SCHEMA_2_VERSIONS.slice(0, -1).join(', ')}, `
-      + `or ${BINDING_SCHEMA_2_VERSIONS.at(-1)}.`);
+  // A drawings-layout drawing's one-drawing view holds its bindings (gbdraw/session_io.py).
+  if (bindings?.schema === 2
+    && !(versionHoldsDrawings(Number(version)) || isWebDraftVersion(Number(version), [41, 42, 44]))) {
+    throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
+      + `${MODE_SCOPED_SESSION_VERSION}-${MODE_SCOPED_SESSION_MAX_VERSION}, or ${SESSION_DRAWINGS_LAYOUT.version}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {

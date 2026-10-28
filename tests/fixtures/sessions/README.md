@@ -389,3 +389,12 @@ drawn twice: `circular` keeps the five file cards, `circular-2` has none).
 Each `.provenance.json` names the source, the edits, the script and the
 decompressed SHA-256; `tests/test_session_admission_49.py` admits them and
 writes each again unchanged.
+
+`hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 49, PD-OI-109), written by
+`tests/web/circular-hide-definition.playwright.spec.js` and recompressed with
+`gzip -n -9`: Circular draws `tests/test_inputs/HmmtDNA.gbk` with the plot title
+"Mitochondrial genome" at the top and **Show Definition** off, so its slice holds
+`adv.show_definition: false` and its request
+`objects.definition.circular.show: false`. Its decompressed SHA-256 is
+`5d25d11dea37f278ff2aee041d9d7c92c63c7756bc1e4291ef9a118c91e33a94`.

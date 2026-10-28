@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `95`
+- Contract revision: `97`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -41,7 +41,7 @@ Status: active Product authority
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
-  `PD-OI-107`, and `PD-OI-108`
+  `PD-OI-107`, `PD-OI-108`, and `PD-OI-109`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -3461,7 +3461,48 @@ Status: active Product authority
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
-- Revision 96 change: `PD-OI-093` is replaced for scenario revision `4`
+- Revision 96 changes: `PD-OI-109` is added (concern
+  `diagram-generation.circular-definition-visibility`, scenario revision `1`;
+  the outcome `B / HIDE-CIRCULAR-DEFINITION`). A Circular "Show Definition"
+  setting (default ON; CLI `--hide_definition`, config
+  `objects.definition.circular.show`) draws no center definition for any
+  record when OFF, and the layout then reserves no center room for it. The
+  replies come from the Product Decision Owner `satoshikawato` of
+  `2026-10-28` in the Claude Code session of the campaign
+  `hide-definition-20261028` (decisions HD-D01, HD-D02, HD-R01, and HD-D08), given to
+  questions the session asked because the choices are the Product Decision
+  Owner's. Each reply is quoted as written.
+  - HD-D01 (`2026-10-28`). With a screenshot of a Circular Result, the Owner
+    wrote 「Definitionを表示しない選択肢が欲しい。」. The session reported that
+    no setting hides the Circular center definition (typed Species and Strain
+    leave the accession, length, and GC lines) and offered B, one check in the
+    Circular Record Labels section that hides every record's center
+    definition, and A, per-line Show for Circular like Linear's, with Q2 asking
+    whether the option covers Circular only or both modes. Reply:
+    「B（推奨）」
+  - HD-D02 (`2026-10-28`). B as offered named the Circular Record Labels
+    section, so the receipt states Circular only; the Owner's approval of the
+    receipt (HD-R01) confirms it.
+  - HD-R01 (`2026-10-28`). The session showed the complete receipt below.
+    Reply: 「承認」
+  - HD-D08 (`2026-10-28`). After review, the session reported that a
+    **Center Reserved Radius** set in the sidebar (typed, or written by the
+    label-fit action that narrows the inside tracks) still reserves the center
+    while the definition is hidden:
+    「サイドバーの Center Reserved Radius に値が入っていると、Definition を消しても中央の空きはその値のまま残ります」.
+    Reply: 「OK」. The receipt is unchanged; this confirmation is recorded in
+    the `PD-OI-109` record.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-109` scenario revision `1`
+    `206f551751107725ba2cdbeac873cb3aaefb9f9aee216be00b4f74eb78bb105e`.
+  - No other record is amended or retired. `PD-OI-078` (concern
+    `diagram-generation.circular-definition-fit`) keeps governing a drawn
+    Circular definition.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 97 change: `PD-OI-093` is replaced for scenario revision `4`
   (concern `web.settings-pane.display`; the outcome
   `A / STACKED-DEFAULT-WITH-ICON-RAIL-SWITCH` is kept). The Accepted residual
   risk figure for the height of a rail item in a window 800 px high or lower
@@ -8368,7 +8409,7 @@ Decision date: 2026-10-13
   and its JSON representation below.
 - Decision source: the Owner replies of `2026-10-24` quoted verbatim in the
   Revision 88 entry above, and the Owner reply of `2026-10-25` quoted in the
-  Revision 96 entry above. The Owner approved the receipt text below as
+  Revision 97 entry above. The Owner approved the receipt text below as
   written. The receipt reproduces its fields without translation or
   additional terms. Scenario revision `3` kept the outcome and retired the
   Circular comparison-ring layout warning before Generate, with the rail's
@@ -9862,6 +9903,55 @@ Decision date: 2026-10-27
   "acceptedResidualRisk": "Gallery とチュートリアルは英語のまま。ヘッダーが狭いと tagline が隠れる（今の仕組み）。スマホ幅では Result が設定の下にあり、通知はスクロールしないと見えない（DRAWINGS-B で読み込み後に Preview を先に出すようになる）。ヘッダーや空の画面が写る Gallery と docs のキャプチャは、撮り直すまで古い見た目のまま。769〜800 px では、日本語・韓国語・ベトナム語・タイ語で Session 名が dev より最大 6 px 縮む。769〜800 px で dev でもヘッダーがはみ出している 5 言語（英・西・仏・葡・インドネシア語）では、はみ出しが 10 px 増える。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-27"
+}
+```
+
+### PD-OI-109: Hide the Circular center definition
+
+- Concern key: `diagram-generation.circular-definition-visibility`
+- Scenario revision: `1`
+- Supersedes: none. `PD-OI-078` keeps governing how a drawn Circular
+  definition fits; this record decides when none is drawn.
+- Status: `ACCEPTED`
+- Selected outcome: `B / HIDE-CIRCULAR-DEFINITION`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-28` quoted in the Revision 96
+  entry above (HD-D01, HD-D02, and HD-R01). The receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. The runtime that implements it merges with it (static
+  Product Contract co-change); this record supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `206f551751107725ba2cdbeac873cb3aaefb9f9aee216be00b4f74eb78bb105e`.
+- Owner confirmation (HD-D08 of the Revision 96 entry above): a **Center
+  Reserved Radius** (`--center_reserved_radius`) that the user set still
+  reserves the center while the definition is hidden.
+
+```text
+PRODUCT_DECISION
+Concern: diagram-generation.circular-definition-visibility
+Scenario revision: 1
+Choice: B / HIDE-CIRCULAR-DEFINITION（Circular のみ）。Circular の Record Labels に「Show Definition」のチェック（既定 ON）を足す。OFF にすると、どのレコードの中央の Definition（名前、株名、レプリコン、アクセッション、長さ、GC%）も描かない。CLI は gbdraw circular --hide_definition、Python は config の objects.definition.circular.show（既定 true）。Definition を描かない図では、内側のトラックは Definition をよけて外へ移ったり細くなったりせず、Definition が収まらないという警告も出さない。Plot Title（Top / Bottom）は今の設定のまま描く。OFF の間は「Keep Full Definition with Plot Title」を出さない。設定は Session に保存し、Run info の CLI にも出す。
+Rationale: Circular の中央の Definition を消す方法がない（Species と Strain を空にしても、アクセッション・長さ・GC% は残る）。Owner の依頼（2026-10-28）で、消す選択肢を足す。
+Must preserve: 既定（ON）の図は今と同じ。保存済みの Session と、これまでの CLI の実行は今と同じ図になる。Linear の Definition と、その行ごとの Show。Plot Title の描き方。
+May retire: なし
+Accepted residual risk: OFF の間も、Definition の文字の設定（Default font size、Species と Strain、レコードの名前と副題）は編集できるが、図には出ない。Linear の Definition 全体は消せない（行ごとの Show はある）。OFF の図にはレコードの名前が出ないので、Multi-Record Canvas でどの円がどのレコードかは、図の外で示す必要がある。新しい文言は、リリース前の一括翻訳までは英語のまま。
+Owner: satoshikawato
+Decision date: 2026-10-28
+```
+
+```json
+{
+  "concern": "diagram-generation.circular-definition-visibility",
+  "scenarioRevision": 1,
+  "choice": "B / HIDE-CIRCULAR-DEFINITION（Circular のみ）。Circular の Record Labels に「Show Definition」のチェック（既定 ON）を足す。OFF にすると、どのレコードの中央の Definition（名前、株名、レプリコン、アクセッション、長さ、GC%）も描かない。CLI は gbdraw circular --hide_definition、Python は config の objects.definition.circular.show（既定 true）。Definition を描かない図では、内側のトラックは Definition をよけて外へ移ったり細くなったりせず、Definition が収まらないという警告も出さない。Plot Title（Top / Bottom）は今の設定のまま描く。OFF の間は「Keep Full Definition with Plot Title」を出さない。設定は Session に保存し、Run info の CLI にも出す。",
+  "rationale": "Circular の中央の Definition を消す方法がない（Species と Strain を空にしても、アクセッション・長さ・GC% は残る）。Owner の依頼（2026-10-28）で、消す選択肢を足す。",
+  "mustPreserve": "既定（ON）の図は今と同じ。保存済みの Session と、これまでの CLI の実行は今と同じ図になる。Linear の Definition と、その行ごとの Show。Plot Title の描き方。",
+  "mayRetire": "なし",
+  "acceptedResidualRisk": "OFF の間も、Definition の文字の設定（Default font size、Species と Strain、レコードの名前と副題）は編集できるが、図には出ない。Linear の Definition 全体は消せない（行ごとの Show はある）。OFF の図にはレコードの名前が出ないので、Multi-Record Canvas でどの円がどのレコードかは、図の外で示す必要がある。新しい文言は、リリース前の一括翻訳までは英語のまま。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-28"
 }
 ```
 
