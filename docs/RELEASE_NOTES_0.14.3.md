@@ -41,11 +41,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   proteins" when a color rule takes a CDS feature under another caption).
   Before, a later rule edit or Legend delete stroked those features again
   until the next **Generate Diagram**.
-- After a palette switch in the Web app, a Legend row whose name a color rule
-  also uses takes the new palette color while the rule colors no drawn feature
-  (for example **Use existing color** on a CDS feature that a visibility rule
-  hides), as **Generate Diagram** draws it. Before, the row kept the rule's
-  color until the next Generate.
+- After a palette switch or a Default colors change in the Web app, a Legend
+  row whose name a color rule also uses takes its new color while the
+  rule colors no drawn feature (for example **Use existing color** on a CDS
+  feature that a visibility rule hides), as **Generate Diagram** draws it.
+  Before, the row kept the rule's color until the next Generate.
 
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
@@ -113,8 +113,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   no longer redraw when a definition or record label changes. The Worker
   parses each Depth file once and keeps it while **Show Depth** is off, so
   showing Depth again does not parse the file again. A Circular Species change
-  that moves no track keeps the placed labels and the record definitions, and a Linear change that moves
-  rows without changing a comparison keeps its ribbons. In a warm Generate of
+  that moves no track keeps the placed labels and the record definitions, and
+  a Linear change that moves rows without changing a comparison keeps its
+  ribbons. In a warm Generate of
   the vibrio Gallery Session, the prepared-input check takes 155 ms of CPU
   instead of 331 ms.
 

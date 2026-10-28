@@ -36,10 +36,10 @@ write-up of a release.
   row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
   strokes no feature by its color after a later edit, as Generate draws it. Before, a later rule edit or Legend delete
   stroked the features of the row's old color again until the next Generate (OV-1987, #1438).
-- Fixed: in the Web app, after a palette switch, a Legend row whose name a color rule also uses takes the new
-  palette color while the rule colors no drawn feature (for example "Use existing color" on a CDS feature that a
-  visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next Generate
-  (OV-1988, #1441).
+- Fixed: in the Web app, after a palette switch or a Default colors change, a Legend row whose name a color rule
+  also uses takes its new color while the rule colors no drawn feature (for example "Use existing color" on a CDS
+  feature that a visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next
+  Generate (OV-1988, #1441).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).

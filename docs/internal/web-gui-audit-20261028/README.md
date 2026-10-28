@@ -35,7 +35,7 @@
 
 **修正（OV-1987、#1438）**: Result が描かない行の stroke は、draft がその key にどの色を与えても色では feature に届かない（`legendRowFeatureIds`）。color の編集で行に名指しされた feature や古い Session が行に列挙した feature には、live でも Generate でも従来どおり届く。Generate の結果は変わらない。
 
-**修正（OV-1988、#1441）**: rule が行に色を与えるのは、表示中の Result が描く feature のうち、その rule の group（caption と色）を最初の rule として取るものがあるときだけ（`ruleGroupDrawn` in `services/specific-color-rules.js`、`draftLegendRowColors` が読む）。描かれる feature の match がまだ分からない間は、従来どおりすべての rule が行に色を与える。Legend パネルの swatch 色（`draftLegendPanelColors`）と行の stroke が届く feature も同じ色を読む。Generate の結果は変わらない。
+**修正（OV-1988、#1441）**: palette の切り替えでも Default colors の変更でも、rule が行に色を与えるのは、表示中の Result が描く feature のうち、その rule の group（caption と色）を最初の rule として取るものがあるときだけ。描かれる feature が最初に取る rule と、すべての match が分かっているかは 1 つの owner（`drawnRuleMatches` in `services/specific-color-rules.js`）が 1 回の走査で決め、`draftLegendRowColors` と Python が描かない行を決める `rowsLeftOut` がその結果を読む（live の compile では 1 回だけ計算して両方に渡す）。描かれる feature の match がまだ分からない間は、従来どおりすべての rule が行に色を与える（`rowsLeftOut` は従来どおり、分からない match を「塗らない」と読む）。Legend パネルの swatch 色（`draftLegendPanelColors`）と行の stroke が届く feature も同じ色を読む。Generate の結果は変わらない。
 
 ## guard の判断
 

@@ -420,6 +420,9 @@ test('a palette change recolors the CDS row a rule names when the rule colors no
   const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, false) });
   assert.equal(compiled.colorOf('CDS'), '#123456');
   assert.deepEqual([...panel.listed], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  // The unknown-match fallback: while a drawn feature's match is unknown, live keeps the rule's color.
+  const pending = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: [{ type: 'CDS', fill_color: '#00aa00' }] });
+  assert.equal(pending.compiled.colorOf('CDS'), '#00aa00');
 });
 
 // OV-527: a hand-edited Session may name a palette `constructor` or `__proto__`;
