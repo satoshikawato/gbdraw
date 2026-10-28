@@ -590,6 +590,40 @@ class _ResultProjector:
         return replace(value, blocks=projected_blocks, unblocked_anchors=unblocked, orthogroups=orthogroups)
 
 
+@dataclass(frozen=True)
+class _TypedResultProjection:
+    """The typed results of one request in the frames of its bindings.
+
+    ``None`` keeps the given result: it was absent or already in that frame.
+    """
+
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None
+    collinearity: CollinearityResult | Sequence[CollinearityBlock] | None
+    unmatched: tuple[UnmatchedFrameItem, ...]
+
+
+def _project_typed_results(
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    collinearity: CollinearityResult | Sequence[CollinearityBlock] | None,
+    bindings: tuple[ComparisonRecordBinding, ...],
+) -> _TypedResultProjection:
+    """Typed results in the frames of ``bindings`` (render stage ``comparison_rows``).
+
+    As a stage, a projected result has the identity of this stage's key (the
+    results' and bindings' identities), so a stage that takes it keys that
+    identity instead of walking every member on each render (OV-1582).
+    """
+
+    projector = _ResultProjector(bindings)
+    projected_orthogroups = None if orthogroups is None else projector.orthogroups(orthogroups)
+    projected_collinearity = None if collinearity is None else projector.collinearity(collinearity)
+    return _TypedResultProjection(
+        None if projected_orthogroups is orthogroups else projected_orthogroups,
+        None if projected_collinearity is collinearity else projected_collinearity,
+        tuple(projector.unmatched),
+    )
+
+
 def project_source_bound_results(
     options: LinearDiagramOptions,
     bindings: Sequence[ComparisonRecordBinding],
@@ -627,10 +661,14 @@ def project_source_bound_results(
         for comparison in options.linear_comparisons or ())
     protein = None if options.protein_comparisons is None else tuple(
         project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
-    projector = _ResultProjector(bindings)
-    orthogroups = None if options.orthogroups is None else projector.orthogroups(options.orthogroups)
-    collinearity = (None if options.collinearity_blocks is None
-                    else projector.collinearity(options.collinearity_blocks))
+    typed = (
+        _TypedResultProjection(None, None, ())
+        if options.orthogroups is None and options.collinearity_blocks is None
+        else render_stage("comparison_rows", _project_typed_results, options.orthogroups,
+                          options.collinearity_blocks, tuple(bindings))
+    )
+    orthogroups = options.orthogroups if typed.orthogroups is None else typed.orthogroups
+    collinearity = options.collinearity_blocks if typed.collinearity is None else typed.collinearity
     changed = (
         any(before.matches is not after.matches or before.drawn_feature_ids for before, after in
             zip(options.linear_comparisons or (), explicit, strict=True))
@@ -646,7 +684,7 @@ def project_source_bound_results(
         orthogroups=orthogroups,
         collinearity_blocks=collinearity,
     ) if changed else options
-    return FrameProjection(projected, tuple(projector.unmatched))
+    return FrameProjection(projected, typed.unmatched)
 
 
 def project_similarity_alignment_centers(
