@@ -410,9 +410,12 @@ export const createSessionImportRollbackState = ({
   }),
   // A Load's commit: each drawing it made starts with an empty History.
   replaceHistoryMembers,
-  restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
-    // The previous drawings' Histories, which the Load replaced (`replaceMembers`).
+  // The previous drawings' Histories, which the Load replaced (`replaceMembers`): the rollback gives them back in the
+  // task that restores the store, before `restore` (OV-2132).
+  restoreHistoryMembers: (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     restoreHistoryMembers(snapshot.historyMembers);
+  },
+  restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
     // The restored document holds each drawing's Depth series (OV-1165).
@@ -3214,7 +3217,7 @@ export const createAppSetup = () => {
         slot.runtimeState?.canonical?.committedCanonicalSession))
     ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])),
     readDraftHeldFiles: () => state.drawingList().map((drawing) => ({
-      drawingId: drawing.id, files: heldDepthFiles(drawing.mode, state, drawing)
+      drawingId: drawing.id, files: heldDepthFiles(state, drawing)
     }))
   });
   // The Results of all drawings: the shown one's and every kept one's. The
@@ -3487,7 +3490,7 @@ export const createAppSetup = () => {
     },
     isCurrentFeature: isCurrentResultFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
-      serializeActiveRenderFiles(state.mode.value, state, drawing, {
+      serializeActiveRenderFiles(state, drawing, {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
       })
@@ -4530,12 +4533,9 @@ export const createAppSetup = () => {
     previewFeatureSearch.switchDrawingSearch(departing.id, arriving.id);
     failedGeneratePreservedResult.value = false;
     // OV-372: an operation error belongs to the drawing it was raised in,
-    // except one that names the arriving drawing's Result (PD-OI-079). A
-    // producer that still names only a mode (the Save errors of config.js,
-    // until B2d-3) names that mode's drawing.
+    // except one that names the arriving drawing's Result (PD-OI-079).
     const errorContext = errorLog.value ? normalizeUserFacingError(errorLog.value)?.context : undefined;
-    if (errorLog.value && !(errorContext?.drawingId === arriving.id
-      || (errorContext?.drawingId === undefined && errorContext?.diagramMode === arriving.mode))) {
+    if (errorLog.value && errorContext?.drawingId !== arriving.id) {
       errorLog.value = null;
     }
     if (arrivingCardFailure !== null && errorLog.value === null) errorLog.value = arrivingCardFailure;
@@ -5033,13 +5033,11 @@ export const createAppSetup = () => {
       }
     });
   };
-  // E1 (PD-OI-079): an error about another diagram mode's Result (Save of a
-  // legacy Result kept in that mode) offers Generate there: the action shows
-  // that mode first.
+  // E1 (PD-OI-079): an error about another drawing's Result (Save of a
+  // legacy Result kept in that drawing) offers Generate there: the action
+  // shows that drawing first.
   const generateFromError = () => {
-    const context = errorLog.value?.context;
-    const target = context?.drawingId !== undefined ? context.drawingId
-      : (context?.diagramMode === 'circular' || context?.diagramMode === 'linear' ? state.drawingOfMode(context.diagramMode).id : undefined);
+    const target = errorLog.value?.context?.drawingId;
     if (target !== undefined && target !== state.activeDrawingId.value) {
       const switched = selectDrawing(target);
       if (switched && switched.status === 'busy') return switched;

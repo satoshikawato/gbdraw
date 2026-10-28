@@ -52,7 +52,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   file.arrayBuffer = async () => { reads += 1; return read(); };
   // Generate: the request encodes the File once and stages its bytes (the transfer releases the byte cache).
   const sourceState = boundState({ files: { c_gb: file }, linearSeqs: [] });
-  const encoded = (await serializeActiveRenderFiles('circular', sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
+  const encoded = (await serializeActiveRenderFiles(sourceState, { ...modeDrawing(state, 'circular'), files: sourceState.files })).c_gb;
   await takeFileBytesForTransfer(file);
   const committed = adoptRuntimeCanonicalSession({
     renderRequest: {
@@ -88,7 +88,7 @@ test('Save binds a File Generate already encoded with no read, hash or decode (O
   metrics.length = 0;
   const other = new File(['other bytes'], 'other.tsv', { type: '' });
   const otherState = boundState({ files: { c_gb: other }, linearSeqs: [] }, state.inputFiles);
-  await serializeActiveRenderFiles('circular', otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
+  await serializeActiveRenderFiles(otherState, { ...modeDrawing(state, 'circular'), files: otherState.files });
   metrics.length = 0;
   const saved = await buildSessionResources({ inputFiles: state.inputFiles }, committed, bindingDrawings({
     files: { c_gb: state.inputFiles.registerFile(file), d_color: state.inputFiles.registerFile(other) }

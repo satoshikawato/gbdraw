@@ -398,8 +398,8 @@ const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
-// E1: `diagramMode` names the mode whose Result it is when that mode is not
-// shown; the error's Generate action then runs in that mode.
+// E1: `drawingId` names the drawing whose Result it is (`diagramMode` its
+// mode, for the text); the error's Generate action runs in that drawing.
 /** @param {Record<string, any>} [context] */
 const sessionSaveRequiresGenerate = (context = {}) => diagnosticError(
   'SESSION_SAVE_REQUIRES_GENERATE', context, /** @type {Record<string, any>} */ ({
@@ -4048,15 +4048,14 @@ const boundFileRefs = (value) => (
  * descriptors a Session loaded or an earlier Generate encoded: the Worker keeps their bytes while
  * the draft holds them (gbdraw/web/CLAUDE.md, Runtime data flow). Nothing is read, so a file no
  * request carried is not held.
- * @param {string} mode The drawing's mode.
  * @param {{ inputFiles: Pick<InputFileStore, 'fileOf'> }} sourceState The project (`state`), whose store
  *   holds the files.
- * @param {DrawingState} drawing The drawing whose Depth slots are read.
+ * @param {DrawingState} drawing The drawing whose Depth slots are read, of its own mode.
  * @returns {RawSessionResourceDescriptor[]}
  */
-export const heldDepthFiles = (mode, sourceState, drawing) => {
-  if (draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing)) return [];
-  return draftDepthSlots(mode, drawing).flatMap(boundFileRefs).flatMap((ref) => {
+export const heldDepthFiles = (sourceState, drawing) => {
+  if (draftDrawsDepth(drawing.mode, drawing)) return [];
+  return draftDepthSlots(drawing.mode, drawing).flatMap(boundFileRefs).flatMap((ref) => {
     const file = sourceState.inputFiles.fileOf(ref);
     const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
     return descriptor ? [descriptor] : [];
@@ -4064,21 +4063,17 @@ export const heldDepthFiles = (mode, sourceState, drawing) => {
 };
 
 /**
- * @param {string} mode
  * @param {Record<string, any>} sourceState The project (`state`), whose store holds the files.
  * @param {DrawingState} drawing The drawing whose settings choose the inputs, and whose input fields and record
- *   rows it serializes.
+ *   rows it serializes, in its own mode.
  * @param {Record<string, any> | null} [comparisonPlanOrOptions]
  */
 export const serializeActiveRenderFiles = async (
-  mode,
   sourceState,
   drawing,
   comparisonPlanOrOptions = null
 ) => {
-  if (!['circular', 'linear'].includes(mode)) {
-    throw new Error(`Unsupported render mode: ${String(mode)}.`);
-  }
+  const { mode } = drawing;
   const sourceFiles = drawing.files;
   /** @type {InputFileStore} */
   const store = sourceState.inputFiles;
@@ -4086,7 +4081,7 @@ export const serializeActiveRenderFiles = async (
   const normalizedLinearSeqs = mode === 'linear'
     ? normalizeLinearSeqList(drawnLinearSequences(drawing.linearSeqs, drawing.recordsOff))
     : [];
-  const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
+  const depthRequested = draftDrawsDepth(mode, drawing);
   const depthSlots = draftDepthSlots(mode, drawing);
   const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq, index) => ({
@@ -4352,13 +4347,14 @@ export const getCommittedCanonicalRenderRequest = () => {
 
 /**
  * Whether the committed request can show the live value of `requestPath` of
- * its mode's drawing (`liveSettingApplies`); without a committed Session every
- * path can. The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * its drawing, the one whose artifact is displayed (`state.generatedDrawingId`;
+ * `liveSettingApplies`); without a committed Session every path can. The app
+ * setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
  * @param {string} requestPath
  */
 export const committedLiveSettingApplies = (requestPath) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath, state.drawingOfMode(request.mode));
+  return !request || liveSettingApplies(request, requestPath, state.drawingOf(state.generatedDrawingId.value));
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -5193,13 +5189,18 @@ const captureSessionImportSnapshot = (shownDrawingId) => ({
   transients: captureSessionImportTransientState()
 });
 
-/** @param {ReturnType<typeof captureSessionImportSnapshot>} snapshot */
-const restoreSessionImportSnapshot = async (snapshot) => {
+/**
+ * @param {ReturnType<typeof captureSessionImportSnapshot>} snapshot
+ * @param {() => void} restoreHistoryMembers Gives back the History router's members the Load replaced; it runs in
+ *   the task that writes the store, so a reader of the shown drawing's History finds the one the Load found (OV-2132).
+ */
+const restoreSessionImportSnapshot = async (snapshot, restoreHistoryMembers) => {
   state.sessionImportRollbackInProgress.value = true;
   try {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionProject();
     replaceDrawingsShowing(snapshot.drawings, snapshot.tabs, snapshot.shownDrawingId);
+    restoreHistoryMembers();
     const { shownUi } = snapshot;
     applySessionUiData(shownUi);
     applyShownResultUiData(shownUi);
@@ -5866,25 +5867,26 @@ const buildArtifactEditorState = (view) => {
   };
 };
 // D-25 (PD-OI-079): Results need their admitted catalog; a Result without one
-// (a legacy Session) is saved after a Generate in its mode. The error names that
-// mode when it is not the one shown, and its Generate action runs there.
+// (a legacy Session) is saved after a Generate in its drawing. The error names
+// that drawing when it is not the one shown, and its Generate action runs there.
 /**
  * @param {FeatureCatalog | null} featureCatalog The artifact's admitted catalog.
  * @param {FeatureCatalogResult[]} logicalResults
- * @param {'circular' | 'linear'} mode
+ * @param {DrawingState} saved The drawing whose Results they are.
+ * @param {DrawingId} activeDrawingId The shown drawing.
  * @returns {FeatureCatalog | null} The catalog checked against the Results; null without Results.
  */
-const admitSavedFeatureCatalog = (featureCatalog, logicalResults, mode) => {
+const admitSavedFeatureCatalog = (featureCatalog, logicalResults, saved, activeDrawingId) => {
   if (logicalResults.length === 0) return null;
   const requiresGenerate = () => sessionSaveRequiresGenerate(
-    mode === state.mode.value ? {} : { diagramMode: mode }
+    saved.id === activeDrawingId ? {} : { drawingId: saved.id, diagramMode: saved.mode }
   );
   if (!featureCatalog) throw requiresGenerate();
   try {
     return validateFeatureCatalog(
       featureCatalog,
       logicalResults,
-      { adopt: true, mode }
+      { adopt: true, mode: saved.mode }
     );
   } catch (error) {
     console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
@@ -6035,7 +6037,7 @@ const exportSessionDocument = async (
     });
     const results = artifact ? serializeArtifactResults(artifact) : [];
     const editorState = artifact ? buildArtifactEditorState(artifact) : null;
-    if (editorState) editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, saved.mode);
+    if (editorState) editorState.featureCatalog = admitSavedFeatureCatalog(editorState.featureCatalog, results, saved, activeDrawingId);
     let committed = !artifact?.committedCanonicalSession ? null
       : isAdoptedCanonicalSession(artifact.committedCanonicalSession)
         ? artifact.committedCanonicalSession
@@ -6058,7 +6060,7 @@ const exportSessionDocument = async (
         throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'config', reason: 'FIELDS' }));
       }
     }
-    if (!committed && results.length) throw sessionSaveRequiresGenerate({ diagramMode: saved.mode });
+    if (!committed && results.length) throw sessionSaveRequiresGenerate({ drawingId: saved.id, diagramMode: saved.mode });
     // The shown drawing's inputs without a Generate are saved as its draft
     // request (`exportSession` decides it once).
     if (!committed && draftRequest) {
@@ -6075,7 +6077,6 @@ const exportSessionDocument = async (
           })
         : null;
       const activeFiles = await serializeActiveRenderFiles(
-        saved.mode,
         state,
         saved,
         {
@@ -6317,6 +6318,7 @@ const importSessionDocument = async (e, options = {}) => {
   const rollbackState = options.rollbackState;
   /** @type {ReturnType<typeof captureSessionImportSnapshot> | null} */
   let rollbackSnapshot = null;
+  /** @type {unknown} What the rollback port's `capture` returned. */
   let rollbackExtensionSnapshot;
   let commitStarted = false;
   // The stored figure of a Session 27-44 shown while Python upgrades it
@@ -7752,7 +7754,8 @@ const importSessionDocument = async (e, options = {}) => {
     const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {
       try {
-        await restoreSessionImportSnapshot(rollbackSnapshot);
+        await restoreSessionImportSnapshot(rollbackSnapshot,
+          () => rollbackState.restoreHistoryMembers(rollbackExtensionSnapshot));
         await rollbackState.restore(rollbackExtensionSnapshot);
       } catch (rollbackError) {
         state.generationFailureRecovery.value = 'restore-failed';
@@ -7958,9 +7961,11 @@ export const exportSession = (titleOverride = null, options) => {
 /**
  * The Load rollback port: `capture` before the Load commits, `replaceHistoryMembers` with the committed drawings'
  * IDs in the same task as the store write (each drawing a Load makes has a History before any reader asks for the
- * shown drawing's; OV-2131), `restore` with what `capture` returned when the Load fails (the method form keeps the
- * owner's own snapshot type assignable).
+ * shown drawing's; OV-2131). When the Load fails, `restoreHistoryMembers` gives the captured members back in the
+ * task that restores the store (OV-2132), then `restore` the rest; both take what `capture` returned (the method
+ * form keeps the owner's own snapshot type assignable).
  * @typedef {{ capture(): unknown, replaceHistoryMembers(drawingIds: readonly DrawingId[]): void,
+ *   restoreHistoryMembers(snapshot: unknown): void,
  *   restore(snapshot: unknown): void | Promise<void> }} SessionImportRollbackState
  */
 /**

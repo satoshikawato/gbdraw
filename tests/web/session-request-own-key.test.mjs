@@ -46,7 +46,7 @@ const circularState = (form) => {
 };
 const buildWithFiles = async () => buildCanonicalRenderRequest({
   state, drawing, comparisonPlanSnapshot: null, recordDisplayRows: [],
-  filesData: await serializeActiveRenderFiles('circular', state, drawing, null)
+  filesData: await serializeActiveRenderFiles(state, drawing, null)
 });
 const emptyRecordFiles = () => ({ c_gb: state.inputFiles.fileOf(drawing.files.c_gb), circularRecords: [] });
 

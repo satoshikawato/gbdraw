@@ -15,17 +15,18 @@ globalThis.document = {};
 const { serializeActiveRenderFiles: serializeDrawingFiles, heldDepthFiles: heldDrawingDepthFiles } = await import(
   '../../gbdraw/web/js/services/config.js'
 );
-// A fixture state is its own drawing.
+// A fixture state is its own drawing, of the mode a case names.
 // Its input files are registered in a store and named by ref, as the app binds them.
+const fixtureDrawing = (bound, mode) => Object.create(bound, { mode: { value: mode } });
 const serializeActiveRenderFiles = (mode, fixture, snapshot, ...rest) => {
   const bound = boundState(fixture);
   const edges = snapshot?.edges?.map((edge) => ({ ...edge, file: bound.inputFiles.registerFile(edge.file) }));
-  return serializeDrawingFiles(mode, bound, bound, ...(snapshot ? [edges ? { ...snapshot, edges } : snapshot] : []), ...rest);
+  return serializeDrawingFiles(bound, fixtureDrawing(bound, mode), ...(snapshot ? [edges ? { ...snapshot, edges } : snapshot] : []), ...rest);
 };
 /** The Depth files the fixture drawing's draft holds, its inputs bound as the app binds them. */
 const heldDepthFiles = (mode, fixture) => {
   const bound = boundState(fixture);
-  return heldDrawingDepthFiles(mode, bound, bound);
+  return heldDrawingDepthFiles(bound, fixtureDrawing(bound, mode));
 };
 const {
   adoptCurrentSessionResources,

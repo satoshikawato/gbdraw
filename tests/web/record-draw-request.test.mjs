@@ -66,7 +66,7 @@ const comparisonPlanSnapshot = resolveLinearComparisonPlan({
   recordsOff: drawing.recordsOff,
   layout: drawing.linearRecordRows
 });
-const filesData = await serializeActiveRenderFiles('linear', state, drawing, comparisonPlanSnapshot);
+const filesData = await serializeActiveRenderFiles(state, drawing, comparisonPlanSnapshot);
 assert.deepEqual(filesData.linearSeqs.map((seq) => seq.uid), ['a', 'c']);
 const recordDisplayRows = ['a', 'b', 'c'].map((uid) => ({
   key: JSON.stringify([uid, '#1']), scope: 'linear', sourceUid: uid, selector: '#1', recordId: uid,
@@ -99,7 +99,7 @@ drawing.recordsOff.splice(0, Infinity, 'a');
 const cropped = modeDrawing(state, 'linear').linearSeqs.find((seq) => seq.uid === 'c');
 Object.assign(cropped, { region_start: 1, region_end: 10 });
 await assert.rejects(
-  serializeActiveRenderFiles('linear', state, drawing, {
+  serializeActiveRenderFiles(state, drawing, {
     comparisonPlan: { mode: 'none', edges: [] },
     linearRecordCatalog: {
       mode: 'linear', status: 'ready', issues: [],
@@ -110,7 +110,7 @@ await assert.rejects(
 );
 Object.assign(cropped, { region_start: null, region_end: null });
 await assert.rejects(
-  serializeActiveRenderFiles('linear', state, drawing, {
+  serializeActiveRenderFiles(state, drawing, {
     comparisonPlan: { mode: 'none', edges: [] },
     linearRecordCatalog: { mode: 'linear', status: 'ready', issues: [], records: [{ sourceIndex: 0, localIndex: 0 }] }
   }),

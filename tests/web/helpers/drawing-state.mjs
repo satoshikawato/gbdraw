@@ -5,7 +5,10 @@
 // key is a generated artifact, a project input or cache, an app setting or
 // catalog, transient, or the drawing store. Each diagram mode has its own
 // drawing (PR-1, Session 46 `modes`).
-import { drawingIdOfMode } from '../../../gbdraw/web/js/services/drawing-view.js';
+import { allocateDrawingId } from '../../../gbdraw/web/js/services/drawing-view.js';
+
+// The ID of a mode's first drawing, as a new store allocates it.
+const firstDrawingId = (mode) => allocateDrawingId(mode, []);
 import { CANVAS_SLICE } from '../../../gbdraw/web/js/services/drawing/canvas.js';
 import { GROUP_NAMES_SLICE } from '../../../gbdraw/web/js/services/drawing/group-names.js';
 import { ANNOTATION_SETS_SLICE } from '../../../gbdraw/web/js/services/drawing/annotation-sets.js';
@@ -189,7 +192,7 @@ const withSliceHandles = (drawing) => {
 // History step. Call it once the test has set up `window` and imported state.js.
 export const addStartLinearDrawing = async () => {
   const { state, createDrawingState } = await import('../../../gbdraw/web/js/state.js');
-  const id = drawingIdOfMode('linear');
+  const id = firstDrawingId('linear');
   if (state.drawingTabs.value.some((tab) => tab.id === id)) return;
   state.addDrawing(createDrawingState(id, 'linear'), 'Linear', state.drawingTabs.value.length);
 };
@@ -204,7 +207,7 @@ export const modeDrawingsAdder = async () => {
   const { withNewDrawingDefaults } = await import('../../../gbdraw/web/js/services/reset.js');
   return () => {
     for (const mode of ['circular', 'linear']) {
-      const id = drawingIdOfMode(mode);
+      const id = firstDrawingId(mode);
       if (state.drawingTabs.value.some((tab) => tab.id === id)) continue;
       state.addDrawing(withNewDrawingDefaults(state, createDrawingState(id, mode)), mode === 'circular' ? 'Circular' : 'Linear',
         mode === 'circular' ? 0 : state.drawingTabs.value.length);
@@ -215,13 +218,13 @@ export const modeDrawingsAdder = async () => {
 // The drawing of a diagram mode in a `state`-shaped value (the real state or a
 // fixture from `withDrawings` / `withModeDrawings`): the drawing whose ID the
 // mode names.
-export const modeDrawing = (state, mode) => state.drawingOf(drawingIdOfMode(mode));
+export const modeDrawing = (state, mode) => state.drawingOf(firstDrawingId(mode));
 
 // The drawing store as state.js builds it: the drawings by ID in creation
 // order, read through `drawingList`, `drawingOf`, and `drawingOfMode`. A fake
 // `state` spreads it.
 export const drawingStore = (circular, linear) => {
-  const drawings = new Map([[drawingIdOfMode('circular'), circular], [drawingIdOfMode('linear'), linear]]);
+  const drawings = new Map([[firstDrawingId('circular'), circular], [firstDrawingId('linear'), linear]]);
   const drawingOf = (id) => {
     if (!drawings.has(id)) throw new Error(`Unknown drawing ${id}`);
     return drawings.get(id);
@@ -229,7 +232,7 @@ export const drawingStore = (circular, linear) => {
   return {
     drawingList: () => [...drawings.values()],
     drawingOf,
-    drawingOfMode: (mode) => drawingOf(drawingIdOfMode(mode))
+    drawingOfMode: (mode) => drawingOf(firstDrawingId(mode))
   };
 };
 
@@ -240,7 +243,7 @@ const storeProperties = (circular, linear) => Object.fromEntries(Object.entries(
 // The drawing the displayed Result belongs to (state.generatedDrawingId), the
 // Circular drawing unless the fixture names one, as in state.js.
 const generatedDrawingProperty = (fixture) => (Object.hasOwn(fixture, 'generatedDrawingId') ? {} : {
-  generatedDrawingId: { value: { value: drawingIdOfMode('circular') }, configurable: true, writable: true }
+  generatedDrawingId: { value: { value: firstDrawingId('circular') }, configurable: true, writable: true }
 });
 
 // The fixture with the drawing store that services and owners read
@@ -251,7 +254,7 @@ const generatedDrawingProperty = (fixture) => (Object.hasOwn(fixture, 'generated
 // members.
 export const withDrawings = (fixture) => Object.defineProperties(withSliceHandles(fixture), {
   ...storeProperties(fixture, fixture),
-  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: drawingIdOfMode('circular'), configurable: true } }),
+  ...(Object.hasOwn(fixture, 'id') ? {} : { id: { value: firstDrawingId('circular'), configurable: true } }),
   ...generatedDrawingProperty(fixture),
   activeDrawing: { value: () => fixture, configurable: true }
 });

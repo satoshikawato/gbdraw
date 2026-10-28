@@ -156,7 +156,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           )));
           assert.deepEqual(state.activeDrawing().linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
           assert.notEqual(state.activeDrawing().losatProgram.value, 'blastp');
-          const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+          const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
           const comparisonPlanSnapshot = resolveLinearComparisonPlan({
             plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
             losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
@@ -245,7 +245,7 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assertNoReplacementDraft();
     // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     const candidate = buildCanonicalRenderRequest({
       state,
       drawing: state.activeDrawing(),
@@ -302,7 +302,7 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     assert.equal(state.activeDrawing().importedComparisonIntent.disposition, 'EDITABLE');
     assert.deepEqual(state.activeDrawing().linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.activeDrawing().losatProgram.value, 'blastp');
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     // ... so the first Generate after Load reuses them instead of converting again.
     const blastp = state.activeDrawing().losat.blastp;
     assert.equal(canReuseResolvedProteinArtifacts({
@@ -377,7 +377,7 @@ save_session_document(Path(${JSON.stringify(file)}), request)
     const drawing = state.activeDrawing();
     assert.equal(drawing.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assert.deepEqual(drawing.linearComparisonPlan, DEFAULT_PLAN);
-    const filesData = await serializeActiveRenderFiles('linear', state, drawing);
+    const filesData = await serializeActiveRenderFiles(state, drawing);
     assert.equal(filesData.linearSeqs.length, 3);
     const candidate = buildCanonicalRenderRequest({ state, drawing,
       filesData: { ...filesData, linearCanonicalComparisons: [] },
@@ -403,7 +403,7 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   const loadDraft = async (document) => {
     const result = await load(JSON.stringify(document));
     assert.equal(result.status, 'ok', result.error?.stack);
-    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
+    const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.activeDrawing().linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.activeDrawing().losatProgram.value, blastpMode: state.activeDrawing().losat.blastp.mode
@@ -565,7 +565,7 @@ await test('a main v33 Web Session with Scale Interval 0 loads into the current 
   assert.equal(result.status, 'ok', result.error?.stack);
   assert.equal(state.mode.value, 'circular');
   assert.equal(state.activeDrawing().adv.scale_interval, 0);
-  const filesData = await serializeActiveRenderFiles('circular', state, state.activeDrawing());
+  const filesData = await serializeActiveRenderFiles(state, state.activeDrawing());
   const candidate = buildCanonicalRenderRequest({
     state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot: null
   });
@@ -671,7 +671,7 @@ const renderedSession = async ({ renderRequest, resources }) => JSON.stringify({
 // read-only CLI comparison (-b) as Inherit saved comparison does.
 const nextGenerate = async () => {
   const drawing = state.activeDrawing();
-  const filesData = await serializeActiveRenderFiles(state.mode.value, state, drawing);
+  const filesData = await serializeActiveRenderFiles(state, drawing);
   const inherit = drawing.importedComparisonIntent.disposition === 'PRESERVED_READ_ONLY';
   const candidate = buildCanonicalRenderRequest({ state, drawing,
     filesData: inherit ? { ...filesData, linearCanonicalComparisons: [] } : filesData,
