@@ -993,3 +993,48 @@ test('replacing a file for this drawing only reaches its inactive or hidden comp
       `${label}: the shown drawing keeps no record of the old file`);
   }
 });
+
+// R17-28 (OV-2155): a replacement swaps only the comparison's file; the edge
+// keeps its source, inclusion, and file state in every drawing it reaches.
+test('replacing a comparison file keeps the edge source, inclusion, and file state', async () => {
+  const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  app.selectDrawing('linear');
+  const linear = state.drawingOf('linear');
+  if (linear.linearSeqs.length < 2) app.addLinearSeq();
+  const [query, subject] = linear.linearSeqs;
+  const edgeId = 'edge-r1728';
+  const edgeOf = (drawing) => drawing.linearComparisonPlan.edges.find((edge) => edge.id === edgeId);
+  const stateOf = (drawing) => {
+    const { source, included, fileActive } = edgeOf(drawing);
+    return { source, included, fileActive };
+  };
+  for (const scope of ['drawing', 'all']) {
+    app.selectDrawing('linear');
+    await history.runUndoable('Change comparisons', () => SETTINGS_SLICE.install(linear.slices.settings, { linearComparisonPlan: {
+      mode: 'selected', defaultSource: 'upload', edges: [{ id: edgeId, queryUid: query.uid, subjectUid: subject.uid, source: 'upload', included: true }]
+    } }));
+    const blast = state.inputFiles.registerFile(new File([`q\ts\t100\t10\t0\t0\t1\t10\t1\t10\t1e-5\t20\n`], `${scope}.tsv`));
+    await history.runUndoable('Change uploaded file', () => { app.setLinearComparisonFile(edgeId, blast); });
+    const { drawingId: copyId } = app.drawingList.duplicateDrawing('linear');
+    const copy = state.drawingOf(copyId);
+    await history.runUndoable('Change comparisons', () => app.setLinearComparisonSource(edgeId, 'losat'));
+    app.selectDrawing('linear');
+    await history.runUndoable('Change comparisons', () => app.deactivateLinearComparisonFile(edgeId));
+    const reached = scope === 'all' ? [linear, copy] : [linear];
+    const before = reached.map(stateOf);
+    assert.deepEqual(before, scope === 'all'
+      ? [{ source: 'upload', included: false, fileActive: false }, { source: 'losat', included: true, fileActive: true }]
+      : [{ source: 'upload', included: false, fileActive: false }], `${scope}: the edges before`);
+    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${scope}-new.tsv`), scope).status, 'ok');
+    await settle();
+    reached.forEach((drawing, index) => {
+      const replaced = edgeOf(drawing).file;
+      assert.ok(replaced && replaced.fileId !== blast.fileId, `${scope} ${drawing.id}: the new file`);
+      assert.deepEqual(stateOf(drawing), before[index], `${scope} ${drawing.id}: source, included, fileActive kept`);
+    });
+    if (scope === 'drawing') assert.equal(edgeOf(copy).file, blast, 'drawing: the copy keeps the old file');
+  }
+});

@@ -171,18 +171,28 @@ test('selecting an unknown drawing ID throws and changes nothing; the shown draw
   assert.equal(app.selectDrawing(shown), false);
 });
 
-// E1 (PD-OI-079) after a Delete: the error's Generate no longer has its
-// drawing to show, so it runs in the shown drawing, as for an error that names
-// no drawing (OV-2151), instead of throwing.
-test('an error naming a deleted drawing generates in the shown drawing', async () => {
+// R17-29 (OV-2156): an error that names a drawing leaves with it on Delete,
+// as it leaves on a switch away (OV-372); Undo of the Delete does not bring it
+// back. E1's Generate (PD-OI-079) therefore always finds the drawing it names.
+test('deleting a drawing clears an error that names it, and only that error', async () => {
   const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
   const { drawingId: gone } = app.drawingList.newDrawing('linear');
+  const { drawingId: other } = app.drawingList.newDrawing('linear');
   const { drawingId: shown } = app.drawingList.newDrawing('circular');
+  const errorNaming = (drawingId) => ({ code: 'SESSION_SAVE_REQUIRES_GENERATE', actions: ['generate'], context: { drawingId } });
+  app.errorLog.value = errorNaming(other);
+  app.drawingList.deleteDrawing(gone);
+  assert.deepEqual(app.errorLog.value, errorNaming(other), 'an error naming another drawing stays');
+  await history.undo();
+  assert.ok(tabIds().includes(gone));
+  app.errorLog.value = errorNaming(gone);
   app.drawingList.deleteDrawing(gone);
   assert.equal(state.activeDrawingId.value, shown);
-  app.errorLog.value = { code: 'SESSION_SAVE_REQUIRES_GENERATE', actions: ['generate'], context: { drawingId: gone } };
-  await app.generateFromError();
-  assert.equal(state.activeDrawingId.value, shown);
+  assert.equal(app.errorLog.value, null, 'the error naming the deleted drawing is gone');
+  await history.undo();
+  assert.ok(tabIds().includes(gone));
+  assert.equal(app.errorLog.value, null, 'Undo of the Delete does not bring the error back');
 });
 
 test('New is one project step: its Undo shows the drawing shown before, its Redo the new drawing', async () => {

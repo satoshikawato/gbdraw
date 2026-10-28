@@ -218,16 +218,27 @@ export const createLinearComparisonEdge = ({
 });
 
 /**
- * An edge's uploaded BLAST TSV, the one place that sets it: a file is the
- * edge's active upload; none leaves the edge with no file and none active.
- * The pair card's file input and its Remove set it, and so does Load where it
- * drops the edge's file binding (OV-899).
+ * An edge's uploaded BLAST TSV, as an upload sets it: a file is the edge's
+ * active upload; none leaves the edge with no file and none active. The pair
+ * card's file input and its Remove set it, and so does Load where it drops the
+ * edge's file binding (OV-899).
  * @param {LinearComparisonEdge} edge Changed in place.
  * @param {InputFileRef | null} file The ref of the file (`state.inputFiles.registerFile`).
  */
 export const setComparisonEdgeFile = (edge, file) => {
   edge.file = file || null;
   edge.fileActive = Boolean(file);
+};
+
+/**
+ * An edge's bound file swapped for another (an input file replacement,
+ * PD-OI-090 〔入力ファイル〕): only the file changes; the edge keeps its
+ * source, inclusion, and file state (R17-28).
+ * @param {LinearComparisonEdge} edge Changed in place.
+ * @param {InputFileRef} file The ref of the new file.
+ */
+export const swapComparisonEdgeFile = (edge, file) => {
+  edge.file = file;
 };
 
 /** @param {unknown} value */
