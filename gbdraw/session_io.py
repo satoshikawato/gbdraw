@@ -2213,8 +2213,7 @@ def _legacy_feature_index(legacy: object, mode: object) -> list[_IndexedFeature]
     ``record_idx`` its record in that input. Identities are the renderer's:
     the record key, ``<recordKey>:<n>`` for each record of an ALL input with
     several records, and the source hash, ``~<source index>`` when the record
-    has it twice. The twin of ``legacyIndex`` in the Web
-    ``feature-edit-migration.js``.
+    has it twice.
     """
 
     fields = legacy if isinstance(legacy, Mapping) else {}
@@ -2363,8 +2362,7 @@ def _catalog_drawn_features(catalog: object, mode: object) -> list[_IndexedFeatu
 
     A catalog row's rendered ID (``svgId``) carries the feature's hash in its
     drawn (cropped, reverse-complemented) record. The record position is the
-    rendered ID's or the row's place in its item's records. The twin of
-    ``catalogDrawnFeatures`` in the Web ``feature-edit-migration.js``.
+    rendered ID's or the row's place in its item's records.
     """
 
     drawn: list[_IndexedFeature] = []
@@ -2495,8 +2493,6 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped or reverse-complemented, so
     the drawn hashes of its features differ from their source hashes (a
     rotation or a region that only selects a record changes no hash).
-
-    The twin of ``hashFrameChanged`` in the Web ``feature-edit-migration.js``.
     """
 
     region = record.get("region")
@@ -2513,8 +2509,6 @@ def _hash_frame_changed(record: Mapping[str, Any]) -> bool:
 
 def has_hash_color_rules(rules: object) -> bool:
     """Whether specific color rules (``qual`` and ``val``) hold a ``hash`` rule.
-
-    The twin of ``hasHashColorRules`` in the Web ``feature-edit-migration.js``.
     """
 
     return isinstance(rules, list) and any(
@@ -2786,8 +2780,6 @@ def _js_truthy(value: object) -> bool:
 
 def _drawn_transformed(record: Mapping[str, Any]) -> bool:
     """Whether a request record is drawn cropped, reverse-complemented, or rotated.
-
-    The twin of ``drawnTransformed`` in the Web ``feature-edit-migration.js``.
     """
 
     presentation = record.get("presentation")

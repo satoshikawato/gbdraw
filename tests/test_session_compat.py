@@ -2019,8 +2019,7 @@ _MAIN_ANNOTATION_TARGET_VECTOR = next(
 def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_reader(
     case: dict[str, Any],
 ) -> None:
-    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionAnnotationTargets.
+    # Python alone migrates annotation targets at Load; the Web reads the result.
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_annotation_targets(
@@ -2127,8 +2126,7 @@ _HASH_RULE_VECTORS = json.loads(
     ids=[case["name"] for case in _HASH_RULE_VECTORS["selectorCases"]],
 )
 def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
-    # One mapper serves the Session draft and the CLI replay of a request;
-    # tests/web/feature-edit-migration.test.mjs checks sourceHashSelectorValue.
+    # One mapper serves the Session draft and the CLI replay of a request.
     drawn = [tuple(feature) for feature in _HASH_RULE_VECTORS["drawnFeatures"]]
 
     value, source_count = source_hash_selector_value(case["value"], drawn)
@@ -2140,8 +2138,7 @@ def test_hash_selector_values_read_the_vectors_shared_with_the_web_reader(case: 
     "case", _HASH_RULE_VECTORS["cases"], ids=[case["name"] for case in _HASH_RULE_VECTORS["cases"]]
 )
 def test_hash_rules_migrate_to_the_vectors_shared_with_the_web_reader(case: dict[str, Any]) -> None:
-    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
-    # migrateSessionHashRules.
+    # Python alone migrates hash rules at Load; the Web reads the result.
     source = json.loads(json.dumps(case["input"]))
 
     migration = migrate_session_hash_rules(
