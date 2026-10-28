@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: similarity-ring color schemes. `--conservation_color_scheme`
+  (`same`, the default; `ten`; `per_five`), the config key
+  `objects.conservation.color_scheme`, and `ComparisonRingOptions.color_scheme`
+  color the rings without a color of their own by drawn position from the
+  outermost ring. `--conservation_colors` accepts `auto` for such a ring, and a
+  Python ring track with `color=None` no longer requires every ring to leave
+  its color unset.
+- Changed: the Circular legend lists the drawn similarity rings by name from
+  `outer` to `inner` above one `identity` band, with a swatch per ring when the
+  ring colors differ. It replaces the `Conservation identity` row and the
+  per-ring gradient rows. A ring colored like the default (`#8b9cc1`) draws the
+  default gradient.
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
