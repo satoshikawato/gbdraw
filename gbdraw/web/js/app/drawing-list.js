@@ -405,9 +405,12 @@ const MODE_LABELS = Object.freeze({ circular: msg('Circular'), linear: msg('Line
  * @typedef {(drawingId: DrawingId) => boolean} NeedsDeleteConfirmation
  * @typedef {(mode: ModeProfileName) => DrawingListOutcome} NewDrawingStep The list's New.
  * @typedef {(drawingId: DrawingId) => DrawingListOutcome} DuplicateDrawingStep The list's Duplicate.
+ * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingListOutcome} NewDrawingWithStyleStep
+ *   The list's New with the style of a drawing, as a drawing of the target mode.
  * @typedef {object} DrawingBarPorts
  * @property {NewDrawingStep} newDrawing
  * @property {DuplicateDrawingStep} duplicateDrawing
+ * @property {NewDrawingWithStyleStep} newDrawingWithStyle
  * @property {RenameDrawingStep} renameDrawing
  * @property {MoveDrawingStep} moveDrawing
  * @property {DeleteDrawingStep} deleteDrawing
@@ -454,11 +457,12 @@ export const moveTabFocus = (event) => {
 /**
  * The drawing bar's view (PD-OI-090 〔drawing bar と切り替え〕): its tabs with
  * the Linear offer tab, and the tab menu's New Circular, New Linear, Duplicate,
- * Rename, Move, and Delete, each one list operation (one History step).
+ * New Circular or Linear drawing with this style (R17-27), Rename, Move, and
+ * Delete, each one list operation (one History step).
  * @param {DrawingBarPorts} ports
  */
 export const createDrawingBar = ({
-  newDrawing, duplicateDrawing, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
+  newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing: renameStep, moveDrawing: moveStep, deleteDrawing: deleteStep, needsDeleteConfirmation,
   drawingTabs, shownDrawingId, modeOf, askText, askChoice
 }) => {
   /** @returns {Array<DrawingBarTab | DrawingBarOffer>} */
@@ -539,5 +543,5 @@ export const createDrawingBar = ({
     return deleteStep(drawingId);
   };
 
-  return { tabs, newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing };
+  return { tabs, newDrawing, duplicateDrawing, newDrawingWithStyle, renameDrawing, moveDrawing, deleteDrawing };
 };
