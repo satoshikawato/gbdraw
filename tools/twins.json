@@ -221,7 +221,7 @@
         "gbdraw/web/js/app/legend/layout-actions.js:createLegendLayoutActions"
       ],
       "vector": "tests/fixtures/legend_layout_vectors.json",
-      "reason": "A Legend edit lays out in the browser with no Generate; 456 measurement and 140 Legend cases from Python pin the port (difference 0).",
+      "reason": "A Legend edit lays out in the browser with no Generate; 456 measurement and 155 Legend cases from Python pin the port (difference 0). Python no longer draws Circular gradient rows (it draws the similarity-ring block), but a saved Result still holds them, so their 16 cases keep the values Python computed when it last drew them.",
       "retireWhen": "a Legend edit calls the Python layout through the Worker",
       "source": "inventory C section B (Legend measurement and layout; OV-127, OV-143, OV-165, #940)"
     },

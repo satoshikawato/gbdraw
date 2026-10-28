@@ -636,7 +636,10 @@ export const linearLegendLocalBounds = (layout, colorRectSize) => {
 
 /**
  * A gradient block: its entries, and the one scale (minimum and 100% labels)
- * below the bars that every form draws.
+ * below the bars that every form draws. Only a Result saved before the
+ * similarity-ring block holds Circular gradient rows; Python no longer lays them
+ * out, and the frozen cases of tests/fixtures/legend_layout_vectors.json keep
+ * the values it computed when it did.
  * @typedef {object} CircularGradientLayout
  * @property {boolean} compact
  * @property {number} width
@@ -730,7 +733,7 @@ const circularRingLayout = (rings, measure, rect) => {
   const bandWidth = bandLabelX + measure(RING_BAND_LABEL).width;
   return {
     width: Math.max(captionWidth, bandWidth, ...rings.map((entry) => textX + entry.textWidth)),
-    height: scaleLabelY + labelHeight + (line * SINGLE_GRADIENT_TRAILING_GAP_RATIO),
+    height: scaleLabelY + labelHeight,
     showSwatches,
     outerCaptionY,
     innerCaptionY,

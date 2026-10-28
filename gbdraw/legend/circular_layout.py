@@ -9,12 +9,11 @@ from typing import Mapping, cast
 
 from ..core.text import drawn_text_box
 from ..core.numeric import compensated_sum
-from .metrics import legend_line_height, legend_text_x_offset, single_gradient_block_x
+from .metrics import legend_line_height, legend_text_x_offset
 from .table import DrawnLegendName, LegendRowKey, as_legend_table
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10
-SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35
 # The similarity-ring block (PD-OI-110): its captions, and the label of its identity band.
 RING_OUTER_CAPTION = "outer"
 RING_INNER_CAPTION = "inner"
@@ -33,43 +32,6 @@ class CircularLegendEntryLayout:
     rect_y: float
     text_x: float
     text_y: float
-
-
-@dataclass(frozen=True)
-class CircularCompactGradientEntryLayout:
-    key: LegendRowKey
-    properties: Mapping[str, object]
-    label_x: float
-    label_y: float
-    bar_y: float
-
-
-@dataclass(frozen=True)
-class CircularSingleGradientEntryLayout:
-    key: LegendRowKey
-    properties: Mapping[str, object]
-    title_x: float
-    title_y: float
-    bar_x: float
-    bar_y: float
-
-
-@dataclass(frozen=True)
-class CircularGradientLegendLayout:
-    """A gradient block: its entries, and the one scale (minimum and 100%
-    labels) below the bars that every form draws."""
-
-    compact: bool
-    width: float
-    height: float
-    bar_width: float
-    bar_x: float
-    min_label_text: str
-    min_label_x: float
-    max_label_x: float
-    scale_label_y: float
-    compact_entries: tuple[CircularCompactGradientEntryLayout, ...]
-    single_entries: tuple[CircularSingleGradientEntryLayout, ...]
 
 
 @dataclass(frozen=True)
@@ -118,8 +80,8 @@ class CircularLegendLayout:
     num_columns: int
     num_items_per_line: int
     solid_entries: tuple[CircularLegendEntryLayout, ...]
-    # A similarity-ring block, or the gradient rows a saved Result drawn before it still holds.
-    gradient: CircularGradientLegendLayout | CircularRingLegendLayout | None
+    # The similarity-ring block, beside or below the solid rows.
+    gradient: CircularRingLegendLayout | None
     gradient_x: float
     gradient_y: float
 
@@ -147,9 +109,8 @@ def _measure_entries(
     font_family: str,
     font_size: float,
     x_margin: float,
-) -> tuple[tuple[_MeasuredLegendEntry, ...], tuple[_MeasuredLegendEntry, ...], tuple[_MeasuredLegendEntry, ...]]:
+) -> tuple[tuple[_MeasuredLegendEntry, ...], tuple[_MeasuredLegendEntry, ...]]:
     solid_entries: list[_MeasuredLegendEntry] = []
-    gradient_entries: list[_MeasuredLegendEntry] = []
     ring_entries: list[_MeasuredLegendEntry] = []
     table = as_legend_table(legend_table)
     drawn_names = table.names()
@@ -167,13 +128,11 @@ def _measure_entries(
             text_width=float(text_width),
             entry_width=float(text_width) + (2 * float(x_margin)),
         )
-        if properties.get("type") == "gradient":
-            gradient_entries.append(measured)
-        elif properties.get("type") == "ring":
+        if properties.get("type") == "ring":
             ring_entries.append(measured)
         elif properties.get("type") == "solid":
             solid_entries.append(measured)
-    return tuple(solid_entries), tuple(gradient_entries), tuple(ring_entries)
+    return tuple(solid_entries), tuple(ring_entries)
 
 
 def _build_ring_layout(
@@ -211,7 +170,7 @@ def _build_ring_layout(
     )
     band_width = band_label_x + float(drawn_text_box(RING_BAND_LABEL, font_family, font_size)[0])
     width = max(caption_width, band_width, *(text_x + entry.text_width for entry in ring_entries))
-    height = scale_label_y + float(label_height) + (line * SINGLE_GRADIENT_TRAILING_GAP_RATIO)
+    height = scale_label_y + float(label_height)
     return CircularRingLegendLayout(
         width=width,
         height=height,
@@ -226,109 +185,6 @@ def _build_ring_layout(
         min_label_x=0.0,
         max_label_x=bar_width,
         scale_label_y=scale_label_y,
-    )
-
-
-def _gradient_reserved_width(
-    gradient_entries: tuple[_MeasuredLegendEntry, ...],
-    *,
-    color_rect_size: float,
-    x_margin: float,
-) -> float:
-    if not gradient_entries:
-        return 0.0
-    width = GRADIENT_BAR_WIDTH_RATIO * float(color_rect_size)
-    if len(gradient_entries) > 1:
-        return width + (max(entry.text_width for entry in gradient_entries) + float(x_margin))
-    # One gradient reserves its block, title included (OV-1611).
-    return single_gradient_block_x(width, gradient_entries[0].text_width)[0]
-
-
-def _build_gradient_layout(
-    gradient_entries: tuple[_MeasuredLegendEntry, ...],
-    *,
-    font_family: str,
-    font_size: float,
-    color_rect_size: float,
-) -> CircularGradientLegendLayout | None:
-    if not gradient_entries:
-        return None
-
-    color_rect_size = float(color_rect_size)
-    bar_width = GRADIENT_BAR_WIDTH_RATIO * color_rect_size
-    row_height = legend_line_height(color_rect_size)
-    first_min_label = min_gradient_label_text(gradient_entries[0].properties.get("min_value", 0))
-
-    if len(gradient_entries) > 1:
-        label_width = max(entry.text_width for entry in gradient_entries)
-        bar_x = label_width + color_rect_size
-        scale_label_y = color_rect_size + ((len(gradient_entries) - 1) * row_height) + 2
-        # The scale labels share one line box, whatever their digits.
-        _, label_height = drawn_text_box("100%", font_family, font_size)
-        compact_entries = tuple(
-            CircularCompactGradientEntryLayout(
-                key=entry.key,
-                properties=entry.properties,
-                # The block's left edge; an int keeps the drawn translate(0,y).
-                label_x=0,
-                label_y=(color_rect_size / 2) + (idx * row_height),
-                bar_y=(color_rect_size / 2) + (idx * row_height),
-            )
-            for idx, entry in enumerate(gradient_entries)
-        )
-        return CircularGradientLegendLayout(
-            compact=True,
-            width=bar_x + bar_width,
-            height=scale_label_y + float(label_height),
-            bar_width=bar_width,
-            bar_x=bar_x,
-            min_label_text=first_min_label,
-            min_label_x=bar_x,
-            max_label_x=bar_x + bar_width,
-            scale_label_y=scale_label_y,
-            compact_entries=compact_entries,
-            single_entries=(),
-        )
-
-    entry = gradient_entries[0]
-    title_width, title_height = drawn_text_box(
-        entry.text,
-        font_family,
-        font_size,
-    )
-    bar_y = float(title_height) + (color_rect_size / 2)
-    scale_label_y = bar_y + (color_rect_size / 2) + 2
-    _, label_height = drawn_text_box(
-        "100%",
-        font_family,
-        font_size,
-    )
-    height = (
-        scale_label_y
-        + float(label_height)
-        + (row_height * SINGLE_GRADIENT_TRAILING_GAP_RATIO)
-    )
-    width, bar_x = single_gradient_block_x(bar_width, float(title_width))
-    single_entry = CircularSingleGradientEntryLayout(
-        key=entry.key,
-        properties=entry.properties,
-        title_x=width / 2.0,
-        title_y=0.0,
-        bar_x=bar_x,
-        bar_y=bar_y,
-    )
-    return CircularGradientLegendLayout(
-        compact=False,
-        width=width,
-        height=max(0.0, height),
-        bar_width=bar_width,
-        bar_x=bar_x,
-        min_label_text=min_gradient_label_text(entry.properties.get("min_value", 0)),
-        min_label_x=bar_x,
-        max_label_x=bar_x + bar_width,
-        scale_label_y=scale_label_y,
-        compact_entries=(),
-        single_entries=(single_entry,),
     )
 
 
@@ -365,7 +221,7 @@ def _wrap_horizontal_rows(
 
 def _horizontal_legend_width(
     solid_entries: tuple[_MeasuredLegendEntry, ...],
-    gradient_layout: CircularGradientLegendLayout | CircularRingLegendLayout | None,
+    gradient_layout: CircularRingLegendLayout | None,
     *,
     pairwise_legend_width: float,
     canvas_width: float,
@@ -395,7 +251,7 @@ def _horizontal_legend_width(
 
 def _build_horizontal_layout(
     solid_entries: tuple[_MeasuredLegendEntry, ...],
-    gradient_layout: CircularGradientLegendLayout | CircularRingLegendLayout | None,
+    gradient_layout: CircularRingLegendLayout | None,
     *,
     width: float,
     pairwise_legend_width: float,
@@ -473,38 +329,24 @@ def build_circular_legend_layout(
 ) -> CircularLegendLayout:
     line_margin = legend_line_height(color_rect_size)
     x_margin = legend_text_x_offset(color_rect_size)
-    solid_entries, gradient_entries, ring_entries = _measure_entries(
+    solid_entries, ring_entries = _measure_entries(
         legend_table,
         font_family=font_family,
         font_size=font_size,
         x_margin=x_margin,
     )
-    ring_layout = _build_ring_layout(
+    gradient_layout = _build_ring_layout(
         ring_entries,
         font_family=font_family,
         font_size=font_size,
         color_rect_size=float(color_rect_size),
     )
-    gradient_layout: CircularGradientLegendLayout | CircularRingLegendLayout | None = (
-        ring_layout
-        if ring_layout is not None
-        else _build_gradient_layout(
-            gradient_entries,
-            font_family=font_family,
-            font_size=font_size,
-            color_rect_size=float(color_rect_size),
-        )
-    )
     resolved_pairwise_width = (
         float(pairwise_legend_width)
         if pairwise_legend_width is not None
-        else ring_layout.width
-        if ring_layout is not None
-        else _gradient_reserved_width(
-            gradient_entries,
-            color_rect_size=float(color_rect_size),
-            x_margin=x_margin,
-        )
+        else gradient_layout.width
+        if gradient_layout is not None
+        else 0.0
     )
     horizontal = str(legend_position) in {"top", "bottom"}
 
@@ -631,11 +473,9 @@ def build_circular_legend_layout(
     else:
         height = feature_height
     num_lines = len(solid_entries)
-    if ring_layout is not None:
+    if gradient_layout is not None:
         # outer, the rings, inner, the band and its scale labels
         num_lines += len(ring_entries) + 4
-    elif gradient_layout is not None:
-        num_lines += len(gradient_entries) + (1 if len(gradient_entries) > 1 else 2)
     return CircularLegendLayout(
         horizontal=False,
         width=width,
@@ -657,13 +497,10 @@ def build_circular_legend_layout(
 
 
 __all__ = [
-    "CircularCompactGradientEntryLayout",
-    "CircularGradientLegendLayout",
     "CircularLegendEntryLayout",
     "CircularLegendLayout",
     "CircularRingLegendLayout",
     "CircularRingRowLayout",
-    "CircularSingleGradientEntryLayout",
     "RING_BAND_LABEL",
     "RING_INNER_CAPTION",
     "RING_OUTER_CAPTION",

@@ -578,7 +578,27 @@ def test_circular_multi_record_auto_conservation_inserts_at_explicit_axis(
     assert canvas.tostring().count('data-track-label="Axis reference"') >= 2
 
 
-def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout() -> None:
+def _ring_rows(names: list[str], fills: list[str] | None = None) -> dict[str, dict[str, object]]:
+    """Similarity-ring Legend rows as the assembler writes them (one colour: no swatch fill)."""
+
+    return {
+        name: {
+            "type": "ring",
+            "source_index": index,
+            "track_index": index + 1,
+            "fill": None if fills is None else fills[index],
+            "stroke": "none",
+            "width": 0,
+            "min_color": "#f0f1f5",
+            "max_color": "#8b9cc1",
+            "min_value": 0,
+        }
+        for index, name in enumerate(names)
+    }
+
+
+@pytest.mark.parametrize("fills", [None, ["#4e79a7", "#f28e2b"]], ids=["one-colour", "colours-differ"])
+def test_circular_ring_legend_lists_ring_names_and_one_scale(fills: list[str] | None) -> None:
     canvas_config = SimpleNamespace(legend_position="right", dpi=96)
     legend_config = SimpleNamespace(
         font_family="'Liberation Sans', 'Arial', sans-serif",
@@ -588,24 +608,7 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
         legend_height=80.0,
         pairwise_legend_width=160.0,
     )
-    legend_table = {
-        "barcode07.draft": {
-            "type": "gradient",
-            "min_color": "#dbe8f5",
-            "max_color": "#4e79a7",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
-        "barcode15.draft": {
-            "type": "gradient",
-            "min_color": "#fdebd8",
-            "max_color": "#f28e2b",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
-    }
+    legend_table = _ring_rows(["barcode07.draft", "barcode15.draft"], fills)
 
     drawing = Drawing(debug=False)
     drawing.add(
@@ -628,31 +631,27 @@ def test_circular_multi_conservation_gradient_legend_uses_compact_linear_layout(
         "barcode15.draft",
     ]
 
-    first_entry = entries[0]
-    first_label = first_entry.find("svg:text", ns)
+    # Names start at the block's left edge, or after a swatch when the ring colours differ.
+    first_label = entries[0].find("svg:text", ns)
     assert first_label is not None
     label_x, _ = _translate_xy(first_label.get("transform"))
-    assert label_x == pytest.approx(0.0)
+    swatches = [entry.find("svg:path", ns) for entry in entries]
+    if fills is None:
+        assert label_x == pytest.approx(0.0)
+        assert swatches == [None, None]
+    else:
+        assert label_x == pytest.approx((22 / 14) * legend_config.color_rect_size)
+        assert [swatch.get("fill") for swatch in swatches if swatch is not None] == fills
 
-    gradient_bar = next(
-        path
-        for path in first_entry.findall("svg:path", ns)
-        if str(path.get("fill", "")).startswith("url(")
-    )
-    bar_x, _ = _translate_xy(gradient_bar.get("transform"))
-    label_width, _ = drawn_text_box(
-        "barcode07.draft",
-        legend_config.font_family,
-        legend_config.font_size,
-    )
-    assert bar_x == pytest.approx(label_width + legend_config.color_rect_size)
-
+    band = legend.find("svg:g[@data-gbdraw-role='conservation-identity-band']", ns)
+    assert band is not None
+    assert [path.get("fill", "").startswith("url(") for path in band.findall("svg:path", ns)] == [True]
     legend_texts = [text.text for text in legend.findall(".//svg:text", ns)]
     assert legend_texts.count("0%") == 1
     assert legend_texts.count("100%") == 1
 
 
-def test_circular_vertical_conservation_legend_centers_feature_and_gradient_blocks() -> None:
+def test_circular_vertical_conservation_legend_centers_feature_and_ring_blocks() -> None:
     canvas_config = SimpleNamespace(legend_position="right", dpi=96)
     legend_config = SimpleNamespace(
         font_family="'Liberation Sans', 'Arial', sans-serif",
@@ -665,22 +664,7 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     legend_table = {
         "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
         "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
-        "barcode07.draft": {
-            "type": "gradient",
-            "min_color": "#dbe8f5",
-            "max_color": "#4e79a7",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
-        "barcode15.draft": {
-            "type": "gradient",
-            "min_color": "#fdebd8",
-            "max_color": "#f28e2b",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
+        **_ring_rows(["barcode07.draft", "barcode15.draft"]),
     }
 
     drawing = Drawing(debug=False)
@@ -732,7 +716,7 @@ def test_circular_vertical_conservation_legend_centers_feature_and_gradient_bloc
     assert label_x == pytest.approx(0.0)
 
 
-def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks_vertically() -> None:
+def test_circular_bottom_conservation_legend_centers_feature_and_ring_blocks_vertically() -> None:
     canvas_config = SimpleNamespace(legend_position="bottom", dpi=96)
     legend_config = SimpleNamespace(
         font_family="'Liberation Sans', 'Arial', sans-serif",
@@ -745,22 +729,7 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     legend_table = {
         "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
         "tRNA": {"type": "solid", "fill": "#e9ba42", "stroke": "none", "width": 0},
-        "barcode07.draft": {
-            "type": "gradient",
-            "min_color": "#dbe8f5",
-            "max_color": "#4e79a7",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
-        "barcode15.draft": {
-            "type": "gradient",
-            "min_color": "#fdebd8",
-            "max_color": "#f28e2b",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
+        **_ring_rows(["barcode07.draft", "barcode15.draft"]),
     }
 
     drawing = Drawing(debug=False)
@@ -790,21 +759,13 @@ def test_circular_bottom_conservation_legend_centers_feature_and_gradient_blocks
     assert feature_center == pytest.approx(gradient_center, abs=1.0)
 
 
-def test_circular_bottom_multi_conservation_layout_height_contains_gradient_block() -> None:
+def test_circular_bottom_multi_conservation_layout_height_contains_ring_block() -> None:
     canvas_config = SimpleNamespace(legend_position="bottom", dpi=96)
     legend_table = {
         "CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0},
         "GC content": {"type": "solid", "fill": "#999999", "stroke": "none", "width": 0},
     }
-    for idx in range(14):
-        legend_table[f"R{idx:02d}"] = {
-            "type": "gradient",
-            "min_color": "#dbe8f5",
-            "max_color": "#4e79a7",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        }
+    legend_table.update(_ring_rows([f"R{idx:02d}" for idx in range(14)]))
 
     layout = build_circular_legend_layout(
         legend_table,
@@ -1088,23 +1049,20 @@ def test_circular_api_rejects_nonpositive_conservation_geometry() -> None:
         )
 
 
-def test_circular_single_conservation_legend_keeps_long_title_inside_legend_width() -> None:
-    """OV-1261: a ring label wider than the colorbar stays inside the legend block."""
-    canvas_config = SimpleNamespace(legend_position="left", dpi=96)
+@pytest.mark.parametrize("side", ["left", "right", "top", "bottom"])
+@pytest.mark.parametrize("feature_row", [False, True], ids=["rings-only", "with-feature-row"])
+def test_circular_ring_legend_keeps_a_long_ring_name_inside_legend_width(side: str, feature_row: bool) -> None:
+    """OV-1261, OV-1611, OV-1612: a ring name wider than the identity bar stays inside the legend block, beside
+    or below the feature rows and alone."""
+    canvas_config = SimpleNamespace(legend_position=side, dpi=96)
     font_family = "'Liberation Sans', 'Arial', sans-serif"
-    legend_table = {
-        "Enterobacteria phage DE3, complete genome": {
-            "type": "gradient",
-            "min_color": "#ffffff",
-            "max_color": "#6f92b8",
-            "stroke": "none",
-            "width": 0,
-            "min_value": 0,
-        },
+    legend_table: dict[str, dict[str, object]] = {
+        **({"CDS": {"type": "solid", "fill": "#54bcf8", "stroke": "none", "width": 0}} if feature_row else {}),
+        **_ring_rows(["Enterobacteria phage DE3, complete genome"]),
     }
     natural = build_circular_legend_layout(
         legend_table,
-        legend_position="left",
+        legend_position=side,
         canvas_width=1000.0,
         font_family=font_family,
         font_size=10.0,

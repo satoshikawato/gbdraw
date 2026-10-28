@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from typing import Mapping
-
 from gbdraw.svg.elements import Group, LinearGradient, Path
 
 from ....configurators.legend import LegendMeasurement
@@ -10,10 +8,9 @@ from ....legend.circular_layout import (
     RING_BAND_LABEL,
     RING_INNER_CAPTION,
     RING_OUTER_CAPTION,
-    CircularGradientLegendLayout,
     CircularRingLegendLayout,
 )
-from ....legend.table import LegendRowKey, LegendTable, write_legend_row_names
+from ....legend.table import LegendTable, write_legend_row_names
 from ....render.group_content import GroupContent
 from ....svg.text_path import generate_text_path
 from ....svg.ids import stable_svg_id
@@ -58,15 +55,6 @@ class LegendGroup:
             f"L {path_point(normalized_end, end_y_bottom)} L {path_point(normalized_start, start_y_bottom)} z"
         )
         return rectangle_path
-
-    def _gradient_id(self, key: LegendRowKey, properties: Mapping[str, object]) -> str:
-        return stable_svg_id(
-            "circular_legend_grad",
-            "circular-conservation-gradient",
-            key,
-            properties["min_color"],
-            properties["max_color"],
-        )
 
     def _text(
         self,
@@ -145,143 +133,6 @@ class LegendGroup:
         group.attribs["data-gbdraw-orientation"] = "circular"
         return group
 
-    def _build_gradient_legend(self, layout: CircularGradientLegendLayout) -> Group:
-        group = self._comparison_legend_group()
-        font = self.font_family
-        path_desc = (
-            f"M 0,{path_number(-self.color_rect_size / 2)} L {path_point(layout.bar_width, -self.color_rect_size / 2)} "
-            f"L {path_point(layout.bar_width, self.color_rect_size / 2)} L 0,{path_number(self.color_rect_size / 2)} z"
-        )
-
-        if layout.compact:
-            for compact_entry in layout.compact_entries:
-                properties = compact_entry.properties
-                gradient_id = self._gradient_id(compact_entry.key, properties)
-                entry_group = Group()
-                drawn_name = self._name_entry(entry_group.attribs, compact_entry.key)
-
-                gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-                gradient.add_stop_color(offset="0%", color=properties["min_color"])
-                gradient.add_stop_color(offset="100%", color=properties["max_color"])
-                entry_group.add(gradient)
-
-                label_path = generate_text_path(
-                    drawn_name,
-                    0,
-                    0,
-                    0,
-                    self.font_size,
-                    "normal",
-                    font,
-                    dominant_baseline="central",
-                    text_anchor="start",
-                )
-                label_path.translate(compact_entry.label_x, compact_entry.label_y)
-                entry_group.add(label_path)
-
-                grad_rect = Path(
-                    d=path_desc,
-                    fill=f"url(#{gradient_id})",
-                    stroke=properties["stroke"],
-                    stroke_width=properties["width"],
-                )
-                grad_rect.translate(layout.bar_x, compact_entry.bar_y)
-                entry_group.add(grad_rect)
-                group.add(entry_group)
-
-            min_label = generate_text_path(
-                layout.min_label_text,
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="hanging",
-                text_anchor="start",
-            )
-            min_label.translate(layout.min_label_x, layout.scale_label_y)
-            group.add(min_label)
-
-            max_label = generate_text_path(
-                "100%",
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="hanging",
-                text_anchor="end",
-            )
-            max_label.translate(layout.max_label_x, layout.scale_label_y)
-            group.add(max_label)
-            return group
-
-        for entry in layout.single_entries:
-            properties = entry.properties
-            gradient_id = self._gradient_id(entry.key, properties)
-            entry_group = Group()
-            drawn_name = self._name_entry(entry_group.attribs, entry.key)
-
-            gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
-            gradient.add_stop_color(offset="0%", color=properties["min_color"])
-            gradient.add_stop_color(offset="100%", color=properties["max_color"])
-            entry_group.add(gradient)
-
-            title_path = generate_text_path(
-                drawn_name,
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="hanging",
-                text_anchor="middle",
-            )
-            title_path.translate(entry.title_x, entry.title_y)
-            entry_group.add(title_path)
-
-            grad_rect = Path(
-                d=path_desc,
-                fill=f"url(#{gradient_id})",
-                stroke=properties["stroke"],
-                stroke_width=properties["width"],
-            )
-            grad_rect.translate(entry.bar_x, entry.bar_y)
-            entry_group.add(grad_rect)
-
-            min_label = generate_text_path(
-                layout.min_label_text,
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="hanging",
-                text_anchor="start",
-            )
-            min_label.translate(layout.min_label_x, layout.scale_label_y)
-            entry_group.add(min_label)
-            max_label = generate_text_path(
-                "100%",
-                0,
-                0,
-                0,
-                self.font_size,
-                "normal",
-                font,
-                dominant_baseline="hanging",
-                text_anchor="end",
-            )
-            max_label.translate(layout.max_label_x, layout.scale_label_y)
-            entry_group.add(max_label)
-            group.add(entry_group)
-
-        return group
-
     def add_elements_to_group(self):
         layout = self.layout
         assert layout is not None
@@ -326,11 +177,7 @@ class LegendGroup:
         if layout.gradient is not None and layout.solid_entries:
             self.legend_group.add(feature_group)
         if layout.gradient is not None:
-            gradient_group = (
-                self._build_ring_legend(layout.gradient)
-                if isinstance(layout.gradient, CircularRingLegendLayout)
-                else self._build_gradient_legend(layout.gradient)
-            )
+            gradient_group = self._build_ring_legend(layout.gradient)
             gradient_group.translate(layout.gradient_x, layout.gradient_y)
             self.legend_group.add(gradient_group)
         return self.legend_group

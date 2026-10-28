@@ -10,6 +10,11 @@ results for:
 - synthetic Legends for the branches the Gallery does not reach (conservation
   gradients, wrapping, an empty table).
 
+Circular gradient rows are frozen: Python draws the similarity-ring block
+instead, but a Result saved before it still holds them and the Web port lays
+them out. Those cases keep the expected values stored when Python last drew
+them; the generator carries them through unchanged.
+
 ``tests/test_legend_layout_vectors.py`` recomputes the expected values with
 Python and ``tests/web/legend-layout-vectors.test.mjs`` with the JavaScript
 port (``gbdraw/web/js/services/legend-layout.js``); both require equality.
@@ -53,11 +58,7 @@ from gbdraw.layout.composition import (  # noqa: E402
     plan_composition,
 )
 from gbdraw.layout.spatial import Aabb  # noqa: E402
-from gbdraw.legend.circular_layout import (  # noqa: E402
-    CircularGradientLegendLayout,
-    CircularRingLegendLayout,
-    build_circular_legend_layout,
-)
+from gbdraw.legend.circular_layout import build_circular_legend_layout  # noqa: E402
 from gbdraw.legend.linear_layout import build_linear_legend_layout  # noqa: E402
 
 SVG = "{http://www.w3.org/2000/svg}"
@@ -432,7 +433,7 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
         "pairwiseLegendWidth": layout.pairwise_legend_width, "lineMargin": layout.line_margin,
         "xMargin": layout.x_margin, "numLines": layout.num_lines, "numColumns": layout.num_columns,
         "numItemsPerLine": layout.num_items_per_line, "entries": _entries(layout.solid_entries),
-        "rings": None if not isinstance(gradient, CircularRingLegendLayout) else {
+        "rings": None if gradient is None else {
             "width": gradient.width, "height": gradient.height, "showSwatches": gradient.show_swatches,
             "outerCaptionY": gradient.outer_caption_y, "innerCaptionY": gradient.inner_caption_y,
             "rows": [
@@ -442,23 +443,8 @@ def _circular_expected(case: dict[str, Any]) -> tuple[dict[str, Any], Aabb]:
             "minLabelText": gradient.min_label_text, "minLabelX": gradient.min_label_x,
             "maxLabelX": gradient.max_label_x, "scaleLabelY": gradient.scale_label_y,
         },
-        "gradient": None if not isinstance(gradient, CircularGradientLegendLayout) else {
-            "compact": gradient.compact, "width": gradient.width, "height": gradient.height,
-            "barWidth": gradient.bar_width, "barX": gradient.bar_x, "minLabelText": gradient.min_label_text,
-            "minLabelX": gradient.min_label_x, "maxLabelX": gradient.max_label_x,
-            "scaleLabelY": gradient.scale_label_y,
-            "compactEntries": [
-                {"key": entry.key, "labelX": entry.label_x, "labelY": entry.label_y, "barY": entry.bar_y}
-                for entry in gradient.compact_entries
-            ],
-            "singleEntries": [
-                {
-                    "key": entry.key, "titleX": entry.title_x, "titleY": entry.title_y, "barX": entry.bar_x,
-                    "barY": entry.bar_y,
-                }
-                for entry in gradient.single_entries
-            ],
-        },
+        # Only a frozen case (a saved Result's gradient rows) has a gradient block.
+        "gradient": None,
         "gradientX": layout.gradient_x, "gradientY": layout.gradient_y,
     }, bounds
 
@@ -492,13 +478,30 @@ def _composition_expected(case: dict[str, Any], legend: Aabb) -> dict[str, Any]:
     }
 
 
+def _is_frozen(case: dict[str, Any]) -> bool:
+    return case["mode"] == "circular" and any(row["type"] == "gradient" for row in case["rows"])
+
+
+def _frozen_cases() -> dict[tuple[str, str], dict[str, Any]]:
+    stored = json.loads(TARGET.read_text(encoding="utf-8")) if TARGET.is_file() else {"layout": []}
+    return {(case["name"], case["edit"]): case for case in stored["layout"] if _is_frozen(case)}
+
+
 def expected_values(inputs: dict[str, Any]) -> dict[str, Any]:
     measurement = []
     for case in inputs["measurement"]:
         width, height = drawn_text_box(case["text"], case["fontFamily"], case["fontSize"])
         measurement.append({**case, "expected": {"width": width, "height": height}})
+    frozen = _frozen_cases()
     layout = []
     for case in inputs["layout"]:
+        if _is_frozen(case):
+            stored = frozen.get((case["name"], case["edit"]))
+            if stored is None or {key: value for key, value in stored.items() if key != "expected"} != case:
+                raise SystemExit(f"{case['name']} / {case['edit']}: a Circular gradient case is frozen; "
+                                 "its inputs must equal the stored case")
+            layout.append(stored)
+            continue
         build = _linear_expected if case["mode"] == "linear" else _circular_expected
         result, bounds = build(case)
         result["localBounds"] = _box(bounds)
