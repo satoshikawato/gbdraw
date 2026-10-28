@@ -119,6 +119,9 @@ python -m gbdraw.cli -h
 pytest tests/ -v -m "not slow"
 ```
 
+A source checkout contains no LOSAT binary. For `--losat` comparisons, run
+`gbdraw setup-losat` once, or put `losat` or NCBI BLAST+ on `PATH`.
+
 ## Optional: non-SVG export support
 
 SVG export works with the base install. PNG, PDF, EPS, and PS export require

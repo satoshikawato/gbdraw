@@ -30,14 +30,15 @@ write-up of a release.
   not yet applied stay when the labels are placed again while the popup is
   open (OV-1984, #1417).
 - Fixed: in the Web app, a Legend row's stroke stays on the Result when a color rule edit gives the row
-  another key (for example a caption edit of another rule that leaves the row's color alone in it), as
+  another key (for example a caption edit of another rule that leaves
+  the row's caption in one color), as
   Generate draws it. Before, the row showed the default line until the next Generate (OV-1985, #1433).
 - Fixed: in the Web app, a Legend row stroke whose row the Result no longer draws (for example the `CDS`
   row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
-  strokes no feature by its color after a later edit, as Generate draws it. Before, a later rule edit or Legend delete
+  strokes no feature by its color after a later edit, as Generate draws it. Before, a later Legend delete
   stroked the features of the row's old color again until the next Generate (OV-1987, #1438).
 - Fixed: in the Web app, after a palette switch or a Default colors change, a Legend row whose name a color rule
-  also uses takes its new color while the rule colors no drawn feature (for example "Use existing color" on a CDS
+  also uses takes its new color while the rule colors no drawn feature (for example **Use the "CDS" Legend color** on a CDS
   feature that a visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next
   Generate (OV-1988, #1441).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
@@ -47,8 +48,11 @@ write-up of a release.
   and Windows have no LOSAT binary (#1406).
 - Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
   fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
-  (AP027078 at 8 pt: about 1.5 s); labels that need 0.8 times or more warn before they are placed
-  (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs). See
+  (AP027078 `--labels out` at 8 pt: about 1.4 s instead of 28 s; MG1655 `--labels out`: about 8 s instead of about
+  37 min); labels that need 0.8 times or more warn before they are placed
+  (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs, and after a stop the **Labels do not fit**
+  dialog lists the ways to make room). Python raises `LabelsDoNotFitError` with no rows and a `capacity`
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
   the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
@@ -61,7 +65,7 @@ write-up of a release.
 - Changed: the installation notes state what CI and each release check instead of a 0.14.0 claim (#1407).
 - Changed: in the one-row header from 769 to 1000 px, where every button already shows only its icon and the
   Session title would still narrow, the Session block hides its "Session" caption and the toolbar gaps close up
-  to 2 px, so the title keeps its width (PD-OI-108, #1415).
+  to 2 px, so the title is wider (PD-OI-108, #1415).
 - Removed: the LOSAT development build tracked at `gbdraw/bin/linux-x86_64/losat`, and the resolver step that
   preferred it over `losat` on `PATH`. In a source checkout, run `gbdraw setup-losat` or put `losat` on `PATH`.
   The automatic order is now: the explicit option, conda, the managed install (`gbdraw setup-losat`), `losat` on
@@ -71,7 +75,7 @@ write-up of a release.
   **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
   loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
   four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
-  button's icon beside the logo (PD-OI-108, #1383).
+  button's icon beside the logo (PD-OI-108, #1409).
 - Added: a Circular "Show Definition" setting in the Web app's Record Labels (default on), `gbdraw circular
   --hide_definition`, and the config key `objects.definition.circular.show`. Off draws no center definition for any
   record and reserves no center room for it; the plot title stays. Session files rise to version 49 to store it
@@ -79,12 +83,12 @@ write-up of a release.
 - Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
   Security Advisories (#1403).
 - Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
-  inputs in `gbdraw/web/tutorial-data/` of a source checkout; the Quickstart also links the web app (#1407).
+  inputs in `gbdraw/web/tutorial-data/` (the README commands find that folder in the installed package, so they work
+  after a `pip install` and in a source checkout); the Quickstart also links the web app (#1407).
 - Performance: Circular label placement and the label-fit search on large label sets
   build far fewer pair tables, and the leader-crossing count looks for
   candidates in the grid cells each leader passes through. The output is the
-  same. AP027078 `--labels out` (562 labels) takes about 11 s instead of 28 s;
-  radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
+  same. Radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
   about 4 s instead of 25 s, with less memory (#1396, #1400).
 - Performance (web app): turning the GC content or GC skew track on or off no longer redraws the feature
   contents, the Linear records or the Circular ticks; only the tracks, labels and legend that move redraw. The
@@ -111,7 +115,7 @@ write-up of a release.
   warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
 - Performance (web app): beside a plot title, a Circular Species change that moves no track keeps the placed labels,
   the record content and the catalog snapshot (tobacco: 6 stage builds to 3, about 190 ms to 70 ms in CPython).
-  A Circular Generate that changes neither the centre definition nor the tracks reuses the check of the definition
+  A Circular Generate that changes neither the center definition nor the tracks reuses the check of the definition
   over the tracks instead of building every track's paint again (Vnig: about 20 ms less per Generate). The commit
   check of the cached records hashes each feature field directly (Vnig about 40-85 ms to 32-39 ms). A GC toggle or
   another change that moves Linear rows without changing a comparison ribbon keeps the ribbons (Hepatoplasmataceae
@@ -124,7 +128,7 @@ write-up of a release.
   a setting it did not declare changes (OV-2105). The drawn bytes are unchanged.
 - Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
   the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
-  before (C2 species change: 11 stage builds to 0). The drawn bytes and the feature catalog are unchanged (#1437).
+  before (a three-record canvas with a typed plot title: 11 stage builds to 0; the Vnig Gallery Session: 32 to 24). The drawn bytes and the feature catalog are unchanged (#1437).
 - Performance (web app): a repeat Generate of a Linear similarity-groups or collinear figure with a reversed
   record no longer walks every orthogroup member to look up the cached interactive context and the Session's
   stored result; the orthogroups moved into the drawn frame or back into each record's search frame are reused

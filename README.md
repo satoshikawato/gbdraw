@@ -90,14 +90,15 @@ dates. If the desired package is unavailable, use a source install.
 
 ## Draw your first figures
 
-A source checkout ships small inputs in `gbdraw/web/tutorial-data/`: the
+The gbdraw package ships small inputs in `gbdraw/web/tutorial-data/`: the
 human mitochondrial genome (NCBI `NC_012920.1`), the phage Lambda
 (`NC_001416.1`) and DE3 (`NC_042057.1`) genomes, and a LOSATN comparison table
-of the two phages. Run these commands in the directory that holds the `gbdraw`
-checkout made by `git clone` above:
+of the two phages. These commands find that folder in the installed package, so
+they work after `pip install gbdraw` and in a source checkout; run them in any
+directory where you want the SVG files:
 
 ```bash
-data=gbdraw/gbdraw/web/tutorial-data
+data=$(python -c "import gbdraw, pathlib; print(pathlib.Path(gbdraw.__file__).parent / 'web' / 'tutorial-data')")
 gbdraw circular \
   --gbk "$data/human-mitochondrion/HmmtDNA.gbk" \
   --separate_strands \
