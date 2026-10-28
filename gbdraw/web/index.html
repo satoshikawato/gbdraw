@@ -2069,8 +2069,6 @@
                     contain: size;
                     grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) auto auto;
                 }
-                /* The Result pane scrolls here, not the page, so the sticky-header margin of the page layout does not apply. */
-                .app-main[data-phone-pane="preview"] .preview-workspace:has(> .alignment-review-panel) .preview-canvas { scroll-margin-top: 0; }
                 .app-main[data-phone-pane="preview"] .preview-workspace:has(.alignment-review-panel) {
                     grid-template-rows: minmax(calc(200px + var(--preview-search-space)), 1fr) clamp(15rem, 29dvh, 18rem) auto;
                 }
