@@ -18,11 +18,12 @@ const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_0
 
 const loadMode = async (page, mode) => {
   await openApp(page);
+  // A new Session has one Circular drawing; the Linear drawing comes from the offer tab.
+  if (mode === 'linear') await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ mode, genbank, depthTsv }) => {
     const app = window.__GBDRAW_APP__;
     const file = (text, name) => new File([text], name, { type: 'text/plain' });
     if (mode === 'linear') {
-      app.selectDrawing('linear');
       app.setLinearInputType('gb');
       app.setLinearSeqPrimaryFile(0, 'gb', file(genbank, 'HmmtDNA.gbk'));
       app.setLinearDepthFile(app.linearSeqs[0], 0, file(depthTsv, 'sample.depth.tsv'));

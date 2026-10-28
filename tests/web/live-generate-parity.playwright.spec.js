@@ -17,6 +17,7 @@ const { answerSessionTitle, expectNoLoadRepairDialog, WARM_APP_PAGE, warmAppTest
 const { loadSessionFile, openFresh } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 const { download, load, loadEditorLegendRows } = require('./helpers/mode-transition.cjs');
+const { showDrawing } = require('./helpers/drawing-bar.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow, legendRowStrokeColor, editorLegendRows, switchPalette, deleteLegendRow,
@@ -815,9 +816,9 @@ test('Palette color None and the live edits after it show the Legend row Generat
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await openFresh(page);
+  await showDrawing(page, { kind: 'linear' });
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.selectDrawing('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));
@@ -1249,8 +1250,10 @@ test.describe('the warm app page', () => {
     return {
       mode: app.mode,
       results: app.results.length,
-      linearSources: state.drawingList().find((drawing) => drawing.mode === 'linear').linearSeqs.filter((seq) => seq.gb || seq.gff || seq.fasta).length,
-      showLabelsLinear: state.drawingOf('linear').form.show_labels_linear,
+      // A new Session holds one Circular drawing; a case's Linear drawing must be gone after the restore.
+      drawingKinds: state.drawingList().map((drawing) => drawing.mode),
+      linearSources: state.drawingList().filter((drawing) => drawing.mode === 'linear')
+        .flatMap((drawing) => drawing.linearSeqs).filter((seq) => seq.gb || seq.gff || seq.fasta).length,
       undo: window.__GBDRAW_HISTORY__.getUndoCount(),
       leftByCase: window.leftByCase ?? null
     };
@@ -1267,7 +1270,7 @@ test.describe('the warm app page', () => {
     expect(warmPage()).toBe('reused');
     await openFresh(page);
     expect(await freshBootView(page)).toEqual({
-      mode: 'circular', results: 0, linearSources: 0, showLabelsLinear: 'none', undo: 0, leftByCase: null
+      mode: 'circular', results: 0, drawingKinds: ['circular'], linearSources: 0, undo: 0, leftByCase: null
     });
     await page.evaluate(() => { window.leftByCase = true; });
   });
