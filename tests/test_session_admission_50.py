@@ -188,7 +188,7 @@ def test_saving_a_49_again_drops_the_resources_no_drawing_names() -> None:
         resources=base.to_dict()["resources"],
     ).to_dict()
 
-    assert saved["version"] == 49
+    assert saved["version"] == CURRENT_SESSION_VERSION
     assert sorted(saved["resources"]) == ["colors-default-colors", "record-1-genbank"]
     assert _drawing(saved, "linear")["renderRequest"] is None
     assert _drawing(saved, "circular") == _drawing(base.to_dict(), "circular")

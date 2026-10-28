@@ -1104,7 +1104,7 @@ def test_a_resave_keeps_the_losat_entries_of_every_drawing(tmp_path: Path) -> No
              "-f", "svg", "--session_output", str(output)]
         )
         resaved = load_session_document(output)
-        assert resaved.version == 49
+        assert resaved.version == CURRENT_SESSION_VERSION
         assert _losat_entries(resaved) == expected, selected
 
     render_main(["--session", str(session), "-o", str(tmp_path / "all"), "-f", "svg", "--save_session"])
@@ -1126,5 +1126,5 @@ def test_a_cli_resave_of_a_session_48_keeps_its_shared_losat_entry_in_every_draw
         output = tmp_path / f"{name}.gbdraw-session.json"
         run(output)
         resaved = load_session_document(output)
-        assert resaved.version == 49
+        assert resaved.version == CURRENT_SESSION_VERSION
         assert _losat_entries(resaved) == expected, name
