@@ -849,11 +849,11 @@ test('the Load notice stays across Generate and clears on a mode switch and Rese
   await expect(page.locator('[data-app-notice-announcer]')).toHaveText(/^Session loaded/);
   await generateAndWaitForResult(page);
   await expect(notice).toContainText('Session loaded');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('linear'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'linear' });
   await expect(notice).toHaveCount(0);
   await expect(page.locator('[data-app-notice-announcer]')).toHaveCount(1);
 
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.selectDrawing('circular'))).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind: 'circular' });
   await loadBaselineSession(page);
   await page.evaluate(() => { window.__GBDRAW_APP__.requestResetSettings(); });
   const reset = page.getByRole('dialog', { name: 'Reset settings?', exact: true });
