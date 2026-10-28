@@ -497,6 +497,8 @@ def _verify_exports(page) -> None:
 
 
 def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
+    # A new Session lists one Circular drawing; the Linear offer tab makes the Linear drawing.
+    page.locator('.drawing-bar [role="tab"][data-drawing-offer="linear"]').click()
     setup_state = page.evaluate(
         """
         async ({ leftText, rightText }) => {

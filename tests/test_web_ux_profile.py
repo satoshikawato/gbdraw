@@ -29,9 +29,10 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     tab = index[tab_start : index.index("</button>", tab_start)]
     for attribute in (
         'role="tab"',
-        ':data-drawing-id="tab.id"',
+        ":data-drawing-id=\"tab.kind === 'offer' ? null : tab.id\"",
+        ':data-drawing-offer="tab.kind === \'offer\' ? tab.mode : null"',
         ":aria-selected=\"tab.selected ? 'true' : 'false'\"",
-        '@click="selectDrawing(tab.id)"',
+        "@click=\"tab.kind === 'offer' ? drawingBar.newDrawing(tab.mode) : selectDrawing(tab.id)\"",
         "{{ tab.label }}",
     ):
         assert attribute in tab, attribute
