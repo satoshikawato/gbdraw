@@ -302,6 +302,16 @@ _CATALOG_KEPT_OPTIONS = frozenset(
 )
 
 
+# The Circular definition-over-track count reads the centre definition lines, the radial layout and every track's
+# paint (OV-2088): it rebuilds with any stage that holds one of them.
+_DEFINITION_COUNT_INPUTS = frozenset(
+    {
+        "circular_definition_content", "circular_labels", "feature_layers", "axis_content", "ticks_content",
+        "gc_content_content", "gc_skew_content", "depth_content", "conservation_content", "annotation_content",
+    }
+)
+
+
 # The composition plan is keyed by the bounds of the primary content, the
 # legend and the title, and by their placements. These stages hold those bounds.
 _BOUNDS_STAGES = (
@@ -345,6 +355,8 @@ def allowed_builds(option_id: str, mode: Mode) -> frozenset[str]:
     )
     if allowed & _RIBBON_INPUTS:
         allowed |= {"comparison_content"}
+    if allowed & _DEFINITION_COUNT_INPUTS:
+        allowed |= {"definition_track_overlaps"}
     if allowed & _PLACED_LABELS:
         allowed |= {"circular_record_content"}
     if allowed & _RECORD_MERGE_INPUTS:

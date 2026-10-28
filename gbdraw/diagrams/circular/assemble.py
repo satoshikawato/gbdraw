@@ -764,30 +764,39 @@ def _reaches_band(inner: float, outer: float, band: RadialBand) -> bool:
     return min(outer - band.inner_px, band.outer_px - inner) > REGION_TRACK_MIN_OVERLAP_PX
 
 
+@dataclass(frozen=True, eq=False)
+class CircularTrackInkSources:
+    """What a record's tracks paint from, besides the radial layout: the sources the drawing reads for each slot
+    (``_draw_resolved_circular_slot``). The ``definition_track_overlaps`` stage is keyed by these fields."""
+
+    gb_record: SeqRecord
+    geometry: CircularCanvasGeometry
+    profile: CircularRenderProfile
+    record_transform: RecordDisplayTransform | None
+    gc_df: DataFrame
+    gc_config: GcContentConfigurator
+    skew_config: GcSkewConfigurator
+    # Each depth slot's data and settings (``_slot_depth_source``), by slot id: not the track's label.
+    depth_by_slot: Mapping[str, tuple[DataFrame, DepthConfigurator]]
+    conservation_tracks: Sequence[ConservationTrack] | None
+    conservation_min_identity: float
+    dinucleotide_dataframes: dict[str, DataFrame] | None
+    dinucleotide_content_dataframes: dict[str, DataFrame] | None
+    dinucleotide_skew_dataframes: dict[str, DataFrame] | None
+    gc_content_tick_font_size_override: float | None
+    # The feature layers the radial layout measured (``_radial_layout_feature_dict``).
+    feature_layers: FeatureBuildResult
+    # Half the feature blocks' stroke (``stroke_pad_px``): not their arrow shape.
+    feature_stroke_pad_px: float
+    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None
+    annotation_record_index: int
+    use_slot_tick_options: bool
+
+
 def _record_track_ink(
     radial_layout: CircularRadialLayout,
-    *,
-    gb_record: SeqRecord,
-    canvas_config: CircularCanvasConfigurator,
-    record_transform: RecordDisplayTransform | None,
-    gc_df: DataFrame,
-    gc_config: GcContentConfigurator,
-    skew_config: GcSkewConfigurator,
-    depth_df: DataFrame | None,
-    depth_config: DepthConfigurator | None,
-    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
-    conservation_tracks: Sequence[ConservationTrack] | None,
-    conservation_min_identity: float,
-    dinucleotide_dataframes: dict[str, DataFrame] | None,
-    dinucleotide_content_dataframes: dict[str, DataFrame] | None,
-    dinucleotide_skew_dataframes: dict[str, DataFrame] | None,
-    gc_content_tick_font_size_override: float | None,
-    feature_dict: Mapping[str, FeatureObject],
-    feature_config: FeatureDrawingConfigurator,
-    annotation_track_layouts: Mapping[str, ResolvedAnnotationTrack] | None,
+    sources: CircularTrackInkSources,
     annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
-    annotation_record_index: int,
-    use_slot_tick_options: bool,
 ) -> tuple[CircularInk, ...]:
     """What the record's tracks paint, from the owners that draw them (D-18), read with the same slot sources
     the drawing reads (``_draw_resolved_circular_slot``).
@@ -798,9 +807,13 @@ def _record_track_ink(
     from the tick group, and the axis circle from its paint band. A spacer paints nothing.
     """
 
-    canvas_radius = float(canvas_config.radius)
+    gb_record = sources.gb_record
+    canvas_radius = float(sources.geometry.radius)
     record_length = len(gb_record.seq)
-    font_family = str(canvas_config.profile.config.objects.text.font_family)
+    cfg = sources.profile.config
+    font_family = str(cfg.objects.text.font_family)
+    record_transform = sources.record_transform
+    gc_df, gc_config = sources.gc_df, sources.gc_config
     inks: list[CircularInk] = [CircularInkRing(radial_layout.axis.paint_band_px)]
     for slot in radial_layout.slots:
         renderer = str(slot.renderer)
@@ -812,8 +825,8 @@ def _record_track_ink(
                 slot,
                 gc_df=gc_df,
                 gc_config=gc_config,
-                dataframes=dinucleotide_content_dataframes or dinucleotide_dataframes,
-                tick_font_size_override=gc_content_tick_font_size_override,
+                dataframes=sources.dinucleotide_content_dataframes or sources.dinucleotide_dataframes,
+                tick_font_size_override=sources.gc_content_tick_font_size_override,
             )
             if content_df is not None:
                 inks.extend(
@@ -827,8 +840,8 @@ def _record_track_ink(
                 slot,
                 gc_df=gc_df,
                 gc_config=gc_config,
-                skew_config=skew_config,
-                dataframes=dinucleotide_skew_dataframes or dinucleotide_dataframes,
+                skew_config=sources.skew_config,
+                dataframes=sources.dinucleotide_skew_dataframes or sources.dinucleotide_dataframes,
             )
             if skew_df is not None:
                 inks.extend(
@@ -838,16 +851,16 @@ def _record_track_ink(
                     )
                 )
         elif renderer == "depth":
-            depth_source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
-            if depth_source is not None and depth_source[0] is not None and depth_source[1] is not None:
+            depth_paint = sources.depth_by_slot.get(str(slot.id))
+            if depth_paint is not None:
                 inks.extend(
-                    DepthDrawer(depth_source[1]).ink(
-                        canvas_radius, depth_source[0], record_length, float(slot.draw_width_px), norm_factor,
+                    DepthDrawer(depth_paint[1]).ink(
+                        canvas_radius, depth_paint[0], record_length, float(slot.draw_width_px), norm_factor,
                         font_family=font_family, record_transform=record_transform,
                     )
                 )
         elif renderer == "sequence_conservation":
-            track = _slot_conservation_track(slot, conservation_tracks)
+            track = _slot_conservation_track(slot, sources.conservation_tracks)
             if track is not None:
                 inks.extend(
                     conservation_ring_ink(
@@ -855,18 +868,18 @@ def _record_track_ink(
                         total_length=record_length,
                         inner_radius_px=float(slot.draw_inner_radius_px),
                         outer_radius_px=float(slot.draw_outer_radius_px),
-                        min_identity=float(conservation_min_identity),
-                        cfg=canvas_config.profile.config,
+                        min_identity=float(sources.conservation_min_identity),
+                        cfg=cfg,
                         record_transform=record_transform,
                     )
                 )
         elif renderer == "annotations":
-            annotation_layout = (annotation_track_layouts or {}).get(slot.id)
+            annotation_layout = (sources.annotation_track_layouts or {}).get(slot.id)
             if annotation_layout is not None:
                 inks.extend(
                     circular_annotation_track_ink(
                         annotation_layout,
-                        record_index=annotation_record_index,
+                        record_index=sources.annotation_record_index,
                         record_length=record_length,
                         inner_radius_px=float(slot.draw_inner_radius_px),
                         outer_radius_px=float(slot.draw_outer_radius_px),
@@ -876,53 +889,44 @@ def _record_track_ink(
                     )
                 )
         elif renderer == "ticks":
-            tick_options = _slot_tick_options(slot, use_slot_tick_options)
+            tick_options = _slot_tick_options(slot, sources.use_slot_tick_options)
             if tick_options is not None:
                 inks.extend(
                     TickGroup(
                         gb_record,
-                        canvas_config.geometry(),
-                        profile=canvas_config.profile,
+                        sources.geometry,
+                        profile=sources.profile,
                         radius=float(slot.anchor_radius_px or 0.0),
                         record_transform=record_transform,
                         **tick_options,
                     ).ink()
                 )
         elif renderer == "features" and isinstance(slot.payload, CircularFeatureLayout):
-            pad = stroke_pad_px(feature_config.block_stroke_color, feature_config.block_stroke_width)
+            pad = sources.feature_stroke_pad_px
             inks.extend(
                 CircularInkRing(RadialBand(inner - pad, outer + pad), start / record_length, end / record_length)
-                for start, end, inner, outer in feature_radius_intervals(feature_dict, record_length, slot.payload)
+                for start, end, inner, outer in feature_radius_intervals(
+                    _radial_layout_feature_dict(sources.feature_layers), record_length, slot.payload
+                )
             )
     return tuple(inks)
 
 
-def _ink_reach_px(boxes: Sequence[Aabb]) -> float:
-    """How far from the record centre ``boxes`` reach: the farthest corner of any box (0 for none)."""
+def definition_lines_over_tracks(
+    definition_lines: tuple[Aabb, ...],
+    radial_layout: CircularRadialLayout,
+    sources: CircularTrackInkSources,
+    annotation_labels: Mapping[str, Sequence[CircularAnnotationLabel]],
+) -> int:
+    """How many centre definition lines meet a track's paint (stage ``definition_track_overlaps``, OV-2088).
 
-    return max(
-        (math.hypot(max(abs(box.min_x), abs(box.max_x)), max(abs(box.min_y), abs(box.max_y))) for box in boxes),
-        default=0.0,
+    Every call builds every track's paint and counts against all of it; the stage key (the lines, the layout,
+    the paint sources and the annotation labels) lets a Generate that changes none of them reuse the count.
+    """
+
+    return _definition_lines_on_tracks(
+        _record_track_ink(radial_layout, sources, annotation_labels), definition_lines
     )
-
-
-def _track_ink_floor_px(
-    radial_layout: CircularRadialLayout, labels: Mapping[str, Sequence[CircularAnnotationLabel]], pad_px: float
-) -> float:
-    """How near the centre a record's track paint (``_record_track_ink``) can come: the inner edge of the axis
-    paint band, of each drawn slot's drawn and reserved bands, and of each annotation label, less ``pad_px`` (the
-    feature blocks' stroke). Tests pin that no paint item comes nearer (OV-2088)."""
-
-    floor = float(radial_layout.axis.paint_band_px.inner_px)
-    for slot in radial_layout.slots:
-        if slot.draw_band_px is None:
-            continue
-        floor = min(floor, float(slot.draw_band_px.inner_px))
-        if slot.reserved_band_px is not None:
-            floor = min(floor, float(slot.reserved_band_px.inner_px))
-    for slot_labels in labels.values():
-        floor = min([floor, *(float(label.ink_radii[0]) for label in slot_labels)])
-    return floor - pad_px
 
 
 def _definition_lines_on_tracks(inks: Sequence[CircularInk], definition_text: Sequence[Aabb]) -> int:
@@ -1700,6 +1704,24 @@ def _slot_depth_source(
     if depth_track is None:
         return None
     return depth_track.df, depth_track.config, depth_track
+
+
+def _depth_paint_by_slot(
+    radial_layout: CircularRadialLayout,
+    depth_df: DataFrame | None,
+    depth_config: DepthConfigurator | None,
+    depth_tracks_by_index: Mapping[int, DepthTrackData] | None,
+) -> dict[str, tuple[DataFrame, DepthConfigurator]]:
+    """The data and settings each drawn depth slot of ``radial_layout`` paints with (``_slot_depth_source``)."""
+
+    paint: dict[str, tuple[DataFrame, DepthConfigurator]] = {}
+    for slot in radial_layout.slots:
+        if str(slot.renderer) != "depth" or slot.draw_band_px is None:
+            continue
+        source = _slot_depth_source(slot, depth_df, depth_config, depth_tracks_by_index)
+        if source is not None and source[0] is not None and source[1] is not None:
+            paint[str(slot.id)] = (source[0], source[1])
+    return paint
 
 
 def _slot_conservation_track(
@@ -2814,7 +2836,9 @@ def add_record_on_circular_canvas(
         compute_label_text=compute_label_text,
         record_transform=record_transform,
     )
-    layout_feature_dict = _radial_layout_feature_dict(feature_layers)
+    # The layers the radial layout measures; the definition count reads their blocks (OV-2088).
+    layout_feature_layers = feature_layers
+    layout_feature_dict = _radial_layout_feature_dict(layout_feature_layers)
     if feature_layers.underlay_features:
         (
             layout_slots,
@@ -2896,36 +2920,36 @@ def add_record_on_circular_canvas(
         definition_lines: Sequence[Aabb],
         labels: Mapping[str, Sequence[CircularAnnotationLabel]],
     ) -> int:
-        # Lines whose farthest corner stays inside the nearest track paint meet none: ``box_meets_ink`` keeps only
-        # paint nearer than a line's corner, so the count is 0 without building every track's paint (OV-2088).
-        feature_pad_px = stroke_pad_px(feature_config.block_stroke_color, feature_config.block_stroke_width)
-        if _ink_reach_px(definition_lines) <= _track_ink_floor_px(layout, labels, feature_pad_px):
-            return 0
-        inks = _record_track_ink(
+        return render_stage(
+            "definition_track_overlaps",
+            definition_lines_over_tracks,
+            tuple(definition_lines),
             layout,
-            gb_record=gb_record,
-            canvas_config=canvas_config,
-            record_transform=record_transform,
-            gc_df=gc_df,
-            gc_config=gc_config,
-            skew_config=skew_config,
-            depth_df=depth_df,
-            depth_config=depth_config,
-            depth_tracks_by_index=depth_tracks_by_index,
-            conservation_tracks=conservation_tracks,
-            conservation_min_identity=conservation_min_identity,
-            dinucleotide_dataframes=dinucleotide_dataframes,
-            dinucleotide_content_dataframes=dinucleotide_content_dataframes,
-            dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
-            gc_content_tick_font_size_override=gc_content_tick_font_size_override,
-            feature_dict=layout_feature_dict,
-            feature_config=feature_config,
-            annotation_track_layouts=annotation_track_layouts,
-            annotation_labels=labels,
-            annotation_record_index=annotation_record_index,
-            use_slot_tick_options=user_slot_mode,
+            CircularTrackInkSources(
+                gb_record=gb_record,
+                geometry=canvas_config.geometry(),
+                profile=canvas_config.profile,
+                record_transform=record_transform,
+                gc_df=gc_df,
+                gc_config=gc_config,
+                skew_config=skew_config,
+                depth_by_slot=_depth_paint_by_slot(layout, depth_df, depth_config, depth_tracks_by_index),
+                conservation_tracks=conservation_tracks,
+                conservation_min_identity=conservation_min_identity,
+                dinucleotide_dataframes=dinucleotide_dataframes,
+                dinucleotide_content_dataframes=dinucleotide_content_dataframes,
+                dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
+                gc_content_tick_font_size_override=gc_content_tick_font_size_override,
+                feature_layers=layout_feature_layers,
+                feature_stroke_pad_px=stroke_pad_px(
+                    feature_config.block_stroke_color, feature_config.block_stroke_width
+                ),
+                annotation_track_layouts=annotation_track_layouts,
+                annotation_record_index=annotation_record_index,
+                use_slot_tick_options=user_slot_mode,
+            ),
+            labels,
         )
-        return _definition_lines_on_tracks(inks, definition_lines)
 
     def definition_clears_tracks(font_size: float) -> bool:
         """A hint for the definition row: the tracks and the text at ``font_size`` before the labels are placed."""
