@@ -20,6 +20,7 @@
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { evaluateWithRetainedPromise } from './app-lifecycle.cjs';
+import { showDrawing } from './drawing-bar.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
@@ -181,11 +182,10 @@ const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const otherMode = (mode) => (mode === 'circular' ? 'linear' : 'circular');
 
-// One drawing switch (the mode buttons call `selectDrawing`), settled.
-const switchDrawing = async (page, drawingId) => {
+// One drawing switch as a user makes it (a tab, or the Linear offer when the project holds no Linear drawing), settled.
+const switchDrawing = async (page, kind) => {
   await settleLive(page);
-  const outcome = await page.evaluate((id) => window.__GBDRAW_APP__.selectDrawing(id), drawingId);
-  expect(outcome, `the switch to ${drawingId}`).toEqual({ status: 'ok' });
+  await showDrawing(page, { kind });
   await expect.poll(() => page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.drawingOf('circular').circularRecordDiscovery.status))
     .not.toBe('loading');
   await page.evaluate(async () => { await window.Vue.nextTick(); });

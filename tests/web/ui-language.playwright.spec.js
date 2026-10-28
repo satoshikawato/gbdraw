@@ -42,6 +42,7 @@ const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { gunzipSync } = require('node:zlib');
 const { generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
+const { offerTab } = require('./helpers/drawing-bar.cjs');
 
 test.use({ actionTimeout: 20_000, locale: 'ja-JP', viewport: { width: 1280, height: 800 } });
 
@@ -183,7 +184,8 @@ test('a choice shows the UI in that language at once and changes no Result, Hist
     .getByRole('button', { name: ja['Go to {section}'].replace('{section}', ja.Labels), exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: ja['Generate Diagram'], exact: true })).toBeVisible();
   // The diagram mode keeps the key 'Linear'; the Record Size Mode option has its own (OV-1387, i18n-catalogs.test.mjs).
-  await expect(page.locator('.drawing-bar [role="tab"][data-drawing-id="linear"]')).toHaveAccessibleName(ja.Linear);
+  // The Circular Session holds no Linear drawing, so the bar offers Linear (the offer's label is the same key).
+  await expect(offerTab(page)).toHaveAccessibleName(ja.Linear);
   // No upper-casing or tracking in Japanese.
   expect(await page.locator('header .app-session-label').evaluate((element) => {
     const style = getComputedStyle(element);

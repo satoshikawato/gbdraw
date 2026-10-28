@@ -4,7 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, openApp, reveal, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 const { inspectSafeDetails } = require('./helpers/operation-error.cjs');
-const { showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
 
 const fixture = mode => join(process.cwd(), 'gbdraw/web/gallery/sessions', mode === 'linear'
   ? 'lambda_basic_linear.gbdraw-session.json' : 'HmmtDNA_basic_circular.gbdraw-session.json');
@@ -309,7 +309,8 @@ for (const boundary of ['drawer', 'mode cycle', 'remove', 'reorder', 'Session', 
       await generateAndWaitForResult(page);
       // Settle the existing mode-keyed mount's stroke binding before freezing
       // the accepted boundary. The held edit must preserve every SVG attribute.
-      await page.evaluate(() => { const a = window.__GBDRAW_APP__; a.selectDrawing('linear'); a.selectDrawing('circular'); });
+      await showDrawing(page, { kind: 'linear' });
+      await showDrawing(page, { kind: 'circular' });
       await snapshot(page);
     }
     // Session: no Load takes over a held edit. A rule edit's only request is
