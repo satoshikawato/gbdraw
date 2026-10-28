@@ -1406,6 +1406,15 @@ export const createAppSetup = () => {
   const linearRecordRowFor = (drawing, uid, fallback) => (
     drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback
   );
+  /**
+   * The File card's row input: the row of `uid` in the shown Linear drawing,
+   * or `fallback` (its position) when the drawing gives it none.
+   * @param {string} uid @param {number} fallback
+   */
+  const shownLinearRecordRowFor = (uid, fallback) => {
+    const drawing = shownDrawingOfMode('linear');
+    return drawing === null ? fallback : linearRecordRowFor(drawing, uid, fallback);
+  };
   const linearLayoutTokens = computed(() => {
     const drawing = state.activeDrawing();
     return (
@@ -7557,7 +7566,7 @@ export const createAppSetup = () => {
     reuseResolvedLinearComparisonLosatFilename,
     deactivateResolvedLinearComparisonLosatFilename,
     addLinearComparisonBatch,
-    linearRecordRowFor,
+    linearRecordRowFor: shownLinearRecordRowFor,
     linearReorderNotice,
     addLinearSeq,
     removeLastLinearSeq,
