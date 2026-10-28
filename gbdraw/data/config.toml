@@ -203,6 +203,8 @@ font_weight = 'normal'
 font_weight = 'normal'
 
 [objects.definition.circular]
+# Draw each record's centre definition (false: none, and the tracks keep no room for it); the plot title is kept.
+show = true
 interval = 20
 font_size = 18
 plot_title_font_size = 32

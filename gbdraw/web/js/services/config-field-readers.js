@@ -572,6 +572,7 @@ const advRows = (mode) => Object.freeze([
   row('scale_font_size', positiveNumberOrNull),
   row('ruler_label_font_size', positiveNumberOrNull),
   row('keep_full_definition_with_plot_title', onlyTrue),
+  row('show_definition', trueUnlessFalse),
   row('depth_color', (value) => ({ value: resolveColorToHex(String(value || '#4A90E2')), lost: false })),
   row('depth_normalize', onlyTrue),
   row('depth_show_axis', trueUnlessFalse),

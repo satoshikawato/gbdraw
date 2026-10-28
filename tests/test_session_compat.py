@@ -2210,7 +2210,7 @@ def test_session_47_protein_results_of_a_reversed_record_move_to_the_search_fram
     resaved = tmp_path / "resaved.gbdraw-session.json"
     assert _replay(source, tmp_path, "replay", "--session_output", str(resaved)) == expected
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 48
+    assert saved.version == CURRENT_SESSION_VERSION == 49
     with materialize_session(saved, output_directory=tmp_path) as materialized:
         written = session_to_request(materialized)
         assert _protein_results(written.options) == _protein_results(converted.options)
@@ -2281,7 +2281,7 @@ def test_early_session_drawn_feature_ids_of_a_reversed_record_are_read_as_view_i
     resaved = tmp_path / "resaved.gbdraw-session.json"
     first = _replay(source, tmp_path, "replay", "--session_output", str(resaved))
     saved = load_session_document(resaved)
-    assert saved.version == CURRENT_SESSION_VERSION == 48
+    assert saved.version == CURRENT_SESSION_VERSION == 49
     with materialize_session(saved, output_directory=tmp_path) as materialized:
         [written] = session_to_request(materialized).options.linear_comparisons
         assert not written.drawn_feature_ids

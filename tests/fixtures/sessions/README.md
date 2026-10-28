@@ -362,3 +362,12 @@ fixture of the Generate that moves a record's rows to the key of its new view
 (OV-1949): `record-identity-moves.playwright.spec.js` loads it, turns the canvas
 on, and expects the four edits on record 2. The steps, edited features
 and hashes are in `record-identity-circular-single.provenance.json`.
+
+`hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 49, PD-OI-109), written by
+`tests/web/circular-hide-definition.playwright.spec.js` and recompressed with
+`gzip -n -9`: Circular draws `tests/test_inputs/HmmtDNA.gbk` with the plot title
+"Mitochondrial genome" at the top and **Show Definition** off, so its slice holds
+`adv.show_definition: false` and its request
+`objects.definition.circular.show: false`. Its decompressed SHA-256 is
+`5d25d11dea37f278ff2aee041d9d7c92c63c7756bc1e4291ef9a118c91e33a94`.

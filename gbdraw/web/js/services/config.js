@@ -2102,7 +2102,7 @@ const readSessionResetReceipts = async (data, repairs) => {
  * new data object when a request changed (the parsed file is never changed),
  * the request schemas the file stored (RK-1), and whether the Session loads as
  * settings only because its request cannot be read (K22, C-OD07): only a
- * Session version that has a settings-only form (42, 44, 46, 47) and holds the
+ * Session version that has a settings-only form (42, 44, 46 to current) and holds the
  * settings it keeps does; any other is refused (R4, C-OD25).
  * The Comparisons notice after Load is classified on the stored top-level
  * request, as before the reader (receipt 〔今までの知らせ〕, C-OD14); it is null

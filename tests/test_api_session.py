@@ -977,7 +977,7 @@ def test_an_upgrade_stores_the_protein_results_of_a_reversed_record_in_the_searc
     upgraded = upgrade.document.to_dict()
 
     assert upgrade.warnings == ()
-    assert upgraded["version"] == CURRENT_SESSION_VERSION == 48
+    assert upgraded["version"] == CURRENT_SESSION_VERSION == 49
     assert [drawing.id for drawing in upgrade.document.drawings] == ["circular", "linear"]
     # Bytes change under the stored IDs, only for the protein results.
     assert upgraded["resources"].keys() == source["resources"].keys()
