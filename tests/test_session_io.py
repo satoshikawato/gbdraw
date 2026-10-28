@@ -550,10 +550,10 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
 
 def test_current_session_version_matches_web_config() -> None:
     # The Web reads these values from `contracts/schema.generated.js`.
-    assert CURRENT_SESSION_VERSION == 49 and ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
+    assert CURRENT_SESSION_VERSION == 50 and ROW_KEYED_LEGEND_SESSION_MIN_VERSION == 47
     assert MODE_SCOPED_SESSION_MIN_VERSION == 46
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49, CURRENT_SESSION_VERSION}
     )
 
 
