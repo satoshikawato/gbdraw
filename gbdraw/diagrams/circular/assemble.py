@@ -66,7 +66,7 @@ from ...labels.circular import (
     circular_label_shape,
     minimum_bbox_gap_px,
     prepare_label_list,
-    radial_label_layout,
+    radial_label_inner_reserve_px,
     x_overlap,
     y_overlap,
 )
@@ -87,6 +87,7 @@ from ...layout.circular import (
     CircularTickLayout,
     RadialBand,
     feature_radius_intervals,
+    slots_feature_layout,
 )
 from ...layout.circular_depth_axis import DepthAxisStyle, depth_axis_tick_font_size_px
 from ...layout.circular_ink import CircularInk, CircularInkRing, box_meets_ink, stroke_pad_px
@@ -2361,7 +2362,11 @@ class _CircularLabelState:
     resolved_feature_anchor_radius_px: float | None
     outer_arena_enabled: bool
     feature_track_ratio_factor_override: float | None
-    radial_layout: CircularRadialLayout
+    # What the labels read of the radial layout: the feature lanes, the content radius radial outer labels keep
+    # past, and the reserve inner radial labels keep outside (``radial_label_inner_reserve_px``, OV-2103).
+    feature_layout: CircularFeatureLayout | None
+    outer_content_radius_px: float
+    inner_reserve_px: float
     feature_lane_direction: CircularFeatureLaneDirection
     record_transform: RecordDisplayTransform | None
     definition_text: tuple[Aabb, ...]
@@ -2401,8 +2406,9 @@ def _place_circular_labels(
             else None
         ),
         feature_track_ratio_factor_override=state.feature_track_ratio_factor_override,
-        feature_layout=state.radial_layout.features,
-        radial_layout=state.radial_layout,
+        feature_layout=state.feature_layout,
+        outer_content_radius_px=state.outer_content_radius_px,
+        inner_reserve_px=state.inner_reserve_px,
         track_preset=state.track_preset,
         feature_lane_direction=state.feature_lane_direction,
         _candidate_cache=candidate_caches.setdefault(font_size, {}),
@@ -2424,6 +2430,8 @@ class CircularLabelPlacement:
 
     labels: tuple[CircularLabel, ...]
     state: _CircularLabelState
+    # The layout the radial growth replanned, or ``None`` when the labels kept the one they were given.
+    radial_layout: CircularRadialLayout | None
     feature_layers: FeatureBuildResult
     layout_slots: tuple[CircularTrackSlot, ...]
     feature_slot: CircularTrackSlot | None
@@ -2440,7 +2448,9 @@ def circular_labels(
     *,
     total_length: int,
     geometry: CircularCanvasGeometry,
-    radial_layout: CircularRadialLayout,
+    resolved_slots: tuple[CircularResolvedSlot, ...],
+    outer_content_radius_px: float,
+    inner_reserve_px: float,
     layout_slots: tuple[CircularTrackSlot, ...],
     feature_slot: CircularTrackSlot | None,
     feature_lane_direction: CircularFeatureLaneDirection,
@@ -2462,13 +2472,17 @@ def circular_labels(
 ) -> CircularLabelPlacement:
     """Place one record's external and embedded labels; radial labels grow the radius (stage ``circular_labels``).
 
-    The growth loop replans the radial layout with a larger radius until the
-    radial labels fit or growing stops making room. It works on copies: the
-    feature layers it is given and the canvas configurator are not changed.
+    The labels read the radial layout through its resolved slots, its outer
+    content radius and the inner reserve (``radial_label_inner_reserve_px``),
+    not the centre band (OV-2103). The growth loop replans the radial layout
+    with a larger radius until the radial labels fit or growing stops making
+    room. It works on copies: the feature layers it is given and the canvas
+    configurator are not changed.
     """
 
     cfg = profile.config
     candidate_caches: dict[float, CircularLabelCandidateCache] = {}
+    replanned_layout: CircularRadialLayout | None = None
 
     def state() -> _CircularLabelState:
         return _CircularLabelState(
@@ -2480,7 +2494,9 @@ def circular_labels(
             resolved_feature_anchor_radius_px=resolved_feature_anchor_radius_px,
             outer_arena_enabled=feature_width_override_requested,
             feature_track_ratio_factor_override=feature_track_ratio_factor_override,
-            radial_layout=radial_layout,
+            feature_layout=slots_feature_layout(resolved_slots),
+            outer_content_radius_px=outer_content_radius_px,
+            inner_reserve_px=inner_reserve_px,
             feature_lane_direction=feature_lane_direction,
             record_transform=record_transform,
             definition_text=definition_text,
@@ -2531,7 +2547,7 @@ def circular_labels(
                     resolved_slot = next(
                         (
                             candidate
-                            for candidate in radial_layout.slots
+                            for candidate in resolved_slots
                             if int(candidate.slot_index) == int(slot_index)
                         ),
                         None,
@@ -2608,7 +2624,7 @@ def circular_labels(
                 base_radius_px=float(geometry.radius),
                 base_track_ratio=float(geometry.track_ratio),
             )
-            radial_layout = resolve_circular_radial_layout(
+            replanned_layout = resolve_circular_radial_layout(
                 total_length=total_length,
                 geometry=geometry,
                 cfg=cfg,
@@ -2620,10 +2636,13 @@ def circular_labels(
                 center_reserved_radius_explicit=center_reserved_radius_explicit,
                 annotation_label_rooms=annotation_label_rooms,
             )
-            if radial_layout.features is not None:
-                resolved_feature_anchor_radius_px = float(radial_layout.features.anchor_radius_px)
+            resolved_slots = replanned_layout.slots
+            outer_content_radius_px = float(replanned_layout.outer_content_radius_px)
+            inner_reserve_px = radial_label_inner_reserve_px(replanned_layout)
+            if replanned_layout.features is not None:
+                resolved_feature_anchor_radius_px = float(replanned_layout.features.anchor_radius_px)
                 feature_track_ratio_factor_override = (
-                    float(radial_layout.features.width_px)
+                    float(replanned_layout.features.width_px)
                     / max(
                         FEATURE_BAND_EPSILON,
                         float(geometry.radius) * float(geometry.track_ratio),
@@ -2639,6 +2658,7 @@ def circular_labels(
     return CircularLabelPlacement(
         labels=tuple(labels),
         state=state(),
+        radial_layout=replanned_layout,
         feature_layers=feature_layers,
         layout_slots=tuple(slots),
         feature_slot=feature_slot,
@@ -2999,7 +3019,9 @@ def add_record_on_circular_canvas(
             total_length=len(gb_record.seq),
             geometry=canvas_config.geometry(),
             # The labels read the centre band only as their inner reserve (OV-2103).
-            radial_layout=radial_label_layout(radial_layout),
+            resolved_slots=radial_layout.slots,
+            outer_content_radius_px=float(radial_layout.outer_content_radius_px),
+            inner_reserve_px=radial_label_inner_reserve_px(radial_layout),
             layout_slots=tuple(layout_slots),
             feature_slot=feature_slot,
             feature_lane_direction=feature_lane_direction,
@@ -3025,7 +3047,8 @@ def add_record_on_circular_canvas(
         # The one write of the radius the labels grew (a stage result is never changed).
         canvas_config.radius = placement.state.geometry.radius
         label_state = placement.state
-        radial_layout = label_state.radial_layout
+        if placement.radial_layout is not None:
+            radial_layout = placement.radial_layout
         feature_layers = placement.feature_layers
         layout_slots = list(placement.layout_slots)
         feature_slot = placement.feature_slot

@@ -841,3 +841,59 @@ def test_a_generate_that_changes_nothing_reuses_the_definition_count(tmp_path: P
     assert "definition_track_overlaps" not in again.stages.builds
     assert again.stages.hits.get("definition_track_overlaps"), dict(again.stages.hits)
     assert not again.stages.uncacheable_total and not again.stages.undeclared_read_total
+
+
+@pytest.mark.circular
+@pytest.mark.parametrize("placement", ["horizontal", "radial"])
+def test_the_tracks_keep_the_definition_band_the_labels_stage_reads_only_as_a_reserve(
+    placement: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Review 1 of OV-2103: the labels stage takes the inner reserve as a number, so the layout drawn after the
+    labels keeps the centre band the tracks were placed around (the untitled definition's, beside a plot title);
+    the labels hand back only a layout their radial growth replanned."""
+
+    import gbdraw.diagrams.circular.assemble as assemble_module
+    from tests.utils.render_stage_equivalence import CASES, EquivalenceHarness, Placeholders, write_tables
+
+    fits: list[object] = []
+    drawn: list[object] = []
+    placements: list[object] = []
+    fit_of = assemble_module._resolve_radial_layout_fitting_definition
+    overlaps_of = assemble_module._region_labels_on_other_tracks
+    labels_of = assemble_module.circular_labels
+
+    def fitting(*args, **kwargs):
+        fits.append(fit_of(*args, **kwargs))
+        return fits[-1]
+
+    def overlaps(layout, labels):
+        drawn.append(layout)
+        return overlaps_of(layout, labels)
+
+    def placing(*args, **kwargs):
+        placements.append(labels_of(*args, **kwargs))
+        return placements[-1]
+
+    monkeypatch.setattr(assemble_module, "_resolve_radial_layout_fitting_definition", fitting)
+    monkeypatch.setattr(assemble_module, "_region_labels_on_other_tracks", overlaps)
+    monkeypatch.setattr(assemble_module, "circular_labels", placing)
+    case = CASES["C1"]
+    arguments = [
+        *Placeholders(write_tables(tmp_path / "tables")).expand(case, case.base),
+        "--species", "<i>Homo sapiens</i>", "--label_placement", placement,
+    ]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", LabelLeadersCrossWarning)
+        assert EquivalenceHarness(case.mode, tmp_path / "C1").uncached(arguments).error is None
+    [placed] = placements
+    [layout] = drawn
+    if placed.radial_layout is None:
+        # The labels kept the layout they were given: the drawing reads the tracks' own centre band.
+        band = fits[0].layout.definition_reserved_band_px
+        assert band is not None and layout.definition_reserved_band_px == band
+    else:
+        assert layout is placed.radial_layout
+    # The reserve the labels read is the one owner's value for the layout they read.
+    assert placed.state.inner_reserve_px == assemble_module.radial_label_inner_reserve_px(
+        layout if placed.radial_layout is not None else fits[0].layout
+    )
