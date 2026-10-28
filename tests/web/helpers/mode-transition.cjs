@@ -48,8 +48,10 @@ const generate = async (page, health = {}) => {
 
 const switchMode = async (page, mode) => {
   await showDrawing(page, { kind: mode });
-  await expect.poll(() => page.evaluate(async () =>
-    (await import('./js/state.js')).state.drawingOf('circular').circularRecordDiscovery.status)).not.toBe('loading');
+  // Every Circular drawing the project holds (a one-mode Load makes none for the other mode).
+  await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.drawingList()
+    .filter((drawing) => drawing.mode === 'circular')
+    .map((drawing) => drawing.circularRecordDiscovery.status))).not.toContain('loading');
   // Settle the Vue render and its asynchronous preview binder, without a time delay.
   await page.evaluate(async () => { await window.Vue.nextTick(); });
 };
