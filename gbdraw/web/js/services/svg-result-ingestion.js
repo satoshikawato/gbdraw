@@ -1104,8 +1104,12 @@ const applyLegendOperations = (index, operations, {
     }
     entries.set(caption, groups.map((group) => {
       const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
-      // The template is Python's first row, whatever row a user order shows first (OV-2188).
-      const row = /** @type {Element | null} */ (pythonOrderedLegendRows(group)[0]?.cloneNode?.(true) || null);
+      // The template is Python's first row, whatever row a user order shows
+      // first (OV-2188): its own row when it has one, since a rule commit's row
+      // an older build saved may carry a copied GC row's "no line".
+      const pythonRows = pythonOrderedLegendRows(group);
+      const template = pythonRows.find((pythonRow) => !pythonRow.hasAttribute('data-legend-owner')) ?? pythonRows[0];
+      const row = /** @type {Element | null} */ (template?.cloneNode(true) || null);
       if (!row) throw new Error('Current SVG has no Legend entry template.');
       // The copy is of Python's row as drawn, not of that row's edits (OV-121);
       // Python draws no hidden row.

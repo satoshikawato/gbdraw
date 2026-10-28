@@ -1979,7 +1979,6 @@ for (const [name, field, value] of [
 // first, so Generate draws the row first. Expected to fail until the Owner
 // settles which order both show.
 test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
-  test.fail(true, 'OV-2189');
   test.setTimeout(240_000);
   await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
   await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
@@ -1993,5 +1992,8 @@ test('a popup Legend name on the only feature of a rule row shows the Legend ord
   expect(rules, 'the rule table of the edit').toEqual([['^dup alpha$', 'gamma'], ['^alpha protein$', 'alpha']]);
   const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
   expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
+  // Only the comparison is the expected failure: a failed precondition fails
+  // the case, so the pin cannot outlive a fix.
+  test.fail(true, 'OV-2189');
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
 });
