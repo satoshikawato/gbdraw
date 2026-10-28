@@ -61,9 +61,9 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {number} definitionOverlaps
  * @property {number} regionOverlaps Region labels over other labels or lines (Linear).
  * @property {boolean} refused Radial labels that could not be placed (counts may be 0).
- * @property {number | null} capacityRatio The room the labels need as a multiple of the room around the map, to one
- *   decimal place as Python rounds it, when they were not placed (CAPACITY-STOP); null otherwise. Such a record is a
- *   `LabelCapacityKind` and is worded by `labelCapacityText`.
+ * @property {LabelCapacity | null} capacity The room the labels need, when they were not placed (CAPACITY-STOP; from
+ *   Python's `capacityRatio` and the record's kind, count and font size), worded by `labelCapacityText`; null
+ *   otherwise.
  * @property {string} counts Python's counts, or why the labels were refused.
  */
 /**
@@ -77,7 +77,7 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
  * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room for the records not placed, in Python's
- *   order; empty unless a record has a `capacityRatio`.
+ *   order; empty unless a record has a `capacity`.
  */
 /**
  * @typedef {object} ResultLabelFit The report of one drawn Result.
@@ -107,9 +107,39 @@ export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
 /** @typedef {keyof typeof LABEL_CAPACITY_REMEDY_WORDS} LabelCapacityRemedy */
 
 /**
- * @typedef {'circular_outer' | 'circular_inner'} LabelCapacityKind The label kinds whose room Python reads before
- * placing them (`HorizontalLabelKind` in gbdraw/labels/circular_capacity.py).
+ * The Web's words for the room each kind of label needs (CAPACITY-STOP, CAPACITY-WARN), by Python's label kind id:
+ * its keys are the kinds whose room Python reads before placing them (`HorizontalLabelKind` in
+ * gbdraw/labels/circular_capacity.py, in its order). `line` is the dialog's record line, whose `{record}` stays in the
+ * text for the dialog's `<i18n-text>` slot (the record ID in bold); `notice` is the processing overlay's sentence. A
+ * report or notice naming another kind is invalid. Each form is a whole sentence per kind and count (OV-2179).
  */
+const LABEL_CAPACITY_KIND_WORDS = Object.freeze({
+  circular_outer: {
+    /** @param {number} count @param {Record<string, string | number>} params */
+    line: (count, params) => tn(count,
+      '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map',
+      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map', params),
+    /** @param {number} count @param {Record<string, string | number>} params */
+    notice: (count, params) => tn(count,
+      '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
+      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
+      params)
+  },
+  circular_inner: {
+    /** @param {number} count @param {Record<string, string | number>} params */
+    line: (count, params) => tn(count,
+      '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map',
+      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map', params),
+    /** @param {number} count @param {Record<string, string | number>} params */
+    notice: (count, params) => tn(count,
+      '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
+      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
+      params)
+  }
+});
+/** @typedef {keyof typeof LABEL_CAPACITY_KIND_WORDS} LabelCapacityKind */
+/** The label kinds whose room Python reads, in its order (`HorizontalLabelKind`). */
+export const LABEL_CAPACITY_KINDS = Object.freeze(/** @type {LabelCapacityKind[]} */ (Object.keys(LABEL_CAPACITY_KIND_WORDS)));
 /**
  * @typedef {object} LabelCapacity The room one side of a record's labels needs.
  * @property {LabelCapacityKind} labelKind
@@ -122,40 +152,25 @@ export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
  * the render runs (CAPACITY-WARN; `LabelCapacityNoticePayload` in gbdraw/web_support/label_fit.py).
  */
 /** @param {unknown} value @returns {value is LabelCapacityKind} */
-const isCapacityKind = (value) => value === 'circular_outer' || value === 'circular_inner';
+const isCapacityKind = (value) => typeof value === 'string' && Object.hasOwn(LABEL_CAPACITY_KIND_WORDS, value);
 
 /**
- * The dialog's line for a record's labels that were not placed (CAPACITY-STOP). `{record}` stays in the text for
- * the dialog's `<i18n-text>` slot, which shows the record ID in bold.
+ * The dialog's line for a record's labels that were not placed (CAPACITY-STOP), with `{record}` left for its slot.
  * @param {LabelCapacity} capacity
  * @returns {string}
  */
-export const labelCapacityText = ({ labelKind, labelCount, fontSize, capacityRatio }) => {
-  const params = { size: fontSize, ratio: capacityRatio };
-  return labelKind === 'circular_inner'
-    ? tn(labelCount, '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map',
-      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map', params)
-    : tn(labelCount, '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map',
-      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map', params);
-};
+export const labelCapacityText = ({ labelKind, labelCount, fontSize, capacityRatio }) => (
+  LABEL_CAPACITY_KIND_WORDS[labelKind].line(labelCount, { size: fontSize, ratio: capacityRatio })
+);
 
 /**
  * The sentence the processing overlay shows for labels that may not fit (CAPACITY-WARN).
  * @param {LabelCapacityNotice} notice
  * @returns {string}
  */
-export const labelCapacityNoticeText = ({ recordId, labelKind, labelCount, fontSize, capacityRatio }) => {
-  const params = { record: recordId, size: fontSize, ratio: capacityRatio };
-  return labelKind === 'circular_inner'
-    ? tn(labelCount,
-      '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
-      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
-      params)
-    : tn(labelCount,
-      '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
-      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
-      params);
-};
+export const labelCapacityNoticeText = ({ recordId, labelKind, labelCount, fontSize, capacityRatio }) => (
+  LABEL_CAPACITY_KIND_WORDS[labelKind].notice(labelCount, { record: recordId, size: fontSize, ratio: capacityRatio })
+);
 
 const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
 const OFFERED_STATUSES = new Set(['found', 'found_with_notice']);
@@ -246,9 +261,16 @@ const normalizeLabelFitReport = (parsed) => {
       || typeof record.labelKindTitle !== 'string' || !isCount(record.labelCount)
       || !isNumber(record.fontSize) || !isCount(record.overlapPairs) || !isCount(record.crossingPairs)
       || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean'
-      || !(record.capacityRatio === null || (isRatio(record.capacityRatio) && isCapacityKind(record.labelKind)))
       || typeof record.counts !== 'string') {
       throw invalid();
+    }
+    // Only the kinds whose room Python reads carry a ratio.
+    const { labelKind, capacityRatio } = record;
+    /** @type {LabelCapacity | null} */
+    let capacity = null;
+    if (capacityRatio !== null) {
+      if (!isRatio(capacityRatio) || !isCapacityKind(labelKind)) throw invalid();
+      capacity = Object.freeze({ labelKind, labelCount: record.labelCount, fontSize: record.fontSize, capacityRatio });
     }
     return Object.freeze({
       recordId: record.recordId,
@@ -262,7 +284,7 @@ const normalizeLabelFitReport = (parsed) => {
       definitionOverlaps: record.definitionOverlaps,
       regionOverlaps: record.regionOverlaps,
       refused: record.refused,
-      capacityRatio: record.capacityRatio,
+      capacity,
       counts: record.counts
     });
   });

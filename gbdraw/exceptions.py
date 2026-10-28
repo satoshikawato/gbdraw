@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
-    from gbdraw.labels.fit import LabelCapacityRecord, LabelFitReport, LabelFitRows, LabelKind
+    from gbdraw.labels.fit import HorizontalLabelKind, LabelCapacityRecord, LabelFitReport, LabelFitRows
 
 
 class GbdrawError(Exception):
@@ -76,11 +76,16 @@ class ExportError(GbdrawError):
     """Raised when an explicitly requested library export cannot be generated."""
 
 
-# The Web error's context key of the room each side's labels need when they were not placed (CAPACITY-STOP).
-_CAPACITY_CONTEXT_KEYS: Mapping[LabelKind, str] = {
-    "circular_outer": "labelCapacityOuter",
-    "circular_inner": "labelCapacityInner",
-}
+def label_capacity_context_key(kind: HorizontalLabelKind) -> str:
+    """The Web error's context key of the room one side's labels need when they were not placed (CAPACITY-STOP).
+
+    One branch per kind: mypy reports a missing return when ``HorizontalLabelKind`` gains a kind.
+    """
+
+    if kind == "circular_outer":
+        return "labelCapacityOuter"
+    if kind == "circular_inner":
+        return "labelCapacityInner"
 
 
 def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
@@ -94,7 +99,7 @@ def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
         return {
             "code": "LABEL_LAYOUT",
             "reason": "LABEL_CAPACITY",
-            **{_CAPACITY_CONTEXT_KEYS[kind]: shown_capacity_ratio(capacity) for kind, capacity in largest.items()},
+            **{label_capacity_context_key(kind): shown_capacity_ratio(capacity) for kind, capacity in largest.items()},
         }
     return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
 
@@ -138,7 +143,9 @@ class LabelsMayNotFitWarning(UserWarning):
     ``capacity`` is the room they need; ``record_id`` and ``label_kind`` name them.
     """
 
-    def __init__(self, message: str, *, record_id: str, label_kind: LabelKind, capacity: LabelCapacityRecord) -> None:
+    def __init__(
+        self, message: str, *, record_id: str, label_kind: HorizontalLabelKind, capacity: LabelCapacityRecord
+    ) -> None:
         super().__init__(message)
         self.record_id = record_id
         self.label_kind = label_kind

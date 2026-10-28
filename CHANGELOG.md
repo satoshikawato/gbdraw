@@ -60,8 +60,8 @@ write-up of a release.
   it has at 768 px and below. The Circular and Linear names stay on one line (OV-2177, OV-2178, #1446; 0.14.2 had
   both).
 - Fixed: in the Web app, the room that Circular labels need (the record line of the "Labels do not fit" dialog, the
-  Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language. Before,
-  those sentences stayed English in every language (OV-2179, #1447).
+  Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language, and a whole
+  ratio reads "3", not "3.0". Before, those sentences stayed English in every language (OV-2179, #1447).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).

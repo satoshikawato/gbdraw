@@ -37,6 +37,7 @@ from gbdraw.labels.fit import (
     SPACING_PATH,
     X_OFFSET_PATH,
     Y_OFFSET_PATH,
+    HorizontalLabelKind,
     LabelCapacityRemedy,
     LabelFitRecord,
     LabelFitReport,
@@ -147,7 +148,7 @@ class LabelCapacityNoticePayload(TypedDict):
     """One side of a record whose labels may not fit (CAPACITY-WARN), as the Web words it while the render runs."""
 
     recordId: str
-    labelKind: LabelKind
+    labelKind: HorizontalLabelKind
     labelCount: int
     fontSize: float
     # As shown (``shown_capacity_ratio``).

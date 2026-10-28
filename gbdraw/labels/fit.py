@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypeAlias, get_args
+from typing import Literal, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 from ..layout.spatial import (
@@ -41,6 +41,9 @@ LabelKind: TypeAlias = Literal[
     "linear",
     "linear_region",
 ]
+# The label kinds whose room is read before they are placed (CAPACITY-STOP, CAPACITY-WARN): Circular horizontal labels.
+# The Web words each by id (`LABEL_CAPACITY_KIND_WORDS` in gbdraw/web/js/services/label-fit.js, OV-2179).
+HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
 LabelFitOutcome: TypeAlias = Literal["fits", "warn", "stop"]
 LabelFitRowKind: TypeAlias = Literal[
     "outward_both",
@@ -703,16 +706,23 @@ def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: Lab
 DEFINITION_TEXT_REMEDY = "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
 
 
-def largest_capacities(report: LabelFitReport) -> dict[LabelKind, LabelCapacityRecord]:
-    """The room of each label kind whose labels were not placed (CAPACITY-STOP): the largest of its records, in the
-    order the kinds first appear."""
+def is_horizontal_label_kind(kind: LabelKind) -> TypeGuard[HorizontalLabelKind]:
+    """Whether labels of ``kind`` have their room read before they are placed."""
 
-    largest: dict[LabelKind, LabelCapacityRecord] = {}
+    return kind in get_args(HorizontalLabelKind)
+
+
+def largest_capacities(report: LabelFitReport) -> dict[HorizontalLabelKind, LabelCapacityRecord]:
+    """The room of each label kind whose labels were not placed (CAPACITY-STOP): the largest of its records, in the
+    order the kinds first appear. Only horizontal labels carry a capacity."""
+
+    largest: dict[HorizontalLabelKind, LabelCapacityRecord] = {}
     for record in report.records:
-        if record.capacity is not None and (
-            record.label_kind not in largest or record.capacity.ratio > largest[record.label_kind].ratio
-        ):
-            largest[record.label_kind] = record.capacity
+        kind = record.label_kind
+        if record.capacity is None or not is_horizontal_label_kind(kind):
+            continue
+        if kind not in largest or record.capacity.ratio > largest[kind].ratio:
+            largest[kind] = record.capacity
     return largest
 
 
@@ -893,6 +903,7 @@ __all__ = [
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
     "FONT_SIZE_PATHS",
+    "HorizontalLabelKind",
     "PLACEMENT_PATH",
     "RADIAL_PLACEMENT",
     "ROW_TITLES",
@@ -923,6 +934,7 @@ __all__ = [
     "covers_definition_text",
     "crossing_pairs",
     "fit_counts",
+    "is_horizontal_label_kind",
     "format_label_fit_report",
     "label_fit_error_counts",
     "largest_capacities",

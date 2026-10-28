@@ -23,7 +23,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 /**
  * @import {
  *   LabelFitReport, LabelFitRow, LabelFitRowKind, LabelFitRowToken, ConfigPath, LabelFitSetting, LabelFitTrackOptions,
- *   LabelFitValue
+ *   LabelFitValue, LabelCapacity
  * } from '../services/label-fit.js'
  */
 
@@ -45,8 +45,8 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {boolean} capacity True when a record was not placed for lack of room (CAPACITY-STOP).
  * @property {string[]} remedies The ways to make room, as the Web words them (i18n keys), in Python's order.
  * @property {{ recordId: string, recordIndex: number | null, labelKind: string, labelKindTitle: string,
- *   labelCount: number, fontSize: number, counts: string, capacityRatio: number | null }[]} records Python's counts
- *   text per record (OV-699: a refused record says why); a record not placed for lack of room (`capacityRatio`) is
+ *   labelCount: number, fontSize: number, counts: string, capacity: LabelCapacity | null }[]} records Python's
+ *   counts text per record (OV-699: a refused record says why); a record not placed for lack of room (`capacity`) is
  *   worded by `labelCapacityText` instead.
  * @property {LabelFitDialogRow[]} rows
  * @property {LabelFitRowKind | ''} selectedKind
@@ -171,7 +171,7 @@ export const createLabelFitDialog = ({
     dialogRowToken = rowToken;
     rowsByKind = new Map(report.rows.map((row) => [row.kind, row]));
     dialog.drawn = report.drawn;
-    dialog.capacity = report.records.some((record) => record.capacityRatio !== null);
+    dialog.capacity = report.records.some((record) => record.capacity !== null);
     dialog.remedies = report.remedies.map((remedy) => LABEL_CAPACITY_REMEDY_WORDS[remedy]);
     dialog.records = report.records.map((record) => ({
       recordId: record.recordId,
@@ -181,7 +181,7 @@ export const createLabelFitDialog = ({
       labelCount: record.labelCount,
       fontSize: record.fontSize,
       counts: record.counts,
-      capacityRatio: record.capacityRatio
+      capacity: record.capacity
     }));
     // Only a drawn figure has the definition to edit: after a Generate that drew nothing the preview may show an
     // older figure. One button per drawn record, by its index (two records may share an ID).

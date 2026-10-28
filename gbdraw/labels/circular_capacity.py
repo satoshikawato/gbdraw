@@ -37,7 +37,7 @@ from typing import Literal, TypeAlias
 from .circular_fit import FONT_LIMIT_PT, OFFSET_LIMIT
 from .circular_types import LABEL_FIT_X_MARGIN_PX, LABEL_FIT_Y_MARGIN_PX, CircularLabel
 from ..exceptions import LabelsMayNotFitWarning
-from .fit import LabelCapacityRecord, LabelCapacityRemedy, label_capacity_sentence
+from .fit import HorizontalLabelKind, LabelCapacityRecord, LabelCapacityRemedy, label_capacity_sentence
 
 # A side whose labels need more than this many times the room stops at once when its lever needs more than
 # CAPACITY_LEVER_RATIO times too (CAPACITY-STOP); from CAPACITY_WARN_RATIO it warns before placement (CAPACITY-WARN).
@@ -46,7 +46,6 @@ CAPACITY_STOP_RATIO = 1.5
 CAPACITY_LEVER_RATIO = 1.0
 
 CapacityLevel: TypeAlias = Literal["fits", "near", "over"]
-HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
 
 # Off while a fit row's settings are verified with the full assembly, so the rows are computed as before.
 _CHECKED: ContextVar[bool] = ContextVar("gbdraw_circular_label_capacity_checked", default=True)

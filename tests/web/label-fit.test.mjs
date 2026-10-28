@@ -420,12 +420,15 @@ const capacityReport = (remedies = CAPACITY_REMEDIES, capacityRatio = 2.5) => {
 
 test('a capacity stop carries each record\'s ratio and Python\'s remedies; an unknown remedy is RESULT_INVALID', () => {
   const parsed = normalizeReport(capacityReport());
-  assert.equal(parsed.records[0].capacityRatio, 2.5);
+  assert.deepEqual(parsed.records[0].capacity,
+    { labelKind: 'circular_outer', labelCount: 562, fontSize: 8, capacityRatio: 2.5 });
+  assert.ok(Object.isFrozen(parsed.records[0].capacity));
+  assert.equal('capacityRatio' in parsed.records[0], false);
   assert.equal(parsed.records[0].counts, 'need about 2.5 times the room around the map');
   assert.deepEqual(parsed.remedies, CAPACITY_REMEDIES);
   assert.ok(Object.isFrozen(parsed.remedies));
   assert.deepEqual(parsed.rows, []);
-  assert.equal(normalizeReport(report([])).records[0].capacityRatio, null);
+  assert.equal(normalizeReport(report([])).records[0].capacity, null);
   assert.deepEqual(normalizeReport(report([])).remedies, []);
   const invalid = (error) => error.code === 'RESULT_INVALID';
   for (const remedies of [['shrink'], ['Filter'], 'filter', [3], undefined, null]) {
@@ -438,7 +441,7 @@ test('a capacity stop carries each record\'s ratio and Python\'s remedies; an un
   }
   // Only the kinds whose room Python reads carry a ratio (the Web words them, OV-2179).
   assert.equal(normalizeReport({ ...capacityReport(), records: [{ ...capacityReport().records[0], labelKind: 'circular_inner' }] })
-    .records[0].labelKind, 'circular_inner');
+    .records[0].capacity.labelKind, 'circular_inner');
   for (const labelKind of ['circular_embedded', 'linear', 'outer']) {
     const value = capacityReport();
     value.records = [{ ...value.records[0], labelKind }];
@@ -493,6 +496,17 @@ test('the Web words exactly the remedies Python can name, in Python\'s order', a
   assert.ok(Object.isFrozen(LABEL_CAPACITY_REMEDY_WORDS));
 });
 
+test('the Web words exactly the label kinds whose room Python reads, in Python\'s order', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const { LABEL_CAPACITY_KINDS } = await import('../../gbdraw/web/js/services/label-fit.js');
+  const fit = await readFile(new URL('../../gbdraw/labels/fit.py', import.meta.url), 'utf8');
+  const literal = fit.match(/^HorizontalLabelKind: TypeAlias = Literal\[([^\]]+)\]$/m)?.[1] || '';
+  const kinds = [...literal.matchAll(/"([a-z_]+)"/g)].map(([, kind]) => kind);
+  assert.deepEqual(kinds, ['circular_outer', 'circular_inner']);
+  assert.deepEqual(LABEL_CAPACITY_KINDS, kinds);
+  assert.ok(Object.isFrozen(LABEL_CAPACITY_KINDS));
+});
+
 test('the dialog over a capacity stop lists the remedies in Python\'s order, no rows, and only Close', async () => {
   const { readFile } = await import('node:fs/promises');
   const { dialog, steps, writes, generates } = dialogHarness();
@@ -506,8 +520,8 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
     'Draw a Linear map.'
   ]);
   assert.deepEqual(state.rows, []);
-  assert.deepEqual(state.records.map((record) => [record.recordId, record.labelKind, record.labelCount, record.fontSize,
-    record.capacityRatio]), [['AP027078.1', 'circular_outer', 562, 8, 2.5]]);
+  assert.deepEqual(state.records.map((record) => [record.recordId, record.capacity]),
+    [['AP027078.1', { labelKind: 'circular_outer', labelCount: 562, fontSize: 8, capacityRatio: 2.5 }]]);
   assert.equal(state.selectedKind, '');
   await dialog.resolveLabelFitChoice('cancel');
   assert.equal(state.show, false);
@@ -516,7 +530,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   await dialog.openLabelFitDialog(normalizeReport(report([foundRow('smaller_font', 1.2)])), { mode: 'circular' });
   assert.equal(state.capacity, false);
   assert.deepEqual(state.remedies, []);
-  assert.deepEqual(state.records.map((record) => record.capacityRatio), [null]);
+  assert.deepEqual(state.records.map((record) => record.capacity), [null]);
 
   const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
   const start = html.indexOf('<choice-dialog v-if="labelFitDialog.show"');
@@ -528,7 +542,7 @@ test('the dialog over a capacity stop lists the remedies in Python\'s order, no 
   assert.match(markup, /<button v-if="!labelFitDialog\.capacity" [^>]*@click="resolveLabelFitChoice\('apply'\)"/);
   assert.match(markup, />\{\{ labelFitDialog\.capacity \? t\('Close'\) : labelFitDialog\.drawn \? t\('Keep as drawn'\) : t\('Cancel'\) \}\}<\/button>/);
   // A record not placed for lack of room reads in the Web's words (OV-2179); other records keep their counts in brackets.
-  assert.match(markup, /<i18n-text v-if="record\.capacityRatio !== null" :text="labelCapacityText\(record\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
+  assert.match(markup, /<i18n-text v-if="record\.capacity" :text="labelCapacityText\(record\.capacity\)"><template #record><span[^>]*>\{\{ record\.recordId \}\}<\/span><\/template><\/i18n-text>\s*<template v-else><span[^>]*>\{\{ record\.recordId \}\}<\/span>: \{\{ record\.labelCount \}\} \{\{ record\.labelKindTitle \}\} at \{\{ record\.fontSize \}\} pt \(\{\{ record\.counts \}\}\)<\/template>/);
 });
 
 // The status line the shared choice dialog shows, from the label fit dialog's
