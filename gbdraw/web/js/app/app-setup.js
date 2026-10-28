@@ -6,6 +6,8 @@
 /** @import { KeptLegendRow, LegendRow } from '../services/drawing/paint.js' */
 /** @import { NoticeLink } from './app-messages.js' */
 /** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
+/** @import { DrawingInputSite } from './drawing-list.js' */
+/** @import { ReplaceableInputSlot } from '../services/drawing/inputs.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { CircularDiagramRecords } from '../services/record-options.js' */
 /** @import { EditorPaintState } from './result-paint-record.js' */
@@ -25,6 +27,7 @@
 /** @import { LinearSourceGroup, LinearSourceRemovalPlan } from '../services/linear-sources.js' */
 /** @import { RecordDrawKey, RecordSettingsOwner, RecordEditData } from '../services/record-draw-selection.js' */
 /** @import { RecordListRequest, RecordSelectionMode, RecordSource } from './record-selection.js' */
+/** @import { CircularRecordsDiscovered } from './run-analysis.js' */
 /** @import { AlignmentFigureGeometry } from '../services/alignment-review-view.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan, displayedLegendRowColors, editorPaintDomains, LIVE_EDIT_DOMAINS, RECORDED_LEGEND_ROW_COLORS } from './candidate-render.js';
@@ -54,7 +57,7 @@ import {
   createFeatureRecordRotationWorkflow
 } from './record-display/feature-record-rotation.js';
 import { createDrawingState, drawingHasEdits, state, sessionOperationAvailability } from '../state.js';
-import { createDrawingBar, createDrawingList, moveTabFocus } from './drawing-list.js';
+import { createDrawingBar, createDrawingList, createInputReplacement, moveTabFocus } from './drawing-list.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyCapturedConfigData,
@@ -1248,8 +1251,12 @@ export const createAppSetup = () => {
     edge.included = true;
     replaceLinearComparisonPlan(drawing, next);
   });
-  /** @param {string} id @param {InputFileCandidate} file */
-  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => {
+  /**
+   * A Linear comparison's uploaded file, found by the comparison's id: the
+   * shown drawing's control and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {string} id @param {InputFileCandidate | InputFileRef} file
+   */
+  const replaceLinearComparisonFile = (drawing, id, file) => {
     const next = selectedPlanForEdit(drawing);
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -1258,7 +1265,9 @@ export const createAppSetup = () => {
     edge.source = LINEAR_COMPARISON_SOURCES.UPLOAD;
     edge.included = Boolean(ref) || edge.included;
     replaceLinearComparisonPlan(drawing, next);
-  });
+  };
+  /** @param {string} id @param {InputFileCandidate} file */
+  const setLinearComparisonFile = (id, file) => shownAction('linear', (drawing) => replaceLinearComparisonFile(drawing, id, file));
   /** @param {string} id */
   const reuseLinearComparisonFile = (id) => shownAction('linear', (drawing) => {
     const next = selectedPlanForEdit(drawing);
@@ -1393,12 +1402,10 @@ export const createAppSetup = () => {
     }
     if (draft) setLinearComparisonFile(draft.id, file);
   };
-  /** @param {string} uid @param {number} fallback */
-  const linearRecordRowFor = (uid, fallback) => {
-    const drawing = shownDrawingOfMode('linear');
-    if (!drawing) return fallback;
-    return drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback;
-  };
+  /** @param {DrawingState} drawing @param {string} uid @param {number} fallback */
+  const linearRecordRowFor = (drawing, uid, fallback) => (
+    drawing.linearRecordRows.find((/** @type {LinearRecordRow} */ entry) => entry.uid === uid)?.row || fallback
+  );
   const linearLayoutTokens = computed(() => {
     const drawing = state.activeDrawing();
     return (
@@ -1413,32 +1420,49 @@ export const createAppSetup = () => {
       .map((/** @type {LosatCacheInfoEntry} */ entry) => [String(entry.edgeKey), entry])
   ));
 
-  // The Linear rows whose next record discovery may expand them, each with
-  // whether the row's own names were entered for the file being read. They
-  // were not when the file replaced another: those names belong to that file.
-  /** @type {Map<string, boolean>} */
-  const pendingLinearRecordExpansions = new Map();
-  // The Linear Files and the Circular input just uploaded: their first record
-  // discovery infers record definitions (Linear GenBank) and opens the record
-  // list of a file with many records (D-04). A Session load, a rollback, and a
-  // History step never add one.
-  /** @type {Set<string>} */
-  const pendingLinearUploads = new Set();
-  /** @type {InputFileRef | null} */
-  let pendingCircularUpload = null;
-  /** @type {RecordListRequest[]} */
-  const recordListRequests = reactive([]);
-  /** @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount */
-  const requestRecordListAfterUpload = (listMode, sourceKey, recordCount) => {
-    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) recordListRequests.push({ mode: listMode, sourceKey });
+  /**
+   * What a drawing's next record discoveries do, for the rows and input of
+   * that drawing only (OV-2148: a Duplicate keeps its row uids, so a uid alone
+   * names a row of several drawings).
+   * - `expansions`: the Linear rows whose next discovery may expand them, each
+   *   with whether the row's own names were entered for the file being read.
+   *   They were not when the file replaced another: those names belong to it.
+   * - `uploads`, `circularUpload`: the Linear Files and the Circular input just
+   *   uploaded: their first discovery infers record definitions (Linear
+   *   GenBank) and asks for the record list of a file with many records (D-04).
+   *   A Session load, a rollback, and a History step never add one.
+   * - `listRequests`: those asks, in upload order; the drawing's panel opens them.
+   * @typedef {{ expansions: Map<string, boolean>, uploads: Set<string>, circularUpload: InputFileRef | null,
+   *   listRequests: RecordListRequest[] }} PendingRecordDiscovery
+   */
+  /** @type {WeakMap<DrawingState, PendingRecordDiscovery>} */
+  const pendingDiscoveries = new WeakMap();
+  /** @param {DrawingState} drawing @returns {PendingRecordDiscovery} */
+  const pendingDiscoveryOf = (drawing) => {
+    const known = pendingDiscoveries.get(drawing);
+    if (known) return known;
+    /** @type {PendingRecordDiscovery} */
+    const pending = { expansions: new Map(), uploads: new Set(), circularUpload: null, listRequests: reactive([]) };
+    pendingDiscoveries.set(drawing, pending);
+    return pending;
+  };
+  /**
+   * @param {DrawingState} drawing
+   * @param {RecordSelectionMode} listMode @param {string} sourceKey @param {number} recordCount
+   */
+  const requestRecordListAfterUpload = (drawing, listMode, sourceKey, recordCount) => {
+    if (recordCount > WEB_UX_PROFILE.recordList.autoOpenAbove) {
+      pendingDiscoveryOf(drawing).listRequests.push({ mode: listMode, sourceKey });
+    }
   };
   /**
    * @param {DrawingState} drawing
    * @param {{ uid: string, records: SequenceRecord[], inferDefinitions?: boolean }} discovered
    */
   const expandDiscoveredLinearRecords = (drawing, { uid, records, inferDefinitions = false }) => {
-    const namesOfThisFile = pendingLinearRecordExpansions.get(uid);
-    pendingLinearRecordExpansions.delete(uid);
+    const { expansions } = pendingDiscoveryOf(drawing);
+    const namesOfThisFile = expansions.get(uid);
+    expansions.delete(uid);
     const index = drawing.linearSeqs.findIndex((seq) => seq.uid === uid);
     if (index < 0) return;
     const source = drawing.linearSeqs[index];
@@ -1448,7 +1472,7 @@ export const createAppSetup = () => {
       }
       return;
     }
-    const row = linearRecordRowFor(uid, index + 1);
+    const row = linearRecordRowFor(drawing, uid, index + 1);
     // Expanded records keep only File-level values. A crop or record display
     // value of the replaced File does not apply to the new records (IN-04).
     // A name entered on the card of this file before it had several records
@@ -1477,35 +1501,40 @@ export const createAppSetup = () => {
     const drawing = state.drawingOf(drawingId);
     // Only an upload infers record definitions and opens the record list; a
     // loaded Session keeps its own.
-    const fromUpload = !state.sessionImportRollbackInProgress.value && pendingLinearUploads.delete(uid);
+    const fromUpload = !state.sessionImportRollbackInProgress.value && pendingDiscoveryOf(drawing).uploads.delete(uid);
     const expanded = expandDiscoveredLinearRecords(drawing, {
       uid, records, inferDefinitions: fromUpload && drawing.inputType.value === 'gb'
     });
-    if (fromUpload) requestRecordListAfterUpload('linear', uid, records.length);
+    if (fromUpload) requestRecordListAfterUpload(drawing, 'linear', uid, records.length);
     // After the expansion, which gives records 2..n of the file new keys: an
     // expansion rebinds in its source edit (`applyLinearSeqMutation`).
     if (!expanded) rebindAnnotationRecords();
     return expanded;
   };
   /**
-   * The Circular input's first discovery after its upload (success or error).
-   * @param {{ primaryFile: InputFileRef | null, pairedFile: InputFileRef | null, recordCount: number }} discovered
+   * A Circular drawing's discovery settled (success or error): the first after
+   * its input's upload asks for the record list.
+   * @param {CircularRecordsDiscovered} discovered
    */
-  const handleCircularRecordsDiscovered = ({ primaryFile, pairedFile, recordCount }) => {
+  const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
     rebindAnnotationRecords();
-    if (!pendingCircularUpload || (pendingCircularUpload !== primaryFile && pendingCircularUpload !== pairedFile)) return;
-    pendingCircularUpload = null;
-    requestRecordListAfterUpload('circular', 'circular', recordCount);
+    // A drawing deleted while its discovery ran asks for nothing.
+    if (!state.drawingTabs.value.some((tab) => tab.id === drawingId)) return;
+    const drawing = state.drawingOf(drawingId);
+    const pending = pendingDiscoveryOf(drawing);
+    const upload = pending.circularUpload;
+    if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
+    pending.circularUpload = null;
+    requestRecordListAfterUpload(drawing, 'circular', 'circular', recordCount);
   };
   /** @param {DrawingState} drawing */
   const materializeAutomaticLinearRecords = async (drawing) => {
     if (drawing.mode !== 'linear') return;
     // A row that already waits for its discovery keeps what its writer said
     // about its names (a replacing file does not own the row's record name).
+    const { expansions } = pendingDiscoveryOf(drawing);
     drawing.linearSeqs.forEach((seq) => {
-      if (!seq.region_record_id && !pendingLinearRecordExpansions.has(seq.uid)) {
-        pendingLinearRecordExpansions.set(seq.uid, true);
-      }
+      if (!seq.region_record_id && !expansions.has(seq.uid)) expansions.set(seq.uid, true);
     });
     await linearRecordSelector.refresh(drawing);
   };
@@ -2804,8 +2833,12 @@ export const createAppSetup = () => {
   };
   /** @param {number} index */
   const getCircularDepthFile = (index) => circularDepthRepresentatives(state.activeDrawing())[Number(index)] || null;
-  /** @param {number} index @param {FileLike | null} file */
-  const setCircularDepthFile = (index, file) => shownAction('circular', (drawing) => {
+  /**
+   * A Circular drawing's Depth file at series `index`: the shown drawing's
+   * control and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {number} index @param {InputFileCandidate | InputFileRef} file
+   */
+  const replaceCircularDepthFile = (drawing, index, file) => {
     const idx = Math.max(0, Number(index) || 0);
     const ref = state.inputFiles.registerFile(file);
     ensureDepthTrackConfigCount(drawing, idx + 1);
@@ -2825,13 +2858,18 @@ export const createAppSetup = () => {
         drawing.form.show_depth = true;
       }
     });
-  });
+  };
+  /** @param {number} index @param {FileLike | null} file */
+  const setCircularDepthFile = (index, file) => shownAction('circular', (drawing) => replaceCircularDepthFile(drawing, index, file));
   /** @param {LinearSeq | null | undefined} seq @param {number} index */
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  /** @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index @param {FileLike | null} file */
+  /**
+   * The Depth file at series `index` of Linear record rows: the shown drawing's
+   * controls and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing @param {LinearSeq[]} sequences @param {number} index
+   * @param {InputFileCandidate | InputFileRef} file
+   */
   const setLinearDepthFiles = (drawing, sequences, index, file) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
     const targets = Array.from(sequences || []).filter(Boolean);
     if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
@@ -3005,8 +3043,6 @@ export const createAppSetup = () => {
   };
   /** @param {DrawingState} drawing @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles Files, or refs kept */
   const setCircularConservationSourceFiles = (drawing, nextFiles) => {
-    const sessionBusy = sessionOperationAvailability();
-    if (sessionBusy) return sessionBusy;
     if (isCircularConservationUploadSource(drawing)) {
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
       setConservationBlastsSource(drawing.slices.inputs, null);
@@ -3015,6 +3051,20 @@ export const createAppSetup = () => {
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
     }
     losatCacheInfo.value = [];
+    reconcileCircularConservation(drawing);
+  };
+  /**
+   * A Circular drawing's similarity-ring BLAST files, the files kept in their
+   * places: the uploaded rings through their source edit, the rows of a LOSAT
+   * cache replay in place, each followed by the rings' reconcile.
+   * @param {DrawingState} drawing @param {readonly (InputFileRef | null)[]} nextFiles
+   */
+  const replaceCircularConservationBlasts = (drawing, nextFiles) => {
+    if (isCircularConservationUploadSource(drawing)) {
+      setCircularConservationSourceFiles(drawing, nextFiles);
+      return;
+    }
+    bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
     reconcileCircularConservation(drawing);
   };
   /** @param {InputFileCandidate | readonly InputFileCandidate[]} nextFiles */
@@ -6416,18 +6466,21 @@ export const createAppSetup = () => {
   /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
   const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
   /**
-   * The Circular source file controls (upload, replace, Remove).
+   * A Circular drawing's source file (upload, replace, Remove), with the
+   * drawing's reactions to its new source: the shown drawing's controls and
+   * the replacement for every drawing that uses a file write through it.
+   * @param {DrawingState} drawing
    * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
-   * @param {File | null} value
+   * @param {InputFileCandidate | InputFileRef} value
    */
-  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => {
+  const replaceCircularSource = (drawing, field, value) => {
     const nextValue = value ?? null;
     const previous = drawing.files[field];
     const nextRef = state.inputFiles.registerFile(nextValue);
     if (previous === nextRef) return;
     const previousRecordCount = drawing.circularRecordList.value.length;
     changeRecordSources(drawing, () => { bindDrawingInputFile(state.inputFiles, drawing.slices.inputs, field, nextValue); });
-    if (nextRef) pendingCircularUpload = nextRef;
+    if (nextRef) pendingDiscoveryOf(drawing).circularUpload = nextRef;
     void discoverDrawingRecords(drawing);
     // An upload into an empty slot starts reading another input (after an
     // Input switch), whose records the OFF list does not name.
@@ -6439,7 +6492,13 @@ export const createAppSetup = () => {
       removed: !nextValue, previousRecordCount
     })) retireCircularRecordPresentation(drawing);
     else retireCircularRecordSelector(drawing);
-  });
+  };
+  /**
+   * The Circular source file controls of the shown drawing.
+   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * @param {File | null} value
+   */
+  const setCircularSourceFile = (field, value) => shownAction('circular', (drawing) => replaceCircularSource(drawing, field, value));
   /** @param {unknown} value */
   const setCircularRecordPresentationSelector = (value) => {
     const busy = sessionOperationAvailability();
@@ -6624,11 +6683,13 @@ export const createAppSetup = () => {
       changeRecordSources(drawing, () => replaceLinearSeqs(drawing.slices.inputs, next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
-    pendingLinearRecordExpansions.forEach((_, uid) => {
-      if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
+    // A removed row of this drawing no longer waits; another drawing's rows are its own.
+    const pending = pendingDiscoveryOf(drawing);
+    pending.expansions.forEach((_, uid) => {
+      if (!activeUids.has(uid)) pending.expansions.delete(uid);
     });
-    pendingLinearUploads.forEach((uid) => {
-      if (!activeUids.has(uid)) pendingLinearUploads.delete(uid);
+    pending.uploads.forEach((uid) => {
+      if (!activeUids.has(uid)) pending.uploads.delete(uid);
     });
     const nextRows = reconcileLinearRecordLayout(drawing.linearSeqs, layoutEntries);
     drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...nextRows);
@@ -6778,17 +6839,22 @@ export const createAppSetup = () => {
     return openLinearSourceRemovalDialog(source, 'global', event?.currentTarget || null);
   };
 
-  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
-  const setLinearSeqPrimaryFile = (index, field, value) => shownAction('linear', (drawing) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.linearSeqs.length) return;
-    if (!['gb', 'gff', 'fasta'].includes(field)) return;
-
+  /**
+   * A Linear record row's source file (upload, replace, Remove), found by the
+   * row's uid, with the drawing's reactions to its new source: the shown
+   * drawing's File card and the replacement for every drawing write through it.
+   * @param {DrawingState} drawing
+   * @param {string} rowUid
+   * @param {'gb' | 'gff' | 'fasta'} field
+   * @param {InputFileCandidate | InputFileRef} value
+   */
+  const replaceLinearSourceFile = (drawing, rowUid, field, value) => {
+    const seq = drawing.linearSeqs.find((entry) => entry.uid === rowUid);
+    if (!seq) return;
     const nextValue = state.inputFiles.registerFile(value);
-    const seq = drawing.linearSeqs[idx];
     if (seq[field] === nextValue) return;
     // `groupLinearSourceRecords` puts every record card of the drawing in a group, and `seq` is one of them.
-    const group = /** @type {LinearSourceGroup} */ (linearSourceGroups.value.find((entry) => (
+    const group = /** @type {LinearSourceGroup} */ (groupLinearSourceRecords(drawing.linearSeqs).find((entry) => (
       entry.records.some(({ sequence }) => sequence.uid === seq.uid)
     )));
     const members = new Set(group.records.map(({ sequence }) => sequence.uid));
@@ -6806,9 +6872,106 @@ export const createAppSetup = () => {
         : members.has(entry.uid) ? [] : [entry]
     )), { alignmentMutation: msg('source replaced.'), retiredRecordKeys: [...members] });
     if (keepSource) {
-      pendingLinearRecordExpansions.set(replacement.uid, !seq[field]);
-      pendingLinearUploads.add(replacement.uid);
+      const pending = pendingDiscoveryOf(drawing);
+      pending.expansions.set(replacement.uid, !seq[field]);
+      pending.uploads.add(replacement.uid);
     }
+  };
+  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {FileLike | null | undefined} value */
+  const setLinearSeqPrimaryFile = (index, field, value) => shownAction('linear', (drawing) => {
+    const idx = Number(index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= drawing.linearSeqs.length) return;
+    if (!['gb', 'gff', 'fasta'].includes(field)) return;
+    replaceLinearSourceFile(drawing, drawing.linearSeqs[idx].uid, field, value);
+  });
+  /** @param {readonly (InputFileRef | null)[]} slots @param {string} fileId @returns {number[]} */
+  const slotIndexesOfFile = (slots, fileId) => slots.flatMap((ref, idx) => (ref && ref.fileId === fileId ? [idx] : []));
+  /**
+   * The writer of each slot an input file replacement names: every
+   * `ReplaceableInputSlot` has one (a missing one fails the type check), and
+   * each is the body the shown drawing's control of that slot runs.
+   * @type {Readonly<Record<ReplaceableInputSlot, (drawing: DrawingState, site: DrawingInputSite, fileId: string, file: InputFileCandidate | InputFileRef) => void>>}
+   */
+  const INPUT_REPLACEMENT_WRITERS = Object.freeze({
+    c_gb: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gb', file),
+    c_gff: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_gff', file),
+    c_fasta: (drawing, _site, _fileId, file) => replaceCircularSource(drawing, 'c_fasta', file),
+    c_depth: (drawing, _site, fileId, file) => {
+      const indexes = new Set(circularDepthRows(drawing).flatMap((row) => slotIndexesOfFile(row, fileId)));
+      indexes.forEach((idx) => replaceCircularDepthFile(drawing, idx, file));
+    },
+    c_conservation_blasts: (drawing, _site, fileId, file) => {
+      const ref = state.inputFiles.registerFile(file);
+      replaceCircularConservationBlasts(drawing, normalizeFileList(drawing.files.c_conservation_blasts)
+        .map((entry) => (entry.fileId === fileId ? ref : entry)));
+    },
+    'row.gb': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gb', file),
+    'row.gff': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'gff', file),
+    'row.fasta': (drawing, site, _fileId, file) => replaceLinearSourceFile(drawing, String(site.rowUid), 'fasta', file),
+    'row.depth': (drawing, site, fileId, file) => {
+      const seq = drawing.linearSeqs.find((entry) => entry.uid === site.rowUid);
+      if (!seq) return;
+      slotIndexesOfFile(depthFileSlotsFromValue(seq.depth), fileId).forEach((idx) => setLinearDepthFiles(drawing, [seq], idx, file));
+    },
+    edge: (drawing, site, _fileId, file) => replaceLinearComparisonFile(drawing, String(site.edgeId), file)
+  });
+  // The replacement of an input file for the shown drawing or every drawing
+  // that uses it (PD-OI-090 〔入力ファイル〕): its owner is `app/drawing-list.js`,
+  // created after every writer it reaches.
+  const inputReplacement = createInputReplacement({
+    drawingTabs: () => state.drawingTabs.value,
+    shownDrawingId: () => state.activeDrawingId.value,
+    switchBusy: drawingSwitchBusy,
+    drawingOf: state.drawingOf,
+    runProjectStep: history.runProjectStep,
+    runDrawingStep: history.runUndoable,
+    applyInputReplacementToDrawings: (sites, fileId, file) => sites.forEach((site) => {
+      INPUT_REPLACEMENT_WRITERS[site.slot](state.drawingOf(site.drawingId), site, fileId, file);
+    }),
+    askScope: async (previous, otherDrawingIds) => {
+      const choice = await askChoice({
+        title: t('Replace input file?'),
+        description: t('{name} is also used in other drawings ({count}).', {
+          name: previous.name, count: otherDrawingIds.length
+        }),
+        actions: [
+          { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },
+          { id: 'all', label: t('Every drawing that uses this file'), tone: 'primary' }
+        ]
+      });
+      return choice === 'drawing' || choice === 'all' ? choice : null;
+    }
+  });
+  // The uploaders of the shown drawing's bound input files: each names the
+  // file its control binds and its own write; `replaceFromShownDrawing`
+  // decides whether to ask (PD-OI-090 〔入力ファイル〕). The five cards and
+  // the similarity-ring file list are not replacements of one bound file.
+  const { replaceFromShownDrawing } = inputReplacement;
+  /** @param {'c_gb' | 'c_gff' | 'c_fasta'} field @param {File | null} file */
+  const uploadCircularSourceFile = (field, file) => shownAction('circular', (drawing) => (
+    replaceFromShownDrawing(drawing.files[field], file, () => replaceCircularSource(drawing, field, file))
+  ));
+  /** @param {number} index @param {File | null} file */
+  const uploadCircularDepthFile = (index, file) => shownAction('circular', (drawing) => (
+    replaceFromShownDrawing(circularDepthRepresentatives(drawing)[Number(index)] || null, file, () => replaceCircularDepthFile(drawing, index, file))
+  ));
+  /** @param {number} index @param {'gb' | 'gff' | 'fasta'} field @param {File | null} file */
+  const uploadLinearSeqPrimaryFile = (index, field, file) => shownAction('linear', (drawing) => {
+    const seq = drawing.linearSeqs[Number(index)];
+    return seq ? replaceFromShownDrawing(seq[field], file, () => replaceLinearSourceFile(drawing, seq.uid, field, file)) : undefined;
+  });
+  /** @param {LinearSeq} seq @param {number} index @param {File | null} file */
+  const uploadLinearDepthFile = (seq, index, file) => shownAction('linear', (drawing) => (
+    replaceFromShownDrawing(getLinearDepthFile(seq, index), file, () => setLinearDepthFiles(drawing, [seq], index, file))
+  ));
+  /** @param {LinearSourceGroup} source @param {number} index @param {File | null} file */
+  const uploadLinearSourceDepthFile = (source, index, file) => shownAction('linear', () => (
+    replaceFromShownDrawing(getLinearDepthFile(source.sequence, index), file, () => setLinearSourceDepthFile(source, index, file))
+  ));
+  /** @param {string} edgeKey @param {File | null} file */
+  const uploadLinearComparisonCardFile = (edgeKey, file) => shownAction('linear', () => {
+    const pair = linearComparisonPairForEdgeKey(edgeKey);
+    return replaceFromShownDrawing(pair && pair.draft ? pair.draft.file : null, file, () => setLinearComparisonCardFile(edgeKey, file));
   });
 
   // Record selection (D-01..D-10): the record sources and edits its owner
@@ -6977,7 +7140,7 @@ export const createAppSetup = () => {
       if (!drawing) return null;
       return getCircularRecordDiscoveryState(drawing).status === 'ready' ? null : inspectCircularSourceRecords();
     },
-    autoOpenRequests: recordListRequests
+    autoOpenRequests: () => pendingDiscoveryOf(state.activeDrawing()).listRequests
   });
 
   /** @param {DrawingState} drawing @param {number} sourceIndex @param {number} direction */
@@ -7677,6 +7840,13 @@ export const createAppSetup = () => {
     setCircularRecordPresentationSelector,
     changeCircularMultiRecordCanvas,
     setCircularSourceFile,
+    replaceInputFile: inputReplacement.replaceInputFile,
+    uploadCircularSourceFile,
+    uploadCircularDepthFile,
+    uploadLinearSeqPrimaryFile,
+    uploadLinearDepthFile,
+    uploadLinearSourceDepthFile,
+    uploadLinearComparisonCardFile,
     recordSelection,
     circularDrawnRecordCount,
     formatRecordLength,

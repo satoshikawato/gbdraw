@@ -6,6 +6,7 @@
 // drawing shown before (R16-2). A step that takes a drawing out holds it, its
 // Result slot, and (through the router) its History, for its Undo (R16-3).
 import { allocateDrawingId, copyDrawingName, defaultDrawingName, drawingNamesProblem } from '../services/drawing-view.js';
+import { projectInputReplacement } from '../services/drawing/inputs.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { errorText } from '../utils/error-text.js';
 import { msg, t, tm } from '../utils/i18n.js';
@@ -17,6 +18,7 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
 /** @import { AskChoice, AskText } from './app-messages.js' */
 /** @import { DiagnosticError } from '../utils/error-normalization.js' */
+/** @import { InputFileCandidate, InputFileRef } from '../services/history-files.js' */
 
 /**
  * @typedef {() => readonly DrawingTab[]} ReadDrawingTabs The drawings' IDs and names, in tab order.
@@ -257,6 +259,84 @@ export const createDrawingList = ({
   };
 
   return { newDrawing, duplicateDrawing, renameDrawing, moveDrawing, deleteDrawing, needsDeleteConfirmation };
+};
+
+/**
+ * @typedef {import('../services/drawing/inputs.js').InputReplacementSite<DrawingId>} DrawingInputSite
+ * @typedef {(sites: readonly DrawingInputSite[], fileId: string, file: InputFileCandidate | InputFileRef) => void} ApplyInputReplacementToDrawings
+ *   Writes `file` in place of the file `fileId` at each site, in the site's drawing, with that
+ *   drawing's reactions to its new source; every slot a site names has a writer.
+ * @typedef {(label: string, apply: () => void) => unknown} RunReplacementStep One History step that runs `apply`.
+ * @typedef {'drawing' | 'all'} InputReplacementScope The shown drawing only, or every drawing that uses the file.
+ * @typedef {object} InputReplacementPorts
+ * @property {ReadDrawingTabs} drawingTabs
+ * @property {ReadShownDrawingId} shownDrawingId
+ * @property {ReadSwitchBusy} switchBusy
+ * @property {ReadDrawing} drawingOf
+ * @property {RunReplacementStep} runProjectStep A project step: one Undo from any drawing (R11).
+ * @property {RunReplacementStep} runDrawingStep A step of the shown drawing.
+ * @property {ApplyInputReplacementToDrawings} applyInputReplacementToDrawings
+ * @property {(previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null>} askScope
+ *   Asks "This drawing only" / "Every drawing that uses this file"; null is Cancel.
+ */
+
+/**
+ * The replacement of an input file that drawings bind (PD-OI-090 〔入力ファイル〕,
+ * R16-5, R17-3): for the shown drawing only, a step of that drawing; for every
+ * drawing that uses the file, one project step, after which no drawing binds
+ * the replaced file. The sites come from `projectInputReplacement` by drawing
+ * ID and slot, row uid, or comparison id; the five cards are never sites.
+ * @param {InputReplacementPorts} ports
+ */
+export const createInputReplacement = ({
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope
+}) => {
+  /**
+   * @param {string} fileId the bound file being replaced
+   * @param {InputFileCandidate | InputFileRef} file the new file, or a file in this Session
+   * @param {InputReplacementScope} scope
+   * @returns {DrawingListOutcome}
+   */
+  const replaceInputFile = (fileId, file, scope) => {
+    const reason = switchBusy();
+    if (reason) return { status: 'busy', reason };
+    const shown = shownDrawingId();
+    const drawings = drawingTabs().filter((tab) => scope === 'all' || tab.id === shown)
+      .map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
+    const sites = projectInputReplacement(drawings, fileId);
+    if (sites.length) {
+      (scope === 'all' ? runProjectStep : runDrawingStep)('Replace input file', () => applyInputReplacementToDrawings(sites, fileId, file));
+    }
+    return { status: 'ok', drawingId: shown };
+  };
+  /**
+   * The drawings other than the shown one that bind `fileId` where a
+   * replacement writes: the replacement asks only when there is one.
+   * @param {string} fileId @returns {DrawingId[]}
+   */
+  const otherDrawingsUsing = (fileId) => {
+    const shown = shownDrawingId();
+    const drawings = drawingTabs().filter((tab) => tab.id !== shown).map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
+    return [...new Set(projectInputReplacement(drawings, fileId).map((site) => site.drawingId))];
+  };
+  /**
+   * An uploader of the shown drawing writes a new file in place of `previous`
+   * (PD-OI-090 〔入力ファイル〕). When another drawing uses `previous`, the
+   * scope is asked: Cancel records nothing, else `replaceInputFile`. Else,
+   * and for a Remove (`file` null, not a replacement), the uploader's own
+   * write `writeShown`, a step of the shown drawing. The only place that asks.
+   * @template T
+   * @param {InputFileRef | null} previous the file the uploader binds now
+   * @param {InputFileCandidate | InputFileRef | null} file
+   * @param {() => T} writeShown
+   * @returns {T | Promise<DrawingListOutcome | null>}
+   */
+  const replaceFromShownDrawing = (previous, file, writeShown) => {
+    const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
+    if (!previous || !file || !others.length) return writeShown();
+    return askScope(previous, others).then((scope) => (scope ? replaceInputFile(previous.fileId, file, scope) : null));
+  };
+  return { replaceInputFile, otherDrawingsUsing, replaceFromShownDrawing };
 };
 
 /**
