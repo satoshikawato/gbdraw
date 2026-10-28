@@ -7,6 +7,7 @@ import { File } from 'node:buffer';
 import test from 'node:test';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
+import { withBootPalettes } from './helpers/boot-palettes.mjs';
 
 globalThis.window = {
   Vue: {
@@ -21,10 +22,11 @@ globalThis.document = { createElement: () => ({ click: () => {} }), querySelecto
 installFakeSvgDom();
 globalThis.File = File;
 
-const { state, createDrawingState } = await import('../../gbdraw/web/js/state.js');
+const { state, createDrawingState, drawingHasEdits } = await import('../../gbdraw/web/js/state.js');
 const { createAppSetup } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { bindDrawingInputFileTree } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
-const { resetProject, resetSettings } = await import('../../gbdraw/web/js/services/reset.js');
+const { PALETTE_SLICE } = await import('../../gbdraw/web/js/services/drawing/palette.js');
+const { resetProject, resetSettings, withNewDrawingDefaults } = await import('../../gbdraw/web/js/services/reset.js');
 const { createDefaultLosatExecution } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
 const { createDefaultEditorDraftState, createDefaultPaletteDraftState } = await import('../../gbdraw/web/js/state.js');
 
@@ -148,6 +150,21 @@ test('New is one project step: its Undo shows the drawing shown before, its Redo
   assert.deepEqual(tabIds(), [...before, drawingId]);
   assert.equal(history.managerOf(drawingId).getUndoCount(), 0);
 });
+
+test('New takes the defaults of its mode, the drawing Load and the generator make (OV-1761)', () => withBootPalettes(state, async () => {
+  const app = createAppSetup();
+  for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const outcome = app.drawingList.newDrawing(mode);
+    assert.equal(outcome.status, 'ok');
+    const made = state.drawingOf(outcome.drawingId);
+    const expected = withNewDrawingDefaults(state, createDrawingState(outcome.drawingId, mode));
+    const colors = PALETTE_SLICE.capture(expected.slices.palette).currentColors;
+    assert.ok(Object.keys(colors).length > 0, 'the default palette has colors');
+    assert.deepEqual(PALETTE_SLICE.capture(made.slices.palette), PALETTE_SLICE.capture(expected.slices.palette),
+      `a new ${mode} drawing takes its default palette's colors`);
+    assert.equal(drawingHasEdits(made), false, 'it carries no edits');
+  }
+}));
 
 test('a new drawing starts with an empty History', async () => {
   const app = createAppSetup();
