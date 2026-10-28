@@ -942,14 +942,16 @@ by its position among the drawn rings counted from the outermost ring:
 A color given with `--conservation_colors` or in the `color` column of
 `--conservation_table` wins under every scheme. Write `auto` in
 `--conservation_colors` (an empty cell in the table) for a ring that takes the
-scheme color. A ring draws its identity from white to its color; a ring colored
-`#8b9cc1` draws the default gradient (`objects.conservation.min_color` to
-`max_color`). The config key is `objects.conservation.color_scheme`.
+scheme color. A ring with a color draws its identity from a light tint of that
+color to the color; a ring without one (`same`) draws the default gradient
+(`objects.conservation.min_color` to `max_color`). The config key is
+`objects.conservation.color_scheme`.
 
 The legend lists the drawn rings by name from `outer` to `inner`, then one
 `identity` band with the minimum identity and `100%`. When the drawn rings
 differ in color, each name shows a swatch of its ring color and the band is
-grey; otherwise the names have no swatch and the band is the rings' gradient.
+grey; otherwise the names have no swatch and the band is the outermost ring's
+gradient. A ring without a color counts as `objects.conservation.max_color`.
 
 The single-track geometry options `--feature_width`, `--depth_width`,
 `--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and

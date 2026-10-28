@@ -102,13 +102,18 @@ def test_a_disabled_slot_draws_no_ring() -> None:
     assert [(track.track_index, track.track_color) for track in resolved] == [(2, TEN[0])]
 
 
-def test_a_ring_coloured_like_the_default_max_draws_the_default_gradient() -> None:
+def test_a_ring_coloured_like_the_default_max_keeps_its_own_gradient() -> None:
+    """A ring's own colour draws white-tinted-to-colour, even when it equals the configured max (dev behaviour;
+    saved work keeps its colours)."""
+    from gbdraw.core.color import tint_color
+
     cfg = apply_config_overrides(None, None).objects.conservation
     default = conservation_track_gradient_colors(None, default_min_color=cfg.min_color, default_max_color=cfg.max_color)
 
+    assert default == (cfg.min_color, cfg.max_color)
     assert conservation_track_gradient_colors(
         "#8B9CC1", default_min_color=cfg.min_color, default_max_color=cfg.max_color
-    ) == default == (cfg.min_color, cfg.max_color)
+    ) == (tint_color("#8b9cc1"), "#8b9cc1")
 
 
 def test_config_scheme_defaults_to_same_and_rejects_other_values() -> None:
@@ -339,11 +344,17 @@ def test_captions_and_scale_labels_are_muted_and_ring_names_keep_the_legend_text
     assert [text.get("fill") for text in names] == [None, None, None]
     assert len(font_sizes) == 1
 
-def test_a_ring_coloured_like_the_default_keeps_the_one_colour_legend() -> None:
-    block = _ring_block(_draw_legend("same", ["#8B9CC1", "", ""]))
+@pytest.mark.parametrize(
+    ("colors", "band_min"), [(["#8B9CC1", "", ""], "tint"), (["", "#8B9CC1", ""], "#f0f1f5")]
+)
+def test_a_ring_coloured_like_the_default_keeps_the_one_colour_legend(colors: list[str], band_min: str) -> None:
+    """A ring without a colour counts as the configured max; the band is the first drawn ring's gradient."""
+    from gbdraw.core.color import tint_color
+
+    block = _ring_block(_draw_legend("same", colors))
 
     assert [row[3] for row in _block_rows(block)] == [None, None, None]
-    assert _band_stops(block) == ["#f0f1f5", "#8b9cc1"]
+    assert _band_stops(block) == [tint_color("#8b9cc1") if band_min == "tint" else band_min, "#8b9cc1"]
 
 
 def test_mixed_colour_legend_shows_swatches_and_the_grey_band() -> None:

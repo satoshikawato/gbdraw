@@ -1896,7 +1896,7 @@ def _add_conservation_ring_rows(
     """One row per drawn ring, outermost first, with the identity band they share (PD-OI-110).
 
     A row shows its ring's color (no color = the configured max) only when the drawn rings differ in color; the
-    band is then the neutral grey gradient, else the rings' own gradient.
+    band is then the neutral grey gradient, else the first drawn ring's gradient.
     """
 
     def gradient(color: str | None) -> tuple[str, str]:
@@ -1906,7 +1906,7 @@ def _add_conservation_ring_rows(
 
     colors = [gradient(ring.track_color)[1] for ring in rings]
     one_color = len(set(colors)) == 1
-    band_min, band_max = gradient(colors[0] if one_color else CONSERVATION_MIXED_BAND_COLOR)
+    band_min, band_max = gradient(rings[0].track_color if one_color else CONSERVATION_MIXED_BAND_COLOR)
     for ring, color in zip(rings, colors):
         out.add_source(ring.track_label, {
             "type": "ring",
