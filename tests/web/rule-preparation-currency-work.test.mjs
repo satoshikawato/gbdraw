@@ -106,6 +106,20 @@ for (const [name, write] of Object.entries(WRITES)) {
   });
 }
 
+// OV-2159 (R16-4, D-15-126): a drawing's Specific rules match on its own
+// inputs. Another drawing's input type, record rows, and cards are not inputs
+// of the shown one, so a failed import's Retry stays while they change.
+test('another drawing\'s input type, record rows, and cards keep the shown drawing\'s snapshot current', () => {
+  const { drawings, preparation } = setup();
+  const shown = preparation.snapshot();
+  drawings.linear.inputType.value = 'gff';
+  drawings.linear.linearSeqs.push({ gb: null, gff: null, fasta: null });
+  drawings.linear.files.d_color = { name: 'colors.tsv' };
+  assert.equal(preparation.isCurrent(shown), true);
+  drawings.circular.files.d_color = { name: 'colors.tsv' };
+  assert.equal(preparation.isCurrent(shown), false);
+});
+
 test('a mode switch reads the inputs of the drawing it shows', () => {
   const { drawings, state, preparation } = setup();
   drawings.linear.featureColorOverrides.f2 = { color: '#666666', caption: 'CDS' };

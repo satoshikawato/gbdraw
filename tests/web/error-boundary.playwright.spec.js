@@ -303,12 +303,15 @@ test('table import failures retain exact cause and concrete retry without a draf
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Not a valid regular expression',{timeout:180000});
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.history);
   // D-15-126: the failure is the Circular drawing's card state: not shown on another drawing, shown again with its Retry.
+  // Making the Linear drawing is a project step of its own (R11); the History baseline follows it.
   await showDrawing(page,{kind:'linear'});
   await expect(alert).toHaveCount(0);
   await showDrawing(page,{kind:'circular'});
   await expect(alert).toContainText('Not a valid regular expression');
   await expect(alert.getByRole('button',{name:'Retry table import',exact:true})).toBeVisible();
+  before.history=await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
   await page.evaluate(()=>{window.__S03_PREVIOUS_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
   await alert.getByRole('button',{name:'Retry table import',exact:true}).click();
   await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__S03_PREVIOUS_IMPORT_ERROR__ && !window.__GBDRAW_APP__.files.t_color);

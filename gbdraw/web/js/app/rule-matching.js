@@ -292,34 +292,36 @@ export const createRulePreparation = ({
   const drawingInputs = Object.entries(drawingInputReaders).map(([key, read]) => (
     /** @type {[string, { value: string }]} */ ([key, computed(() => JSON.stringify(read(state.activeDrawing())))])
   ));
+  // The shown drawing's inputs only: its rows match on its own input type,
+  // records, and cards, never another drawing's (R16-4).
   /** @returns {RuleInputsSnapshot} */
-  const snapshot = () => ({
-    catalog: state.extractedFeatures.value,
-    biology: state.biologicalFeatures?.value,
-    result: state.svgResultIdentity?.value,
-    mode: state.mode?.value,
-    // Every drawing's input type, in tab order.
-    inputKinds: JSON.stringify(state.drawingList().map((/** @type {DrawingState} */ drawing) => drawing.inputType.value)),
-    // The shown drawing's Specific rules file (R16-4).
-    file: state.activeDrawing().files.t_color,
-    // Every drawing's cards, in tab order: the same invalidation as the
-    // project's rows had.
-    linearFiles: state.drawingList().flatMap((/** @type {DrawingState} */ drawing) => drawing.linearSeqs)
-      .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
-    resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
-    selectedResult: state.selectedResultIndex?.value,
-    ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
-    // Physical source, palette, and selector inputs retain their identity while
-    // request-owned comparison artifacts are published independently.
-    inputFiles: [
-      ...state.drawingList().flatMap((/** @type {DrawingState} */ { files }) => [
+  const snapshot = () => {
+    /** @type {DrawingState} */
+    const drawing = state.activeDrawing();
+    const { files } = drawing;
+    return {
+      catalog: state.extractedFeatures.value,
+      biology: state.biologicalFeatures?.value,
+      result: state.svgResultIdentity?.value,
+      mode: state.mode?.value,
+      inputKind: drawing.inputType.value,
+      // The Specific rules file (R16-4).
+      file: files.t_color,
+      linearFiles: drawing.linearSeqs
+        .flatMap((/** @type {LinearSeq} */ sequence) => [sequence.gb, sequence.gff, sequence.fasta]),
+      resultNames: JSON.stringify((state.results?.value || []).map((/** @type {{ name?: unknown }} */ result) => result.name)),
+      selectedResult: state.selectedResultIndex?.value,
+      ...Object.fromEntries(drawingInputs.map(([key, input]) => [key, input.value])),
+      // Physical source, palette, and selector inputs retain their identity while
+      // request-owned comparison artifacts are published independently.
+      inputFiles: /** @type {unknown[]} */ ([
         files.c_gb, files.c_gff, files.c_fasta, files.c_depth,
         files.c_conservation_blasts, files.c_conservation_blasts_source,
         files.c_conservation_fastas, files.c_conservation_sequence_sources,
         files.d_color, files.blacklist, files.whitelist, files.qualifier_priority
-      ])
-    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
-  });
+      ]).flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
+    };
+  };
   /** @type {RulePreparation['isCurrent']} */
   const isCurrent = (before) => {
     const after = snapshot();
