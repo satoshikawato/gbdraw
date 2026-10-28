@@ -240,8 +240,12 @@ header lacks room, the button shows only its icon, and where even that would
 narrow the Session title, **Reset Settings**, **Save Session**, **Load
 Session**, and **Load example** show only their icons too and the header's
 groups move closer together; where the title would still narrow, the
-**Session** caption before it is hidden. In the two-row header of a window 768 px wide or
-narrower, the button shows only its icon, at the end of the logo's row.
+**Session** caption before it is hidden, and then the closed **Language** menu
+is only as wide as the shown language's name (in browsers with CSS
+`field-sizing`, such as Chrome and Edge). Where the Session title would still be
+narrower than 5rem (80 px), the header takes the two-row layout it has in a
+window 768 px wide or narrower. In the two-row header, the button shows only
+its icon, at the end of the logo's row.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,
