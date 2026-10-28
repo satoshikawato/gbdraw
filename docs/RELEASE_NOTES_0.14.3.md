@@ -41,6 +41,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   proteins" when a color rule takes a CDS feature under another caption).
   Before, a later rule edit or Legend delete stroked those features again
   until the next **Generate Diagram**.
+- After a palette switch in the Web app, a Legend row whose name a color rule
+  also uses takes the new palette color while the rule colors no drawn feature
+  (for example **Use existing color** on a CDS feature that a visibility rule
+  hides), as **Generate Diagram** draws it. Before, the row kept the rule's
+  color until the next Generate.
 
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,

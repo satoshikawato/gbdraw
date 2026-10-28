@@ -15,7 +15,7 @@ import { legendEntryKey } from '../services/drawing/paint.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import { ruleMatcher } from '../services/rule-matchers.js';
-import { featureColorEditColor, generatedLegendRow, ruleLegendCaptions } from '../services/specific-color-rules.js';
+import { featureColorEditColor, generatedLegendRow, ruleGroupDrawn, ruleLegendCaptions } from '../services/specific-color-rules.js';
 import { trackLegendRows, trackRowColor } from '../services/track-legend-rows.js';
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 import { displayedLegendRowContext, resolveFeatureDrawn } from '../services/feature-visibility.js';
@@ -266,7 +266,8 @@ const paletteLegendColor = (key, palette, trackRows) => {
  * @param {{ rules: readonly Partial<SpecificColorRule>[], pythonRows?: ReadonlyMap<PythonLegendKey, PythonLegendRow>,
  *   features?: LegendRowContext['features'], originalLegendOrder: readonly string[], paletteColors: Record<string, string>,
  *   drawnTracks: readonly DrawnTrack[], sharedLegendKeys?: ReadonlySet<PythonLegendKey> }} draft
- *   `features`: the features the displayed Result draws, whose rule matches decide the rows Python leaves out (OV-306).
+ *   `features`: the features the displayed Result draws, whose rule matches decide the rows Python leaves out (OV-306)
+ *   and the rules that draw a row (`ruleGroupDrawn`, OV-1988).
  *   `sharedLegendKeys`: `trackLegendRows`'s, of the displayed Result.
  * @returns {{ ruleCaptions: PythonLegendKey[], rowOf: ReturnType<typeof ruleLegendCaptions>,
  *   colorOf: (key: PythonLegendKey) => SwatchColor | null }} `rowOf`: the key of the row a rule is drawn in.
@@ -276,8 +277,11 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] });
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
+  // A rule that colors no drawn feature draws no row: its caption's row keeps
+  // Python's color (OV-1988).
+  const draws = rules.some((rule) => text(rule?.cap)) ? ruleGroupDrawn({ rules, features }) : () => false;
   rules.forEach((rule) => {
-    const key = text(rule?.cap) ? rowOf(rule) : null;
+    const key = text(rule?.cap) && draws(rule) ? rowOf(rule) : null;
     if (key && !ruleColors.has(key)) ruleColors.set(key, text(rule.color));
   });
   return {

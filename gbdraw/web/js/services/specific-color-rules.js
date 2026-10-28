@@ -576,6 +576,26 @@ export const ruleLegendCaptions = (context) => {
   };
 };
 
+// Whether a rule's Legend group (its caption and fill) colors a feature the
+// displayed Result draws, as each feature's first rule (Python draws a rule's
+// row only then, OV-1988); true for every rule while a drawn feature's match
+// is unknown, so an unknown match is never read as a miss.
+/**
+ * @param {Pick<LegendRowContext, 'rules' | 'features'>} context
+ * @returns {(rule: Partial<SpecificColorRule>) => boolean}
+ */
+export const ruleGroupDrawn = ({ rules = [], features = [] }) => {
+  const winnerOf = ruleMatcher([...rules]).firstIfKnown;
+  /** @type {Set<string>} */
+  const drawn = new Set();
+  for (const feature of features) {
+    const rule = winnerOf(feature);
+    if (rule === undefined) return () => true;
+    if (rule) drawn.add(legendGroupKey(normalizeSpecificRule(rule)));
+  }
+  return (rule) => drawn.has(legendGroupKey(normalizeSpecificRule(rule)));
+};
+
 // The key of the Legend row each color-rule group of `context.rules` is drawn
 // in: a group is the rules of one caption and one color, which share that row.
 /**

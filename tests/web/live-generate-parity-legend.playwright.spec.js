@@ -1906,3 +1906,23 @@ test('a stroke on a Legend row the Result no longer draws reaches no feature aft
   await settleLive(page);
   await expectLiveEqualsGenerate(page, { label: 'a rule edit after the stroked row left the Result' });
 });
+
+// OV-1988 (release-tier random walk, seed 40655413787): "Use existing color"
+// on a feature that a visibility rule hides writes a CDS rule in the CDS
+// palette color. The rule colors no drawn feature, so Python draws no row for
+// it, and the `CDS` row stays the palette's row. After a palette switch the
+// live `CDS` row takes the new palette color, as Generate draws it; before the
+// fix it kept the rule's (the old palette's) color until Generate.
+test('a palette switch recolors the CDS row a rule of a hidden feature names, live = Generate (OV-1988)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' });
+  await popupEdit(page, 'FL2', { fill: '#123456', scope: 'useExisting' });
+  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
+  expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
+  await switchPalette(page, 'earthtones');
+  const earthtonesCds = await page.evaluate(() => window.__GBDRAW_APP__.paletteDefinitions.earthtones.CDS);
+  const cdsRow = (await semanticSnapshot(page)).legend.find((row) => row.key === 'CDS');
+  expect(cdsRow?.fill, 'the live CDS row shows the new palette color').toBe(earthtonesCds);
+  await expectLiveEqualsGenerate(page, { label: 'a palette switch after a rule of a hidden feature' });
+});
