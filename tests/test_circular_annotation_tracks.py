@@ -26,6 +26,7 @@ from gbdraw.api import (
 )
 import gbdraw.api.render as api_render
 from gbdraw.exceptions import LabelLeadersCrossWarning
+from tests.utils.svg_compare import assert_nested_approx
 from gbdraw.api.diagram import build_circular_diagram, build_circular_multi_diagram
 from gbdraw.core.text import dominant_baseline_shift_em, get_font_vertical_metrics, text_ink
 from gbdraw.tracks import (
@@ -1405,7 +1406,7 @@ def test_circular_rings_keep_their_places_when_they_cannot_make_the_label_room()
         )
         return _slot_bands(_draw_span_regions(slots, RegionAnnotationStyle(label_offset=4.0)))
 
-    assert bands("true") == pytest.approx(bands("false"), abs=1e-6)
+    assert_nested_approx(bands("true"), bands("false"), abs=1e-6)
 
 
 def test_circular_span_label_room_on_an_inside_ring_leaves_the_outside_rows_in_place() -> None:

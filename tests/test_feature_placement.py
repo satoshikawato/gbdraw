@@ -33,7 +33,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import _LANE_SIDES, FeaturePlacementOverride, FeaturePlacementTarget
 from gbdraw.features.source import capture_source_features
 from gbdraw.io.regions import parse_region_spec
-from tests.utils.svg_compare import PATH_ROUNDING
+from tests.utils.svg_compare import PATH_ROUNDING, assert_nested_approx
 from gbdraw.session_request_codec import (
     CanonicalRequestEncodingError,
     encode_canonical_request,
@@ -1704,8 +1704,10 @@ def test_moved_feature_ribbons_ignore_a_to_slot_span(stack):
     plain, _ = _moved_feature_ribbons(stack)
     spanned, _ = _moved_feature_ribbons((*stack, span))
     # A span adds no space, so each ribbon keeps its gap to its own feature's lane.
-    assert [(gap_q, gap_s) for _, gap_q, _, gap_s in spanned] == pytest.approx(
-        [(gap_q, gap_s) for _, gap_q, _, gap_s in plain])
+    assert_nested_approx(
+        [(gap_q, gap_s) for _, gap_q, _, gap_s in spanned],
+        [(gap_q, gap_s) for _, gap_q, _, gap_s in plain],
+    )
 
 
 def test_moved_feature_ribbons_ignore_a_to_slot_span_whose_slots_have_no_data():

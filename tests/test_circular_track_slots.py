@@ -30,6 +30,7 @@ from gbdraw.tracks import (
     parse_circular_track_slot,
     parse_circular_track_slots,
 )
+from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.circular_drawer_fakes import (
     make_numeric_slot_capture,
     make_numeric_slot_geometry_capture,
@@ -2796,7 +2797,7 @@ def test_a_definition_that_cannot_fit_moves_no_row_with_or_without_a_title(
             species=species,
             plot_title=plot_title,
         )
-        assert _slot_geometry(layout) == pytest.approx(expected), plot_title
+        assert_nested_approx(_slot_geometry(layout), expected)
 
 
 def test_a_definition_that_needs_more_room_still_bounds_the_gallery_stack(
