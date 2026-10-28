@@ -1362,7 +1362,8 @@ def _search_frame_items(
         content = _embedded_resource_bytes(after_resources[_comparison_resource_id(new)])
         query, subject = (identity[1], identity[2]) if len(identity) == 4 else (-1, -1)
         if not isinstance(query, int) or not isinstance(subject, int):
-            raise ValidationError("A stored comparison result requires integer record indices.")
+            raise ValidationError("A stored comparison result requires integer record indices.",
+                                  diagnostic={"code": "INPUT_INVALID"})
         items.append(_SearchFrameItem(
             _comparison_resource_id(item),
             (query, subject),
@@ -1406,7 +1407,7 @@ def _comparison_items(comparisons: object, kinds: frozenset[str]) -> dict[tuple[
 def _comparison_resource_id(item: Mapping[str, object]) -> str:
     resource_id = item.get("resourceId")
     if not isinstance(resource_id, str):
-        raise ValidationError("A stored comparison result requires a resourceId.")
+        raise ValidationError("A stored comparison result requires a resourceId.", diagnostic={"code": "INPUT_INVALID"})
     return resource_id
 
 
