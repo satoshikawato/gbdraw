@@ -480,6 +480,26 @@ def test_a_track_toggle_rebuilds_no_definition_title_record_content_or_ticks(
     } & set(outcome.stages.builds)
 
 
+def test_a_circular_label_rendering_change_rebuilds_the_labels_not_the_record_content_or_ticks(
+    tables: Path, tmp_path: Path
+) -> None:
+    """The record content, the ticks and the track-overlap count read the strand setting of the profile, not the
+    whole canvas or labels node, so a label rendering change rebuilds only the label stages and what they bound.
+    The warm render equals a cold one (no stale hit)."""
+
+    case = CASES["C1"]
+    placeholders = Placeholders(tables)
+    harness = EquivalenceHarness(case.mode, tmp_path / "C1")
+    assert harness.warm(placeholders.expand(case, case.base)).error is None
+    [(option, variant)] = matrix_variants(case, option_ids=["label_rendering"], first_variant_only=True)
+    warm, _cold = harness.step(state_arguments(case, {option: variant}, placeholders), "C1 label_rendering")
+    assert warm.error is None
+    assert {"circular_labels", "label_text_content"} <= set(warm.stages.builds)
+    assert not {
+        "circular_record_content", "ticks_content", "definition_track_overlaps", "catalog_snapshot",
+    } & set(warm.stages.builds)
+
+
 def test_a_plot_title_font_size_change_rebuilds_the_title_not_the_record_definition(
     tables: Path, tmp_path: Path
 ) -> None:
