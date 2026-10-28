@@ -31,7 +31,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
     results: { value: [{ name: 'figure', content: '<svg>accepted</svg>' }] },
     svgResultIdentity: { value: 'accepted' }, mode: { value: 'circular' }, generatedMode: { value: 'circular' },
     addedLegendCaptions: { value: new Set() },
-    legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {}, legendStrokeOverrides: {}
+    legendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {}
   };
   const calls = [], history = [];
   let available = true;

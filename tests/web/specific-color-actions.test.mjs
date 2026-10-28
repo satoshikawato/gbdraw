@@ -876,7 +876,7 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     manualSpecificRules: [], featureColorOverrides: {}, featureOverrides: {}, featureVisibilityManualRules: [],
     svgResultIdentity: { value: 'result' }, addedLegendCaptions: { value: new Set() },
     legendEntries: { value: [] }, deletedLegendEntries: { value: [] }, files: { t_color: null }, legendColorOverrides: {},
-    legendStrokeOverrides: {}, extractedFeatures: { value: [] }
+    extractedFeatures: { value: [] }
   };
   state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
   const drawingState = withDrawings(state);

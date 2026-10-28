@@ -1851,3 +1851,41 @@ for (const { name, generateBetween } of [
     await expectLiveEqualsGenerate(page, { label: `a rule caption edit after a caption-scope stroke: ${name}` });
   });
 }
+
+// OV-1986: a Legend row's stroke reaches the features drawn in the row's color,
+// so a rule commit that changes which features a stroked row reaches shows the
+// strokes too, live and on Undo and Redo, as Generate draws them. (A) The rule
+// of a stroked row is removed: its feature leaves the row and its stroke. (B)
+// A pattern edit moves FL2 from the stroked row `other proteins` to the rule
+// row `Other`; no Legend row is added or removed. On dev before the fix both
+// commits already asked for the automatic rerender, which redrew the strokes,
+// so these cases pin the result rather than fail first.
+const ruleIndexOf = (page, cap) => page.evaluate((caption) => (
+  window.__GBDRAW_APP__.manualSpecificRules.findIndex((rule) => rule.cap === caption)
+), cap);
+test('a stroked rule row whose rule is removed leaves its feature unstroked, live = Generate (OV-1986)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'Special' });
+  await legendRowStrokeColor(page, 'Special', '#123456');
+  const index = await ruleIndexOf(page, 'Special');
+  await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.removeSpecificRule(rule), index);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'the rule of a stroked row removed' });
+});
+for (const { name, history: steps } of [
+  { name: 'the pattern edit', history: [] },
+  { name: 'the pattern edit, then Undo and Redo', history: ['undo', 'redo'] }
+]) {
+  test(`a rule pattern edit that moves a feature out of a stroked row takes the row's stroke from it, live = Generate: ${name} (OV-1986)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2266aa', cap: 'Other' });
+    await legendRowStrokeColor(page, 'other proteins', '#123456');
+    const index = await ruleIndexOf(page, 'Other');
+    await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.setSpecificRuleField(rule, 'val', '^FL[12]$'), index);
+    await settleLive(page);
+    for (const step of steps) await history(page, step);
+    await expectLiveEqualsGenerate(page, { label: `a pattern edit after a Legend row stroke: ${name}` });
+  });
+}

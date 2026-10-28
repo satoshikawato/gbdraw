@@ -1926,29 +1926,34 @@ export const createAppSetup = () => {
   // show through the port, compiled with Generate's precedence, unless the
   // caller shows them in its own compile (`show: false`). The Save that shows
   // what a display declined because of it (`saving`) does not count itself.
-  // A rule commit's Legend rows (`legendRows`) show in the same compile, with
-  // the strokes when the commit moved a row's stroke edit to a new key
-  // (`strokes`, OV-1985).
+  // A rule commit's Legend rows (`legendRows`) show in the same compile.
   /** @param {boolean} saving */
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
+  // The domains a display of the feature fills shows. A Legend row's stroke
+  // reaches the features drawn in the row's color (`legendRowFeatureIds`), so a
+  // fill edit can change which features it reaches, and a rule commit can move
+  // the row to another key: while the drawing holds a Legend row stroke, a fill
+  // display also shows the strokes (OV-1985, OV-1986).
+  /** @param {DrawingState} drawing @returns {readonly string[]} */
+  const fillDomainsOf = (drawing) => (Object.keys(drawing.legendStrokeOverrides).length > 0
+    ? [...LIVE_EDIT_DOMAINS.fills, ...LIVE_EDIT_DOMAINS.strokes]
+    : LIVE_EDIT_DOMAINS.fills);
   /**
    * @param {{
    *   recolor?: { recolorPairwise?: boolean, recolorCollinear?: boolean }, prepareRules?: boolean, show?: boolean, saving?: boolean,
-   *   legendRows?: import('./candidate-render.js').RuleLegendRows | null, strokes?: boolean
+   *   legendRows?: import('./candidate-render.js').RuleLegendRows | null
    * }} [options]
    */
-  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false, legendRows = null, strokes = false } = {}) => {
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true, saving = false, legendRows = null } = {}) => {
     const blocked = () => sessionBlocks(saving);
     const project = () => {
       if (blocked()) return false;
       svgActions.applyPaletteToSvg(recolor);
       if (show) {
+        const fills = fillDomainsOf(state.activeDrawing());
         showEditorIntent(legendRows
-          ? {
-              domains: [...FILL_DOMAINS, ...LIVE_EDIT_DOMAINS.legendStructure, ...(strokes ? LIVE_EDIT_DOMAINS.strokes : [])],
-              ruleRows: legendRows
-            }
-          : { domains: FILL_DOMAINS });
+          ? { domains: [...fills, ...LIVE_EDIT_DOMAINS.legendStructure], ruleRows: legendRows }
+          : { domains: fills });
       }
       return true;
     };
@@ -4006,7 +4011,7 @@ export const createAppSetup = () => {
     // one label request.
     if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
     if (labels && !visibility) reconcileLabelOverrides();
-    const shown = [...new Set([...(colors ? FILL_DOMAINS : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
+    const shown = [...new Set([...(colors ? fillDomainsOf(state.activeDrawing()) : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
     if (show && shown.length > 0) showEditorIntent({ domains: shown });
     return shown;
   };
@@ -4220,7 +4225,7 @@ export const createAppSetup = () => {
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
   const {
-    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, fills: FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
+    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
   } = LIVE_EDIT_DOMAINS;
   /**
    * The one transition of a live edit of the paint intent (design §5.8): the

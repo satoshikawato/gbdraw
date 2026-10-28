@@ -30,6 +30,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Generate.
 - Label text and **Label visibility** typed in the Web feature popup and not
   yet applied stay when the labels are placed again while the popup is open.
+- A Legend row's stroke in the Web app shows at once when a color rule edit
+  renames the row, removes it, or changes which features it holds, as
+  **Generate Diagram** draws it. Before, a renamed row showed the default
+  line until the next Generate.
 
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
