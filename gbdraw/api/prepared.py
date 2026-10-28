@@ -349,7 +349,7 @@ _HASH_WORD = 1 << 64
 _HASH_SIGN = 1 << 63
 
 
-def _qualifiers_hash(qualifiers: Any) -> int:
+def _qualifiers_hash(qualifiers: object) -> int:
     """The hash of a feature's qualifiers field (``_shallow_value_stamp`` semantics, without building that stamp).
 
     A dict whose keys are all ``str`` (every GenBank qualifier mapping): the sum,

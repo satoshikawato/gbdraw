@@ -778,11 +778,14 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
         style=RegionAnnotationStyle(fill="#cccccc", stroke="#202020", stroke_width=3.0),
     )
     captured: list[tuple[object, object, object]] = []
+    drawn: list[tuple[tuple[object, ...], int]] = []
     original = assemble_module.definition_lines_over_tracks
 
     def capture(lines, layout, sources, labels):
         captured.append((layout, sources, labels))
-        return original(lines, layout, sources, labels)
+        count = original(lines, layout, sources, labels)
+        drawn.append((tuple(lines), count))
+        return count
 
     monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", capture)
     with warnings.catch_warnings():
@@ -806,6 +809,11 @@ def test_the_count_over_stroked_track_paint_is_a_full_count(monkeypatch: pytest.
     assert captured, "the definition count did not run"
     layout, sources, labels = captured[-1]
     inks = assemble_module._record_track_ink(layout, sources, labels)
+    # The count drawn at the stage boundary is the full count, once per captured call.
+    assert len(drawn) == len(captured)
+    for lines, count in drawn:
+        assert count == assemble_module._definition_lines_on_tracks(inks, list(lines)), (lines, count)
+    monkeypatch.setattr(assemble_module, "definition_lines_over_tracks", original)
     band_floor = min(float(slot.draw_band_px.inner_px) for slot in layout.slots if slot.draw_band_px is not None)
     # The GC% border, half its 6 px stroke inside every band: the paint a band floor would have missed.
     nearest = min((ink for ink in inks if isinstance(ink, CircularInkRing)), key=lambda ink: ink.nearest_px)
