@@ -276,7 +276,7 @@ export const draftLegendRowColors = ({ rules, pythonRows = new Map(), features =
   const trackRows = trackLegendRows(drawnTracks, pythonRows, sharedLegendKeys);
   // Read once for both readers: the row keys (`rowsLeftOut`) and the rules that draw a row.
   const ruleMatches = rules.some((rule) => text(rule?.cap)) ? drawnRuleMatches({ rules, features }) : undefined;
-  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder], ruleMatches });
+  const rowOf = ruleLegendCaptions({ rules: [...rules], pythonRows, features, originalLegendOrder: [...originalLegendOrder] }, ruleMatches);
   /** @type {Map<PythonLegendKey, string>} */
   const ruleColors = new Map();
   // A rule whose group colors no drawn feature draws no row: its caption's

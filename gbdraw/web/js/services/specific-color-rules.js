@@ -170,8 +170,6 @@ const drawsRow = (row, rule) => hasRuleSwatch(row, rule.color)
  * @property {readonly Partial<SpecificColorRule>[]} rules
  * @property {Iterable<LegendRowFeature>} features The features the displayed Result draws
  *   (feature-visibility.js `displayedDrawnFeatures`), with their known rule matches (`rowsLeftOut`).
- * @property {DrawnRuleMatches} [ruleMatches] `drawnRuleMatches` of `rules` and `features`, when the
- *   caller read it already, so one compile reads the features once; read here otherwise.
  */
 
 /**
@@ -254,11 +252,16 @@ export const drawnRuleMatches = ({ rules = [], features = [] }) => {
 //   in until Generate: a feature Python drew in the row's color takes a rule
 //   of the row's caption, and the caption names no row Python generates
 //   (`generatedLegendRow`: a track's row, or a displayed type's row).
+// `ruleMatches` is `drawnRuleMatches` of the same `context.rules` and
+// `context.features`, when the caller read it already, so one compile reads
+// the features once; it is an argument, not a context field, so a context
+// copied with other rules never carries it.
 /**
  * @param {LegendRowContext} context
+ * @param {DrawnRuleMatches} [ruleMatches]
  * @returns {Set<PythonLegendKey>}
  */
-const rowsLeftOut = (context) => {
+const rowsLeftOut = (context, ruleMatches) => {
   const { rules = [], pythonRows, features = [] } = context;
   const captioned = rules.map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
   const typed = captioned.filter((rule) => pythonRows.has(captionRowKey(rule.feat)));
@@ -269,7 +272,7 @@ const rowsLeftOut = (context) => {
     if (color && color !== fillIdentity(rule.color)) recolored.set(rule.cap, color);
   });
   if (typed.length === 0 && recolored.size === 0) return new Set();
-  const { takenBy, types } = context.ruleMatches ?? drawnRuleMatches({ rules, features });
+  const { takenBy, types } = ruleMatches ?? drawnRuleMatches({ rules, features });
   // `pair` keys a rule by its caption and `normalizeColor`, as before one
   // owner read the matches: unlike the Legend group key it keeps #abc and
   // #aabbcc apart, so it stays until that difference is settled.
@@ -297,9 +300,12 @@ const rowsLeftOut = (context) => {
 
 // Python's rows of the displayed Result, by key and drawn fill: those N-06
 // compares a rule with, and those the rules take (`rowsLeftOut`).
-/** @param {LegendRowContext} context */
-const pythonRowsOf = (context) => {
-  const leftOut = rowsLeftOut(context);
+/**
+ * @param {LegendRowContext} context
+ * @param {DrawnRuleMatches} [ruleMatches] As for `rowsLeftOut`.
+ */
+const pythonRowsOf = (context, ruleMatches) => {
+  const leftOut = rowsLeftOut(context, ruleMatches);
   /** @type {RendererLegendRow[]} */
   const compared = [];
   /** @type {Set<PythonLegendKey>} */
@@ -607,10 +613,11 @@ const namesRowOfAnotherSwatch = (rule, rows) => Boolean(rule.cap) && rows.some((
 // read for many rules: the keys are allocated once, when a rule first needs it.
 /**
  * @param {LegendRowContext} context
+ * @param {DrawnRuleMatches} [ruleMatches] As for `rowsLeftOut`.
  * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey}
  */
-export const ruleLegendCaptions = (context) => {
-  const rows = pythonRowsOf(context).compared;
+export const ruleLegendCaptions = (context, ruleMatches) => {
+  const rows = pythonRowsOf(context, ruleMatches).compared;
   /** @type {Map<string, Set<string>> | null} */
   let fillsOf = null;
   /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => PythonLegendKey) | null} */
