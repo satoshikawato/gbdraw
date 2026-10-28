@@ -74,6 +74,13 @@ const move = async (page, point, dx, dy) => {
   await settle(page);
 };
 
+// A file Session Load fits the Result (R17-25). These cases start from the 100 % view: a user
+// presses Reset zoom, or Reset layout when the case also starts from pan 0 (nothing else moved yet).
+const startAtFullSize = async (page, control = 'Reset zoom') => {
+  await page.getByRole('button', { name: control, exact: true }).click();
+  await settle(page);
+};
+
 const expectTranslation = (before, after, dx, dy) => {
   for (let i = 0; i < before.points.length; i += 1) {
     expect(after.points[i].x - before.points[i].x).toBeCloseTo(dx, 1);
@@ -89,6 +96,7 @@ test('background pan preserves screen displacement after text selection and zoom
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await startAtFullSize(page, 'Reset layout');
   await settle(page);
   const committed = await page.evaluate(async () => {
     const { getCommittedCanonicalSession } = await import('./js/services/config.js');
@@ -143,6 +151,7 @@ test('preview pan leaves feature and match gestures available', async ({ page })
   await page.locator('input[type=file][accept*="application/json"][accept*="application/gzip"]')
     .setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
+  await startAtFullSize(page, 'Reset layout');
   for (let i = 0; i < 7; i += 1) await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await settle(page);
   expect(await getDiagramWorkerActivity(page)).toMatchObject({ constructions: 0 });
@@ -301,6 +310,7 @@ test('docked search and controls remain reachable across Preview sizes and Edito
     join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')
   );
   await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
+  await startAtFullSize(page);
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   await search.fill('tRNA');
   await search.press('Enter');
