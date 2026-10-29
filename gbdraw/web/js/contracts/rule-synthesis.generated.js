@@ -12,6 +12,7 @@
  * @property {ColorRuleRow[]} rules
  * @property {string} color
  * @property {string} caption
+ * @property {JoinedLegendRow | null} joins
  */
 /**
  * @typedef {object} RuleFeaturePayload
@@ -36,6 +37,11 @@
  * @property {string} val
  * @property {string} color
  * @property {string} cap
+ */
+/**
+ * @typedef {object} JoinedLegendRow
+ * @property {number} at
+ * @property {number[]} rows
  */
 /**
  * @typedef {object} SynthesizedColorRules

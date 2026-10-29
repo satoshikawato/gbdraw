@@ -57,10 +57,10 @@ def _cds(index: int, **qualifiers: str) -> SeqFeature:
 
 def _synthesize(features: list[dict], selected: list[int], rules: list[dict] | None = None,
                 labels: list[list[str]] | None = None, caption: str = "Group", scope: str = "group",
-                color: str = COLOR) -> dict:
+                color: str = COLOR, joins: dict | None = None) -> dict:
     request = dict(scope=scope, features=features, selected=selected, labels=labels or [[] for _ in selected],
                    rules=[{key: rule[key] for key in ("feat", "qual", "val", "color", "cap")} for rule in rules or []],
-                   color=color, caption=caption)
+                   color=color, caption=caption, joins=joins)
     return json.loads(synthesize_color_rules_json(json.dumps(request)))
 
 
@@ -396,7 +396,11 @@ def test_a_feature_without_hash_or_condition_is_declined():
 
 def test_a_malformed_request_is_refused():
     with pytest.raises(ValueError, match="selected"):
-        synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], labels=[], rules=[], color=COLOR, caption="x")))
+        synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], labels=[], rules=[], color=COLOR, caption="x",
+                                                    joins=None)))
+    with pytest.raises(ValueError, match="joined row"):
+        synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], selected=[], labels=[], rules=[],
+                                                    color=COLOR, caption="x", joins=dict(at=0, rows=[]))))
 
 
 def _genbank_payloads(path: Path) -> list[dict]:
@@ -434,3 +438,75 @@ def test_a_new_hash_rule_goes_before_a_broader_old_hash_rule_that_colors_the_fea
     table = _next_table(answer, current)
     assert _colors(features, table) == [COLOR, "#0000ff"]
     assert answer["table"] == [{"feat": "CDS", "qual": "hash", "val": r"^aaa1@rec$", "color": COLOR, "cap": "Group"}, 0]
+
+
+TEAL = "#2a9d8f"
+
+
+def _legend_order(features: list[dict], table: list[dict]) -> list[str]:
+    """The rule rows Python's Legend draws, in its order: each caption and color
+    a feature takes, at its first rule in the table (prepare_legend_table)."""
+    used = {(table[w]["cap"], table[w]["color"]) for w in _winners(features, table) if w >= 0}
+    return list(dict.fromkeys(rule["cap"] for rule in table if (rule["cap"], rule["color"]) in used))
+
+
+def _join_case(beta: str) -> tuple[list[dict], list[dict]]:
+    """A beta row of pattern `beta`, a delta row, and an alpha row of beta's color."""
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
+            _cds(3, product="dup beta")]
+    current = [dict(feat="CDS", qual="product", val=beta, color=TEAL, cap="beta"),
+               dict(feat="CDS", qual="product", val="^beta protein$", color="#e9c46a", cap="delta"),
+               dict(feat="CDS", qual="product", val="^alpha protein$", color=TEAL, cap="alpha")]
+    return [_payload(f, "rec") for f in seqs], current
+
+
+def test_a_rename_that_joins_a_row_through_a_same_pattern_rule_keeps_the_joined_row_in_place():
+    # OV-2193 (Owner 2026-10-29): the re-captioned rule goes just before the
+    # joined row's first rule, so Python's Legend keeps the joined row where the
+    # live Legend keeps it; without `joins` it stays in its own place (OV-2189).
+    features, current = _join_case("^dup alpha$")
+    joined = dict(feat="CDS", qual="product", val="^dup alpha$", color=TEAL, cap="alpha")
+    alone = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha")
+    assert alone["table"] == [joined, 1, 2]
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=2, rows=[]))
+    assert answer["table"] == [1, joined, 2]
+    assert _legend_order(features, _next_table(answer, current)) == ["delta", "alpha"]
+
+
+def test_a_join_of_part_of_a_row_takes_a_hash_rule_before_the_joined_row():
+    # The feature's own condition would lose to the broader beta rule before the
+    # joined row's first rule, so it takes a `hash` rule there instead.
+    features, current = _join_case("^dup")
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=2, rows=[]))
+    assert [entry if isinstance(entry, int) else entry["qual"] for entry in answer["table"]] == [0, 1, "hash", 2]
+    table = _next_table(answer, current)
+    assert [table[w]["cap"] for w in _winners(features, table)] == ["alpha", "alpha", "delta", "beta"]
+    assert _legend_order(features, table) == ["beta", "delta", "alpha"]
+
+
+def test_a_row_of_own_hash_rules_that_joins_a_row_goes_before_the_joined_row():
+    # A "This feature only" row: its own `hash` row gives way, and the new rule
+    # goes before the joined row's first rule, not in the old row's place.
+    features, current = _join_case("^dup alpha$")
+    current[0] = dict(feat="CDS", qual="hash", val=exact_value_pattern(_instance(features[1])), color=TEAL, cap="beta")
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=2, rows=[]))
+    assert answer["table"] == [1, dict(feat="CDS", qual="product", val="^dup alpha$", color=TEAL, cap="alpha"), 2]
+
+
+def test_rules_renamed_onto_a_listed_row_move_just_before_its_first_rule():
+    # The Legend editor's rename: the Web re-captions the row's rules, and
+    # Python moves the ones before the joined row's first rule to just before it.
+    features, current = _join_case("^dup")
+    renamed = [{**current[0], "cap": "alpha"}, *current[1:]]
+    answer = _synthesize(features, [], rules=renamed, color=TEAL, caption="alpha", joins=dict(at=2, rows=[0]))
+    assert answer["table"] == [1, 0, 2]
+    assert _legend_order(features, _next_table(answer, renamed)) == ["delta", "alpha"]
+
+
+def test_rules_renamed_onto_a_listed_row_stay_in_place_when_the_move_would_recolor_a_feature():
+    # Moved past the delta rule, the renamed rule would lose `dup beta` to it:
+    # the rows keep their places, as without a join (the joined row moves).
+    features, current = _join_case("^dup")
+    renamed = [{**current[0], "cap": "alpha"}, {**current[1], "val": "beta"}, current[2]]
+    answer = _synthesize(features, [], rules=renamed, color=TEAL, caption="alpha", joins=dict(at=2, rows=[0]))
+    assert answer["table"] == [0, 1, 2]
