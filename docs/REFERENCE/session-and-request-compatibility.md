@@ -17,7 +17,7 @@ Session 49 stores the Circular **Show Definition** setting in each Circular
 slice (`modes.circular.config.adv.show_definition`). Off is saved in the
 render request as `objects.definition.circular.show: false`; on is left out
 of the request, as earlier writers left it. An older Session reads it as on and
-draws as before. gbdraw 0.14.3 writes Session 49; gbdraw 0.14.0 to 0.14.2 read
+draws as before. gbdraw 0.14.3 and 0.14.4 write Session 49; gbdraw 0.14.0 to 0.14.2 read
 Sessions up to 48 and refuse a Session 49 file. Session 50 keeps the setting in
 each Circular drawing's `config.adv.show_definition`; reading a Session 49 moves
 it there.
