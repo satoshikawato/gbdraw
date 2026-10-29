@@ -2012,13 +2012,14 @@ const trackPlanProjection = (request, drawing, context) => {
   const draftStack = Boolean(drawing.adv[stackKey]);
   const kept = keptTrackPartsOf(request);
   const nt = normalizeNt(request.diagramOptions.dinucleotide ?? 'GC');
-  /** @type {KeptPlan} */
+  /** @type {KeptPlan | null} */
   let committedPlan;
   try {
     committedPlan = committedPlanOf(request);
   } catch {
-    return TRACK_PLAN_WAITS;
+    committedPlan = null;
   }
+  if (!committedPlan) return TRACK_PLAN_WAITS;
   const committedSlots = committedPlan.slots;
   const committedIds = new Set((committedSlots || []).map((slot) => slot.id));
   const committedDepth = Array.isArray(request.diagramOptions.depthTracks);
@@ -3960,17 +3961,16 @@ const builtPlanOf = (tracks, circular) => {
 /**
  * The plan of a committed request: its slot entries as it states them, read
  * by the slot parser (`requestTrackSlots`), so a spec string keeps its id.
- * Throws for an entry the parser rejects.
+ * Null when an entry was not read; throws for an entry the parser rejects.
  * @param {CanonicalRenderRequest} request
- * @returns {KeptPlan}
+ * @returns {KeptPlan | null}
  */
 const committedPlanOf = (request) => {
   const parsed = requestTrackSlots(request);
   const tracks = request.diagramOptions.tracks;
   const axis = request.mode === 'circular' ? tracks?.circularTrackAxisIndex : tracks?.linearTrackAxisIndex;
-  return parsed
-    ? keptPlanOf(/** @type {readonly TrackSlotEntry[]} */ (parsed.entries), parsed.slots, axis)
-    : { slots: null, axisNull: true };
+  if (!parsed) return { slots: null, axisNull: true };
+  return parsed.slots ? keptPlanOf(/** @type {readonly TrackSlotEntry[]} */ (parsed.entries), parsed.slots, axis) : null;
 };
 /**
  * The kept track parts of a Generate (D-199, D-201): built in the same call as

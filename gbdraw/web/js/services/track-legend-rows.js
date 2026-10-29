@@ -178,23 +178,24 @@ export const drawnTracks = (request) => {
   const view = trackRequestView(request);
   if (!view) return [];
   try {
-    return slotTracks(view.mode, view.defaultNt, view.entries && entrySlots(view.mode, view.defaultNt, view.entries), view.depth);
+    const slots = view.entries ? entrySlots(view.mode, view.defaultNt, view.entries) : null;
+    return view.entries && !slots ? [] : slotTracks(view.mode, view.defaultNt, slots, view.depth);
   } catch {
     return [];
   }
 };
 /**
- * A request's slot entries, each read by the slot parsers, in entry order. Throws for an entry they reject.
+ * A request's slot entries, each read by the slot parsers, in entry order; null when the Linear parser
+ * drops an entry, so no slot is read under another entry's place. The parsers throw for an entry they reject.
  * @param {'circular' | 'linear'} mode @param {string} defaultNt @param {ReadonlyArray<string | Record<string, unknown>>} entries
- * @returns {readonly TrackRowSlot[]}
+ * @returns {readonly TrackRowSlot[] | null}
  */
 const entrySlots = (mode, defaultNt, entries) => {
   const slots = mode === 'linear'
     ? parseLinearTrackSlotSpecs(entries, defaultNt)
     : entries.map((entry, index) => (typeof entry === 'string'
         ? parseCircularTrackSlotSpec(entry, index, defaultNt) : normalizeCircularTrackSlot(entry, index, defaultNt)));
-  if (slots.length !== entries.length) throw new Error('A track slot entry was not read.');
-  return slots;
+  return slots.length === entries.length ? slots : null;
 };
 /**
  * The explicit track slots of the request that drew a Result, as the slot
@@ -202,10 +203,10 @@ const entrySlots = (mode, defaultNt, entries) => {
  * alike), beside the entries the request states, in entry order: the live
  * track projection finds a committed row by the id read here and keeps its
  * entry as the request states it. Null: no explicit slots (the default
- * tracks) or a value that is no request. Throws for an entry the parsers
- * reject (as Session load would).
+ * tracks) or a value that is no request; `slots` null: an entry was not
+ * read. Throws for an entry the parsers reject (as Session load would).
  * @param {unknown} request
- * @returns {{ readonly entries: ReadonlyArray<string | Record<string, unknown>>, readonly slots: readonly TrackRowSlot[] } | null}
+ * @returns {{ readonly entries: ReadonlyArray<string | Record<string, unknown>>, readonly slots: readonly TrackRowSlot[] | null } | null}
  */
 export const requestTrackSlots = (request) => {
   const view = trackRequestView(request);
