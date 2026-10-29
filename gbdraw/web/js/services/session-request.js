@@ -96,13 +96,15 @@ import {
 } from './linear-record-layout.js';
 import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
+  CustomTrackPlanValidationError,
   assertValidCustomTrackPlan,
   emittedCustomTrackAxisIndex,
-  overlaySlotReferences,
+  overlayReferenceIssues,
+  trackSlotRowEnabled,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
-/** @import { CustomTrackPlan, CustomTrackPlanInput, OverlaySlotReference } from './track-slot-validation.js' */
+/** @import { CustomTrackPlan, CustomTrackPlanInput, OverlayCheckRow } from './track-slot-validation.js' */
 import {
   annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest, normalizeAnnotationSets
 } from './annotation-state.js';
@@ -1900,10 +1902,12 @@ const GT_REQUEST_PATHS = Object.freeze({
 /** @type {ReadonlySet<string>} */
 const GT_REQUEST_PATH_SET = new Set(Object.values(GT_REQUEST_PATHS));
 /**
- * What the track projection writes, by request path, and whether it leaves a
- * show pending (a track the draft draws that the kept parts cannot give).
+ * What the track projection writes, by request path, whether it leaves a
+ * show pending (a track the draft draws that the kept parts cannot give),
+ * and the error Generate's check gives the stack it would draw (`refused`:
+ * nothing applies; only the writer, `trackPlanApplied`, throws it).
  * @typedef {{ readonly writes: Readonly<Record<string, LiveSettingWrite[]>>, readonly complete: boolean,
- *   readonly slots: readonly TrackSlotEntry[] | null }} TrackPlanProjection
+ *   readonly slots: readonly TrackSlotEntry[] | null, readonly refused: Error | null }} TrackPlanProjection
  */
 /** @type {WeakMap<object, { readonly request: CanonicalRenderRequest, readonly projection: TrackPlanProjection }>} */
 const trackPlanProjections = new WeakMap();
@@ -2002,8 +2006,20 @@ const projectTrackPlan = (request, drawing, context) => {
 const TRACK_PLAN_WAITS = Object.freeze({
   writes: Object.freeze(Object.fromEntries(Object.values(GT_REQUEST_PATHS).map((path) => [path, []]))),
   complete: false,
-  slots: null
+  slots: null,
+  refused: null
 });
+/**
+ * The track projection the live apply writes: a refused one throws its
+ * error, as Generate of the same draft does.
+ * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context
+ * @returns {TrackPlanProjection}
+ */
+const trackPlanApplied = (request, drawing, context) => {
+  const projection = projectTrackPlan(request, drawing, context);
+  if (projection.refused) throw projection.refused;
+  return projection;
+};
 /** @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context @returns {TrackPlanProjection} */
 const trackPlanProjection = (request, drawing, context) => {
   recordStructuralMetric('liveTrackPlanProjectionCount');
@@ -2077,8 +2093,8 @@ const trackPlanProjection = (request, drawing, context) => {
     const baseIds = new Set(base.slots.map((slot) => slot.id));
     if (draftStack) {
       const rows = Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : [];
-      if (/** @type {readonly ({ id?: unknown, renderer?: unknown, enabled?: unknown } | null)[]} */ (rows).some((row) => row && row.enabled !== false && trackKindOf(row.renderer)
-        && !baseIds.has(String(row.id)))) complete = false;
+      if (/** @type {readonly ({ id?: unknown, renderer?: unknown } | null)[]} */ (rows).some((row) => row && trackSlotRowEnabled(row)
+        && trackKindOf(row.renderer) && !baseIds.has(String(row.id)))) complete = false;
     } else if (circular) {
       for (const kind of /** @type {const} */ (['content', 'skew'])) {
         if (!hidden(kind, null, nt) && !present.some((slot) => trackKindOf(slot.renderer) === kind)) complete = false;
@@ -2086,20 +2102,19 @@ const trackPlanProjection = (request, drawing, context) => {
       if (draftDrawsDepth('circular', { form: drawing.form, adv: drawing.adv }) && !present.some((slot) => slot.renderer === 'depth')) complete = false;
     }
     if ([...committedIds].some((id) => !baseIds.has(id)) && !baseIsOther) complete = false;
-    // A row that names a track slot the apply leaves out (an Overlay row's
-    // anchor or Extend to slot) leaves with it while the draft does not draw
-    // that row either; one the draft draws is refused, as Generate refuses it.
-    const left = new Set(base.slots.filter((slot) => trackKindOf(slot.renderer)).map((slot) => slot.id));
-    present.forEach((slot) => left.delete(slot.id));
-    const draftRows = /** @type {readonly ({ id?: unknown, enabled?: unknown } | null)[]} */ (
-      draftStack && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
-    const unnamed = present.filter((slot) => {
-      const named = slot.refs.find((ref) => left.has(ref.id));
-      if (!named) return true;
-      if (!draftRows.some((row) => row && String(row.id) === slot.id && row.enabled !== false)) return false;
-      throw diagnosticError('TRACK_INVALID', { reason: named.key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: named.key });
-    });
-    present.splice(0, present.length, ...unnamed);
+    // Generate's Overlay check (`overlayReferenceIssues`) reads the stack the
+    // apply draws. A row it refuses names a track slot the apply leaves out
+    // (an Overlay row's anchor or Extend to slot): it leaves with it while
+    // the draft does not draw that row either (`trackSlotRowEnabled`), and
+    // one the draft draws refuses the apply with the issue Generate gives
+    // that draft row.
+    const draftRows = /** @type {readonly unknown[]} */ (draftStack && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+    const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => draftRows.findIndex((row) => (
+      trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === String(read.id))));
+    const refused = issues.filter(({ issue }) => issue.rowIndex >= 0).map(({ issue }) => issue);
+    if (refused.length > 0) return { ...TRACK_PLAN_WAITS, refused: new CustomTrackPlanValidationError(refused) };
+    const leaving = new Set(issues.map(({ row }) => row));
+    present.splice(0, present.length, ...present.filter((slot) => !leaving.has(slot.read)));
     slots = present.map((slot) => slot.payload);
     const presentIds = new Set(present.map((slot) => slot.id));
     // A null Axis index (a Python-written request) stays null: each slot keeps its own side.
@@ -2169,7 +2184,8 @@ const trackPlanProjection = (request, drawing, context) => {
       [GT_REQUEST_PATHS[circular ? 'circularSlots' : 'linearSlots']]: slotWrites
     },
     complete,
-    slots
+    slots,
+    refused: null
   };
 };
 /**
@@ -2255,18 +2271,18 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
       }) };
     })]];
   },
-  // The GT set: one track projection (`projectTrackPlan`), each key its own leaves.
-  [GT_REQUEST_PATHS.gc]: (drawing, request, context) => projectTrackPlan(request, drawing, context).writes[GT_REQUEST_PATHS.gc],
-  [GT_REQUEST_PATHS.skew]: (drawing, request, context) => projectTrackPlan(request, drawing, context).writes[GT_REQUEST_PATHS.skew],
-  [GT_REQUEST_PATHS.depth]: (drawing, request, context) => projectTrackPlan(request, drawing, context).writes[GT_REQUEST_PATHS.depth],
+  // The GT set: one track projection (`trackPlanApplied`), each key its own leaves.
+  [GT_REQUEST_PATHS.gc]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.gc],
+  [GT_REQUEST_PATHS.skew]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.skew],
+  [GT_REQUEST_PATHS.depth]: (drawing, request, context) => trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.depth],
   [GT_REQUEST_PATHS.circularSlots]: (drawing, request, context) => (
-    projectTrackPlan(request, drawing, context).writes[GT_REQUEST_PATHS.circularSlots] || []
+    trackPlanApplied(request, drawing, context).writes[GT_REQUEST_PATHS.circularSlots] || []
   ),
   // The Linear rows the track projection keeps, then the Height of each row
   // whose Height is live (`linearSlotHeightLive`), matched by slot id; a new
   // row waits.
   [LINEAR_TRACK_SLOTS_REQUEST_PATH]: (drawing, request, context) => {
-    const projection = projectTrackPlan(request, drawing, context);
+    const projection = trackPlanApplied(request, drawing, context);
     const own = projection.writes[LINEAR_TRACK_SLOTS_REQUEST_PATH] || [];
     const { slots } = projection;
     if (!Array.isArray(slots)) return own;
@@ -2394,13 +2410,24 @@ const noteContextOf = (inputs, resources) => {
 export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
   const mode = LIVE_SETTING_MODES[requestPath];
   if (Boolean(mode) && request.mode !== mode) return true;
-  // A GT key applies while its projection leaves no show pending; a Linear
-  // row's Height note keeps its own answer (G2).
+  // A GT key applies while its projection leaves no show pending and is not
+  // refused; a Linear row's Height note keeps its own answer (G2).
   if (GT_REQUEST_PATH_SET.has(requestPath) && !item) {
     return projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).complete;
   }
   return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
+/**
+ * Whether the live track apply of the drawing is refused (the track
+ * projection's `refused`, as Generate refuses the same draft): nothing
+ * applies, so the Result keeps every track it draws and the Legend list
+ * keeps their rows (`hiddenTrackLegendKeys`).
+ * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ */
+export const liveTrackApplyRefused = (request, drawing, inputs, resources = null) => (
+  projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).refused !== null
+);
 
 /** @param {unknown} root @param {readonly string[]} path */
 const valueAtPath = (root, path) => path.reduce(
@@ -3893,10 +3920,10 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
 /**
  * A slot of a kept plan: its request entry (a slot object, or the spec string
  * a Python API request states), its id, renderer and own dinucleotide as the
- * slot parser reads the entry, and whether it lies before the Axis.
+ * slot parser reads the entry, whether it lies before the Axis, and the
+ * slot as read (what Generate's Overlay check reads).
  * @typedef {{ readonly id: string, readonly payload: TrackSlotEntry, readonly renderer: string,
- *   readonly nt: unknown, readonly before: boolean,
- *   readonly refs: readonly { readonly key: OverlaySlotReference, readonly id: string }[] }} KeptSlot
+ *   readonly nt: unknown, readonly before: boolean, readonly read: OverlayCheckRow }} KeptSlot
  */
 /** @typedef {string | CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} TrackSlotEntry */
 /**
@@ -3961,7 +3988,7 @@ const forcedTrackRows = (slots) => slots.map((slot) => (
 /**
  * A plan from its slot entries, each with the slot it is read as.
  * @param {readonly TrackSlotEntry[] | null} entries
- * @param {readonly { readonly id: unknown, readonly renderer: unknown, readonly params?: { readonly nt?: unknown } | null }[]} read
+ * @param {readonly (OverlayCheckRow & { readonly id: unknown, readonly renderer: unknown, readonly params?: { readonly nt?: unknown } | null })[]} read
  * @param {number | null | undefined} axisIndex
  * @returns {KeptPlan}
  */
@@ -3970,7 +3997,7 @@ const keptPlanOf = (entries, read, axisIndex) => {
   return {
     slots: entries ? entries.map((payload, index) => ({
       id: String(read[index].id), payload, renderer: String(read[index].renderer), nt: read[index].params?.nt, before: index < axis,
-      refs: overlaySlotReferences(read[index].params)
+      read: read[index]
     })) : null,
     axisNull: axisIndex === null || axisIndex === undefined
   };

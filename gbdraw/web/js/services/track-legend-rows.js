@@ -398,17 +398,22 @@ export const drawnTrackHidden = (track, request, drawing) => {
  * (`drawnTrackHidden`): each leaves the Legend list with its track and
  * returns with it (OV-1198, OV-1215, PD-OI-104). The live track projection
  * applies every hide this answer gives to a track the request draws (D-212),
- * so a row leaves only with a track the live apply removes from the Result,
- * never while the Result keeps drawing it. None for a Result without a
- * request (a Session 27 to 30): its tracks change only at Generate, so the
- * list keeps the rows it draws.
+ * so while that apply succeeds a row leaves only with a track it removes
+ * from the Result. None while the apply is refused (`refused`, as Generate
+ * refuses the draft: the Result keeps its tracks), and none for a Result
+ * without a request (a Session 27 to 30): its tracks change only at
+ * Generate, so the list keeps the rows it draws. A live redraw that fails
+ * after the projection, and a Session loaded with a draft that hides a drawn
+ * track (PD-OI-104 Accepted residual risk), still leave such a row out while
+ * the Result draws its track.
  * @param {TrackLegendRows} rows `trackLegendRows` of the displayed Result.
  * @param {unknown} request The request that drew the displayed Result, or null.
  * @param {TrackVisibilityDrawing} drawing
+ * @param {boolean} [refused] The live track apply of `drawing` is refused.
  * @returns {PythonLegendKey[]}
  */
-export const hiddenTrackLegendKeys = (rows, request, drawing) => (
-  request ? [...rows.values()].filter((row) => drawnTrackHidden(row, request, drawing)).map((row) => row.key) : []
+export const hiddenTrackLegendKeys = (rows, request, drawing, refused = false) => (
+  request && !refused ? [...rows.values()].filter((row) => drawnTrackHidden(row, request, drawing)).map((row) => row.key) : []
 );
 
 /**

@@ -29,6 +29,7 @@ const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/servic
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 const { applyCircularSuppressControlsToSlots, createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
+const validation = await import('../../gbdraw/web/js/services/track-slot-validation.js');
 // The request projections a Generate runs (`canonicalRequestProjectionCount`).
 let projections = 0;
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: ({ name }) => { if (name === 'canonicalRequestProjectionCount') projections += 1; } };
@@ -893,6 +894,22 @@ test('M2 (review 2): while a show waits the Legend list lists no row of the trac
   }
 });
 
+// The error a Generate of `mode`'s draft throws now (none: the case fails).
+const generateError = (mode) => {
+  try {
+    generate(mode, { keepTrackParts: false });
+  } catch (error) {
+    return error;
+  }
+  assert.fail('Generate refuses the draft');
+};
+const sameError = (expected) => (error) => {
+  assert.equal(error.constructor, expected.constructor);
+  assert.equal(error.message, expected.message);
+  assert.deepEqual(error.issues, expected.issues);
+  return true;
+};
+
 // CI round 3 (tobacco): a committed row that names a hidden track slot
 // (an Overlay tint row's Extend to slot or anchor) leaves with it when the
 // draft does not draw it either; while the draft draws it, the apply is
@@ -927,8 +944,53 @@ test('A tint row that extends to the GC content slot leaves with it when its own
     withTintSet(again);
     const base = generate('circular');
     set(rowOf(again, 'circular', (row) => row.id === 'gc_content'), 'enabled', false);
-    assert.throws(() => generate('circular', { keepTrackParts: false }), /TRACK_INVALID|OVERLAY|Extend|missing/i, 'Generate refuses');
-    assert.throws(() => project(loaded ? loadOf(base) : base, 'circular'), /TRACK_INVALID|INPUT_INVALID|OVERLAY/i, `${label}: the apply is refused`);
+    const refusal = generateError('circular');
+    assert.throws(() => project(loaded ? loadOf(base) : base, 'circular'), sameError(refusal), `${label}: the apply is refused as Generate`);
     undoAll();
   }
+});
+
+// Review 3 M1, M2: a refused apply is data. The setting note and the Legend
+// list read the projection without an error (the note says the hide does not
+// apply, the list keeps the track Generate would refuse to remove); only the
+// writer throws, with the error Generate gives the same draft.
+test('M1/M2 (review 3): Hide GC Content with a tint row extending to GC: the writer throws Generate\'s error; the note and the Legend list follow the refusal', () => {
+  for (const loaded of [false, true]) {
+    const label = loaded ? 'after a Load' : 'after a Generate';
+    const drawing = circularStack({ depthSeries: 1, extra: [tintRow()] });
+    withTintSet(drawing);
+    const generated = generate('circular');
+    const committed = loaded ? loadOf(generated) : generated;
+    setSuppress(drawing, 'suppress_gc', true);
+    const applies = (path) => request.liveSettingNoteApplies(committed.renderRequest, path, drawing, inputs, committed.resources);
+    assert.equal(applies(K.GC), false, `${label}: the note says the hide does not apply`);
+    const note = owner.settingApplicationNote('track-visibility', applies);
+    assert.notEqual(note.text, owner.settingApplicationNote('track-visibility').text, `${label}: the note is not Live edit`);
+    const refusal = generateError('circular');
+    assert.throws(() => project(committed, 'circular'), sameError(refusal), `${label}: the writer throws Generate's error`);
+    assert.equal(request.liveTrackApplyRefused(committed.renderRequest, drawing, inputs, committed.resources), true, `${label}: refused`);
+    const tracks = legendRows.drawnTracks(committed.renderRequest);
+    const rows = new Map(tracks.map((track, index) => [`row ${index}`, { key: `row ${index}`, ...track }]));
+    assert.ok(legendRows.hiddenTrackLegendKeys(rows, committed.renderRequest, drawing).length > 0, `${label}: the hide answer hides GC`);
+    assert.deepEqual(legendRows.hiddenTrackLegendKeys(rows, committed.renderRequest, drawing, true), [], `${label}: the list keeps every row`);
+    config.canonicalRenderArtifactOwner.restore({ committedCanonicalSession: committed, activeSessionResourceTable: null });
+    try {
+      assert.equal(config.committedTrackApplyRefused(drawing), true, `${label}: the app reads the refusal`);
+    } finally {
+      config.canonicalRenderArtifactOwner.restore(null);
+    }
+    undoAll();
+  }
+});
+
+test('M2 (review 3): one reader of an Overlay row\'s references; a falsy value names no slot', () => {
+  assert.equal(validation.overlaySlotReference({ anchor_slot: ' features ', to_slot: 0 }, 'anchor_slot'), 'features');
+  assert.equal(validation.overlaySlotReference({ anchor_slot: 'features', to_slot: 0 }, 'to_slot'), '');
+  // Generate's plan check and the projection's check read the same issue.
+  const rows = [{ id: 'features', renderer: 'features', side: 'inside', z: 0, params: {} },
+    { id: 'tint', renderer: 'annotations', side: 'overlay', z: -1,
+      params: { set_id: 'tint_set', anchor_slot: 'features', to_slot: 'gc_content', layer: 'underlay' } }];
+  const plan = validation.validateCustomTrackPlan({ mode: 'circular', slots: rows, axisIndex: 1, trackType: 'tuckin', annotationSetIds: ['tint_set'] });
+  const issues = validation.overlayReferenceIssues(rows, 'circular', (row) => rows.indexOf(row)).map(({ issue }) => issue);
+  assert.deepEqual(issues, plan.rowIssues.get(1));
 });

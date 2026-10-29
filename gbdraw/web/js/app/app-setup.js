@@ -75,6 +75,7 @@ import {
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
   committedSettingNotePredicate,
+  committedTrackApplyRefused,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
   getLoadedTrackSettings,
@@ -1894,10 +1895,11 @@ export const createAppSetup = () => {
   // The keys of the displayed Result's Legend rows whose drawn track the draft
   // hides (OV-1198, OV-1215), by the hide answer the live track projection
   // reads: the Legend list leaves them out, so a hidden track's rows leave and
-  // return with it. A Result without a request keeps every row until Generate.
+  // return with it. A Result without a request, and one whose live track apply
+  // is refused, keeps every row until Generate.
   /** @param {DrawingState} drawing @returns {string[]} */
   const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(
-    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), drawing
+    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), drawing, committedTrackApplyRefused(drawing)
   );
   const svgActions = createSvgStyles({
     state,
