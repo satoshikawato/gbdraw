@@ -2281,3 +2281,26 @@ test('a popup color change for a rule whose row another rule also draws shows Ge
   expect((await semanticSnapshot(page)).legend.map((row) => row.key), 'the live Legend order').toEqual(legend);
   await expectLiveEqualsGenerate(page, { label: 'a popup color change for a rule whose row another rule also draws' });
 });
+
+// OV-2265 (release-tier random walk, seed 40923303904): a Legend name on the
+// feature of a type row with a Legend color of its own gives the row a rule
+// and keeps that color, live and at Generate. A later rule commit that leaves
+// the row's rule alone kept refusing the edit (LEGEND_ROW_CONFLICT); one that
+// recolors the row's rule recolors the row (OV-61).
+test('a rule commit beside a rule row with a Legend color of its own is applied, live = Generate (OV-2265)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, FL1_ALPHA);
+  await legendRowColor(page, 'repeat_region', '#123456');
+  await popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' });
+  await settleLive(page);
+  const fills = async () => Object.fromEntries((await semanticSnapshot(page)).legend
+    .filter((row) => ['alpha', 'Walk group'].includes(row.key)).map((row) => [row.key, row.fill.toLowerCase()]));
+  expect(await fills(), 'the named row keeps its Legend color').toEqual({ alpha: '#e63946', 'Walk group': '#123456' });
+  await colorLegendRow(page, 'alpha', '#2a9d8f');
+  expect(await fills(), 'the other rule row is recolored').toEqual({ alpha: '#2a9d8f', 'Walk group': '#123456' });
+  await expectLiveEqualsGenerate(page, { label: 'a rule row recolored beside a rule row with a Legend color of its own' });
+  await colorLegendRow(page, 'Walk group', '#ff0000');
+  expect(await fills(), 'the row of the recolored rule').toEqual({ alpha: '#2a9d8f', 'Walk group': '#ff0000' });
+  await expectLiveEqualsGenerate(page, { label: 'a rule row with a Legend color of its own recolored' });
+});
