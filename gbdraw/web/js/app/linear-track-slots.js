@@ -917,7 +917,9 @@ export const createLinearTrackSlotEditor = ({
     const previousSourced = linearSourcedDepthTrackIndexesForDrawing(drawing);
     mutate();
     reconcileLinearDepthSlots(drawing, previousSourced);
-    if (previousSourced.length > 0 && linearSourcedDepthTrackIndexesForDrawing(drawing).length === 0) drawing.form.show_depth = false;
+    // Show Depth follows the drawing's first and last Depth file; a replaced file keeps it (PD-OI-090).
+    const sourced = linearSourcedDepthTrackIndexesForDrawing(drawing).length > 0;
+    if (previousSourced.length > 0 !== sourced) drawing.form.show_depth = sourced;
   };
 
   const linearTrackStackEntries = () => {

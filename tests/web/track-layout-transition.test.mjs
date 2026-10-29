@@ -354,8 +354,8 @@ test('the stack editors are created once, with the transition', () => {
   // Hide GC content / skew question uses, and the reader of the record lengths
   // its estimates describe.
   assert.deepEqual(sites, [
-    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions'],
-    ['app/app-setup.js', 'state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions']
+    ['app/app-setup.js', 'state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths, changeTrackVisibility: retireShownLegendStyles'],
+    ['app/app-setup.js', 'state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles']
   ]);
 });
 

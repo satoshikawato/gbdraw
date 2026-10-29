@@ -218,6 +218,23 @@ for (const [mode, adapter] of Object.entries(MODES)) {
   }
 }
 
+// PD-OI-090 (D-15-183): Show Depth turns On when the first Depth file enters
+// the drawing, in the transition every Depth source write runs; a file that
+// replaces one (the replacement port's swap) keeps Show Depth as it is, also Off.
+for (const [mode, adapter] of Object.entries(MODES)) {
+  test(`${mode}: the first Depth file turns Show Depth on, and a replaced file keeps it off`, () => {
+    const first = adapter.create([], [], undefined);
+    first.state.form.show_depth = false;
+    first.change([0]);
+    assert.equal(first.state.form.show_depth, true);
+
+    const replaced = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    replaced.state.form.show_depth = false;
+    replaced.change([0], 1);
+    assert.equal(replaced.state.form.show_depth, false);
+  });
+}
+
 // OV-1099: a Linear copy of an unedited Depth row is named `depth_2`, so it is
 // a managed row like its source and leaves with the last Depth source, as a
 // Circular copy does. (On the base it was `depth_copy`, a manual row that
