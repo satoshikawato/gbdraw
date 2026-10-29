@@ -295,7 +295,7 @@ import {
 } from '../services/conservation-series.js';
 import {
   getDepthTrackFileBaseName,
-  isDepthTrackAutoLabel
+  isDepthSeriesAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
 import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
@@ -2815,8 +2815,8 @@ export const createAppSetup = () => {
     if (hasSource) delete slot.depth_binding_error;
     syncDepthTrackSlotLabelsForTrack(drawing, trackIndex);
   };
-  /** @type {string[]} */
-  const depthTrackAutoLabels = [];
+  // A series label is auto while it is a default name or the name of a file the
+  // series had in its drawing; the drawing's files decide it (OV-2202).
   /** @param {DrawingState} drawing @param {DepthFileSlots} previousFiles @param {DepthFileSlots} nextFiles @param {number} removedIndex */
   const refreshDepthTrackLabelsAfterRemoval = (drawing, previousFiles, nextFiles, removedIndex) => {
     depthFileSlotsFromValue(nextFiles).forEach((file, newIndex) => {
@@ -2825,35 +2825,24 @@ export const createAppSetup = () => {
       if (!config) return;
       const oldFile = depthFileSlotsFromValue(previousFiles)[oldIndex] || null;
       const currentLabel = String(config.label ?? '').trim();
-      if (
-        isDepthTrackAutoLabel(currentLabel, oldIndex, oldFile) ||
-        currentLabel === depthTrackAutoLabels[oldIndex]
-      ) {
+      if (isDepthSeriesAutoLabel(currentLabel, oldIndex, [oldFile])) {
         // A file names its series; a series without one keeps no label (OV-1508).
-        const nextLabel = getDepthTrackFileBaseName(file);
-        config.label = nextLabel;
-        depthTrackAutoLabels[newIndex] = nextLabel;
-      } else {
-        depthTrackAutoLabels[newIndex] = currentLabel;
+        config.label = getDepthTrackFileBaseName(file);
       }
     });
-    depthTrackAutoLabels.length = depthFileSlotsFromValue(nextFiles).length;
   };
   /**
    * @param {DrawingState} drawing
    * @param {number} index
    * @param {InputFileRef | null} file
-   * @param {InputFileRef | null} [previousFile]
+   * @param {readonly (InputFileRef | null)[]} previousFiles The series' files in the drawing before the change
    */
-  const updateDepthTrackLabelFromFile = (drawing, index, file, previousFile = null) => {
+  const updateDepthTrackLabelFromFile = (drawing, index, file, previousFiles) => {
     if (!file) return;
     const config = drawing.adv.depth_tracks[index];
     if (!config) return;
-    const currentLabel = String(config.label ?? '').trim();
-    if (isDepthTrackAutoLabel(currentLabel, index, previousFile) || currentLabel === depthTrackAutoLabels[index]) {
-      const nextLabel = getDepthTrackFileBaseName(file);
-      config.label = nextLabel;
-      depthTrackAutoLabels[index] = nextLabel;
+    if (isDepthSeriesAutoLabel(String(config.label ?? '').trim(), index, previousFiles)) {
+      config.label = getDepthTrackFileBaseName(file);
       syncDepthTrackSlotLabelsForTrack(drawing, index);
     }
   };
@@ -2869,7 +2858,7 @@ export const createAppSetup = () => {
     const ref = state.inputFiles.registerFile(file);
     ensureDepthTrackConfigCount(drawing, idx + 1);
     const rows = circularDepthRows(drawing);
-    const previousFile = circularDepthRepresentatives(drawing)[idx] || null;
+    const previousFiles = rows.map((row) => row[idx] || null);
     // A new file can rename an auto-labeled series, so the label follows in the same retirement.
     retireLegendStylesOfUnnamedCaptions(drawing, () => {
       circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {
@@ -2878,7 +2867,7 @@ export const createAppSetup = () => {
         });
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', rows.map((row) => compactDepthFileSlots(row)));
       });
-      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
+      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };
   /** @param {number} index @param {FileLike | null} file */
@@ -2899,7 +2888,7 @@ export const createAppSetup = () => {
     const logicalWidth = Math.max(linearDepthLogicalWidth(drawing), idx + 1);
     padLinearDepthRows(drawing, logicalWidth);
     ensureDepthTrackConfigCount(drawing, logicalWidth);
-    const previousFile = getLinearDepthFile(targets[0], idx);
+    const previousFiles = linearDepthRows(drawing).map((row) => row[idx] || null);
     retireLegendStylesOfUnnamedCaptions(drawing, () => {
       linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
         targets.forEach((seq) => {
@@ -2912,7 +2901,7 @@ export const createAppSetup = () => {
           }
         });
       });
-      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
+      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };
   /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
@@ -2995,7 +2984,6 @@ export const createAppSetup = () => {
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       // Show Depth goes off with the drawing's last Depth source (OV-82).
       if (!linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = false;
-      depthTrackAutoLabels.splice(idx, 1);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
       const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
       const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
@@ -5704,7 +5692,6 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetDrawings();
-      matchSequenceRegistry.reset();
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
@@ -5727,6 +5714,9 @@ export const createAppSetup = () => {
   const resetSettings = () => runReset((reset) => history.runProjectStep(msg('Reset settings'), reset), () => {
     resetProject(state);
     state.drawingList().forEach((drawing) => resetDrawing(drawing));
+    // As 0.14.0 Reset settings did; Reset this drawing keeps the shown
+    // Result's match sequences with the Result (OV-2203).
+    matchSequenceRegistry.reset();
   });
   // Reset this drawing is a step of the shown drawing (R17-5): the other
   // drawings, their Histories, and the Session values stay.
@@ -6473,16 +6463,23 @@ export const createAppSetup = () => {
   // The OFF records name records of the old file too (record selection).
   /** @param {DrawingState} drawing */
   const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
-    form.circular_record_selector = '';
+    form.circular_record_selector = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_selector;
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
     if (recordsOff.length) recordsOff.splice(0);
   };
   // The whole record presentation: the record form fields return to their
-  // defaults (the one list a style copy leaves out too).
+  // defaults (the one list a style copy leaves out too). Each field is written
+  // by name, so the track-layout writer guard reads no whole-form write; a
+  // node case pins that every field of the list is written.
   /** @param {DrawingState} drawing */
   const retireCircularRecordPresentation = (drawing) => {
+    const { form } = drawing;
     retireCircularRecordSelector(drawing);
-    Object.assign(drawing.form, CIRCULAR_RECORD_FORM_DEFAULTS);
+    form.circular_region_start = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_start;
+    form.circular_region_end = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_end;
+    form.circular_reverse = CIRCULAR_RECORD_FORM_DEFAULTS.circular_reverse;
+    form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
+    form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };
   // D-32: one record replacing one record (a new version of the same genome)
   // keeps its crop and titles; a removed file or a replaced multi-record file

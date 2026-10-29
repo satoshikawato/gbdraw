@@ -644,3 +644,70 @@ test('arrow keys move the focus over the tabs and wrap; Home and End go to the e
   assert.equal(focusedTabIndex('End', 0, 3), 2);
   assert.equal(focusedTabIndex('Enter', 1, 3), null, 'Enter and Space select through the button (manual activation)');
 });
+
+// The auto label of a Depth series belongs to its drawing (OV-2202): the text
+// one drawing took from its file is not auto in another drawing, and an Undo
+// or Reset this drawing in one drawing leaves the other's labels.
+test('a Depth series auto label belongs to its drawing; Undo and Reset in one leave the other (OV-2202)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} name */
+  const depthFile = (name) => new File(['chr\t1\t3\n'], name);
+  const shownLabel = () => app.getDepthTrackLabel(0);
+  /** @param {string} label @param {() => unknown} edit */
+  const step = (label, edit) => history.runUndoable(label, edit);
+  app.selectDrawing('circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('alpha.tsv')));
+  assert.equal(shownLabel(), 'alpha', 'a file names an auto-labeled series');
+
+  const { drawingId: second } = app.drawingBar.newDrawing('circular');
+  await step('Depth label', () => app.setDepthTrackLabel(0, 'alpha'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('beta.tsv')));
+  assert.equal(shownLabel(), 'alpha', 'a label typed in drawing B stays: the text is drawing A\'s auto label, not B\'s');
+
+  await step('Depth label', () => app.setDepthTrackLabel(0, ''));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('gamma.tsv')));
+  assert.equal(shownLabel(), 'gamma');
+  await history.undo();
+  await app.resetShownDrawing();
+  app.selectDrawing('circular');
+  assert.equal(shownLabel(), 'alpha', 'B\'s Undo and Reset this drawing leave A\'s label');
+  await step('Depth label', () => app.setDepthTrackLabel(0, 'gamma'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('delta.tsv')));
+  assert.equal(shownLabel(), 'gamma', 'a label typed in A stays: B\'s undone auto label is not A\'s');
+  app.drawingList.deleteDrawing(second);
+});
+
+// The match sequences are the shown Result's (its pairwise band popup reads
+// them). Reset this drawing keeps that Result, so it keeps them; Reset all
+// drawings empties them, as 0.14.0 Reset settings did.
+test('Reset this drawing keeps the shown Result\'s match sequences; Reset all drawings empties them', async () => {
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const sourceKeys = () => [...state.matchSequenceRegistry.sources.keys()];
+  state.matchSequenceRegistry.reset([{ key: 'NC_1', recordId: 'NC_1', sequence: 'ACGTACGT', recordIndex: 0, sourceIndex: 0 }]);
+  assert.deepEqual(sourceKeys(), ['NC_1']);
+  await app.resetShownDrawing();
+  assert.deepEqual(sourceKeys(), ['NC_1'], 'Reset this drawing keeps the band popup\'s sequences');
+  await app.resetSettings();
+  assert.deepEqual(sourceKeys(), [], 'Reset all drawings empties them');
+});
+
+// D-32: removing a Circular drawing's source retires its record presentation:
+// every record-bound form field returns to its value in the one list
+// (`CIRCULAR_RECORD_FORM_DEFAULTS`), which a style copy also leaves out. The
+// retire writes the fields by name, so this pins that it names each of them.
+test('removing the Circular source returns every record-bound form field to its default', async () => {
+  const { CIRCULAR_RECORD_FORM_DEFAULTS } = await import('../../gbdraw/web/js/services/config.js');
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const drawing = state.activeDrawing();
+  app.setCircularSourceFile('c_gb', new File(['LOCUS'], 'record.gb'));
+  const edited = Object.fromEntries(Object.entries(CIRCULAR_RECORD_FORM_DEFAULTS).map(([field, value]) => [
+    field, typeof value === 'boolean' ? !value : typeof value === 'string' ? 'edited' : 7
+  ]));
+  Object.assign(drawing.form, edited);
+  app.setCircularSourceFile('c_gb', null);
+  assert.deepEqual(Object.fromEntries(Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => [field, drawing.form[field]])),
+    { ...CIRCULAR_RECORD_FORM_DEFAULTS });
+});
