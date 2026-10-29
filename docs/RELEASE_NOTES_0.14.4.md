@@ -44,6 +44,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - In the Web app, a color picked without a pointer first (a picker opened from
   the keyboard) is one **Undo** step and applies as its setting does. Before,
   Undo skipped it.
+- In the Web app, changing a feature's color for its color rule, when another
+  rule of the same Legend name and color also draws that row, shows the row
+  where **Generate Diagram** draws it at once. Since 0.14.0 the row stayed in
+  its old place until the next Generate.
 
 ## Changed behavior
 

@@ -80,6 +80,9 @@ write-up of a release.
 - Fixed: in the Web app, a color picked without a pointer first (a picker
   opened from the keyboard) is now one **Undo** step and applies as its
   setting does; before, Undo skipped it (OV-2243).
+- Fixed: in the Web app, a feature color change for a color rule whose Legend row another rule
+  of the same name and color also draws now shows that row where Generate draws it at once;
+  since 0.14.0 it stayed in its old place until the next Generate (OV-2264).
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 

@@ -2108,15 +2108,15 @@ for (const [name, beta, rename, legend] of [
 // The Legend rows a commit itself shows, by key, in the editor list and on the
 // Result (its visible rows), read in the same tick as the edit, before the automatic rerender it
 // asks for: a popup Legend name on the feature of product `product` for "This
-// feature", a popup fill `fill` on it for "This feature", or a Legend editor
-// rename of the row `from`.
-const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, async ({ product, name, from, fill }) => {
+// feature", a popup fill `fill` on it for the style scope `scope` (default
+// "This feature"), or a Legend editor rename of the row `from`.
+const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, async ({ product, name, from, fill, scope }) => {
   const app = window.__GBDRAW_APP__;
   if (fill) {
     await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === product), null);
     await window.Vue.nextTick();
     await app.updateClickedFeatureColor(fill);
-    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(scope || 'single');
   } else if (from) {
     await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === from), name);
   } else {
@@ -2256,3 +2256,28 @@ for (const { name, genbank, rules, edit, legend } of [
     await expectLiveEqualsGenerate(page, { label: name });
   });
 }
+
+// OV-2264: a popup color change for the "rule" scope recolors a rule whose
+// row another rule of the same caption and color also draws (here the feature's
+// own hash rule, written after the delta rule by "Use existing"). The recolored
+// rule then draws nothing, the row is re-keyed `walk [#f4a261]`, and Python
+// draws it at its first drawing rule, after delta; the commit kept it in its
+// old place until the next Generate.
+test('a popup color change for a rule whose row another rule also draws shows Generate\'s Legend order at once (OV-2264)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { ...ALPHA_TEAL, color: '#f4a261', cap: 'walk' });
+  await addColorRule(page, DELTA);
+  await generate(page);
+  await popupEdit(page, { product: 'alpha protein' }, { fill: '#e63946', scope: 'useExisting' });
+  await settleLive(page);
+  expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, cap, color }) => [qual, cap, color])),
+    'the feature\'s own rule of the row, after delta').toEqual([['product', 'walk', '#f4a261'], ['product', 'delta', '#e9c46a'],
+    ['hash', 'walk', '#f4a261']]);
+  const legend = ['delta', 'walk [#f4a261]', 'other proteins', 'repeat_region'];
+  expect(await rowsShownAtCommit(page, { product: 'alpha protein', fill: '#123456', scope: 'rule' }),
+    'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
+  await settleLive(page);
+  expect((await semanticSnapshot(page)).legend.map((row) => row.key), 'the live Legend order').toEqual(legend);
+  await expectLiveEqualsGenerate(page, { label: 'a popup color change for a rule whose row another rule also draws' });
+});
