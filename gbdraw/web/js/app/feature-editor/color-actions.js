@@ -1362,8 +1362,8 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) await commitRuleWrite((current, revise) => current.map(rule => (rule === matchingRule
-        ? revise(rule, { color }) : rule)), msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
+      if (matchingRule) await commitRuleWrite(reviseColorRules([matchingRule], { cap: matchingRule.cap, color }, null),
+        msg('Change specific color rule'), { drawing, afterCommit: () => showClickedFeatureColor(feat, color) });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {

@@ -1077,12 +1077,34 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return { rules: synthesizedRuleTable(table, current), legend };
   };
 
-  // The rename of a Legend row's rules (the Legend editor, or "All" in the
-  // popup): `rows` take `patch`, each in its row. When they join the listed
-  // row of key `joins`, Python moves the ones before that row's first rule
-  // just before it, so the joined row keeps its place, unless that changes the
-  // rule that colors a feature (OV-2193). Python answers every join, also one
-  // that moves no rule, so the joined rows go where Generate draws them.
+  // Whether revising `rows` of `current` into `next` keeps each Legend row it
+  // touches whole: no other rule draws a row with a revised rule, before or
+  // after. Such a revision moves no row, since its rules keep their places
+  // (OV-158). One that takes part of a row, or meets another row's rules, can
+  // move a row: the row's first drawing rule changes (OV-2264).
+  /**
+   * @param {readonly Partial<SpecificColorRule>[]} current
+   * @param {readonly Partial<SpecificColorRule>[]} next
+   * @param {readonly Partial<SpecificColorRule>[]} rows
+   */
+  const revisesWholeRows = (current, next, rows) => /** @type {const} */ ([
+    [current, (/** @type {Partial<SpecificColorRule>} */ rule) => rows.includes(rule)],
+    [next, (/** @type {Partial<SpecificColorRule>} */ rule) => !current.includes(rule)]
+  ]).every(([table, revised]) => {
+    const rowKey = createRuleLegendCaptions(table);
+    const captioned = table.filter((rule) => String(rule.cap ?? '').trim());
+    const touched = new Set(captioned.filter(revised).map(rowKey));
+    return !captioned.some((rule) => !revised(rule) && touched.has(rowKey(rule)));
+  });
+
+  // The revision of rules in their rows (the Legend editor's rename, "All" in
+  // the popup, the popup's "rule" scope): `rows` take `patch`, each in its row.
+  // When they join the listed row of key `joins`, Python moves the ones before
+  // that row's first rule just before it, so the joined row keeps its place,
+  // unless that changes the rule that colors a feature (OV-2193). Python
+  // answers every join, also one that moves no rule, and every revision that
+  // does not keep its rows whole (`revisesWholeRows`), so a row it splits or
+  // re-keys goes where Generate draws it (OV-2264).
   /**
    * @param {readonly Partial<SpecificColorRule>[]} rows
    * @param {{ cap: string, color: string }} patch
@@ -1092,7 +1114,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures) => {
     const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
     const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
-    if (!joined) return next;
+    if (!joined && revisesWholeRows(current, next, rows)) return next;
     const { table, legend } = await rulePreparation.synthesizeGroup({
       scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
     }, next);

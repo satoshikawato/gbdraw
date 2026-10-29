@@ -1011,6 +1011,21 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.ok(unmoved && !Array.isArray(unmoved), 'a join that moves no rule');
   assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
   assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'number' ? unmoved.rules[row].cap : row)), ['alpha', 'delta']);
+  // OV-2264: a revision that joins no row but takes part of a row (the popup's
+  // "rule" scope recolors one of the row's rules) gets Python's answer as well,
+  // so the row it splits or re-keys goes where Generate draws it. A revision
+  // that takes whole rows moves no row and asks Python nothing.
+  const recolored = [tagRule('A', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('Z', 'alpha')];
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...recolored);
+  const recolor = await actions.reviseColorRules([recolored[0]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored], revise,
+    () => state.extractedFeatures.value);
+  assert.ok(recolor && !Array.isArray(recolor), 'a revision that splits a row');
+  assert.deepEqual(recolor.rules.map(({ val, color }) => [val, color]), [['^(A)$', '#abcdef'], ['^(B)$', '#445566'], ['^(Z)$', '#112233']]);
+  assert.deepEqual(recolor.legend?.map((row) => (typeof row === 'number' ? `${recolor.rules[row].cap} ${recolor.rules[row].color}` : row)),
+    ['alpha #abcdef', 'delta #445566'], 'Python\'s order of the rows the drawn features take (no feature has tag Z)');
+  const whole = await actions.reviseColorRules([recolored[0], recolored[2]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored],
+    revise, () => state.extractedFeatures.value);
+  assert.ok(Array.isArray(whole), 'a revision of whole rows is a plain table');
 });
 
 // Review round 2 of #1474: a commit whose answer moves a listed row writes the
