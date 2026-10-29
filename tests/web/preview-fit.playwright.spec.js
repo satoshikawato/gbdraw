@@ -204,10 +204,9 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
 // R17-25 covers a file Session Load with a Result: a legacy configuration Load
 // brings no Result, so the generated figure the user zoomed keeps its zoom.
 // (After a Session Load the held view refits to the room the notice changes,
-// so this case starts from a Generate.) Expected failure: with the R17-25 Fit
-// limited to a file Session Load, the figure is still refitted by another path
-// of the legacy Load (zoom 1.3 -> 0.43, cause not yet found; see the fix-r2 handoff).
-test.fixme('a legacy configuration Load keeps the zoom of the figure already shown', async ({ page }) => {
+// so this case starts from a Generate.) OV-2201: the R17-25 Fit that ran for a
+// legacy Load too refitted it (zoom 1.3 -> 0.43).
+test('a legacy configuration Load keeps the zoom of the figure already shown', async ({ page }) => {
   test.setTimeout(240000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
