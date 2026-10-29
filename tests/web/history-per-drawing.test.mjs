@@ -763,7 +763,7 @@ test('replacing a file for every drawing that uses it is one project step that l
   const circular = state.drawingOf('circular');
   assert.equal(copy.files.c_gb, shared, 'the copy binds the same file');
   const stepsBefore = history.undoLabel();
-  const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'), 'all');
+  const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'));
   // The project step is recorded when each drawing's part has settled.
   for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(outcome.status, 'ok');
@@ -817,7 +817,7 @@ test('replacing a Linear row file or a comparison file for every drawing that us
   const drawings = () => state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
   for (const [old, next, read] of [[shared, genbank('new.gb'), rowFile], [blast, new File(['x'], 'new.tsv'), edgeFile]]) {
     const before = history.undoLabel();
-    assert.equal(app.replaceInputFile(old.fileId, next, 'all').status, 'ok');
+    assert.equal(app.replaceInputFile(old.fileId, next).status, 'ok');
     await settle();
     const replaced = read(linear);
     assert.ok(replaced && replaced.fileId !== old.fileId, `${old.name}: the shown drawing binds the new file`);
@@ -872,7 +872,7 @@ test('replacing a multi-record file for every drawing expands it into records in
     .filter((seq) => seq.gb?.fileId === file.fileId).map((seq) => seq.region_record_id);
   assert.deepEqual(recordsOf(copy, one), recordsOf(linear, one), 'the Duplicate binds the same rows');
   const multi = genbank('multi.gb', ['REC_A', 'REC_B']);
-  assert.equal(app.replaceInputFile(one.fileId, multi, 'all').status, 'ok');
+  assert.equal(app.replaceInputFile(one.fileId, multi).status, 'ok');
   await settle();
   const replaced = linear.linearSeqs.find((seq) => seq.uid === uid)?.gb;
   assert.ok(replaced && replaced.fileId !== one.fileId, 'the shown drawing binds the new file');
@@ -930,6 +930,106 @@ test('an uploader asks whether to replace a file another drawing uses for this d
   assert.equal(circular.files.c_gb, shared);
 });
 
+// R17-30 (PD-OI-090 〔入力ファイル〕): the File card the user uploads into always
+// gets the uploader's own write. "This drawing only" changes nothing else, even
+// another card of the shown drawing that binds the same file; "Every drawing
+// that uses this file" swaps it at every other card, of the shown drawing too,
+// and in every other drawing, as one project step.
+test('an upload over a file another drawing uses writes the chosen card; only "Every drawing" swaps the others (R17-30)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  const depthTsv = (name) => new File(['chr\t1\t5\n'], name);
+  for (const answer of ['drawing', 'all']) {
+    const { drawingId: lId } = app.drawingList.newDrawing('linear');
+    app.selectDrawing(lId);
+    const l = state.drawingOf(lId);
+    while (l.linearSeqs.length < 2) app.addLinearSeq();
+    const [one, two] = l.linearSeqs.map((seq) => seq.uid);
+    const x = state.inputFiles.registerFile(depthTsv(`${answer}-x.tsv`));
+    const rowOf = (drawing, uid) => drawing.linearSeqs.find((seq) => seq.uid === uid);
+    for (const uid of [one, two]) {
+      await history.runUndoable('Change uploaded file', () => app.uploadLinearDepthFile(rowOf(l, uid), 0, x));
+    }
+    assert.equal(app.choicePrompt.show, false, `${answer}: no other drawing uses the file yet`);
+    const { drawingId: copyId } = app.drawingList.duplicateDrawing(lId);
+    const copy = state.drawingOf(copyId);
+    app.selectDrawing(lId);
+    const depthOf = (drawing, uid) => app.getLinearDepthFile(rowOf(drawing, uid), 0);
+    // The uploader's step ends before the answer, as `emit('update:modelValue')` drops the promise.
+    let pending;
+    await history.runUndoable('Change uploaded file', () => { pending = app.uploadLinearDepthFile(rowOf(l, one), 0, depthTsv(`${answer}-y.tsv`)); });
+    await settle();
+    assert.equal(app.choicePrompt.show, true, `${answer}: another drawing uses the file: the uploader asks`);
+    app.resolveChoicePrompt(answer);
+    await pending;
+    await settle();
+    const y = depthOf(l, one);
+    assert.equal(y?.name, `${answer}-y.tsv`, `${answer}: the chosen card binds the uploaded file`);
+    if (answer === 'drawing') {
+      assert.equal(depthOf(l, two), x, 'This drawing only: the other card of the shown drawing keeps its file');
+      assert.deepEqual([depthOf(copy, one), depthOf(copy, two)], [x, x], 'and the other drawing keeps its files');
+      assert.equal(history.undoLabel(), 'Replace input file', 'a step of the shown drawing');
+    } else {
+      assert.equal(depthOf(l, two), y, 'Every drawing: the other card of the shown drawing is swapped');
+      assert.deepEqual([depthOf(copy, one), depthOf(copy, two)], [y, y], 'and so are the other drawing\'s cards');
+      assert.equal(history.undoLabel(), 'Replace input file', 'as one project step');
+    }
+    await app.undoHistory();
+    assert.deepEqual([depthOf(l, one), depthOf(l, two), depthOf(copy, one), depthOf(copy, two)], [x, x, x, x],
+      `${answer}: one Undo restores every card`);
+  }
+});
+
+// R17-30 with R17-28: the comparison card the user uploads into becomes an
+// included, active Upload, as with no other drawing on the file, under either
+// answer; an excluded edge that "Every drawing" reaches in another drawing only
+// gets the new file and stays excluded.
+test('an upload into an excluded comparison card makes it an included active Upload; another drawing\'s edge keeps its state (R17-30)', async () => {
+  const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  const settle = async () => { for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0)); };
+  for (const answer of ['drawing', 'all']) {
+    const { drawingId: lId } = app.drawingList.newDrawing('linear');
+    app.selectDrawing(lId);
+    const l = state.drawingOf(lId);
+    while (l.linearSeqs.length < 2) app.addLinearSeq();
+    const [query, subject] = l.linearSeqs;
+    const edgeId = `edge-r1730-${answer}`;
+    await history.runUndoable('Change comparisons', () => SETTINGS_SLICE.install(l.slices.settings, { linearComparisonPlan: {
+      mode: 'selected', defaultSource: 'upload', edges: [{ id: edgeId, queryUid: query.uid, subjectUid: subject.uid, source: 'upload', included: true }]
+    } }));
+    const x = state.inputFiles.registerFile(new File(['q\ts\t100\t10\t0\t0\t1\t10\t1\t10\t1e-5\t20\n'], `${answer}-x.tsv`));
+    await history.runUndoable('Change uploaded file', () => { app.setLinearComparisonFile(edgeId, x); });
+    await history.runUndoable('Change comparisons', () => app.deactivateLinearComparisonFile(edgeId));
+    const { drawingId: copyId } = app.drawingList.duplicateDrawing(lId);
+    const copy = state.drawingOf(copyId);
+    app.selectDrawing(lId);
+    const edgeOf = (drawing) => drawing.linearComparisonPlan.edges.find((edge) => edge.id === edgeId);
+    const stateOf = (drawing) => {
+      const { source, included, fileActive } = edgeOf(drawing);
+      return { source, included, fileActive };
+    };
+    const excluded = { source: 'upload', included: false, fileActive: false };
+    assert.deepEqual([stateOf(l), stateOf(copy)], [excluded, excluded], `${answer}: both edges are excluded`);
+    let pending;
+    await history.runUndoable('Change uploaded file', () => {
+      pending = app.uploadLinearComparisonCardFile(`${query.uid}->${subject.uid}`, new File(['y'], `${answer}-y.tsv`));
+    });
+    await settle();
+    assert.equal(app.choicePrompt.show, true, `${answer}: another drawing uses the file: the uploader asks`);
+    app.resolveChoicePrompt(answer);
+    await pending;
+    await settle();
+    const y = edgeOf(l).file;
+    assert.equal(y?.name, `${answer}-y.tsv`, `${answer}: the clicked card binds the uploaded file`);
+    assert.deepEqual(stateOf(l), { source: 'upload', included: true, fileActive: true }, `${answer}: as an included active Upload`);
+    assert.equal(edgeOf(copy).file, answer === 'all' ? y : x, `${answer}: the other drawing's file`);
+    assert.deepEqual(stateOf(copy), excluded, `${answer}: the other drawing's edge stays excluded`);
+  }
+});
+
 // OV-2150: the Linear File card's row input reads `linearRecordRowFor(uid, fallback)`
 // from the template; the shown Linear drawing answers it (a drawing-generic reader
 // exported as is made every render of the card list throw).
@@ -953,8 +1053,10 @@ test('the template row reader answers from the shown Linear drawing', async () =
 
 // D2 (PD-OI-090 〔入力ファイル〕): a comparison file the drawing holds but does not
 // use (its file turned off, or its pair set to LOSAT so the file input is not shown)
-// is still a place that binds the file, so "This drawing only" replaces it there.
-test('replacing a file for this drawing only reaches its inactive or hidden comparison file', async () => {
+// is still a place that binds the file, so the replacement for every drawing that
+// uses the file reaches it there (R17-30: "This drawing only" is the clicked
+// control's upload alone).
+test('replacing a file for every drawing reaches an inactive or hidden comparison file', async () => {
   const { projectInputReplacement } = await import('../../gbdraw/web/js/services/drawing/inputs.js');
   const { SETTINGS_SLICE } = await import('../../gbdraw/web/js/services/drawing/settings.js');
   const app = createAppSetup();
@@ -984,13 +1086,12 @@ test('replacing a file for this drawing only reaches its inactive or hidden comp
     assert.equal(edgeOf(copy).file, blast, `${label}: the copy still binds the file`);
     assert.deepEqual(projectInputReplacement([{ drawingId: copyId, drawing: copy }], blast.fileId),
       [{ drawingId: copyId, slot: 'edge', rowUid: null, edgeId }], `${label}: it is a replacement site`);
-    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${label}-new.tsv`), 'drawing').status, 'ok');
+    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${label}-new.tsv`)).status, 'ok');
     await settle();
     const replaced = edgeOf(copy).file;
     assert.ok(replaced && replaced.fileId !== blast.fileId, `${label}: the shown drawing binds the new file`);
-    assert.equal(edgeOf(linear).file, blast, `${label}: the other drawing keeps the old file`);
-    assert.deepEqual(projectInputReplacement(drawings().filter(({ drawingId }) => drawingId === copyId), blast.fileId), [],
-      `${label}: the shown drawing keeps no record of the old file`);
+    assert.equal(edgeOf(linear).file, replaced, `${label}: so does the other drawing`);
+    assert.deepEqual(projectInputReplacement(drawings(), blast.fileId), [], `${label}: no drawing keeps a record of the old file`);
   }
 });
 
@@ -1011,7 +1112,8 @@ test('replacing a comparison file keeps the edge source, inclusion, and file sta
     const { source, included, fileActive } = edgeOf(drawing);
     return { source, included, fileActive };
   };
-  for (const scope of ['drawing', 'all']) {
+  {
+    const scope = 'all';
     app.selectDrawing('linear');
     await history.runUndoable('Change comparisons', () => SETTINGS_SLICE.install(linear.slices.settings, { linearComparisonPlan: {
       mode: 'selected', defaultSource: 'upload', edges: [{ id: edgeId, queryUid: query.uid, subjectUid: subject.uid, source: 'upload', included: true }]
@@ -1023,18 +1125,16 @@ test('replacing a comparison file keeps the edge source, inclusion, and file sta
     await history.runUndoable('Change comparisons', () => app.setLinearComparisonSource(edgeId, 'losat'));
     app.selectDrawing('linear');
     await history.runUndoable('Change comparisons', () => app.deactivateLinearComparisonFile(edgeId));
-    const reached = scope === 'all' ? [linear, copy] : [linear];
+    const reached = [linear, copy];
     const before = reached.map(stateOf);
-    assert.deepEqual(before, scope === 'all'
-      ? [{ source: 'upload', included: false, fileActive: false }, { source: 'losat', included: true, fileActive: true }]
-      : [{ source: 'upload', included: false, fileActive: false }], `${scope}: the edges before`);
-    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${scope}-new.tsv`), scope).status, 'ok');
+    assert.deepEqual(before, [{ source: 'upload', included: false, fileActive: false }, { source: 'losat', included: true, fileActive: true }],
+      `${scope}: the edges before`);
+    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${scope}-new.tsv`)).status, 'ok');
     await settle();
     reached.forEach((drawing, index) => {
       const replaced = edgeOf(drawing).file;
       assert.ok(replaced && replaced.fileId !== blast.fileId, `${scope} ${drawing.id}: the new file`);
       assert.deepEqual(stateOf(drawing), before[index], `${scope} ${drawing.id}: source, included, fileActive kept`);
     });
-    if (scope === 'drawing') assert.equal(edgeOf(copy).file, blast, 'drawing: the copy keeps the old file');
   }
 });

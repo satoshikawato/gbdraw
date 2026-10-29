@@ -303,32 +303,38 @@ export const createDrawingList = ({
 
 /**
  * The replacement of an input file that drawings bind (PD-OI-090 〔入力ファイル〕,
- * R16-5, R17-3): for the shown drawing only, a step of that drawing; for every
- * drawing that uses the file, one project step, after which no drawing binds
- * the replaced file. The sites come from `projectInputReplacement` by drawing
- * ID and slot, row uid, or comparison id; the five cards are never sites.
+ * R16-5, R17-3, R17-30): one project step, after which no drawing binds the
+ * replaced file. The sites come from `projectInputReplacement` by drawing ID
+ * and slot, row uid, or comparison id; the five cards are never sites.
  * @param {InputReplacementPorts} ports
  */
 export const createInputReplacement = ({
   drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope
 }) => {
+  /** @param {string} fileId @returns {DrawingInputSite[]} every site of `fileId`, in every drawing */
+  const sitesOf = (fileId) => projectInputReplacement(
+    drawingTabs().map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) })), fileId
+  );
   /**
+   * Replaces `fileId` with `file` in every drawing that uses it. `writeShown`,
+   * the uploader's own write of the control the user chose the file in, runs
+   * first in the same step (R17-30); the replacement port swaps the file at
+   * every site still bound after it (R17-28: only the file changes).
    * @param {string} fileId the bound file being replaced
    * @param {InputFileCandidate | InputFileRef} file the new file, or a file in this Session
-   * @param {InputReplacementScope} scope
+   * @param {() => unknown} [writeShown]
    * @returns {DrawingListOutcome}
    */
-  const replaceInputFile = (fileId, file, scope) => {
+  const replaceInputFile = (fileId, file, writeShown = () => undefined) => {
     const reason = switchBusy();
     if (reason) return { status: 'busy', reason };
-    const shown = shownDrawingId();
-    const drawings = drawingTabs().filter((tab) => scope === 'all' || tab.id === shown)
-      .map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
-    const sites = projectInputReplacement(drawings, fileId);
-    if (sites.length) {
-      (scope === 'all' ? runProjectStep : runDrawingStep)('Replace input file', () => applyInputReplacementToDrawings(sites, fileId, file));
+    if (sitesOf(fileId).length) {
+      runProjectStep('Replace input file', () => {
+        writeShown();
+        applyInputReplacementToDrawings(sitesOf(fileId), fileId, file);
+      });
     }
-    return { status: 'ok', drawingId: shown };
+    return { status: 'ok', drawingId: shownDrawingId() };
   };
   /**
    * The drawings other than the shown one that bind `fileId` where a
@@ -337,25 +343,31 @@ export const createInputReplacement = ({
    */
   const otherDrawingsUsing = (fileId) => {
     const shown = shownDrawingId();
-    const drawings = drawingTabs().filter((tab) => tab.id !== shown).map((tab) => ({ drawingId: tab.id, drawing: drawingOf(tab.id) }));
-    return [...new Set(projectInputReplacement(drawings, fileId).map((site) => site.drawingId))];
+    return [...new Set(sitesOf(fileId).map((site) => site.drawingId).filter((drawingId) => drawingId !== shown))];
   };
   /**
    * An uploader of the shown drawing writes a new file in place of `previous`
-   * (PD-OI-090 〔入力ファイル〕). When another drawing uses `previous`, the
-   * scope is asked: Cancel records nothing, else `replaceInputFile`. Else,
-   * and for a Remove (`file` null, not a replacement), the uploader's own
-   * write `writeShown`, a step of the shown drawing. The only place that asks.
+   * (PD-OI-090 〔入力ファイル〕). Its control always gets the uploader's own
+   * write `writeShown` (R17-30), in the uploader's step when nothing is asked.
+   * When another drawing uses `previous`, the scope is asked first, after
+   * which the uploader's step has ended: Cancel records nothing; "This drawing
+   * only" is that write alone, a step of the shown drawing; "Every drawing that
+   * uses this file" is `replaceInputFile` with it, which swaps every other
+   * site. A Remove (`file` null) is not a replacement and never asks. The only
+   * place that asks.
    * @template T
    * @param {InputFileRef | null} previous the file the uploader binds now
    * @param {InputFileCandidate | InputFileRef | null} file
    * @param {() => T} writeShown
-   * @returns {T | Promise<DrawingListOutcome | null>}
+   * @returns {T | Promise<unknown>}
    */
   const replaceFromShownDrawing = (previous, file, writeShown) => {
     const others = previous && file && previous !== file ? otherDrawingsUsing(previous.fileId) : [];
     if (!previous || !file || !others.length) return writeShown();
-    return askScope(previous, others).then((scope) => (scope ? replaceInputFile(previous.fileId, file, scope) : null));
+    return askScope(previous, others).then((scope) => {
+      if (scope === 'drawing') return runDrawingStep('Replace input file', writeShown);
+      return scope === 'all' ? replaceInputFile(previous.fileId, file, writeShown) : null;
+    });
   };
   return { replaceInputFile, otherDrawingsUsing, replaceFromShownDrawing };
 };
