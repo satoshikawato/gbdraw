@@ -36,6 +36,8 @@ write-up of a release.
 - Fixed: a Similarity alignment anchored on a CDS that crosses a circular
   record's origin centers on the middle of that CDS instead of the middle of
   the record (OV-2259).
+- Fixed: gbdraw imports again on Python 3.14 and later (OV-2196). `Traversable` is read
+  from `importlib.resources.abc`, because Python 3.14 removed `importlib.abc.Traversable`.
 - Fixed: the Circular legend lists only the similarity rings a slot draws; a
   ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
 - Fixed: in the Web app, a Legend name that joins another Legend row of the

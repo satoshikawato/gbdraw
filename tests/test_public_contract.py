@@ -7,6 +7,7 @@ import inspect
 import json
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -37,6 +38,8 @@ def _json_value(value):
         return [_json_value(item) for item in value]
     if isinstance(value, dict):
         return {str(key): _json_value(item) for key, item in value.items()}
+    if isinstance(value, types.UnionType):  # 3.14 gives "X | None" a __module__ and __name__
+        return str(value)
     module = getattr(value, "__module__", None)
     name = getattr(value, "__qualname__", getattr(value, "__name__", None))
     if (module, name) == ("pandas.core.frame", "DataFrame"):

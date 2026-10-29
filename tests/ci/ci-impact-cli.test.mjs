@@ -850,7 +850,7 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   for (const id of ['core', 'recipes-standard', 'gallery', 'browser', 'playwright-functional', 'playwright-performance', 'losat-cache-browser-acceptance', 'acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     assert.ok(release.includes(`      - ${id}\n`), `release gate missing ${id}`);
   }
-  assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12", "3.13"\]/);
+  assert.match(job('core'), /python-version: \["3.10", "3.11", "3.12", "3.13", "3.14"\]/);
   assert.match(job('acceptance-supported-main'), /python-version: \["3.10", "3.12"\]/);
   assert.match(job('acceptance-supported-main'), /surface: \["recipe", "gallery", "browser"\]/);
   assert.match(job('slow-main'), /python-version: \["3.10", "3.11", "3.12"\]/);
