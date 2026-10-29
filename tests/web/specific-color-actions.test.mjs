@@ -14,6 +14,7 @@ import {
 import { legendColorIdentity, sameLegendLine } from '../../gbdraw/web/js/services/legend-row-names.js';
 import { recordRuleMatches, recordVisibilityMatch, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/services/feature-visibility.js';
+import { isLegendOrderEdited } from '../../gbdraw/web/js/services/legend-svg.js';
 import { evaluatePythonRules, synthesizePythonColorRules } from './helpers/python-evaluator.mjs';
 import { withDrawings, withModeDrawings } from './helpers/drawing-state.mjs';
 import { FEATURE_EDITS_SLICE } from '../../gbdraw/web/js/services/drawing/feature-edits.js';
@@ -1011,6 +1012,49 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
   assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'number' ? unmoved.rules[row].cap : row)), ['alpha', 'delta']);
 });
+
+// Review round 2 of #1474: a commit whose answer moves a listed row writes the
+// displayed Result's inventory, which only a checkpoint step records, so it is
+// one checkpoint step even when it adds and removes no row; Undo then returns
+// the list and the inventory together, and the list keeps the default order.
+test('a commit whose answer moves a listed row is a checkpoint step, so Undo keeps the default order', () => withDocument(async () => {
+  const inventory = { value: ['beta', 'alpha', 'other proteins'] };
+  const s = setup(undefined, {
+    createHistory: (state) => createHistoryManager({
+      buildIntent: () => structuredClone({ rules: state.manualSpecificRules, entries: state.legendEntries.value }),
+      applyIntent: ({ rules, entries }) => {
+        state.manualSpecificRules.splice(0, Infinity, ...structuredClone(rules));
+        state.legendEntries.value = structuredClone(entries);
+      },
+      // A checkpoint records the editor state with the inventory (history-snapshot.js), an intent step not the inventory.
+      buildCheckpoint: () => structuredClone({ rules: state.manualSpecificRules, entries: state.legendEntries.value, inventory: inventory.value }),
+      applyCheckpoint: ({ rules, entries, inventory: kept }) => {
+        state.manualSpecificRules.splice(0, Infinity, ...structuredClone(rules));
+        state.legendEntries.value = structuredClone(entries);
+        inventory.value = structuredClone(kept);
+      }
+    }),
+    // The Legend owner's answer in the default order (entry-actions.js): the
+    // rows and the inventory take Python's order.
+    prepareFileLegendEntries: async () => ({
+      diff: { add: [], update: [], remove: [], unchanged: [] }, reorders: true, isCurrent: () => true,
+      apply: () => {
+        const order = ['alpha', 'beta', 'other proteins'];
+        s.state.legendEntries.value = order.map((caption) => ({ caption, originalCaption: caption }));
+        inventory.value = [...order];
+        return { add: [], retire: [], order };
+      }
+    })
+  });
+  s.state.legendEntries.value = inventory.value.map((caption) => ({ caption, originalCaption: caption }));
+  s.state.manualSpecificRules.push({ feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'beta' });
+  await s.history.initializeIntentBaseline();
+  assert.equal(await s.actions.commitSpecificRules((current) => current.map((rule) => ({ ...rule, color: '#00aa00' }))), true);
+  assert.equal(s.rerenders(), 1, 'the commit asks for the rerender');
+  await s.history.undo();
+  assert.deepEqual(s.state.legendEntries.value.map(({ caption }) => caption), ['beta', 'alpha', 'other proteins']);
+  assert.equal(isLegendOrderEdited(s.state.legendEntries.value, inventory.value), false);
+}));
 
 // OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer
 // commit supersedes a pending one. An Add is never dropped that way: a second

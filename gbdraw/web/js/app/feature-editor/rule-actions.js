@@ -537,8 +537,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     });
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
-    // draws (R13); a checkpoint when the legend gains or loses a row.
-    const transact = legend.diff.add.length || legend.diff.remove.length
+    // draws (R13); a checkpoint when the legend gains or loses a row, or when
+    // Python's answer moves a listed row: the Legend owner then writes the
+    // displayed Result's inventory, which only a checkpoint records.
+    const transact = legend.diff.add.length || legend.diff.remove.length || legend.reorders
       ? runUndoableCheckpoint : runUndoable;
     // D-24 (OV-731): a checkpoint step records whether the figure of each
     // side is the one its state draws, so Undo and Redo of a drawn side ask

@@ -511,12 +511,14 @@ export const createLegendEntryActions = ({
           // Rows in Python's order are no edit (D-08): in the default order,
           // the inventory takes the answer's order and the rows placed, so
           // the list stays the default order, Generate replays no order on
-          // another Result, and a Session saves none.
-          if (inDefault) {
+          // another Result, and a Session saves none. Only a commit that adds
+          // a row or moves one (`reorders`) writes it: the rule owner runs
+          // those as checkpoint steps, which record the inventory.
+          if (inDefault && (answered.placed.length > 0 || reorders)) {
             const inventory = originalLegendOrder.value;
             const keys = new Map(answered.placed.filter((key) => !inventory.includes(key)).map((key) => [key, key]));
             writeDisplayedInventory(inAnsweredLegendOrder(inventory, keys, legendOrder, String, true).items);
-            if (movesKeptRow(kept, entries)) order = [...entries, ...added.values()].map(keyOf);
+            if (reorders && movesKeptRow(kept, entries)) order = [...entries, ...added.values()].map(keyOf);
           }
         }
         for (const key of placed) {
