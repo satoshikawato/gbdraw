@@ -1515,9 +1515,18 @@ export const createAppSetup = () => {
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
+  /**
+   * The drawing a discovery ran for, or null when it was deleted while the
+   * discovery ran: such a discovery changes nothing (OV-2148).
+   * @param {DrawingId} drawingId @returns {DrawingState | null}
+   */
+  const listedDrawingOf = (drawingId) => (
+    state.drawingTabs.value.some((tab) => tab.id === drawingId) ? state.drawingOf(drawingId) : null
+  );
   /** @param {{ drawingId: DrawingId, uid: string, records: SequenceRecord[] }} discovered the records of one card, for the drawing the discovery ran for */
   const handleLinearRecordsDiscovered = ({ drawingId, uid, records }) => {
-    const drawing = state.drawingOf(drawingId);
+    const drawing = listedDrawingOf(drawingId);
+    if (!drawing) return false;
     // Only an upload infers record definitions and opens the record list; a
     // loaded Session keeps its own.
     const fromUpload = !state.sessionImportRollbackInProgress.value && pendingDiscoveryOf(drawing).uploads.delete(uid);
@@ -1537,9 +1546,8 @@ export const createAppSetup = () => {
    */
   const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
     rebindAnnotationRecords();
-    // A drawing deleted while its discovery ran asks for nothing.
-    if (!state.drawingTabs.value.some((tab) => tab.id === drawingId)) return;
-    const drawing = state.drawingOf(drawingId);
+    const drawing = listedDrawingOf(drawingId);
+    if (!drawing) return;
     const pending = pendingDiscoveryOf(drawing);
     const upload = pending.circularUpload;
     if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
@@ -3886,10 +3894,11 @@ export const createAppSetup = () => {
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
     // without a Result shows Settings.
     if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
-    // R17-25: a Load with a Result fits the figure to the shown Preview, at every width,
-    // after the phone pane switch and the whole notice (its height sizes the canvas), so the
-    // measured canvas is the one shown; Generate resets to 100 %.
-    if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) {
+    // R17-25: a file Session Load with a Result fits the figure to the shown Preview, at every
+    // width, after the phone pane switch and the whole notice (its height sizes the canvas), so
+    // the measured canvas is the one shown; Generate resets to 100 %. A legacy configuration
+    // Load brings no Result, so the figure already shown keeps its zoom.
+    if (result?.status === 'ok' && svgContent.value) {
       await nextTick();
       fitPreviewToViewport();
     }

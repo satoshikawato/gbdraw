@@ -263,7 +263,7 @@ class SessionDocument:
 
     @classmethod
     def _from_checked_move(cls, data: Mapping[str, Any]) -> SessionDocument:
-        """Keep the Session 50 that a checked Session 46-50 document moved to, unchecked.
+        """Keep the Session 50 that a checked Session 46-49 document moved to, unchecked.
 
         Only the CLI re-save keeps one (``_upgraded_session``): the document it
         writes holds every drawing of this one and is checked (OV-1815).

@@ -511,7 +511,7 @@ const readWebFileBindings = (webFiles, resources, inputSlot, at, repairs) => {
  * The input files of a Session as the app reads them (A8, A6b): a resource
  * whose descriptor cannot be read is dropped, with a row when a binding or
  * a request names it, and each input inventory is read
- * (`readWebFileBindings`): a Session 27-50's one, each Session 50 drawing's
+ * (`readWebFileBindings`): a Session 27-49's one, each Session 50 drawing's
  * own (B2d-3a-2). The request's references to a dropped resource are its
  * reader's (`readSessionRequests`).
  * @param {SessionChecked} document
@@ -578,7 +578,7 @@ export const readSessionDocument = (value) => {
   // reads (R2).
   if (isDrawingsBand(checked)) {
     if (!drawingIdsAreUnique(checked)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
-    // Each drawing's Web-only artifact fields are read as a Session 40-50's top level's.
+    // Each drawing's Web-only artifact fields are read as a Session 40-49's top level's.
     const entries = /** @type {Record<string, unknown>[]} */ (/** @type {Record<string, unknown>} */ (checked).drawings);
     const read = entries.map((entry, index) => (isPlainObject(entry) ? withoutArtifactWebOnlyFields(entry, drawingSetPath(index), repairs) : entry));
     const document = read.some((entry, index) => entry !== entries[index])
@@ -643,7 +643,7 @@ export const restoresNothing = (stored, repairs) => {
   const requestDropped = repairs.some(({ code }) => code === 'request-dropped');
   // A Session 50 drawing whose request was dropped stays, with its settings.
   if (requestDropped && !hasSettingsOnlyForm(stored) && !versionHoldsDrawings(stored.version)) return true;
-  // A Session 46-50's stored set dropped for its request is its top-level
+  // A Session 46-49's stored set dropped for its request is its top-level
   // part (a Session 50 drawing stays without its set).
   const dropped = new Set(repairs.filter(({ effect }) => effect === 'dropped' || effect === 'defaulted')
     .map(({ code, path }) => (code === 'other-result-set-dropped' ? topLevelKey(path) : path)));
@@ -1506,7 +1506,7 @@ export const readSessionAuthorityParts = (sessionData, version, storedSchemas, r
 /**
  * Load: one drawing's committed Result set of a Session 50, read after its
  * request (`readSessionRequests`) as `readSessionAuthorityParts` reads a
- * Session 46-50's: the drawing Load projects keeps what can be restored of
+ * Session 46-49's: the drawing Load projects keeps what can be restored of
  * its set, as the top-level set does; any other drawing's set is dropped on
  * a fault of its own (`session-part-dropped`), as the other mode's set is.
  * Null drops the set (the drawing stays).
@@ -1803,7 +1803,7 @@ export const openedDrawingOf = (document) => {
  */
 /**
  * The committed Result sets of a Session, the projected one first: a Session
- * 27-50's top-level set and a Session 46-50's `otherModeResult`; each Session
+ * 27-49's top-level set and a Session 46-49's `otherModeResult`; each Session
  * 50 drawing that holds a request, the one it opens (`openedDrawingOf`)
  * projected (a drawing is found by its ID). The one place Load names where a
  * file holds a set; each set reader below reads one.
