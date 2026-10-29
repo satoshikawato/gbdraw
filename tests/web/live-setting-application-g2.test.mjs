@@ -24,6 +24,7 @@ const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/servic
 const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 const { RECORD_POPUP_FIELDS } = await import('../../gbdraw/web/js/app/preview-item-popup.js');
+const { DEFINITION_LINE_STYLE_KINDS } = await import('../../gbdraw/web/js/services/definition-line-style-state.js');
 
 const record = (id) => `LOCUS       ${id.padEnd(16)}          40 bp    DNA     linear   UNK 01-JAN-1980
 DEFINITION  Live setting fixture ${id}.
@@ -280,6 +281,42 @@ test('a value Generate refuses fails the apply (INPUT_INVALID)', () => {
     committed.renderRequest.comparisons = [{ kind: 'pairwiseComparison', pairs: [] }];
     set(modeDrawing(state, 'linear').adv, 'comparison_height', -1);
     refused(HEIGHT);
+  } finally {
+    undoAll();
+  }
+});
+
+// OV-2244: each Linear row's Size input stores its trimmed text
+// (`setDefinitionLineStyleSize` -> `setOptionalNumberInputValue`); Weight and
+// Color store their text. The live apply reads the row styles the way
+// Generate does, so it sends numbers and refuses what Generate refuses.
+test('a Linear row style the inputs store as text applies as Generate sends it (OV-2244)', () => {
+  try {
+    fixtures('linear');
+    const committed = generate('linear');
+    const drawing = modeDrawing(state, 'linear');
+    const sizes = { name: ['22', 22], subtitle: ['9.5', 9.5], replicon: ['11', 11], accession: [' 8.25 ', 8.25], length: ['30', 30] };
+    assert.deepEqual(Object.keys(sizes), [...DEFINITION_LINE_STYLE_KINDS]);
+    set(drawing.adv, 'linear_definition_line_styles', Object.fromEntries(
+      DEFINITION_LINE_STYLE_KINDS.map((kind) => [kind, {
+        font_size: sizes[kind][0],
+        font_weight: { subtitle: 'bold', replicon: 'normal' }[kind] ?? null,
+        fill: kind === 'subtitle' ? '#123456' : null
+      }])
+    ));
+    const live = applied(committed, project(committed, 'linear', [STYLES])).renderRequest.diagramOptions.configOverrides;
+    const key = (kind, field) => `objects.definition.linear.line_styles.${kind}.${field}`;
+    for (const kind of DEFINITION_LINE_STYLE_KINDS) {
+      assert.strictEqual(live[key(kind, 'font_size')], sizes[kind][1], key(kind, 'font_size'));
+    }
+    assert.equal(live[key('subtitle', 'font_weight')], 'bold');
+    assert.equal(live[key('subtitle', 'fill')], '#123456');
+    // Only the size is read: a stored weight goes as stored, as a lifted legacy request holds it.
+    assert.equal(live[key('replicon', 'font_weight')], 'normal');
+    set(drawing.adv, 'linear_definition_line_styles', { name: { font_size: '-1', font_weight: null, fill: null } });
+    assert.throws(() => project(committed, 'linear', [STYLES]), (error) => (
+      error.code === 'INPUT_INVALID' && error.context?.configPath === key('name', 'font_size')
+    ));
   } finally {
     undoAll();
   }
