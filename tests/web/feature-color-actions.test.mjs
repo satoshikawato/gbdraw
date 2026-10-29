@@ -1231,6 +1231,29 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.deepEqual(fixture.commitOptions.at(-1).legendPlacement, { name: 'gamma', color: '#2a9d8f', at: 'beta', replaces: true });
   }
 
+  // A popup Legend name that joins another listed row of the same color is
+  // not a row renamed in its place: Python writes the rules as for any group
+  // edit (here the feature's hash rule, last), and the joined row stays where
+  // it is, as live keeps it (review of OV-2192).
+  {
+    const betaRule = { feat: 'tRNA', qual: 'locus_tag', val: '^T1$', color: '#2a9d8f', cap: 'beta' };
+    const deltaRule = { feat: 'tRNA', qual: 'product', val: '^delta$', color: '#e9c46a', cap: 'delta' };
+    const alphaRule = { feat: 'tRNA', qual: 'product', val: '^alpha$', color: '#2a9d8f', cap: 'alpha' };
+    const tagged = { ...trna, product: 'shared', qualifiers: { locus_tag: ['T1'], product: ['shared'] }, legendCaption: 'beta' };
+    const twin = { ...trna, id: 't2', svg_id: 't2', product: 'shared', qualifiers: { product: ['shared'] }, start: 101, end: 170, legendCaption: 'tRNA' };
+    const delta = { ...trna, id: 't3', svg_id: 't3', product: 'delta', qualifiers: { product: ['delta'] }, start: 201, end: 270, legendCaption: 'delta' };
+    const alpha = { ...trna, id: 't4', svg_id: 't4', product: 'alpha', qualifiers: { product: ['alpha'] }, start: 301, end: 370, legendCaption: 'alpha' };
+    const fixture = build({
+      entries: [{ caption: 'beta', color: '#2a9d8f', featureIds: ['t1'] }, { caption: 'delta', color: '#e9c46a', featureIds: ['t3'] },
+        { caption: 'alpha', color: '#2a9d8f', featureIds: ['t4'] }, { caption: 'tRNA', color: '#e8b441', featureIds: ['t2'] }],
+      order: ['beta', 'delta', 'alpha', 'tRNA'], rules: [betaRule, deltaRule, alphaRule], features: [tagged, twin, delta, alpha],
+      clicked: { svg_id: 't1', feat: tagged, color: '#2a9d8f', legendName: 'alpha', appliedLegendName: 'beta' } });
+    await fixture.renameActions.handleLegendNameCommit();
+    assert.equal(fixture.errorLog.value, null);
+    assert.deepEqual(fixture.committed.at(-1).map(({ qual, cap }) => [qual, cap]),
+      [['locus_tag', 'beta'], ['product', 'delta'], ['product', 'alpha'], ['hash', 'alpha']], 'the joined rule goes last');
+  }
+
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the
   // Legend owner's `keepBothNamesOf`). A row renamed whole keeps its place and
   // its key's records; a feature split off its row is placed right after the
