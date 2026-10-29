@@ -1,23 +1,28 @@
 // The PR random walk (PD-OI-066, gbdraw/web/CLAUDE.md R3): the seeded walk of
 // tests/web/helpers/live-random-walk.mjs at the pull-request level of
 // tests/web/helpers/live-random-walk-plan.mjs, with a fixed seed: every
-// ordered pair of edit kinds, and every kind in each popup and Auto Reflow
+// feasible ordered pair of edit kinds, and every kind in each popup and Auto Reflow
 // state. Every step compares the live Result with a fresh Generate from the
 // same draft and checks that the drawing it did not edit keeps its slices
 // (M6). A failing walk is shrunk to a minimal reproduction within
-// GBDRAW_RANDOM_WALK_SHRINK_REPLAYS replays (default 10 here). The promotion
-// spec live-generate-random-walk.promotion.spec.js runs the promotion level.
+// GBDRAW_RANDOM_WALK_SHRINK_REPLAYS replays (default 10 here), for the first
+// GBDRAW_RANDOM_WALK_SHRINK_WALKS failing walks of the run (default 2). The
+// promotion spec live-generate-random-walk.promotion.spec.js runs the
+// promotion level.
 const { expect, test } = require('@playwright/test');
-const { ALLOWLIST_WALK_KINDS, randomWalkTests, recordReplayTest, shrinkReplaysFromEnv } = require('./helpers/live-random-walk.mjs');
+const { ALLOWLIST_WALK_KINDS, randomWalkTests, recordReplayTest, shrinkLimitsFromEnv } = require('./helpers/live-random-walk.mjs');
 const { FIXTURES, PR_SEED, REPLACED_MATRIX_CASES, WALK_KINDS, coverageOf, planWalk } = require('./helpers/live-random-walk-plan.mjs');
 const { WORK_ALLOWLIST } = require('./helpers/live-work-allowlist.mjs');
 
 test.describe.configure({ retries: 0 });
 
 const PLAN = { level: 'pr', required: REPLACED_MATRIX_CASES };
+// At most 2 x 10 replays of at most 40 steps: about 10 minutes more for this
+// spec's shard when every walk fails (its job limit is 45 minutes).
+const SHRINK = { replays: 10, walks: 2 };
 
 // Each row of the R3 work allowlist names the walk kind that draws its path
-// (or null), and the walk draws every kind, every ordered pair of kinds, and
+// (or null), and the walk draws every kind, every feasible ordered pair of kinds, and
 // every kind in each popup and Auto Reflow state on every run.
 test('the walk draws every kind and names a kind for each work allowlist row', () => {
   expect(Object.keys(ALLOWLIST_WALK_KINDS)).toEqual(WORK_ALLOWLIST.map(({ kind }) => kind));
@@ -41,4 +46,4 @@ test('the walk draws each matrix case it replaced in that case\'s states', () =>
 const { title, body } = recordReplayTest({ seed: PR_SEED });
 test(title, body);
 
-for (const walk of randomWalkTests({ seed: PR_SEED, ...PLAN, shrinkReplays: shrinkReplaysFromEnv(10) })) test(walk.title, walk.body);
+for (const walk of randomWalkTests({ seed: PR_SEED, ...PLAN, shrink: shrinkLimitsFromEnv(SHRINK) })) test(walk.title, walk.body);

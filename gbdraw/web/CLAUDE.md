@@ -455,7 +455,9 @@ Generate from the same draft; a case that compares one Web path with another
 through the same executor is not kept. The pull-request random walk
 (`tests/web/live-generate-random-walk.playwright.spec.js`, over
 `tests/web/helpers/live-random-walk.mjs` and its covering plan) draws every
-ordered pair of edit kinds of its list, and every kind with the popup opened
+ordered pair of edit kinds of its list that one fixture can run (a Result
+switch runs only in the two-Result batch, Reset Settings and a drawing switch
+only outside it), and every kind with the popup opened
 and not and with Auto Reflow on and off, on every run, with a fixed seed, and
 after each step checks that the Result equals a fresh Generate and that the
 drawing the step did not edit keeps its slices.
@@ -484,7 +486,7 @@ the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-color-actions.test.mjs`,
 `tests/web/live-generate-random-walk.playwright.spec.js` with
 `tests/web/helpers/live-random-walk.mjs` (every ordered pair of edit kinds of
-the walk and every kind in each popup and Auto Reflow state on every run, a
+the walk that one fixture can run and every kind in each popup and Auto Reflow state on every run, a
 step kind for each work allowlist row, and each matrix case the walk replaced
 drawn in that case's states),
 `tests/web/live-generate-parity.playwright.spec.js` (the work guard over
