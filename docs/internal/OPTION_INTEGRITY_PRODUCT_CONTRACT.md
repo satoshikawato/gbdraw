@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `100`
+- Contract revision: `101`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -3730,6 +3730,47 @@ Status: active Product authority
   - This is a Product Contract-only change: it contains no runtime, and the
     runtime that implements it follows in later pull requests, which require
     it merged into their base. The Review is `REQUIRED`.
+- Revision 101 change: `PD-OI-104` is replaced for scenario revision `4`
+  (`A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`, reading `AS S5-Q1`, set
+  `TOGETHER`, is kept). It comes from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-30` (campaign
+  `incremental-render-20261013`, `DECISIONS.md` `D-199` to `D-202` and
+  `D-205`) to the questions PQ-1 to PQ-4 of
+  `design/STEP5-RUNTIME-DESIGN.md` revision 3, section 10, asked in one batch
+  after the Owner's 「質問してください」. Each reply is the option the Owner
+  selected, quoted as written.
+  - PQ-2 (Load of a Session saved before go-live whose draft hides a drawn
+    track: the first live redraw after Load draws that track while the toggle
+    says hidden, until the toggle changes or Generate). Reply:
+    「A: 何もしない (Recommended)」 (`A / LOAD-APPLIES-NOTHING`).
+  - PQ-4 (turning Hide GC Content or Hide GC Skew off with a Circular custom
+    track stack or Circular track widths or radii set, when the committed
+    request lacks the hidden kind's slot). Reply:
+    「A: このモードは Generate (Recommended)」 (`A / SLOT-SHOW-WAITS`).
+  - PQ-1 (Show Depth on when the committed request has no Depth rows) and
+    PQ-3 (slot switches and "Use custom stack" that hide or show a drawn
+    track) were answered in the same batch with
+    「B: 外した値を覚える (Recommended)」 (`B / RUNTIME-ROWS-KEPT`) and
+    「B: 計測して基準内ならライブ (Recommended)」
+    (`B / SLOT-SWITCH-LIVE-BY-EVIDENCE`); neither changes a receipt field.
+  - Receipt approval: the session showed the two added sentences, the new
+    scenario revision and decision date. Reply:
+    「この文言で承認 (Recommended)」.
+  - Receipt change: May retire gains, after its last sentence,
+    「With a Circular custom track stack or Circular track widths or radii set, turning Hide GC Content or Hide GC Skew off after a live hide (also its Undo) no longer shows the track at once: it applies on Generate, with a note.」;
+    Accepted residual risk gains, after its last sentence,
+    「Load applies nothing: a Session saved before go-live whose draft hides a drawn track shows that track again at the first live redraw after Load while its toggle says hidden, until the toggle changes or Generate.」;
+    the decision date is `2026-10-30`. Every other field of the scenario
+    revision `3` receipt is unchanged; the scenario revision `1` receipt
+    stays in the record, as before.
+  - The replies state no rationale for this change, and the receipt adds
+    none.
+  - New receipt SHA-256: `PD-OI-104` scenario revision `4`
+    `a795d823d343a627a5d8945f35cd9f0115234f68212c0d963794655e22eb55a5`.
+  - No other record is amended or retired.
+  - This change is Contract-only: the Contract is the only changed path, and
+    the Review is `REQUIRED`. The runtime that implements it follows in the
+    GT runtime pull request, which cites this authority on its base.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -9819,11 +9860,15 @@ Decision date: 2026-10-18
 ### PD-OI-104: When the GC, skew and depth toggles apply
 
 - Concern key: `web.layout.track-toggle-application`
-- Scenario revision: `3`
-- Supersedes: `PD-OI-104`, scenario revision `2`
-  (`A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`). Scenario revision `3` keeps
-  every field of the scenario revision `2` receipt and adds to its May retire
-  the packet's "Lost" text of that option (Revision 65 entry). Scenario
+- Scenario revision: `4`
+- Supersedes: `PD-OI-104`, scenario revision `3`
+  (`A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`). Scenario revision `4` keeps
+  every field of the scenario revision `3` receipt, adds the Owner's answer
+  `PQ-4 A / SLOT-SHOW-WAITS` to its May retire and `PQ-2 A /
+  LOAD-APPLIES-NOTHING` to its Accepted residual risk, and dates it
+  `2026-10-30` (Revision 101 entry). Scenario revision `3` kept every field
+  of the scenario revision `2` receipt and added to its May retire the
+  packet's "Lost" text of that option (Revision 65 entry). Scenario
   revision `2` superseded scenario revision `1`
   (`B / TOGGLE-HIDE-AT-ONCE-NOTED`, the outcome of `S4-Q3`) and changed only
   what its receipt states; in the decision
@@ -9832,8 +9877,8 @@ Decision date: 2026-10-18
 - Status: `ACCEPTED`
 - Selected outcomes: `B / TOGGLE-HIDE-AT-ONCE-NOTED` (scenario revision `1`)
   and `A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET`, reading `AS S5-Q1`, set
-  `TOGETHER` (scenario revision `3`)
-- Normative outcome: exactly the complete approved scenario revision `3`
+  `TOGETHER` (scenario revision `4`)
+- Normative outcome: exactly the complete approved scenario revision `4`
   `PRODUCT_DECISION` receipt and its nine-field JSON representation below,
   with the effects of the scenario revision `1` receipt that it does not
   change. The scenario revision `1` receipt is kept as it was approved.
@@ -9842,13 +9887,13 @@ Decision date: 2026-10-18
   nine confirmed fields without translation or additional terms.
 - Receipt SHA-256 (scenario revision `1`; UTF-8, excluding the final newline):
   `23aa2302bfdbf219d08593e7e37f484ab039efb7b030bc53a98d916228883aec`.
-- Decision source (scenario revision `3`): the Owner replies quoted
-  verbatim in the Revision 64 and Revision 65 entries above. The scenario
-  revision `3` receipt and JSON below reproduce all nine fields without translation or
+- Decision source (scenario revision `4`): the Owner replies quoted
+  verbatim in the Revision 64, Revision 65 and Revision 101 entries above. The
+  scenario revision `4` receipt and JSON below reproduce all nine fields without translation or
   additional terms. Dependent runtime requires this authority merged into its
   base; this record supplies no runtime acceptance evidence.
-- Receipt SHA-256 (scenario revision `3`; UTF-8, excluding the final newline):
-  `8d2096e0ea8236387807688b956388ce96e13f005ada0a8e08f130364137e3cd`.
+- Receipt SHA-256 (scenario revision `4`; UTF-8, excluding the final newline):
+  `a795d823d343a627a5d8945f35cd9f0115234f68212c0d963794655e22eb55a5`.
 
 Scenario revision `1` receipt, confirmed on `2026-10-17`:
 
@@ -9879,32 +9924,32 @@ Decision date: 2026-10-17
 }
 ```
 
-Scenario revision `3` receipt, confirmed on `2026-10-18`:
+Scenario revision `4` receipt, confirmed on `2026-10-30`:
 
 ```text
 PRODUCT_DECISION
 Concern: web.layout.track-toggle-application
-Scenario revision: 3
+Scenario revision: 4
 Choice: A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET; reading AS S5-Q1, set TOGETHER
 Rationale: the G2 rule, and the instant response until the redraw is within it. TOGETHER: one PR retires the second writer and its exception whole; no state where one toggle redraws and its neighbour is patched.
 Must preserve: R1 (c) parity; hiding stays live (Show Depth off after a removal too); OV-1043; Depth display settings (G3). Evidence rule: "A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers."
-May retire: `applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once.
-Accepted residual risk: the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits.
+May retire: `applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once. With a Circular custom track stack or Circular track widths or radii set, turning Hide GC Content or Hide GC Skew off after a live hide (also its Undo) no longer shows the track at once: it applies on Generate, with a note.
+Accepted residual risk: the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits. Load applies nothing: a Session saved before go-live whose draft hides a drawn track shows that track again at the first live redraw after Load while its toggle says hidden, until the toggle changes or Generate.
 Owner: satoshikawato
-Decision date: 2026-10-18
+Decision date: 2026-10-30
 ```
 
 ```json
 {
   "concern": "web.layout.track-toggle-application",
-  "scenarioRevision": 3,
+  "scenarioRevision": 4,
   "choice": "A / TOGGLE-LIVE-REDRAW-WHEN-WITHIN-TARGET; reading AS S5-Q1, set TOGETHER",
   "rationale": "the G2 rule, and the instant response until the redraw is within it. TOGETHER: one PR retires the second writer and its exception whole; no state where one toggle redraws and its neighbour is patched.",
   "mustPreserve": "R1 (c) parity; hiding stays live (Show Depth off after a removal too); OV-1043; Depth display settings (G3). Evidence rule: \"A unit (a G2 unit, or the GT set or toggle as chosen in S5-Q2) is within the rule when its acceptance report shows, with the live mode of the step 4 spec (controls selected by CSS), the unit's representative change (U1: the section's slowest control; U2: each control group's representative change; GT: hide and show of each toggle), warm, at least 3 interleaved rounds with alternating Session order, each run started at a 1-minute load at or below 8 and a 5-minute load at or below 6, that in every round the median live apply (MARGIN: multiplied by 1.3; SENSITIVITY: itself, the x 1.3 result reported) is at or below its D-03 class target (P1 250, P2 400, P3 1000 ms) on each deciding Session. The deciding Sessions are the Gallery Vnig, hepatoplasmataceae orthogroup and vibrio collinear Sessions where the control is enabled and its change draws something different, with these cases fixed: hepa's record gap (one record) is left out; record names are judged on hepa and vibrio (Vnig's Multi-Record Canvas disables them); Dinucleotide controls on vibrio with Show GC Content turned on first; a toggle a Session has off is turned on first for its hide; Show Depth on all three Sessions, each with an added per-base Depth TSV (`samtools depth -a` text: one row per position of every record). The tobacco result, the stage D state and the stage work are reported. After SW1 is measured (and SW2 / SW3 where designed), every unit still over returns to the Owner as a 'stay on Generate (GT: stay instant) / accept the measured cost' question with its numbers.\"",
-  "mayRetire": "`applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once.",
-  "acceptedResidualRisk": "the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits.",
+  "mayRetire": "`applyTrackVisibility`, its watcher, its History restore call (`app/app-setup.js` 3904), the R1 exception sentence; the instant hide and show (a redraw within the rule instead); Show Depth turned on after a Depth source change no longer shows the old drawn track at once. With a Circular custom track stack or Circular track widths or radii set, turning Hide GC Content or Hide GC Skew off after a live hide (also its Undo) no longer shows the track at once: it applies on Generate, with a note.",
+  "acceptedResidualRisk": "the gap after hiding until go-live (PD-OI-104's accepted risk); TOGETHER: GC waits. Load applies nothing: a Session saved before go-live whose draft hides a drawn track shows that track again at the first live redraw after Load while its toggle says hidden, until the toggle changes or Generate.",
   "owner": "satoshikawato",
-  "decisionDate": "2026-10-18"
+  "decisionDate": "2026-10-30"
 }
 ```
 
