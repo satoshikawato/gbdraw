@@ -29,6 +29,10 @@ const settle = async (page) => {
   await page.evaluate(() => new Promise((resolve) => (
     requestAnimationFrame(() => requestAnimationFrame(resolve))
   )));
+  // A view change after the work ends (the Fit of a Session Load, R17-25) moves the
+  // figure in a 0.2 s transform transition: the figure rests when it has ended.
+  await page.waitForFunction(() => [...document.querySelectorAll('.gbdraw-preview-surface')]
+    .every((surface) => surface.getAnimations().length === 0));
 };
 
 const openFresh = async (page) => {
