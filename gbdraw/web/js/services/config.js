@@ -36,7 +36,10 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema
 } from './linear-track-slot-model.js';
-import { depthFileSlotsFromValue, fitDepthStateToSources, padDepthFileSlots } from './depth-track-state.js';
+import {
+  DEPTH_FILES_CHANGE, depthFileSlotsFromValue, fitDepthStateToSources, isDepthSeriesAutoLabel,
+  normalizeRecordMajorDepthFileRows, padDepthFileSlots, showDepthAfterSourceChange, syncDepthSlotLabels
+} from './depth-track-state.js';
 import { draftDrawsDepth } from './track-legend-rows.js';
 import { isUnsetValue, noteReplacedLeaf, truthy } from '../utils/field-reading.js';
 import {
@@ -5437,6 +5440,34 @@ const styleCopiesRow = (row, from, to) => !NOT_STYLE_ROWS.has(`${row.domain}.${r
   ? row.modes === 'both' || row.modes === to
   : row.modes === 'both' && row.migrate !== 'profile');
 /**
+ * A style copy binds no Depth file (R17-4, D-15-185). A series label taken
+ * from one of `source`'s Depth files of that series becomes the default series
+ * name; a typed label and the rest of each series stay, and the Depth rows
+ * follow the labels. Show Depth follows the copy's Depth sources (none) by the
+ * Depth source change rule.
+ * @param {Record<string, unknown>} config The style's `config` part, changed in place.
+ * @param {DrawingState} source
+ */
+const leaveDepthSourcesBehind = (config, source) => {
+  const rows = source.mode === 'linear'
+    ? source.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
+    : normalizeRecordMajorDepthFileRows(source.files.c_depth);
+  const { adv, form } = config;
+  if (isPlainObject(adv) && Array.isArray(adv.depth_tracks)) {
+    const depthTracks = adv.depth_tracks;
+    depthTracks.forEach((track, index) => {
+      if (isPlainObject(track) && isDepthSeriesAutoLabel(track.label, index, rows.map((row) => row[index]))) track.label = '';
+    });
+    [adv.circular_track_slots, adv.linear_track_slots].forEach((slots) => {
+      if (Array.isArray(slots)) syncDepthSlotLabels({ slots, depthTracks });
+    });
+  }
+  const show = showDepthAfterSourceChange({
+    wasSourced: rows.some((row) => row.some(Boolean)), isSourced: false, inShownDrawing: false, change: DEPTH_FILES_CHANGE
+  });
+  if (isPlainObject(form) && show !== null) form.show_depth = show;
+};
+/**
  * A style copy's settings for a drawing of `mode` (PD-OI-090 〔作成〕(3)):
  * `source`'s Save slice (`buildModeSliceData`; its layout preferences of
  * `mode`) with only the registry rows `styleCopiesRow` copies, and the five
@@ -5464,6 +5495,7 @@ const drawingStyleOf = (source, mode, paletteColors) => {
     const target = nested ? /** @type {Record<string, unknown>} */ (style.config[nested] ??= {}) : style[head];
     target[row.path] = cloneJsonData(container[row.path]);
   });
+  leaveDepthSourcesBehind(style.config, source);
   return style;
 };
 

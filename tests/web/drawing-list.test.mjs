@@ -489,6 +489,62 @@ test('New drawing with this style copies no record selection, crop, or record di
   assert.deepEqual(plain(styled.recordDisplayDrafts), plain(circularDefaults.recordDisplayDrafts));
 });
 
+// D-15-185 (R17-4): a series label taken from the source drawing's Depth file
+// is that file's, so the copy, which binds no file, has the default series
+// name and Show Depth off (no Depth source); a typed label is style and stays.
+// The source's files decide it, not the shown drawing's.
+test('New drawing with this style leaves a series label taken from a Depth file and Show Depth behind', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} name */
+  const depthFile = (name) => new File(['chr\t1\t3\n'], name);
+  /** @param {string} label @param {() => unknown} edit */
+  const step = (label, edit) => history.runUndoable(label, edit);
+  const plain = (/** @type {unknown} */ value) => JSON.parse(JSON.stringify(value));
+  /** @param {DrawingState} drawing */
+  const slotLabels = (drawing) => [...drawing.adv.circular_track_slots, ...drawing.adv.linear_track_slots]
+    .filter((slot) => slot.renderer === 'depth').map((slot) => slot.params?.legend_label ?? '');
+  /** @param {string} sourceId @param {'circular' | 'linear'} mode */
+  const copyOf = (sourceId, mode) => {
+    // Another drawing is shown, so the copy reads the source's files.
+    app.drawingList.newDrawing(mode);
+    const outcome = app.drawingList.newDrawingWithStyle(sourceId, mode);
+    assert.equal(outcome.status, 'ok');
+    return state.drawingOf(outcome.drawingId);
+  };
+  /** @param {DrawingState} copy @param {string} direction */
+  const assertLeftBehind = (copy, direction) => {
+    assert.deepEqual(plain(copy.adv.depth_tracks.map((track) => track.label)), ['', 'Coverage'],
+      `${direction}: the file label becomes the default series name; the typed label and the series count stay`);
+    assert.equal(copy.form.show_depth, false, `${direction}: Show Depth follows the copy's Depth sources (none)`);
+    assert.ok(!slotLabels(copy).includes('sampleA'), `${direction}: no Depth row keeps the file label`);
+  };
+
+  app.selectDrawing('circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('sampleA.tsv')));
+  await step('Depth track', () => app.addCircularDepthTrack());
+  await step('Depth label', () => app.setDepthTrackLabel(1, 'Coverage'));
+  const circular = state.activeDrawing();
+  assert.equal(app.getDepthTrackLabel(0), 'sampleA');
+  assert.equal(circular.form.show_depth, true);
+
+  const sameMode = copyOf(circular.id, 'circular');
+  assertLeftBehind(sameMode, 'Circular to Circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('sampleB.tsv')));
+  assert.equal(app.getDepthTrackLabel(0), 'sampleB', 'a file uploaded into the copy names its series');
+  assertLeftBehind(copyOf(circular.id, 'linear'), 'Circular to Linear');
+
+  app.selectDrawing('linear');
+  const linear = state.activeDrawing();
+  await step('Depth file', () => app.setLinearDepthFile(linear.linearSeqs[0], 0, depthFile('sampleA.tsv')));
+  await step('Depth track', () => app.addLinearDepthTrack());
+  await step('Depth label', () => app.setDepthTrackLabel(1, 'Coverage'));
+  assert.equal(app.getDepthTrackLabel(0), 'sampleA');
+  assert.equal(linear.form.show_depth, true);
+  assertLeftBehind(copyOf(linear.id, 'circular'), 'Linear to Circular');
+  assertLeftBehind(copyOf(linear.id, 'linear'), 'Linear to Linear');
+});
+
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
   const app = createAppSetup();
   const history = window.__GBDRAW_HISTORY__;

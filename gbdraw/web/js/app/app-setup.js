@@ -294,10 +294,6 @@ import {
   reconcileConservationSeries,
   withoutConservationSeries
 } from '../services/conservation-series.js';
-import {
-  getDepthTrackFileBaseName,
-  isDepthSeriesAutoLabel
-} from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
 import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
@@ -326,6 +322,8 @@ import {
   padDepthFileSlots,
   representativeDepthFiles,
   defaultDepthSeriesLabel,
+  getDepthTrackFileBaseName,
+  isDepthSeriesAutoLabel,
   reindexDepthSlots,
   removeDepthTrackColumnAt,
   syncDepthSlotLabels,
