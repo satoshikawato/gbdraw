@@ -148,7 +148,13 @@ const UNITS = {
     paths: [ANNOTATIONS], change: (d) => {
       const item = d.annotationSets[0].annotations[0];
       set(item, 'style', { fill: '#ff0000', stroke: '#00ff00' });
-    }, leaves: () => [['renderRequest', 'diagramOptions', 'annotations', 'sets', 0, 'annotations', 0, 'style']]
+    }, leaves: () => [['renderRequest', 'diagramOptions', 'annotations', 'sets', 0, 'annotations', 0, 'style']],
+    // The same item's Hatch and label apply on Generate.
+    samePending: (d) => {
+      const item = d.annotationSets[0].annotations[0];
+      set(item, 'style', { ...item.style, hatch: { angle: 45, spacing: 4, color: '#000000', width: 1, cross: false } });
+      set(item, 'label', 'Pending label');
+    }
   }])),
   'comparison-height': {
     linear: { paths: [HEIGHT], change: (d) => set(d.adv, 'comparison_height', 31), leaves: () => [] }
@@ -158,7 +164,12 @@ const UNITS = {
       leaves: () => [['renderRequest', 'diagramOptions', 'tracks', 'centerReservedRadius']] },
     linear: { paths: [RADIUS, SLOTS], change: (d) => {
       set(d.adv.linear_track_slots[1], 'height', '44');
-    }, leaves: () => [['renderRequest', 'diagramOptions', 'tracks', 'linearTrackSlots', 1, 'height']] }
+    }, leaves: () => [['renderRequest', 'diagramOptions', 'tracks', 'linearTrackSlots', 1, 'height']],
+    // The same row's spacing and renderer apply on Generate.
+    samePending: (d) => {
+      set(d.adv.linear_track_slots[1], 'spacing', '9');
+      set(d.adv.linear_track_slots[1], 'renderer', 'dinucleotide_skew');
+    } }
   },
   'record-names': {
     circular: { paths: [RECORDS], change: (d) => {
@@ -241,6 +252,7 @@ for (const [unit, modes] of Object.entries(UNITS)) {
           if (other !== unit && otherModes[mode]) otherModes[mode].change(modeDrawing(state, mode));
         }
         pendingGenerateOnly(mode);
+        spec.samePending?.(modeDrawing(state, mode));
         const busy = applied(committed, project(committed, mode, spec.paths));
         const expected = structuredClone(committed);
         if (unit === 'comparison-height') {
@@ -328,6 +340,12 @@ test('Match height applies to a committed comparison only, LOSAT-only intent and
     python.renderRequest.comparisons = [{ kind: 'pairwiseComparison', pairs: [] }];
     assert.equal(request.liveSettingApplies(python.renderRequest, HEIGHT, drawing, inputs), true);
     assert.equal(project(python, 'linear', [HEIGHT]).length, 1);
+    // A CLI request without -b or a protein mode writes a disabled protein
+    // pipeline that draws no comparison: Match height waits.
+    const cli = structuredClone(committed);
+    cli.renderRequest.comparisons = [{ kind: 'generatedProteinComparison', mode: 'none', pairs: [] }];
+    assert.equal(request.liveSettingApplies(cli.renderRequest, HEIGHT, drawing, inputs), false);
+    assert.deepEqual(project(cli, 'linear', [HEIGHT]), []);
   } finally {
     undoAll();
   }
@@ -373,6 +391,61 @@ test('Linear record names follow the draft records in order; a removed or moved 
   } finally {
     undoAll();
   }
+});
+
+test('a Linear card\'s record selection applies on Generate: its record names wait until then', () => {
+  try {
+    // A two-record File whose card draws its first record by the definition
+    // inferred from that record (no File or record Definition).
+    const card = { ...seq('record-2', 'LIVE2'), gb: genbank(['LIVE2', 'LIVE3']), file_definition: '',
+      region_record_id: '#1', inferred_definition: 'Live setting fixture LIVE2.' };
+    set(inputs.linearSeqs, 1, card);
+    const committed = generate('linear');
+    const drawing = modeDrawing(state, 'linear');
+    const note = () => owner.settingApplicationNote('record-names', (path) => request.liveSettingNoteApplies(
+      committed.renderRequest, path, drawing, inputs, committed.resources)).text;
+    assert.equal(note(), 'Live edit');
+    // The selector picks the second record; the inferred definition follows it
+    // (setLinearRecordSelector). Generate draws the second record with it.
+    set(card, 'region_record_id', '#2');
+    set(card, 'inferred_definition', 'Live setting fixture LIVE3.');
+    const draft = generate('linear');
+    assert.notDeepEqual(draft.renderRequest.records[1].selector, committed.renderRequest.records[1].selector);
+    const live = applied(committed, project(committed, 'linear', request.LIVE_SETTING_REQUEST_PATHS));
+    assert.deepEqual(live.renderRequest.records, committed.renderRequest.records, 'the drawn record keeps its name');
+    assert.deepEqual(live.webFiles, committed.webFiles);
+    assert.equal(note(), 'Applies on Generate');
+    // The same record by a crop of it: the card still selects it.
+    set(card, 'region_record_id', '#1');
+    set(card, 'region_start', 2);
+    set(card, 'region_end', 20);
+    set(card, 'definition', 'Cropped name');
+    assert.equal(note(), 'Live edit');
+    assert.equal(applied(committed, project(committed, 'linear', [RECORDS])).renderRequest.records[1].presentation.label,
+      'Cropped name');
+    // A split member (F-18) was drawn from a card that selects no record.
+    const split = { ...structuredClone({ renderRequest: committed.renderRequest, webFiles: committed.webFiles }), resources: committed.resources };
+    split.renderRequest.records.splice(1, 1, { ...split.renderRequest.records[1], recordKey: 'record-2:1',
+      selector: { kind: 'recordIndex', index: 0 } });
+    split.webFiles.linearRecordMetadata.splice(1, 1, { ...split.webFiles.linearRecordMetadata[1], recordKey: 'record-2:1' });
+    const splitApplies = () => request.liveSettingApplies(split.renderRequest, RECORDS, drawing, inputs, split.resources);
+    assert.equal(splitApplies(), false, 'the card now selects one record');
+    set(card, 'region_record_id', '');
+    set(card, 'region_start', null);
+    set(card, 'region_end', null);
+    assert.equal(splitApplies(), true);
+  } finally {
+    undoAll();
+  }
+});
+
+test('a live write creates an optional object the committed request holds as null', () => {
+  const target = { diagramOptions: { configOverrides: null } };
+  request.applyLiveSettingWrites(target, [[['diagramOptions', 'configOverrides', 'objects.definition.font_size'], 23]]);
+  assert.deepEqual(target.diagramOptions, { configOverrides: { 'objects.definition.font_size': 23 } });
+  const removal = { diagramOptions: { configOverrides: null } };
+  request.applyLiveSettingWrites(removal, [[['diagramOptions', 'configOverrides', 'canvas.linear.comparison_height'], undefined]]);
+  assert.deepEqual(removal.diagramOptions, { configOverrides: null }, 'a removal has nothing to remove');
 });
 
 test('a live write never enters an array by index (F-1)', () => {

@@ -1222,6 +1222,22 @@ const selectorPayload = (rawValue) => {
   }
   return { kind: 'recordId', value: raw };
 };
+/**
+ * The record a Linear card's Generate selects (`buildRecords`): its region's
+ * selector, or its own when it has no region.
+ * @param {{ region_record_id?: unknown } | null | undefined} seq
+ */
+const linearCardSelector = (seq) => selectorPayload(seq?.region_record_id);
+/**
+ * The record a request record selects: its region's selector, else its own.
+ * @param {{ region?: CanonicalRecord['region'], selector?: CanonicalRecord['selector'] } | null | undefined} record
+ * @returns {CanonicalRecord['selector']}
+ */
+const requestRecordSelector = (record) => record?.region?.selector || record?.selector || null;
+/** @param {CanonicalRecord['selector']} a @param {CanonicalRecord['selector']} b */
+const sameRecordSelector = (a, b) => (a === null || b === null ? a === b
+  : a.kind === 'recordIndex' ? b.kind === 'recordIndex' && a.index === b.index
+    : b.kind === 'recordId' && a.value === b.value);
 
 /** @param {{ label?: unknown, subtitle?: unknown, reverseComplement?: unknown, gridRow?: number | null, gridColumn?: number | null }} [options] */
 const presentationPayload = ({
@@ -1326,7 +1342,7 @@ const linearRegionPayload = (seq) => {
     throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return {
-    selector: selectorPayload(seq?.region_record_id),
+    selector: linearCardSelector(seq),
     start: Math.min(start, end),
     end: Math.max(start, end),
     reverseComplement: Boolean(seq?.region_reverse) || start > end
@@ -1398,7 +1414,7 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = linearRecordSource(resources, state.lInputType.value, seq, index);
       const region = linearRegionPayload(seq);
-      const selector = region ? null : selectorPayload(seq.region_record_id);
+      const selector = region ? null : linearCardSelector(seq);
       return {
         recordKey: linearSeqRecordKey(seq, index),
         cardinality: canonicalCardinalityByUid.get(seq.uid)
@@ -1743,23 +1759,32 @@ const configWrites = (path, value) => {
 const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key], value ?? undefined];
 
 /**
- * Whether a draft card still holds the files a committed record was drawn
- * from: the committed resource the record's source names holds the card's
- * File (`resourceIdOwnedBy`, by payload identity). A replaced File does not,
- * whatever its definition says.
- * @param {RequestLinearSeq} seq @param {CanonicalRecord['source']} source
+ * Whether a draft card still draws a committed record: the committed resource
+ * the record's source names holds the card's File (`resourceIdOwnedBy`, by
+ * payload identity; a replaced File does not, whatever its definition says),
+ * and the card's Generate selects the same record: the record under the
+ * card's key the card's selector (`linearCardSelector`), a split member
+ * (F-18) none. A changed selection applies on Generate (G3), and the card's
+ * definition follows it.
+ * @param {RequestLinearSeq} seq @param {string} cardKey @param {CanonicalRecord} record
  * @param {LiveSettingResources} resources
  */
-const cardHoldsRecordSource = (seq, source, resources) => (source.kind === 'genbank'
-  ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
-  : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
-    && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId);
+const cardDrawsRecord = (seq, cardKey, record, resources) => {
+  const { source } = record;
+  return (source.kind === 'genbank'
+    ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
+    : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
+      && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId)
+    && (record.recordKey === cardKey
+      ? sameRecordSelector(linearCardSelector(seq), requestRecordSelector(record))
+      : linearCardSelector(seq) === null);
+};
 /**
  * The draft card index of each committed Linear record: the card whose
  * Generate key is the record's key or expands to it (a split member, F-18).
  * Null when a committed record has no card, the cards were moved, or a card
- * no longer holds the File the record was drawn from (a replaced File): then
- * the record names wait for Generate.
+ * no longer draws the record (`cardDrawsRecord`: a replaced File or another
+ * selected record): then the record names wait for Generate.
  * @param {CanonicalRenderRequest} request @param {LiveSettingInputs} inputs
  * @param {LiveSettingResources} resources
  * @returns {number[] | null}
@@ -1770,7 +1795,7 @@ const linearRecordCardIndexes = (request, inputs, resources) => {
     (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
   ));
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
-    && cardHoldsRecordSource(inputs.linearSeqs[index], request.records[position].source, resources))
+    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources))
     ? indexes : null;
 };
 /**
@@ -1976,7 +2001,8 @@ const LIVE_SETTING_MODES = Object.freeze({
  * Multi-Record Canvas change selects the other canvas's at Generate (OV-1074,
  * OV-1077); Match height only a committed comparison draws (the Web's
  * comparison intent sends the match style, F-10; a Python-written request
- * omits a default style but carries its pairs); Circular record names only a
+ * omits a default style but carries its pairs, and a CLI request's disabled
+ * protein pipeline draws none, `drawsNoComparison`); Circular record names only a
  * single record draws (a batch or grid of one draws no record presentation),
  * Linear ones only while the committed records follow the draft cards
  * (`linearRecordCardIndexes`). With an `item`, the value of that one item
@@ -1994,7 +2020,8 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
   if (mode) {
     if (request.mode !== mode) return false;
     if (requestPath !== COMPARISON_HEIGHT_REQUEST_PATH) return true;
-    return Object.hasOwn(request.diagramOptions, 'pairwiseMatchStyle') || request.comparisons.length > 0;
+    return Object.hasOwn(request.diagramOptions, 'pairwiseMatchStyle')
+      || (request.comparisons.length > 0 && !drawsNoComparison(request.comparisons));
   }
   if (CIRCULAR_GRID_REQUEST_PATHS.has(requestPath)) return grid;
   if (requestPath === 'records') {
@@ -2044,7 +2071,7 @@ export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inp
 };
 /**
  * Writes live setting values into `root` in place. A request a Session was
- * loaded with may lack an optional object a write enters
+ * loaded with may lack, or hold null for, an optional object a write enters
  * (`diagramOptions.configOverrides`): a value creates it, as Generate sends
  * it, and a removal of a key it would hold has nothing to remove. A path
  * through an array or a scalar throws: a live write replaces a whole array
@@ -2057,7 +2084,7 @@ const writeLiveValues = (root, writes) => {
     for (const key of path.slice(0, -1)) {
       const node = parent[key];
       if (isPlainObject(node)) parent = node;
-      else if (node !== undefined) throw diagnosticError('INPUT_INVALID', { field: path.join('.'), reason: 'UNKNOWN_CONFIG_PATH' });
+      else if (node != null) throw diagnosticError('INPUT_INVALID', { field: path.join('.'), reason: 'UNKNOWN_CONFIG_PATH' });
       else if (value === undefined) return;
       else parent = parent[key] = {};
     }
@@ -3520,7 +3547,7 @@ const projectCanonicalRenderInput = ({
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
     const sourceRows = recordDisplayRows.filter((/** @type {RecordDisplayRow} */ row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
-    const selector = record.region?.selector || record.selector;
+    const selector = requestRecordSelector(record);
     const selectedRows = sourceRows.filter((/** @type {RecordDisplayRow} */ row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
     /** @param {RecordDisplayRow} row */
