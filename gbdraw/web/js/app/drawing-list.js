@@ -23,7 +23,8 @@ import { msg, t, tm } from '../utils/i18n.js';
 /**
  * @typedef {() => readonly DrawingTab[]} ReadDrawingTabs The drawings' IDs and names, in tab order.
  * @typedef {() => DrawingId} ReadShownDrawingId
- * @typedef {() => unknown} ReadSwitchBusy Why a drawing switch waits now, or a falsy value (R15).
+ * @typedef {{ readonly reason: string }} SwitchBusy What a busy drawing switch says; its owners add the fields the app uses.
+ * @typedef {() => (SwitchBusy | null)} ReadSwitchBusy Why a drawing switch waits now, or null (R15).
  * @typedef {(drawingId: DrawingId, mode: ModeProfileName) => DrawingState} CreateDrawing A new drawing at its defaults.
  * @typedef {(drawingId: DrawingId) => DrawingState} ReadDrawing A drawing the store holds.
  * @typedef {Readonly<ArtifactSlot> | null} HeldSlot A removed drawing's Result slot (null: it had none).
@@ -299,6 +300,7 @@ export const createDrawingList = ({
  * @property {ApplyInputReplacementToDrawings} applyInputReplacementToDrawings
  * @property {(previous: InputFileRef, otherDrawingIds: readonly DrawingId[]) => Promise<InputReplacementScope | null>} askScope
  *   Asks "This drawing only" / "Every drawing that uses this file"; null is Cancel.
+ * @property {(busy: SwitchBusy) => void} onBusy Shows why "Every drawing" wrote nothing: the drawing switch waits (D-15-186).
  */
 
 /**
@@ -309,7 +311,7 @@ export const createDrawingList = ({
  * @param {InputReplacementPorts} ports
  */
 export const createInputReplacement = ({
-  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope
+  drawingTabs, shownDrawingId, switchBusy, drawingOf, runProjectStep, runDrawingStep, applyInputReplacementToDrawings, askScope, onBusy
 }) => {
   /** @param {string} fileId @returns {DrawingInputSite[]} every site of `fileId`, in every drawing */
   const sitesOf = (fileId) => projectInputReplacement(
@@ -319,15 +321,21 @@ export const createInputReplacement = ({
    * Replaces `fileId` with `file` in every drawing that uses it. `writeShown`,
    * the uploader's own write of the control the user chose the file in, runs
    * first in the same step (R17-30); the replacement port swaps the file at
-   * every site still bound after it (R17-28: only the file changes).
+   * every site still bound after it (R17-28: only the file changes). While the
+   * drawing switch waits it writes nothing, not even `writeShown`, and `onBusy`
+   * shows the reason, since the answer to the question has no control to
+   * disable (D-15-186).
    * @param {string} fileId the bound file being replaced
    * @param {InputFileCandidate | InputFileRef} file the new file, or a file in this Session
-   * @param {() => unknown} [writeShown]
+   * @param {() => unknown} writeShown
    * @returns {DrawingListOutcome}
    */
-  const replaceInputFile = (fileId, file, writeShown = () => undefined) => {
+  const replaceInputFile = (fileId, file, writeShown) => {
     const reason = switchBusy();
-    if (reason) return { status: 'busy', reason };
+    if (reason) {
+      onBusy(reason);
+      return { status: 'busy', reason };
+    }
     if (sitesOf(fileId).length) {
       runProjectStep('Replace input file', () => {
         writeShown();

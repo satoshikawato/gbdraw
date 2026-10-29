@@ -763,7 +763,7 @@ test('replacing a file for every drawing that uses it is one project step that l
   const circular = state.drawingOf('circular');
   assert.equal(copy.files.c_gb, shared, 'the copy binds the same file');
   const stepsBefore = history.undoLabel();
-  const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'));
+  const outcome = app.replaceInputFile(shared.fileId, genbank('new.gb'), () => undefined);
   // The project step is recorded when each drawing's part has settled.
   for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(outcome.status, 'ok');
@@ -817,7 +817,7 @@ test('replacing a Linear row file or a comparison file for every drawing that us
   const drawings = () => state.drawingTabs.value.map((tab) => ({ drawingId: tab.id, drawing: state.drawingOf(tab.id) }));
   for (const [old, next, read] of [[shared, genbank('new.gb'), rowFile], [blast, new File(['x'], 'new.tsv'), edgeFile]]) {
     const before = history.undoLabel();
-    assert.equal(app.replaceInputFile(old.fileId, next).status, 'ok');
+    assert.equal(app.replaceInputFile(old.fileId, next, () => undefined).status, 'ok');
     await settle();
     const replaced = read(linear);
     assert.ok(replaced && replaced.fileId !== old.fileId, `${old.name}: the shown drawing binds the new file`);
@@ -872,7 +872,7 @@ test('replacing a multi-record file for every drawing expands it into records in
     .filter((seq) => seq.gb?.fileId === file.fileId).map((seq) => seq.region_record_id);
   assert.deepEqual(recordsOf(copy, one), recordsOf(linear, one), 'the Duplicate binds the same rows');
   const multi = genbank('multi.gb', ['REC_A', 'REC_B']);
-  assert.equal(app.replaceInputFile(one.fileId, multi).status, 'ok');
+  assert.equal(app.replaceInputFile(one.fileId, multi, () => undefined).status, 'ok');
   await settle();
   const replaced = linear.linearSeqs.find((seq) => seq.uid === uid)?.gb;
   assert.ok(replaced && replaced.fileId !== one.fileId, 'the shown drawing binds the new file');
@@ -1086,7 +1086,7 @@ test('replacing a file for every drawing reaches an inactive or hidden compariso
     assert.equal(edgeOf(copy).file, blast, `${label}: the copy still binds the file`);
     assert.deepEqual(projectInputReplacement([{ drawingId: copyId, drawing: copy }], blast.fileId),
       [{ drawingId: copyId, slot: 'edge', rowUid: null, edgeId }], `${label}: it is a replacement site`);
-    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${label}-new.tsv`)).status, 'ok');
+    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${label}-new.tsv`), () => undefined).status, 'ok');
     await settle();
     const replaced = edgeOf(copy).file;
     assert.ok(replaced && replaced.fileId !== blast.fileId, `${label}: the shown drawing binds the new file`);
@@ -1129,7 +1129,7 @@ test('replacing a comparison file keeps the edge source, inclusion, and file sta
     const before = reached.map(stateOf);
     assert.deepEqual(before, [{ source: 'upload', included: false, fileActive: false }, { source: 'losat', included: true, fileActive: true }],
       `${scope}: the edges before`);
-    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${scope}-new.tsv`)).status, 'ok');
+    assert.equal(app.replaceInputFile(blast.fileId, new File(['x'], `${scope}-new.tsv`), () => undefined).status, 'ok');
     await settle();
     reached.forEach((drawing, index) => {
       const replaced = edgeOf(drawing).file;

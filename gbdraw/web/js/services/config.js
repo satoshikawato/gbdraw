@@ -3520,9 +3520,11 @@ export const setPreviewRuntime = (ports) => {
  * @property {number} [subjectIndex]
  */
 /**
- * The one write of the project's cache-info rows from a pass over them (a filter, a reindex, a clear). Rows equal
- * one by one keep the array: every drawing's generated artifact names it by reference in its transport identity
- * (`currentArtifactMatchesIdentity`), so replacing it unchanged would drop that identity in every drawing (OV-2210).
+ * The write of the project's cache-info rows from a pass over them (a filter, a reindex, a clear): the Linear
+ * drawing's pass and the conservation clears use it; Generate, a Session load, History restore and Reset still
+ * assign the array directly. Rows equal one by one keep the array, so the readers of the ref (for example
+ * `linearLosatCacheInfoByEdgeKey`) are not triggered and the History owner-set capture keeps the same array (OV-2210).
+ * A transport identity no longer names the array (OV-2212).
  * @param {LosatCacheInfoEntry[]} next
  */
 export const writeLosatCacheInfo = (next) => {

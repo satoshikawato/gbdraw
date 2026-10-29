@@ -6964,7 +6964,10 @@ export const createAppSetup = () => {
         ]
       });
       return choice === 'drawing' || choice === 'all' ? choice : null;
-    }
+    },
+    // The busy outcome has no control to disable: the notice banner words the
+    // drawing list's own busy reason, as the tabs' title does (R15).
+    onBusy: (busy) => showNotice({ text: tm(busy.reason), tone: 'warning' })
   });
   // The uploaders of the shown drawing's bound input files: each names the
   // file its control binds and its own write; `replaceFromShownDrawing`
