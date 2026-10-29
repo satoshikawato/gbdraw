@@ -285,6 +285,38 @@ test('a value Generate refuses fails the apply (INPUT_INVALID)', () => {
   }
 });
 
+// OV-2244: each Linear row's Size input stores its trimmed text
+// (`setDefinitionLineStyleSize` -> `setOptionalNumberInputValue`); Weight and
+// Color store their text. The live apply reads the row styles the way
+// Generate does, so it sends numbers and refuses what Generate refuses.
+test('a Linear row style the inputs store as text applies as Generate sends it (OV-2244)', () => {
+  try {
+    fixtures('linear');
+    const committed = generate('linear');
+    const drawing = modeDrawing(state, 'linear');
+    set(drawing.adv, 'linear_definition_line_styles', {
+      name: { font_size: '22', font_weight: null, fill: null },
+      subtitle: { font_size: '9.5', font_weight: 'bold', fill: '#123456' }
+    });
+    const live = applied(committed, project(committed, 'linear', [STYLES])).renderRequest.diagramOptions.configOverrides;
+    const generated = generate('linear').renderRequest.diagramOptions.configOverrides;
+    const key = (kind, field) => `objects.definition.linear.line_styles.${kind}.${field}`;
+    assert.equal(live[key('name', 'font_size')], 22);
+    assert.equal(live[key('subtitle', 'font_size')], 9.5);
+    for (const kind of ['name', 'subtitle', 'replicon', 'accession', 'length']) {
+      for (const field of ['font_size', 'font_weight', 'fill']) {
+        assert.equal(live[key(kind, field)], generated[key(kind, field)], key(kind, field));
+      }
+    }
+    set(drawing.adv, 'linear_definition_line_styles', { name: { font_size: '-1', font_weight: null, fill: null } });
+    assert.throws(() => project(committed, 'linear', [STYLES]), (error) => (
+      error.code === 'INPUT_INVALID' && error.context?.configPath === key('name', 'font_size')
+    ));
+  } finally {
+    undoAll();
+  }
+});
+
 test('a features or Depth row, an unknown slot, a new item, and an item with a Legend label keep their committed values', () => {
   try {
     fixtures('linear');
