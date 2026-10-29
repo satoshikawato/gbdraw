@@ -5,7 +5,8 @@ import { decodeDepthText, isEncodedDepthFileEntry } from './depth-file-codec.js'
 import {
   readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
 } from './file-content-cache.js';
-import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
+import { getResourcePayloadOwner } from './resource-payload-owner.js';
+export { resourceIdOwnedBy } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
@@ -89,25 +90,6 @@ const descriptorTransferBuffer = async (resourceId, descriptor, owner) => {
   return buffer;
 };
 
-/**
- * The id of the resource of `resources` whose bytes `file` stands for (the
- * File the user chose, or a Session resource view), of this kind, or null. A
- * request that names it stages the bytes the Worker holds under that id
- * (OV-1555).
- * @param {Readonly<Record<string, unknown>> | null | undefined} resources A committed Session's resources.
- * @param {object | null | undefined} file
- * @param {string} kind
- * @returns {string | null}
- */
-export const resourceIdOwnedBy = (resources, file, kind) => {
-  if (!resources || !file) return null;
-  const identity = getResourcePayloadIdentity(file);
-  return Object.keys(resources).find((resourceId) => {
-    const descriptor = resources[resourceId];
-    return typeof descriptor === 'object' && descriptor !== null
-      && /** @type {{ kind?: unknown }} */ (descriptor).kind === kind && getResourcePayloadIdentity(descriptor) === identity;
-  }) ?? null;
-};
 
 /**
  * A request a drawing has committed, with the resources it names.

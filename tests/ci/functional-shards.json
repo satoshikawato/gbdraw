@@ -155,7 +155,8 @@
       "tests/web/preview-item-popup.playwright.spec.js",
       "tests/web/pyodide-snapshot-boot.playwright.spec.js",
       "tests/web/record-draw-selection.playwright.spec.js",
-      "tests/web/source-legend-reconciliation.playwright.spec.js"
+      "tests/web/source-legend-reconciliation.playwright.spec.js",
+      "tests/web/live-setting-application-g2.playwright.spec.js"
     ],
     [
       "tests/web/annotation-style-integration.playwright.spec.js",

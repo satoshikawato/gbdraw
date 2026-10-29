@@ -18,6 +18,7 @@ import { prefetchPyodideBootAssets } from './services/pyodide-assets.js';
 /** @import { UserFacingError } from './utils/error-normalization.js' */
 /** @import { TranslationParams } from './utils/i18n.js' */
 /** @import { SettingApplicationId } from './services/setting-application.js' */
+/** @import { LiveSettingItem } from './services/session-request.js' */
 
 /** @import { SettingsEntry, SettingsSectionKey } from './services/settings-sections.js' */
 /** @import { SettingsPaneView } from './app/settings-pane.js' */
@@ -319,12 +320,13 @@ export const SettingsSectionTitle = {
 // Generate scope, or the row's own qualified note as a hint line. A live
 // setting row the shown Result cannot draw says "Applies on Generate"
 // (the injected `SETTING_NOTE_APPLIES` predicate of the committed request).
+// An `item` (an annotation item, a Linear row) states that one item's value.
 export const SettingNote = {
-  props: { setting: { type: String, required: true } },
-  /** @param {{ setting: SettingApplicationId }} props */
+  props: { setting: { type: String, required: true }, item: { type: Object, default: null } },
+  /** @param {{ setting: SettingApplicationId, item: LiveSettingItem | null }} props */
   setup: (props) => {
-    const applies = /** @type {(requestPath: string) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => true));
-    return { note: computed(() => settingApplicationNote(props.setting, applies)) };
+    const applies = /** @type {(requestPath: string, item: LiveSettingItem | null) => boolean} */ (inject(SETTING_NOTE_APPLIES, () => true));
+    return { note: computed(() => settingApplicationNote(props.setting, (requestPath) => applies(requestPath, props.item))) };
   },
   template: `<span v-if="note.text" :class="note.qualified ? 'ui-hint block' : 'apply-note'"
     :data-applies-on-generate="note.application === 'generate' ? setting : null"><i v-if="note.application === 'generate'"
@@ -994,7 +996,7 @@ export const MarkupPreview = {
 // record's state; `linearFileCardRecord` decides which place shows it.
 export const LinearRecordNames = {
   template: '#linear-record-names-template',
-  components: { MarkupPreview },
+  components: { MarkupPreview, SettingNote },
   props: {
     seq: { type: Object, required: true },
     source: { type: Object, required: true },

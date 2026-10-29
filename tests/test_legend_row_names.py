@@ -164,6 +164,31 @@ def test_annotation_rows_follow_the_rule_and_keep_their_keys():
     assert table["Island (4)"]["annotation_hatch"] == hatch
 
 
+def test_only_a_legend_label_draws_an_annotation_color_in_the_legend():
+    """O-8: the Web applies an annotation item's Fill and Line color live only
+    while neither the item nor its set has a Legend label (the resolved
+    ``legend_label`` is the item's or else the set's). Without one, no Legend
+    row reads the colors; with one, each distinct color is a row of its own."""
+    slot = LinearTrackSlot(id="islands", renderer="annotations", params={"set_id": "islands"})
+
+    def rows(*annotations: tuple[str, str | None]) -> list[str]:
+        bundle = SimpleNamespace(annotations=tuple(
+            SimpleNamespace(  # the fields the legend reads
+                set_id="islands",
+                mark="highlight",
+                legend_label=legend_label,
+                style=RegionAnnotationStyle(fill=fill, stroke="#334155", stroke_width=1),
+                style_is_annotation_override=True,
+            )
+            for fill, legend_label in annotations
+        ))
+        return list(sync_annotation_legend_entries(LegendTable(), bundle, legend_slot_sources([slot])))
+
+    assert rows(("#ff0000", None)) == rows(("#00ff00", None)) == []
+    assert len(rows(("#ff0000", "Island"), ("#00ff00", "Island"))) == 2
+    assert len(rows(("#ff0000", "Island"), ("#ff0000", "Island"))) == 1
+
+
 def test_the_layout_measures_the_drawn_name():
     def width(table: LegendTable) -> float:
         return build_circular_legend_layout(

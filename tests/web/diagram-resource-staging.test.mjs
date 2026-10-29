@@ -215,7 +215,7 @@ test('staging decodes base64 with the one shared decoder (OV-1560)', async () =>
 });
 
 test('two Linear cards that read one Session resource both find its committed resource id (OV-1555)', async () => {
-  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/diagram-resource-staging.js');
+  const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
   const { adoptCurrentSessionResources, createSessionResourceFileView, sessionResourceSource } = await import(
     '../../gbdraw/web/js/services/session-resource-backing.js'
   );
