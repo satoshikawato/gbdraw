@@ -225,7 +225,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
-      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
+      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows),
+      rendererRows
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
@@ -491,18 +492,24 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // twin of `prepare_legend_table`'s rule-row order (the first rule of each
   // row in table order). Python groups rule rows by feature type, which the
   // twin does not, so it is read only when every named rule of the next
-  // table is of one feature type.
+  // table is of one feature type, and only when the twin keys every rule row
+  // as the commit does (not a rule captioned like a renderer row of another
+  // color, which the commit keys `X [#fill]`).
   /**
    * @param {DrawingState} drawing
    * @param {readonly Partial<SpecificColorRule>[]} rules The next table.
    * @param {PythonLegendKey} key The split row's key.
    * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed Listed rows the commit gives a new key.
+   * @param {import('../../services/specific-color-rules.js').RendererLegendRow[]} rendererRows The rows the commit keys rule rows beside.
    * @returns {import('../legend/entry-actions.js').LegendRowPlacement | null}
    */
-  const splitRowPlacement = (drawing, rules, key, rekeyed) => {
-    const types = new Set(rules.filter((rule) => String(rule.cap ?? '').trim()).map((rule) => rule.feat));
+  const splitRowPlacement = (drawing, rules, key, rekeyed, rendererRows) => {
+    const captioned = rules.filter((rule) => String(rule.cap ?? '').trim());
+    const types = new Set(captioned.map((rule) => rule.feat));
     if (types.size !== 1 || types.has('*')) return null;
     const order = legendRuleOrder(rules);
+    const commitKey = createRuleLegendCaptions(rules, rendererRows);
+    if (captioned.some((rule) => order(commitKey(rule)) < 0)) return null;
     const at = order(key);
     if (at < 0) return null;
     const listed = (drawing.legendEntries.value || [])
@@ -526,7 +533,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -537,7 +544,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
     const inPlace = new Map([...rekeyed, ...replaced]);
     const placement = !placedKey || !legendPlacement || legendPlacement.replaces ? null
-      : legendPlacement.inLegendOrder ? splitRowPlacement(drawing, candidate.rules, placedKey, rekeyed)
+      : legendPlacement.inLegendOrder ? splitRowPlacement(drawing, candidate.rules, placedKey, rekeyed, rendererRows)
         : { caption: placedKey, after: legendPlacement.at };
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {

@@ -967,6 +967,22 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
       { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', inLegendOrder: true } }), true, name);
     assert.deepEqual(placements.at(-1), placement, name);
   }
+  // A rule captioned like a renderer row of another color (Python's row
+  // `CDS [#ff0000]` beside the drawn `CDS` row of B) is a row
+  // `legendRuleOrder` does not key, so the Web cannot tell where Python draws
+  // the split row, and the commit adds it (review N1 of #1468).
+  const redCds = { feat: 'CDS', qual: 'locus_tag', val: '^(Q)$', color: '#ff0000', cap: 'CDS' };
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A|Y', 'beta'), redCds);
+  state.legendEntries.value = [{ caption: 'beta', color: '#112233' }, { caption: 'CDS [#ff0000]', color: '#ff0000' },
+    { caption: 'CDS', originalCaption: 'CDS', color: '#808080' }];
+  const shownSvg = state.svgContainer;
+  state.originalLegendOrder = { value: ['beta', 'CDS [#ff0000]', 'CDS'] };
+  state.svgContainer = mounted([['beta', '#112233'], ['CDS [#ff0000]', '#ff0000'], ['CDS', '#808080']]);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('Y', 'beta'), redCds, tagRule('A', 'delta')], 'Rename legend item',
+    { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', inLegendOrder: true } }), true, 'renderer row');
+  assert.deepEqual(placements.at(-1), null, 'a rule row keyed apart from the renderer row');
+  state.svgContainer = shownSvg;
+  delete state.originalLegendOrder;
   // OV-2193 (review L3 of #1467): the rule owner's `reviseColorRules`, the
   // Legend editor's rename. Rules renamed onto a listed row move just before
   // its first rule; a move that would change the rule coloring a feature
