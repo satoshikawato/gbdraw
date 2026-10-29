@@ -12,7 +12,7 @@
 /**
  * Where a rule commit puts a row it splits off: right after the row of key
  * `after` (D-29), or right before the row of key `before` (OV-2194).
- * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey } | { caption: PythonLegendKey, before: PythonLegendKey }} LegendRowPlacement
+ * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey }} LegendRowPlacement
  */
 /**
  * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
@@ -331,6 +331,47 @@ export const createLegendEntryActions = ({
     return true;
   };
 
+  // OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): the listed rows where
+  // Generate draws them from the next rule table, by Python's answer
+  // (`legendOrder`, the keys of its feature rows in Legend order). A row the
+  // commit adds goes right before the first listed row the answer puts after
+  // it, else right after the last one it puts before it (`placed` receives
+  // it; it leaves `added`). With `reorder`, the list is in the default order,
+  // which follows Python's, so the rows of the answer also take their places
+  // in its order, among the places they hold (an old row Python moves);
+  // the other rows keep theirs. In an edited order, which Generate replays
+  // (PD-OI-063), the old rows stay.
+  /**
+   * @param {EntryRecord[]} entries The listed rows the commit keeps.
+   * @param {Map<string, EntryRecord>} added The rows the commit adds, by key.
+   * @param {readonly PythonLegendKey[]} legendOrder
+   * @param {{ placed: PythonLegendKey[], reorder: boolean }} options
+   * @returns {EntryRecord[]}
+   */
+  const legendRowsInOrder = (entries, added, legendOrder, { placed, reorder }) => {
+    /** @type {Map<string, number>} */
+    const rank = new Map();
+    legendOrder.forEach((key, index) => { if (!rank.has(key)) rank.set(key, index); });
+    /** @param {EntryRecord} entry */
+    const rankOf = (entry) => rank.get(legendEntryKey(entry)) ?? -1;
+    let rows = [...entries];
+    for (const [key, row] of [...added].filter(([key]) => rank.has(key)).sort(([a], [b]) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))) {
+      const at = rank.get(key) ?? 0;
+      const next = rows.findIndex((entry) => rankOf(entry) > at);
+      const previous = rows.findLastIndex((entry) => rankOf(entry) >= 0 && rankOf(entry) < at);
+      const index = next >= 0 ? next : previous >= 0 ? previous + 1 : -1;
+      if (index < 0) continue;
+      rows = [...rows.slice(0, index), row, ...rows.slice(index)];
+      added.delete(key);
+      placed.push(/** @type {PythonLegendKey} */ (key));
+    }
+    if (!reorder) return rows;
+    const slots = rows.flatMap((entry, index) => (rankOf(entry) >= 0 ? [index] : []));
+    const ordered = slots.map((index) => rows[index]).sort((a, b) => rankOf(a) - rankOf(b));
+    slots.forEach((slot, index) => { rows[slot] = ordered[index]; });
+    return rows;
+  };
+
   // The Legend rows the specific-color rules draw, computed on the listed rows
   // (R1, R13): the rows the rules own (a caption and color of the previous rule
   // intents) and the listed rows of a wanted caption and color are diffed with
@@ -338,8 +379,8 @@ export const createLegendEntryActions = ({
   // in another color stops the commit. The rule owner runs its transition and
   // then `apply` in one History step, while `isCurrent` holds; `apply` writes
   // the rows into the intent, a row the commit splits off right after the row
-  // `placement.after` (D-29) or right before the row `placement.before`
-  // (OV-2194), and returns the rows the displayed Result shows
+  // `placement.after` (D-29), the rows of `legendOrder` where it puts them
+  // (`legendRowsInOrder`), and returns the rows the displayed Result shows
   // at once until Python draws them (gaps 1 and 2; null when the rows only
   // change color). A row of `rekeyed` (old key to new key) is one row whose
   // key the commit changes: a rule row the rule table change re-allocates
@@ -351,10 +392,12 @@ export const createLegendEntryActions = ({
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
-   *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
+   *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+   *   legendOrder?: readonly PythonLegendKey[] | null }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
-    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
+    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map(),
+    legendOrder = null
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     if (getAllFeatureLegendGroups(mountedSvg).length === 0) {
@@ -390,6 +433,7 @@ export const createLegendEntryActions = ({
       diff,
       isCurrent: () => svgContainer.value?.querySelector('svg') === mountedSvg,
       apply: () => {
+        const inDefaultOrder = !isLegendOrderEdited(drawing.legendEntries.value || [], originalLegendOrder.value);
         const removed = new Set(diff.remove.map(({ caption }) => caption));
         // An intent's `caption` is its row's key; its `name` is the rule's caption.
         const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
@@ -419,19 +463,23 @@ export const createLegendEntryActions = ({
         }
         // D-29: a row a commit splits off a row goes right after the row of
         // its name, so the editor list records the edited order Generate
-        // replays (PD-OI-063), and the Result shows it there; a row split
-        // off its own row goes right before or after it (OV-2194).
+        // replays (PD-OI-063), and the Result shows it there.
+        /** @type {PythonLegendKey[]} The added rows placed in the list. */
+        const placed = [];
         const split = placement && added.get(placement.caption);
-        const anchor = placement && ('before' in placement ? placement.before : placement.after);
-        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === anchor) : -1;
+        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === placement.after) : -1;
         if (placement && split && target >= 0) {
-          const at = 'before' in placement ? target : target + 1;
-          entries = [...entries.slice(0, at), split, ...entries.slice(at)];
+          entries = [...entries.slice(0, target + 1), split, ...entries.slice(target + 1)];
           added.delete(placement.caption);
-          const next = entries.slice(at + 1).find((entry) => !removed.has(legendEntryKey(entry)));
-          if (next) before.set(placement.caption, legendEntryKey(next));
+          placed.push(placement.caption);
         }
-        replaceLegendRows(drawing.slices.paint, listedRowsOf([...entries.filter((entry) => !removed.has(legendEntryKey(entry))), ...added.values()]));
+        entries = entries.filter((entry) => !removed.has(legendEntryKey(entry)));
+        if (legendOrder) entries = legendRowsInOrder(entries, added, legendOrder, { placed, reorder: inDefaultOrder });
+        for (const key of placed) {
+          const next = entries[entries.findIndex((entry) => legendEntryKey(entry) === key) + 1];
+          if (next) before.set(key, legendEntryKey(next));
+        }
+        replaceLegendRows(drawing.slices.paint, listedRowsOf([...entries, ...added.values()]));
         const rows = {
           add: diff.add.map(({ caption, color }) => ({
             caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),

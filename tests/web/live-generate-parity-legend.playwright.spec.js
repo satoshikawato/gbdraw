@@ -2105,6 +2105,36 @@ for (const [name, beta, rename, legend] of [
   });
 }
 
+// The Legend rows a commit itself shows, by key, in the editor list and on the
+// Result (its visible rows), read in the same tick as the edit, before the automatic rerender it
+// asks for: a popup Legend name on the feature of product `product` for "This
+// feature", or a Legend editor rename of the row `from`.
+const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, async ({ product, name, from }) => {
+  const app = window.__GBDRAW_APP__;
+  if (from) {
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === from), name);
+  } else {
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === product), null);
+    await window.Vue.nextTick();
+    app.clickedFeature.legendName = name;
+    await app.handleLegendNameCommit();
+    await app.handleLegendRenameChoice('single');
+  }
+  const svg = app.svgContainer.querySelector('svg');
+  // Drawn as the semantic snapshot reads it: no display none on the row or a group around it.
+  const shown = (group) => {
+    for (let node = group; node && node !== svg; node = node.parentElement) {
+      if ((node.style.display || node.getAttribute('display')) === 'none') return false;
+    }
+    return true;
+  };
+  return {
+    editor: app.legendEntries.map((entry) => entry.originalCaption || entry.caption),
+    drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].filter((group) => shown(group))
+      .map((group) => group.getAttribute('data-legend-key')))]
+  };
+}, edit);
+
 // OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of a row
 // whose rule of the same pattern colors only that feature splits it off; Python
 // re-captions that rule in its place, so Generate draws the new row there. The
@@ -2120,21 +2150,8 @@ for (const [name, rules, legend] of [
     for (const [val, cap] of rules) await addColorRule(page, { feat: 'CDS', qual: 'product', val, color: '#2a9d8f', cap });
     await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
     await generate(page);
-    // The rows the commit itself shows, read before the automatic rerender it asks for.
-    const shown = await evaluateWithRetainedPromise(page, async () => {
-      const app = window.__GBDRAW_APP__;
-      await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === 'dup alpha'), null);
-      await window.Vue.nextTick();
-      app.clickedFeature.legendName = 'gamma';
-      await app.handleLegendNameCommit();
-      await app.handleLegendRenameChoice('single');
-      const svg = app.svgContainer.querySelector('svg');
-      return {
-        editor: app.legendEntries.map((entry) => entry.caption),
-        drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].map((group) => group.getAttribute('data-legend-key')))]
-      };
-    });
-    expect(shown, 'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
+    expect(await rowsShownAtCommit(page, { product: 'dup alpha', name: 'gamma' }), 'the rows the commit shows before Python redraws them')
+      .toEqual({ editor: legend, drawn: legend });
     expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap }) => [val, cap])),
       'the rule is re-captioned in its place').toEqual(rules.map(([val, cap]) => [val, val === '^dup alpha$' ? 'gamma' : cap])
       .concat([['^alpha protein$', 'alpha']]));
@@ -2145,32 +2162,50 @@ for (const [name, rules, legend] of [
   });
 }
 
-// The same split off a row of a broader pattern: Python writes the feature's
-// exact condition before the first rule of its type and qualifier, so Generate
-// draws the new row first; the commit shows it there too (review L1 of #1467).
-test('a popup Legend name split off a row of a broader pattern shows the new row in Generate\'s place (OV-2194)', async ({ page }) => {
-  test.setTimeout(240_000);
-  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
-  await addColorRule(page, DELTA);
-  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup', color: '#2a9d8f', cap: 'beta' });
-  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
-  await generate(page);
-  const legend = ['gamma', 'delta', 'beta', 'alpha', 'repeat_region'];
-  const shown = await evaluateWithRetainedPromise(page, async () => {
-    const app = window.__GBDRAW_APP__;
-    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === 'dup alpha'), null);
-    await window.Vue.nextTick();
-    app.clickedFeature.legendName = 'gamma';
-    await app.handleLegendNameCommit();
-    await app.handleLegendRenameChoice('single');
-    const svg = app.svgContainer.querySelector('svg');
-    return {
-      editor: app.legendEntries.map((entry) => entry.caption),
-      drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].map((group) => group.getAttribute('data-legend-key')))]
-    };
+// Python's answer of the rule synthesis gives the Legend order Generate draws
+// from the next table, and the commit shows its rows in that order at once
+// (Owner 2026-10-29): the row split off a row of a broader pattern, which
+// Python writes before the first rule of its type and qualifier (review L1 of
+// #1467); the old row that moves when its first rule is re-captioned
+// (OV-2247); the rule rows of another feature type, which Python draws after
+// the rows of the type drawn first (review M2 of #1467); a rule row captioned
+// like a renderer row of another color, keyed `X [#fill]` (review N1 of
+// #1468); and a Legend editor rename whose move Python refuses because it
+// would recolor another feature, where Generate keeps the old order (OV-2248).
+const TRNA_GENBANK = readFileSync(SINGLE_FIXTURE, 'utf8').replace('     repeat_region   1001..1600',
+  '     tRNA            801..870\n                     /product="tRNA-Gly"\n     repeat_region   1001..1600');
+const TEAL_RULE = (val, cap) => ({ feat: 'CDS', qual: 'product', val, color: '#2a9d8f', cap });
+for (const { name, genbank, rules, edit, legend } of [
+  { name: 'a popup Legend name split off a row of a broader pattern',
+    rules: [DELTA, TEAL_RULE('^dup', 'beta'), { ...DELTA, val: '^alpha protein$', color: '#e63946', cap: 'alpha' }],
+    edit: { product: 'dup alpha', name: 'gamma' }, legend: ['gamma', 'delta', 'beta', 'alpha', 'repeat_region'] },
+  { name: 'a popup Legend name split off a row whose old row moves (OV-2247)',
+    rules: [TEAL_RULE('^dup alpha$', 'beta'), { ...DELTA, val: '^alpha protein$', color: '#e63946', cap: 'alpha' },
+      TEAL_RULE('^dup beta$', 'beta')],
+    edit: { product: 'dup alpha', name: 'gamma' }, legend: ['gamma', 'alpha', 'beta', 'other proteins', 'repeat_region'] },
+  { name: 'a popup Legend name split off a row of another feature type',
+    genbank: TRNA_GENBANK,
+    rules: [{ feat: 'tRNA', qual: 'product', val: '^tRNA-Gly$', color: '#2a9d8f', cap: 'beta' }, TEAL_RULE('^dup beta$', 'beta'),
+      { ...DELTA, val: '^alpha protein$', color: '#e63946', cap: 'alpha' }],
+    edit: { product: 'tRNA-Gly', name: 'gamma' }, legend: ['beta', 'alpha', 'other proteins', 'gamma', 'repeat_region'] },
+  { name: 'a popup Legend name split off a row beside a rule row named like a renderer row',
+    rules: [TEAL_RULE('^dup alpha$', 'beta'), TEAL_RULE('^dup beta$', 'beta'),
+      { ...DELTA, val: '^alpha protein$', color: '#e63946', cap: 'repeat_region' }],
+    edit: { product: 'dup alpha', name: 'gamma' },
+    legend: ['gamma', 'beta', 'repeat_region [#e63946]', 'other proteins', 'repeat_region'] },
+  { name: 'a Legend editor rename onto a row whose move would recolor a feature (OV-2248)',
+    rules: [TEAL_RULE('^dup', 'beta'), { ...DELTA, val: 'beta' }, ALPHA_TEAL],
+    edit: { from: 'beta', name: 'alpha' }, legend: ['alpha', 'delta', 'repeat_region'] }
+]) {
+  test(`${name} shows Generate's Legend order at once`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off', ...(genbank ? { genbank } : {}) });
+    for (const rule of rules) await addColorRule(page, rule);
+    await generate(page);
+    expect(await rowsShownAtCommit(page, edit), 'the rows the commit shows before Python redraws them')
+      .toEqual({ editor: legend, drawn: legend });
+    await settleLive(page);
+    expect((await semanticSnapshot(page)).legend.map((row) => row.key), 'the live Legend order').toEqual(legend);
+    await expectLiveEqualsGenerate(page, { label: name });
   });
-  expect(shown, 'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
-  await settleLive(page);
-  expect((await semanticSnapshot(page)).legend.map((row) => row.caption), 'the live Legend order').toEqual(legend);
-  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name split off a row of a broader pattern' });
-});
+}

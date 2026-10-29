@@ -57,10 +57,10 @@ def _cds(index: int, **qualifiers: str) -> SeqFeature:
 
 def _synthesize(features: list[dict], selected: list[int], rules: list[dict] | None = None,
                 labels: list[list[str]] | None = None, caption: str = "Group", scope: str = "group",
-                color: str = COLOR, joins: dict | None = None) -> dict:
+                color: str = COLOR, joins: dict | None = None, drawn: list[int] | None = None) -> dict:
     request = dict(scope=scope, features=features, selected=selected, labels=labels or [[] for _ in selected],
                    rules=[{key: rule[key] for key in ("feat", "qual", "val", "color", "cap")} for rule in rules or []],
-                   color=color, caption=caption, joins=joins)
+                   color=color, caption=caption, joins=joins, drawn=drawn)
     return json.loads(synthesize_color_rules_json(json.dumps(request)))
 
 
@@ -391,16 +391,19 @@ def test_a_feature_without_hash_or_condition_is_declined():
     feature = _payload(_cds(0), "rec")
     feature["selector"]["hash"] = None
     answer = _synthesize([feature], [0])
-    assert answer == {"table": []}
+    assert answer == {"table": [], "legend": None}
 
 
 def test_a_malformed_request_is_refused():
     with pytest.raises(ValueError, match="selected"):
         synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], labels=[], rules=[], color=COLOR, caption="x",
-                                                    joins=None)))
+                                                    joins=None, drawn=None)))
     with pytest.raises(ValueError, match="joined row"):
         synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], selected=[], labels=[], rules=[],
-                                                    color=COLOR, caption="x", joins=dict(at=0, rows=[]))))
+                                                    color=COLOR, caption="x", joins=dict(at=0, rows=[]), drawn=None)))
+    with pytest.raises(ValueError, match="drawn feature"):
+        synthesize_color_rules_json(json.dumps(dict(scope="group", features=[], selected=[], labels=[], rules=[],
+                                                    color=COLOR, caption="x", joins=None, drawn=[0])))
 
 
 def _genbank_payloads(path: Path) -> list[dict]:
@@ -537,3 +540,92 @@ def test_an_own_hash_row_after_the_joined_row_keeps_its_place():
                dict(feat="CDS", qual="product", val="^beta$", color="#e9c46a", cap="delta"), own]
     answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=0, rows=[]))
     assert answer["table"] == [0, 1, {**own, "cap": "alpha"}]
+
+
+def _renderer_legend(features: list[dict], table: list[dict]) -> list[str]:
+    """The feature rows Generate's Legend owner draws from `table` for the
+    drawn `features` (prepare_legend_table, with the used rules and default
+    types its presence check finds), by name."""
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    from gbdraw.legend.table import prepare_legend_table
+
+    winners = _winners(features, table)
+    numeric = SimpleNamespace(dinucleotide="GC", high_fill_color="#000000", low_fill_color="#000000",
+                              stroke_color="none", stroke_width=0)
+    config = SimpleNamespace(
+        color_table=pd.DataFrame([[r["feat"], r["qual"], r["val"], r["color"], r["cap"]] for r in table],
+                                 columns=["feature_type", "qualifier_key", "value", "color", "caption"]),
+        default_colors=pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"]),
+        block_stroke_color="none", block_stroke_width=0)
+    legend = prepare_legend_table(
+        numeric, numeric, config, list(dict.fromkeys(f["type"] for f in features)),
+        used_color_rules={(table[w]["cap"], table[w]["color"]) for w in winners if w >= 0 and table[w]["cap"]},
+        default_used_features={f["type"] for f, w in zip(features, winners) if w < 0},
+        show_gc=False, show_skew=False, show_depth=False)
+    return [str(names.name) for names in legend.names().values()]
+
+
+def _answer_legend(answer: dict, table: list[dict]) -> list[str]:
+    """The answer's Legend order by name: a rule row by its rule's caption."""
+    return [table[row]["cap"] if isinstance(row, int) else row for row in answer["legend"]]
+
+
+def test_the_answer_gives_the_legend_order_of_the_next_table_where_the_old_row_moves():
+    # OV-2247: a split whose old row also moves in Python's Legend. The feature's
+    # rule is re-captioned in place, first in the table, so the old row now
+    # starts at its later rule, after alpha. The answer gives that order, so
+    # the live Legend shows it at once.
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
+            _cds(3, product="dup beta")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="product", val="^dup alpha$", color=TEAL, cap="beta"),
+               dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha"),
+               dict(feat="CDS", qual="product", val="^dup beta$", color=TEAL, cap="beta")]
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="gamma", drawn=[0, 1, 2, 3])
+    table = _next_table(answer, current)
+    assert [rule["cap"] for rule in table] == ["gamma", "alpha", "beta"]
+    assert answer["legend"] == [0, 1, 2, "other proteins"]
+    assert _answer_legend(answer, table) == _renderer_legend(features, table)
+
+
+def test_the_answer_gives_the_old_order_when_the_join_is_refused():
+    # OV-2248 (Owner 2026-10-29: Generate keeps the old order): moving the
+    # renamed rule past the delta rule would recolor `dup beta`, so the table
+    # stays and the renamed row keeps its first rule's place, before delta.
+    features, current = _join_case("^dup")
+    renamed = [{**current[0], "cap": "alpha"}, {**current[1], "val": "beta"}, current[2]]
+    answer = _synthesize(features, [], rules=renamed, color=TEAL, caption="alpha", joins=dict(at=2, rows=[0]),
+                         drawn=[0, 1, 2, 3])
+    assert answer["table"] == [0, 1, 2]
+    assert answer["legend"] == [0, 1]
+    assert _answer_legend(answer, renamed) == _renderer_legend(features, renamed) == ["alpha", "delta"]
+
+
+def test_the_answer_groups_the_legend_rows_by_feature_type_in_drawing_order():
+    # Review M2 of #1467: Python draws the rule rows of the first drawn type
+    # first, whatever their table order: a tRNA split off its row goes after
+    # the CDS rows when a CDS is drawn first.
+    trna = SeqFeature(SimpleLocation(900, 970, strand=1), type="tRNA", qualifiers={"product": ["tRNA-Gly"]})
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup beta"), trna]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="tRNA", qual="product", val="^tRNA-Gly$", color=TEAL, cap="beta"),
+               dict(feat="CDS", qual="product", val="^dup beta$", color=TEAL, cap="beta"),
+               dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha")]
+    answer = _synthesize(features, [2], rules=current, color=TEAL, caption="gamma", drawn=[0, 1, 2])
+    table = _next_table(answer, current)
+    assert answer["legend"] == [1, 2, 0]
+    assert _answer_legend(answer, table) == _renderer_legend(features, table) == ["beta", "alpha", "gamma"]
+
+
+def test_the_answer_reads_only_the_drawn_features():
+    # A feature the Result does not draw (another Result's, or a source copy)
+    # takes no row; a drawn type no rule colors keeps its own row.
+    features, current = _join_case("^dup alpha$")
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="gamma", drawn=[1, 3])
+    table = _next_table(answer, current)
+    assert _answer_legend(answer, table) == _renderer_legend([features[1], features[3]], table) == [
+        "gamma", "other proteins"]
+    assert _synthesize(features, [1], rules=current, color=TEAL, caption="gamma")["legend"] is None

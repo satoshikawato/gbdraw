@@ -12,6 +12,11 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: after a Legend name edit that splits off, joins, or moves a rule's row, the Web
+  app's Legend shows the rows at once in the order Generate draws them, including a row of
+  another feature type and an old row the edit moves, instead of first showing them
+  elsewhere and then jumping.
+
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-29
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by

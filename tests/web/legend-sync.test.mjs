@@ -864,14 +864,32 @@ const mockLegendEntry = (caption, color, x) => {
   assert.deepEqual(split.apply(), { add: [{ caption: 'CDS [#00aa00]', name: 'CDS', color: '#00aa00', before: 'New' }], retire: [] });
   assert.deepEqual(listed(), [['CDS', '#112233'], ['CDS [#00aa00]', '#00aa00'], ['New', '#aa0000'], ['tRNA', '#334455']]);
   state.legendEntries.value = state.legendEntries.value.filter(({ caption }) => caption !== 'CDS [#00aa00]');
-  // OV-2194: a row split off its row goes right before it, and the Result shows it there.
-  const splitBefore = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#aa0000' }, { caption: 'Newer', color: '#aa0000' }], {
-    previousFileIntents: [{ caption: 'New', color: '#aa0000' }],
-    placement: { caption: 'Newer', before: 'New' }
+  // OV-2194, OV-2247 (Owner 2026-10-29): the rows go where Python's answer
+  // puts them (the keys of its feature rows in Legend order). A row the commit
+  // adds goes before the first listed row the answer puts after it, and the
+  // Result shows it there; in the default order an old row the answer moves
+  // takes its place too, among the places of the answer's rows.
+  const listedRows = state.legendEntries.value;
+  const twoNews = [{ caption: 'New', color: '#aa0000' }, { caption: 'Newer', color: '#aa0000' }];
+  for (const [name, order, before, rows] of [
+    ['a split row', ['CDS', 'Newer', 'New', 'tRNA'], 'New', ['CDS', 'Newer', 'New', 'tRNA']],
+    ['an old row that moves', ['CDS', 'Newer', 'tRNA', 'New'], 'tRNA', ['CDS', 'Newer', 'tRNA', 'New']]
+  ]) {
+    state.legendEntries.value = listedRows;
+    const placed = await actions.prepareFileLegendEntries(twoNews, {
+      previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: order
+    });
+    assert.deepEqual(placed.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before }], retire: [] }, name);
+    assert.deepEqual(listed().map(([caption]) => caption), rows, name);
+  }
+  // In an edited order, which Generate replays (PD-OI-063), the old rows stay.
+  state.legendEntries.value = [listedRows[2], listedRows[0], listedRows[1]];
+  const edited = await actions.prepareFileLegendEntries(twoNews, {
+    previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: ['CDS', 'Newer', 'New', 'tRNA']
   });
-  assert.deepEqual(splitBefore.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before: 'New' }], retire: [] });
-  assert.deepEqual(listed(), [['CDS', '#112233'], ['Newer', '#aa0000'], ['New', '#aa0000'], ['tRNA', '#334455']]);
-  state.legendEntries.value = state.legendEntries.value.filter(({ caption }) => caption !== 'Newer');
+  assert.deepEqual(edited.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before: 'tRNA' }], retire: [] });
+  assert.deepEqual(listed().map(([caption]) => caption), ['Newer', 'tRNA', 'CDS', 'New']);
+  state.legendEntries.value = listedRows;
   // A rule color change draws no row; a listed row the rules do not own keeps
   // its color or stops the commit.
   const recolored = await actions.prepareFileLegendEntries([{ caption: 'New', color: '#00aa00' }], {

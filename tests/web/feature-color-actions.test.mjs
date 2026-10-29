@@ -1293,8 +1293,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       [['^delta$', 'delta'], ['^dup', 'alpha'], ['^alpha$', 'alpha']], 'the Legend editor join goes before the joined row');
 
     // OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of the
-    // row, split off it ("This feature"), is placed where Python's Legend
-    // draws it (the rule owner tells that place).
+    // row, split off it ("This feature"), takes no placement of its own: the
+    // rule owner places it by Python's answer.
     const split = joinRows([tealRule('^dup alpha$', 'beta'), tealRule('^dup beta$', 'beta'), tealRule('^alpha$', 'alpha')], both, 'gamma');
     await split.renameActions.handleLegendNameCommit();
     assert.equal(split.legendRenameDialog.mode, 'scope');
@@ -1302,7 +1302,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.equal(split.errorLog.value, null);
     assert.deepEqual(split.committed.at(-1).map(({ val, cap }) => [val, cap]),
       [['^dup alpha$', 'gamma'], ['^dup beta$', 'beta'], ['^alpha$', 'alpha']], 'the rule is re-captioned in its place');
-    assert.deepEqual(split.commitOptions.at(-1).legendPlacement, { name: 'gamma', color: '#2a9d8f', at: 'beta', inLegendOrder: true });
+    assert.equal(split.commitOptions.at(-1).legendPlacement, null);
   }
 
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the
