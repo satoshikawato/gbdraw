@@ -23,6 +23,12 @@ write-up of a release.
   `outer` to `inner` above one `identity` band, with a swatch per ring when the
   ring colors differ. It replaces the `Conservation identity` row and the
   per-ring gradient rows.
+- Fixed: a CDS whose location crosses a circular record's origin, such as
+  `complement(join(3717939..3718359,1..656))`, no longer makes LOSATP
+  Pairwise links and Collinear blocks that use it span the whole record. The
+  link or block covers the CDS's own short arc and is drawn as one piece on
+  each side of the origin, both carrying the same block and protein metadata
+  (OV-2258).
 - Fixed: the Circular legend lists only the similarity rings a slot draws; a
   ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
 - Fixed: in the Web app, a Legend name that joins another Legend row of the

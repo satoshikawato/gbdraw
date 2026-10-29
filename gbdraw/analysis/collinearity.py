@@ -1549,14 +1549,10 @@ def _block_link_side(
         )[0]
         for anchor in anchors
     ]
-    cover = cover_arcs(arcs)
-    crosses = cover is not None and cover[0] > cover[1]
-    if cover is None:
-        cover = (0, int(record_length)) if record_length is not None else (
-            min(start for start, _end in arcs), max(end for _start, end in arcs)
-        )
+    # No cover: the arcs, one across the origin (so the length is known), cover the record.
+    cover = cover_arcs(arcs) or (0, int(record_length or 0))
     start, end = arc_link_endpoints(cover, forward)
-    return LinkSide(start, end, crosses, int(record_length or 0))
+    return LinkSide(start, end, cover[0] > cover[1], int(record_length or 0))
 
 
 def _weighted_identity(anchors: Sequence[CollinearityAnchor]) -> float:
