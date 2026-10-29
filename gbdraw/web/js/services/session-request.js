@@ -194,7 +194,8 @@ import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadIdentity,
   getResourcePayloadOwner,
-  resourceIdOwnedBy,
+  recordSourceOwnedBy,
+  recordSourceResourceIds,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
@@ -226,6 +227,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { JsonValue } from './json-clone.js' */
 /** @import { UnvalidatedFields } from './session-authority.js' */
 /** @import { TableRepair } from './file-imports.js' */
+/** @import { InputFileRef, InputFileStore } from './history-files.js' */
 
 // The drawing a request reads its settings and edits from: a `DrawingState`
 // (state.js), Generate's drawing with the rules it admits, or a Gallery
@@ -1731,11 +1733,27 @@ const circularRecordSourceIndexes = (records) => records.map((record, index) => 
  */
 const LIVE_WEB_FILES_ROOT = 'webFiles';
 /**
+ * A drawing's Linear card as a live projector reads it (`LinearSeq`,
+ * services/drawing/inputs.js): its file fields hold `InputFileRef`s.
+ * @typedef {Omit<RequestLinearSeq, 'gb' | 'gff' | 'fasta'>
+ *   & { readonly gb?: InputFileRef | null, readonly gff?: InputFileRef | null, readonly fasta?: InputFileRef | null }} LiveSettingCard
+ */
+/**
  * The draft values a live projector reads, given by its caller (the request
  * owner never reads `state`): the Linear cards of the drawing it projects
- * (`drawing.linearSeqs`), never another drawing's.
- * @typedef {{ readonly linearSeqs: readonly RequestLinearSeq[] }} LiveSettingInputs
+ * (`drawing.linearSeqs`), never another drawing's, and the project's file
+ * store reader (`state.inputFiles.fileOf`) that gives the File a card's ref
+ * binds (OV-2205).
+ * @typedef {{ readonly linearSeqs: readonly LiveSettingCard[], readonly fileOf: InputFileStore['fileOf'] }} LiveSettingInputs
  */
+/**
+ * The live projector inputs of `drawing`: its own Linear cards, read through
+ * the project's file store (`fileOf`). Every caller builds them here.
+ * @param {{ readonly linearSeqs: readonly LiveSettingCard[] }} drawing
+ * @param {InputFileStore['fileOf']} fileOf
+ * @returns {LiveSettingInputs}
+ */
+export const liveSettingInputsOf = (drawing, fileOf) => ({ linearSeqs: drawing.linearSeqs, fileOf });
 /**
  * The committed Session's resources, which name the files each committed
  * record was drawn from.
@@ -1759,22 +1777,23 @@ const configWrites = (path, value) => {
 const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key], value ?? undefined];
 
 /**
- * Whether a draft card still draws a committed record: the committed resource
- * the record's source names holds the card's File (`resourceIdOwnedBy`, by
+ * Whether a draft card still draws a committed record: the card's Files
+ * (`fileOf` of its refs) name the record's source (`recordSourceOwnedBy`, by
  * payload identity; a replaced File does not, whatever its definition says),
  * and the card's Generate selects the same record: the record under the
  * card's key the card's selector (`linearCardSelector`), a split member
  * (F-18) none. A changed selection applies on Generate (G3), and the card's
  * definition follows it.
- * @param {RequestLinearSeq} seq @param {string} cardKey @param {CanonicalRecord} record
- * @param {LiveSettingResources} resources
+ * @param {LiveSettingCard} seq @param {string} cardKey @param {CanonicalRecord} record
+ * @param {LiveSettingResources} resources @param {LiveSettingInputs['fileOf']} fileOf
  */
-const cardDrawsRecord = (seq, cardKey, record, resources) => {
+const cardDrawsRecord = (seq, cardKey, record, resources, fileOf) => {
   const { source } = record;
-  return (source.kind === 'genbank'
-    ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
-    : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
-      && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId)
+  const drawn = source.kind === 'genbank'
+    ? recordSourceOwnedBy(resources, fileOf(seq.gb), null)
+    : recordSourceOwnedBy(resources, fileOf(seq.gff), fileOf(seq.fasta));
+  return drawn !== null && drawn.kind === source.kind
+    && recordSourceResourceIds(drawn).join('\n') === recordSourceResourceIds(source).join('\n')
     && (record.recordKey === cardKey
       ? sameRecordSelector(linearCardSelector(seq), requestRecordSelector(record))
       : linearCardSelector(seq) === null);
@@ -1795,7 +1814,7 @@ const linearRecordCardIndexes = (request, inputs, resources) => {
     (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
   ));
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
-    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources))
+    && cardDrawsRecord(inputs.linearSeqs[index], cards[index], request.records[position], resources, inputs.fileOf))
     ? indexes : null;
 };
 /**

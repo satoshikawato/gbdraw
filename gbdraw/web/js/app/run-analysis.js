@@ -42,7 +42,8 @@ import {
   DiagramGenerationCanceledError,
   isDiagramGenerationCanceled,
   runDiagramGeneration,
-  resourceIdOwnedBy,
+  recordSourceOwnedBy,
+  recordSourceResourceIds,
   runDiagramHelperOperation,
   selectHeldRenderState
 } from '../services/diagram-generation.js';
@@ -57,6 +58,7 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
+  liveSettingInputsOf,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   readCanonicalResourceText,
@@ -1152,19 +1154,9 @@ const logPostGbdrawTimings = (entries) => {
  */
 const requestRecordSource = (resources, sourceFile, fastaFile) => {
   if (!resources) return null;
-  /** @type {CanonicalRecordSource | null} */
-  let recordSource = null;
-  if (!fastaFile) {
-    const resourceId = resourceIdOwnedBy(resources, sourceFile, 'genbank');
-    if (resourceId) recordSource = { kind: 'genbank', resourceId };
-  } else {
-    const gffResourceId = resourceIdOwnedBy(resources, sourceFile, 'gff3');
-    const fastaResourceId = resourceIdOwnedBy(resources, fastaFile, 'fasta');
-    if (gffResourceId && fastaResourceId) recordSource = { kind: 'gffFasta', gffResourceId, fastaResourceId };
-  }
+  const recordSource = recordSourceOwnedBy(resources, sourceFile, fastaFile);
   if (!recordSource) return null;
-  const ids = recordSource.kind === 'genbank'
-    ? [recordSource.resourceId] : [recordSource.gffResourceId, recordSource.fastaResourceId];
+  const ids = recordSourceResourceIds(recordSource);
   // The transport validates each descriptor when it stages it.
   return {
     recordSource,
@@ -6047,7 +6039,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: { linearSeqs: drawing.linearSeqs } });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf(drawing, inputFiles.fileOf) });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6240,7 +6232,7 @@ export const createRunAnalysis = ({
     if (!pending || !committed) return;
     for (const path of [...pending]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: { linearSeqs: drawing.linearSeqs } }).length === 0) {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf(drawing, inputFiles.fileOf) }).length === 0) {
           pending.delete(path);
         }
       } catch {

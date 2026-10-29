@@ -97,6 +97,7 @@ import {
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
   liveSettingNoteApplies,
+  liveSettingInputsOf,
   applyLiveWebFileWrites,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
@@ -4378,7 +4379,7 @@ export const committedLiveSettingApplies = (requestPath, item = null) => {
   const request = getCommittedCanonicalRenderRequest();
   if (!request) return true;
   const drawing = state.drawingOf(state.generatedDrawingId.value);
-  return liveSettingNoteApplies(request, requestPath, drawing, { linearSeqs: drawing.linearSeqs },
+  return liveSettingNoteApplies(request, requestPath, drawing, liveSettingInputsOf(drawing, state.inputFiles.fileOf),
     committedCanonicalSession?.resources, item);
 };
 

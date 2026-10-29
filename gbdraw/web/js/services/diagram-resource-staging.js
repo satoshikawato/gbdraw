@@ -6,7 +6,7 @@ import {
   readFileContentToken, releaseFileContentCache, resourceContentToken, takeFileBytesForTransfer
 } from './file-content-cache.js';
 import { getResourcePayloadIdentity, getResourcePayloadOwner } from './resource-payload-owner.js';
-export { resourceIdOwnedBy } from './resource-payload-owner.js';
+export { recordSourceOwnedBy, recordSourceResourceIds } from './resource-payload-owner.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
