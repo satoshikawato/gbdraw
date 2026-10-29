@@ -13,9 +13,9 @@ write-up of a release.
 ## [Unreleased]
 
 - Added: one Session now holds several drawings, each with its own settings,
-  files, Result, and History. The Web app's drawing bar replaces the Circular
-  and Linear buttons: a new Session has one Circular drawing and a Linear tab
-  with a plus icon that adds a Linear drawing. A tab's menu offers New Circular
+  files, Result, and History. In the Web app, a new Session has one Circular
+  drawing and a Linear tab with a plus icon that adds a Linear drawing. A tab's
+  menu offers New Circular
   drawing, New Linear drawing, Duplicate drawing, New Circular drawing with this
   style, New Linear drawing with this style, Rename, and Delete drawing. Reset
   offers "Reset this drawing" beside "Reset all drawings". Uploading over a file
