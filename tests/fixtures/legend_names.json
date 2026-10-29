@@ -1,6 +1,14 @@
 {
-  "description": "THE naming rule of the Legend (PD-OI-042 scenario revision 2, PD-OI-095): the rows being drawn, in legend order (a legend draws its solid rows, then its gradient rows), each as its name and its swatch, and the name each is drawn with. Rows of one name and one swatch are one row and share a drawn name. A name left with two or more rows is drawn `name (1)`, `name (2)`, ... in legend order, and a number skips a drawn name another row already has; a name left with one row is drawn as written. A solid swatch is its fill and its stroke (color and width; a stroke of no width or no color is no stroke), a hatch being part of the fill; a gradient swatch is its two end colors; a named color equals its hex. Python's answer is gbdraw/legend/table.py::drawn_legend_names over ::legend_swatch (tests/test_legend_row_names.py); the Web app's is services/legend-row-names.js::drawnLegendNames over ::legendSwatch (tests/web/legend-row-names.test.mjs). Add a case, not a special case, when the two disagree.",
+  "description": "THE naming rule of the Legend (PD-OI-042 scenario revision 2, PD-OI-095): the rows being drawn, in legend order (a legend draws its solid rows, then its gradient rows), each as its name and its swatch, and the name each is drawn with. Rows of one name and one swatch are one row and share a drawn name. A name left with two or more rows is drawn `name (1)`, `name (2)`, ... in legend order, and a number skips a drawn name another row already has; a name left with one row is drawn as written. A solid swatch is its fill and its stroke (color and width; a stroke of no width or no color is no stroke), a hatch being part of the fill; a gradient swatch is its two end colors; a similarity-ring row's swatch is its ring (track_index), so every drawn ring is a row of its own; a named color equals its hex. Python's answer is gbdraw/legend/table.py::drawn_legend_names over ::legend_swatch (tests/test_legend_row_names.py); the Web app's is services/legend-row-names.js::drawnLegendNames over ::legendSwatch (tests/web/legend-row-names.test.mjs). Add a case, not a special case, when the two disagree.",
   "cases": [
+    { "name": "similarity rings of one name are each a row and numbered; a ring named like a feature row is numbered",
+      "rows": [
+        {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},
+        {"name": "AF332093", "swatch": {"type": "ring", "track_index": 1, "fill": null}},
+        {"name": "AF332093", "swatch": {"type": "ring", "track_index": 2, "fill": null}},
+        {"name": "CDS", "swatch": {"type": "ring", "track_index": 3, "fill": "#6e91b7"}}
+      ],
+      "drawn": ["CDS (1)", "AF332093 (1)", "AF332093 (2)", "CDS (2)"] },
     { "name": "a name drawn once has no number",
       "rows": [
         {"name": "CDS", "swatch": {"type": "solid", "fill": "#47b8f8", "stroke": "gray", "width": 1}},

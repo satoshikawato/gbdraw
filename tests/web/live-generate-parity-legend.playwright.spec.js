@@ -1445,15 +1445,16 @@ const PYTHON_NAMED_RESULTS = [{
     ['Pairwise match identity', null, 'Pairwise match identity (2)']
   ]
 }, {
-  name: 'a solid row and a gradient row of one name (Circular, a color rule)',
+  // PD-OI-110: the similarity-ring block lists the drawn ring by its name (here the file name, `ring`).
+  name: 'a solid row and a similarity-ring row of one name (Circular, a color rule)',
   mode: 'circular',
   inputs: [SINGLE_FIXTURE],
-  files: { 'ring.blast': RING_BLAST, 'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'Conservation identity']] },
+  files: { 'ring.blast': RING_BLAST, 'rules.tsv': [['CDS', 'locus_tag', 'FL1', '#ff0000', 'ring']] },
   args: ['--conservation_blast', 'ring.blast', '-t', 'rules.tsv'],
   rows: [
-    ['Conservation identity', null, 'Conservation identity (1)'], ['other proteins', null, 'other proteins'], ['repeat_region', null, 'repeat_region'],
+    ['ring', null, 'ring (1)'], ['other proteins', null, 'other proteins'], ['repeat_region', null, 'repeat_region'],
     ['GC content', null, 'GC content'], ['GC skew (+)', null, 'GC skew (+)'], ['GC skew (-)', null, 'GC skew (-)'],
-    ['Conservation identity (2)', 'Conservation identity', 'Conservation identity (2)']
+    ['ring (2)', 'ring', 'ring (2)']
   ]
 }, {
   name: 'a caption in two colors in the two copies of a Linear Legend',

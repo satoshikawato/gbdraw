@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { CircularGradientLayout, LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout, LinearGradientLayout, RegisteredLegendFace } from '../../services/legend-layout.js' */
+/** @import { CircularGradientLayout, CircularRingLayout, LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout, LinearGradientLayout, RegisteredLegendFace } from '../../services/legend-layout.js' */
 import {
   buildCircularLegendLayout,
   buildLinearLegendLayout,
@@ -70,8 +70,10 @@ const gradientBar = (entry) => Array.from(entry.children)
   .find((child) => child.localName === 'path' && String(child.getAttribute('fill') || '').startsWith('url(')) || null;
 
 /**
- * The gradient rows of a comparison or conservation Legend: their keys, bar
- * strokes, and the lowest identity its scale shows.
+ * The rows of a comparison or conservation Legend block and the lowest
+ * identity its scale shows: the similarity-ring block's ring rows (a row with
+ * `data-track-index`; whether it shows a swatch), or the gradient rows of a
+ * comparison and of a Result drawn before the ring block (their bar strokes).
  * @param {Element | null} group
  * @returns {LegendLayoutRow[]}
  */
@@ -82,6 +84,17 @@ const readGradientRows = (group) => {
   const minLabel = labels.find((label) => /^-?\d+(?:\.\d+)?%$/.test(label) && label !== '100%');
   const minValue = minLabel ? Number(minLabel.slice(0, -1)) : 0;
   return entryGroupsOf(group).map((entry) => {
+    if (entry.hasAttribute('data-track-index')) {
+      return /** @type {LegendLayoutRow} */ ({
+        key: pythonLegendKey(entry),
+        name: drawnLegendRowName(entry),
+        type: 'ring',
+        stroke: 'none',
+        strokeWidth: 0,
+        minValue,
+        swatch: Array.from(entry.children).some((child) => child.localName === 'path')
+      });
+    }
     const bar = gradientBar(entry);
     return /** @type {LegendLayoutRow} */ ({
       key: pythonLegendKey(entry),
@@ -178,6 +191,36 @@ const placeGradient = (group, placement) => {
   const [minLabel, maxLabel] = placement.compact ? texts : texts.slice(1);
   setTranslate(minLabel || null, placement.minLabelX, placement.scaleLabelY);
   setTranslate(maxLabel || null, placement.maxLabelX, placement.scaleLabelY);
+};
+
+/**
+ * Write the similarity-ring block's parts where Python's layout puts them
+ * (legend/circular_layout.py `_build_ring_layout`): the `outer` and `inner`
+ * captions, each ring row's swatch and name, and the band's bar, `identity`
+ * label and scale labels, in the order Python writes them.
+ * @param {Element} group
+ * @param {CircularRingLayout} rings
+ */
+const placeRings = (group, rings) => {
+  const children = Array.from(group.children);
+  const [outer, inner] = children.filter((child) => child.localName === 'text');
+  setTranslate(outer || null, 0, rings.outerCaptionY);
+  setTranslate(inner || null, 0, rings.innerCaptionY);
+  const byKey = new Map(rings.rows.map((row) => [row.key, row]));
+  entryGroupsOf(group).forEach((entry) => {
+    const layout = byKey.get(pythonLegendKey(entry));
+    if (!layout) return;
+    const parts = Array.from(entry.children);
+    setTranslate(parts.find((child) => child.localName === 'path') || null, layout.swatchX, layout.y);
+    setTranslate(parts.find((child) => child.localName === 'text') || null, layout.textX, layout.y);
+  });
+  const band = children.find((child) => child.getAttribute('data-gbdraw-role') === 'conservation-identity-band');
+  const bandParts = Array.from(band?.children || []);
+  setTranslate(bandParts.find((child) => child.localName === 'path') || null, 0, rings.bandY);
+  const [label, minLabel, maxLabel] = bandParts.filter((child) => child.localName === 'text');
+  setTranslate(label || null, rings.bandLabelX, rings.bandY);
+  setTranslate(minLabel || null, rings.minLabelX, rings.scaleLabelY);
+  setTranslate(maxLabel || null, rings.maxLabelX, rings.scaleLabelY);
 };
 
 // Python's Legend, laid out in the Web (zero shift): the rows the Legend holds
@@ -298,10 +341,9 @@ export const createLegendLayoutActions = ({ readRegisteredFontFaces }) => {
       .find((child) => child.localName === 'path' && child.getAttribute('fill') === 'none');
     outline?.setAttribute('d', `M 0,${-0.5 * rect} L ${layout.width},${-0.5 * rect} `
       + `L ${layout.width},${layout.height - 0.5 * rect} L 0,${layout.height - 0.5 * rect} z`);
-    if (gradientGroup && layout.gradient) {
-      setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
-      placeGradient(gradientGroup, circularGradientPlacement(layout.gradient));
-    }
+    if (gradientGroup && (layout.rings || layout.gradient)) setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
+    if (gradientGroup && layout.rings) placeRings(gradientGroup, layout.rings);
+    else if (gradientGroup && layout.gradient) placeGradient(gradientGroup, circularGradientPlacement(layout.gradient));
     return circularLegendLocalBounds(layout, rect);
   };
 

@@ -473,6 +473,8 @@ export const legendRowName = (row) => /** @type {LegendRowName} */ (
 );
 /** @param {Element} row @returns {LegendSwatchIdentity} */
 export const legendRowSwatch = (row) => {
+  const trackIndex = row.getAttribute('data-track-index');
+  if (trackIndex !== null) return legendSwatch({ type: 'ring', trackIndex: Number(trackIndex) });
   const stops = Array.from(row.querySelectorAll('stop'));
   if (stops.length > 1) {
     return legendSwatch({ type: 'gradient', minColor: stops[0].getAttribute('stop-color'), maxColor: stops[stops.length - 1].getAttribute('stop-color') });

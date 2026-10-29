@@ -25,9 +25,11 @@ from svgwrite.container import Group
 from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator, CircularCanvasGeometry
 from ...analysis.conservation import (
+    CONSERVATION_MIXED_BAND_COLOR,
     ConservationLegendSource,
     ConservationTrack,
     conservation_legend_sources,
+    conservation_slot_track,
     conservation_track_gradient_colors,
 )
 from ...analysis.depth_tracks import (
@@ -1765,11 +1767,7 @@ def _slot_conservation_track(
 ) -> ConservationTrack | None:
     """The conservation track a conservation slot draws."""
 
-    track_index = int(resolved_slot.params.get("track_index", 0) or 0)
-    return next(
-        (track for track in (conservation_tracks or ()) if int(track.track_index) == track_index),
-        None,
-    )
+    return conservation_slot_track(resolved_slot.params, conservation_tracks)
 
 
 class _TickOptions(TypedDict):
@@ -1885,32 +1883,42 @@ def _sync_legend_table_for_circular_slots(
             nt = slot_dinucleotide(slot.params, default_nt)
             out.add_numeric_source(slot_legend_label(slot, f"{nt} skew"), skew.for_skew_slot(slot, nt))
     if conservation_legend:
-        default_min_color, default_max_color = conservation_colors
-        if any(track.track_color for track in conservation_legend):
-            for conservation_track in conservation_legend:
-                min_color, max_color = conservation_track_gradient_colors(
-                    conservation_track.track_color,
-                    default_min_color=default_min_color,
-                    default_max_color=default_max_color,
-                )
-                out.add_source(conservation_track.track_label, {
-                    "type": "gradient",
-                    "min_color": min_color,
-                    "max_color": max_color,
-                    "stroke": "none",
-                    "width": 0,
-                    "min_value": float(conservation_min_identity or 0.0),
-                })
-        else:
-            out.add_source("Conservation identity", {
-                "type": "gradient",
-                "min_color": default_min_color,
-                "max_color": default_max_color,
-                "stroke": "none",
-                "width": 0,
-                "min_value": float(conservation_min_identity or 0.0),
-            })
+        _add_conservation_ring_rows(out, conservation_legend, conservation_colors, conservation_min_identity)
     return out
+
+
+def _add_conservation_ring_rows(
+    out: LegendTable,
+    rings: Sequence[ConservationLegendSource],
+    default_colors: tuple[str, str],
+    min_identity: float | None,
+) -> None:
+    """One row per drawn ring, outermost first, with the identity band they share (PD-OI-110).
+
+    A row shows its ring's color (no color = the configured max) only when the drawn rings differ in color; the
+    band is then the neutral grey gradient, else the first drawn ring's gradient.
+    """
+
+    def gradient(color: str | None) -> tuple[str, str]:
+        return conservation_track_gradient_colors(
+            color, default_min_color=default_colors[0], default_max_color=default_colors[1]
+        )
+
+    colors = [gradient(ring.track_color)[1] for ring in rings]
+    one_color = len(set(colors)) == 1
+    band_min, band_max = gradient(rings[0].track_color if one_color else CONSERVATION_MIXED_BAND_COLOR)
+    for ring, color in zip(rings, colors):
+        out.add_source(ring.track_label, {
+            "type": "ring",
+            "source_index": ring.source_index,
+            "track_index": ring.track_index,
+            "fill": None if one_color else color,
+            "stroke": "none",
+            "width": 0,
+            "min_color": band_min,
+            "max_color": band_max,
+            "min_value": float(min_identity or 0.0),
+        })
 
 
 def _draw_resolved_circular_slot(

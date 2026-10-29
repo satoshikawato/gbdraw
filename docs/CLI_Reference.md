@@ -134,6 +134,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
+              [--conservation_color_scheme {same,ten,per_five}]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
               [--losat {losatn,tlosatx,losatp}]
@@ -352,7 +353,15 @@ options:
                         index.
   --conservation_colors COLOR [COLOR ...]
                         Colors for similarity rings, aligned by logical source
-                        index. Accepts SVG color names or #RRGGBB.
+                        index. Accepts SVG color names, #RRGGBB, or auto (the
+                        ring takes the --conservation_color_scheme color of
+                        its position).
+  --conservation_color_scheme {same,ten,per_five}
+                        Colors of the similarity rings without a color of
+                        their own, by drawn position from the outermost ring:
+                        same (every ring the default color), ten (ten colors,
+                        repeating from ring 11), or per_five (one color per
+                        five rings, repeating from ring 31) (default: same).
   --conservation_ring_width CONSERVATION_RING_WIDTH
                         Similarity ring width for circular mode (in px; must
                         be > 0).
@@ -907,7 +916,7 @@ Allowed columns:
 | `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. |
 | `losat_gencode` | optional | TLOSATX genetic code of the ring with `--losat tlosatx` (empty cells use 1); rejected with `--losat losatn`, unused without `--losat`. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
-| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
+| `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list; an empty cell takes the `--conservation_color_scheme` color. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
 
@@ -918,6 +927,31 @@ blast	label	color
 ref_a.blast.tsv	Reference A	#E15759
 ref_b.blast.tsv	Reference B	#4E79A7
 ```
+
+### Similarity-ring colors and legend
+
+`--conservation_color_scheme` colors every ring without a color of its own,
+by its position among the drawn rings counted from the outermost ring:
+
+| Value | Ring colors |
+| --- | --- |
+| `same` (default) | Every ring `#8b9cc1`, the configured default (`objects.conservation.max_color`). |
+| `ten` | `#6e91b7 #f4a251 #8fc4c0 #e67577 #c6bebb #77b26f #be92b2 #f0d369 #ae8e7c #ffafb7`, repeating from ring 11. |
+| `per_five` | One color per five rings: `#8b9cc1 #c88890 #62ad9a #bf89ab #7caa7e #bc9464`, repeating from ring 31. |
+
+A color given with `--conservation_colors` or in the `color` column of
+`--conservation_table` wins under every scheme. Write `auto` in
+`--conservation_colors` (an empty cell in the table) for a ring that takes the
+scheme color. A ring with a color draws its identity from a light tint of that
+color to the color; a ring without one (`same`) draws the default gradient
+(`objects.conservation.min_color` to `max_color`). The config key is
+`objects.conservation.color_scheme`.
+
+The legend lists the drawn rings by name from `outer` to `inner`, then one
+`identity` band with the minimum identity and `100%`. When the drawn rings
+differ in color, each name shows a swatch of its ring color and the band is
+grey; otherwise the names have no swatch and the band is the outermost ring's
+gradient. A ring without a color counts as `objects.conservation.max_color`.
 
 The single-track geometry options `--feature_width`, `--depth_width`,
 `--gc_content_width`, `--gc_content_radius`, `--gc_skew_width`, and

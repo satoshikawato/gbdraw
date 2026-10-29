@@ -38,9 +38,9 @@ python -m playwright install chromium
 
 The authoritative environment is:
 
-- Python Playwright 1.61.0
-- Node Playwright 1.61.1 (the paired JavaScript test environment)
-- Chrome for Testing 149.0.7827.55, Playwright Chromium revision v1228
+- Python Playwright 1.64.1
+- Node Playwright 1.64.1 (the paired JavaScript test environment)
+- Chrome for Testing 156.0.8078.4, Playwright Chromium revision v1248
 - 1440 × 900 viewport at device scale 1
 - `en-US`, UTC, light color scheme, reduced motion, and vendored fonts
 

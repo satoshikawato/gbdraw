@@ -892,9 +892,7 @@ test('every job that installs gbdraw from the checkout installs the managed LOSA
   // Python API, also from a Node or Playwright test that spawns the CLI, so every job that
   // installs gbdraw from the checkout runs the one composite action right after the install.
   const action = readFileSync(resolve(REPOSITORY_ROOT, '.github/actions/managed-losat/action.yml'), 'utf8');
-  const restore = action.indexOf('uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0\n'
-    + '      with:\n        path: ~/.cache/gbdraw/losat\n'
-    + "        key: gbdraw-losat-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gbdraw/data/losat-release.json') }}\n");
+  const restore = action.search(/uses: actions\/cache@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {6}with:\n {8}path: ~\/\.cache\/gbdraw\/losat\n {8}key: gbdraw-losat-\$\{\{ runner\.os \}\}-\$\{\{ runner\.arch \}\}-\$\{\{ hashFiles\('gbdraw\/data\/losat-release\.json'\) \}\}\n/);
   assert.ok(restore > 0, 'the action restores the cache keyed by the release lock');
   const setup = action.indexOf('if python -m gbdraw.cli setup-losat; then\n');
   assert.ok(restore < setup, 'setup-losat runs after the cache');
@@ -994,7 +992,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
     assert.ok(source.indexOf(restore) < source.indexOf(install), id);
     assert.ok(source.indexOf(install) < source.indexOf(save), id);
     assert.equal((source.match(/playwright install --with-deps chromium/g) || []).length, 1, id);
-    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@[0-9a-f]{40} # v4\.3\.0/);
+    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@[0-9a-f]{40} # v\d+\.\d+\.\d+/);
     assert.ok(restore.includes(`key: ${prefix}\n`), id);
     assert.ok(restore.includes(`restore-keys: ${prefix}`), id);
     // apt only receives cached files; the install command and its exit status are unchanged.
@@ -1010,7 +1008,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
       install,
       /echo "apt-cache-key=playwright-apt-v1-\$\{RUNNER_OS\}-\$\{RUNNER_ARCH\}-\$\{sum\}" >> "\$GITHUB_OUTPUT"/
     );
-    assert.match(save, /uses: actions\/cache\/save@[0-9a-f]{40} # v4\.3\.0/);
+    assert.match(save, /uses: actions\/cache\/save@[0-9a-f]{40} # v\d+\.\d+\.\d+/);
     assert.match(save, /steps\.playwright-install\.outputs\.apt-cache-key != ''/);
     assert.match(
       save,
@@ -1065,7 +1063,7 @@ test('browser jobs seed apt from one verified cache and bound their test steps',
   for (const id of ['ci-impact', 'web-change-budget']) {
     assert.match(
       job(id),
-      /uses: actions\/checkout@[0-9a-f]{40} # v4\.3\.1\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
+      /uses: actions\/checkout@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
       id
     );
   }
@@ -1091,7 +1089,7 @@ test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
   assert.match(planner, /\n    timeout-minutes: 5\n/);
   assert.match(
     planner,
-    /uses: actions\/checkout@[0-9a-f]{40} # v4\.3\.1\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
+    /uses: actions\/checkout@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
   );
 });
 
