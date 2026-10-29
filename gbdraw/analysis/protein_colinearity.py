@@ -3362,7 +3362,7 @@ def extract_cds_proteins(
                     feature_hash_parts=hash_parts,
                     location_operator=str(getattr(feature.location, "operator", None) or ""),
                     source_feature_position=feature_index,
-                    origin_arc=location_origin_arc(view_hash_parts),
+                    origin_arc=location_origin_arc(view_hash_parts, len(record)),
                     record_length=len(record),
                 )
             )

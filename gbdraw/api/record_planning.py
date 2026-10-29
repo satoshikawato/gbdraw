@@ -17,6 +17,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityResult,
 )
+from gbdraw.analysis.origin_arcs import location_center
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
     OrthogroupMember,
@@ -725,11 +726,7 @@ def _project_alignment_anchor_center(
     displayed_length: int,
 ) -> float:
     feature = _alignment_source_feature(anchor, provenance)
-    center = (
-        min(part[0] for part in feature.location_parts)
-        + max(part[1] for part in feature.location_parts)
-    ) / 2.0
-    projected = transform.source_position_to_display_offset(center)
+    projected = _source_feature_display_center(feature, transform)
     if not 0.0 <= projected <= float(displayed_length):
         raise ValidationError(
             "Similarity alignment anchor is outside the current crop for record "
@@ -737,6 +734,15 @@ def _project_alignment_anchor_center(
         )
     return projected
 
+
+def _source_feature_display_center(
+    feature: SourceFeatureIdentity, transform: RecordDisplayTransform,
+) -> float:
+    """The display offset of a source feature's middle, the one alignment centre."""
+
+    return transform.source_position_to_display_offset(
+        location_center(feature.location_parts, transform.length)
+    )
 
 
 def _alignment_source_feature(
@@ -898,13 +904,7 @@ def _similarity_candidate_from_orthogroup_member(
     )
     display_center: float | None = None
     if feature is not None:
-        source_center = (
-            min(part[0] for part in feature.location_parts)
-            + max(part[1] for part in feature.location_parts)
-        ) / 2.0
-        projected = collection.transforms[
-            member.record_index
-        ].source_position_to_display_offset(source_center)
+        projected = _source_feature_display_center(feature, collection.transforms[member.record_index])
         if 0.0 <= projected <= float(len(collection.records[member.record_index])):
             display_center = projected
     return SimilarityAlignmentCandidate(

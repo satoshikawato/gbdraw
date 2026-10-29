@@ -29,13 +29,18 @@ class LinkSide(NamedTuple):
     record_length: int
 
 
-def location_origin_arc(parts: Sequence[tuple[int, int, int | None]]) -> Arc | None:
+def location_origin_arc(
+    parts: Sequence[tuple[int, int, int | None]], record_length: int,
+) -> Arc | None:
     """The arc of a location whose parts, in biological order, cross the origin.
 
-    ``parts`` are 0-based half-open ``(start, end, strand)`` triples. A
-    location crosses the origin when its parts all share one strand and step
-    back over the origin exactly once (``join(L-x..L,1..y)`` and its
-    complement). Any other location returns None and keeps its linear extent.
+    ``parts`` are 0-based half-open ``(start, end, strand)`` triples on a
+    record of ``record_length`` bases. A location crosses the origin when its
+    parts all share one strand and step back exactly once, from a part that
+    ends at the record's end to a part that starts at 0 (``join(L-x..L,1..y)``
+    and its complement). Any other location, such as a minus-strand location
+    listed in ascending order or a trans-spliced one, returns None and keeps
+    its linear extent.
     """
 
     if len(parts) < 2:
@@ -46,18 +51,35 @@ def location_origin_arc(parts: Sequence[tuple[int, int, int | None]]) -> Arc | N
     (strand,) = strands
     if strand not in (-1, 1):
         return None
-    steps_back = sum(
-        1
-        for previous, current in zip(parts, parts[1:])
-        if (int(current[0]) - int(previous[0])) * strand < 0
-    )
-    if steps_back != 1:
+    # Genomic (5' to 3' on the plus strand) order: a step back there is a wrap.
+    ordered = list(parts) if strand == 1 else list(reversed(parts))
+    steps = [
+        (previous, current)
+        for previous, current in zip(ordered, ordered[1:])
+        if int(current[0]) < int(previous[0])
+    ]
+    if len(steps) != 1:
         return None
-    if strand == 1:
-        start, end = int(parts[0][0]), int(parts[-1][1])
-    else:
-        start, end = int(parts[-1][0]), int(parts[0][1])
+    ((last, first),) = steps
+    if int(last[1]) != int(record_length) or int(first[0]) != 0:
+        return None
+    start, end = int(ordered[0][0]), int(ordered[-1][1])
     return (start, end) if start > end else None
+
+
+def location_center(parts: Sequence[tuple[int, int, int | None]], record_length: int) -> float:
+    """The source boundary at the middle of a location.
+
+    A location across the origin centres on the middle of its arc
+    (:func:`location_origin_arc`), wrapped into ``[0, record_length]``; any
+    other location centres on the middle of its linear extent.
+    """
+
+    arc = location_origin_arc(parts, record_length)
+    if arc is None:
+        return (min(part[0] for part in parts) + max(part[1] for part in parts)) / 2.0
+    center = (arc[0] + arc[1] + int(record_length)) / 2.0
+    return center - record_length if center > record_length else center
 
 
 def cover_arcs(arcs: Sequence[Arc]) -> Arc | None:
@@ -182,6 +204,7 @@ __all__ = [
     "arc_link_endpoints",
     "cover_arcs",
     "directed_arc",
+    "location_center",
     "location_origin_arc",
     "rows_inside_records",
     "split_link_at_origin",
