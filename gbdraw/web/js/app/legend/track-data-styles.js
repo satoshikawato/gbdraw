@@ -124,9 +124,13 @@ export const buildLegendStyleRetirement = ({ drawing, namedCaptions,
 /**
  * The Legend port of every drawing: `retire(drawing, change)` runs a track data
  * change of that drawing and retires the Legend styles of the captions its
- * data stops naming, measured on that drawing (`namedCaptions(drawing)`,
- * `hiddenRows(drawing)`). The relist and the projection read the displayed
- * Result, so only the shown drawing, found by its ID, runs them; a replacement
+ * data stops naming: `namedCaptions(drawing)` reads that drawing's form, and
+ * `hiddenRows(drawing)` reads that drawing's form flags (Show Depth and the
+ * like) over the rows displayed in the shown Result, so for a drawing not
+ * shown only the flags are its own. A port write to a drawing not shown never
+ * changes them (D-15-183), so its hidden set stays unchanged. The relist and
+ * the projection read the displayed Result, so only the shown drawing, found
+ * by its ID, runs them; a replacement
  * that reaches a drawing not shown retires its paint the same way (review S2).
  * @template {RetirementDrawing} D
  * @param {{
