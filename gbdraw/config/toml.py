@@ -13,7 +13,13 @@ else:
     import tomli as tomllib
 
 from importlib import resources
-from importlib.abc import Traversable
+
+# Traversable lives in importlib.resources.abc since 3.11; Python 3.14 removed importlib.abc.Traversable
+if sys.version_info >= (3, 11):
+    from importlib.resources.abc import Traversable
+else:
+    from importlib.abc import Traversable
+
 from typing import TYPE_CHECKING, cast
 
 from ..exceptions import ConfigError
