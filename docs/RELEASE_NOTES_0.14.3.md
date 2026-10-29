@@ -53,9 +53,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - A color rule edit in the Web app, made while a batch Result is shown on
   which the rule colors no feature, keeps that Result's Legend row of the
   rule's name and color (for example the CDS row after **Use the "CDS"
-  Legend color** on a CDS of the other Result). The same holds on one Result when the rule
-  colors only features that Feature visibility hides. Before, the row
-  disappeared until the next **Generate Diagram**.
+  Legend color** on a CDS of the other Result). The same holds on one Result
+  when the rule colors only features that Feature visibility hides. Before,
+  the row disappeared until the next **Generate Diagram**.
 - A popup Legend name in the Web app on the only feature of a color
   rule's Legend row keeps the row in its place at **Generate Diagram**, as
   the live Legend shows it: when the new rule only gives that rule's
@@ -103,8 +103,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   and searched and that no fix makes fit get the same ways to make room, in the
   **Labels do not fit** dialog and on the command line.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
-- **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
-  write no file, and print one error that names the formats and the install
+- **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status
+  1, write no file, and print one error that names the formats and the install
   command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not
   installed. Before, they wrote only the SVG with a warning and exited 0.
 - **LOSAT and BLAST+.** The LOSAT development build tracked in the source tree
