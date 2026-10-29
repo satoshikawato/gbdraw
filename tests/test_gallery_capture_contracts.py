@@ -936,3 +936,29 @@ def test_vnig_palette_select_reads_the_app_palette_list() -> None:
 
     assert len(specs) == 1
     assert "options" not in specs[0]
+
+
+@pytest.mark.parametrize(
+    "example_id",
+    [
+        "BGC0000708-BGC0000713",
+        "hepatoplasmataceae_collinear",
+        "hepatoplasmataceae_orthogroup",
+        "majanivirus_orthogroup",
+    ],
+)
+def test_linear_drawing_bar_crop_is_taken_from_a_new_page_after_the_plus_linear_click(
+    example_id: str,
+) -> None:
+    sample = load_ready_examples(example_id)[0]
+    tutorial = _load_tutorial(sample)
+    captures = [
+        operation["capture"]
+        for _, operation in iter_operation_contexts(sample, tutorial)
+        if operation.get("media", {}).get("src", "").endswith("manual-01-01-linear-mode.webp")
+    ]
+    assert len(captures) == 1
+    capture = captures[0]
+    assert capture["freshPage"] is True
+    assert "session" not in capture and "replayThrough" not in capture
+    assert capture["actions"][0]["selector"].endswith('[data-drawing-offer="linear"]')

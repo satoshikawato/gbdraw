@@ -38,7 +38,7 @@
           "genericMedia": true,
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
-            "alt": "Drawing bar with the Linear drawing tab selected.",
+            "alt": "Drawing bar with the Circular and Linear tabs; the Linear drawing tab is selected.",
             "caption": "After clicking + Linear, the Linear drawing tab is selected."
           }
         }

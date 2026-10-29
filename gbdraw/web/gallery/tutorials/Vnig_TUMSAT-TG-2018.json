@@ -35,7 +35,7 @@
           "capture": {
             "source": "webapp",
             "selector": ".drawing-bar-tabs",
-            "cropPadding": 14,
+            "cropPadding": 4,
             "actions": [
               {
                 "type": "click",

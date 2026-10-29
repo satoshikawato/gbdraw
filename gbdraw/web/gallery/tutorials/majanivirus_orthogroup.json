@@ -98,15 +98,19 @@
         {
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Drawing bar with the Linear drawing tab selected.",
+            "alt": "Drawing bar with the Circular and Linear tabs; the Linear drawing tab is selected.",
             "caption": "After clicking + Linear, the Linear drawing tab is selected."
           },
           "capture": {
             "source": "webapp",
             "selector": ".drawing-bar-tabs",
-            "cropPadding": 14,
-            "replayThrough": 1,
+            "cropPadding": 4,
+            "freshPage": true,
             "actions": [
+              {
+                "type": "click",
+                "selector": ".drawing-bar [role=\"tab\"][data-drawing-offer=\"linear\"]"
+              },
               {
                 "type": "waitForFunction",
                 "script": "() => window.__GBDRAW_APP__?.mode === 'linear'"
