@@ -217,6 +217,51 @@ def test_a_rename_of_a_whole_locus_tag_row_appends_its_hash_rule_as_before():
     assert [table[w]["cap"] if w >= 0 else None for w in _winners(features, table)] == ["alpha", "gamma", None]
 
 
+@pytest.mark.parametrize(("name", "beta", "beta_first", "products", "group", "row", "winners"), [
+    # OV-2192 (Owner 2026-10-29, D-19 a): the Web says the edit takes the
+    # features' Legend row whole (scope "row"); the new rows go at the place of
+    # the rule that colored them, and the old rule stays for what it still colors.
+    # A whole locus_tag row: the target's hash row.
+    ("locus_tag row", ("locus_tag", "^T_1$"), True, ("x", "x"), [0, 1, "hash"], ["hash", 0, 1],
+     ["alpha", "gamma", None]),
+    # A whole locus_tag row whose feature has a product of its own: the new condition.
+    ("locus_tag row, own product", ("locus_tag", "^T_1$"), False, ("unique", "x"), ["product", 0, 1],
+     [0, "product", 1], ["alpha", "gamma", None]),
+    # A product rule that also colors a feature the Web does not draw (T_2,
+    # hidden): the Web takes the row whole; Python cannot tell it from a split
+    # (scope "group"), where T_1 leaves the row.
+    ("rule that also colors a hidden feature", ("product", "^dup alpha$"), False, ("dup alpha", "dup alpha"),
+     [0, 1, "hash"], [0, "hash", 1], ["alpha", "gamma", "beta"]),
+])
+@pytest.mark.parametrize("scope", ["group", "row"])
+def test_a_row_taken_whole_puts_its_new_rows_in_the_row_place(name, beta, beta_first, products, group, row, winners,
+                                                              scope):
+    alpha = dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha")
+    beta_rule = dict(feat="CDS", qual=beta[0], val=beta[1], color="#2a9d8f", cap="beta")
+    current = [beta_rule, alpha] if beta_first else [alpha, beta_rule]
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product=products[0], locus_tag="T_1"),
+            _cds(2, product=products[1], locus_tag="T_2")]
+    features = [_payload(f, "rec") for f in seqs]
+    answer = _synthesize(features, [1], rules=current, color="#2a9d8f", caption="gamma", scope=scope)
+    shape = [entry if isinstance(entry, int) else entry["qual"] for entry in answer["table"]]
+    assert shape == (group if scope == "group" else row), name
+    # The old rule stays in the table for every feature it still colors.
+    table = _next_table(answer, current)
+    assert beta_rule in table, name
+    assert [table[w]["cap"] if w >= 0 else None for w in _winners(features, table)] == winners, name
+
+
+@pytest.mark.parametrize("scope", ["group", "row"])
+def test_a_same_pattern_rename_is_the_same_for_a_row_taken_whole(scope):
+    # The same-pattern re-caption (OV-2189) does not depend on the scope.
+    seqs = [_cds(0, product="alpha protein"), _cds(1, gene="dupA", product="dup alpha"), _cds(2, product="other")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha"),
+               dict(feat="CDS", qual="gene", val="^dupA$", color="#2a9d8f", cap="beta")]
+    answer = _synthesize(features, [1], rules=current, color="#2a9d8f", caption="gamma", scope=scope)
+    assert answer["table"] == [0, {**current[1], "cap": "gamma"}]
+
+
 @pytest.mark.parametrize("beta_first", [True, False], ids=["beta-row-first", "alpha-row-first"])
 @pytest.mark.parametrize(("qualifier", "value", "labels", "gene_first"), [
     # OV-2191: a gene rule row; the feature also has a product, which hits the

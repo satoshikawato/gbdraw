@@ -5,7 +5,7 @@
 
 /**
  * @typedef {object} SynthesizeColorRulesRequest
- * @property {'group' | 'features' | 'reset'} scope
+ * @property {'group' | 'row' | 'features' | 'reset'} scope
  * @property {RuleFeaturePayload[]} features
  * @property {number[]} selected
  * @property {string[][]} labels

@@ -828,18 +828,20 @@ export const createFeatureColorActions = ({
     const features = (request.features || []).filter(Boolean);
     const sourceRules = getLegendRowRules(request.sourceKey);
     if (sourceRules.length || features.length) {
+      const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
+      // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
+      // and every record stored under its key. The one decision that the
+      // edit takes the row whole places the live row and, as the "row"
+      // scope, Python's new rules (OV-2192, Owner 2026-10-29).
+      const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
       /** @type {SpecificRuleBuild} */
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
-        : groupColorRules(features, color, caption, 'group');
-      const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
-      const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
+        : groupColorRules(features, color, caption, retireOld ? 'row' : 'group');
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
-        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
-        // and every record stored under its key; a row that joins another row
-        // keeps that row's place.
+        // A row that joins another row keeps that row's place.
         // Features that Keep both split off go right after the target row (D-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,

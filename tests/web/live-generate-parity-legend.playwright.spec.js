@@ -2020,3 +2020,29 @@ test('a popup Legend name on the only feature of a gene rule row keeps the row i
   expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a gene rule row' });
 });
+
+// OV-2192 (Owner 2026-10-29, D-19 a): the same edit on a locus_tag rule row
+// whose feature shares its product, so Python writes a hash rule for it. The
+// Web says the edit takes the row whole, and the hash rule goes at the place of
+// the locus_tag rule, which stays; Generate used to append it last.
+test('a popup Legend name on the only feature of a locus_tag rule row keeps the row in place, live = Generate (OV-2192)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, 'FL2', { legendName: 'gamma' });
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, val, cap, color }) => [qual, qual === 'hash' ? '<instance>' : val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['hash', '<instance>', 'gamma', '#2a9d8f'], ['locus_tag', '^FL2$', 'beta', '#2a9d8f'],
+      ['product', '^alpha protein$', 'alpha', '#e63946']],
+    undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['gamma', 'alpha', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a locus_tag rule row' });
+});

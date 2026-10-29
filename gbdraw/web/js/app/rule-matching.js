@@ -224,7 +224,8 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * One group color edit: the selected features, found in the catalog by their
  * rendered id (`svg_id`; a feature without one is not drawn and takes no rule),
  * the label texts each shows (aligned with `features`), and the color and
- * caption they take; `scope` "features" colors each feature by itself.
+ * caption they take; `scope` "features" colors each feature by itself, and "row"
+ * colors them as a group that takes their Legend row whole, in its place.
  * @typedef {object} GroupColorEdit
  * @property {SynthesizeColorRulesRequest['scope']} scope
  * @property {readonly (RuleMatchedFeature & { svg_id?: string | null })[]} features
