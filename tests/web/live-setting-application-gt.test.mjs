@@ -28,6 +28,7 @@ const { getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner } = 
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
 const { applyCircularSuppressControlsToSlots, createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
+const { createAnnotationSet } = await import('../../gbdraw/web/js/services/annotation-state.js');
 // The request projections a Generate runs (`canonicalRequestProjectionCount`).
 let projections = 0;
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: ({ name }) => { if (name === 'canonicalRequestProjectionCount') projections += 1; } };
@@ -888,6 +889,46 @@ test('M2 (review 2): while a show waits the Legend list lists no row of the trac
     const waits = assertListFollowsApply(hidden, 'circular', 'Depth show after a Load (waits)');
     assert.ok(!drawsKind(waits.renderRequest, 'depth'), 'the show waits');
     assert.equal(request.liveSettingNoteApplies(waits.renderRequest, K.DEPTH, drawing, inputs, waits.resources), false);
+    undoAll();
+  }
+});
+
+// CI round 3 (tobacco): a committed row that names a hidden track slot
+// (an Overlay tint row's Extend to slot or anchor) leaves with it when the
+// draft does not draw it either; while the draft draws it, the apply is
+// refused as Generate refuses it (TRACK_INVALID).
+const tintRow = () => ({ id: 'tint', renderer: 'annotations', enabled: true, side: 'overlay', z: -1,
+  params: { set_id: 'tint_set', anchor_slot: 'features', layer: 'underlay', to_slot: 'gc_content', marks: ['highlight'] } });
+// The annotation sets are the slice's array: the tint set replaces its items.
+const withTintSet = (drawing) => {
+  const sets = drawing.annotationSets;
+  const before = sets.splice(0, sets.length);
+  restore.push(() => sets.splice(0, sets.length, ...before));
+  sets.push(createAnnotationSet({ id: 'tint_set', annotations: [{ id: 'span', target: { kind: 'coordinateSpan', start: 1, end: 20 }, mark: 'highlight' }] }));
+};
+
+test('A tint row that extends to the GC content slot leaves with it when its own switch is off too', () => {
+  for (const loaded of [false, true]) {
+    const label = loaded ? 'after a Load' : 'after a Generate';
+    const drawing = circularStack({ depthSeries: 1, extra: [tintRow()] });
+    withTintSet(drawing);
+    const generated = generate('circular');
+    const committed = loaded ? loadOf(generated) : generated;
+    assert.ok(committed.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.id === 'tint'), `${label}: the tint is drawn`);
+    set(rowOf(drawing, 'circular', (row) => row.id === 'tint'), 'enabled', false);
+    set(rowOf(drawing, 'circular', (row) => row.id === 'gc_content'), 'enabled', false);
+    const hidden = withPending('circular', () => live(committed, 'circular'));
+    const ids = hidden.next.renderRequest.diagramOptions.tracks.circularTrackSlots.map((slot) => slot.id);
+    assert.ok(!ids.includes('gc_content') && !ids.includes('tint'), `${label}: ${ids}`);
+    assertLiveEqualsGenerate(hidden.next, 'circular', hidden.revert, `${label}: GC row and tint off`);
+    undoAll();
+    // The tint still on: Generate refuses the stack, and so does the apply.
+    const again = circularStack({ depthSeries: 1, extra: [tintRow()] });
+    withTintSet(again);
+    const base = generate('circular');
+    set(rowOf(again, 'circular', (row) => row.id === 'gc_content'), 'enabled', false);
+    assert.throws(() => generate('circular', { keepTrackParts: false }), /TRACK_INVALID|OVERLAY|Extend|missing/i, 'Generate refuses');
+    assert.throws(() => project(loaded ? loadOf(base) : base, 'circular'), /TRACK_INVALID|INPUT_INVALID|OVERLAY/i, `${label}: the apply is refused`);
     undoAll();
   }
 });

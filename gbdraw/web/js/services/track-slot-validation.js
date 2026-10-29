@@ -312,6 +312,15 @@ const OVERLAY_SLOT_REFERENCES = Object.freeze([
     ineligible: msg("Extend to slot '{target}' has no drawable band.")
   } }
 ]);
+/**
+ * The slots a slot's params name as its Overlay anchor or Extend to slot
+ * (`OVERLAY_SLOT_REFERENCES`), each with its key.
+ * @param {unknown} params @returns {{ key: OverlaySlotReference, id: string }[]}
+ */
+export const overlaySlotReferences = (params) => {
+  const record = params && typeof params === 'object' ? /** @type {Record<string, unknown>} */ (params) : {};
+  return OVERLAY_SLOT_REFERENCES.map(({ key }) => ({ key, id: String(record[key] ?? '').trim() })).filter(({ id }) => id);
+};
 /** The params only an Overlay annotation slot keeps: leaving Overlay drops them. */
 export const OVERLAY_ANNOTATION_PARAMS = Object.freeze(['anchor_slot', 'to_slot', 'cover_anchor']);
 

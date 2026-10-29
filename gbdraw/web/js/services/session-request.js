@@ -98,10 +98,11 @@ import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
   emittedCustomTrackAxisIndex,
+  overlaySlotReferences,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from './track-slot-validation.js';
-/** @import { CustomTrackPlan, CustomTrackPlanInput } from './track-slot-validation.js' */
+/** @import { CustomTrackPlan, CustomTrackPlanInput, OverlaySlotReference } from './track-slot-validation.js' */
 import {
   annotationOptionsPayload, createDefaultAnnotationStyle, draftAnnotationSetsOfRequest, normalizeAnnotationSets
 } from './annotation-state.js';
@@ -2085,6 +2086,20 @@ const trackPlanProjection = (request, drawing, context) => {
       if (draftDrawsDepth('circular', { form: drawing.form, adv: drawing.adv }) && !present.some((slot) => slot.renderer === 'depth')) complete = false;
     }
     if ([...committedIds].some((id) => !baseIds.has(id)) && !baseIsOther) complete = false;
+    // A row that names a track slot the apply leaves out (an Overlay row's
+    // anchor or Extend to slot) leaves with it while the draft does not draw
+    // that row either; one the draft draws is refused, as Generate refuses it.
+    const left = new Set(base.slots.filter((slot) => trackKindOf(slot.renderer)).map((slot) => slot.id));
+    present.forEach((slot) => left.delete(slot.id));
+    const draftRows = /** @type {readonly ({ id?: unknown, enabled?: unknown } | null)[]} */ (
+      draftStack && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+    const unnamed = present.filter((slot) => {
+      const named = slot.refs.find((ref) => left.has(ref.id));
+      if (!named) return true;
+      if (!draftRows.some((row) => row && String(row.id) === slot.id && row.enabled !== false)) return false;
+      throw diagnosticError('TRACK_INVALID', { reason: named.key === 'to_slot' ? 'OVERLAY_SPAN' : 'OVERLAY_ANCHOR', field: named.key });
+    });
+    present.splice(0, present.length, ...unnamed);
     slots = present.map((slot) => slot.payload);
     const presentIds = new Set(present.map((slot) => slot.id));
     // A null Axis index (a Python-written request) stays null: each slot keeps its own side.
@@ -3880,7 +3895,8 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  * a Python API request states), its id, renderer and own dinucleotide as the
  * slot parser reads the entry, and whether it lies before the Axis.
  * @typedef {{ readonly id: string, readonly payload: TrackSlotEntry, readonly renderer: string,
- *   readonly nt: unknown, readonly before: boolean }} KeptSlot
+ *   readonly nt: unknown, readonly before: boolean,
+ *   readonly refs: readonly { readonly key: OverlaySlotReference, readonly id: string }[] }} KeptSlot
  */
 /** @typedef {string | CanonicalCircularTrackSlot | CanonicalLinearTrackSlot} TrackSlotEntry */
 /**
@@ -3953,7 +3969,8 @@ const keptPlanOf = (entries, read, axisIndex) => {
   const axis = Number(axisIndex);
   return {
     slots: entries ? entries.map((payload, index) => ({
-      id: String(read[index].id), payload, renderer: String(read[index].renderer), nt: read[index].params?.nt, before: index < axis
+      id: String(read[index].id), payload, renderer: String(read[index].renderer), nt: read[index].params?.nt, before: index < axis,
+      refs: overlaySlotReferences(read[index].params)
     })) : null,
     axisNull: axisIndex === null || axisIndex === undefined
   };
