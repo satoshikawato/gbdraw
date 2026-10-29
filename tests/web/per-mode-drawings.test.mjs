@@ -396,7 +396,9 @@ test('every slice writer, install, and reset changes its own drawing only (M6 is
     functions.filter((key) => NOT_WRITERS.has(key)).forEach((key) => listed.add(key));
   }
   assert.deepEqual([...NOT_WRITERS].filter((key) => !listed.has(key)), [], 'each listed non-writer is a slice export');
-  assert.deepEqual(SLICE_READERS.filter((key) => key.includes('.')).sort(), captures.sort(),
+  // Every existing slice's capture is listed; INPUTS_SLICE.capture is listed ahead of multi-drawing B (D-15-184),
+  // and the test-only PR after B restores the exact match.
+  assert.deepEqual(captures.filter((key) => !SLICE_READERS.includes(key)), [],
     'each slice\'s capture is listed under the name its module exports the slice by');
   const saved = Object.fromEntries(MODES.map((mode) => [mode, Object.fromEntries(Object.entries(DRAWING_SLICES)
     .map(([name, slice]) => [name, slice.capture(modeDrawing(state, mode).slices[name])]))]));
