@@ -18,19 +18,34 @@
   "manualSteps": [
     {
       "title": "Switch to Circular mode",
-      "body": "Open gbdraw.app and choose Circular before adding the GenBank file.",
+      "body": "Open gbdraw.app and check that the Circular drawing is shown before adding the GenBank file.",
       "replay": [
         {
           "type": "click",
-          "selector": "role=button[name='Circular's]"
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
         }
       ],
       "operations": [
         {
           "media": {
             "src": "./media/Vnig_TUMSAT-TG-2018/manual-01-01-circular-mode.webp",
-            "alt": "Circular mode selected in the web app header.",
-            "caption": "Select Circular."
+            "alt": "Drawing bar with the Circular drawing tab selected and the + Linear tab beside it.",
+            "caption": "The Circular drawing is shown when the app opens."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": ".drawing-bar-tabs",
+            "cropPadding": 14,
+            "actions": [
+              {
+                "type": "click",
+                "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"circular\"]"
+              },
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.mode === 'circular'"
+              }
+            ]
           }
         }
       ]

@@ -87,13 +87,31 @@
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
-      "body": "Open gbdraw.app and select Linear mode before adding the viral GenBank records.",
+      "body": "Open gbdraw.app and click + Linear before adding the viral GenBank records.",
+      "replay": [
+        {
+          "type": "click",
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"linear\"]"
+        }
+      ],
       "operations": [
         {
           "media": {
             "src": "./media/majanivirus_orthogroup/manual-01-01-linear-mode.webp",
-            "alt": "Mode selector with Linear selected.",
-            "caption": "Select Linear before adding the viral GenBank records."
+            "alt": "Drawing bar with the Linear drawing tab selected.",
+            "caption": "After clicking + Linear, the Linear drawing tab is selected."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": ".drawing-bar-tabs",
+            "cropPadding": 14,
+            "replayThrough": 1,
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.mode === 'linear'"
+              }
+            ]
           }
         }
       ]

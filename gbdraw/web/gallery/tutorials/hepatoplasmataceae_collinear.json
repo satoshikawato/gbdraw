@@ -46,19 +46,31 @@
   "manualSteps": [
     {
       "title": "Switch to Linear mode",
-      "body": "Open gbdraw.app and select Linear mode before adding inputs.",
+      "body": "Open gbdraw.app and click + Linear before adding inputs.",
       "replay": [
         {
           "type": "click",
-          "selector": "role=button[name='Linear's]"
+          "selector": ".drawing-bar [role=\"tab\"][data-drawing-id=\"linear\"]"
         }
       ],
       "operations": [
         {
           "media": {
             "src": "./media/hepatoplasmataceae_collinear/manual-01-01-linear-mode.webp",
-            "alt": "Mode selector with Linear selected.",
-            "caption": "Select Linear before adding inputs."
+            "alt": "Drawing bar with the Linear drawing tab selected.",
+            "caption": "After clicking + Linear, the Linear drawing tab is selected."
+          },
+          "capture": {
+            "source": "webapp",
+            "selector": ".drawing-bar-tabs",
+            "cropPadding": 14,
+            "replayThrough": 1,
+            "actions": [
+              {
+                "type": "waitForFunction",
+                "script": "() => window.__GBDRAW_APP__?.mode === 'linear'"
+              }
+            ]
           }
         }
       ]
