@@ -40,6 +40,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -7351,6 +7352,7 @@ export const createAppSetup = () => {
     processing,
     processingStatus,
     labelCapacityNotices,
+    labelCapacityNoticeText,
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
@@ -7362,6 +7364,7 @@ export const createAppSetup = () => {
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     labelFitDialog,
+    labelCapacityText,
     labelFitNotice,
     openLabelFitNotice,
     resolveLabelFitChoice,

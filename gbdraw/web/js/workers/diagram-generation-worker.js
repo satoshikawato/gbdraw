@@ -1227,10 +1227,10 @@ const runGeneration = async ({
       held?.revision ?? null,
       JSON.stringify(heldSegments.map(({ revision }) => revision)),
       preparedInputRetentionJson,
-      // CAPACITY-WARN: Python calls this with its sentence about labels that may not fit, before it places them;
-      // the page shows it while the render goes on. Pyodide passes the function as a JsProxy for the call.
-      (/** @type {unknown} */ sentence) => {
-        self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(sentence) });
+      // CAPACITY-WARN: Python calls this with the JSON text of labels that may not fit, before it places them;
+      // the page words it while the render goes on. Pyodide passes the function as a JsProxy for the call.
+      (/** @type {unknown} */ notice) => {
+        self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
       }
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');

@@ -4,6 +4,8 @@
 
 **件数**: 固有の問題 3 件（P2 3: OV-1985、OV-1987、OV-1988）。#1433 の review で同じ経路の OV-1986 を追加（再現せず）。どの run でも `Promotion audit / random-walk` だけが失敗し、その原因は run 40634318370 では OV-1985、run 40648501950 では OV-1987、run 40655413787 では OV-1988 である。修正は OV-1985 が #1433（`fix/ov1985-legend-stroke-caption`）、OV-1987 が #1438（`fix/ov1987-legend-stroke-leave`）、OV-1988 が #1441（`fix/ov1988-legend-fill-palette`）。
 
+追加の乱歩（dev `d08c1878e`、seed 20261101 から 20261108、fixture ごとに 30 step）で 3 件（P2 3: OV-2187、OV-2188、OV-2189）。8 seed のうち 4 seed が失敗し、すべて live と Generate の Legend の差。修正は 3 件とも #1445（`fix/rw-legend-parity-0143`）。OV-2189 は Owner の判断（2026-10-29、A）に従い、Python の rule 合成が、置き換える rule と同じ条件・同じ色で名前だけを変える rule をその rule の表の位置に書く形にした。3 件とも 0.14.2 からの回帰ではない。OV-2187 と OV-2189 は v0.14.2 で同じ seed を再生し、同じ step で失敗した（seed 20261101、20261108）。OV-2188 は v0.14.2 で再生しておらず、関係するコード（追加する行の複製元を選ぶ行）が v0.14.2 と同一であることから判断した。
+
 ## 方法と表記
 
 - 手順は `docs/internal/WEB_PERIODIC_AUDIT.md` に従う。`random-walk` は seed 付きの乱歩（`tests/web/live-generate-random-walk.promotion.spec.js`）で、各 step で live 表示と Generate 結果を比べる。
@@ -45,10 +47,58 @@
 - OV-1988: 同じ spec に 1 件（base `6ea8b36ca` で失敗）と、`tests/web/palette-default-colors.test.mjs` に `draftLegendRowColors` と `draftLegendPanelColors` の 1 件（base で失敗）を追加した。乱歩の seed 40655413787 も修正後に成功する。work guard の行は変わらない。
 - work guard（`tests/web/helpers/live-work-allowlist.mjs` の `WORK_ALLOWLIST`）: setup が CDS 行に stroke を付けた後の fill を表示する 12 行（color rule commit、palette の変更、Apply to all、Save、Legend rename など）に `strokes` の stage を記録した。
 
+## 追加の乱歩（dev `d08c1878e`、30 step）
+
+| ジョブ | 結果 | 項目 |
+|---|---|---|
+| seed 20261101（fixture "Circular, two-Result batch" の step 8） | 失敗 | OV-2187 |
+| seed 20261102（fixture "Circular, one Result" の step 21） | 失敗 | OV-2188 |
+| seed 20261106（fixture "Circular, one Result" の step 12） | 失敗 | OV-2188 |
+| seed 20261108（fixture "Linear, one Result" の step 18 と 19） | 失敗 | OV-2189 |
+| seed 20261103、20261104、20261105、20261107 | 成功 | なし |
+
+| ID | 重大度 | 症状 | 原因 |
+|---|---|---|---|
+| OV-2187 | P2 | batch の 1 つ目の Result の CDS に feature popup の "Use existing color" で色を付ける（caption `CDS`、CDS の palette 色の rule）。この rule は 2 つ目の Result の feature を塗らないので、2 つ目の Result では Python は palette の `CDS` 行を描く。2 つ目の Result を表示したまま rule を編集すると（caption の再入力、色の変更）、live ではその `CDS` 行が消え、Generate では描かれる。1 つの Result でも、rule が Feature visibility で隠した feature だけを塗るときに同じことが起きる | rule commit が退かせる行（`candidateLegendIntents` in `app/feature-editor/rule-actions.js` の `previousIntents`）に、caption を持つ rule をすべて入れた。表示中の Result で描かれる feature を 1 つも塗らない rule も含めた。Legend の準備（`prepareFileLegendEntries` in `app/legend/entry-actions.js`）は、名前と色が一致する行を rule の行と見なすので、palette の `CDS` 行を退かせた。関係するコードは v0.14.2 と同一で、v0.14.2 でも同じ seed が同じ step で失敗する |
+| OV-2188 | P2 | Legend の並びを変えて GC content、GC skew、Depth のいずれかの行を先頭にした後（Sort、行の移動）、feature popup の Legend name や Legend の rename で rule の行を作ると、新しい行の枠線が live では無し（`none`）、Generate では block stroke の灰色（`#808080`）になる | rule の行をすぐ表示するとき、executor（`applyLegendOperations` in `services/svg-result-ingestion.js`）は表示中の並びで先頭の行を複製した。並びを変えると先頭は GC content の行（枠線なし）になる。Python は rule の行を block stroke で描き、Generate の executor は Python の並びの先頭（feature の行）を複製する。関係するコードは v0.14.2 と同一（v0.14.2 での再生はしていない） |
+| OV-2189 | P2 | product の rule 2 つ（`alpha`、`beta`）の後、`beta` 行の唯一の feature に feature popup で Legend name `gamma` を付けると、live では `gamma` が `beta` の位置に残り（OV-158）、Generate では先頭に描かれる。乱歩の Sort（step 12）は並びを変えておらず、関係しない | 色の編集の rule 表は Python が作り（OV-244）、この編集ではその feature の rule を表の先頭に置く。Python は rule の行を表の順に描く。live の commit は OV-158（Owner 2026-10-07: 名前を変えた行はその位置に残る）に従い、行と生成時の並びの記録の両方を同じ位置で新しい key に移すので、並びは編集されたものと見なされず、Generate は Python の並びのまま描く。v0.14.2 でも同じ seed が同じ step で失敗する。#1445 で修正: Python の rule 合成は、feature がこれまで取っていた rule と同じ条件・同じ色で名前だけを変える rule を、その rule の表の位置に書く。それ以外の合成（hash rule の追加など）は変えない |
+
+**修正（OV-2188、#1445）**: 追加する行は Python の並びの最初の行の複製にする。「feature Legend group の Python の並び」の owner を `pythonOrderedLegendRows`（`services/legend-svg.js`）1 つにした。editor の行（`direct-editor`）を除く行を、group が記録した Python の並び（`LEGEND_ORDER_RECORD`）の順に、記録がなければ描かれた順に返す。rule commit の行（`specific-color-file`）は、Python が次に描く rule の行の代わりとして含める（並びの記録はもともとそう数えている）。executor の行の追加（複製元）、並びの記録の書き込み（`orderLegendGroup`）、`legendRowTakesPlace` がこれを読む。`restoreLegendStructure` は記録をそのまま読む（`recordedGroupOrder`）。Generate の結果は変わらない。
+
+**修正（OV-2187、#1445）**: rule commit が退かせる行は、表示中の Result で描かれる feature が最初の rule として取る rule の行だけにする（#1441 の `drawnRuleMatches` の `groupTaken`）。match が分からない間は従来どおりすべての rule の行。Legend editor が追加した行の記録（`addedLegendCaptions`）から rule の caption を外す処理は、従来どおりすべての rule の行で行う（`ownedCaptions`）。Generate の結果は変わらない。
+
+**OV-2189（未修正）**: Product Contract に該当する行がなく、Owner の決定 OV-158（`tests/web/source-legend-reconciliation.playwright.spec.js` の M15: 行は live でも Generate でも位置を保つ）は live 側を意図した結果としている。直すには Generate の結果（または rule 表の順）を変える必要があり、Owner の判断を待つ。選択肢と推奨は handoff `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md` にある。
+
+guard: `tests/web/live-generate-parity-legend.playwright.spec.js` に OV-2188 の 2 件（popup の Legend name、Legend の rename。base で失敗）、OV-2187 の 2 件（caption の再入力、色の変更。base で失敗）、OV-2189 の `test.fail` 1 件（前提の rule の順と live の並びを case の中で確かめる。`test.fail` を外した実行では並びの差だけで失敗する）を追加した。`tests/web/specific-color-actions.test.mjs` に OV-2187 の 1 件（rule が塗らない Result では行を持たず、追加した行の記録からは caption を外す。base と前の head で失敗）を追加した。seed 20261101、20261102、20261106 は修正後に成功する。
+
 ## 証拠と再現方法
 
 - run 40634318370（dev `33d9e234c`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40634318370-failed.log`。
 - 再現: `GBDRAW_RANDOM_WALK_SEED=40634318370 npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "Linear, one Result"`。
 - run 40648501950（dev `e7b3c3a06`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40648501950-failed.log`。再現は上と同じコマンドで seed 40648501950。
 - run 40655413787（dev `639de764a`、2026-10-28）。失敗ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/tier-40655413787-failed.log`。再現は seed 40655413787 で `-g "Circular, two-Result batch"`。
-- 調査メモ: `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1985.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1987.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1988.md`。
+- 追加の乱歩（dev `d08c1878e`）: ログは `/home/kawato/gbdraw-baselines/release-0143-20261027/logs/rw/seed-<seed>.log`。再現: `GBDRAW_RANDOM_WALK_STEPS=30 GBDRAW_RANDOM_WALK_SEED=<seed> npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "<fixture>"`。
+- 調査メモ: `/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1985.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1987.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/OV-1988.md`、`/home/kawato/gbdraw-baselines/release-0143-20261027/handoffs/RW-LEGEND.md`。
+
+## GUI 監査（dev `d08c1878e`、2026-10-28）: ヘッダー
+
+0.14.3 の候補 `d08c1878e` を実ブラウザ（Chromium）で調べた（証拠は `/home/kawato/gbdraw-baselines/release-0143-20261027/evidence/gui-audit/FINDINGS.md` と `evidence/header-0143/`）。ヘッダーの 3 件はどれも v0.14.2 にもある（v0.14.2 の Web bundle を同じ probe で測った。v0.14.2 では en のはみ出しが 769〜778 px で最大 10 px、en の Session 名は 769〜910 px で 64 px 未満）。#1409 の Gallery & tutorials ボタンが原因ではない。
+
+| ID | 重大度 | 症状 | 原因 | 修正と guard |
+|---|---|---|---|---|
+| OV-2177 | P3 | 1 段のヘッダーが 769〜800 px で window からはみ出す（fr 769〜800 px で最大 32 px、en と pt 769〜776 px で最大 8 px、id 769〜775 px で最大 7 px、es 769〜774 px で最大 6 px）。右端の翻訳 feedback リンクが切れ、ページが横にスクロールする | header の状態を選ぶ `chooseHeaderFit`（`app/header-fit.js`）は、最後の状態（アイコンだけ、「Session」の小見出しなし）でも足りないときに次の手がなかった。Session 名のボタンが 10 px まで縮んだ後は toolbar がはみ出す | 同じ owner に 2 つの状態を足した。Session 名がまだ縮むとき、閉じた Language メニューを表示中の言語名の幅にする（CSS `field-sizing: content`）。それでも Session 名が `SESSION_TITLE_MIN_PX`（80 px、既定の 16 px の root で 5rem）より狭いとき、768 px 以下と同じ 2 段のレイアウトにする。2 段のレイアウトの規則は `data-header-wrapped` の 1 か所にまとめ、768 px 以下では stylesheet の目印（`--app-header-two-row`）を header-fit が読んで常に 2 段にする。Circular と Linear の名前は 1 行に保ち（vi と th は 769〜930 px で 2 行に割れていた）、mode ボタンの transition は色だけにした（大きさの変化が測定を狂わせる）。header-fit は header、tagline の領域、Session 名のボタンの大きさの変化で測り直す（狭めたときも 2 段に移る）。guard: `tests/web/ui-language.playwright.spec.js` の feedback リンクの case が 11 言語で 769、800、850、800 px（最後は狭める手順）を確かめる（はみ出しがなく Session 名が 80 px 以上）。base では en 769 px が、#1446 の最初の head（`567f4ccf4`）では en の 850 → 800 px が失敗する。`tests/web/header-fit.test.mjs` が状態の順と 80 px の境を確かめる |
+| OV-2178 | P3 | Session 名の欄が 810 px 付近から 769 px まで 0 px になる（en で 900 px 107 px、850 px 57 px、810 px 以下 10 px のボタンだけが残る）。名前が見えず編集もしにくい | OV-2177 と同じ。release notes の「小見出しを隠すので Session 名が幅を保つ」は 1 段のヘッダーの一部の幅でしか正しくなかった | OV-2177 と同じ修正。11 言語の 769〜1000 px（上りと下りの両方）で、1 段の Session 名は 80 px 以上、2 段では 160 px。1000〜1440 px と 768 px 以下（360〜768 px の高さと Language メニューの幅）は base と同じ。release notes の主張を「小見出しを隠すので Session 名が広くなる」に直した |
+| OV-2186 | P3（未修正） | 768 px 以下の 2 段のヘッダーで、閉じた Language メニューが矢印だけになる（ja 480〜496 px、en 504〜520 px と 640〜660 px など、toolbar の行が折り返す幅のすぐ下。11 言語すべて） | `.app-language` の flex-basis 4.5rem が globe と feedback リンクを含むため、行の詰まる幅ではメニューに 28〜32 px しか残らない。OV-368 が受け入れたのは 390 px で English より長い名前が切れることで、矢印だけになることではない。v0.14.2 も同じ | 製品の判断が要るので直していない。選択肢: (A) このまま（0.14.2 からの回帰ではない）。(B) basis を 7.25rem にする。メニューは "English" の幅を保つが、ヘッダーが 1 行増える幅がある（en 360〜376 px、fr 360〜392 px で 135 → 173 px、ja 616〜648 px で 96 → 135 px）。(C) より小さい最小幅（例: メニュー 3.5rem）で数文字を見せ、1 行増える幅を狭める |
+
+Show Definition と Default font size（Record Labels）が Generate まで図を変えないことは、R1（`gbdraw/web/CLAUDE.md`）と OIC-024 のとおり。両者は `data-setting="titles"`（`Applies on Generate`）の scope にあり、その card の先頭に注記がある。`tests/web/setting-application.test.mjs` は Generate の scope ごとに注記を 1 つ求め、control ごとには求めない。行ごとの注記を求める規則はない。
+
+## GUI 監査 dev `d08c1878e`: 収まらないラベル（OV-2179、OV-2180）
+
+GUI 監査（`/home/kawato/gbdraw-baselines/release-0143-20261027/evidence/gui-audit/FINDINGS.md`）の Track L。どちらも今回の cycle の容量の確認（#1402、#1405、#1408）で入り、v0.14.2 にはない。
+
+| ID | 重大度 | 症状 | 原因 | 対応と guard |
+|---|---|---|---|---|
+| OV-2179 | P3 | 英語以外の UI で、ラベルの場所の量を述べる文が英語のまま出る。"Labels do not fit" dialog の record 行（`AP027078.1: 562 outer labels at 8 pt need about 2.5 times the room around the map`）、Generate のエラーの末尾、Generate 中の "Labels may not fit" の文。dialog の題、説明、場所を空ける方法は訳されている | Python が英文（`label_capacity_sentence`、`label_fit_error_counts`、`label_fit_record_counts` in `gbdraw/labels/fit.py`）を送り、Web はそれをそのまま見せた | 修正。Python は値を送る: report の `capacityRatio`（表示する 1 桁に Python が丸める `shown_capacity_ratio`）、エラーの context `labelCapacityOuter` / `labelCapacityInner`（`gbdraw/exceptions.py`、`gbdraw/web_support/error_adapter.py`）、Generate 中の notice は `LabelCapacityNoticePayload` の JSON（`gbdraw/web_support/label_fit.py`）。Web は `labelCapacityText` / `labelCapacityNoticeText`（`services/label-fit.js`）と error text の `outerLabelRoom` / `innerLabelRoom`（`utils/error-normalization.js`）で i18n key から文を作る。側の種類は Python の `HorizontalLabelKind`（`gbdraw/labels/fit.py`）が持ち、Web の `LABEL_CAPACITY_KIND_WORDS` はその手写し（`label-fit.test.mjs` が Literal と順序を照合。`tools/twins.json` の `constant:HorizontalLabelKind` 行は #1447 の merge 後に authority だけの PR で足す）。新しい 10 key は 10 言語とも機械の下訳。guard: `tests/web/label-fit.playwright.spec.js` の容量の case に ja の確認（base で失敗）、node（`label-fit`、`error-normalization`、`error-text`、`run-analysis-simple-path`）と pytest（`test_web_label_fit.py`、`test_circular_label_capacity.py`）の case（base で失敗） |
+| OV-2180 | P3 | AP027078、Labels out、6 pt: 「約 1.8 倍」の知らせの後、77 秒置いて探してから、6 行とも "Does not fit" で Apply できない dialog で止まる。8 pt の止まる dialog は「文字を小さくする」を勧める | 6 pt の比 1.84 は 1.5 を超えるが、Outer の X と Y の Offset を 2 まで広げたときの見積もり（lever）が 0.855 で 1.0 以下なので、CAPACITY-STOP の条件（比 > 1.5 かつ lever > 1.0）を満たさない。見積もりは下限なので外へ広げる行を除けない。PD-OI-097（scenario revision 20）の accepted residual risk が「AP027078 の 4 pt から 6 pt などは置いて探してから止まる（数分かかる）」とこの場合を名指しし、止まる dialog の場所を空ける方法に「文字を小さくする」を挙げている | Contract に対する欠陥ではなかった。Owner の判断（2026-10-29、Q1 B `NO-ROW-WAYS`、Q2 A `FONT-LISTED`、PD-OI-097 scenario revision 21）で修正: 置いて探したあとで行がどれも "Does not fit" のとき、dialog は行の下に、CLI は `No single change of the label settings fits this map.` の後に、止めたときと同じ場所を空ける方法を示す（6 pt では文字を小さくするを除く）。止まる dialog は今と同じく「文字を小さくする」を示す。方法は Python の `label_room_remedies`（`gbdraw/labels/fit.py`、止めるときと同じ owner）から report の `remedies`（`LabelFitReport.room_remedies`）に入り、Web は行がすべて `not_found` になったときに既存の一覧を出す（`label-fit-dialog.js`）。guard: pytest `test_a_report_with_no_fitting_row_lists_the_ways_to_make_room`、node `label-fit.test.mjs` の NO-ROW-WAYS の case（どちらも base で失敗） |
+
+残り（OV-2179 の範囲外）: 容量以外の "Labels do not fit" dialog（重なりで止まる図）の record 行（`562 outer labels at 6 pt (935 label pairs overlap, ...)`、英語の `at` を含む）、行の題と理由、Generate のエラーの数の文（`Overlapping label pairs: ...`）は Python の英文のまま（PD-OI-106 の accepted residual risk「Python-produced warnings ... stay English」の範囲）。

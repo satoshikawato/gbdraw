@@ -18,7 +18,7 @@ import math
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol, TypeAlias, get_args
+from typing import Literal, Protocol, TypeAlias, TypeGuard, get_args
 
 from ..exceptions import LabelLeadersCrossWarning, LabelsDoNotFitError
 from ..layout.spatial import (
@@ -41,6 +41,9 @@ LabelKind: TypeAlias = Literal[
     "linear",
     "linear_region",
 ]
+# The label kinds whose room is read before they are placed (CAPACITY-STOP, CAPACITY-WARN): Circular horizontal labels.
+# The Web words each by id (`LABEL_CAPACITY_KIND_WORDS` in gbdraw/web/js/services/label-fit.js, OV-2179).
+HorizontalLabelKind: TypeAlias = Literal["circular_outer", "circular_inner"]
 LabelFitOutcome: TypeAlias = Literal["fits", "warn", "stop"]
 LabelFitRowKind: TypeAlias = Literal[
     "outward_both",
@@ -69,6 +72,8 @@ LabelFitValue: TypeAlias = bool | float | str
 # What makes room for labels that need much more room than the map has (CAPACITY-STOP): label fewer features, shorten
 # the label text, use a smaller font, or draw a Linear map.
 LabelCapacityRemedy: TypeAlias = Literal["filter", "label_text", "font", "linear"]
+# The smallest label font the font rows try.
+FONT_LIMIT_PT = 6.0
 Polygon: TypeAlias = tuple[Point, ...]
 Polyline: TypeAlias = Sequence[Point]
 
@@ -530,10 +535,22 @@ class LabelFitReport:
         return sum(record.fit.definition_track_overlaps for record in self.records)
 
     @property
-    def capacity_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
-        """The ways to make room for the records that were not placed (CAPACITY-STOP), in the order offered."""
+    def room_remedies(self) -> tuple[LabelCapacityRemedy, ...]:
+        """The ways to make room, in the order offered: for the records that were not placed (CAPACITY-STOP), else,
+        when no row has a value, for the outer and inner Circular labels (NO-ROW-WAYS, OV-2180). A row not computed
+        may still fit, so a surface lists the second only once every row is known not to fit."""
 
-        offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
+        if any(record.capacity for record in self.records):
+            offered = {remedy for record in self.records if record.capacity for remedy in record.capacity.remedies}
+        elif self.rows and all(row.values is None for row in self.rows):
+            offered = {
+                remedy
+                for record in self.records
+                if is_horizontal_label_kind(record.label_kind)
+                for remedy in label_room_remedies(record.font_size)
+            }
+        else:
+            return ()
         return tuple(remedy for remedy in get_args(LabelCapacityRemedy) if remedy in offered)
 
 
@@ -670,7 +687,7 @@ def label_fit_notice(report: LabelFitReport) -> tuple[str, ...]:
 
 
 _RADIAL_REFUSAL = "need more room than the circular tracks leave"
-# The CLI's ways to make room (CAPACITY-STOP); the Web names its own controls for the same remedies.
+# The CLI's ways to make room (CAPACITY-STOP, NO-ROW-WAYS); the Web names its own controls for the same remedies.
 _CLI_CAPACITY_REMEDIES: Mapping[LabelCapacityRemedy, str] = {
     "filter": "label fewer features with --label_blacklist or --label_whitelist;",
     "label_text": "shorten the label text with --qualifier_priority (for example gene names only);",
@@ -679,8 +696,22 @@ _CLI_CAPACITY_REMEDIES: Mapping[LabelCapacityRemedy, str] = {
 }
 
 
+def label_room_remedies(font_size: float) -> tuple[LabelCapacityRemedy, ...]:
+    """The ways to make room for labels at ``font_size``: a smaller font only above the font rows' floor."""
+
+    if font_size > FONT_LIMIT_PT:
+        return ("filter", "label_text", "font", "linear")
+    return ("filter", "label_text", "linear")
+
+
+def shown_capacity_ratio(capacity: LabelCapacityRecord) -> float:
+    """The room the labels need as every surface shows it: the ratio to one decimal place."""
+
+    return round(capacity.ratio, 1)
+
+
 def _room_needed(capacity: LabelCapacityRecord) -> str:
-    return f"need about {capacity.ratio:.1f} times the room around the map"
+    return f"need about {shown_capacity_ratio(capacity):.1f} times the room around the map"
 
 
 def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: LabelCapacityRecord, *, placed: bool) -> str:
@@ -697,8 +728,29 @@ def label_capacity_sentence(record_id: str, label_kind: LabelKind, capacity: Lab
 DEFINITION_TEXT_REMEDY = "Or shorten the definition text with --species or --strain (for example, an abbreviation)."
 
 
+def is_horizontal_label_kind(kind: LabelKind) -> TypeGuard[HorizontalLabelKind]:
+    """Whether labels of ``kind`` have their room read before they are placed."""
+
+    return kind in get_args(HorizontalLabelKind)
+
+
+def largest_capacities(report: LabelFitReport) -> dict[HorizontalLabelKind, LabelCapacityRecord]:
+    """The room of each label kind whose labels were not placed (CAPACITY-STOP): the largest of its records, in the
+    order the kinds first appear. Only horizontal labels carry a capacity."""
+
+    largest: dict[HorizontalLabelKind, LabelCapacityRecord] = {}
+    for record in report.records:
+        kind = record.label_kind
+        if record.capacity is None or not is_horizontal_label_kind(kind):
+            continue
+        if kind not in largest or record.capacity.ratio > largest[kind].ratio:
+            largest[kind] = record.capacity
+    return largest
+
+
 def label_fit_error_counts(report: LabelFitReport) -> str:
-    """The counts sentence of the Web error over a figure that was not drawn.
+    """The counts sentence of the Web error over a figure that was not drawn and has no record left unplaced for lack
+    of room (those the Web words from :func:`largest_capacities`).
 
     A refused record's counts are those of the layout it refused, so a report
     with one states the refusal instead (OV-1194).
@@ -706,16 +758,6 @@ def label_fit_error_counts(report: LabelFitReport) -> str:
 
     if any(record.refused for record in report.records):
         return f"Radial labels {_RADIAL_REFUSAL}."
-    largest: dict[LabelKind, LabelCapacityRecord] = {}
-    for record in report.records:
-        if record.capacity is not None and (
-            record.label_kind not in largest or record.capacity.ratio > largest[record.label_kind].ratio
-        ):
-            largest[record.label_kind] = record.capacity
-    if largest:
-        return " ".join(
-            f"{_KIND_WORDS[kind].capitalize()} labels {_room_needed(capacity)}." for kind, capacity in largest.items()
-        )
     return f"Overlapping label pairs: {report.overlap_pairs}. Crossing leader pairs: {report.crossing_pairs}."
 
 
@@ -831,6 +873,7 @@ def format_label_fit_report(report: LabelFitReport, *, search_seconds: float | N
         lines.append(f"{names[0].upper()}{names[1:]} {verb} not fit this map.")
     elif missing:
         lines.append("No single change of the label settings fits this map.")
+        lines.extend(_room_lines(report))
     if skipped:
         seconds = search_seconds
         if seconds is None:
@@ -858,9 +901,15 @@ def _capacity_report(report: LabelFitReport) -> str:
         lines.append(_first_line(LabelFitReport(others, (), drawn=False)))
     else:
         lines[-1] += " Nothing was drawn."
-    lines.append("To make room:")
-    lines.extend(f"  - {_CLI_CAPACITY_REMEDIES[remedy]}" for remedy in report.capacity_remedies)
+    lines.extend(_room_lines(report))
     return "\n".join(lines)
+
+
+def _room_lines(report: LabelFitReport) -> list[str]:
+    remedies = report.room_remedies
+    if not remedies:
+        return []
+    return ["To make room:", *(f"  - {_CLI_CAPACITY_REMEDIES[remedy]}" for remedy in remedies)]
 
 
 def raise_or_warn(
@@ -882,7 +931,9 @@ __all__ = [
     "DEFINITION_TEXT_REMEDY",
     "DEFINITION_TEXT_MIN_OVERLAP_PX",
     "FITS",
+    "FONT_LIMIT_PT",
     "FONT_SIZE_PATHS",
+    "HorizontalLabelKind",
     "PLACEMENT_PATH",
     "RADIAL_PLACEMENT",
     "ROW_TITLES",
@@ -913,8 +964,10 @@ __all__ = [
     "covers_definition_text",
     "crossing_pairs",
     "fit_counts",
+    "is_horizontal_label_kind",
     "format_label_fit_report",
     "label_fit_error_counts",
+    "largest_capacities",
     "label_capacity_sentence",
     "label_fit_notice",
     "label_fit_outcome",
@@ -923,12 +976,14 @@ __all__ = [
     "label_kind_nouns",
     "label_kind_title",
     "label_kind_words",
+    "label_room_remedies",
     "overlapping_pairs",
     "polyline_crossing_count",
     "polylines_cross",
     "raise_or_warn",
     "row_note",
     "shapes_overlap",
+    "shown_capacity_ratio",
     "split_row_option_values",
     "switch_row",
     "verified_row",

@@ -291,6 +291,17 @@ test('labels far over the room around the map: Generate stops at once with the w
   // Before the check, placing 600 labels took minutes; the stop comes within seconds of the render's start.
   const times = await page.evaluate(() => window.__CAPACITY_TIMES__);
   expect(times.ended - times.rendering).toBeLessThan(60000);
+  // OV-2179: in another UI language the record line and the alert read in that language, worded from Python's values.
+  await page.locator('header select[data-ui-language]').selectOption('ja');
+  await expect.poll(() => page.evaluate(() => document.documentElement.lang)).toBe('ja');
+  await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[data-label-fit-records]')).toHaveText(
+    /^capacity：14 ptの外側のラベル600個には、図のまわりにあるスペースの約\d\.\d倍が必要です\s*$/);
+  await expect(dialog.locator('[data-label-fit-records] .font-semibold')).toHaveText('capacity');
+  await expect(page.getByRole('alert')).toContainText(/外側のラベルには、図のまわりにあるスペースの約\d\.\d倍が必要です。/);
+  await expect(page.getByRole('alert')).not.toContainText('room around the map');
+  await shot(dialog, 'capacity-dialog-ja.png');
 });
 
 // The labels are pinned at 10 pt, the size the OV-1155 cases were drawn at (a region label without

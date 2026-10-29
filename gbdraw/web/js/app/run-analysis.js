@@ -10,6 +10,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { LabelCapacityNotice } from '../services/label-fit.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
 /** @import { GenerationPayload, RequestProgress } from '../services/diagram-generation.js' */
@@ -263,10 +264,10 @@ const diagramProgressMessage = ({ stage = '', step, total, label } = {}) => {
 };
 /**
  * The one owner of a diagram Worker progress report in the processing
- * overlay: the status line, and each sentence Python sends about labels that
+ * overlay: the status line, and each notice Python sends about labels that
  * may not fit (CAPACITY-WARN), kept under it until the run ends.
  * @param {RequestProgress} progress
- * @param {{ processingStatus: { value: string }, labelCapacityNotices: { value: readonly string[] } }} overlay
+ * @param {{ processingStatus: { value: string }, labelCapacityNotices: { value: readonly LabelCapacityNotice[] } }} overlay
  */
 export const showDiagramProgress = (progress, { processingStatus, labelCapacityNotices }) => {
   const message = diagramProgressMessage(progress);

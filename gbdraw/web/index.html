@@ -1466,10 +1466,9 @@
            aria-label and title. The tagline gives way before the toolbar, so the
            longer button labels of es, fr and pt keep the Session title and the
            Language menu in view; the logo keeps its size, and the Session title
-           narrows when the labels still do not fit. Below 769px, where the toolbar
-           wraps, the closed Language select shrinks and clips the longer names
-           (at 390px, those longer than English) before it pushes its row to wrap;
-           the open list still shows every name in full. OV-1495: at 1440px and wider the
+           narrows when the labels still do not fit, down to 5rem, below which the
+           header takes its two-row layout (OV-2178), as it always does below 769px.
+           OV-1495: at 1440px and wider the
            tagline takes only the room the toolbar leaves, cut with an ellipsis,
            and is hidden when that room is under 10rem; so the Session title and
            the Language menu stay in view there too in es, fr and pt. */
@@ -1499,10 +1498,12 @@
         /* The states of the one-row header (app/header-fit.js): the Gallery link shows its cap alone, the file
            buttons show their icons alone as they do below 1280 px, and with both, the toolbar's groups close up
            (vi and th at 1024 px keep the Session title and the mode names on one line); where even that narrows the
-           Session title, its "Session" caption hides, as in the wrapped header, and the groups close up to 2 px (TL-D06:
-           from 769 px no language then narrows the title or widens an overflow beyond dev's). The wrapped header below
-           769 px shows the cap alone at the end of the logo's row, which has room, so the toolbar's rows stay as
-           they are without the link (with its words, or in the toolbar's row, it would add a row). */
+           Session title, its "Session" caption hides, as in the two-row header, and the groups close up to 2 px
+           (TL-D06). OV-2177, OV-2178: where the title still narrows, the closed Language menu takes the width of the
+           shown name, not of the longest one (a browser without field-sizing keeps the longest and so takes two rows
+           sooner), and a mode name keeps one line (vi and th split theirs from 769 to about 930 px), so the title,
+           which header-fit.js measures, takes the whole shortfall; where it would be under 5rem, the header takes
+           its two-row layout below. */
         @media (min-width: 769px) {
             .app-header[data-gallery-icon] .app-gallery-link-label { display: none; }
             .app-header[data-file-icons] .app-file-actions .app-config-button {
@@ -1515,12 +1516,80 @@
             .app-header[data-session-title-alone] .app-session-label { display: none; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
             .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
+            .app-header[data-language-narrow] .app-language-select { field-sizing: content; }
         }
+        /* The two-row header (`data-header-wrapped`, app/header-fit.js): always at 768 px and below, where the
+           stylesheet sets the `--app-header-two-row` marker, and from 769 px where the one-row header cannot keep
+           the Session title 5rem wide (OV-2177, OV-2178). The logo's row ends with the Gallery cap alone, which has
+           room there, so the toolbar's rows stay as they are without the link (with its words, or in the toolbar's
+           row, it would add a row). Below 769 px the closed Language select shrinks and clips the longer names
+           (at 390 px, those longer than English) before it pushes its row to wrap; the open list still shows every
+           name in full. */
+        .app-header[data-header-wrapped] {
+            height: auto !important;
+        }
+
+        .app-header[data-header-wrapped] .app-header-inner {
+            position: relative;
+            height: auto !important;
+            min-height: 3.5rem !important;
+            padding: 0.5rem 0.75rem !important;
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
+        .app-header[data-header-wrapped] .app-gallery-link-label { display: none; }
+
+        .app-header[data-header-wrapped] .app-brand {
+            flex: 1 1 auto !important;
+        }
+
+        .app-header[data-header-wrapped] .app-logo-title {
+            height: 2rem !important;
+            max-width: 8.5rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-label {
+            display: none !important;
+        }
+
+        .app-header[data-header-wrapped] .app-toolbar {
+            width: 100% !important;
+            flex-wrap: wrap !important;
+            justify-content: space-between !important;
+            gap: 0.4rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-file-actions {
+            flex-wrap: wrap !important;
+            gap: 0.25rem !important;
+            order: 2 !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-actions {
+            flex: 1 1 8rem !important;
+            order: 3 !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-button {
+            width: min(100%, 10rem) !important;
+            height: 2rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-language {
+            order: 1 !important;
+            flex: 1 1 4.5rem;
+            min-width: 0;
+            max-width: max-content;
+        }
+
+        .app-header[data-header-wrapped] .app-language-select {
+            min-width: 0;
+        }
+
         @media (max-width: 768px) {
             .input-label { flex-wrap: wrap; }
-            .app-header-inner { position: relative; }
-            .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
-            .app-gallery-link-label { display: none; }
         }
         .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
         .tutorial-card {
@@ -1565,63 +1634,9 @@
                 min-height: 100dvh !important;
             }
 
+            /* The header takes its two-row layout (app/header-fit.js reads this marker). */
             .app-header {
-                height: auto !important;
-            }
-
-            .app-header-inner {
-                height: auto !important;
-                min-height: 3.5rem !important;
-                padding: 0.5rem 0.75rem !important;
-                flex-wrap: wrap !important;
-                gap: 0.5rem !important;
-            }
-
-            .app-brand {
-                flex: 1 1 auto !important;
-            }
-
-            .app-logo-title {
-                height: 2rem !important;
-                max-width: 8.5rem !important;
-            }
-
-            .app-session-label {
-                display: none !important;
-            }
-
-            .app-toolbar {
-                width: 100% !important;
-                flex-wrap: wrap !important;
-                justify-content: space-between !important;
-                gap: 0.4rem !important;
-            }
-
-            .app-file-actions {
-                flex-wrap: wrap !important;
-                gap: 0.25rem !important;
-                order: 2 !important;
-            }
-
-            .app-session-actions {
-                flex: 1 1 8rem !important;
-                order: 3 !important;
-            }
-
-            .app-session-button {
-                width: min(100%, 10rem) !important;
-                height: 2rem !important;
-            }
-
-            .app-language {
-                order: 1 !important;
-                flex: 1 1 4.5rem;
-                min-width: 0;
-                max-width: max-content;
-            }
-
-            .app-language-select {
-                min-width: 0;
+                --app-header-two-row: 1;
             }
 
             .drawing-bar {
@@ -2352,11 +2367,11 @@
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
-        <!-- CAPACITY-WARN: Python's sentences about labels that may not fit, as sent, while the render goes on -->
+        <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
         <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
              class="mt-3 mx-4 max-w-md rounded border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-900">
             <p class="font-semibold">{{ t('Labels may not fit') }}</p>
-            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ notice }}</p>
+            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ labelCapacityNoticeText(notice) }}</p>
         </div>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
@@ -8879,7 +8894,8 @@
             </div>
         </choice-dialog>
         <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order; labels not placed for
-             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only -->
+             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only; every row known not to
+             fit (NO-ROW-WAYS): the same ways under the rows -->
         <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing"
              :busy-status="labelFitDialog.finishing ? t('Finishing the choice being computed…') : null" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
@@ -8893,17 +8909,11 @@
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt <template v-if="record.capacity">{{ record.counts }}</template><template v-else>({{ record.counts }})</template>
+                    <i18n-text v-if="record.capacity" :text="labelCapacityText(record.capacity)"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
+                    <template v-else><span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})</template>
                 </li>
             </ul>
-            <div v-if="labelFitDialog.capacity" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
-                <p class="font-semibold">{{ t('To make room:') }}</p>
-                <ul class="mt-1 list-disc pl-5 space-y-1">
-                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
-                </ul>
-            </div>
-            <p v-else-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
-            <fieldset v-else class="mt-3">
+            <fieldset v-if="labelFitDialog.rows.length" class="mt-3">
                 <legend class="sr-only">{{ t('Fix') }}</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
                     <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"
@@ -8926,6 +8936,13 @@
                     </li>
                 </ul>
             </fieldset>
+            <p v-else-if="!labelFitDialog.capacity" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
+            <div v-if="labelFitDialog.remedies.length" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
+                <p class="font-semibold">{{ t('To make room:') }}</p>
+                <ul class="mt-1 list-disc pl-5 space-y-1">
+                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
+                </ul>
+            </div>
             <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
             <div v-if="labelFitDialog.definitionRecords.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
                 <button v-for="record in labelFitDialog.definitionRecords" :key="record.recordIndex" type="button" data-history-ignore

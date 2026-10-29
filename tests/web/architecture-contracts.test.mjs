@@ -1830,6 +1830,8 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   );
   assert.match(devPolicy, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(devPolicy, /fetch-depth: 0/);
+  // Commits and trees only: the blobs of every branch timed the job out (OV-2190).
+  assert.match(devPolicy, /fetch-depth: 0\n {10}filter: blob:none\n/);
   assert.match(devPolicy, /persist-credentials: false/);
   assert.match(devPolicy, /git fetch --no-tags origin "\$HEAD_SHA"/);
   assert.doesNotMatch(

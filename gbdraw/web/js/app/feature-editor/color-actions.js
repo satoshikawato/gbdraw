@@ -111,6 +111,8 @@ import { msg } from '../../utils/i18n.js';
  * @property {string} [finalColor]
  * @property {PythonLegendKey} [keepBothAfter] Keep both of features split off their row: the key of the
  *   target row the new row is placed right after (D-29).
+ * @property {PythonLegendKey} [joins] The key of the listed row, not the renamed one, whose name the rename
+ *   takes (a join or a Merge): that row keeps its place, so the new rules are not put in the renamed row's.
  */
 /**
  * What a rename collides with: a listed or deleted Legend row, or a color-rule
@@ -824,18 +826,21 @@ export const createFeatureColorActions = ({
     const features = (request.features || []).filter(Boolean);
     const sourceRules = getLegendRowRules(request.sourceKey);
     if (sourceRules.length || features.length) {
+      const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
+      // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
+      // and every record stored under its key. The one decision that the
+      // edit takes the row whole places the live row and, as the "row"
+      // scope, Python's new rules (OV-2192, Owner 2026-10-29), unless the
+      // rename joins another listed row, which keeps its own place.
+      const retireOld = Boolean(oldEntry) && features.length > 0 && takesWholeRow(request.sourceKey, features);
       /** @type {SpecificRuleBuild} */
       const rules = request.sourceScope === 'group' && sourceRules.length
         ? (current, revise) => current.map(rule => (sourceRules.includes(rule) ? revise(rule, { cap: caption, color }) : rule))
-        : groupColorRules(features, color, caption, 'group');
-      const retireOld = features.length > 0 && takesWholeRow(request.sourceKey, features);
-      const oldEntry = drawing.legendEntries.value.find((entry) => legendEntryKey(entry) === request.sourceKey);
+        : groupColorRules(features, color, caption, retireOld && !request.joins ? 'row' : 'group');
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
-        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place
-        // and every record stored under its key; a row that joins another row
-        // keeps that row's place.
+        // A row that joins another row keeps that row's place.
         // Features that Keep both split off go right after the target row (D-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
@@ -992,6 +997,9 @@ export const createFeatureColorActions = ({
     const mergeAllowed = target !== null && sourceTypes.size === 1
       && (group ? colorRuleGroupTakes(group, String(sourceType)) : target.types.size === 1 && target.types.has(sourceType));
     const sameColor = target !== null && colorsMatch(target.color, currentColor);
+    // A rename that takes the target's name joins it when the target is a listed row.
+    /** @type {Pick<LegendRenameRequest, 'joins'>} */
+    const joins = target && listedTarget ? { joins: legendEntryKey(listedTarget) } : {};
     const resolution = request.targetResolution || (group && mergeAllowed && !deletedTarget ? 'merge' : null);
 
     // A chosen Merge adopts the target's color, also once a Restore made a
@@ -1000,7 +1008,7 @@ export const createFeatureColorActions = ({
     // as `Shared (2)` (review M-3).
     if (featureOrRuleRename && resolution !== 'merge' && (!target || (!deletedTarget && mergeAllowed && sameColor))) {
       await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
-        finalCaption: target ? target.caption : newCaption, finalColor: currentColor });
+        finalCaption: target ? target.caption : newCaption, finalColor: currentColor, ...joins });
       clearLegendRenameDialog(drawing);
       return;
     }
@@ -1040,7 +1048,7 @@ export const createFeatureColorActions = ({
         ...request,
         currentColor,
         features,
-        ...(resolution === 'merge' ? { finalCaption: target.caption, finalColor: target.color }
+        ...(resolution === 'merge' ? { finalCaption: target.caption, finalColor: target.color, ...joins }
           : { finalCaption: newCaption, finalColor: currentColor, ...(keepBothAfter ? { keepBothAfter } : {}) })
       });
       clearLegendRenameDialog(drawing);
@@ -1052,7 +1060,8 @@ export const createFeatureColorActions = ({
       currentColor,
       features,
       finalCaption: target && sameColor ? target.caption : newCaption,
-      finalColor: target && sameColor ? target.color : currentColor
+      finalColor: target && sameColor ? target.color : currentColor,
+      ...(target && sameColor ? joins : {})
     });
     clearLegendRenameDialog(drawing);
   };

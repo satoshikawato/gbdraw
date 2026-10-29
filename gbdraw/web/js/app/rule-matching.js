@@ -214,7 +214,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @property {(rules?: readonly Partial<SpecificColorRule>[]) => boolean} isPrepared
  * @property {(rules?: readonly Partial<SpecificColorRule>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  *   `options.asGiven` prepares the rules as they are, without writing them as `normalizeSpecificRule` does.
- * @property {(group: GroupColorEdit, rules: readonly Partial<SpecificColorRule>[]) => Promise<SynthesizedColorRules>} synthesizeGroup
+ * @property {(group: GroupColorEdit, rules: readonly SpecificColorRule[]) => Promise<SynthesizedColorRules>} synthesizeGroup
  *   Python's rules for coloring `group.features` as one group over the rule table `rules` and the whole catalog.
  * @property {() => RuleInputsSnapshot} snapshot The inputs the matches depend on.
  * @property {(before: RuleInputsSnapshot) => boolean} isCurrent Whether `before` is still the current inputs.
@@ -225,7 +225,8 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * One group color edit: the selected features, found in the catalog by their
  * rendered id (`svg_id`; a feature without one is not drawn and takes no rule),
  * the label texts each shows (aligned with `features`), and the color and
- * caption they take; `scope` "features" colors each feature by itself.
+ * caption they take; `scope` "features" colors each feature by itself, and "row"
+ * colors them as a group that takes their Legend row whole, in its place.
  * @typedef {object} GroupColorEdit
  * @property {SynthesizeColorRulesRequest['scope']} scope
  * @property {readonly (RuleMatchedFeature & { svg_id?: string | null })[]} features
@@ -446,7 +447,7 @@ export const createRulePreparation = ({
       features: targets.map((feature) => ruleFeaturePayload(feature)),
       selected: picked,
       labels: picked.map((index) => labelsById.get(/** @type {{ svg_id: string }} */ (targets[index]).svg_id) || []),
-      rules: rules.map((rule) => ({ feat: String(rule.feat ?? ''), qual: String(rule.qual ?? ''), val: String(rule.val ?? '') })),
+      rules: rules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
       color,
       caption
     });

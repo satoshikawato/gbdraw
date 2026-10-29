@@ -206,7 +206,7 @@ def run_canonical_request_wrapper(
             # A4b: the drawing it renders and the tokens the page retains ("null": none).
             retention = None if _is_blank_or_js_nullish(retention_json) else json.loads(str(retention_json))
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
-        # Labels near the room around the map: the Worker shows Python's sentence while the render runs.
+        # Labels near the room around the map: the Worker relays their values (JSON) while the render runs.
         with label_capacity_notices(
             (lambda sentence: None) if _is_blank_or_js_nullish(notice) else notice
         ):

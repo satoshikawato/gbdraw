@@ -16,7 +16,8 @@ const SINGLE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
 // Reflow, and labels (bound: a feature popup was opened after the last
 // Generate and before the edit; unbound: none was). A popup edit binds the
 // labels itself.
-const open = async (page, { mode, results, reflow }) => {
+// `genbank` replaces the Linear fixture's text (a Linear single Result only).
+const open = async (page, { mode, results, reflow, genbank = readFileSync(SINGLE_FIXTURE, 'utf8') }) => {
   if (mode === 'linear') {
     await openFresh(page);
     await showDrawing(page, { kind: 'linear' });
@@ -25,7 +26,7 @@ const open = async (page, { mode, results, reflow }) => {
       const app = window.__GBDRAW_APP__;
       app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
       await window.Vue.nextTick();
-    }, readFileSync(SINGLE_FIXTURE, 'utf8'));
+    }, genbank);
     await settleLive(page);
     await page.evaluate(() => { window.__GBDRAW_APP__.form.show_labels_linear = 'all'; });
   } else if (results === 'batch') {

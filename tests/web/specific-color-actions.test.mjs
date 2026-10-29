@@ -583,6 +583,29 @@ test('a rule commit owns no type row of the displayed Result for a feature it do
   assert.deepEqual(s.previousIntents(), [], 'Python keeps the CDS row of the displayed Result');
 });
 
+// OV-2187: a current rule that colors no feature the displayed Result draws
+// owns no row of it, so a palette row of its name and color stays; the
+// commit still takes the rule's caption out of the Legend editor's record of
+// added rows (`addedLegendCaptions`), as before.
+test('a rule edit on a Result the rule does not color owns no row there and still clears its added caption (OV-2187)', async () => {
+  const s = setup();
+  const a1 = { type: 'CDS', svg_id: 'a1', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A1'] } };
+  const a2 = { type: 'CDS', svg_id: 'a2', fill_color: '#54bcf8', qualifiers: { locus_tag: ['A2'] } };
+  s.state.extractedFeatures.value = [a1, a2];
+  s.state.results.value = [{ name: 'A', content: 'a' }, { name: 'B', content: 'b' }];
+  Object.assign(s.state, {
+    displayedResultMetadata: () => ({ renderedFeatureIdentities: { renderedIds: new Set(['a1']) } }),
+    originalLegendOrder: { value: ['CDS'] }, svgContainer: mounted([['CDS', '#54bcf8']])
+  });
+  s.state.legendEntries.value = [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }];
+  s.setLegendPreparation(async () => {});
+  assert.equal(await s.actions.commitSpecificRules(() => [{ feat: 'CDS', qual: 'locus_tag', val: '^A2$', color: '#54bcf8', cap: 'CDS' }]), true);
+  s.state.addedLegendCaptions.value = new Set(['CDS', 'Independent manual legend']);
+  await s.actions.setSpecificRuleField(0, 'cap', 'Other');
+  assert.deepEqual(s.previousIntents(), [], 'the palette CDS row is not the rule\'s');
+  assert.deepEqual([...s.state.addedLegendCaptions.value], ['Independent manual legend'], 'the rule\'s caption leaves the added rows');
+});
+
 // OV-344: the rows a rule commit draws are those of the displayed Result. A
 // rule whose features only another batch Result draws, or that a Feature
 // visibility rule hides, draws no row on it, as Generate draws none.

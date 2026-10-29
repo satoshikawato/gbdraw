@@ -687,7 +687,16 @@ test('an example whose Gallery tutorial is not published offers no tutorial', as
 test('the header gives way by icons, never by narrowing the Session title', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
+  // A wide window never shows the two-row header, not even while the app mounts (review of #1446: the fit
+  // measured the hidden header at mount and chose two rows for the first frame).
+  await page.addInitScript(() => {
+    window.__headerTwoRowsSeen = false;
+    new MutationObserver((records) => {
+      if (records.some((record) => record.oldValue === null)) window.__headerTwoRowsSeen = true;
+    }).observe(document, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['data-header-wrapped'] });
+  });
   await openApp(page);
+  expect(await page.evaluate(() => window.__headerTwoRowsSeen)).toBe(false);
   const header = page.locator('header.app-header');
   const words = page.locator('[data-gallery-link] .app-gallery-link-label');
   const titleWidth = () => page.locator('.app-session-button').evaluate((node) => node.getBoundingClientRect().width);

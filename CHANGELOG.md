@@ -41,6 +41,27 @@ write-up of a release.
   also uses takes its new color while the rule colors no drawn feature (for example **Use the "CDS" Legend color** on a CDS
   feature that a visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next
   Generate (OV-1988, #1441).
+- Fixed: in the Web app, a Legend row that a popup Legend name or a Legend rename adds at once is drawn with the
+  feature line, as Generate draws it, also when a Legend sort or move has put a GC content, GC skew, or Depth row
+  first. Before, it took that row's lack of a line until the next Generate (OV-2188, #1445).
+- Fixed: in the Web app, a color rule edit made while a batch Result is shown on which the rule colors no feature
+  keeps that Result's Legend row of the rule's name and color (for example the CDS row after **Use the "CDS" Legend
+  color** on a CDS of the other Result), as Generate draws it; the same holds on one Result when the rule colors only
+  features that Feature visibility hides. Before, the row disappeared until the next Generate (OV-2187, #1445).
+- Fixed: in the Web app, a popup Legend name on the only feature of a color rule's Legend row keeps the row in its
+  place at Generate, as the live Legend shows it: when the new rule only gives that rule's condition a new name, it
+  takes that rule's place in the color rule table. Before, it was written ahead of the other rules on the same
+  qualifier, and Generate drew the row ahead of rows it followed live (OV-2189, #1445).
+- Fixed: the Web app's header from 769 to about 970 px stays inside the window and keeps the Session title in view.
+  Before, it ran past the right edge by up to 32 px (French; English, Spanish, Portuguese, and Indonesian by up to
+  8 px at 769 to 776 px), cutting off the translation feedback link, and narrowed the Session title to nothing below
+  about 810 px. Where the title still narrows, the closed Language menu takes the width of the shown language's name
+  (browsers with CSS `field-sizing`); where the title would be narrower than 5rem, the header takes the two-row layout
+  it has at 768 px and below. The Circular and Linear names stay on one line (OV-2177, OV-2178, #1446; 0.14.2 had
+  both).
+- Fixed: in the Web app, the room that Circular labels need (the record line of the "Labels do not fit" dialog, the
+  Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language, and a whole
+  ratio reads "3", not "3.0". Before, those sentences stayed English in every language (OV-2179, #1447).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
@@ -52,7 +73,9 @@ write-up of a release.
   37 min); labels that need 0.8 times or more warn before they are placed
   (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs, and after a stop the **Labels do not fit**
   dialog lists the ways to make room). Python raises `LabelsDoNotFitError` with no rows and a `capacity`
-  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). See
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). Labels that are
+  placed and searched and that no fix makes fit get the same ways to make room in the **Labels do not fit** dialog
+  and after `No single change of the label settings fits this map.` on the command line (OV-2180, #1447). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
   the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.

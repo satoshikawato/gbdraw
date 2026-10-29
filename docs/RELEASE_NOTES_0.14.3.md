@@ -46,6 +46,35 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   rule colors no drawn feature (for example **Use the "CDS" Legend color** on
   a CDS feature that a visibility rule hides), as **Generate Diagram** draws
   it. Before, the row kept the rule's color until the next Generate.
+- A Legend row that a popup Legend name or a Legend rename adds in the Web
+  app is drawn with the feature line, as **Generate Diagram** draws it, also
+  after a Legend sort or move has put a GC content, GC skew, or Depth row
+  first. Before, it had no line until the next Generate.
+- A color rule edit in the Web app, made while a batch Result is shown on
+  which the rule colors no feature, keeps that Result's Legend row of the
+  rule's name and color (for example the CDS row after **Use the "CDS"
+  Legend color** on a CDS of the other Result). The same holds on one Result when the rule
+  colors only features that Feature visibility hides. Before, the row
+  disappeared until the next **Generate Diagram**.
+- A popup Legend name in the Web app on the only feature of a color
+  rule's Legend row keeps the row in its place at **Generate Diagram**, as
+  the live Legend shows it: when the new rule only gives that rule's
+  condition a new name, it takes that rule's place in the color rule table.
+  Before, Generate could draw the row ahead of rows it followed live.
+- The Web app's header from 769 to about 970 px stays inside the window and
+  keeps the Session title in view. Before, it ran past the right edge by up to
+  32 px in French (and up to 8 px in English, Spanish, Portuguese, and
+  Indonesian), cutting off the translation feedback link, and below about
+  810 px it narrowed the Session title to nothing. Where the title still
+  narrows, the closed Language menu now takes the width of the shown
+  language's name (in browsers that support CSS `field-sizing`, such as
+  Chrome and Edge); where the title would be narrower than 5rem, the header
+  takes the two-row layout it has in a window 768 px wide or narrower. 0.14.2
+  had both problems.
+- When Circular labels need much more room than the map has, the Web app
+  states the room they need in the chosen UI language: the record line of the
+  **Labels do not fit** dialog, the Generate error, and the **Labels may not
+  fit** note while Generate runs. Before, those sentences stayed English.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only
@@ -65,7 +94,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   runs, and after a stop the **Labels do not fit** dialog lists the ways to make
   room. Python raises `LabelsDoNotFitError` with no rows and a `capacity`
   (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was
-  not placed, and warns with `LabelsMayNotFitWarning`.
+  not placed, and warns with `LabelsMayNotFitWarning`. Labels that are placed
+  and searched and that no fix makes fit get the same ways to make room, in the
+  **Labels do not fit** dialog and on the command line.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
   write no file, and print one error that names the formats and the install
@@ -84,7 +115,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   already shows only its icon and the Session title would still be narrowed
   (for example from 769 to 1000 px in most languages), the Session block hides
   its "Session" caption and the toolbar gaps close to 2 px, so the Session
-  title is wider (French at 900 px: about 83 px instead of 28 px).
+  title is wider (French at 900 px: its full 128 px, with the Language menu
+  change under Fixed, instead of 28 px in 0.14.2).
 
 ## Added
 

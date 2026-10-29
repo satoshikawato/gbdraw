@@ -108,6 +108,15 @@ test('a locale translates each part and the labels inside it; values stay as wri
       + ' conflicting labels, or place it on the other side of the Axis.»«Below it, 34 px are kept for the tracks inside it,'
       + ` among them ««GC content» and «GC skew»».»«To make room, do one of the following.»${remedies.map((text) => `«${text}»`).join('')}`
       + 'Overlapping label pairs: 2.');
+    // OV-2179: the room labels not placed need is a key of its own with Python's value, not Python's sentence.
+    const capacity = normalizeUserFacingError({ code: 'LABEL_LAYOUT',
+      context: { reason: 'LABEL_CAPACITY', labelCapacityOuter: 2.5, labelCapacityInner: 1.8 } });
+    assert.equal(capacity.summary, 'Labels do not fit. Label fewer features, use a smaller Label Font Size, or draw a'
+      + ' Linear map. Outer labels need about 2.5 times the room around the map. Inner labels need about 1.8 times the'
+      + ' room around the map.');
+    assert.equal(errorText(capacity.summaryParts), '«Labels do not fit.»«Label fewer features, use a smaller Label Font'
+      + ' Size, or draw a Linear map.»«Outer labels need about 2.5 times the room around the map.»«Inner labels need about'
+      + ' 1.8 times the room around the map.»');
     const table = normalizeUserFacingError({ code: 'TABLE_INVALID', context: { sessionTable: 'default-colors', row: 2 } });
     assert.match(errorText(table.summaryParts), /«Session table: «Default colors».»/);
     const live = liveEditFailure(normalizeUserFacingError({ code: 'WORKER_INIT' }));

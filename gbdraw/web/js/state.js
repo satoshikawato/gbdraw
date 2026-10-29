@@ -70,9 +70,9 @@ const { ref, reactive, computed } = window.Vue;
 // System State
 const processing = ref(false);
 const processingStatus = ref('');
-// Python's sentences about labels that may not fit (CAPACITY-WARN), shown under the status line until the run ends;
-// the next run that shows the overlay starts without them.
-const labelCapacityNotices = /** @type {{ value: readonly string[] }} */ (ref([]));
+// The labels that may not fit (CAPACITY-WARN), as Python sends their values, shown under the status line until the
+// run ends; the next run that shows the overlay starts without them.
+const labelCapacityNotices = /** @type {{ value: readonly LabelCapacityNotice[] }} */ (ref([]));
 const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
@@ -95,7 +95,7 @@ const featureIdentityNotices = ref([]);
 // The edits the last source-replacing Generate removed (Q3 = A); a notice only.
 const featureEditRemovalCount = ref(0);
 const comparisonWarnings = ref([]);
-/** @import { ResultLabelFit } from './services/label-fit.js' */
+/** @import { LabelCapacityNotice, ResultLabelFit } from './services/label-fit.js' */
 // Python's label fit report of each drawn Result with crossing label leaders
 // (LP-D46): the notice bar of the shown Result reads it. Artifact-owned like
 // comparisonWarnings; not saved in a Session.

@@ -478,7 +478,8 @@ test('the folded line names both files of a GFF3 + FASTA card, cuts a long name,
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => paneWidth(page)).toBeLessThanOrEqual(390);
-  expect(await noSidewaysScroll(page), 'phone width').toEqual({ area: true, page: true, wideCards: 0 });
+  // The header takes its two-row layout in the page's resize event, which can run after setViewportSize returns.
+  await expect.poll(() => noSidewaysScroll(page), { message: 'phone width' }).toEqual({ area: true, page: true, wideCards: 0 });
   await page.setViewportSize({ width: 1600, height: 1000 });
 
   // GFF3 + FASTA. A card that holds only a file of the other input type reads as a card without a file.

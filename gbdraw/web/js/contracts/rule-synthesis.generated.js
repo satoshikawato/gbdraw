@@ -5,11 +5,11 @@
 
 /**
  * @typedef {object} SynthesizeColorRulesRequest
- * @property {'group' | 'features' | 'reset'} scope
+ * @property {'group' | 'row' | 'features' | 'reset'} scope
  * @property {RuleFeaturePayload[]} features
  * @property {number[]} selected
  * @property {string[][]} labels
- * @property {ColorRuleCondition[]} rules
+ * @property {ColorRuleRow[]} rules
  * @property {string} color
  * @property {string} caption
  */
@@ -30,22 +30,16 @@
  * @property {string | null} record_location
  */
 /**
- * @typedef {object} ColorRuleCondition
- * @property {string} feat
- * @property {string} qual
- * @property {string} val
- */
-/**
- * @typedef {object} SynthesizedColorRules
- * @property {(number | ColorRuleRow | RetargetedColorRule)[]} table
- */
-/**
  * @typedef {object} ColorRuleRow
  * @property {string} feat
  * @property {string} qual
  * @property {string} val
  * @property {string} color
  * @property {string} cap
+ */
+/**
+ * @typedef {object} SynthesizedColorRules
+ * @property {(number | ColorRuleRow | RetargetedColorRule)[]} table
  */
 /**
  * @typedef {object} RetargetedColorRule
