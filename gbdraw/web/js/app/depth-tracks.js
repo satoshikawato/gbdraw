@@ -27,3 +27,16 @@ export const isDepthTrackAutoLabel = (label, index, file = null) => {
   const fileBaseName = getDepthTrackFileBaseName(file);
   return Boolean(fileBaseName && normalized === fileBaseName);
 };
+
+/**
+ * Whether a series label is still the drawing's auto label: a default name, or
+ * the base name of a file the series had in that drawing before a change. The
+ * drawing's own files decide it, so a label stays with its drawing through an
+ * Undo, a Reset, or a Load (OV-2202).
+ * @param {unknown} label
+ * @param {number} index
+ * @param {readonly (DepthSlotFile | null | undefined)[]} files The series' files before the change
+ */
+export const isDepthSeriesAutoLabel = (label, index, files) => (
+  isDepthTrackAutoLabel(label, index) || files.some((file) => Boolean(file) && isDepthTrackAutoLabel(label, index, file))
+);

@@ -644,3 +644,36 @@ test('arrow keys move the focus over the tabs and wrap; Home and End go to the e
   assert.equal(focusedTabIndex('End', 0, 3), 2);
   assert.equal(focusedTabIndex('Enter', 1, 3), null, 'Enter and Space select through the button (manual activation)');
 });
+
+// The auto label of a Depth series belongs to its drawing (OV-2202): the text
+// one drawing took from its file is not auto in another drawing, and an Undo
+// or Reset this drawing in one drawing leaves the other's labels.
+test('a Depth series auto label belongs to its drawing; Undo and Reset in one leave the other (OV-2202)', async () => {
+  const app = createAppSetup();
+  const history = window.__GBDRAW_HISTORY__;
+  /** @param {string} name */
+  const depthFile = (name) => new File(['chr\t1\t3\n'], name);
+  const shownLabel = () => app.getDepthTrackLabel(0);
+  /** @param {string} label @param {() => unknown} edit */
+  const step = (label, edit) => history.runUndoable(label, edit);
+  app.selectDrawing('circular');
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('alpha.tsv')));
+  assert.equal(shownLabel(), 'alpha', 'a file names an auto-labeled series');
+
+  const { drawingId: second } = app.drawingBar.newDrawing('circular');
+  await step('Depth label', () => app.setDepthTrackLabel(0, 'alpha'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('beta.tsv')));
+  assert.equal(shownLabel(), 'alpha', 'a label typed in drawing B stays: the text is drawing A\'s auto label, not B\'s');
+
+  await step('Depth label', () => app.setDepthTrackLabel(0, ''));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('gamma.tsv')));
+  assert.equal(shownLabel(), 'gamma');
+  await history.undo();
+  await app.resetShownDrawing();
+  app.selectDrawing('circular');
+  assert.equal(shownLabel(), 'alpha', 'B\'s Undo and Reset this drawing leave A\'s label');
+  await step('Depth label', () => app.setDepthTrackLabel(0, 'gamma'));
+  await step('Depth file', () => app.setCircularDepthFile(0, depthFile('delta.tsv')));
+  assert.equal(shownLabel(), 'gamma', 'a label typed in A stays: B\'s undone auto label is not A\'s');
+  app.drawingList.deleteDrawing(second);
+});
