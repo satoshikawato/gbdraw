@@ -711,3 +711,33 @@ test('removing the Circular source returns every record-bound form field to its 
   assert.deepEqual(Object.fromEntries(Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => [field, drawing.form[field]])),
     { ...CIRCULAR_RECORD_FORM_DEFAULTS });
 });
+
+// D-15-186: "Every drawing that uses this file" stays all-or-nothing. While the
+// drawing switch waits it writes nothing, not even the clicked card's upload,
+// and the busy reason is shown once through `onBusy`.
+test('Every drawing while the drawing switch is busy writes nothing and shows the busy reason (D-15-186)', async () => {
+  const { createInputReplacement } = await import('../../gbdraw/web/js/app/drawing-list.js');
+  const busy = { status: 'busy', reason: 'Generating diagram. Retry after generation finishes.' };
+  let waiting = busy;
+  const calls = [];
+  const shared = { fileId: 'f1', name: 'a.gb' };
+  const drawings = { circular: createDrawingState('circular', 'circular'), 'circular-2': createDrawingState('circular-2', 'circular') };
+  for (const drawing of Object.values(drawings)) drawing.files.c_gb = shared;
+  const replacement = createInputReplacement({
+    drawingTabs: () => Object.keys(drawings).map((id) => ({ id })),
+    shownDrawingId: () => 'circular',
+    switchBusy: () => waiting,
+    drawingOf: (drawingId) => drawings[drawingId],
+    runProjectStep: (label, apply) => { calls.push(['step', label]); apply(); },
+    runDrawingStep: (label, apply) => { calls.push(['drawingStep', label]); apply(); },
+    applyInputReplacementToDrawings: () => calls.push(['replace']),
+    askScope: async () => 'all',
+    onBusy: (reason) => calls.push(['busy', reason])
+  });
+  const outcome = await replacement.replaceFromShownDrawing(
+    shared, { fileId: 'f2', name: 'b.gb' }, () => calls.push(['writeShown'])
+  );
+  assert.deepEqual(calls, [['busy', busy]], 'nothing is written, the reason is shown once');
+  assert.equal(outcome.status, 'busy');
+  waiting = null;
+});
