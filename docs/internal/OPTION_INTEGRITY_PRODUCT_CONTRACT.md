@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `99`
+- Contract revision: `100`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -41,7 +41,7 @@ Status: active Product authority
   `PD-OI-092`, `PD-OI-093`, `PD-OI-094`, `PD-OI-095`, `PD-OI-096`,
   `PD-OI-097`, `PD-OI-098`, `PD-OI-099`, `PD-OI-100`, `PD-OI-101`,
   `PD-OI-102`, `PD-OI-103`, `PD-OI-104`, `PD-OI-105`, `PD-OI-106`,
-  `PD-OI-107`, `PD-OI-108`, and `PD-OI-109`
+  `PD-OI-107`, `PD-OI-108`, `PD-OI-109`, and `PD-OI-110`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -3668,6 +3668,68 @@ Status: active Product authority
   - This change is Contract-only: the Contract is the only changed path, and
     the Review is `REQUIRED`. The runtime that implements this record
     follows in DRAWINGS-B, which cites this authority on its base.
+- Revision 100 changes: `PD-OI-110` is added (concern
+  `tracks.circular-conservation-ring-colors`, scenario revision `1`; the
+  outcome `DEFAULT-SAME ; GROUP5-IS-COLOR-RULE ; REASSIGN-OFF ; HOVER-ONLY ;
+  CLI-SCHEME ; MANUAL-COLORS ; LEGEND-SWATCH-WHEN-MIXED`). One setting chooses
+  the color of the similarity (pairwise match and conservation) rings: same
+  color (default), ten colors, or one color per five rings; a ring's color can
+  be set by hand under every scheme; the Web hover and the legend identify the
+  rings. The replies come from the Product Decision Owner `satoshikawato` of
+  `2026-10-28` in the Claude Code sessions of the campaigns
+  `conservation-palette-20261028` and `conservation-ring-colors-impl-20261028`
+  (decisions RP-D08 to RP-D12, RP-D14 to RP-D17, D-03, D-04, and D-05). Each
+  reply is quoted as written.
+  - RP-D08 (`2026-10-28`). After the session showed ring-color proposals, the
+    Owner directed the Web hover plus a selectable color scheme, leaving the
+    order of the ten colors to the session. Reply:
+    「Web の動き（F＋K を 1 つのホバー)+選択可能なオプションとして - 同じ色, 今の10色のやつ(色の順番はあなたの思うベストな順番にしてほしい。あと、あとでトラック並び替えた時に色を再配置するオプションもつけてほしい）, 5 本区切り を選択可能にしてほしい。バックアップ前にこれだけ見せて。それでサイドバックアップして〆ましょう」
+  - RP-D09 (`2026-10-28`). Asked what 「5 本区切り」 means (a color rule, or
+    gaps and hairlines between groups, or both). Reply:
+    「Q2「5 本区切り」の意味: 5 本ごとに色を変える規則」
+  - RP-D10 (`2026-10-28`). Asked for the default of the re-assignment check
+    (OFF recommended). Reply:
+    「Q3「トラックを並び替えたら色を振り直す」の既定: 規定はOFFでよい。」
+  - RP-D11 (`2026-10-28`). Asked whether the first implementation includes
+    click-to-pin for the hover (hover only recommended). Reply:
+    「Q4 クリックでホバーを固定する機能:最初の実装に入れず、ホバーだけにする」
+  - RP-D12 (`2026-10-28`). Asked whether the CLI can select the scheme too.
+    Reply:
+    「Q5 CLI でも色の方式を選べるようにするか: 選べるようにする」
+  - RP-D14 and RP-D15 (`2026-10-28`). Asked for the default value of the ring
+    color setting and shown the receipt. One reply answers both:
+    「Q1 SAME 同じ色、記録文はこの文面で承認」
+  - RP-D16 (`2026-10-28`). While RP-D14 and RP-D15 were recorded, the Owner
+    added:
+    「SAMEでもmanually自分で色は変えられるようにして。で、そうするとレーンごとに凡例の色がつくようにして」
+    The session added `MANUAL-COLORS ; LEGEND-SWATCH-WHEN-MIXED` and the
+    sentence 「振り直すのは方式の色だけで、手で変えた色は残す」 to the
+    same scenario revision `1`, which had not reached `dev`.
+  - RP-D17 (`2026-10-28`). The session showed the amended receipt below,
+    including that sentence. Reply: 「Q1:承認」
+  - D-03 (`2026-10-28`). Asked for a way back from a hand-set color (a per-row
+    button on hand-set rows only, recommended, or Undo only). Reply:
+    「Q2: 推奨通り」. The receipt is unchanged; this confirmation is recorded in
+    the `PD-OI-110` record: a per-row button 「方式の色に戻す」 on hand-set
+    rows only.
+  - D-04 (`2026-10-28`). Asked about the legend: (a) captions outer and inner
+    above and below the ring names, (b) the identity band when ring colors
+    differ (A the outermost ring's color, B neutral gray). Reply:
+    「Q3 (a)つける (b) B」. The receipt is unchanged; the record states the
+    captions and the neutral gray band.
+  - D-05 (`2026-10-28`). Asked for the color of a ring added after a removal
+    while re-assignment is OFF (A its position, B the first scheme index no
+    ring uses, recommended). Reply: 「Q4 B」. The receipt is unchanged; the
+    record states B.
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms.
+  - New receipt SHA-256: `PD-OI-110` scenario revision `1`
+    `a49ef4b43097e21149ef460f0e7acf0106799a2309cf22ca50e33b2dbe4d5160`.
+  - No other record is amended or retired. No earlier record governs the
+    similarity-ring colors; `PD-OI-110` changes the Web's default ring colors.
+  - This is a Product Contract-only change: it contains no runtime, and the
+    runtime that implements it follows in later pull requests, which require
+    it merged into their base. The Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -10160,6 +10222,67 @@ Decision date: 2026-10-28
   "mustPreserve": "既定（ON）の図は今と同じ。保存済みの Session と、これまでの CLI の実行は今と同じ図になる。Linear の Definition と、その行ごとの Show。Plot Title の描き方。",
   "mayRetire": "なし",
   "acceptedResidualRisk": "OFF の間も、Definition の文字の設定（Default font size、Species と Strain、レコードの名前と副題）は編集できるが、図には出ない。Linear の Definition 全体は消せない（行ごとの Show はある）。OFF の図にはレコードの名前が出ないので、Multi-Record Canvas でどの円がどのレコードかは、図の外で示す必要がある。新しい文言は、リリース前の一括翻訳までは英語のまま。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-28"
+}
+```
+
+### PD-OI-110: Similarity-ring colors and hover
+
+- Concern key: `tracks.circular-conservation-ring-colors`
+- Scenario revision: `1`
+- Supersedes: none. It changes the Web's default ring colors, which no
+  earlier record fixed.
+- Status: `ACCEPTED`
+- Selected outcome: `DEFAULT-SAME ; GROUP5-IS-COLOR-RULE ; REASSIGN-OFF ;
+  HOVER-ONLY ; CLI-SCHEME ; MANUAL-COLORS ; LEGEND-SWATCH-WHEN-MIXED`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner replies of `2026-10-28` quoted in the Revision 100
+  entry above (RP-D08 to RP-D12, RP-D14 to RP-D17). The receipt and JSON below
+  reproduce all nine fields of the approved receipt without translation or
+  additional terms. This Contract-only record supplies no runtime acceptance
+  evidence; the runtime follows in later pull requests.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `a49ef4b43097e21149ef460f0e7acf0106799a2309cf22ca50e33b2dbe4d5160`.
+- Owner confirmations (D-03, D-04, and D-05 of the Revision 100 entry above):
+  a hand-set ring has a per-row button 「方式の色に戻す」 (on hand-set rows
+  only); the legend has the captions 「outer」 and 「inner」 above and below
+  the ring names, and the identity band is a neutral gray when the ring colors
+  differ; a ring added after a removal, while re-assignment is OFF, takes the
+  first scheme index that no ring uses.
+
+```text
+PRODUCT_DECISION
+Concern: tracks.circular-conservation-ring-colors（類似度リングの色の方式と Web のホバー）
+Scenario revision: 1
+Choice: DEFAULT-SAME ; GROUP5-IS-COLOR-RULE ; REASSIGN-OFF ; HOVER-ONLY ; CLI-SCHEME ; MANUAL-COLORS ; LEGEND-SWATCH-WHEN-MIXED
+  - 類似度リング（pairwise match / conservation）の色を 1 つの設定「リングの色」で選ぶ。値は 同じ色 / 10 色 / 5 本ごとに 1 色。既定は 同じ色。
+  - 同じ色: 全リング #8b9cc1（今の CLI の既定）。
+  - どの方式でも（同じ色でも）、リングごとの色は手で変えられる（Web の各リングの色、CLI の --conservation_colors）。手で変えた色は方式より優先し、方式を切り替えても残る。
+  - 凡例: 全リングが同じ色のときは、名前の列（外→内）と identity の帯 1 本で、色見本は付けない。リングの色が 1 色でなくなったとき（手で変えたとき、10 色、6 本以上の 5 本ごとに 1 色）は、凡例の各行（レーン）にそのリングの色見本を付ける。
+  - 10 色: 今の Web の 10 色を 青・橙・青緑・赤・灰・緑・紫・黄・茶・桃 の順に使い、11 本目から繰り返す。
+  - 5 本ごとに 1 色: i 本目の色は HUES[(i − 1) ÷ 5]（#8b9cc1 #c88890 #62ad9a #bf89ab #7caa7e #bc9464）で、31 本目から繰り返す。「5 本区切り」はこの色の規則で、隙間や線の区切り（案 D）は入れない。
+  - Web にチェック「トラックを並び替えたら色を振り直す」（既定 OFF: 色はゲノムに付く）とボタン「今の並びで色を振り直す」（1 回だけ振り直す）。同じ色のときはどちらも無効。振り直すのは方式の色だけで、手で変えた色は残す。
+  - Web のホバー: リングに乗せると、そのリングだけ元の濃さで残してほかを 35% に薄くし、凡例のその行を太字にし、マウスの角度に放射状の線を引き、その位置（bp）と全リングの identity を外→内の順に並べたポップアップを出す。凡例の名前に乗せると、そのリングだけ残す（ポップアップなし）。離せば戻る。クリックで固定する機能は入れない。
+  - CLI でも同じ 3 つの方式を選べる（オプション名は仮で、実装で決める）。
+Rationale: リングがどの比較ゲノムかを、色に頼らずホバーと凡例で読めるようにし、色は 1 つの規則で Web と CLI に揃える
+Must preserve: ユーザーが指定した色（CLI の --conservation_colors、Web のソースごとの色、Session の conservationColors）は方式より優先する。保存済みの Session は開いたときの色が変わらない。identity の濃淡（白→その色）の意味
+May retire: Web の既定の色の順（青・橙・緑・赤・青緑・黄・紫・桃・茶・灰）
+Accepted residual risk: 10 色は 11 本目から繰り返し、隣り合わない組（例: 緑と桃）は 2 型色覚でほぼ同じ色（ΔE 1.1）。5 本ごとに 1 色は組の中が同じ色で 31 本目から繰り返す。ホバーは印刷と SVG 書き出しに残らない
+Owner: satoshikawato
+Decision date: 2026-10-28
+```
+
+```json
+{
+  "concern": "tracks.circular-conservation-ring-colors（類似度リングの色の方式と Web のホバー）",
+  "scenarioRevision": 1,
+  "choice": "DEFAULT-SAME ; GROUP5-IS-COLOR-RULE ; REASSIGN-OFF ; HOVER-ONLY ; CLI-SCHEME ; MANUAL-COLORS ; LEGEND-SWATCH-WHEN-MIXED\n  - 類似度リング（pairwise match / conservation）の色を 1 つの設定「リングの色」で選ぶ。値は 同じ色 / 10 色 / 5 本ごとに 1 色。既定は 同じ色。\n  - 同じ色: 全リング #8b9cc1（今の CLI の既定）。\n  - どの方式でも（同じ色でも）、リングごとの色は手で変えられる（Web の各リングの色、CLI の --conservation_colors）。手で変えた色は方式より優先し、方式を切り替えても残る。\n  - 凡例: 全リングが同じ色のときは、名前の列（外→内）と identity の帯 1 本で、色見本は付けない。リングの色が 1 色でなくなったとき（手で変えたとき、10 色、6 本以上の 5 本ごとに 1 色）は、凡例の各行（レーン）にそのリングの色見本を付ける。\n  - 10 色: 今の Web の 10 色を 青・橙・青緑・赤・灰・緑・紫・黄・茶・桃 の順に使い、11 本目から繰り返す。\n  - 5 本ごとに 1 色: i 本目の色は HUES[(i − 1) ÷ 5]（#8b9cc1 #c88890 #62ad9a #bf89ab #7caa7e #bc9464）で、31 本目から繰り返す。「5 本区切り」はこの色の規則で、隙間や線の区切り（案 D）は入れない。\n  - Web にチェック「トラックを並び替えたら色を振り直す」（既定 OFF: 色はゲノムに付く）とボタン「今の並びで色を振り直す」（1 回だけ振り直す）。同じ色のときはどちらも無効。振り直すのは方式の色だけで、手で変えた色は残す。\n  - Web のホバー: リングに乗せると、そのリングだけ元の濃さで残してほかを 35% に薄くし、凡例のその行を太字にし、マウスの角度に放射状の線を引き、その位置（bp）と全リングの identity を外→内の順に並べたポップアップを出す。凡例の名前に乗せると、そのリングだけ残す（ポップアップなし）。離せば戻る。クリックで固定する機能は入れない。\n  - CLI でも同じ 3 つの方式を選べる（オプション名は仮で、実装で決める）。",
+  "rationale": "リングがどの比較ゲノムかを、色に頼らずホバーと凡例で読めるようにし、色は 1 つの規則で Web と CLI に揃える",
+  "mustPreserve": "ユーザーが指定した色（CLI の --conservation_colors、Web のソースごとの色、Session の conservationColors）は方式より優先する。保存済みの Session は開いたときの色が変わらない。identity の濃淡（白→その色）の意味",
+  "mayRetire": "Web の既定の色の順（青・橙・緑・赤・青緑・黄・紫・桃・茶・灰）",
+  "acceptedResidualRisk": "10 色は 11 本目から繰り返し、隣り合わない組（例: 緑と桃）は 2 型色覚でほぼ同じ色（ΔE 1.1）。5 本ごとに 1 色は組の中が同じ色で 31 本目から繰り返す。ホバーは印刷と SVG 書き出しに残らない",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-28"
 }
