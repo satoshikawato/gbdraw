@@ -176,6 +176,13 @@ const LABEL_TEXTS = [
   'walk label',
   'a label text far too long to stay inside its own arc, drawn outside with leaders'
 ];
+// The label text short enough to be drawn inside the smallest feature. Two
+// features with the same span are drawn on top of each other, so this text on
+// both draws two labels on one place, and Generate rightly refuses the draft
+// (PD-OI-097, LP-D52: "Labels do not fit", fix "separate overlapping
+// features"; OV-2195). The walk gives a feature with a same-span twin the
+// outside text 'walk label' instead; the random draws stay as they were.
+const INSIDE_LABEL_TEXT = 'x';
 const CAPTIONS = ['Walk caption', 'transfer RNA', 'Renamed group', 'CDS'];
 const ADDED_CAPTIONS = ['Walk group', 'Added row'];
 const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -249,7 +256,11 @@ const readState = (page) => page.evaluate(async () => {
   const history = window.__GBDRAW_HISTORY__;
   const featureKey = (feature) => [feature.type, feature.start, feature.end, feature.locus_tag || '', feature.product || ''].join('|');
   const features = app.filteredFeatures.map((feature) => ({
-    key: featureKey(feature), type: String(feature.type || ''), tag: String(feature.locus_tag || ''), product: String(feature.product || '')
+    key: featureKey(feature),
+    span: `${feature.start}|${feature.end}`,
+    type: String(feature.type || ''),
+    tag: String(feature.locus_tag || ''),
+    product: String(feature.product || '')
   })).sort((left, right) => (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
   return {
     drawing: state.activeDrawing().id,
@@ -303,7 +314,12 @@ const nextStep = (random, state, kind, { fixture, canUndo }) => {
       ? { kind, target: 'popup', feature: feature(), color: random.pick(COLORS), picks }
       : { kind, target: 'legend', index: index(state.legend.length), color: random.pick(COLORS), picks };
     case 'featureVisibility': return { kind, feature: feature(), value: random.pick(['on', 'off']), picks };
-    case 'labelText': return { kind, feature: feature(), text: random.pick(LABEL_TEXTS), picks };
+    case 'labelText': {
+      const target = random.pick(features);
+      const text = random.pick(LABEL_TEXTS);
+      const stacked = features.some((other) => other.key !== target.key && other.span === target.span);
+      return { kind, feature: target.key, text: text === INSIDE_LABEL_TEXT && stacked ? 'walk label' : text, picks };
+    }
     case 'labelVisibility': return { kind, feature: feature(), value: random.pick(['on', 'off']), picks };
     case 'visibilityRuleAdd': return visibilityRuleAdd();
     case 'visibilityRuleEdit':
