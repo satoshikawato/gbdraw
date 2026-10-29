@@ -37,7 +37,7 @@ const { createLegendEntryActions } = await import(
 );
 // The root's reader of the colors Legend rows show (app-setup.js); without a
 // displayed Result, a row shows the color it records.
-const { displayedLegendRowColors } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
+const { displayedLegendRowColors, draftLegendRows } = await import(pathToFileURL(join(tempRoot, 'app', 'candidate-render.js')));
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
@@ -1262,12 +1262,20 @@ const mockLegendEntry = (caption, color, x) => {
   // and the retired Rule row. Once it commits, its request draws no GC content.
   hidden = ['GC content'];
   const keep = ['GC content'];
-  if (actions.liveRedrawLegend) assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, keep);
+  assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, keep);
   hidden = [];
   render('CDS', 'GC skew');
   actions.extractLegendEntries({ replaceGeneratedInventory: true, liveRedraw: { keep }, liveResultIdentities: ['result-1'] });
   assert.ok(state.originalLegendOrder.value.includes('GC content'), 'the hidden track row stays');
   assert.ok(!state.originalLegendOrder.value.includes('Rule'), 'the retired row leaves the inventory');
+  // A row the editor adds under the retired caption is the editor's, not Python's.
+  state.legendEntries.value = [...state.legendEntries.value, { caption: 'Rule', originalCaption: 'Rule', color: '#445566' }];
+  const draftRows = draftLegendRows({
+    legendEntries: state.legendEntries.value, deletedLegendEntries: state.deletedLegendEntries.value,
+    dormantLegendEntries: state.dormantLegendEntries.value, originalLegendOrder: state.originalLegendOrder.value
+  });
+  assert.equal(draftRows.styledRow('Rule').isOriginal, false, 'the added Rule row is not Python\'s');
+  assert.equal(draftRows.styledRow('GC content').isOriginal, true, 'the kept hidden track row is Python\'s');
   // The next live redraw (the skew hidden too) keeps the row the last one kept.
   hidden = ['GC skew'];
   assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, ['GC content', 'GC skew']);

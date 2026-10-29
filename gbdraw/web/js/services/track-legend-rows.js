@@ -396,7 +396,10 @@ export const drawnTrackHidden = (track, request, drawing) => {
 /**
  * The keys of a Result's Legend rows whose drawn track the draft hides
  * (`drawnTrackHidden`): each leaves the Legend list with its track and
- * returns with it (OV-1198, OV-1215, PD-OI-104). None for a Result without a
+ * returns with it (OV-1198, OV-1215, PD-OI-104). The live track projection
+ * applies every hide this answer gives to a track the request draws (D-212),
+ * so a row leaves only with a track the live apply removes from the Result,
+ * never while the Result keeps drawing it. None for a Result without a
  * request (a Session 27 to 30): its tracks change only at Generate, so the
  * list keeps the rows it draws.
  * @param {TrackLegendRows} rows `trackLegendRows` of the displayed Result.

@@ -1909,8 +1909,8 @@ const trackPlanProjections = new WeakMap();
 /**
  * The Use custom stack switch a committed request shows it was drawn with: a
  * Linear request has slots only with the stack on; a Circular request without
- * slots was drawn with it off, and one with slots with it on unless Circular
- * track widths or radii drew them with it off (null: unknown here).
+ * slots was drawn with it off. A Circular request with slots does not show it
+ * (Circular track widths or radii draw slots with the switch off): null.
  * @param {CanonicalRenderRequest} request @returns {boolean | null}
  */
 const requestDrawnStack = (request) => {
@@ -1981,10 +1981,12 @@ const depthSourcesKept = (depth, request, inputs, resources) => {
  * the kept parts can give it (a Depth track while the draft's Depth sources
  * are the kept ones). Kept payloads hold the values of the last Generate, so
  * no pending row value rides along (PD-OI-103 rev 2). A show the parts cannot
- * give waits (`complete` false), and a hide always applies. A draft Use
- * custom stack switch other than the one the request was drawn with, without
- * a kept plan of it (after a Load), and committed slots the slot parser
- * rejects wait whole: nothing is written.
+ * give waits (`complete` false), and a hide always applies. When the drawn
+ * switch is unknown, or the draft's Use custom stack is the other one without
+ * a kept plan of it (after a Load), only the hides apply, from what the
+ * committed request draws; a show and the switch wait (D-212). Committed
+ * slots the slot parser does not read wait whole: nothing is written (the
+ * Legend list knows no track of them either, `drawnTracks`).
  * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context
  * @returns {TrackPlanProjection}
  */
@@ -2025,16 +2027,19 @@ const trackPlanProjection = (request, drawing, context) => {
   const committedDepth = Array.isArray(request.diagramOptions.depthTracks);
   let complete = true;
   // 1. The base plan: the plan of the switch the request was drawn with, or
-  // the kept plan of the other one. A Circular request with slots whose
-  // switch is unknown was drawn with it on while the draft has no Circular
-  // track widths or radii (with them, either switch could have drawn it).
-  const drawnStack = (kept ? kept.drawnStack : requestDrawnStack(request))
-    ?? (hasCircularGeometryShortcuts(circularGeometryShortcutsForState(drawing)) ? null : true);
-  const other = drawnStack !== draftStack;
-  if (drawnStack === null || (other && !kept?.plans.other)) return TRACK_PLAN_WAITS;
-  const base = kept ? (other ? /** @type {KeptPlan} */ (kept.plans.other) : kept.plans.drawn) : committedPlan;
-  const baseIsOther = other;
-  const depthShowable = Boolean(kept?.depth && depthSourcesKept(kept.depth, request, inputs, resources));
+  // the kept plan of the other one. The drawn switch is the kept parts' or
+  // what the request shows (`requestDrawnStack`), never read from the draft.
+  // When it is unknown, or the draft's switch is the other one and no kept
+  // plan of it exists (after a Load), only hides apply: each track the draft
+  // hides leaves what the committed request draws, whatever switch drew it,
+  // and a show or the switch itself waits (D-212).
+  const drawnStack = kept ? kept.drawnStack : requestDrawnStack(request);
+  const other = drawnStack !== null && drawnStack !== draftStack;
+  const hidesOnly = drawnStack === null || (other && !kept?.plans.other);
+  const baseIsOther = other && !hidesOnly;
+  const base = hidesOnly || !kept ? committedPlan : baseIsOther ? /** @type {KeptPlan} */ (kept.plans.other) : kept.plans.drawn;
+  if (hidesOnly) complete = false;
+  const depthShowable = !hidesOnly && Boolean(kept?.depth && depthSourcesKept(kept.depth, request, inputs, resources));
   /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
   const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, { form: drawing.form, adv: drawing.adv });
   const waiting = new Set(kept?.waiting || []);
@@ -2064,7 +2069,7 @@ const trackPlanProjection = (request, drawing, context) => {
         continue;
       }
       if (committedSlot) present.push(committedSlot);
-      else if (kept && !waiting.has(kept_.id) && (kind !== 'depth' || depthShowable)) present.push(kept_);
+      else if (kept && !hidesOnly && !waiting.has(kept_.id) && (kind !== 'depth' || depthShowable)) present.push(kept_);
       else complete = false;
     }
     // A GC, skew or Depth row the draft draws that the base lacks waits.
@@ -2109,7 +2114,6 @@ const trackPlanProjection = (request, drawing, context) => {
     });
     depthWrites.push([[LIVE_WEB_FILES_ROOT, 'resourceOriginalNames'], Object.keys(names).length > 0 ? names : undefined]);
   }
-  const flags = trackFlagOverrides(drawing.form, circular, depthPresent);
   // A request without a flag (a CLI Session without overrides) draws the
   // mode's track default, as Load reads it; a flag equal to it creates nothing.
   const committedOverrides = /** @type {Record<string, unknown>} */ (request.diagramOptions.configOverrides || {});
@@ -2119,6 +2123,14 @@ const trackPlanProjection = (request, drawing, context) => {
     [CONFIG_OVERRIDE_PATHS.showGc]: defaults.gc, [CONFIG_OVERRIDE_PATHS.showSkew]: defaults.skew,
     [CONFIG_OVERRIDE_PATHS.showDepth]: committedDepth
   };
+  /** @param {string} key */
+  const committedFlag = (key) => (Object.hasOwn(committedOverrides, key) ? Boolean(committedOverrides[key]) : drawnFlags[key]);
+  // Only hides: a GC or skew flag turns off for a default track the draft hides, and stays otherwise.
+  const flags = hidesOnly ? {
+    [CONFIG_OVERRIDE_PATHS.showGc]: committedFlag(CONFIG_OVERRIDE_PATHS.showGc) && !hidden('content', null, nt),
+    [CONFIG_OVERRIDE_PATHS.showSkew]: committedFlag(CONFIG_OVERRIDE_PATHS.showSkew) && !hidden('skew', null, nt),
+    [CONFIG_OVERRIDE_PATHS.showDepth]: depthPresent
+  } : trackFlagOverrides(drawing.form, circular, depthPresent);
   /** @param {string} key @returns {LiveSettingWrite[]} */
   const flagWrite = (key) => (!Object.hasOwn(committedOverrides, key) && flags[key] === drawnFlags[key]
     ? [] : [configWrite(key, flags[key])]);
@@ -3887,7 +3899,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  * @typedef {object} KeptTrackParts
  * @property {boolean | null} drawnStack The Use custom stack switch the request was built with; for parts
  *   completed from a loaded Session, what the request shows (`requestDrawnStack`); null: a Circular request
- *   with slots, which Circular track widths or radii may have drawn with the switch off.
+ *   with slots, which does not show it (only hides apply, D-212).
  * @property {{ readonly drawn: KeptPlan, readonly other: KeptPlan | null }} plans The plan of that switch and of
  *   the other one, every GC, skew and Depth row on except a row Hide GC Content or Hide GC Skew hid (PQ-4 A).
  * @property {KeptDepth | null} depth

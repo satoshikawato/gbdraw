@@ -532,7 +532,10 @@ test('N18 (request-less Results): a Result shown without a committed request say
   }
 });
 
-test('N7: after a Load a live Depth hide completes the kept parts, and its Undo shows live', () => {
+// A Circular request with slots does not show which Use custom stack switch
+// drew it (Circular track widths or radii draw slots with it off): after a
+// Load its shows wait (D-212); a Linear request shows the switch.
+test('N7: after a Load a live Depth hide completes the kept parts, and its Undo shows live (Linear) or waits (Circular)', () => {
   for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack]]) {
     const drawing = setup({ depthSeries: 1 });
     const generated = generate(mode);
@@ -547,9 +550,14 @@ test('N7: after a Load a live Depth hide completes the kept parts, and its Undo 
     assert.ok(request.keptTrackPartsOf(hidden.renderRequest)?.depth, `${mode}: the hide completes the kept parts`);
     rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = true;
     set(drawing.form, 'show_depth', true);
-    assert.equal(request.liveSettingNoteApplies(hidden.renderRequest, K.DEPTH, drawing, inputs, hidden.resources), true);
-    const undone = withPending(mode, () => live(hidden, mode));
-    assertLiveEqualsGenerate(undone.next, mode, undone.revert, `${mode}: Undo of the hide after a Load`);
+    const showsLive = mode === 'linear';
+    assert.equal(request.liveSettingNoteApplies(hidden.renderRequest, K.DEPTH, drawing, inputs, hidden.resources), showsLive);
+    if (showsLive) {
+      const undone = withPending(mode, () => live(hidden, mode));
+      assertLiveEqualsGenerate(undone.next, mode, undone.revert, `${mode}: Undo of the hide after a Load`);
+    } else {
+      assert.deepEqual(project(hidden, mode), [], `${mode}: the Undo writes nothing`);
+    }
     undoAll();
   }
 });
@@ -649,7 +657,9 @@ test('N13b: a commit that changes the resources rebuilds the adopted resource ta
   undoAll();
 });
 
-test('N11b (Load): with no kept parts, a Use custom stack switch away from the drawn plan waits and writes nothing', () => {
+// D-212: a hide the switch brings (Linear stack off with Show GC Content
+// off) still applies from the committed request; the rest of the switch waits.
+test('N11b (Load): with no kept parts, a Use custom stack switch away from the drawn plan waits; only a hide it brings applies', () => {
   for (const [mode, setup, key, on] of [
     ['linear', linearStack, 'linear_track_slots_enabled', false],
     ['linear', linearSimple, 'linear_track_slots_enabled', true],
@@ -668,7 +678,15 @@ test('N11b (Load): with no kept parts, a Use custom stack switch away from the d
       const loaded = { ...committed, renderRequest: structuredClone(committed.renderRequest) };
       assert.equal(request.keptTrackPartsOf(loaded.renderRequest), null);
       set(drawing.adv, key, on);
-      assert.deepEqual(project(loaded, mode), [], `${label}: writes nothing`);
+      const writes = project(loaded, mode);
+      if (mode === 'linear' && !on && !showGc) {
+        const next = applied(loaded, writes);
+        const before = loaded.renderRequest.diagramOptions.tracks.linearTrackSlots;
+        assert.deepEqual(next.renderRequest.diagramOptions.tracks.linearTrackSlots,
+          before.filter((slot) => slot.renderer !== 'dinucleotide_content'), `${label}: only the GC content slot leaves`);
+      } else {
+        assert.deepEqual(writes, [], `${label}: writes nothing`);
+      }
       for (const path of [K.GC, mode === 'circular' ? K.CSLOTS : K.LSLOTS]) {
         assert.equal(request.liveSettingNoteApplies(loaded.renderRequest, path, drawing, inputs, loaded.resources), false,
           `${label}: ${path} says Applies on Generate`);
@@ -711,7 +729,9 @@ test('H2: committed slots stated as spec strings are read through the slot parse
       `${mode}: the kept rows stay the committed strings`);
     assert.deepEqual(written[slotsKey].map((spec) => spec.split(':')[0]), expected[slotsKey].map((slot) => slot.id), `${mode}: ids`);
     assert.equal(written[axisKey], expected[axisKey], `${mode}: axis`);
-    assert.equal(request.liveSettingNoteApplies(next.renderRequest, mode === 'circular' ? K.CSLOTS : K.LSLOTS, drawing, inputs, next.resources), true);
+    // A Circular request with slots does not show its drawn switch: after the Load, shows wait (D-212).
+    assert.equal(request.liveSettingNoteApplies(next.renderRequest, mode === 'circular' ? K.CSLOTS : K.LSLOTS, drawing, inputs, next.resources),
+      mode === 'linear');
     undoAll();
   }
 });
@@ -749,6 +769,125 @@ test('L6: one note render runs the track projection once for the five GT keys', 
   } finally {
     hooks.onStructuralMetric = previous;
     config.canonicalRenderArtifactOwner.restore(null);
+    undoAll();
+  }
+});
+
+// Review 2 (D-212): a hide always applies from the committed request; the
+// Legend list hides a track's rows only when the apply removes the track.
+// Whether a request draws a track: a slot track by its slot id, a default
+// content or skew track by its flag, a default Depth track by its series.
+const resultDraws = (renderRequest, track) => {
+  if (track.slotId !== null) return legendRows.drawnTracks(renderRequest).some((drawn) => drawn.slotId === track.slotId);
+  if (track.kind === 'depth') return Array.isArray(renderRequest.diagramOptions.depthTracks);
+  return renderRequest.diagramOptions.configOverrides?.[track.kind === 'content' ? 'canvas.show_gc' : 'canvas.show_skew'] !== false;
+};
+// The Legend list (`hiddenTrackLegendKeys` on the committed request) hides
+// exactly the rows of the tracks the live apply removes; returns the apply.
+const assertListFollowsApply = (committed, mode, label) => {
+  const drawing = modeDrawing(state, mode);
+  const tracks = legendRows.drawnTracks(committed.renderRequest);
+  const rows = new Map(tracks.map((track, index) => [`row ${index}`, { key: `row ${index}`, ...track }]));
+  const listedHidden = new Set(legendRows.hiddenTrackLegendKeys(rows, committed.renderRequest, drawing));
+  const next = live(committed, mode);
+  for (const [key, track] of rows) {
+    assert.equal(listedHidden.has(key), !resultDraws(next.renderRequest, track), `${label}: the list follows the apply for ${track.kind} ${track.slotId}`);
+  }
+  return next;
+};
+const loadOf = (committed) => ({ ...committed, renderRequest: structuredClone(committed.renderRequest) });
+const drawsKind = (renderRequest, renderer) => (renderRequest.diagramOptions.tracks.circularTrackSlots
+  ?? renderRequest.diagramOptions.tracks.linearTrackSlots ?? []).some((slot) => slot.renderer === renderer);
+
+test('H1 (review 2 P1): after a Load of a Circular Session drawn with track widths, Hide GC Content applies; also without the Load', () => {
+  for (const loaded of [true, false]) {
+    const label = loaded ? 'after a Load' : 'after a Generate';
+    const drawing = circularPlain();
+    set(drawing.adv, 'gc_content_width_circular', 40);
+    const generated = generate('circular');
+    const committed = loaded ? loadOf(generated) : generated;
+    assert.ok(drawsKind(committed.renderRequest, 'dinucleotide_content'), `${label}: the widths drew slots`);
+    setSuppress(drawing, 'suppress_gc', true);
+    const next = assertListFollowsApply(committed, 'circular', label);
+    assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_content'), `${label}: the GC content slot leaves`);
+    const hidden = withPending('circular', () => live(committed, 'circular'));
+    assertLiveEqualsGenerate(hidden.next, 'circular', hidden.revert, `${label}: Hide GC Content`);
+    undoAll();
+  }
+});
+
+test('H1 (review 2): a hide after a Load applies with a pending width, and after a pending Use custom stack switch', () => {
+  // A Circular stack Session; the draft gets a Circular track width (pending) after the Load.
+  {
+    const drawing = circularStack({ depthSeries: 1 });
+    const committed = loadOf(generate('circular'));
+    set(drawing.adv, 'gc_content_width_circular', 40);
+    setSuppress(drawing, 'suppress_gc', true);
+    const next = assertListFollowsApply(committed, 'circular', 'Circular stack, pending width');
+    assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_content'), 'the GC content slot leaves');
+    assert.ok(drawsKind(next.renderRequest, 'dinucleotide_skew') && drawsKind(next.renderRequest, 'depth'), 'the other tracks stay');
+    undoAll();
+  }
+  // A Linear stack Session; Use custom stack turned off after the Load waits, then Show GC Content off hides.
+  {
+    const drawing = linearStack();
+    const committed = loadOf(generate('linear'));
+    set(drawing.adv, 'linear_track_slots_enabled', false);
+    assert.deepEqual(project(committed, 'linear'), [], 'the switch alone writes nothing');
+    set(drawing.form, 'show_gc', false);
+    const next = assertListFollowsApply(committed, 'linear', 'Linear stack off, then Show GC Content off');
+    assert.ok(!drawsKind(next.renderRequest, 'dinucleotide_content'), 'the GC content slot leaves');
+    assert.ok(drawsKind(next.renderRequest, 'dinucleotide_skew') && drawsKind(next.renderRequest, 'depth'), 'the stack stays otherwise');
+    assert.equal(next.renderRequest.diagramOptions.configOverrides['canvas.show_gc'], false);
+    for (const path of [K.GC, K.LSLOTS]) {
+      assert.equal(request.liveSettingNoteApplies(next.renderRequest, path, drawing, inputs, next.resources), false,
+        `${path}: the switch still says Applies on Generate`);
+    }
+    undoAll();
+  }
+});
+
+test('M1 (review 2 P2): the drawn switch is never read from the draft widths; a pending width cleared and the stack turned on wait', () => {
+  const drawing = circularPlain();
+  set(drawing.adv, 'gc_content_width_circular', 40);
+  set(drawing.adv, 'circular_track_slots', createDefaultCircularTrackSlots({ showDepth: false }));
+  const committed = loadOf(generate('circular'));
+  set(drawing.adv, 'gc_content_width_circular', null);
+  set(drawing.adv, 'circular_track_slots_enabled', true);
+  assert.deepEqual(project(committed, 'circular'), [], 'nothing is written for the switch');
+  for (const path of [K.GC, K.CSLOTS]) {
+    assert.equal(request.liveSettingNoteApplies(committed.renderRequest, path, drawing, inputs, committed.resources), false,
+      `${path} says Applies on Generate`);
+  }
+  undoAll();
+});
+
+test('M2 (review 2): while a show waits the Legend list lists no row of the track and hides none', () => {
+  // PQ-4 A: Hide GC Content off after a live hide in a Circular stack waits.
+  {
+    const drawing = circularStack();
+    const committed = generate('circular');
+    setSuppress(drawing, 'suppress_gc', true);
+    const hidden = assertListFollowsApply(committed, 'circular', 'Hide GC Content');
+    setSuppress(drawing, 'suppress_gc', false);
+    const waits = assertListFollowsApply(hidden, 'circular', 'Hide GC Content off (waits)');
+    assert.ok(!legendRows.drawnTracks(waits.renderRequest).some((track) => track.kind === 'content'), 'no GC content row is listed');
+    assert.equal(request.liveSettingNoteApplies(waits.renderRequest, K.CSLOTS, drawing, inputs, waits.resources), false);
+    undoAll();
+  }
+  // After a Load of a Circular stack (the drawn switch unknown): a Depth hide applies, its show waits.
+  {
+    const drawing = circularStack({ depthSeries: 1 });
+    const committed = loadOf(generate('circular'));
+    set(drawing.form, 'show_depth', false);
+    set(rowOf(drawing, 'circular', (row) => row.renderer === 'depth'), 'enabled', false);
+    const hidden = assertListFollowsApply(committed, 'circular', 'Depth hide after a Load');
+    assert.ok(!drawsKind(hidden.renderRequest, 'depth'));
+    set(drawing.form, 'show_depth', true);
+    set(rowOf(drawing, 'circular', (row) => row.renderer === 'depth'), 'enabled', true);
+    const waits = assertListFollowsApply(hidden, 'circular', 'Depth show after a Load (waits)');
+    assert.ok(!drawsKind(waits.renderRequest, 'depth'), 'the show waits');
+    assert.equal(request.liveSettingNoteApplies(waits.renderRequest, K.DEPTH, drawing, inputs, waits.resources), false);
     undoAll();
   }
 });
