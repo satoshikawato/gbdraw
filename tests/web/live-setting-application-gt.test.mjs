@@ -86,7 +86,7 @@ const draftDepth = (mode) => (mode === 'circular'
 const filesOf = (mode, { hiddenDepth = true } = {}) => {
   const drawing = modeDrawing(state, mode);
   const draws = legendRows.draftDrawsDepth(mode, drawing);
-  const hidden = !draws && hiddenDepth ? { hiddenDepth: mode === 'circular' ? [inputs.circularDepth] : draftDepth(mode) } : {};
+  const hidden = !draws && hiddenDepth ? { hiddenDepth: mode === 'circular' ? { circular: inputs.circularDepth } : { linear: draftDepth(mode) } } : {};
   return mode === 'circular'
     ? { c_gb: circularGenbank, c_depth: draws ? inputs.circularDepth : undefined, linearSeqs: [], ...hidden }
     : { linearSeqs: inputs.linearSeqs.map((card) => ({ ...card, depth: draws ? card.depth : null })), linearComparisons: [], ...hidden };
@@ -501,7 +501,7 @@ test('N18 (request-less Results): nothing says Live edit and the Legend list kee
   const rows = new Map([['GC content', { key: 'GC content', slotId: null, kind: 'content', nt: 'GC', paletteKey: 'gc_content', ownColor: null }]]);
   assert.deepEqual(legendRows.hiddenTrackLegendKeys(rows, null, drawing), []);
   config.canonicalRenderArtifactOwner.restore(null);
-  assert.equal(config.committedLiveSettingApplies(K.GC), true, 'no Result: every path can');
+  assert.equal(config.committedSettingNotePredicate()(K.GC), true, 'no Result: every path can');
   undoAll();
 });
 
@@ -523,9 +523,9 @@ test('N18 (request-less Results): a Result shown without a committed request say
   state.results.value = [{ name: 'loaded' }];
   try {
     for (const key of [...GT, 'diagramOptions.output.legend', 'diagramOptions.plotTitle']) {
-      assert.equal(config.committedLiveSettingApplies(key), false, key);
+      assert.equal(config.committedSettingNotePredicate()(key), false, key);
     }
-    assert.notEqual(owner.settingApplicationNote('track-visibility', config.committedLiveSettingApplies).text,
+    assert.notEqual(owner.settingApplicationNote('track-visibility', config.committedSettingNotePredicate()).text,
       owner.LIVE_NOTE?.text ?? 'Live edit');
   } finally {
     state.results.value = shown;
@@ -621,8 +621,7 @@ test('N20 (F1): Generate serializes the hidden Depth files only when the draft d
   set(drawing.form, 'show_depth', false);
   const off = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null, hiddenDepth: true });
   assert.equal(off.c_depth, null);
-  assert.equal(off.hiddenDepth.length, 1);
-  assert.deepEqual(off.hiddenDepth[0], on.c_depth);
+  assert.deepEqual(off.hiddenDepth, { circular: on.c_depth });
   const plain = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null });
   assert.equal(plain.hiddenDepth, undefined, 'only Generate asks for them');
   assert.equal(reads, 1, 'the File is read once');
@@ -648,4 +647,108 @@ test('N13b: a commit that changes the resources rebuilds the adopted resource ta
   assert.ok(adoptedSessionResourceDescriptor(afterShow, 'depth-tracks-1-source'));
   config.canonicalRenderArtifactOwner.restore(null);
   undoAll();
+});
+
+test('N11b (Load): with no kept parts, a Use custom stack switch away from the drawn plan waits and writes nothing', () => {
+  for (const [mode, setup, key, on] of [
+    ['linear', linearStack, 'linear_track_slots_enabled', false],
+    ['linear', linearSimple, 'linear_track_slots_enabled', true],
+    ['circular', circularStack, 'circular_track_slots_enabled', false],
+    ['circular', circularPlain, 'circular_track_slots_enabled', true]
+  ]) {
+    for (const showGc of [false, true]) {
+      const label = `${mode} stack ${on ? 'on' : 'off'}, GC ${showGc ? 'shown' : 'hidden'}`;
+      const drawing = setup();
+      // The rows the switch turns on (a plain draft keeps its stack rows while it is off).
+      if (on && mode === 'linear') set(drawing.adv, 'linear_track_slots', createDefaultLinearTrackSlots({ showGc: true, showSkew: true }));
+      if (on && mode === 'circular') set(drawing.adv, 'circular_track_slots', createDefaultCircularTrackSlots({ showDepth: false }));
+      if (mode === 'linear') set(drawing.form, 'show_gc', showGc);
+      else setSuppress(drawing, 'suppress_gc', !showGc);
+      const committed = generate(mode);
+      const loaded = { ...committed, renderRequest: structuredClone(committed.renderRequest) };
+      assert.equal(request.keptTrackPartsOf(loaded.renderRequest), null);
+      set(drawing.adv, key, on);
+      assert.deepEqual(project(loaded, mode), [], `${label}: writes nothing`);
+      for (const path of [K.GC, mode === 'circular' ? K.CSLOTS : K.LSLOTS]) {
+        assert.equal(request.liveSettingNoteApplies(loaded.renderRequest, path, drawing, inputs, loaded.resources), false,
+          `${label}: ${path} says Applies on Generate`);
+      }
+      undoAll();
+    }
+  }
+  // The switch the request was drawn with: a hide after the Load stays live.
+  const drawing = linearStack();
+  const committed = generate('linear');
+  const loaded = { ...committed, renderRequest: structuredClone(committed.renderRequest) };
+  set(rowOf(drawing, 'linear', (row) => row.renderer === 'dinucleotide_content'), 'enabled', false);
+  const hidden = withPending('linear', () => live(loaded, 'linear'));
+  assertLiveEqualsGenerate(hidden.next, 'linear', hidden.revert, 'Linear GC row off after a Load');
+  undoAll();
+});
+
+test('H2: committed slots stated as spec strings are read through the slot parser and stay strings', () => {
+  for (const [mode, setup, key, slotsKey, axisKey, hide] of [
+    ['circular', circularPlain, 'circular_track_slots_enabled', 'circularTrackSlots', 'circularTrackAxisIndex',
+      (drawing) => setSuppress(drawing, 'suppress_gc', true)],
+    ['linear', linearSimple, 'linear_track_slots_enabled', 'linearTrackSlots', 'linearTrackAxisIndex',
+      (drawing) => set(rowOf(drawing, 'linear', (row) => row.renderer === 'dinucleotide_content'), 'enabled', false)]
+  ]) {
+    const drawing = setup();
+    set(drawing.adv, mode === 'circular' ? 'circular_track_slots' : 'linear_track_slots', mode === 'circular'
+      ? createDefaultCircularTrackSlots({ showDepth: false }) : createDefaultLinearTrackSlots({ showGc: true, showSkew: true }));
+    set(drawing.adv, key, true);
+    const committed = generate(mode);
+    const renderRequest = structuredClone(committed.renderRequest);
+    const specs = renderRequest.diagramOptions.tracks[slotsKey].map((slot) => `${slot.id}:${slot.renderer}`);
+    renderRequest.diagramOptions.tracks[slotsKey] = specs;
+    const loaded = { ...committed, renderRequest };
+    assert.deepEqual(project(loaded, mode), [], `${mode}: a no-op writes nothing`);
+    hide(drawing);
+    const next = applied(loaded, project(loaded, mode));
+    const expected = generate(mode, { keepTrackParts: false }).renderRequest.diagramOptions.tracks;
+    const written = next.renderRequest.diagramOptions.tracks;
+    assert.deepEqual(written[slotsKey], specs.filter((spec) => spec.split(':')[1] !== 'dinucleotide_content'),
+      `${mode}: the kept rows stay the committed strings`);
+    assert.deepEqual(written[slotsKey].map((spec) => spec.split(':')[0]), expected[slotsKey].map((slot) => slot.id), `${mode}: ids`);
+    assert.equal(written[axisKey], expected[axisKey], `${mode}: axis`);
+    assert.equal(request.liveSettingNoteApplies(next.renderRequest, mode === 'circular' ? K.CSLOTS : K.LSLOTS, drawing, inputs, next.resources), true);
+    undoAll();
+  }
+});
+
+test('A committed null Axis index (a Python-written request: each slot its own side) stays null through a hide', () => {
+  const drawing = circularStack({ depthSeries: 1 });
+  const committed = generate('circular');
+  const renderRequest = structuredClone(committed.renderRequest);
+  renderRequest.diagramOptions.tracks.circularTrackAxisIndex = null;
+  const loaded = { ...committed, renderRequest };
+  setSuppress(drawing, 'suppress_gc', true);
+  const next = applied(loaded, project(loaded, 'circular'));
+  const tracks = next.renderRequest.diagramOptions.tracks;
+  assert.ok(!tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'), 'the hide applies');
+  assert.equal(tracks.circularTrackAxisIndex, null);
+  undoAll();
+});
+
+test('L6: one note render runs the track projection once for the five GT keys', () => {
+  circularStack();
+  const committed = generate('circular');
+  config.canonicalRenderArtifactOwner.restore({ committedCanonicalSession: committed, activeSessionResourceTable: null });
+  const hooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  const previous = hooks.onStructuralMetric;
+  let runs = 0;
+  hooks.onStructuralMetric = (event) => { if (event.name === 'liveTrackPlanProjectionCount') runs += 1; previous(event); };
+  try {
+    const applies = config.committedSettingNotePredicate
+      ? config.committedSettingNotePredicate() : (path) => config.committedLiveSettingApplies(path);
+    assert.equal(owner.settingApplicationNote('track-visibility', applies).text, owner.settingApplicationNote('track-visibility').text);
+    assert.equal(runs, 1);
+    // The next render reads the draft again.
+    owner.settingApplicationNote('track-visibility', config.committedSettingNotePredicate());
+    assert.equal(runs, 2);
+  } finally {
+    hooks.onStructuralMetric = previous;
+    config.canonicalRenderArtifactOwner.restore(null);
+    undoAll();
+  }
 });

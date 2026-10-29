@@ -74,7 +74,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
-  committedLiveSettingApplies,
+  committedSettingNotePredicate,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
   getLoadedTrackSettings,
@@ -433,7 +433,7 @@ export const transformLegacyResultSvg = Object.assign((/** @type {SVGSVGElement}
 const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: msg('Undo or Redo in progress. Retry after it finishes.') });
 const RULE_WRITE_BUSY = Object.freeze({ status: 'busy', reason: 'A color rule edit is being matched. Retry after it finishes.' });
 export const createAppSetup = () => {
-  provide(SETTING_NOTE_APPLIES, committedLiveSettingApplies);
+  provide(SETTING_NOTE_APPLIES, committedSettingNotePredicate);
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload

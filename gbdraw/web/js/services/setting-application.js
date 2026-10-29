@@ -176,9 +176,9 @@ const rowOf = (id) => {
 };
 
 /**
- * The Vue injection key of the `applies` predicate `SettingNote`
- * (components.js) passes to `settingApplicationNote`: the app setup provides
- * `committedLiveSettingApplies` (services/config.js).
+ * The Vue injection key of the maker of the `applies` predicate `SettingNote`
+ * (components.js) passes to `settingApplicationNote`, one per render: the app
+ * setup provides `committedSettingNotePredicate` (services/config.js).
  */
 export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
 

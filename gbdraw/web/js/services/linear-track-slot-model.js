@@ -4,6 +4,7 @@
 // as the request, Session and Gallery services read them. The Linear
 // track-slot editor (app/linear-track-slots.js) edits it.
 import { parseDepthTrackIndexIdentity, syncDepthSlotLabels } from './depth-track-state.js';
+/** @import { RawDepthTrackConfig } from './depth-track-state.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
@@ -789,7 +790,7 @@ export { SUPPORTED_RENDERERS as LINEAR_TRACK_RENDERERS };
  * draft (run-analysis.js); the kept track parts place a stack the last
  * Generate did not draw with it.
  * @param {{ slots: unknown, nt: unknown, trackLayout: unknown, axisIndex: unknown,
- *   depthTracks: readonly unknown[], depthSeriesCount: number }} input
+ *   depthTracks: readonly RawDepthTrackConfig[], depthSeriesCount: number }} input
  * @returns {{ slots: LinearTrackSlot[], axisIndex: number }}
  */
 export const placeLinearStackForGenerate = ({ slots, nt, trackLayout, axisIndex, depthTracks, depthSeriesCount }) => {
@@ -805,14 +806,13 @@ export const placeLinearStackForGenerate = ({ slots, nt, trackLayout, axisIndex,
     const rawTrackIndex = Number(slot.params.track_index);
     if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) slot.params.track_index = nextDepthIndex;
     const trackIndex = Number(slot.params.track_index);
-    /** @type {unknown} */
     const config = depthTracks[trackIndex];
-    const height = config && typeof config === 'object' ? /** @type {{ height?: unknown }} */ (config).height : null;
+    const height = config && typeof config === 'object' ? config.height : null;
     const numeric = height === null || height === undefined || height === '' ? NaN : Number(height);
     if (Number.isFinite(numeric) && numeric > 0) slot.height = String(numeric);
     nextDepthIndex = trackIndex + 1;
   });
-  syncDepthSlotLabels({ slots: normalized, depthTracks: /** @type {never} */ (depthTracks), activeCount: depthSeriesCount });
+  syncDepthSlotLabels({ slots: normalized, depthTracks, activeCount: depthSeriesCount });
   const resolvedAxis = resolveLinearTrackAxisIndex(normalized, clampLinearTrackAxisIndex(axisIndex, normalized.length));
   return {
     slots: applyLinearTrackOrderPlacements(normalized, resolvedAxis, /** @type {string} */ (nt), /** @type {string} */ (trackLayout)),

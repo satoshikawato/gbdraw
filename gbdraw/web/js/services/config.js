@@ -3779,7 +3779,9 @@ export const serializeActiveRenderFiles = async (
       : null,
     // Generate keeps the Depth files a draft that draws no Depth holds, so showing Depth again applies live.
     ...(optionBag?.hiddenDepth === true && !depthRequested
-      ? { hiddenDepth: await Promise.all(depthSlots.map((slot) => serializeFileValue(slot))) }
+      ? { hiddenDepth: mode === 'circular'
+          ? { circular: await serializeFileValue(depthSlots[0]) }
+          : { linear: await Promise.all(depthSlots.map((slot) => serializeFileValue(slot))) } }
       : {}),
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(sourceFiles.c_conservation_blasts)
@@ -3940,19 +3942,25 @@ export const getCommittedCanonicalRenderRequest = () => {
 };
 
 /**
- * Whether the committed request can show the live value of `requestPath` of
- * its mode's drawing, or of its one `item` (`liveSettingNoteApplies`).
- * Without a committed request every path can while no Result is shown; a
- * Result shown without one (a Session 27 to 30) applies nothing live, so no
- * path can (OV-2237). The app setup gives it to `SettingNote`
- * (`SETTING_NOTE_APPLIES`).
- * @param {string} requestPath @param {LiveSettingItem | null} [item]
+ * For one note render: whether the committed request can show the live value
+ * of each `requestPath` of its mode's drawing, or of its one `item`
+ * (`liveSettingNoteApplies`), read with one set of draft inputs. Without a
+ * committed request every path can while no Result is shown; a Result shown
+ * without one (a Session 27 to 30) applies nothing live, so no path can
+ * (OV-2237). The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * @param {LiveSettingItem | null} [item]
+ * @returns {(requestPath: string) => boolean}
  */
-export const committedLiveSettingApplies = (requestPath, item = null) => {
+export const committedSettingNotePredicate = (item = null) => {
   const request = getCommittedCanonicalRenderRequest();
-  if (!request) return !(Array.isArray(state.results.value) && state.results.value.length > 0);
-  return liveSettingNoteApplies(request, requestPath, state.drawingOfMode(request.mode), liveSettingInputsOf(state),
-    committedCanonicalSession?.resources, item);
+  if (!request) {
+    const applies = !(Array.isArray(state.results.value) && state.results.value.length > 0);
+    return () => applies;
+  }
+  const drawing = state.drawingOfMode(request.mode);
+  const inputs = liveSettingInputsOf(state);
+  const resources = committedCanonicalSession?.resources;
+  return (requestPath) => liveSettingNoteApplies(request, requestPath, drawing, inputs, resources, item);
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
