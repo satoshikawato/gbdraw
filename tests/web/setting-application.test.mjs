@@ -242,6 +242,11 @@ test('the Linear record names component scopes the name field to Record names an
   assert.match(scope[1], /v-model="seq\.definition"/);
   assert.doesNotMatch(scope[1], /record_subtitle/);
   assert.equal(template.match(/data-setting=/g).length, 1, 'the subtitle keeps the scope of the card the component sits in');
+  // A component renders <setting-note> only when it registers SettingNote.
+  const components = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
+  const registered = components.match(/template: '#linear-record-names-template',\s*components: \{([^}]*)\}/);
+  assert.ok(registered, 'LinearRecordNames names its components');
+  assert.match(registered[1], /\bSettingNote\b/, 'LinearRecordNames registers SettingNote, so its note renders');
 });
 
 test('the selection toolbar placement select has the note of the popup Feature placement (OV-1038)', () => {

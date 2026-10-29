@@ -996,7 +996,7 @@ export const MarkupPreview = {
 // record's state; `linearFileCardRecord` decides which place shows it.
 export const LinearRecordNames = {
   template: '#linear-record-names-template',
-  components: { MarkupPreview },
+  components: { MarkupPreview, SettingNote },
   props: {
     seq: { type: Object, required: true },
     source: { type: Object, required: true },
