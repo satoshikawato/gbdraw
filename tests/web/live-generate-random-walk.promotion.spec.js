@@ -15,7 +15,9 @@
 // GBDRAW_RANDOM_WALK_SHRINK_REPLAYS (default 40, 0 disables) bounds the
 // replays that shrink a failing walk to a minimal reproduction, and
 // GBDRAW_RANDOM_WALK_SHRINK_WALKS (default 2) the failing walks of the run
-// that are shrunk; the others report their walk-steps.json. Worst case, every
+// that are shrunk; the others report their walk-steps.json. The claims are
+// files in `random-walk-shrink-claims` of the output folder; UI and watch mode
+// keep that folder between runs, so delete it there to shrink again. Worst case, every
 // walk failing at its last step: about 18 minutes for the walks, plus per
 // shrunk walk 20 replays of at most 2 steps and 20 of at most 50 (about 23
 // minutes at 6 s per fixture open and 1.1 s per step), so about 64 minutes

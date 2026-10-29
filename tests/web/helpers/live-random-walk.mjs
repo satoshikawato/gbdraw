@@ -163,8 +163,8 @@ const changedSlices = (before, after, drawingId) => Object.keys(before.drawings[
   .filter((name) => before.drawings[drawingId][name] !== after.drawings[drawingId][name]);
 
 // What the next step may use: the features of the displayed Result, each by
-// its identity (`key`: the feature's `id`, its record key and biological
-// feature ID, which Sessions also key by; two features with the same span and
+// an identity that survives a reboot (`key`: `walkFeatureKey`, the record's
+// position and the biological feature ID; two features with the same span and
 // qualifiers have two), sorted by a readable `label`; the Legend rows by their
 // key (`legendEntryKey`, Python's key of the row); the editor lists; and the
 // History and Result state. Undo is
@@ -173,10 +173,11 @@ const changedSlices = (before, after, drawingId) => Object.keys(before.drawings[
 const readState = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { legendEntryKey } = await import('/gbdraw/web/js/services/drawing/paint.js');
+  const { walkFeatureKey } = await import('/tests/web/helpers/live-random-walk-page.mjs');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   const features = app.filteredFeatures.map((feature) => ({
-    key: String(feature.id),
+    key: walkFeatureKey(feature),
     label: [feature.type, feature.start, feature.end, feature.locus_tag || '', feature.product || ''].join('|'),
     span: `${feature.start}|${feature.end}`,
     type: String(feature.type || ''),
@@ -298,6 +299,7 @@ const nextStep = (random, state, kind, { fixture, canUndo }) => {
 // opens are answered from `picks`.
 const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step) => {
   const { legendEntryKey } = await import('/gbdraw/web/js/services/drawing/paint.js');
+  const { findWalkFeature } = await import('/tests/web/helpers/live-random-walk-page.mjs');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   const notes = [];
@@ -393,7 +395,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (step)
     };
 
     const withPopup = async (edit) => {
-      const feature = app.filteredFeatures.find((item) => String(item.id) === current.feature);
+      const feature = findWalkFeature(app.filteredFeatures, current.feature);
       if (!feature) throw new Error(`no feature ${current.feature}`);
       await app.openFeatureEditorFromList(feature, null);
       await window.Vue.nextTick();
@@ -605,8 +607,11 @@ const runStep = async (page, step, sessionPath) => {
 // The popup state of a step: a feature popup opened and closed before it, as
 // a reader looking at the feature does, which binds the labels.
 const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (target) => {
+  const { findWalkFeature } = await import('/tests/web/helpers/live-random-walk-page.mjs');
   const app = window.__GBDRAW_APP__;
-  await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => String(item.id) === target), null);
+  const feature = findWalkFeature(app.filteredFeatures, target);
+  if (!feature) throw new Error(`no feature ${target}`);
+  await app.openFeatureEditorFromList(feature, null);
   await window.Vue.nextTick();
   app.clickedFeature = null;
 }, key).then(() => settleLive(page));
@@ -619,7 +624,7 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
  * @property {boolean} popup a feature popup was opened and closed before the step
  * @property {boolean} reflow Auto Reflow before the step
  * @property {string} drawing the drawing shown before the step
- * @property {string | null} popupFeature the id of the feature whose popup was opened
+ * @property {string | null} popupFeature the feature whose popup was opened (`walkFeatureKey`)
  * @property {Record<string, unknown> & { kind: string }} step the concrete step, with its `picks` and `prepare`
  * @property {string[]} notes what the run answered and did besides the step
  */
@@ -832,20 +837,25 @@ export const shrinkLimitsFromEnv = (fallback) => {
   return { replays: count('GBDRAW_RANDOM_WALK_SHRINK_REPLAYS', fallback.replays), walks: count('GBDRAW_RANDOM_WALK_SHRINK_WALKS', fallback.walks) };
 };
 
-// Takes one of the run's `walks` shrink claims, or returns false when the
-// run has used them all. Playwright starts a new worker after a failing test,
-// so the claims are files in the run's output folder (emptied at the start of
-// each run), created exclusively so that parallel workers never share one.
+// Takes one of the run's `walks` shrink claims for this test, or returns
+// false when other tests hold them all; a retry of the test keeps its claim.
+// Playwright starts a new worker after a failing test, so the claims are files
+// in the run's output folder, created exclusively so that parallel workers
+// never share one. Playwright empties the folder at the start of each run,
+// except in UI and watch mode, where old claims stay until it is removed.
 /** @param {number} walks */
 const claimShrink = (walks) => {
   const folder = join(test.info().project.outputDir, 'random-walk-shrink-claims');
+  const { testId } = test.info();
   mkdirSync(folder, { recursive: true });
   for (let claim = 1; claim <= walks; claim += 1) {
+    const path = join(folder, `${claim}`);
     try {
-      writeFileSync(join(folder, `${claim}`), `${test.info().title}\n`, { flag: 'wx' });
+      writeFileSync(path, testId, { flag: 'wx' });
       return true;
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error;
+      if (readFileSync(path, 'utf8') === testId) return true;
     }
   }
   return false;
@@ -988,11 +998,16 @@ export const randomWalkTests = ({ seed, level, walkLength, required = [], shrink
  * @returns {Promise<{ run: T, stepsPath: string }>}
  */
 const attachingSteps = async (walk, body) => {
+  let run;
   try {
-    return { run: await body(), stepsPath: test.info().outputPath('walk-steps.json') };
-  } finally {
-    await attachJson('walk-steps.json', walk);
+    run = await body();
+  } catch (error) {
+    // The run's error is the failure; an attach error only goes to the log.
+    // eslint-disable-next-line no-console
+    await attachJson('walk-steps.json', walk).catch((attachError) => console.log(`walk-steps.json not attached: ${attachError}`));
+    throw error;
   }
+  return { run, stepsPath: await attachJson('walk-steps.json', walk) };
 };
 
 /** @param {string} path @returns {WalkRecord} */
@@ -1033,9 +1048,12 @@ export const replayWalkTest = (path, { shrink }) => {
   };
 };
 
-// The steps of the record-and-replay test: a popup edit with its dialogs, a
-// rule, and Undo, on the Circular fixture.
+// The steps of the record-and-replay test, on the Circular fixture: a popup
+// edit with its dialogs on each drawing (a replay boots again, so the feature
+// a step names must keep its identity across boots, OV-2236), a rule, and Undo.
 const RECORD_REPLAY_STEPS = Object.freeze([
+  { kind: 'fill', popup: true, reflow: false },
+  { kind: 'drawingSwitch', popup: false, reflow: false },
   { kind: 'fill', popup: true, reflow: false },
   { kind: 'colorRuleAdd', popup: false, reflow: true },
   { kind: 'undo', popup: false, reflow: false }
