@@ -9,7 +9,6 @@ import {
   requestFeaturePlacements
 } from './feature-placement.js';
 import { resultRenderedFeatures } from './feature-catalog.js';
-import { resourceIdOwnedBy } from './diagram-resource-staging.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
@@ -195,6 +194,7 @@ import { LINEAR_SEQ_READ_FIELDS } from './config-field-readers.js';
 import {
   getResourcePayloadIdentity,
   getResourcePayloadOwner,
+  resourceIdOwnedBy,
   setResourcePayloadOwner
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
@@ -2057,7 +2057,7 @@ const writeLiveValues = (root, writes) => {
     for (const key of path.slice(0, -1)) {
       const node = parent[key];
       if (isPlainObject(node)) parent = node;
-      else if (node !== undefined) throw new Error(`A live setting write enters a non-object at ${path.join('.')}.`);
+      else if (node !== undefined) throw diagnosticError('INPUT_INVALID', { field: path.join('.'), reason: 'UNKNOWN_CONFIG_PATH' });
       else if (value === undefined) return;
       else parent = parent[key] = {};
     }
