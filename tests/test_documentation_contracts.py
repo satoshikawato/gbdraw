@@ -125,7 +125,7 @@ def test_installation_distinguishes_source_version_from_index_availability() -> 
     )
     for command in ('python -m pip install gbdraw', 'python -m pip install "gbdraw[export]"'):
         assert command in install
-    assert "3.10, 3.11, and 3.12" in install
+    assert "3.10, 3.11, 3.12, and 3.14" in install
 
 
 def test_current_task_docs_delegate_persisted_format_details_to_one_authority() -> None:

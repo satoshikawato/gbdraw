@@ -30,6 +30,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - **Similarity alignment center.** A Similarity alignment anchored on such a CDS
   placed the record's middle at the shared center. It now places the CDS
   itself, in the command line, the Python API, and the Web app alike.
+- `import gbdraw` works on Python 3.14 and later. Python 3.14 removed
+  `importlib.abc.Traversable`, which gbdraw's configuration loader imported;
+  it now reads `Traversable` from `importlib.resources.abc`.
 - The Circular legend lists only the similarity rings a slot draws; a ring of a
   disabled `sequence_conservation` slot no longer appears.
 - In the Web app, a Legend name that joins another Legend row of the same color
@@ -78,7 +81,7 @@ The drawn figures are the same as before, except where listed above.
 
 Installation from PyPI and Bioconda is unchanged; see
 [Installation](./INSTALL.md). gbdraw 0.14.4 supports the same Python versions
-as 0.14.3. A Session saved by 0.14.3 opens in 0.14.4, and 0.14.4 saves Sessions
+as 0.14.3 and also Python 3.14. A Session saved by 0.14.3 opens in 0.14.4, and 0.14.4 saves Sessions
 as version 49, as 0.14.3 does. See
 [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
