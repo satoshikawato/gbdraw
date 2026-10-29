@@ -80,9 +80,9 @@ The drawn figures are the same as before, except where listed above.
 ## Installation and compatibility
 
 Installation from PyPI and Bioconda is unchanged; see
-[Installation](./INSTALL.md). gbdraw 0.14.4 supports the same Python versions
-as 0.14.3 and also Python 3.14. A Session saved by 0.14.3 opens in 0.14.4, and 0.14.4 saves Sessions
-as version 49, as 0.14.3 does. See
+[Installation](./INSTALL.md). gbdraw 0.14.4 supports Python 3.10 to 3.14
+(0.14.3 does not import on 3.14). A Session saved by 0.14.3 opens in 0.14.4,
+and 0.14.4 saves Sessions as version 49, as 0.14.3 does. See
 [Session and request compatibility](./REFERENCE/session-and-request-compatibility.md).
 
 ## Known issues

@@ -78,7 +78,7 @@ appears there. If the project or desired version is unavailable, use a source
 install below.
 
 For a version available on PyPI, install in an activated environment using a
-supported Python version (3.10, 3.11, 3.12, or 3.14):
+supported Python version (3.10, 3.11, 3.12, 3.13, or 3.14):
 
 ```bash
 python -m pip install gbdraw
@@ -139,7 +139,7 @@ libraries. On Ubuntu, the tested system packages are `libcairo2-dev` and
 
 ## Supported and verified environments
 
-The supported Python versions are 3.10, 3.11, 3.12, and 3.14. Continuous
+The supported Python versions are 3.10, 3.11, 3.12, 3.13, and 3.14. Continuous
 integration runs the test suite on Linux with each of them, and the web app's
 browser tests use Chromium. Each release also installs its wheel into a clean
 Linux environment, then draws a diagram and replays its Session with the
