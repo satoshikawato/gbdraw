@@ -2016,8 +2016,11 @@ const projectTrackPlan = (request, drawing, context) => {
       const kind = trackKindOf(payload.renderer);
       const inCommitted = committedIds.has(kept_.id) && !baseIsOther;
       const committedPayload = inCommitted ? (committedSlots || []).find((slot) => String(slot.id) === kept_.id) : undefined;
+      // A features, ticks or spacer row stays as the committed stack has it; a
+      // stack the committed request does not draw (Use custom stack turned on
+      // again, or the other kept plan) returns whole from the kept parts.
       if (!kind) {
-        if (inCommitted || baseIsOther) present.push(committedPayload ? { ...kept_, payload: committedPayload } : kept_);
+        if (inCommitted || baseIsOther || !committedSlots) present.push(committedPayload ? { ...kept_, payload: committedPayload } : kept_);
         continue;
       }
       const slotNt = kind === 'depth' ? null : normalizeNt(payload.params?.nt, nt);

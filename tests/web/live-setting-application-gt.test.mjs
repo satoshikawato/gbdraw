@@ -409,6 +409,20 @@ test('N11/N12: Use custom stack switches from the kept parts; a pending width an
   undoAll();
 });
 
+test('N12b: Use custom stack off then on after a Generate with it on returns the whole stack, its features row too', () => {
+  for (const [mode, setup, key] of [['linear', linearStack, 'linear_track_slots_enabled'], ['circular', circularStack, 'circular_track_slots_enabled']]) {
+    const drawing = setup();
+    const committed = generate(mode);
+    set(drawing.adv, key, false);
+    const off = withPending(mode, () => live(committed, mode));
+    assertLiveEqualsGenerate(off.next, mode, off.revert, `${mode} stack off`);
+    set(drawing.adv, key, true);
+    const on = withPending(mode, () => live(off.next, mode));
+    assertLiveEqualsGenerate(on.next, mode, on.revert, `${mode} stack on again`);
+    undoAll();
+  }
+});
+
 test('N13: Depth resources go by reference through two hide/show cycles and the commit rebuilds the resource table', () => {
   const drawing = circularStack({ depthSeries: 1 });
   const committed = generate('circular');
