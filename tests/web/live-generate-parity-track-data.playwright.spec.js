@@ -91,6 +91,9 @@ for (const [name, { mode, results = 'single', shown = null, tsv = DEPTH_TSV, add
     await history(page, 'redo');
     await expectDepthRow('Redo', false);
     await inStep('Change uploaded file', add, tsv);
+    // PD-OI-104 rev 3: a Depth file added after a removal shows on Generate.
+    await generate(page);
+    if (shown !== null) await showResult(page, shown);
     await expectDepthRow('added again', true);
     await expectLiveEqualsGenerate(page, { label: `${name}: added again` });
     await inStep('Remove Depth', remove, null);
