@@ -1301,8 +1301,9 @@ def search_frame_nucleotide_resources(
             item.resource_id, kind=stored.get("kind", ""), name=stored.get("name", ""), content=content,
         )
         if resource_id not in tables:
-            name = table.descriptors()[resource_id]["name"]
-            tables[resource_id] = replace_resource_bytes({**stored, "name": str(name)}, content)
+            tables[resource_id] = replace_resource_bytes(
+                {**stored, "name": table.descriptors()[resource_id]["name"]}, content,
+            )
         query_key, subject_key = (request.records[index].record_key for index in item.record_pair)
         if query_key is not None and subject_key is not None:
             pair_resources[(query_key, subject_key)] = resource_id
@@ -1345,7 +1346,7 @@ def _search_frame_items(
 
     def items_of(
         value: DiagramRequest,
-    ) -> tuple[dict[tuple[object, ...], Mapping[str, object]], Mapping[str, Mapping[str, object]]]:
+    ) -> tuple[dict[tuple[object, ...], Mapping[str, object]], dict[str, SessionResourceDescriptor]]:
         table = SessionResourceTable()
         encoded = encode_canonical_request(value, table=table).payload
         return _comparison_items(encoded.get("comparisons"), kinds), table.descriptors()

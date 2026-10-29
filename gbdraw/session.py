@@ -920,7 +920,7 @@ def _build_session_document_from_drawings(
     created_at: datetime | None = None,
     active_drawing: str | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, Mapping[str, Any]] | None = None,
+    resources: Mapping[str, SessionResourceDescriptor] | None = None,
 ) -> SessionDocument:
     """Build a current (Session 50) document from already-resolved drawings.
 
@@ -980,7 +980,7 @@ def _mode_scoped_document(
     *,
     created_at: datetime | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, Mapping[str, Any]] | None = None,
+    resources: Mapping[str, SessionResourceDescriptor] | None = None,
 ) -> SessionDocument:
     """The checked mode-scoped (Session 48) document of one drawing upgraded
     from a Session 31-45, before its move to drawings."""
@@ -1014,7 +1014,7 @@ def _mode_scoped_data(
     *,
     created_at: datetime | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, Mapping[str, Any]] | None = None,
+    resources: Mapping[str, SessionResourceDescriptor] | None = None,
 ) -> dict[str, Any]:
     """The mode-scoped (Session 48) data of one drawing of an older Session,
     not yet checked; the move to drawings
@@ -1048,7 +1048,7 @@ def _encoded_drawings(
     drawings: Sequence[_DrawingBuild],
     *,
     allocate: bool,
-    resources: Mapping[str, Mapping[str, Any]] | None,
+    resources: Mapping[str, SessionResourceDescriptor] | None,
 ) -> _EncodedDrawings:
     """The one-drawing view of each drawing, its request encoded through one
     resource table that starts from ``resources``. New drawings (``allocate``)
@@ -1180,7 +1180,7 @@ def _build_session_document_from_resolved_request(
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
-    resources: Mapping[str, Mapping[str, Any]] | None = None,
+    resources: Mapping[str, SessionResourceDescriptor] | None = None,
 ) -> SessionDocument:
     """Build a one-drawing current document from an already-resolved request."""
 
@@ -1197,7 +1197,7 @@ def _drawings_session_document(
     base: SessionDocument,
     views: dict[str, dict[str, Any]],
     *,
-    resources: Mapping[str, Mapping[str, Any]],
+    resources: Mapping[str, SessionResourceDescriptor],
     title: str | None,
     created_at: datetime | None,
     web_file_inventory: Mapping[str, Any] | None,
