@@ -39,6 +39,7 @@ import {
   SETTING_APPLICATION, settingApplicationNote, settingApplicationSentence
 } from '../../gbdraw/web/js/services/setting-application.js';
 import { SETTINGS_SECTIONS } from '../../gbdraw/web/js/services/settings-sections.js';
+import { RECORD_POPUP_FIELDS } from '../../gbdraw/web/js/app/preview-item-popup.js';
 
 const html = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'index.html'), 'utf8');
 const lineOf = (offset) => html.slice(0, offset).split('\n').length;
@@ -234,14 +235,17 @@ test('every scope that applies on Generate shows its note, and a nested scope th
   }
 });
 
-test('the Linear record names component scopes the name field to Record names and leaves the subtitle in its card\'s row', () => {
+test('the Linear record names component gives each field the note of its popup row', () => {
   // A component template sits in a <script> the tree parser skips.
   const template = html.match(/<script type="text\/x-template" id="linear-record-names-template">([\s\S]*?)<\/script>/)[1];
-  const scope = template.match(/<div data-setting="record-names">\s*<setting-note setting="record-names"><\/setting-note>([\s\S]*?)\n {4}<\/div>\n/);
-  assert.ok(scope, 'the name block is the Record names scope and shows its note');
-  assert.match(scope[1], /v-model="seq\.definition"/);
-  assert.doesNotMatch(scope[1], /record_subtitle/);
-  assert.equal(template.match(/data-setting=/g).length, 1, 'the subtitle keeps the scope of the card the component sits in');
+  // Each field block: its scope, the note on its own caption line, then its input.
+  const blocks = [...template.matchAll(/<div data-setting="([^"]+)">\s*<div [^>]*>\s*<span>\{\{ t\('[^']+'\) \}\} <setting-note setting="([^"]+)"><\/setting-note><\/span>([\s\S]*?)\n {4}<\/div>\n/g)];
+  assert.deepEqual(blocks.map(([, scope, note, body]) => [scope, note, body.match(/v-model="seq\.(\w+)"/)?.[1]]), [
+    [RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.setting, RECORD_POPUP_FIELDS.linear.name.key],
+    [RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.setting, RECORD_POPUP_FIELDS.linear.subtitle.key]
+  ], 'Organism / strain and Subtitle each sit in their own scope with its note on the caption line');
+  assert.equal(template.match(/data-setting=/g).length, 2);
+  assert.equal(template.match(/<setting-note /g).length, 2);
   // A component renders <setting-note> only when it registers SettingNote.
   const components = readFileSync(join(process.cwd(), 'gbdraw', 'web', 'js', 'components.js'), 'utf8');
   const registered = components.match(/template: '#linear-record-names-template',\s*components: \{([^}]*)\}/);

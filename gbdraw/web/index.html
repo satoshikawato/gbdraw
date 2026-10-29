@@ -9012,18 +9012,17 @@
 <script type="text/x-template" id="linear-record-names-template">
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
     <div data-setting="record-names">
-      <setting-note setting="record-names"></setting-note>
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Organism / strain (optional)') }}</span>
+        <span>{{ t('Organism / strain (optional)') }} <setting-note setting="record-names"></setting-note></span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.definition && getLinearSourceDefaultDefinition(source)" type="button" @click="$emit('reset-definition', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
       <input type="text" v-model="seq.definition" :aria-label="t('Definition for sequence {n}', { n: idx + 1 })" :placeholder="resolveLinearRecordEffectiveDefinition(seq, source) || t('e.g., {example}', { example: 'Escherichia coli O157:H7 Sakai' })" class="form-input px-1 py-0.5 text-xs" :disabled="disabled">
       <markup-preview :text="seq.definition || resolveLinearRecordEffectiveDefinition(seq, source)"></markup-preview>
     </div>
-    <div>
+    <div data-setting="inputs">
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
-        <span>{{ t('Subtitle / title (optional)') }}</span>
+        <span>{{ t('Subtitle / title (optional)') }} <setting-note setting="inputs"></setting-note></span>
         <span v-if="!seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
         <button v-if="seq.record_subtitle && getLinearSourceDefaultSubtitle(source)" type="button" @click="$emit('reset-subtitle', seq)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-slate-500 hover:text-slate-700" :disabled="disabled">{{ t('Reset to default') }}</button>
       </div>
