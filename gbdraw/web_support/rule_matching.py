@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from typing import Callable, Literal, Sequence, TypedDict, is_typeddict
+from typing import Callable, Literal, Sequence, TypedDict, cast, is_typeddict
 
 from types import SimpleNamespace
 
@@ -19,6 +19,7 @@ from gbdraw.features.visibility import (
     compile_feature_visibility_rules,
 )
 from gbdraw.labels.filtering import DEFAULT_LABEL_PRIORITY, _build_label_override_rules, _resolve_label_override
+from gbdraw.legend.table import feature_legend_row_order, feature_type_rows
 
 
 def _visibility_table(rules: list[dict]) -> DataFrame:
@@ -135,7 +136,10 @@ class SynthesizeColorRulesRequest(TypedDict):
     at the write's turn, in order, with each row's color and caption.
     `joins` is the listed Legend row the edit joins, else None: the edit's new
     rows and the `joins.rows` before its first rule go just before that rule,
-    so the joined row keeps its place in the Legend (OV-2193).
+    so the joined row keeps its place in the Legend (OV-2193). `drawn` holds
+    the features one Result draws, by index in `features`, in the order it
+    draws them; with it, the answer gives that Result's Legend order of the
+    next table (else None).
     """
 
     scope: Literal["group", "row", "features", "reset"]
@@ -146,6 +150,7 @@ class SynthesizeColorRulesRequest(TypedDict):
     color: str
     caption: str
     joins: JoinedLegendRow | None
+    drawn: list[int] | None
 
 
 class RetargetedColorRule(TypedDict):
@@ -159,9 +164,15 @@ class SynthesizedColorRules(TypedDict):
     """The next rule table: a number keeps that row of the request's `rules`, a
     row with `row` copies that row under another pattern, any other object is a
     new row. A selected feature without a hash and without an exact condition
-    takes no rule."""
+    takes no rule. `legend` is the order of the feature rows in the Legend of
+    the Result the request's `drawn` names, as Generate draws it from the next
+    table (``feature_legend_row_order``): a number is a rule row, by the index
+    in `table` of a rule that draws it (its first of that caption and color
+    among the rules of its feature type); a text is the key of the renderer's
+    own row of a feature type ("CDS", "other proteins"). None without `drawn`."""
 
     table: list[int | ColorRuleRow | RetargetedColorRule]
+    legend: list[int | str] | None
 
 
 def describe_rule_synthesis() -> dict[str, dict[str, Shape]]:
@@ -259,6 +270,9 @@ _REQUEST_DESCRIPTION = describe_rule_synthesis()
 # rules: (feature type, feature instance).
 Condition = tuple[str, str, str]
 HashTarget = tuple[str, str]
+NextTableRow = int | ColorRuleRow | RetargetedColorRule
+# A next table, and the index in it of the rule that colors each feature (-1 for none).
+ColoredTable = tuple[list[NextTableRow], list[int]]
 
 
 def exact_value_pattern(value: str) -> str:
@@ -380,7 +394,7 @@ def _spellings(value: str) -> tuple[str, str]:
     return value, exact_value_pattern(value)
 
 
-def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_MatchFeature]) -> SynthesizedColorRules:
+def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_MatchFeature]) -> ColoredTable:
     """The table without the `hash` rows that name a target: its instance rows,
     and its stable-hash rows. A stable-hash row that still colors other features
     (an older "This feature only" row on a feature drawn twice: the row wins for
@@ -401,7 +415,7 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
         if stable:
             stable_of.update(((feat, spelling), (feat, stable)) for spelling in _spellings(stable))
     # Each entry of the next table, the row it reads as, and the old row it comes from.
-    table: list[int | ColorRuleRow | RetargetedColorRule] = []
+    table: list[NextTableRow] = []
     rows: list[ColorRuleRow] = []
     origin: list[int] = []
     for position, rule in enumerate(rules):
@@ -426,15 +440,63 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
            for i in range(len(features)) if i not in targets):
         raise ValueError("The rule synthesis would change the color of a feature that is not selected.")
     if not request["color"] or all(winners[i] < 0 for i in targets):
-        return SynthesizedColorRules(table=table)
-    colored = synthesize_color_rules(SynthesizeColorRulesRequest(
+        return table, winners
+    colored, colored_winners = _colored_table(SynthesizeColorRulesRequest(
         scope="features", features=request["features"], selected=request["selected"],
         labels=[[] for _ in request["selected"]], rules=rows, color=request["color"], caption=request["caption"],
-        joins=None))
-    return SynthesizedColorRules(table=[table[entry] if isinstance(entry, int) else entry for entry in colored["table"]])
+        joins=None, drawn=None), features)
+    return [table[entry] if isinstance(entry, int) else entry for entry in colored], colored_winners
+
+
+def _legend_order(rules: Sequence[ColorRuleRow], features: Sequence[_MatchFeature], winners: Sequence[int],
+                  drawn: Sequence[int]) -> list[int | str]:
+    """The feature rows of the Legend of the Result that draws the features
+    `drawn`, in Generate's order (``feature_legend_row_order``, the order
+    ``prepare_legend_table`` adds them), from what ``feature_legend_presence``
+    reads of the drawing: the drawn types in the order they first appear, the
+    caption and color each drawn feature takes from its winning rule (none
+    from an uncaptioned one), and the types of the drawn features no rule
+    colors. A rule row is the index of its first rule of its type, caption and
+    color, once (rules of one caption and color draw one row). `winners` are
+    the rules of `rules` that color each feature of `features` (-1 for none)."""
+    used = {(rules[w]["cap"], rules[w]["color"]) for w in (winners[i] for i in drawn) if w >= 0 and rules[w]["cap"]}
+    default_used = {features[i]["type"] for i in drawn if winners[i] < 0}
+    present = list(dict.fromkeys(features[i]["type"] for i in drawn))
+    specific: dict[str, list[tuple[str, str]]] = {}
+    first: dict[tuple[str, str, str], int] = {}
+    for index, rule in enumerate(rules):
+        specific.setdefault(rule["feat"], []).append((rule["cap"], rule["color"]))
+        first.setdefault((rule["feat"], str(rule["cap"]), rule["color"]), index)
+    renderer_rows = {key for _, key in feature_type_rows(specific, present, used, default_used)}
+    return list(dict.fromkeys(first[row] if isinstance(row, tuple) else row
+                              for row in feature_legend_row_order(specific, present, used, renderer_rows)))
 
 
 def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedColorRules:
+    """The next rule table of one color edit (`_colored_table`, or
+    `_reset_color_rules` for `scope` "reset") and, for the Result the request's
+    `drawn` names, its Legend order (`_legend_order`)."""
+    features = [_match_feature(item) for item in request["features"]]
+    table, winners = (_reset_color_rules(request, features) if request["scope"] == "reset"
+                      else _colored_table(request, features))
+    drawn = request["drawn"]
+    legend = None if drawn is None else _legend_order(
+        [_table_row(row, request["rules"]) for row in table], features, winners, drawn)
+    return SynthesizedColorRules(table=table, legend=legend)
+
+
+def _table_row(row: NextTableRow, rules: Sequence[ColorRuleRow]) -> ColorRuleRow:
+    """The rule an entry of a next table names (`SynthesizedColorRules`)."""
+    if isinstance(row, int):
+        return rules[row]
+    if "row" in row:
+        old = rules[cast(RetargetedColorRule, row)["row"]]
+        return ColorRuleRow(feat=old["feat"], qual=old["qual"], val=cast(RetargetedColorRule, row)["val"],
+                            color=old["color"], cap=old["cap"])
+    return cast(ColorRuleRow, row)
+
+
+def _colored_table(request: SynthesizeColorRulesRequest, features: list[_MatchFeature]) -> ColoredTable:
     """The fewest rules that give the selected features `color` and `caption`
     and leave every other feature's winning rule as it was (Owner R-07); with
     `scope` "features", one `hash` rule per feature; with `scope` "reset", the
@@ -452,9 +514,6 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
     color (an older rule of an earlier qualifier wins) takes a `hash` row, and
     a table that would change the winner of any other feature is refused.
     """
-    features = [_match_feature(item) for item in request["features"]]
-    if request["scope"] == "reset":
-        return _reset_color_rules(request, features)
     rules = request["rules"]
     color, caption = request["color"], request["caption"]
     hash_of, targets, holders = _hash_targets(features, request["selected"])
@@ -509,7 +568,7 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
     row_at = min((old_winners[i] for i in targets if old_winners[i] >= 0), default=None) \
         if request["scope"] == "row" else None
 
-    def place(joins: JoinedLegendRow | None) -> list[int | ColorRuleRow]:
+    def place(joins: JoinedLegendRow | None) -> tuple[list[int | ColorRuleRow], list[int]]:
         """The verified table with the new rows placed as `_next_table` places them."""
         forced: set[int] = set()
         for _attempt in range(3):
@@ -548,20 +607,19 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
             forced |= missed
         else:
             raise ValueError("The rule synthesis could not color the selected features.")
-        return table
+        return table, winners
 
     joins = request["joins"]
     try:
-        table = place(joins)
+        table, winners = place(joins)
     except ValueError:
         if joins is None:
             raise
         # The joined row's place would change the rule that colors a
         # feature (a joined rule moved past another rule that matches its
         # features): the rows go where they go without a join.
-        table = place(None)
-    next_table: list[int | ColorRuleRow | RetargetedColorRule] = [*table]
-    return SynthesizedColorRules(table=next_table)
+        table, winners = place(None)
+    return [*table], winners
 
 
 def synthesize_color_rules_json(request_json: str) -> str:
@@ -580,4 +638,6 @@ def synthesize_color_rules_json(request_json: str) -> str:
     joins = request["joins"]
     if joins is not None and not all(0 <= index < len(request["rules"]) for index in [joins["at"], *joins["rows"]]):
         raise ValueError("Unreadable rule synthesis request: the joined row is not a row of the rules.")
+    if request["drawn"] is not None and not all(0 <= index < len(request["features"]) for index in request["drawn"]):
+        raise ValueError("Unreadable rule synthesis request: a drawn feature is not one of the features.")
     return json.dumps(synthesize_color_rules(request))

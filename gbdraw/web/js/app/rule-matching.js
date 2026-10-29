@@ -244,6 +244,8 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * caption they take; `scope` "features" colors each feature by itself, and "row"
  * colors them as a group that takes their Legend row whole, in its place.
  * `joins` is the listed Legend row the edit joins, which keeps its place (OV-2193), else null.
+ * `drawn` are the features the displayed Result draws, in the order it draws them, found by
+ * identity among the catalog features: Python answers the Legend order of the next table for them.
  * @typedef {object} GroupColorEdit
  * @property {SynthesizeColorRulesRequest['scope']} scope
  * @property {readonly (RuleMatchedFeature & { svg_id?: string | null })[]} features
@@ -251,6 +253,7 @@ export const runWhenPrepared = (state, preparations, commit, stale = () => undef
  * @property {string} color
  * @property {string} caption
  * @property {SynthesizeColorRulesRequest['joins']} joins
+ * @property {Iterable<object>} drawn
  */
 
 /**
@@ -451,8 +454,10 @@ export const createRulePreparation = ({
   // Every catalog feature goes to Python, which refuses a condition that
   // matches an unselected one.
   /** @type {RulePreparation['synthesizeGroup']} */
-  const synthesizeGroup = ({ scope, features: selected, labels, color, caption, joins }, rules) => {
+  const synthesizeGroup = ({ scope, features: selected, labels, color, caption, joins, drawn }, rules) => {
     const targets = features();
+    /** @type {Map<object, number>} */
+    const indexOf = new Map(targets.map((feature, index) => [feature, index]));
     /** @type {Map<string, string[]>} */
     const labelsById = new Map();
     selected.forEach((feature, index) => { if (feature.svg_id) labelsById.set(feature.svg_id, [...labels[index]]); });
@@ -468,7 +473,11 @@ export const createRulePreparation = ({
       rules: rules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
       color,
       caption,
-      joins
+      joins,
+      drawn: [...drawn].flatMap((feature) => {
+        const index = indexOf.get(feature);
+        return index === undefined ? [] : [index];
+      })
     });
   };
   return {

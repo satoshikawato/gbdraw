@@ -12,7 +12,7 @@
 /**
  * Where a rule commit puts a row it splits off: right after the row of key
  * `after` (D-29), or right before the row of key `before` (OV-2194).
- * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey } | { caption: PythonLegendKey, before: PythonLegendKey }} LegendRowPlacement
+ * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey }} LegendRowPlacement
  */
 /**
  * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
@@ -121,6 +121,50 @@ const placeByInventory = (placed, unplaced, inventory, keyOf) => {
  *   The keys of the displayed Result's rows whose drawn track the drawing hides (OV-1198, OV-1215),
  *   which the Legend list leaves out as the live compile deletes them.
  */
+
+// OV-2194, OV-2247, OV-2248 (Owner 2026-10-29): `items` (listed rows, or the
+// keys of an inventory) where Generate draws them from the next rule table,
+// by Python's answer (`legendOrder`, the keys of its feature rows in Legend
+// order). An added item goes right before the first item the answer puts
+// after it, else right after the last one it puts before it; one with neither
+// stays out (`placed` names those placed). With `reorder` (the default order,
+// which follows Python's), the items of the answer also take their places in
+// its order, among the places they hold (an old row Python moves); the other
+// items keep theirs. In an edited order, which Generate replays (PD-OI-063),
+// the old rows stay.
+/**
+ * @template T
+ * @param {readonly T[]} items
+ * @param {ReadonlyMap<string, T>} added The items the commit adds, by key.
+ * @param {readonly PythonLegendKey[]} legendOrder
+ * @param {(item: T) => string} keyOf
+ * @param {boolean} reorder
+ * @returns {{ items: T[], placed: PythonLegendKey[] }}
+ */
+const inAnsweredLegendOrder = (items, added, legendOrder, keyOf, reorder) => {
+  /** @type {Map<string, number>} */
+  const rank = new Map();
+  legendOrder.forEach((key, index) => { if (!rank.has(key)) rank.set(key, index); });
+  /** @param {T} item */
+  const rankOf = (item) => rank.get(keyOf(item)) ?? -1;
+  let rows = [...items];
+  /** @type {PythonLegendKey[]} */
+  const placed = [];
+  for (const [key, row] of [...added].filter(([key]) => rank.has(key)).sort(([a], [b]) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))) {
+    const at = rank.get(key) ?? 0;
+    const next = rows.findIndex((item) => rankOf(item) > at);
+    const previous = rows.findLastIndex((item) => rankOf(item) >= 0 && rankOf(item) < at);
+    const index = next >= 0 ? next : previous >= 0 ? previous + 1 : -1;
+    if (index < 0) continue;
+    rows = [...rows.slice(0, index), row, ...rows.slice(index)];
+    placed.push(/** @type {PythonLegendKey} */ (key));
+  }
+  if (!reorder) return { items: rows, placed };
+  const slots = rows.flatMap((item, index) => (rankOf(item) >= 0 ? [index] : []));
+  const ordered = slots.map((index) => rows[index]).sort((a, b) => rankOf(a) - rankOf(b));
+  slots.forEach((slot, index) => { rows[slot] = ordered[index]; });
+  return { items: rows, placed };
+};
 
 // The Legend entry owner (U3a, R1): its writers edit the drawing's Legend
 // intent (`legendEntries`, `deletedLegendEntries`, the override stores) and
@@ -331,6 +375,16 @@ export const createLegendEntryActions = ({
     return true;
   };
 
+  // The displayed Result's inventory (`originalLegendOrder`, Python's order
+  // of its rows) and its stored copy, which `adoptResultInventory` adopts
+  // when the Result is displayed again.
+  /** @param {readonly string[]} inventory */
+  const writeDisplayedInventory = (inventory) => {
+    originalLegendOrder.value = [...inventory];
+    const identity = readActiveResultIdentity?.() || '';
+    if (identity) inventoryByResult.set(identity, [...inventory]);
+  };
+
   // The Legend rows the specific-color rules draw, computed on the listed rows
   // (R1, R13): the rows the rules own (a caption and color of the previous rule
   // intents) and the listed rows of a wanted caption and color are diffed with
@@ -338,8 +392,8 @@ export const createLegendEntryActions = ({
   // in another color stops the commit. The rule owner runs its transition and
   // then `apply` in one History step, while `isCurrent` holds; `apply` writes
   // the rows into the intent, a row the commit splits off right after the row
-  // `placement.after` (D-29) or right before the row `placement.before`
-  // (OV-2194), and returns the rows the displayed Result shows
+  // `placement.after` (D-29), the rows of `legendOrder` where it puts them
+  // (`inAnsweredLegendOrder`), and returns the rows the displayed Result shows
   // at once until Python draws them (gaps 1 and 2; null when the rows only
   // change color). A row of `rekeyed` (old key to new key) is one row whose
   // key the commit changes: a rule row the rule table change re-allocates
@@ -351,14 +405,16 @@ export const createLegendEntryActions = ({
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
-   *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
+   *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey>,
+   *   legendOrder?: readonly PythonLegendKey[] | null }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
-    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
+    drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map(),
+    legendOrder = null
   } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     if (getAllFeatureLegendGroups(mountedSvg).length === 0) {
-      return { diff: { add: [], update: [], remove: [], unchanged: [] }, isCurrent: () => true, apply: () => null };
+      return { diff: { add: [], update: [], remove: [], unchanged: [] }, reorders: false, isCurrent: () => true, apply: () => null };
     }
     /** @type {Map<string, Set<string>>} */
     const provenance = new Map();
@@ -386,11 +442,26 @@ export const createLegendEntryActions = ({
     const reusable = listed.filter((entry) => !owned.includes(entry) && desiredByCaption.get(entry.caption) === entry.color);
     const diff = diffLegendIntents([...owned, ...reusable], intents);
     if (!isCurrent() || svgContainer.value?.querySelector('svg') !== mountedSvg) return false;
+    const removedKeys = new Set(diff.remove.map(({ caption }) => caption));
+    const inDefaultOrder = () => !isLegendOrderEdited(drawing.legendEntries.value || [], originalLegendOrder.value);
+    /** @param {EntryRecord} entry */
+    const keyOf = (entry) => legendEntryKey(entry);
+    // Whether Python's answer, in the default order, moves a listed row the
+    // commit keeps: the displayed Result shows the answer's order at once
+    // (`order`), which no later live compile keeps, so the commit asks for
+    // the automatic rerender (`reorders`).
+    /** @param {readonly EntryRecord[]} kept @param {readonly EntryRecord[]} answered */
+    const movesKeptRow = (kept, answered) => answered.filter((entry) => kept.includes(entry)).some((entry, index) => entry !== kept[index]);
+    const listedKept = (drawing.legendEntries.value || []).filter((/** @type {EntryRecord} */ entry) => !removedKeys.has(keyOf(entry)));
+    const reorders = Boolean(legendOrder) && inDefaultOrder()
+      && movesKeptRow(listedKept, inAnsweredLegendOrder(listedKept, new Map(), legendOrder || [], keyOf, true).items);
     return {
       diff,
+      reorders,
       isCurrent: () => svgContainer.value?.querySelector('svg') === mountedSvg,
       apply: () => {
-        const removed = new Set(diff.remove.map(({ caption }) => caption));
+        const inDefault = inDefaultOrder();
+        const removed = removedKeys;
         // An intent's `caption` is its row's key; its `name` is the rule's caption.
         const names = new Map(intents.map((intent) => [legendCaption(intent), intent.name]));
         // A row the rules draw records their color, also one that already showed it (a palette row).
@@ -419,27 +490,51 @@ export const createLegendEntryActions = ({
         }
         // D-29: a row a commit splits off a row goes right after the row of
         // its name, so the editor list records the edited order Generate
-        // replays (PD-OI-063), and the Result shows it there; a row split
-        // off its own row goes right before or after it (OV-2194).
+        // replays (PD-OI-063), and the Result shows it there.
+        /** @type {PythonLegendKey[]} The added rows placed in the list. */
+        const placed = [];
         const split = placement && added.get(placement.caption);
-        const anchor = placement && ('before' in placement ? placement.before : placement.after);
-        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === anchor) : -1;
+        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === placement.after) : -1;
         if (placement && split && target >= 0) {
-          const at = 'before' in placement ? target : target + 1;
-          entries = [...entries.slice(0, at), split, ...entries.slice(at)];
+          entries = [...entries.slice(0, target + 1), split, ...entries.slice(target + 1)];
           added.delete(placement.caption);
-          const next = entries.slice(at + 1).find((entry) => !removed.has(legendEntryKey(entry)));
-          if (next) before.set(placement.caption, legendEntryKey(next));
+          placed.push(placement.caption);
         }
-        replaceLegendRows(drawing.slices.paint, listedRowsOf([...entries.filter((entry) => !removed.has(legendEntryKey(entry))), ...added.values()]));
+        entries = entries.filter((entry) => !removed.has(legendEntryKey(entry)));
+        /** @type {PythonLegendKey[] | null} */
+        let order = null;
+        if (legendOrder) {
+          const kept = entries;
+          const answered = inAnsweredLegendOrder(entries, added, legendOrder, keyOf, inDefault);
+          entries = answered.items;
+          answered.placed.forEach((key) => { added.delete(key); placed.push(key); });
+          // Rows in Python's order are no edit (D-08): in the default order,
+          // the inventory takes the answer's order and the rows placed, so
+          // the list stays the default order, Generate replays no order on
+          // another Result, and a Session saves none. Only a commit that adds
+          // a row or moves one (`reorders`) writes it: the rule owner runs
+          // those as checkpoint steps, which record the inventory.
+          if (inDefault && (answered.placed.length > 0 || reorders)) {
+            const inventory = originalLegendOrder.value;
+            const keys = new Map(answered.placed.filter((key) => !inventory.includes(key)).map((key) => [key, key]));
+            writeDisplayedInventory(inAnsweredLegendOrder(inventory, keys, legendOrder, String, true).items);
+            if (reorders && movesKeptRow(kept, entries)) order = [...entries, ...added.values()].map(keyOf);
+          }
+        }
+        for (const key of placed) {
+          const next = entries[entries.findIndex((entry) => legendEntryKey(entry) === key) + 1];
+          if (next) before.set(key, legendEntryKey(next));
+        }
+        replaceLegendRows(drawing.slices.paint, listedRowsOf([...entries, ...added.values()]));
         const rows = {
           add: diff.add.map(({ caption, color }) => ({
             caption, color, ...(names.get(caption) ? { name: names.get(caption) } : {}),
             ...(before.has(caption) ? { before: before.get(caption) } : {})
           })),
-          retire: [...removed]
+          retire: [...removed],
+          ...(order ? { order } : {})
         };
-        return rows.add.length > 0 || rows.retire.length > 0 ? rows : null;
+        return rows.add.length > 0 || rows.retire.length > 0 || order ? rows : null;
       }
     };
   };

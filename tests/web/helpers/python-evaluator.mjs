@@ -151,14 +151,16 @@ result = synthesize_color_rules_json(json.dumps(payload))
 /**
  * The rule owner's `groupColorRules` (app/feature-editor/rule-actions.js) over
  * `preparation`, for a test that stands in for the rule owner; `rowRules` reads
- * the rules a Legend row draws by its key, as `getLegendRowRules` does.
+ * the rules a Legend row draws by its key, as `getLegendRowRules` does. It
+ * returns the next table without the Legend order the rule owner's build
+ * answers with (the test's rule owner reads a table).
  * @param {{ synthesizeGroup: Function }} preparation
  * @param {(feature: any) => string[]} [labelsOf]
  * @param {(key: string) => readonly unknown[]} [rowRules]
  */
 export const groupColorRulesOver = (preparation, labelsOf = () => [], rowRules = () => []) => (features, color, caption, scope, joins = null) => async (current) => {
   const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, []);
-  const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption, joins: joined }, current);
+  const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption, joins: joined, drawn: [] }, current);
   return synthesizedRuleTable(table, current);
 };
 
@@ -188,7 +190,7 @@ export const reviseColorRulesOver = (preparation, rowRules) => (rows, patch, joi
   const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, rows);
   if (!joined || !joined.rows.some((index) => index < joined.at)) return next;
   const { table } = await preparation.synthesizeGroup({
-    scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined
+    scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: []
   }, next);
   return synthesizedRuleTable(table, next);
 };

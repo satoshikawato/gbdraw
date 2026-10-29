@@ -24,6 +24,11 @@ write-up of a release.
   Sessions are saved as Session version 50, which gbdraw 0.14.x cannot open;
   Sessions saved by 0.14.x (46 to 49) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
+- Fixed: after a Legend name edit, a feature color change, or a feature color reset that
+  adds, joins, splits off, or moves a color rule's Legend row, the Web app's Legend shows the
+  rows at once in the order Generate draws them, including a row of another feature type and
+  an old row the edit moves, instead of first showing them elsewhere and then jumping. Rows
+  placed this way do not count as a hand-edited Legend order.
 
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-29
 
@@ -49,6 +54,8 @@ write-up of a release.
 - Fixed: a Similarity alignment anchored on a CDS that crosses a circular
   record's origin centers on the middle of that CDS instead of the middle of
   the record (OV-2259).
+- Fixed: gbdraw imports again on Python 3.14 and later (OV-2196). `Traversable` is read
+  from `importlib.resources.abc`, because Python 3.14 removed `importlib.abc.Traversable`.
 - Fixed: the Circular legend lists only the similarity rings a slot draws; a
   ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
 - Fixed: in the Web app, a Legend name that joins another Legend row of the

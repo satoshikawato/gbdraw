@@ -375,13 +375,25 @@ const uniqueLegendKey = (reserved, preferred) => {
  */
 
 /**
+ * A next rule table that Python answered with the Legend order Generate draws from it on the
+ * displayed Result (`SynthesizedColorRules.legend`): a number is a rule row, by the index in `rules`
+ * of a rule that draws it; a text is the key of the renderer's own row of a feature type. Null when
+ * the build did not ask for it.
+ * @typedef {{ rules: Partial<SpecificColorRule>[], legend: readonly (number | string)[] | null }} AnsweredRuleTable
+ */
+
+/**
  * How a rule table write (rule-actions.js) builds the next table from the one at its turn (OV-444);
  * a row returned as it is or as `revise(row, patch)` keeps its identity. Null writes nothing. A build
- * that Python answers (a group color edit) returns a promise; the write waits for it at its turn.
+ * that Python answers (a group color edit) returns a promise; the write waits for it at its turn, and
+ * the answer carries the Legend order of the features `drawnFeatures` gives (the features the
+ * displayed Result draws, found by identity in the rule preparation's catalog).
  * @callback SpecificRuleBuild
  * @param {readonly SpecificColorRule[]} current
  * @param {(row: SpecificColorRule, patch: Partial<SpecificColorRule>) => SpecificColorRule} revise
- * @returns {Partial<SpecificColorRule>[] | null | Promise<Partial<SpecificColorRule>[] | null>}
+ * @param {() => Iterable<object>} drawnFeatures
+ * @returns {Partial<SpecificColorRule>[] | AnsweredRuleTable | null
+ *   | Promise<Partial<SpecificColorRule>[] | AnsweredRuleTable | null>}
  */
 
 // The rules of one caption and one fill draw one Legend row: that pair is the

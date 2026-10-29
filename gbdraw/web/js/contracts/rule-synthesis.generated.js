@@ -13,6 +13,7 @@
  * @property {string} color
  * @property {string} caption
  * @property {JoinedLegendRow | null} joins
+ * @property {number[] | null} drawn
  */
 /**
  * @typedef {object} RuleFeaturePayload
@@ -46,6 +47,7 @@
 /**
  * @typedef {object} SynthesizedColorRules
  * @property {(number | ColorRuleRow | RetargetedColorRule)[]} table
+ * @property {(number | string)[] | null} legend
  */
 /**
  * @typedef {object} RetargetedColorRule
