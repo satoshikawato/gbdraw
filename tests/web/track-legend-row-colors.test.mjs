@@ -84,9 +84,9 @@ test('a row the request draws no track for takes no palette color from its capti
 
 test('the tracks of the HmmtDNA_ATskew Gallery Session name the slot and the own colors of each track', () => {
   assert.deepEqual(drawnTracks(HMMT_AT_SKEW.renderRequest), [
-    { slotId: 'gc_content', kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null },
-    { slotId: 'gc_skew', kind: 'skew', label: 'GC skew', positiveColor: null, negativeColor: null },
-    { slotId: 'a_skew_2', kind: 'skew', label: 'AT skew', positiveColor: '#deaf6e', negativeColor: '#7294e3' }
+    { slotId: 'gc_content', kind: 'content', nt: 'GC', label: 'GC content', positiveColor: null, negativeColor: null },
+    { slotId: 'gc_skew', kind: 'skew', nt: 'GC', label: 'GC skew', positiveColor: null, negativeColor: null },
+    { slotId: 'a_skew_2', kind: 'skew', nt: 'AT', label: 'AT skew', positiveColor: '#deaf6e', negativeColor: '#7294e3' }
   ]);
 });
 
@@ -198,8 +198,8 @@ test('a saved slot claims a row in its own color only where the Result drew the 
 // may lack `tracks`, and a value that is no request names no track.
 test('a request without tracks draws the default tracks, and a value that is no request names none', () => {
   const defaults = [
-    { slotId: null, kind: 'content', label: 'GC content', positiveColor: null, negativeColor: null },
-    { slotId: null, kind: 'skew', label: 'GC skew', positiveColor: null, negativeColor: null }
+    { slotId: null, kind: 'content', nt: 'GC', label: 'GC content', positiveColor: null, negativeColor: null },
+    { slotId: null, kind: 'skew', nt: 'GC', label: 'GC skew', positiveColor: null, negativeColor: null }
   ];
   assert.deepEqual(drawnTracks({ mode: 'circular', diagramOptions: {} }), defaults);
   assert.deepEqual(drawnTracks({ mode: 'linear', diagramOptions: { tracks: { linearTrackSlots: null } } }), defaults);
@@ -245,47 +245,61 @@ test('a palette edit leaves a skew track the request names no slot for', () => {
   assert.deepEqual(skewFills, ['#6dded3', '#ad72e3']);
 });
 
-// OV-1198, OV-1215: the rows that leave with a track the draft hides, by the
-// predicate the track hide reads (Circular Hide GC Content / Hide GC Skew,
-// Linear Show GC Content / Show GC Skew, Show Depth in both modes).
+// OV-1198, OV-1215, PD-OI-104: the rows that leave with a track the draft
+// hides, by the one hide answer the live track projection reads (Circular Hide
+// GC Content / Hide GC Skew, Linear Show GC Content / Show GC Skew, Show Depth
+// in both modes); a Result without a request keeps every row until Generate.
 test('the rows of a hidden drawn track are the rows of its kind', () => {
   const vector = readJson('../fixtures/legend_track_slot_rows.json').cases;
   const linear = vector.find((each) => each.mode === 'linear' && each.depthTracks);
-  const rows = trackLegendRows(drawnTracks(requestOf(linear)), drawnRows(linear.rows.map(([key]) => key)));
+  const linearRequest = requestOf(linear);
+  const rows = trackLegendRows(drawnTracks(linearRequest), drawnRows(linear.rows.map(([key]) => key)));
   const shown = { show_gc: true, show_skew: true, show_depth: true };
   /** @param {Record<string, unknown>} form @param {Record<string, unknown>} [adv] */
   const draft = (form, adv = {}) => ({ form, adv });
-  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft(shown)), []);
-  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_depth: false })), ['Depth 1', 'Reads B']);
-  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_gc: false })), ['GC content']);
-  assert.deepEqual(hiddenTrackLegendKeys(rows, 'linear', draft({ ...shown, show_skew: false })), ['GC skew (+)', 'GC skew (-)']);
-  const circular = trackLegendRows(drawnTracks(requestOf({ mode: 'circular', dinucleotide: 'GC', slots: null })),
-    drawnRows(['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)']));
+  assert.deepEqual(hiddenTrackLegendKeys(rows, linearRequest, draft(shown)), []);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, linearRequest, draft({ ...shown, show_depth: false })), ['Depth 1', 'Reads B']);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, linearRequest, draft({ ...shown, show_gc: false })), ['GC content']);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, linearRequest, draft({ ...shown, show_skew: false })), ['GC skew (+)', 'GC skew (-)']);
+  assert.deepEqual(hiddenTrackLegendKeys(rows, null, draft({ ...shown, show_gc: false })), [], 'no request: no row leaves');
+  const circularRequest = requestOf({ mode: 'circular', dinucleotide: 'GC', slots: null });
+  const circular = trackLegendRows(drawnTracks(circularRequest), drawnRows(['CDS', 'GC content', 'GC skew (+)', 'GC skew (-)']));
   const circularShown = { suppress_gc: false, suppress_skew: false, show_depth: true };
-  assert.deepEqual(hiddenTrackLegendKeys(circular, 'circular', draft({ ...circularShown, suppress_gc: true })), ['GC content']);
-  assert.deepEqual(hiddenTrackLegendKeys(circular, 'circular', draft({ ...circularShown, suppress_skew: true })), ['GC skew (+)', 'GC skew (-)']);
-  assert.equal(drawnTrackHidden('content', 'circular', draft({ show_gc: false })), false, 'Circular reads Hide GC Content');
+  assert.deepEqual(hiddenTrackLegendKeys(circular, circularRequest, draft({ ...circularShown, suppress_gc: true })), ['GC content']);
+  assert.deepEqual(hiddenTrackLegendKeys(circular, circularRequest, draft({ ...circularShown, suppress_skew: true })), ['GC skew (+)', 'GC skew (-)']);
+  const content = { slotId: null, kind: /** @type {const} */ ('content'), nt: 'GC' };
+  assert.equal(drawnTrackHidden(content, circularRequest, draft({ show_gc: false })), false, 'Circular reads Hide GC Content');
+  // Hide GC Skew reaches the tracks of the drawing's dinucleotide only (TK-09).
+  const atSkew = { slotId: null, kind: /** @type {const} */ ('skew'), nt: 'AT' };
+  assert.equal(drawnTrackHidden(atSkew, circularRequest, draft({ suppress_skew: true })), false, 'an AT skew track stays');
 });
 
-// R2-H1: with a custom stack on, its enabled slots name the tracks the request
-// draws; the toggles the stack disables keep a stale value that hides nothing.
+// R2-H1: with a custom stack on, its rows name the tracks the request draws,
+// by slot id; the toggles the stack disables keep a stale value that hides nothing.
 test('a custom track stack, not its disabled toggles, says which drawn track is hidden', () => {
   const hiddenForm = { show_gc: false, show_skew: false, show_depth: false, suppress_gc: false, suppress_skew: false };
   const depthSlot = { id: 'depth_1', renderer: 'depth', enabled: true };
+  const depthTrack = { slotId: 'depth_1', kind: /** @type {const} */ ('depth'), nt: null };
   for (const mode of /** @type {const} */ (['circular', 'linear'])) {
+    const request = requestOf({ mode, dinucleotide: 'GC', slots: null });
     const on = mode === 'linear' ? 'linear_track_slots_enabled' : 'circular_track_slots_enabled';
     const slots = mode === 'linear' ? 'linear_track_slots' : 'circular_track_slots';
     const stack = (/** @type {unknown[]} */ list) => ({ form: hiddenForm, adv: { [on]: true, [slots]: list } });
     assert.equal(draftDrawsDepth(mode, stack([depthSlot])), true, mode);
-    assert.equal(drawnTrackHidden('depth', mode, stack([depthSlot])), false, mode);
-    assert.equal(drawnTrackHidden('depth', mode, stack([{ ...depthSlot, enabled: false }])), true, mode);
-    assert.equal(drawnTrackHidden('depth', mode, { form: { show_depth: true }, adv: { [on]: true, [slots]: [] } }), true, mode);
-    assert.equal(drawnTrackHidden('depth', mode, { form: hiddenForm, adv: { [slots]: [depthSlot] } }), true, `${mode} stack off`);
+    assert.equal(drawnTrackHidden(depthTrack, request, stack([depthSlot])), false, mode);
+    assert.equal(drawnTrackHidden(depthTrack, request, stack([{ ...depthSlot, enabled: false }])), true, mode);
+    assert.equal(drawnTrackHidden(depthTrack, request, { form: { show_depth: true }, adv: { [on]: true, [slots]: [] } }), true,
+      `${mode}: a removed row`);
+    assert.equal(drawnTrackHidden(depthTrack, request, { form: hiddenForm, adv: { [slots]: [depthSlot] } }), true, `${mode} stack off`);
   }
-  const linearStack = { form: hiddenForm, adv: { linear_track_slots_enabled: true } };
-  assert.equal(drawnTrackHidden('content', 'linear', linearStack), false);
-  assert.equal(drawnTrackHidden('skew', 'linear', linearStack), false);
-  const circularStack = { form: { suppress_gc: true, suppress_skew: true }, adv: { circular_track_slots_enabled: true } };
-  assert.equal(drawnTrackHidden('content', 'circular', circularStack), true, 'Circular keeps Hide GC Content');
-  assert.equal(drawnTrackHidden('skew', 'circular', circularStack), true, 'Circular keeps Hide GC Skew');
+  const linearRequest = requestOf({ mode: 'linear', dinucleotide: 'GC', slots: null });
+  const linearStack = { form: hiddenForm, adv: { linear_track_slots_enabled: true, linear_track_slots: [{ id: 'gc', enabled: true }] } };
+  assert.equal(drawnTrackHidden({ slotId: 'gc', kind: 'content', nt: 'GC' }, linearRequest, linearStack), false);
+  assert.equal(drawnTrackHidden({ slotId: null, kind: 'skew', nt: 'GC' }, linearRequest, linearStack), false);
+  const circularRequest = requestOf({ mode: 'circular', dinucleotide: 'GC', slots: null });
+  const circularStack = { form: { suppress_gc: true, suppress_skew: true }, adv: { circular_track_slots_enabled: true,
+    circular_track_slots: [{ id: 'gc', renderer: 'dinucleotide_content', enabled: false, params: { _suppressed_by_global: 'gc_content' } },
+      { id: 'skew', renderer: 'dinucleotide_skew', enabled: true, params: {} }] } };
+  assert.equal(drawnTrackHidden({ slotId: 'gc', kind: 'content', nt: 'GC' }, circularRequest, circularStack), true, 'Circular keeps Hide GC Content');
+  assert.equal(drawnTrackHidden({ slotId: 'skew', kind: 'skew', nt: 'GC' }, circularRequest, circularStack), true, 'Circular keeps Hide GC Skew');
 });

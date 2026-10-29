@@ -1892,10 +1892,13 @@ export const createAppSetup = () => {
     return trackLegendRows(readDrawnTracks(), pythonRows, sharedLegendKeys);
   };
   // The keys of the displayed Result's Legend rows whose drawn track the draft
-  // hides (OV-1198, OV-1215): the live compile deletes them, and the Legend
-  // list leaves them out, so a hidden track's rows leave and return with it.
+  // hides (OV-1198, OV-1215), by the hide answer the live track projection
+  // reads: the Legend list leaves them out, so a hidden track's rows leave and
+  // return with it. A Result without a request keeps every row until Generate.
   /** @param {DrawingState} drawing @returns {string[]} */
-  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(displayedTrackLegendRows(drawing), drawing.mode, drawing);
+  const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(
+    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), drawing
+  );
   const svgActions = createSvgStyles({
     state,
     watch,
@@ -3306,16 +3309,6 @@ export const createAppSetup = () => {
       // a loaded Session show bytes already laid out.
       const drawn = !context.bindingOptions.isIncrementalEdit
         || Boolean(context.bindingOptions.replaceGeneratedLegend);
-      // An automatic rerender and a record transform draw the committed
-      // request again, so they draw a track the draft hid since (Show Depth
-      // off, its last source removed, a Reset Settings): the track and its
-      // Legend rows leave the new Result at once, as they left the one it
-      // replaces (OV-1198 H2), also when the track claims no row (R3 H-B). A
-      // selected Result was drawn before the draft hid it; its rows left with
-      // the projection above. Generate draws none, so its Result stays Python's.
-      const redrawn = context.phase === 'label-reflow' || context.phase === 'target-record-transform';
-      if (selecting || redrawn) svgActions.applyTrackVisibility();
-      if (redrawn && hiddenTrackLegendRows(drawing).length > 0) showEditorIntent({ domains: LIVE_EDIT_DOMAINS.legendRows });
       const adopt = () => {
         // It shows the Legend editor's edits laid out as Python lays the edited
         // rows out, before its entries are read (zero shift; OV-122, OV-124,
@@ -4079,13 +4072,6 @@ export const createAppSetup = () => {
     });
     if (!projected) return;
     await nextTick();
-    // The restored form decides which track groups the mounted Result shows.
-    // The visibility watcher is suppressed while a step restores files (a Depth
-    // source), so the step applies it here once the restored container is
-    // mounted. The mounted Result is the shown drawing's (OV-66, R3).
-    if (changedDomains.has('files') && changedDomains.has('config')) {
-      svgActions.applyTrackVisibility();
-    }
   });
 
   // A displayed Result whose label intent changed since it was last shown
@@ -4182,8 +4168,7 @@ export const createAppSetup = () => {
           // The committed request may be one a Session stored (unchecked): its options are read as unvalidated.
           ? featureDrawnContext(drawing, { diagramOptions: /** @type {UnvalidatedFields<'selectedFeaturesSet'>} */ (getCommittedCanonicalRenderRequest()?.diagramOptions) })
           : null,
-        ruleRows,
-        hiddenTrackRows: hiddenTrackLegendRows(drawing)
+        ruleRows
       } : null
     });
     return plan.operationsByResult[resultIndex] || null;

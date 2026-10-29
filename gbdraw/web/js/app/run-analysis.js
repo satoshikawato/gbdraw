@@ -63,20 +63,13 @@ import {
   requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
-import { applyCircularSuppressControlsToSlots } from './circular-track-slots.js';
-import {
-  clampCircularTrackAxisIndex,
-  placeCircularTrackStack
-} from '../services/circular-track-slot-model.js';
+import { placeCircularStackForGenerate } from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
   orderedConservationSources
 } from '../services/conservation-series.js';
 import {
-  applyLinearTrackOrderPlacements,
-  clampLinearTrackAxisIndex,
-  normalizeLinearTrackSlots,
-  resolveLinearTrackAxisIndex
+  placeLinearStackForGenerate
 } from '../services/linear-track-slot-model.js';
 import {
   activeDepthTrackIndices,
@@ -214,8 +207,7 @@ import {
 /** @import { LegacyProteinCandidateEnvelope, LosatDerivedCacheEntry, RawLosatCacheEntry, RawLosatCacheMatch } from '../services/losat-cache.js' */
 /** @import { RecordKeyedFeature } from '../services/feature-identity.js' */
 /** @import { RecipeGeneratedFile, RecipeHelperFile } from './run-info.js' */
-/** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
-/** @import { DepthSlotRow, RawDepthTrackConfig } from '../services/depth-track-state.js' */
+/** @import { DepthSlotRow } from '../services/depth-track-state.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { HistoryArtifactHandle, HistoryStepOptions } from '../services/history.js' */
 /** @import { FeaturePlacementDraft } from '../services/feature-placement.js' */
@@ -3013,12 +3005,6 @@ export const createRunAnalysis = ({
           if (Number(drawing.adv.depth_tick_font_size) <= 0) throw new Error('Depth tick font size must be greater than 0.');
         }
       };
-      /** @param {unknown} value */
-      const normalizeDepthTrackValue = (value) => {
-        if (value === null || value === undefined || value === '') return null;
-        const numeric = Number(value);
-        return Number.isFinite(numeric) && numeric > 0 ? String(numeric) : null;
-      };
       /** @param {(FileLike | null)[][]} rows */
       const depthTrackEntriesFromRows = (rows) => Array.from(
         { length: depthTrackMatrixWidth(rows) },
@@ -3045,20 +3031,6 @@ export const createRunAnalysis = ({
        */
       const syncDepthSlotLegendLabelsFromTrackConfigs = (slots, seriesCount) => {
         syncDepthSlotLabels({ slots, depthTracks: drawing.adv.depth_tracks, activeCount: seriesCount });
-      };
-      // A Depth row draws its series' stored height, read without writing: a
-      // series without settings, or one the drawing does not have, leaves the
-      // row its own height (TK-03).
-      /** @param {LinearTrackSlot | null | undefined} slot */
-      const syncLinearDepthSlotHeightFromTrackConfig = (slot) => {
-        if (!slot || String(slot.renderer || '') !== 'depth') return;
-        const rawTrackIndex = Number(slot.params?.track_index);
-        const trackIndex = Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
-        /** @type {unknown} */
-        const config = Array.isArray(drawing.adv.depth_tracks) ? drawing.adv.depth_tracks[trackIndex] : null;
-        if (!config || typeof config !== 'object') return;
-        const configuredHeight = normalizeDepthTrackValue(/** @type {RawDepthTrackConfig} */ (config).height);
-        if (configuredHeight) slot.height = configuredHeight;
       };
       const normalizeGcContentPercentState = () => {
         drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
@@ -3108,22 +3080,18 @@ export const createRunAnalysis = ({
         const normalizedCircularPlotTitle = String(drawing.form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         const useCircularTrackSlots = drawing.adv.circular_track_slots_enabled === true;
-        const circularTrackAxisIndex = clampCircularTrackAxisIndex(
-          drawing.adv.circular_track_slots_axis_index,
-          Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots.length : 0
-        );
-        // The rows' sides follow one Axis index, and Generate stores that index (OV-1263).
+        // The rows' sides follow one Axis index, and Generate stores that index
+        // (OV-1263); the Depth rows take their series (one placement owner).
         const placedCircularTrackStack = useCircularTrackSlots
-          ? placeCircularTrackStack(
-              drawing.adv.circular_track_slots,
-              drawing.adv.nt,
-              drawing.form.track_type,
-              circularTrackAxisIndex
-            )
+          ? placeCircularStackForGenerate({
+              slots: drawing.adv.circular_track_slots,
+              nt: drawing.adv.nt,
+              trackType: drawing.form.track_type,
+              axisIndex: drawing.adv.circular_track_slots_axis_index,
+              form: drawing.form
+            })
           : null;
-        const circularTrackSlots = placedCircularTrackStack
-          ? applyCircularSuppressControlsToSlots(placedCircularTrackStack.slots, drawing.form, drawing.adv.nt)
-          : [];
+        const circularTrackSlots = placedCircularTrackStack ? placedCircularTrackStack.slots : [];
         if (placedCircularTrackStack) {
           drawing.adv.circular_track_slots.splice(0, drawing.adv.circular_track_slots.length, ...circularTrackSlots);
           drawing.adv.circular_track_slots_axis_index = placedCircularTrackStack.axisIndex;
@@ -3173,18 +3141,6 @@ export const createRunAnalysis = ({
         );
         const circularDepthEntries = depthTrackEntriesFromRows(circularDepthRows);
         if (useCircularTrackSlots) {
-          let circularDepthSlotOrdinal = 0;
-          circularTrackSlots.forEach((slot) => {
-            if (slot?.enabled === false || String(slot?.renderer || '') !== 'depth') return;
-            const parsedTrackIndex = Number(slot?.params?.track_index);
-            const trackIndex = Number.isInteger(parsedTrackIndex) && parsedTrackIndex >= 0
-              ? parsedTrackIndex
-              : circularDepthSlotOrdinal;
-            if (!slot.params || !Number.isInteger(parsedTrackIndex) || parsedTrackIndex < 0) {
-              slot.params = { ...(slot.params || {}), track_index: trackIndex };
-            }
-            circularDepthSlotOrdinal += 1;
-          });
           const circularDepthSeriesCount = representativeDepthFiles(circularDepthRows).length;
           shapeDepthSeriesForGenerate(circularDepthSeriesCount);
           syncDepthSlotLegendLabelsFromTrackConfigs(circularTrackSlots, circularDepthSeriesCount);
@@ -3426,45 +3382,21 @@ export const createRunAnalysis = ({
         /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
         if (useLinearTrackSlots) {
-          linearTrackSlots = normalizeLinearTrackSlots(
-            drawing.adv.linear_track_slots,
-            drawing.adv.nt,
-            drawing.form.linear_track_layout
-          );
           const linearDepthSeriesCount = depthTrackMatrixWidth(
             linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
           );
           shapeDepthSeriesForGenerate(linearDepthSeriesCount);
-          let nextDepthIndex = 0;
-          linearTrackSlots.forEach((slot) => {
-            if (slot.renderer !== 'depth') return;
-            slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-            if (slot.enabled === false && slot.depth_binding_error) {
-              delete slot.params.track_index;
-              return;
-            }
-            const rawTrackIndex = Number(slot.params.track_index);
-            if (!Number.isInteger(rawTrackIndex) || rawTrackIndex < 0) {
-              slot.params.track_index = nextDepthIndex;
-            }
-            syncLinearDepthSlotHeightFromTrackConfig(slot);
-            nextDepthIndex = Number(slot.params.track_index) + 1;
+          // One placement owner: the rows, their Depth series, the Axis index.
+          const placedLinearTrackStack = placeLinearStackForGenerate({
+            slots: drawing.adv.linear_track_slots,
+            nt: drawing.adv.nt,
+            trackLayout: drawing.form.linear_track_layout,
+            axisIndex: drawing.adv.linear_track_slots_axis_index,
+            depthTracks: drawing.adv.depth_tracks,
+            depthSeriesCount: linearDepthSeriesCount
           });
-          syncDepthSlotLegendLabelsFromTrackConfigs(linearTrackSlots, linearDepthSeriesCount);
-          linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
-            drawing.adv.linear_track_slots_axis_index,
-            linearTrackSlots.length
-          );
-          linearTrackSlotAxisIndex = resolveLinearTrackAxisIndex(
-            linearTrackSlots,
-            linearTrackSlotAxisIndex
-          );
-          linearTrackSlots = applyLinearTrackOrderPlacements(
-            linearTrackSlots,
-            linearTrackSlotAxisIndex,
-            drawing.adv.nt,
-            drawing.form.linear_track_layout
-          );
+          linearTrackSlots = placedLinearTrackStack.slots;
+          linearTrackSlotAxisIndex = placedLinearTrackStack.axisIndex;
           drawing.adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           drawing.adv.linear_track_slots.splice(0, drawing.adv.linear_track_slots.length, ...linearTrackSlots);
         }

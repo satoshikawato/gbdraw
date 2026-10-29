@@ -1,5 +1,4 @@
 // @ts-check
-/** @import { DrawingState } from '../state.js' */
 /** @import { DrawnTrack } from '../services/track-legend-rows.js' */
 import {
   appliedFeatureColors,
@@ -10,9 +9,9 @@ import {
 } from '../utils/color-utils.js';
 import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import {
-  DEPTH_GROUPS, DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
+  DINUCLEOTIDE_CONTENT_GROUPS, DINUCLEOTIDE_SKEW_GROUPS, findTrackGroups
 } from '../services/drawn-groups.js';
-import { drawnTrackHidden, skewTrackColor } from '../services/track-legend-rows.js';
+import { skewTrackColor } from '../services/track-legend-rows.js';
 
 
 /** @param {unknown} value */
@@ -82,8 +81,7 @@ export const createSvgStyles = ({
     svgContent,
     appliedPaletteColors,
     pairwiseMatchFactors,
-    svgContainer,
-    mode
+    svgContainer
   } = state;
 
   /**
@@ -245,69 +243,6 @@ export const createSvgStyles = ({
     if (updatedCount > 0) commitActiveResultEdit?.('palette');
   };
 
-  const applyTrackVisibility = () => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!svgContent.value) return;
-    if (!svgContainer.value) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    let updated = false;
-
-    const gcContentGroups = findTrackGroups(svg, DINUCLEOTIDE_CONTENT_GROUPS);
-    if (gcContentGroups.length > 0) {
-      const shouldHide = drawnTrackHidden('content', mode.value, drawing);
-      gcContentGroups.forEach((gcContentGroup) => {
-        const currentDisplay = gcContentGroup.getAttribute('display');
-        if (shouldHide && currentDisplay !== 'none') {
-          gcContentGroup.setAttribute('display', 'none');
-          updated = true;
-        } else if (!shouldHide && currentDisplay === 'none') {
-          gcContentGroup.removeAttribute('display');
-          updated = true;
-        }
-      });
-    }
-
-    const skewGroups = findTrackGroups(svg, DINUCLEOTIDE_SKEW_GROUPS);
-    if (skewGroups.length > 0) {
-      const shouldHide = drawnTrackHidden('skew', mode.value, drawing);
-      skewGroups.forEach((skewGroup) => {
-        const currentDisplay = skewGroup.getAttribute('display');
-        if (shouldHide && currentDisplay !== 'none') {
-          skewGroup.setAttribute('display', 'none');
-          updated = true;
-        } else if (!shouldHide && currentDisplay === 'none') {
-          skewGroup.removeAttribute('display');
-          updated = true;
-        }
-      });
-    }
-
-    const depthGroups = findTrackGroups(svg, DEPTH_GROUPS);
-    if (depthGroups.length > 0) {
-      const shouldHide = drawnTrackHidden('depth', mode.value, drawing);
-      depthGroups.forEach((depthGroup) => {
-        const currentDisplay = depthGroup.getAttribute('display');
-        if (shouldHide && currentDisplay !== 'none') {
-          depthGroup.setAttribute('display', 'none');
-          updated = true;
-        } else if (!shouldHide && currentDisplay === 'none') {
-          depthGroup.removeAttribute('display');
-          updated = true;
-        }
-      });
-    }
-
-    if (updated) {
-      commitActiveResultEdit?.('track-visibility');
-      console.log('Track visibility updated');
-    }
-  };
-
   watch(
     appliedPaletteColors,
     (colors, previousColors) => {
@@ -334,22 +269,7 @@ export const createSvgStyles = ({
     { deep: true }
   );
 
-  // Each drawing's answers of the hide rule (`drawnTrackHidden`): a track
-  // checkbox, a slot switched on or off or removed, or the custom stack switch
-  // changes them. The watcher only shows the answer on the Result; the writers
-  // retire the Legend rows (R10). A mode switch changes neither drawing, so it
-  // applies nothing.
-  /** @type {readonly DrawingState[]} */ (state.drawingList()).forEach((drawing) => watch(
-    () => /** @type {const} */ (['content', 'skew', 'depth']).map((kind) => drawnTrackHidden(kind, drawing.mode, drawing)).join(),
-    () => {
-      if (drawing !== state.activeDrawing()) return;
-      if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
-      applyTrackVisibility();
-    }
-  ));
-
   return {
-    applyPaletteToSvg,
-    applyTrackVisibility
+    applyPaletteToSvg
   };
 };
