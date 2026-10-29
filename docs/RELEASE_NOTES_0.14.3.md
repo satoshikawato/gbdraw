@@ -61,6 +61,11 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   the live Legend shows it: when the new rule only gives that rule's
   condition a new name, it takes that rule's place in the color rule table.
   Before, Generate could draw the row ahead of rows it followed live.
+- A popup Legend name in the Web app that takes a color rule's Legend row whole
+  keeps the row's place at **Generate Diagram** for every rule row, as the live
+  Legend shows it. A gene or label-qualifier rule is re-captioned in place. For
+  a `locus_tag` row, or a rule that also colors a hidden feature, the new rule
+  goes at the old rule's place while the old rule keeps its other features.
 - The Web app's header from 769 to about 970 px stays inside the window and
   keeps the Session title in view. Before, it ran past the right edge by up to
   32 px in French (and up to 8 px in English, Spanish, Portuguese, and
@@ -147,20 +152,21 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   what is drawn keeps the feature catalog the page holds instead of rebuilding
   it. On a Multi-record Circular canvas, a change to some records copies and
   re-reads only those records' parts. Circular labels no longer redraw when a
-  definition font or the center radius changes, and Linear comparison ribbons
-  no longer redraw when a definition or record label changes. The Worker
-  parses each Depth file once and keeps it while **Show Depth** is off, so
-  showing Depth again does not parse the file again. A Circular Species change
-  that moves no track keeps the placed labels, and keeps the record definitions
-  and the plot title where they do not draw the species (for example a typed
-  plot title or the record-summary profile), and a Linear change that moves rows without changing a comparison keeps its
-  ribbons. Turning the GC content or GC skew track on or off no longer redraws
-  the feature contents, the Linear records, or the Circular ticks, and a Depth
-  Legend label change keeps the drawn Depth paths. In a warm Generate of the
-  vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
-  of 331 ms in CPython. A change of Separate strands, Resolve overlaps, or
-  Label rendering rebuilds fewer render stages, and a warm Generate of a Linear
-  similarity-groups or collinear figure with a reversed record is faster.
+  definition font or the center radius changes, and Linear comparison ribbons no
+  longer redraw when a definition or record label changes. The Worker parses
+  each Depth file once and keeps it while **Show Depth** is off, so showing
+  Depth again does not parse the file again. A Circular Species change that
+  moves no track keeps the placed labels, and keeps the record definitions and
+  the plot title where they do not draw the species (for example a typed plot
+  title or the record-summary profile), and a Linear change that moves rows
+  without changing a comparison keeps its ribbons. Turning the GC content or GC
+  skew track on or off no longer redraws the feature contents, the Linear
+  records, or the Circular ticks, and a Depth Legend label change keeps the
+  drawn Depth paths. In a warm Generate of the vibrio Gallery Session, the
+  prepared-input check takes 155 ms of CPU instead of 331 ms in CPython. A
+  change of Separate strands, Resolve overlaps, or Label rendering rebuilds
+  fewer render stages, and a warm Generate of a Linear similarity-groups or
+  collinear figure with a reversed record is faster.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).
