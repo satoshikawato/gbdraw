@@ -321,7 +321,7 @@ test('Duplicate in the tab menu shows a named copy as one step that Undo takes b
 // PD-OI-090 〔作成〕(3), R17-4, R17-27: "New Linear drawing with this style" in
 // the tab menu makes a Linear drawing with the source's settings that Linear
 // has, without its files, as one step whose Undo shows the source.
-test('New Linear drawing with this style copies a both-mode setting and no files as one step that Undo takes back', async ({ page }) => {
+test('New Linear drawing with this style copies a both-mode setting, no profile setting, and no files as one step that Undo takes back', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await openApp(page);
@@ -333,12 +333,19 @@ test('New Linear drawing with this style copies a both-mode setting and no files
     const { boundInputFileIds } = await import('./js/services/drawing/inputs.js');
     return [...boundInputFileIds({ drawingList: () => [state.drawingOf(drawingId)] })];
   }, id);
-  const plotTitle = (id) => page.evaluate(async (drawingId) => (
-    (await import('./js/state.js')).state.drawingOf(drawingId).form.plot_title), id);
+  const settingsOf = (id) => page.evaluate(async (drawingId) => {
+    const { form, adv } = (await import('./js/state.js')).state.drawingOf(drawingId);
+    return { plotTitle: form.plot_title, legendFontSize: adv.legend_font_size };
+  }, id);
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
   await expect.poll(async () => (await boundFiles(source)).length).toBe(1);
-  // Plot Title is a setting of both modes.
-  await page.evaluate(() => { window.__GBDRAW_APP__.form.plot_title = 'Styled title'; });
+  // The Legend font size is a setting both modes share; Plot Title is a
+  // `profile` setting, which each mode keeps its own of (D-15-182).
+  await page.evaluate(async (drawingId) => {
+    const { adv } = (await import('./js/state.js')).state.drawingOf(drawingId);
+    adv.legend_font_size = 23;
+    window.__GBDRAW_APP__.form.plot_title = 'Styled title';
+  }, source);
 
   const menu = page.locator('.drawing-bar-menu');
   await menu.locator('summary').click();
@@ -348,14 +355,16 @@ test('New Linear drawing with this style copies a both-mode setting and no files
   const styled = ids[1];
   expect(ids[0]).toBe(source);
   expect(await shownDrawing(page), 'the new Linear drawing is shown').toEqual({ id: styled, kind: 'linear' });
-  expect(await plotTitle(styled)).toBe('Styled title');
+  const styledSettings = await settingsOf(styled);
+  expect(styledSettings.legendFontSize).toBe(23);
+  expect(styledSettings.plotTitle, 'Plot Title keeps the Linear profile').not.toBe('Styled title');
   expect(await boundFiles(styled)).toEqual([]);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undoLabel())).toBe('New drawing with this style');
 
   await page.getByRole('button', { name: 'Undo', exact: true }).click();
   expect(await drawingIds(page)).toEqual([source]);
   expect((await shownDrawing(page)).id, 'Undo shows the source').toBe(source);
-  expect(await plotTitle(source)).toBe('Styled title');
+  expect(await settingsOf(source)).toEqual({ plotTitle: 'Styled title', legendFontSize: 23 });
 });
 
 // PD-OI-090 〔入力ファイル〕〔Undo と削除〕, R17-3: replacing a file that another

@@ -264,6 +264,7 @@ import {
   TYPED_DRAFT_SESSION_VERSION
 } from '../contracts/schema.generated.js';
 import {
+  MODE_SCOPED_ROWS,
   OTHER_MODE_OWN_FIELDS,
   SLICE_MODES,
   modeSliceFieldsOf,
@@ -2508,7 +2509,7 @@ const projectedDrawingView = (data) => {
 /**
  * Where the file holds the drawing Load opens: a Session 50's place in its
  * list of drawings (`drawingSetPath`, found by the opened drawing's ID), a
- * Session 27-50's top level. Its parts' rows take it as their paths' prefix,
+ * Session 27-49's top level. Its parts' rows take it as their paths' prefix,
  * so they name the file's own paths (OV-1791, OV-1797).
  * @typedef {'' | DrawingSetPath} OpenedDrawingPath
  */
@@ -3712,7 +3713,7 @@ const savedLosatCacheEntryKind = (entry) => {
 /**
  * The project's raw LOSAT cache, from each drawing's saved entries (DESIGN
  * §4.1: a Session 50 drawing's entries merge into the one cache, keyed by
- * their content; a Session 27-50's one list is its Linear drawing's).
+ * their content; a Session 27-49's one list is its Linear drawing's).
  * @param {readonly { drawing: DrawingState, entries: unknown }[]} sources
  * @param {unknown} [legacyEnvelope]
  * @param {{ adoptCurrent?: boolean, validatedManifest?: unknown }} [options]
@@ -4990,12 +4991,12 @@ const reconcileDepthTrackStateAfterSessionFiles = (drawing, mode, linearRows, ci
 };
 
 // The inputs a Load installs: each drawing's own (a Session 50 drawing's
-// request and bindings, B2d-3a-2), or a Session 27-50's one set, of which
+// request and bindings, B2d-3a-2), or a Session 27-49's one set, of which
 // each loaded drawing takes its mode's part: the Circular drawing its input
 // fields and record catalog, the Linear drawing its committed comparisons,
 // record rows, layout, and comparison plan. Each drawing takes the five card
 // files of its inputs (R16-4): a Session 50 drawing its own bindings, a
-// Session 27-50's drawings the one set's.
+// Session 27-49's drawings the one set's.
 /**
  * @typedef {LoadedInputs & { circularRecordList: CircularRecordEntry[], linearRecordRows: LinearRecordRow[] }} LiveFileState
  */
@@ -5379,23 +5380,47 @@ export const duplicateDrawingState = (source, copyId) => {
   return copy;
 };
 
+// The registry rows that name records of the drawing's files (R17-4, D-15-182):
+// the records it draws (the record selector, the OFF records), the Circular
+// crop and record label, the Multi-Record Canvas rows, and the per-record
+// display drafts. The registry has no column for this, so the list is here.
+/** @type {readonly string[]} */
+const RECORD_BOUND_ROWS = Object.freeze([
+  'config.form.circular_record_selector', 'config.form.circular_region_start', 'config.form.circular_region_end',
+  'config.form.circular_record_label', 'config.adv.multi_record_positions', 'config.recordsOff',
+  'config.recordDisplayDrafts'
+]);
 // The registry rows a style copy leaves out (PD-OI-090 〔作成〕(3), R17-4):
 // files (the card files and the comparison plans, which name their files),
 // annotation sets, Feature placements, group names, the per-feature edits and
 // label bulk edits, the Legend edits and per-feature paint (`editorState`),
-// and the Features-list record of a Result.
+// the Features-list record of a Result, and the record-bound rows.
+/** @type {ReadonlySet<string>} */
 const NOT_STYLE_ROWS = new Set([
   'config.fileImports', 'config.annotationSets', 'config.featurePlacementOverrides', 'config.webEdits',
   'config.linearComparisonPlan', 'config.importedComparisonResolution', 'config.circularConservation',
   'features.featureOverrides', 'features.featureColorOverrides', 'features.labelOverrideRows',
-  'features.labelTextBulkOverrides', 'ui.selectedFeatureRecordIdx'
+  'features.labelTextBulkOverrides', 'ui.selectedFeatureRecordIdx', ...RECORD_BOUND_ROWS
 ]);
+/**
+ * Whether a style copy from a drawing of `from` into one of `to` copies
+ * `row` (PD-OI-090 〔作成〕(3), D-15-182). Within one mode: every style row of
+ * that mode. Across modes, by the registry's `migrate` rule (the one Python's
+ * mode split follows): only a row both modes share and that is not a
+ * `profile` row; a `profile` row and a row only `to` has keep `to`'s new
+ * drawing defaults.
+ * @param {import('./mode-scoped-migration.js').ModeScopedRow} row
+ * @param {'circular' | 'linear'} from
+ * @param {'circular' | 'linear'} to
+ */
+const styleCopiesRow = (row, from, to) => !NOT_STYLE_ROWS.has(`${row.domain}.${row.path}`) && (from === to
+  ? row.modes === 'both' || row.modes === to
+  : row.modes === 'both' && row.migrate !== 'profile');
 /**
  * A style copy's settings for a drawing of `mode` (PD-OI-090 〔作成〕(3)):
  * `source`'s Save slice (`buildModeSliceData`; its layout preferences of
- * `mode`) with only the registry rows of `mode` (`modes`: both or `mode`)
- * that are style, and the five card tables with only the user's rows
- * (`userTableRows`).
+ * `mode`) with only the registry rows `styleCopiesRow` copies, and the five
+ * card tables with only the user's rows (`userTableRows`).
  * @param {DrawingState} source
  * @param {'circular' | 'linear'} mode
  * @param {Readonly<Record<string, string>>} paletteColors The colors of `source`'s palette.
@@ -5409,8 +5434,8 @@ const drawingStyleOf = (source, mode, paletteColors) => {
   const from = { config, features: saved.features, ui: saved.ui };
   /** @type {Record<string, Record<string, unknown>>} */
   const style = { config: {}, features: {}, ui: {} };
-  MODE_SCOPED_SETTINGS.rows.forEach((/** @type {{ domain: string, path: string, modes: string }} */ row) => {
-    if ((row.modes !== 'both' && row.modes !== mode) || NOT_STYLE_ROWS.has(`${row.domain}.${row.path}`)) return;
+  MODE_SCOPED_ROWS.forEach((row) => {
+    if (!styleCopiesRow(row, source.mode, mode)) return;
     const [head, nested] = row.domain.split('.');
     if (!Object.hasOwn(style, head) || (nested && head !== 'config')) return;
     const fromContainer = /** @type {Record<string, unknown>} */ (from[head]);
@@ -6678,7 +6703,7 @@ const importSessionDocument = async (e, options = {}) => {
     }
     /**
      * Where a drawing's draft part is in the file: a Session 50's
-     * entry in its list of drawings, a Session 46-50's `modes.<mode>` (OV-1791).
+     * entry in its list of drawings, a Session 46-49's `modes.<mode>` (OV-1791).
      * @param {string} mode @param {OpenedDrawingPath} at The drawing's place in the file's list.
      */
     const draftPartAt = (mode, at) => (projectedDrawingId !== null ? at.slice(0, -1) : `modes.${mode}`);
@@ -6806,7 +6831,7 @@ const importSessionDocument = async (e, options = {}) => {
     /**
      * The saved entries of a LOSAT cache field the file wrote into each
      * drawing, by drawing ID (unvalidated): a Session 50's own, the projected
-     * drawing's from its view; a Session 27-50's one list, `partDrawingId`'s
+     * drawing's from its view; a Session 27-49's one list, `partDrawingId`'s
      * (none when the file has no drawing of that part).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field @param {DrawingId | null} partDrawingId
      * @returns {{ id: DrawingId, entries: unknown }[]}
@@ -6820,7 +6845,7 @@ const importSessionDocument = async (e, options = {}) => {
       : partDrawingId === null ? [] : [{ id: partDrawingId, entries: projectedEntries }]);
     // The conservation hash pairs each loaded request names (D-15-124): those
     // of the conservation entries the file wrote into its drawing (a Session
-    // 27-50's one list is its one Circular part's). A drawing without a
+    // 27-49's one list is its one Circular part's). A drawing without a
     // request installs none.
     /** @type {ReadonlyMap<DrawingId, ConservationPairs>} */
     const loadedConservationPairs = new Map(projectionResult
@@ -7587,7 +7612,7 @@ const importSessionDocument = async (e, options = {}) => {
     // Each drawing takes its own files, its card files among them (R16-4).
     restoreLiveFileState(committed.map((drawing) => ({ drawing, inputs: liveFileStateOf(filesOf(drawing.id)) })));
     // The Linear drawing the Files card list folds: the shown one, else a
-    // Session 27-50's Linear part's (a Session 50's first Linear drawing);
+    // Session 27-49's Linear part's (a Session 50's first Linear drawing);
     // without one, no card is folded.
     const linearDrawing = shownDrawing.mode === 'linear' ? shownDrawing
       : linearPartDrawingId === null ? null : state.drawingOf(linearPartDrawingId);
@@ -7597,7 +7622,7 @@ const importSessionDocument = async (e, options = {}) => {
       linearDrawing ? linearDrawing.inputType.value : 'gb'
     );
     // Each Linear drawing's comparisons, classified from its own request
-    // (a Session 27-50's one Linear part is its Linear drawing's), a Session
+    // (a Session 27-49's one Linear part is its Linear drawing's), a Session
     // 27-44's from the file's stored request, which Python's conversion
     // leaves out of a Circular request's drawings (C-OD14).
     const fileComparisonClassification = legacyRead ? legacyRead.comparisonClassification : null;
@@ -7612,7 +7637,7 @@ const importSessionDocument = async (e, options = {}) => {
      * Each drawing's saved raw LOSAT entries as the preflight read them
      * (`readSessionLosatArtifacts`): a Session 50's by drawing, the
      * projected one first (its own are its view's), merged into the one
-     * cache (DESIGN §4.1); a Session 27-50's one list, its Linear part's,
+     * cache (DESIGN §4.1); a Session 27-49's one list, its Linear part's,
      * else the shown drawing's (a cache row of a Circular drawing names no
      * records, `restoredLosatCacheInfoIdentity`).
      * @param {unknown} projectedEntries @param {'losatCache' | 'losatDerivedCache'} field
