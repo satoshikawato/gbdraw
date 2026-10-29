@@ -96,9 +96,9 @@ const MODES = {
       return {
         state,
         slots: () => state.adv.circular_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeCircularDepthSources(state, () => {
+        change: (nextSourced, nextWidth, change) => editor.changeCircularDepthSources(state, () => {
           state.files.c_depth = sourceRow(nextSourced, nextWidth);
-        }),
+        }, change),
         issue: (index) => editor.circularTrackSlotIssue(state.adv.circular_track_slots[index], index),
         duplicate: (index) => editor.duplicateCircularTrackSlot(index)
       };
@@ -129,10 +129,10 @@ const MODES = {
       return {
         state,
         slots: () => state.adv.linear_track_slots,
-        change: (nextSourced, nextWidth) => editor.changeLinearDepthSources(state, () => {
+        change: (nextSourced, nextWidth, change) => editor.changeLinearDepthSources(state, () => {
           // PD-OI-025: clearing a source keeps the logical series width.
           state.linearSeqs[0].depth = sourceRow(nextSourced, nextWidth);
-        }),
+        }, change),
         issue: (index) => editor.linearTrackSlotIssue(state.adv.linear_track_slots[index], index),
         duplicate: (index) => editor.duplicateLinearTrackSlot(index)
       };
@@ -232,6 +232,23 @@ for (const [mode, adapter] of Object.entries(MODES)) {
     replaced.state.form.show_depth = false;
     replaced.change([0], 1);
     assert.equal(replaced.state.form.show_depth, false);
+  });
+
+  // D-15-183 (2026-10-29 reading): a Depth file the user sets in the shown
+  // drawing turns Show Depth on, first file or not, as on dev; the write the
+  // "Every drawing that uses this file" replacement makes in another drawing
+  // ("C copy", not shown) keeps that drawing's Show Depth Off.
+  test(`${mode}: a Depth file set in the shown drawing turns Show Depth on; another drawing keeps it off`, () => {
+    const shown = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    shown.state.form.show_depth = false;
+    shown.change([0], 1, { setsFile: true });
+    assert.equal(shown.state.form.show_depth, true, 'the shown drawing\'s own upload into slot 0 again');
+
+    const copy = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    copy.state.form.show_depth = false;
+    Object.defineProperty(copy.state, 'activeDrawing', { value: () => ({ id: 'circular-c', mode }), configurable: true });
+    copy.change([0], 1, { setsFile: true });
+    assert.equal(copy.state.form.show_depth, false, '"C copy" written by the replacement from C');
   });
 }
 

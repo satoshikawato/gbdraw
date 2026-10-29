@@ -2,6 +2,7 @@
 /** @import { DrawingState } from '../state.js' */
 /** @import { ChangeTrackLayout, ChangeTrackVisibility } from './track-slot-edits.js' */
 /** @import { AskChoice } from './app-messages.js' */
+/** @import { DepthSourceChange } from '../services/depth-track-state.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
   isManagedConservationSlot,
@@ -1002,16 +1003,20 @@ export const createCircularTrackSlotEditor = ({
   };
 
   // The only entry for Depth source changes: run the change, then reconcile.
-  // The Circular drawing's Show Depth goes off with its last Depth
-  // source; the other mode's drawing is not touched (OV-82, OV-101).
-  /** @param {DrawingState} drawing @param {() => unknown} mutate */
-  const changeCircularDepthSources = (drawing, mutate) => {
+  // It alone sets the drawing's Show Depth from its Depth sources: on with
+  // the first file, off with the last (OV-82), and on when the change sets a
+  // file in the shown drawing (the user's own control, or the shown
+  // drawing's part of a replacement). The replacement port's write to
+  // another drawing keeps that drawing's Show Depth (PD-OI-090, D-15-183).
+  // The other mode's drawing is not touched (OV-101).
+  /** @param {DrawingState} drawing @param {() => unknown} mutate @param {DepthSourceChange} [change] */
+  const changeCircularDepthSources = (drawing, mutate, { setsFile } = { setsFile: false }) => {
     const previousSourced = circularSourcedDepthTrackIndexes(drawing);
     mutate();
     reconcileCircularDepthSlots(drawing, previousSourced);
-    // Show Depth follows the drawing's first and last Depth file; a replaced file keeps it (PD-OI-090).
     const sourced = circularSourcedDepthTrackIndexes(drawing).length > 0;
     if (previousSourced.length > 0 !== sourced) drawing.form.show_depth = sourced;
+    else if (sourced && setsFile && drawing.id === state.activeDrawing().id) drawing.form.show_depth = true;
   };
 
   /** @param {DrawingState} drawing */

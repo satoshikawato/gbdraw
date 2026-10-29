@@ -2867,7 +2867,7 @@ export const createAppSetup = () => {
           row[idx] = ref;
         });
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', rows.map((row) => compactDepthFileSlots(row)));
-      });
+      }, { setsFile: ref !== null });
       if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };
@@ -2901,7 +2901,7 @@ export const createAppSetup = () => {
             seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
           }
         });
-      });
+      }, { setsFile: ref !== null });
       if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };

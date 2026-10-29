@@ -45,7 +45,7 @@ import {
   syncLinearSlotsFromAxisIndex
 } from '../services/linear-track-slot-model.js';
 /** @import { LinearSlotPlacementInput, LinearTrackSlot, LinearTrackSlotInput } from '../services/linear-track-slot-model.js' */
-/** @import { DepthFileSlots } from '../services/depth-track-state.js' */
+/** @import { DepthFileSlots, DepthSourceChange } from '../services/depth-track-state.js' */
 
 /**
  * A slot row the editor reads: the rows of `adv.linear_track_slots` are drafts, and the guards below treat a missing row as absent.
@@ -910,16 +910,20 @@ export const createLinearTrackSlotEditor = ({
   };
 
   // The only entry for Depth source changes: run the change, then reconcile.
-  // The Linear drawing's Show Depth goes off with its last Depth
-  // source; the other mode's drawing is not touched (OV-82, OV-101).
-  /** @param {DrawingState} drawing @param {() => unknown} mutate */
-  const changeLinearDepthSources = (drawing, mutate) => {
+  // It alone sets the drawing's Show Depth from its Depth sources: on with
+  // the first file, off with the last (OV-82), and on when the change sets a
+  // file in the shown drawing (the user's own control, or the shown
+  // drawing's part of a replacement). The replacement port's write to
+  // another drawing keeps that drawing's Show Depth (PD-OI-090, D-15-183).
+  // The other mode's drawing is not touched (OV-101).
+  /** @param {DrawingState} drawing @param {() => unknown} mutate @param {DepthSourceChange} [change] */
+  const changeLinearDepthSources = (drawing, mutate, { setsFile } = { setsFile: false }) => {
     const previousSourced = linearSourcedDepthTrackIndexesForDrawing(drawing);
     mutate();
     reconcileLinearDepthSlots(drawing, previousSourced);
-    // Show Depth follows the drawing's first and last Depth file; a replaced file keeps it (PD-OI-090).
     const sourced = linearSourcedDepthTrackIndexesForDrawing(drawing).length > 0;
     if (previousSourced.length > 0 !== sourced) drawing.form.show_depth = sourced;
+    else if (sourced && setsFile && drawing.id === state.activeDrawing().id) drawing.form.show_depth = true;
   };
 
   const linearTrackStackEntries = () => {

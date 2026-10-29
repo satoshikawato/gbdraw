@@ -26,6 +26,14 @@ import { normalizeOptionalText } from './track-slot-display.js';
  */
 
 /**
+ * What a Depth source change does, as its writer states it: `setsFile` when
+ * it puts a file into a slot (an upload or a replacement), not when it clears
+ * one or changes the records. The Depth source change owner of each editor
+ * reads it to decide Show Depth.
+ * @typedef {{ readonly setsFile: boolean }} DepthSourceChange
+ */
+
+/**
  * A Depth series config as a draft or a Session holds it: every field is unvalidated.
  * @typedef {{
  *   label?: unknown, color?: unknown, height?: unknown, large_tick_interval?: unknown,
