@@ -115,3 +115,38 @@ export const buildLegendStyleRetirement = ({ drawing, namedCaptions,
     return result;
   }
 );
+
+/**
+ * @typedef {{ readonly id: string, readonly slices: { readonly paint: PaintSlice } }} RetirementDrawing
+ *   A drawing the Legend port changes: found by its ID, styled by its paint.
+ */
+
+/**
+ * The Legend port of every drawing: `retire(drawing, change)` runs a track data
+ * change of that drawing and retires the Legend styles of the captions its
+ * data stops naming, measured on that drawing (`namedCaptions(drawing)`,
+ * `hiddenRows(drawing)`). The relist and the projection read the displayed
+ * Result, so only the shown drawing, found by its ID, runs them; a replacement
+ * that reaches a drawing not shown retires its paint the same way (review S2).
+ * @template {RetirementDrawing} D
+ * @param {{
+ *   shownDrawingId: () => string,
+ *   namedCaptions: (drawing: D) => Set<string>,
+ *   hiddenRows: (drawing: D) => readonly string[],
+ *   relistLegendEntries: () => void,
+ *   projectLegendEntries: () => void
+ * }} options
+ * @returns {<T>(drawing: D, change: () => T) => T}
+ */
+export const createDrawingLegendRetirement = ({
+  shownDrawingId, namedCaptions, hiddenRows, relistLegendEntries, projectLegendEntries
+}) => (drawing, change) => {
+  const shown = drawing.id === shownDrawingId();
+  return buildLegendStyleRetirement({
+    drawing,
+    namedCaptions: () => namedCaptions(drawing),
+    hiddenRows: () => hiddenRows(drawing),
+    relistLegendEntries: shown ? relistLegendEntries : () => {},
+    projectLegendEntries: shown ? projectLegendEntries : () => {}
+  })(change);
+};

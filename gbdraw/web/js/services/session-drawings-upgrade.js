@@ -211,7 +211,7 @@ export const sessionLegendEditsByRowKey = (session, version, unread = null) => {
  */
 /**
  * The one reading of a Session file's source facts by its version, for the
- * Session 50 Load reads from it (a Session 46-50's here, a Session 27-44's
+ * Session 50 Load reads from it (a Session 46-49's here, a Session 27-44's
  * from Python's conversion, a Session 50 itself).
  * @param {number} version The file's Session version.
  * @param {boolean} hasDraft The file holds a Web draft (a Session 50 holds
@@ -636,7 +636,7 @@ export const sessionDocumentOfViews = (saved, activeDrawingId) => {
 };
 
 /**
- * A Session 46-50's Session 50, what only the source says, and where the
+ * A Session 46-49's Session 50, what only the source says, and where the
  * file holds each drawing's saved Result set (`setSources`, by drawing ID;
  * a drawing without a saved set has none), so Load finds a set's reading and
  * keeps its repair paths the file's own.

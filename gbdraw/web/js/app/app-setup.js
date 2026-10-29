@@ -201,7 +201,7 @@ import { createRightDrawerController } from './right-drawer.js';
 import { createCircularTrackSlotEditor } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
-import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
+import { createDrawingLegendRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
   annotationRecordKeysOf,
   annotationSourceKey,
@@ -1516,9 +1516,18 @@ export const createAppSetup = () => {
     expanded.forEach((seq) => updateLinearRecordRow(drawing.linearRecordRows, seq.uid, row));
     return true;
   };
+  /**
+   * The drawing a discovery ran for, or null when it was deleted while the
+   * discovery ran: such a discovery changes nothing (OV-2148).
+   * @param {DrawingId} drawingId @returns {DrawingState | null}
+   */
+  const listedDrawingOf = (drawingId) => (
+    state.drawingTabs.value.some((tab) => tab.id === drawingId) ? state.drawingOf(drawingId) : null
+  );
   /** @param {{ drawingId: DrawingId, uid: string, records: SequenceRecord[] }} discovered the records of one card, for the drawing the discovery ran for */
   const handleLinearRecordsDiscovered = ({ drawingId, uid, records }) => {
-    const drawing = state.drawingOf(drawingId);
+    const drawing = listedDrawingOf(drawingId);
+    if (!drawing) return false;
     // Only an upload infers record definitions and opens the record list; a
     // loaded Session keeps its own.
     const fromUpload = !state.sessionImportRollbackInProgress.value && pendingDiscoveryOf(drawing).uploads.delete(uid);
@@ -1538,9 +1547,8 @@ export const createAppSetup = () => {
    */
   const handleCircularRecordsDiscovered = ({ drawingId, primaryFile, pairedFile, recordCount }) => {
     rebindAnnotationRecords();
-    // A drawing deleted while its discovery ran asks for nothing.
-    if (!state.drawingTabs.value.some((tab) => tab.id === drawingId)) return;
-    const drawing = state.drawingOf(drawingId);
+    const drawing = listedDrawingOf(drawingId);
+    if (!drawing) return;
     const pending = pendingDiscoveryOf(drawing);
     const upload = pending.circularUpload;
     if (!upload || (upload !== primaryFile && upload !== pairedFile)) return;
@@ -2272,31 +2280,29 @@ export const createAppSetup = () => {
   // OV-87): the annotation editor receives this one port, and the Depth source
   // and label transitions below run through it. A retired rename and the row of
   // a hidden track reach the displayed Result through the one Legend projection (R3).
-  /**
-   * @template T
-   * @param {() => T} change
-   * @returns {T}
-   */
-  const retireLegendStylesOfUnnamedCaptions = (change) => {
-    const drawing = state.activeDrawing();
-    return buildLegendStyleRetirement({
-      drawing,
-      projectLegendEntries: () => { showEditorIntent({ domains: [...LIVE_EDIT_DOMAINS.legendRows, ...LIVE_EDIT_DOMAINS.strokes] }); },
-      hiddenRows: () => hiddenTrackLegendRows(drawing),
-      relistLegendEntries: () => { legendActions.extractLegendEntries(); },
-      namedCaptions: () => trackDataLegendCaptions({
-        annotationSets: drawing.annotationSets,
-        depthTracks: drawing.adv.depth_tracks,
-        ...(mode.value === 'linear'
-          ? { depthSlots: drawing.adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows(drawing)) }
-          : {
-              depthSlots: drawing.adv.circular_track_slots,
-              sourcedDepthTrackIndexes: circularDepthRepresentatives(drawing)
-                .flatMap((file, index) => (file ? [index] : []))
-            })
-      })
-    })(change);
-  };
+  // Each writer passes the drawing it changes, so a replacement that reaches a
+  // drawing not shown measures and retires that drawing's captions (review S2).
+  /** @type {<T>(drawing: DrawingState, change: () => T) => T} */
+  const retireLegendStylesOfUnnamedCaptions = createDrawingLegendRetirement({
+    shownDrawingId: () => state.activeDrawingId.value,
+    projectLegendEntries: () => { showEditorIntent({ domains: [...LIVE_EDIT_DOMAINS.legendRows, ...LIVE_EDIT_DOMAINS.strokes] }); },
+    hiddenRows: (/** @type {DrawingState} */ drawing) => hiddenTrackLegendRows(drawing),
+    relistLegendEntries: () => { legendActions.extractLegendEntries(); },
+    namedCaptions: (/** @type {DrawingState} */ drawing) => trackDataLegendCaptions({
+      annotationSets: drawing.annotationSets,
+      depthTracks: drawing.adv.depth_tracks,
+      ...(drawing.mode === 'linear'
+        ? { depthSlots: drawing.adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows(drawing)) }
+        : {
+            depthSlots: drawing.adv.circular_track_slots,
+            sourcedDepthTrackIndexes: circularDepthRepresentatives(drawing)
+              .flatMap((file, index) => (file ? [index] : []))
+          })
+    })
+  });
+  // The stack and annotation editors edit the shown drawing.
+  /** @type {<T>(change: () => T) => T} */
+  const retireShownLegendStyles = (change) => retireLegendStylesOfUnnamedCaptions(state.activeDrawing(), change);
   // The diagrams the next Circular Generate draws, from the record set of the
   // request, read once: the Auto notes take the record lengths of each, and the
   // track slot estimates those of the diagram that draws the shown Result's
@@ -2312,14 +2318,14 @@ export const createAppSetup = () => {
   const readCircularEstimateLengths = () => circularEstimateRecordLengths.value;
   const circularTrackSlotEditor = createCircularTrackSlotEditor({
     state, changeTrackLayout, askChoice, runUndoable: history.runUndoable, estimateRecordLengths: readCircularEstimateLengths,
-    changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
+    changeTrackVisibility: retireShownLegendStyles
   });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({
-    state, changeTrackLayout, changeTrackVisibility: retireLegendStylesOfUnnamedCaptions
+    state, changeTrackLayout, changeTrackVisibility: retireShownLegendStyles
   });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions, askChoice,
+    state, getRecordCatalog: () => getAnnotationRecordCatalog(state.activeDrawing()), retireLegendStylesOfUnnamedCaptions: retireShownLegendStyles, askChoice,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   // The Show Depth, and Linear Show GC Content and Show GC Skew, checkboxes:
@@ -2331,7 +2337,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const drawing = state.activeDrawing();
     const shown = Boolean(checked);
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       if (key === 'show_gc') drawing.form.show_gc = shown;
       else if (key === 'show_skew') drawing.form.show_skew = shown;
       else drawing.form.show_depth = shown;
@@ -2769,7 +2775,7 @@ export const createAppSetup = () => {
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(drawing, idx);
     if (!config) return;
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       config.label = String(value ?? '');
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
     });
@@ -2784,9 +2790,10 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
+    const drawing = state.activeDrawing();
     // A slot whose index names no series has no series label to edit (TK-03).
-    if (!depthTrackConfigForIndex(state.activeDrawing(), idx)) return;
-    retireLegendStylesOfUnnamedCaptions(() => {
+    if (!depthTrackConfigForIndex(drawing, idx)) return;
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
       const label = String(value ?? '');
       if (label.trim()) {
@@ -2864,17 +2871,14 @@ export const createAppSetup = () => {
     const rows = circularDepthRows(drawing);
     const previousFile = circularDepthRepresentatives(drawing)[idx] || null;
     // A new file can rename an auto-labeled series, so the label follows in the same retirement.
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {
         rows.forEach((row) => {
           row[idx] = ref;
         });
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', rows.map((row) => compactDepthFileSlots(row)));
       });
-      if (ref) {
-        updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
-        drawing.form.show_depth = true;
-      }
+      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
     });
   };
   /** @param {number} index @param {FileLike | null} file */
@@ -2896,7 +2900,7 @@ export const createAppSetup = () => {
     padLinearDepthRows(drawing, logicalWidth);
     ensureDepthTrackConfigCount(drawing, logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
         targets.forEach((seq) => {
           const slots = depthFileSlotsFromValue(seq.depth);
@@ -2908,10 +2912,7 @@ export const createAppSetup = () => {
           }
         });
       });
-      if (ref) {
-        updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
-        drawing.form.show_depth = true;
-      }
+      if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFile);
     });
   };
   /** @param {LinearSeq} seq @param {number} index @param {FileLike | null} file */
@@ -2934,20 +2935,20 @@ export const createAppSetup = () => {
   );
   const addCircularDepthTrack = () => shownAction('circular', (drawing) => {
     ensureDepthTrackConfigCount(drawing, circularDepthTrackCount(drawing) + 1);
-    retireLegendStylesOfUnnamedCaptions(() => { if (circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
+    retireLegendStylesOfUnnamedCaptions(drawing, () => { if (circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
   });
   const addLinearDepthTrack = () => shownAction('linear', (drawing) => {
     const nextCount = linearDepthTrackUiCount(drawing) + 1;
     padLinearDepthRows(drawing, nextCount);
     ensureDepthTrackConfigCount(drawing, nextCount);
-    retireLegendStylesOfUnnamedCaptions(() => { if (linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
+    retireLegendStylesOfUnnamedCaptions(drawing, () => { if (linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
   });
   /** @param {number} index */
   const removeCircularDepthTrack = (index) => shownAction('circular', (drawing) => {
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       const previousFiles = circularDepthRepresentatives(drawing);
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', removeDepthTrackColumnAt(circularDepthRows(drawing), idx)
         .map((row) => compactDepthFileSlots(row)));
@@ -2986,7 +2987,7 @@ export const createAppSetup = () => {
     const logicalWidth = linearDepthLogicalWidth(drawing);
     if (idx >= logicalWidth) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
-    retireLegendStylesOfUnnamedCaptions(() => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => {
       const nextRows = removeDepthTrackColumnAt(linearDepthRows(drawing), idx);
       drawing.linearSeqs.forEach((seq, recordIndex) => {
         seq.depth = nextRows[recordIndex] || [];
@@ -3894,10 +3895,11 @@ export const createAppSetup = () => {
     // The phone layout shows a loaded Result in the Preview, as Generate does; a Load
     // without a Result shows Settings.
     if (result?.status === 'ok' || result?.status === 'legacy') settingsPaneActions.showPhonePane(svgContent.value ? 'preview' : 'settings');
-    // R17-25: a Load with a Result fits the figure to the shown Preview, at every width,
-    // after the phone pane switch and the whole notice (its height sizes the canvas), so the
-    // measured canvas is the one shown; Generate resets to 100 %.
-    if ((result?.status === 'ok' || result?.status === 'legacy') && svgContent.value) {
+    // R17-25: a file Session Load with a Result fits the figure to the shown Preview, at every
+    // width, after the phone pane switch and the whole notice (its height sizes the canvas), so
+    // the measured canvas is the one shown; Generate resets to 100 %. A legacy configuration
+    // Load brings no Result, so the figure already shown keeps its zoom.
+    if (result?.status === 'ok' && svgContent.value) {
       await nextTick();
       fitPreviewToViewport();
     }
@@ -6702,7 +6704,7 @@ export const createAppSetup = () => {
       });
     }
     // Removing a File can remove the last source of a Depth series.
-    retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
+    retireLegendStylesOfUnnamedCaptions(drawing, () => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
       changeRecordSources(drawing, () => replaceLinearSeqs(drawing.slices.inputs, next));
     }));
     const activeUids = new Set(next.map((seq) => seq.uid));
@@ -7100,7 +7102,7 @@ export const createAppSetup = () => {
       ? circularRecordSettingsOwners(drawing).filter((owner) => deleted.has(owner.key))
       : drawing.linearSeqs.filter((seq) => deleted.has(seq.uid)).map((seq) => linearRecordSettingsOwner(drawing, seq));
     const ruleCount = drawing.manualSpecificRules.length;
-    retireLegendStylesOfUnnamedCaptions(() => removeRecordEdits(owners, recordEditData(drawing)));
+    retireLegendStylesOfUnnamedCaptions(drawing, () => removeRecordEdits(owners, recordEditData(drawing)));
     // The color rows it took back color nothing drawn; the rule matches follow the table.
     if (drawing.manualSpecificRules.length !== ruleCount) void projectPaletteAndRules();
     if (listMode === 'linear') {

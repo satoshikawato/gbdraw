@@ -481,7 +481,7 @@ export const createGallerySessionPublication = (owners) => {
       validateCurrentFields(current);
       return isCliWritten(current) ? validateEnvelope(current) : validateCurrent(current);
     }
-    throw new Error('Gallery publication supports Sessions 46-50; Load a Session 27-44 in the app and save it (Python converts it at Load); received ' + String(session?.version) + '.');
+    throw new Error(`Gallery publication supports Sessions ${MODE_SCOPED_SESSION_VERSION}-${CURRENT_VERSION}; Load a Session 27-44 in the app and save it (Python converts it at Load); received ${String(session?.version)}.`);
   };
   /** @param {PublicationSession} session */
   const rebuild = (session) => rebuildIntent(session, owners);
