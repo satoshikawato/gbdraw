@@ -22,7 +22,7 @@ body:
     attributes:
       label: gbdraw version
       description: The output of `gbdraw --version`, or the date you used https://gbdraw.app/.
-      placeholder: 0.14.3
+      placeholder: 0.14.4
   - type: textarea
     id: where
     attributes:

@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-29
+
+- Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by
+  0.14.3 open as before. See the [full release notes](./docs/RELEASE_NOTES_0.14.4.md).
 - Added: similarity-ring color schemes. `--conservation_color_scheme`
   (`same`, the default; `ten`; `per_five`), the config key
   `objects.conservation.color_scheme`, and `ComparisonRingOptions.color_scheme`
