@@ -3,7 +3,7 @@
 // per evaluation made the Web JavaScript tests spend minutes on start-up.
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { synthesizedRuleTable } from '../../../gbdraw/web/js/app/rule-matching.js';
+import { joinedLegendRow, synthesizedRuleTable } from '../../../gbdraw/web/js/app/rule-matching.js';
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const STDERR_TAIL_BYTES = 16 * 1024;
@@ -131,11 +131,30 @@ result = synthesize_color_rules_json(json.dumps(payload))
 
 /**
  * The rule owner's `groupColorRules` (app/feature-editor/rule-actions.js) over
- * `preparation`, for a test that stands in for the rule owner.
+ * `preparation`, for a test that stands in for the rule owner; `rowRules` reads
+ * the rules a Legend row draws by its key, as `getLegendRowRules` does.
  * @param {{ synthesizeGroup: Function }} preparation
  * @param {(feature: any) => string[]} [labelsOf]
+ * @param {(key: string) => readonly unknown[]} [rowRules]
  */
-export const groupColorRulesOver = (preparation, labelsOf = () => []) => (features, color, caption, scope) => async (current) => {
-  const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption }, current);
+export const groupColorRulesOver = (preparation, labelsOf = () => [], rowRules = () => []) => (features, color, caption, scope, joins = null) => async (current) => {
+  const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, []);
+  const { table } = await preparation.synthesizeGroup({ scope, features, labels: features.map(labelsOf), color, caption, joins: joined }, current);
   return synthesizedRuleTable(table, current);
+};
+
+/**
+ * The rule owner's `reviseColorRules` (app/feature-editor/rule-actions.js) over
+ * `preparation`, for a test that stands in for the rule owner.
+ * @param {{ synthesizeGroup: Function }} preparation
+ * @param {(key: string) => readonly unknown[]} rowRules
+ */
+export const reviseColorRulesOver = (preparation, rowRules) => (rows, patch, joins) => async (current, revise) => {
+  const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
+  const joined = joins === null ? null : joinedLegendRow(rowRules(joins), current, rows);
+  if (!joined || !joined.rows.some((index) => index < joined.at)) return next;
+  const { table } = await preparation.synthesizeGroup({
+    scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined
+  }, next);
+  return synthesizedRuleTable(table, next);
 };

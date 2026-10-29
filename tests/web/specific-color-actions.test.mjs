@@ -904,11 +904,14 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   state.extractedFeatures.value = [...resultCatalogFeatures(state).renderedByIdentity.values()];
   const drawingState = withDrawings(state);
   let rerenders = 0;
+  /** @type {unknown[]} The placement each commit gives the Legend owner. */
+  const placements = [];
   const actions = createFeatureRuleActions({
     ref: value => ({ value }), computed: get => ({ get value() { return get(); } }), state: drawingState,
     rulePreparation: createRulePreparation({ state: drawingState, evaluate: evaluatePythonRules, synthesize: synthesizePythonColorRules }),
     runUndoableCheckpoint: async (_label, commit) => commit(), runUndoable: async (_label, commit) => commit(),
-    prepareFileLegendEntries: async (intents) => {
+    prepareFileLegendEntries: async (intents, options = {}) => {
+      placements.push(options.placement ?? null);
       const diff = diffLegendIntents(state.legendEntries.value, intents);
       return { diff, isCurrent: () => true, apply: () => {
         state.legendEntries.value = intents;
@@ -945,6 +948,18 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.equal(rerenders, first + 1, 'Undo and Redo of the rename ask no rerender');
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
+  // OV-2194: a row split off its row goes right before it when the next
+  // table draws its first rule before the old row's, else right after it.
+  for (const [name, next, placement] of [
+    ['first rule', [tagRule('A', 'delta'), tagRule('B', 'beta')], { caption: 'delta', before: 'beta' }],
+    ['later rule', [tagRule('A', 'beta'), tagRule('B', 'delta')], { caption: 'delta', after: 'beta' }]
+  ]) {
+    state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A', 'beta'), tagRule('B', 'beta'));
+    state.legendEntries.value = [{ caption: 'beta', color: '#112233' }];
+    assert.equal(await actions.commitSpecificRules(() => next, 'Rename legend item',
+      { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', beside: true } }), true, name);
+    assert.deepEqual(placements.at(-1), placement, name);
+  }
 });
 
 // OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer
