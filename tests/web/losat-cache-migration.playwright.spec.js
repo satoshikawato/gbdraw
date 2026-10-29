@@ -697,15 +697,17 @@ test('legacy protein caches migrate, export readable TSV, and preserve uploads',
 
   const renamed = await page.evaluate(async () => {
     // A row's file field holds an InputFileRef of the project's file store;
-    // the store's `fileOf` reads its bytes.
+    // the store's `fileOf` names the stored file (a File or, after a Session
+    // Load, a Session resource view), and `readFileBytes` reads either, as the app does.
     const { state } = await import('./js/state.js');
+    const { readFileBytes } = await import('./js/services/file-content-cache.js');
     const bound = (await import('./js/services/drawing/inputs.js')).registerInputFileTree.bind(null, state.inputFiles);
     const app = window.__GBDRAW_APP__;
     for (let index = 0; index < app.linearSeqs.length; index += 1) {
       const source = state.inputFiles.fileOf(app.linearSeqs[index].gb);
       if (!source) throw new Error(`Linear row ${index + 1} holds no loaded GenBank file.`);
       app.linearSeqs[index].gb = bound(new File(
-        [await source.arrayBuffer()],
+        [await readFileBytes(source)],
         `renamed-cache-input-${index + 1}.gbk`,
         { type: source.type || 'text/plain', lastModified: 0 }
       ));

@@ -115,7 +115,9 @@ export const createInputFileStore = ({ sourceOf = () => null } = {}) => {
   };
 
   /**
-   * The bytes a ref names: the registered File, or null once released.
+   * The file a ref names, or null once released: a `File`, or after a Session
+   * Load a Session resource view, which has no `arrayBuffer()`; read its bytes
+   * with `readFileBytes` or `readFileText` (`file-content-cache.js`).
    * @param {InputFileRef | null | undefined} ref
    * @returns {FileLike | null}
    */
