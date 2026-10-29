@@ -71,6 +71,9 @@ write-up of a release.
 - Fixed: in the Web app, a feature color change for a color rule whose Legend row another rule
   of the same name and color also draws now shows that row where Generate draws it at once;
   since 0.14.0 it stayed in its old place until the next Generate (OV-2264).
+- Fixed: in the Web app, a color rule edit is no longer refused as a Legend conflict when another
+  rule's Legend row shows a Legend color of its own, such as a type row's Legend color kept by a
+  Legend name given in the feature popup; 0.14.3 refused every such edit without a message (OV-2265).
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 

@@ -212,7 +212,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const rowOf = (rule) => ({ caption: currentCaption(rule), color: rule.color });
     const ruleRows = captioned.map(rowOf);
     const currentMatches = drawnRuleMatches({ rules: drawing.manualSpecificRules, features: displayed.features });
-    const drawnRuleRows = currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows;
+    // OV-2265 (OV-61): a rule row with a Legend color of its own shows that
+    // color, as Generate draws it, until a commit recolors the row's rule:
+    // that commit retires the Legend color (`supersededLegendColors`).
+    const overrides = drawing.legendColorOverrides;
+    /** @template {{ caption: PythonLegendKey, color: string }} Row @param {Row} row @returns {Row} */
+    const shownRow = (row) => {
+      const current = ruleRows.find(({ caption }) => caption === row.caption);
+      return Object.hasOwn(overrides, row.caption) && current && resolveColorToHex(current.color) === resolveColorToHex(row.color)
+        ? { ...row, color: overrides[row.caption] } : row;
+    };
+    const drawnRuleRows = (currentMatches.known ? captioned.filter(currentMatches.groupTaken).map(rowOf) : ruleRows).map(shownRow);
     /** @type {readonly LegendRow[]} */
     const listed = drawing.legendEntries.value || [];
     // OV-282: in the color each shows (the palette's for a palette row), as the Legend preparation reads it.
@@ -221,7 +231,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       .map(entry => ({ caption: legendEntryKey(entry), color: shown.listed(entry) }));
     const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
-      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents,
+      intents: buildLegendIntents(candidateRules, rendererRows, rule => used.has(rule)).intents.map(shownRow),
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),

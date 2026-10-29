@@ -48,6 +48,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   rule of the same Legend name and color also draws that row, shows the row
   where **Generate Diagram** draws it at once. Since 0.14.0 the row stayed in
   its old place until the next Generate.
+- In the Web app, a color rule edit is applied when another rule's Legend row
+  shows a Legend color of its own, for example a feature type's Legend color
+  that a **Legend name** given in the feature popup kept on the new row. 0.14.3
+  refused every such edit, and a Legend item color change showed no message.
 
 ## Changed behavior
 
