@@ -322,10 +322,10 @@ export const createInputReplacement = ({
    * every site still bound after it (R17-28: only the file changes).
    * @param {string} fileId the bound file being replaced
    * @param {InputFileCandidate | InputFileRef} file the new file, or a file in this Session
-   * @param {() => unknown} [writeShown]
+   * @param {() => unknown} writeShown
    * @returns {DrawingListOutcome}
    */
-  const replaceInputFile = (fileId, file, writeShown = () => undefined) => {
+  const replaceInputFile = (fileId, file, writeShown) => {
     const reason = switchBusy();
     if (reason) return { status: 'busy', reason };
     if (sitesOf(fileId).length) {
