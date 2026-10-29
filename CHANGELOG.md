@@ -12,6 +12,19 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Added: one Session now holds several drawings, each with its own settings,
+  files, Result, and History. The Web app's drawing bar replaces the Circular
+  and Linear buttons: a new Session has one Circular drawing and a Linear tab
+  with a plus icon that adds a Linear drawing. A tab's menu offers New Circular
+  drawing, New Linear drawing, Duplicate drawing, New Circular drawing with this
+  style, New Linear drawing with this style, Rename, and Delete drawing. Reset
+  offers "Reset this drawing" beside "Reset all drawings". Uploading over a file
+  that another drawing uses asks "This drawing only" or "Every drawing that
+  uses this file", and the uploaders offer the files already in the Session.
+  Sessions are saved as Session version 50, which gbdraw 0.14.x cannot open;
+  Sessions saved by 0.14.x (46 to 49) open as before.
+- Changed: the drawing bar replaces the Circular and Linear mode buttons.
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
