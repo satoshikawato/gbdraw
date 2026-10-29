@@ -1214,6 +1214,38 @@
       "source": "OV-1665 (tests/fixtures subfolders; twin.unregistered.v1 on origin/dev f0b23d4ac)"
     },
     {
+      "id": "vector:tests/fixtures/sessions/drawings-vectors.json",
+      "concern": "Drawing IDs and the move of a Session 46-48 to the list of drawings (Session 49)",
+      "pythonOwner": [
+        "gbdraw/session_drawings.py:allocate_drawing_id",
+        "gbdraw/session_drawings.py:drawings_document_from_mode_scoped"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/drawing-view.js:allocateDrawingId",
+        "gbdraw/web/js/services/session-drawings-upgrade.js:upgradeModeScopedSession"
+      ],
+      "vector": "tests/fixtures/sessions/drawings-vectors.json",
+      "reason": "The Web allocates a new drawing's ID and moves a Session 46-48 to drawings without Python (PD-OI-090); Python reads and re-saves the same files. The ids and upgrades vectors pin both sides.",
+      "retireWhen": "Session 46-48 is no longer read and drawing IDs are allocated on one side only",
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
+      "pending": true
+    },
+    {
+      "id": "function:migratedDrawingModes",
+      "concern": "Which modes of a Session 46-48 become drawings, and their order",
+      "pythonOwner": [
+        "gbdraw/session_drawings.py:_migrated_drawing_modes"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-drawings-upgrade.js:migratedDrawingModes"
+      ],
+      "vector": "tests/fixtures/sessions/drawings-vectors.json",
+      "reason": "The Web fast path and Python Load of a Session 46-48 must make the same drawings in the same order (R17-1, R17-2, R17-7); the upgrades vectors pin both.",
+      "retireWhen": "Session 46-48 is no longer read",
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
+      "pending": true
+    },
+    {
       "id": "concern:feature-instance-record-key",
       "concern": "Feature instance text (<biological feature ID>@<record key>) and the CLI record key of a record input (record-<n>, record-<n>:<k> for an input that expands to several records)",
       "pythonOwner": [
