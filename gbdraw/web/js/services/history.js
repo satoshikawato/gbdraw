@@ -210,6 +210,26 @@ const artifactRetentionKey = (handle) => {
     : handle;
 };
 
+/**
+ * The bytes the handles retain, each artifact once (`artifactRetentionKey`) at
+ * the most any of its handles retains (OV-112, OV-2210): the one count of
+ * artifact bytes, for one History and for the shared budget.
+ * @param {Iterable<HistoryArtifactHandle>} handles
+ * @returns {number}
+ */
+const uniqueArtifactBytes = (handles) => {
+  /** @type {Map<unknown, number>} */
+  const bytesByKey = new Map();
+  for (const handle of handles) {
+    const key = artifactRetentionKey(handle);
+    const bytes = Number(handle?.retainedBytes) || 0;
+    if (!((bytesByKey.get(key) ?? -1) >= bytes)) bytesByKey.set(key, bytes);
+  }
+  let total = 0;
+  bytesByKey.forEach((bytes) => { total += bytes; });
+  return total;
+};
+
 /** @param {HistoryCheckpoint | null | undefined} checkpoint */
 const checkpointSvgBytes = (checkpoint) => (
   Array.isArray(checkpoint?.results)
@@ -405,7 +425,9 @@ const checkpointSvgBytes = (checkpoint) => (
 /**
  * What the shared budget reads from and drops in one History manager.
  * @typedef {object} HistoryBudgetMember
- * @property {() => number} entryBytes The bytes its entries retain.
+ * @property {() => number} entryBytes The bytes its entries retain, without the artifacts they name.
+ * @property {() => HistoryArtifactHandle[]} retainedArtifacts The generated artifacts its entries name; the
+ *   budget counts each artifact once across the members, as it counts each file once.
  * @property {() => Set<string>} retainedFileIds The files its current intent and entries name.
  * @property {(kept: object | null) => 'undo' | 'redo' | null} dropOldestStep
  *   Drops its oldest Undo entry, or its Redo entries when no Undo entry is left,
@@ -452,6 +474,7 @@ export const createHistoryBudget = ({
   const overBudget = () => {
     let bytes = 0;
     members.forEach((member) => { bytes += member.entryBytes(); });
+    bytes += uniqueArtifactBytes([...members].flatMap((member) => member.retainedArtifacts()));
     if (estimateFileBytes) bytes += estimateFileBytes(retainedFileIds());
     return bytes > maxBytes;
   };
@@ -577,11 +600,6 @@ export const createHistoryManager = ({
   let totalEntryBytes = 0;
   /** @type {(changes: readonly HistoryIntentChange[] | null) => void} */
   let settingsStepListener = () => {};
-  // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
-  // is entry k+1's `before`), so its bytes count once while any live entry
-  // names it. Keyed by `artifactRetentionKey`.
-  /** @type {Map<unknown, { bytes: number, references: number }>} */
-  const retainedArtifacts = new Map();
   /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
   /** @type {HistoryTransaction | null} */
@@ -812,44 +830,20 @@ export const createHistoryManager = ({
     entry?.type === 'artifact-replacement' ? [entry.before, entry.after] : []
   );
 
-  /** @param {HistoryArtifactHandle} handle */
-  const retainArtifactBytes = (handle) => {
-    const key = artifactRetentionKey(handle);
-    const bytes = Number(handle?.retainedBytes) || 0;
-    const retained = retainedArtifacts.get(key);
-    if (!retained) {
-      retainedArtifacts.set(key, { bytes, references: 1 });
-      totalEntryBytes += bytes;
-      return;
-    }
-    retained.references += 1;
-    if (bytes > retained.bytes) {
-      totalEntryBytes += bytes - retained.bytes;
-      retained.bytes = bytes;
-    }
-  };
-
-  /** @param {HistoryArtifactHandle} handle */
-  const releaseArtifactBytes = (handle) => {
-    const key = artifactRetentionKey(handle);
-    const retained = retainedArtifacts.get(key);
-    if (!retained) return;
-    retained.references -= 1;
-    if (retained.references > 0) return;
-    retainedArtifacts.delete(key);
-    totalEntryBytes = Math.max(0, totalEntryBytes - retained.bytes);
-  };
+  // OV-112, OV-2210: adjacent artifact replacements name one artifact (entry
+  // k's `after` is entry k+1's `before`), and a Duplicate's first entry names
+  // its source's: the shared budget counts each artifact once while any live
+  // entry of any drawing names it (`uniqueArtifactBytes`).
+  const retainedArtifacts = () => [...undoStack, ...redoStack].flatMap(entryArtifactHandles);
 
   /** @param {HistoryEntry} entry */
   const addEntryBytes = (entry) => {
     totalEntryBytes += (Number(entry?.byteSize) || 0) + (entry.session?.byteSize ?? 0);
-    entryArtifactHandles(entry).forEach(retainArtifactBytes);
   };
 
   /** @param {HistoryEntry | undefined} entry */
   const removeEntryBytes = (entry) => {
     totalEntryBytes = Math.max(0, totalEntryBytes - (Number(entry?.byteSize) || 0) - (entry?.session?.byteSize ?? 0));
-    entryArtifactHandles(entry).forEach(releaseArtifactBytes);
   };
 
   /** @param {HistoryEntry[]} stack */
@@ -921,6 +915,7 @@ export const createHistoryManager = ({
   /** @type {HistoryBudgetMember} */
   const budgetMember = {
     entryBytes: () => totalEntryBytes,
+    retainedArtifacts,
     retainedFileIds: collectRetainedFileIds,
     // OV-1260: the step just recorded, undone, or redone (`kept`) stays even
     // when it alone is over the byte limit; the oldest other steps drop first.
@@ -2083,7 +2078,7 @@ export const createHistoryManager = ({
     getCurrentCheckpointSignature: () => currentCheckpointSignature,
     getCurrentIntent: () => currentIntent,
     getCurrentIntentSignature: () => currentIntentSignature,
-    getDiagnostics: () => ({ ...diagnostics, retainedEntryBytes: totalEntryBytes }),
+    getDiagnostics: () => ({ ...diagnostics, retainedEntryBytes: totalEntryBytes + uniqueArtifactBytes(retainedArtifacts()) }),
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
     hasChangesSinceSavePoint,
@@ -2405,6 +2400,7 @@ export const createHistoryRouter = ({
     entryBytes: () => heldMembers().reduce(
       (bytes, member) => bytes + member.entryBytes(), projectEntries().reduce((bytes, entry) => bytes + entry.byteSize, 0)
     ),
+    retainedArtifacts: () => heldMembers().flatMap((member) => member.retainedArtifacts()),
     retainedFileIds: () => {
       /** @type {Set<string>} */
       const ids = new Set();

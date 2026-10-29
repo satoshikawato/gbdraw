@@ -161,3 +161,49 @@ test('restoring captured members gives back every History and the project stream
   await router.undo();
   assert.deepEqual([values.circular, values.linear], ['', ''], 'the project step undoes in both drawings');
 });
+
+// OV-2210: a Duplicate shows its source's Result, so the source's last
+// Generate entry and the copy's first one name the same artifact (the same
+// fingerprint and compact signature). The shared budget counts it once across
+// the drawings, and its bytes leave only with the last entry that names it.
+test('one artifact named by two drawings\' entries counts once in the shared budget', async () => {
+  const ARTIFACT_BYTES = 1000;
+  const artifactFor = (id) => ({ id, identity: { fingerprint: id.repeat(64), compactSignature: 's' }, retainedBytes: ARTIFACT_BYTES, fileIds: [] });
+  const shown = ref('circular');
+  const artifacts = { circular: artifactFor('l'), 'circular-2': artifactFor('a') };
+  const limits = [];
+  const router = createHistoryRouter({
+    drawingIds: ['circular', 'circular-2'],
+    activeDrawingId: () => shown.value,
+    maxBytes: ARTIFACT_BYTES * 3.5,
+    onHistoryLimit: (message) => limits.push(message),
+    sessionHistory: { buildIntent: () => ({}), applyIntent: () => {} },
+    managerOptions: (drawingId) => ({
+      buildIntent: () => ({}),
+      applyIntent: () => {},
+      buildCheckpoint: () => ({}),
+      applyCheckpoint: () => {},
+      captureGeneratedArtifactHandle: () => ({ ...artifacts[drawingId] }),
+      restoreGeneratedArtifactHandle: async (handle) => { artifacts[drawingId] = handle; }
+    })
+  });
+  await router.captureBaseline();
+  const generate = (id) => router.runUndoableArtifactReplacement(`Generate ${id}`, async () => {
+    artifacts[shown.value] = artifactFor(id);
+    return { status: 'ok' };
+  }, { shouldCommit: (result) => result.status === 'ok' });
+  const undoCounts = () => [router.managerOf('circular').getUndoCount(), router.managerOf('circular-2').getUndoCount()];
+
+  await generate('a');
+  shown.value = 'circular-2';
+  await generate('b');
+  assert.deepEqual(undoCounts(), [1, 1], 'artifacts l, a, b: artifact a counts once, within the budget');
+  assert.deepEqual(limits, []);
+
+  await generate('c');
+  assert.deepEqual(undoCounts(), [0, 2], 'l, a, b, c are over: the hidden drawing\'s step drops');
+  // The dropped entry released artifact l only: the copy's first entry still
+  // names a, so a, b, c, d are over again and the copy's oldest step drops.
+  await generate('d');
+  assert.deepEqual(undoCounts(), [0, 2], 'artifact a still counts while the copy\'s entry names it');
+});
