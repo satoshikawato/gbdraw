@@ -509,6 +509,7 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
   try {
     await generate(page);
     const before = await resultFacts();
+    // The drawing loaded: its text includes the record's species name.
     expect(before.labels.join(' ')).toContain('Homo sapiens');
     await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
