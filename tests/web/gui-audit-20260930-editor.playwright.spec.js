@@ -496,8 +496,10 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
       identity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
       processing: state.labelReflowProcessing.value,
       error: state.labelReflowLastError.value,
-      definition: [...root.querySelectorAll('g[data-gbdraw-role="record-definition"] text')]
-        .map((node) => `${Number(node.getAttribute('font-size'))}|${node.textContent}`),
+      labelFontSizes: [...new Set([...root.querySelectorAll('text')]
+        .map((node) => Number(node.getAttribute('font-size'))))].sort((a, b) => a - b),
+      blockPaths: [...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
+        .map((node) => node.getAttribute('d')),
       blockStrokeWidths: [...new Set([...root.querySelectorAll('[data-gbdraw-feature-part="block"]')]
         .map((node) => Number(node.getAttribute('stroke-width'))))],
       labels: [...root.querySelectorAll('text')].map((node) => node.textContent),
@@ -507,11 +509,11 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
   try {
     await generate(page);
     const before = await resultFacts();
-    expect(before.definition.join(' ')).toContain('Homo sapiens');
+    expect(before.labels.join(' ')).toContain('Homo sapiens');
     await evaluateWithRetainedPromise(page, async () => {
       const app = window.__GBDRAW_APP__;
-      Object.assign(app.form, { species: 'Leaked species' });
-      Object.assign(app.adv, { def_font_size: 31, block_stroke_width: 7 });
+      Object.assign(app.form, { track_type: 'tuckin' });
+      Object.assign(app.adv, { label_font_size: 31, block_stroke_width: 7 });
       app.autoLabelReflowEnabled = true;
       await window.Vue.nextTick();
       const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
@@ -527,7 +529,8 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
     const after = await resultFacts();
     expect(after.error).toBeNull();
     expect(after.labels).toContain('REFLOWED_LABEL');
-    expect(after.definition).toEqual(before.definition);
+    expect(after.labelFontSizes).toEqual(before.labelFontSizes);
+    expect(after.blockPaths).toEqual(before.blockPaths);
     expect(after.blockStrokeWidths).toEqual(before.blockStrokeWidths);
     expect(after.request).toBe(before.request);
   } finally {
