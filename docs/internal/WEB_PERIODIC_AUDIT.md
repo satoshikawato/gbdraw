@@ -134,15 +134,21 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
 6. The seeded live-vs-Generate random walk
    ([`live-generate-random-walk.promotion.spec.js`](../../tests/web/live-generate-random-walk.promotion.spec.js),
    run by `tests/web/playwright/promotion.config.js`; PR and push CI do not run it).
-   `Promotion audit / random-walk` runs it with the default budget (20 steps on
-   each of a Circular Result, a Linear Result, and a two-Result Circular
-   batch) and the run ID as the seed, which its first step prints, so each
-   promotion gets a new seed. To replay a walk locally, rebuild the browser
+   `Promotion audit / random-walk` runs it with the run ID as the seed, which
+   its first step prints, so each promotion gets a new seed. The seed fixes a
+   covering plan
+   ([`live-random-walk-plan.mjs`](../../tests/web/helpers/live-random-walk-plan.mjs),
+   promotion level): every ordered pair of edit kinds as adjacent steps and
+   within one walk, and every fixture (a Circular Result, a Linear Result, a
+   two-Result Circular batch) x kind x popup x Auto Reflow, in walks of at most
+   `GBDRAW_RANDOM_WALK_STEPS` steps (default 50); about 800 steps in about 17
+   walks, one test per walk. The step arguments (feature, color, index) are
+   drawn from the seed as well. To replay a walk locally, rebuild the browser
    wheel first when Python under `gbdraw/` changed
    (`python tools/prepare_browser_wheel.py`):
 
    ```bash
-   GBDRAW_RANDOM_WALK_SEED=<run ID> npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1
+   GBDRAW_RANDOM_WALK_SEED=<run ID> npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1 -g "walk <k> of"
    ```
 
    After each step (feature fill with each scope choice, label text and
@@ -151,9 +157,16 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    the displayed Result to equal the Result Generate draws from the same draft
    (R3, PD-OI-066), minus `tests/web/contracts/live-generate-parity-allowed.json`.
    The log starts with the seed; a failure names the seed, the fixture, the
-   step index, the steps so far, and the differences. The same seed and
-   `GBDRAW_RANDOM_WALK_STEPS` replay the same walk; `-g "<fixture name>"`
-   replays one fixture. Each mismatch is a finding (OV-xx): log it, and either
+   walk, the step index, the steps so far, and the differences. It then
+   shrinks the first failing step: it replays the recorded steps from a fresh
+   fixture (the step alone, then with each earlier step, then ddmin over the
+   steps before it) within `GBDRAW_RANDOM_WALK_SHRINK_REPLAYS` replays
+   (default 40, 0 disables), prints the shortest sequence that still fails as
+   the minimal reproduction in the job log, and stores it as
+   `walk-shrunk.json` (every walk also stores `walk-steps.json`) in the
+   `promotion-audit-random-walk` artifact. Replay either file with
+   `GBDRAW_RANDOM_WALK_REPLAY=<file>` and the command above without `-g`.
+   Each mismatch is a finding (OV-xx): log it, and either
    fix it or mark the matching case `test.fail` in the
    `tests/web/live-generate-parity*.playwright.spec.js` specs per R3 (naming
    the finding) before the promotion. Record the seed in the promotion pull
@@ -228,7 +241,7 @@ request and complete them.
   - [ ] Each confirmed defect class has "guard added" (test, PR) or "no guard" (reason)
   - [ ] Every P1 is fixed, or has an Owner waiver: <links>
   - [ ] Owner graph, `origin/main` against `origin/dev` (Procedure step 5): no frozen metric is higher on `dev`, or each one is recorded in the R13 baseline by an authority PR: <PR>
-  - [ ] Random walk (Procedure step 6): seed <run ID>, 20 steps per fixture, no mismatch, or each mismatch is an OV-xx that is fixed or marked `test.fail` in the parity spec: <rows>
+  - [ ] Random walk (Procedure step 6): seed <run ID>, the promotion covering plan (at most 50 steps per walk), no mismatch, or each mismatch is an OV-xx, with the minimal reproduction from `walk-shrunk.json`, that is fixed or marked `test.fail` in the parity spec: <rows>
   - [ ] Count baselines (Procedure step 7): no `BASELINE may be lowered` line on `dev`, or the named entries were lowered: <PR or "none">
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
 ```
