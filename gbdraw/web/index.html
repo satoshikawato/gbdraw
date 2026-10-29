@@ -2352,6 +2352,8 @@
                             <div class="pt-2 space-y-2">
                                 <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
                                 <div class="grid grid-cols-1 gap-2">
+                                    <div data-setting="record-names" class="grid grid-cols-1 gap-2">
+                                    <setting-note setting="record-names"></setting-note>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Record label') }} <help-tip id="help-circular-record-label" :text="t('Overrides the inferred organism line for this Circular record. Leave empty to keep inference.')"></help-tip></span>
                                         <input
@@ -2375,6 +2377,7 @@
                                             :placeholder="t('e.g. Neomycin biosynthetic gene cluster')"
                                             class="form-input px-1 py-1 text-xs"
                                         >
+                                    </div>
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
@@ -3267,8 +3270,9 @@
                                                     <option value="curve">{{ t('Curve') }}</option>
                                                 </select>
                                             </div>
-                                            <div>
+                                            <div data-setting="comparison-height">
                                                 <label class="linear-primary-label mb-1">{{ t('Match height') }}</label>
+                                                <setting-note setting="comparison-height"></setting-note>
                                                 <auto-value-field :visible="autoValueVisible(adv.comparison_height, 'pairwiseMatchHeight')" :text="autoValueText('pairwiseMatchHeight')">
                                                     <input type="number" min="0.01" step="0.01" v-model.number="adv.comparison_height" :aria-label="t('Comparison match height')" :aria-invalid="comparisonHeightValidationError ? 'true' : 'false'" :class="comparisonHeightValidationError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''" class="form-input px-2 py-1.5 text-xs auto-value-input" :disabled="!semanticMutationAvailable">
                                                 </auto-value-field>
@@ -3476,14 +3480,15 @@
                         </div>
 
                         <div v-if="mode === 'circular'" data-setting="species-strain" class="space-y-2">
-                            <setting-note setting="species-strain"></setting-note>
                             <div class="grid grid-cols-2 gap-1.5">
-                                <div>
+                                <div data-setting="species">
+                                    <setting-note setting="species"></setting-note>
                                     <span class="input-label"><label for="circular-species">{{ t('Species') }}</label> <help-tip id="help-species" :text="t('Species name used in the circular center label when no custom plot title is set.')"></help-tip></span>
                                     <input id="circular-species" type="text" v-model="form.species" aria-describedby="help-species" class="form-input" :placeholder="t('e.g., {example}', { example: 'Escherichia coli' })" :disabled="!semanticMutationAvailable">
                                     <markup-preview :text="form.species"></markup-preview>
                                 </div>
                                 <div>
+                                    <setting-note setting="species-strain"></setting-note>
                                     <span class="input-label">{{ t('Strain') }} <help-tip id="help-strain" :text="t('Strain or isolate name used in the circular center label.')"></help-tip></span>
                                     <input type="text" v-model="form.strain" :aria-label="t('Strain')" aria-describedby="help-strain" class="form-input" placeholder="e.g. K-12" :disabled="!semanticMutationAvailable">
                                 </div>
@@ -4360,7 +4365,8 @@
                                             <div>{{ circularTrackPresetSummary().detail }}</div>
                                         </div>
                                         <div class="grid grid-cols-2 gap-1.5 rounded border border-slate-200 bg-white/70 p-1.5">
-                                            <div>
+                                            <div data-setting="track-geometry">
+                                                <setting-note setting="track-geometry"></setting-note>
                                                 <span class="input-label text-[10px]">{{ t('Center Reserved Radius') }} <help-tip id="help-circular-center-reserved-radius" :text="t('Override the center-label reserved radius in px. Lower values let inside tracks move closer to the center and may overlap the label.')"></help-tip></span>
                                                 <input type="number" min="0" step="1" v-model.number="adv.center_reserved_radius" :aria-label="t('Center Reserved Radius')" aria-describedby="help-circular-center-reserved-radius" class="form-input form-input-compact" :placeholder="t('Auto')" :disabled="!semanticMutationAvailable">
                                             </div>
@@ -4806,7 +4812,8 @@
                                     </label>
                                     <help-tip id="help-record-labels-show-definition" :text="t('Circular only. Off draws no center definition for any record (name, strain, replicon, accession, length, GC), and the inside tracks keep no room for it. The plot title is kept.')"></help-tip>
                                 </div>
-                                <div>
+                                <div data-setting="definition-text">
+                                    <setting-note setting="definition-text"></setting-note>
                                     <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
                                         <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" :aria-label="t('Default font size')" aria-describedby="help-title-default-font-size" :disabled="!semanticMutationAvailable">
@@ -4828,8 +4835,9 @@
                                                 <option value="hide">{{ t('Hide') }}</option>
                                             </select>
                                         </div>
-                                        <details class="mt-1" :data-definition-line-style="row.key">
+                                        <details class="mt-1" :data-definition-line-style="row.key" data-setting="definition-text">
                                             <summary :aria-label="t('{label} style', { label: row.label })" class="text-[10px]">{{ t('Style') }}<span v-if="isDefinitionLineStyleMuted(row)" class="ui-hint" :title="t('Its style applies when the line is shown.')">{{ ' ' }}{{ t('(line hidden)') }}</span></summary>
+                                            <setting-note setting="definition-text"></setting-note>
                                             <div class="grid grid-cols-[4rem_auto_minmax(0,1fr)] items-end gap-1.5 pt-1.5">
                                                 <label class="input-label !block text-[9px]">{{ t('Size') }}
                                                     <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" :placeholder="t('Default')" :aria-label="t('{label} font size', { label: row.label })" :disabled="!semanticMutationAvailable">
@@ -5721,7 +5729,8 @@
                         <setting-note setting="dinucleotide" class="mt-2"></setting-note>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
-                                <div>
+                                <div data-setting="dinucleotide-window">
+                                    <setting-note setting="dinucleotide-window"></setting-note>
                                     <span class="input-label text-[10px]">{{ t('Window') }} <help-tip id="help-gc-window" :text="t('Window size for GC content/skew. Default: 1kb (<1Mb), 10kb (<10Mb), 100kb (>=10Mb).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.window_size, 'dinucleotideWindow')" :text="autoValueText('dinucleotideWindow')">
                                         <input type="number" min="1" step="1" v-model.number="adv.window_size" :aria-label="t('Window')" aria-describedby="help-gc-window" class="form-input form-input-compact auto-value-input" :disabled="!semanticMutationAvailable">

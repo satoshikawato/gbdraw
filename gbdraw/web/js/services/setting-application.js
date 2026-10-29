@@ -77,6 +77,40 @@ export const SETTING_APPLICATION = Object.freeze([
   { id: 'definition-column', application: /** @type {const} */ ('live'), requestPaths: {
     'config.form.keep_definition_left_aligned': 'diagramOptions.configOverrides.canvas.linear.keep_definition_left_aligned'
   } },
+  // G2 (PD-OI-103 rev 2, PD-OI-059 rev 3, D-150, D-151): each row a control
+  // group the evidence rule admitted; the other controls of their sections
+  // stay in their `generate` rows. A row with a path of one mode shows its
+  // note by the shown mode's paths (`liveSettingNoteApplies`).
+  { id: 'definition-text', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.adv.def_font_size': 'diagramOptions.configOverrides.objects.definition.font_size',
+    'config.adv.linear_definition_line_styles': 'diagramOptions.configOverrides.objects.definition.linear.line_styles'
+  } },
+  { id: 'species', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.form.species': 'diagramOptions.species'
+  } },
+  { id: 'dinucleotide-window', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.adv.window_size': 'diagramOptions.window'
+  } },
+  { id: 'annotation-style', application: /** @type {const} */ ('live'),
+    note: msg('Live edit; the colors of a new item, or of an item with a Legend label, apply on Generate'), requestPaths: {
+      'config.annotationSets.*.annotations.*.style': 'diagramOptions.annotations.sets'
+    } },
+  { id: 'comparison-height', application: /** @type {const} */ ('live'), requestPaths: {
+    'config.adv.comparison_height': 'diagramOptions.configOverrides.canvas.linear.comparison_height'
+  } },
+  { id: 'track-geometry', application: /** @type {const} */ ('live'),
+    note: msg('Live edit; in Linear, the Height of a new, features or Depth row applies on Generate'), requestPaths: {
+      'config.adv.center_reserved_radius': 'diagramOptions.tracks.centerReservedRadius',
+      'config.adv.linear_track_slots.*.height': 'diagramOptions.tracks.linearTrackSlots'
+    } },
+  // The label fields only; the Linear card order decides whether they apply
+  // (`liveSettingApplies`), so a change of the cards requests them again.
+  { id: 'record-names', application: /** @type {const} */ ('live'), requestPaths: {
+    'files.linearSeqs': 'records',
+    'files.linearSeqs.*.definition': 'records',
+    'config.form.circular_record_label': 'records',
+    'config.form.circular_record_subtitle': 'records'
+  } },
   // OV-1036: `applyTrackVisibility` (app/svg-styles.js) hides or shows a drawn
   // group at once; a track the Result lacks and the layout wait for Generate.
   { id: 'track-visibility', application: /** @type {const} */ ('generate'),
