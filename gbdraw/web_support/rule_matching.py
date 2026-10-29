@@ -110,6 +110,16 @@ class ColorRuleRow(ColorRuleCondition):
     cap: str
 
 
+class JoinedLegendRow(TypedDict):
+    """The listed Legend row an edit joins (a rename onto its name and color,
+    as the Web decides it): `at` is the index in `rules` of the row's first
+    rule; `rows` are the rows of `rules` that join it with the edit, by index
+    (rules the Legend editor re-captioned with the row's name and color)."""
+
+    at: int
+    rows: list[int]
+
+
 class SynthesizeColorRulesRequest(TypedDict):
     """One color edit: color the `selected` features of the catalog `features`.
 
@@ -123,6 +133,9 @@ class SynthesizeColorRulesRequest(TypedDict):
     holds, for each selected feature in the same order, the label texts it
     shows (its displayed and its annotation label). `rules` is the rule table
     at the write's turn, in order, with each row's color and caption.
+    `joins` is the listed Legend row the edit joins, else None: the edit's new
+    rows and the `joins.rows` before its first rule go just before that rule,
+    so the joined row keeps its place in the Legend (OV-2193).
     """
 
     scope: Literal["group", "row", "features", "reset"]
@@ -132,6 +145,7 @@ class SynthesizeColorRulesRequest(TypedDict):
     rules: list[ColorRuleRow]
     color: str
     caption: str
+    joins: JoinedLegendRow | None
 
 
 class RetargetedColorRule(TypedDict):
@@ -284,6 +298,7 @@ def _next_table(
     anchors: dict[HashTarget, int],
     in_place: dict[Condition, int],
     row_at: int | None,
+    joins: JoinedLegendRow | None,
 ) -> list[int | ColorRuleRow]:
     """The next table: the kept rows in order (by index); a condition in the
     place of the old row of the same condition named in `in_place`, else before
@@ -294,15 +309,24 @@ def _next_table(
     its own old `hash` row (`retired`), else last. With `row_at`, the old row
     whose Legend row the edit takes whole, a condition not in `in_place` and a
     `hash` row without an anchor or a place go before the kept rows from it on
-    instead."""
+    instead. With `joins`, the Legend row the edit joins, its first rule is
+    that place for every new row that would stand before it (a `hash` row with
+    an anchor still goes before its anchor), and the `joins.rows` before it go
+    there first, in their order, so the joined row keeps its place (OV-2193);
+    a row placed at or after that rule keeps its place."""
+    join_at = joins["at"] if joins is not None else len(rules)
+    if joins is not None:
+        in_place, row_at = {key: at for key, at in in_place.items() if at >= join_at}, join_at
+    joined = {position for position in joins["rows"] if position < join_at} if joins is not None else set()
     same_condition = {(row["feat"], row["qual"], row["val"]) for row in conditions}
     placed_at = {in_place[key]: row for row in conditions
                  if (key := (row["feat"], row["qual"], row["val"])) in in_place}
     retired_at = {retired[key][0]: key for key in hash_rows
-                  if retired.get(key) and anchors.get(key, len(rules)) > retired[key][0]}
+                  if retired.get(key) and anchors.get(key, len(rules)) > retired[key][0] >= (0 if joins is None else join_at)}
     dropped = {position for rows in retired.values() for position in rows}
     placed_hashes = set(retired_at.values())
     table: list[int | ColorRuleRow] = []
+    moved: list[int] = []
     for position, rule in enumerate(rules):
         if (rule["feat"], rule["qual"].lower(), rule["val"]) in same_condition:
             if position in placed_at:
@@ -311,12 +335,14 @@ def _next_table(
         if position in retired_at:
             table.append(hash_rows[retired_at[position]])
         elif position not in dropped:
-            table.append(position)
+            (moved if position in joined else table).append(position)
 
-    def insert_before(row: ColorRuleRow, kept: Callable[[int], bool]) -> None:
+    def insert_before(row: int | ColorRuleRow, kept: Callable[[int], bool]) -> None:
         at = next((at for at, entry in enumerate(table) if isinstance(entry, int) and kept(entry)), len(table))
         table.insert(at, row)
 
+    for position in moved:
+        insert_before(position, lambda index: index >= join_at)
     for row in conditions:
         if (row["feat"], row["qual"], row["val"]) in in_place:
             continue
@@ -403,7 +429,8 @@ def _reset_color_rules(request: SynthesizeColorRulesRequest, features: list[_Mat
         return SynthesizedColorRules(table=table)
     colored = synthesize_color_rules(SynthesizeColorRulesRequest(
         scope="features", features=request["features"], selected=request["selected"],
-        labels=[[] for _ in request["selected"]], rules=rows, color=request["color"], caption=request["caption"]))
+        labels=[[] for _ in request["selected"]], rules=rows, color=request["color"], caption=request["caption"],
+        joins=None))
     return SynthesizedColorRules(table=[table[entry] if isinstance(entry, int) else entry for entry in colored["table"]])
 
 
@@ -482,43 +509,57 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
     row_at = min((old_winners[i] for i in targets if old_winners[i] >= 0), default=None) \
         if request["scope"] == "row" else None
 
-    forced: set[int] = set()
-    for _attempt in range(3):
-        covered: set[int] = set()
-        conditions: list[ColorRuleRow] = []
-        for c in usable:
-            if hits[c] - covered - forced:
-                feat, qual, val = candidates[c]
-                conditions.append(ColorRuleRow(feat=feat, qual=qual, val=val, color=color, cap=caption))
-                covered |= hits[c]
-        needs_hash = {i for i in targets if i in forced or i not in covered}
-        declined = {i for i in needs_hash if hash_of[i] is None}
-        hash_rows: dict[HashTarget, ColorRuleRow] = {}
-        anchors: dict[HashTarget, int] = {}
-        for i in sorted(needs_hash - declined):
-            key = hash_of[i]
-            assert key is not None
-            # An instance is named exactly: `f1@k` must not match `f1~1@k` or `f1@k:2`.
-            hash_rows.setdefault(key, ColorRuleRow(feat=key[0], qual="hash", val=exact_value_pattern(key[1]),
-                                                   color=color, cap=caption))
-            anchor = next((r for r in old_matches[i] if r not in dropped and rules[r]["qual"].lower() == "hash"
-                           and rules[r]["feat"] == key[0]), None)
-            if anchor is not None:
-                anchors.setdefault(key, anchor)
-        table = _next_table(rules, conditions, hash_rows, retired, anchors, in_place, row_at)
-        winners = _winners(features, [rules[row] if isinstance(row, int) else row for row in table])
-        # The old row that colors each feature now; None for a new row, -1 for none.
-        sources = [-1 if w < 0 else table[w] if isinstance(table[w], int) else None for w in winners]
-        if any(sources[i] != old_winners[i] for i in range(len(features)) if i not in targets):
-            raise ValueError("The rule synthesis would change the color of a feature that is not selected.")
-        missed = {i for i in targets - declined if sources[i] is not None}
-        if not missed:
-            break
-        if missed <= forced:
+    def place(joins: JoinedLegendRow | None) -> list[int | ColorRuleRow]:
+        """The verified table with the new rows placed as `_next_table` places them."""
+        forced: set[int] = set()
+        for _attempt in range(3):
+            covered: set[int] = set()
+            conditions: list[ColorRuleRow] = []
+            for c in usable:
+                if hits[c] - covered - forced:
+                    feat, qual, val = candidates[c]
+                    conditions.append(ColorRuleRow(feat=feat, qual=qual, val=val, color=color, cap=caption))
+                    covered |= hits[c]
+            needs_hash = {i for i in targets if i in forced or i not in covered}
+            declined = {i for i in needs_hash if hash_of[i] is None}
+            hash_rows: dict[HashTarget, ColorRuleRow] = {}
+            anchors: dict[HashTarget, int] = {}
+            for i in sorted(needs_hash - declined):
+                key = hash_of[i]
+                assert key is not None
+                # An instance is named exactly: `f1@k` must not match `f1~1@k` or `f1@k:2`.
+                hash_rows.setdefault(key, ColorRuleRow(feat=key[0], qual="hash", val=exact_value_pattern(key[1]),
+                                                       color=color, cap=caption))
+                anchor = next((r for r in old_matches[i] if r not in dropped and rules[r]["qual"].lower() == "hash"
+                               and rules[r]["feat"] == key[0]), None)
+                if anchor is not None:
+                    anchors.setdefault(key, anchor)
+            table = _next_table(rules, conditions, hash_rows, retired, anchors, in_place, row_at, joins)
+            winners = _winners(features, [rules[row] if isinstance(row, int) else row for row in table])
+            # The old row that colors each feature now; None for a new row, -1 for none.
+            sources = [-1 if w < 0 else table[w] if isinstance(table[w], int) else None for w in winners]
+            if any(sources[i] != old_winners[i] for i in range(len(features)) if i not in targets):
+                raise ValueError("The rule synthesis would change the color of a feature that is not selected.")
+            missed = {i for i in targets - declined if sources[i] is not None}
+            if not missed:
+                break
+            if missed <= forced:
+                raise ValueError("The rule synthesis could not color the selected features.")
+            forced |= missed
+        else:
             raise ValueError("The rule synthesis could not color the selected features.")
-        forced |= missed
-    else:
-        raise ValueError("The rule synthesis could not color the selected features.")
+        return table
+
+    joins = request["joins"]
+    try:
+        table = place(joins)
+    except ValueError:
+        if joins is None:
+            raise
+        # The joined row's place would change the rule that colors a
+        # feature (a joined rule moved past another rule that matches its
+        # features): the rows go where they go without a join.
+        table = place(None)
     next_table: list[int | ColorRuleRow | RetargetedColorRule] = [*table]
     return SynthesizedColorRules(table=next_table)
 
@@ -536,4 +577,7 @@ def synthesize_color_rules_json(request_json: str) -> str:
     if len(request["labels"]) != len(request["selected"]) or not all(
             0 <= index < len(request["features"]) for index in request["selected"]):
         raise ValueError("Unreadable rule synthesis request: selected and labels do not match the features.")
+    joins = request["joins"]
+    if joins is not None and not all(0 <= index < len(request["rules"]) for index in [joins["at"], *joins["rows"]]):
+        raise ValueError("Unreadable rule synthesis request: the joined row is not a row of the rules.")
     return json.dumps(synthesize_color_rules(request))

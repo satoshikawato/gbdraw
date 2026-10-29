@@ -465,7 +465,8 @@ test('a path that leads to a setting docks its section when the rail is alone', 
   const inView = (locator) => inSettingsView(locator);
   const comparisonAtTop = () => page.evaluate(() => {
     const card = document.querySelector('[data-linear-comparison-card]');
-    return { offset: Math.round(card.getBoundingClientRect().top - document.querySelector('.settings-scroll').getBoundingClientRect().top),
+    // Rounded to whole pixels; `|| 0` reads a sub-pixel -0.4 as 0, not -0.
+    return { offset: Math.round(card.getBoundingClientRect().top - document.querySelector('.settings-scroll').getBoundingClientRect().top) || 0,
       focusInside: card.contains(document.activeElement) && document.activeElement.matches('button') };
   });
 

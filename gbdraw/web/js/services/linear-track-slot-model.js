@@ -446,24 +446,44 @@ const canonicalLinearParams = (slot) => {
   return params;
 };
 
+/** @param {LinearTrackSlotInput} slot */
+const normalizedLinearTrackSlot = (slot) => {
+  const normalized = normalizeLinearTrackSlots([slot])[0];
+  if (!normalized) throw new Error('Linear track slot must be an object.');
+  return normalized;
+};
+/** @param {LinearTrackSlotInput} normalized A row `normalizeLinearTrackSlots` returned. */
+const linearHeightPayload = (normalized) => linearScalarPayload(
+  normalized.height,
+  `Linear track '${normalized.id}' height`,
+  { allowZero: false }
+);
+
+/**
+ * The id and the canonical `height` of one Web draft row, as
+ * `buildLinearTrackSlotPayload` encodes them: the live Height of a committed
+ * row (services/session-request.js) and Generate read this one encoder (R3).
+ * Throws for a height Generate refuses.
+ * @param {LinearTrackSlotInput} slot
+ */
+export const linearTrackSlotHeightPayload = (slot) => {
+  const normalized = normalizedLinearTrackSlot(slot);
+  return { id: normalized.id, height: linearHeightPayload(normalized) };
+};
+
 /**
  * Encode one Web draft row as the canonical LinearTrackSlot object.
  * @param {LinearTrackSlotInput} slot
  */
 export const buildLinearTrackSlotPayload = (slot) => {
-  const normalized = normalizeLinearTrackSlots([slot])[0];
-  if (!normalized) throw new Error('Linear track slot must be an object.');
+  const normalized = normalizedLinearTrackSlot(slot);
   return {
     kind: 'linearTrackSlot',
     id: normalized.id,
     renderer: normalized.renderer,
     enabled: normalized.enabled,
     side: normalized.side,
-    height: linearScalarPayload(
-      normalized.height,
-      `Linear track '${normalized.id}' height`,
-      { allowZero: false }
-    ),
+    height: linearHeightPayload(normalized),
     spacing: linearScalarPayload(
       normalized.spacing,
       `Linear track '${normalized.id}' spacing`,

@@ -2050,8 +2050,8 @@ test('a popup Legend name on the only feature of a locus_tag rule row keeps the 
 });
 
 // A popup Legend name that joins another listed row of the same color: the
-// joined row keeps its place live, and Python writes the feature's rule as for
-// any group edit (last), so Generate keeps it there too.
+// joined row keeps its place live, and Python writes the feature's rule before
+// the joined row's first rule (OV-2193), so Generate keeps it there too.
 test('a popup Legend name that joins another row keeps that row in place, live = Generate', async ({ page }) => {
   test.setTimeout(240_000);
   const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
@@ -2062,8 +2062,115 @@ test('a popup Legend name that joins another row keeps that row in place, live =
   await generate(page);
   await popupEdit(page, 'FL2', { legendName: 'alpha' });
   expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, cap }) => [qual, cap])),
-    'the rule table of the join').toEqual([['locus_tag', 'beta'], ['product', 'delta'], ['product', 'alpha'], ['hash', 'alpha']]);
+    'the rule table of the join').toEqual([['locus_tag', 'beta'], ['product', 'delta'], ['hash', 'alpha'], ['product', 'alpha']]);
   const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
   expect(live, 'the live Legend order').toEqual(['delta', 'alpha', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name that joins another row' });
+});
+
+// OV-2193 (Owner 2026-10-29): a rename that joins another listed row of the
+// same color through a rule of the same pattern keeps the joined row's place
+// in Generate too, as the live Legend does. The joined rule used to stay at
+// its own place in the table, before the joined row's first rule, so Python
+// drew the joined row there: live [delta, alpha], Generate [alpha, delta].
+const DELTA = { feat: 'CDS', qual: 'product', val: '^beta protein$', color: '#e9c46a', cap: 'delta' };
+const ALPHA_TEAL = { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#2a9d8f', cap: 'alpha' };
+for (const [name, beta, rename, legend] of [
+  // The only feature of the row: Python's rules for the feature ("group").
+  ['a popup Legend name on the only feature of the row', '^dup alpha$',
+    (page) => popupEdit(page, { product: 'dup alpha' }, { legendName: 'alpha' }),
+    ['delta', 'alpha', 'other proteins', 'repeat_region']],
+  // "All" features of the row: the row's rules are re-captioned.
+  ['a popup Legend name for all features of the row', '^dup',
+    (page) => popupEdit(page, { product: 'dup alpha' }, { legendName: 'alpha', scope: 'group' }),
+    ['delta', 'alpha', 'repeat_region']],
+  ['a Legend editor rename', '^dup',
+    async (page) => { await renameRow(page, 'beta', 'alpha'); await settleLive(page); },
+    ['delta', 'alpha', 'repeat_region']]
+]) {
+  test(`${name} that joins another row through a same-pattern rule keeps that row in place, live = Generate (OV-2193)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await addColorRule(page, { feat: 'CDS', qual: 'product', val: beta, color: '#2a9d8f', cap: 'beta' });
+    await addColorRule(page, DELTA);
+    await addColorRule(page, ALPHA_TEAL);
+    await generate(page);
+    await rename(page);
+    expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap }) => [val, cap])),
+      'the joined rule goes just before the joined row\'s first rule').toEqual([['^beta protein$', 'delta'],
+      [beta, 'alpha'], ['^alpha protein$', 'alpha']]);
+    const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+    expect(live, 'the live Legend order').toEqual(legend);
+    await expectLiveEqualsGenerate(page, { label: `${name} that joins another row` });
+  });
+}
+
+// OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of a row
+// whose rule of the same pattern colors only that feature splits it off; Python
+// re-captions that rule in its place, so Generate draws the new row there. The
+// commit's own show added it last, and the automatic rerender then moved it:
+// the live Legend shows it in Generate's place at once.
+for (const [name, rules, legend] of [
+  ['the row\'s first rule', [['^dup alpha$', 'beta'], ['^dup beta$', 'beta']], ['gamma', 'beta', 'alpha', 'other proteins', 'repeat_region']],
+  ['a later rule of the row', [['^dup beta$', 'beta'], ['^dup alpha$', 'beta']], ['beta', 'gamma', 'alpha', 'other proteins', 'repeat_region']]
+]) {
+  test(`a popup Legend name split off a row through ${name} of the same pattern shows the new row in Generate's place (OV-2194)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    for (const [val, cap] of rules) await addColorRule(page, { feat: 'CDS', qual: 'product', val, color: '#2a9d8f', cap });
+    await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+    await generate(page);
+    // The rows the commit itself shows, read before the automatic rerender it asks for.
+    const shown = await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === 'dup alpha'), null);
+      await window.Vue.nextTick();
+      app.clickedFeature.legendName = 'gamma';
+      await app.handleLegendNameCommit();
+      await app.handleLegendRenameChoice('single');
+      const svg = app.svgContainer.querySelector('svg');
+      return {
+        editor: app.legendEntries.map((entry) => entry.caption),
+        drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].map((group) => group.getAttribute('data-legend-key')))]
+      };
+    });
+    expect(shown, 'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
+    expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap }) => [val, cap])),
+      'the rule is re-captioned in its place').toEqual(rules.map(([val, cap]) => [val, val === '^dup alpha$' ? 'gamma' : cap])
+      .concat([['^alpha protein$', 'alpha']]));
+    await settleLive(page);
+    const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+    expect(live, 'the live Legend order').toEqual(legend);
+    await expectLiveEqualsGenerate(page, { label: `a popup Legend name split off a row through ${name}` });
+  });
+}
+
+// The same split off a row of a broader pattern: Python writes the feature's
+// exact condition before the first rule of its type and qualifier, so Generate
+// draws the new row first; the commit shows it there too (review L1 of #1467).
+test('a popup Legend name split off a row of a broader pattern shows the new row in Generate\'s place (OV-2194)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, DELTA);
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await generate(page);
+  const legend = ['gamma', 'delta', 'beta', 'alpha', 'repeat_region'];
+  const shown = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === 'dup alpha'), null);
+    await window.Vue.nextTick();
+    app.clickedFeature.legendName = 'gamma';
+    await app.handleLegendNameCommit();
+    await app.handleLegendRenameChoice('single');
+    const svg = app.svgContainer.querySelector('svg');
+    return {
+      editor: app.legendEntries.map((entry) => entry.caption),
+      drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].map((group) => group.getAttribute('data-legend-key')))]
+    };
+  });
+  expect(shown, 'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
+  await settleLive(page);
+  expect((await semanticSnapshot(page)).legend.map((row) => row.caption), 'the live Legend order').toEqual(legend);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name split off a row of a broader pattern' });
 });

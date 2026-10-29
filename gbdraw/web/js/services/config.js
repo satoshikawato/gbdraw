@@ -96,7 +96,8 @@ import {
   draftFieldsForConfigValues,
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
-  liveSettingApplies,
+  liveSettingNoteApplies,
+  applyLiveWebFileWrites,
   managedConfigOverridePathsForMode,
   projectCanonicalSessionRequest,
   projectSettingsOnlySession,
@@ -314,7 +315,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { ProteinFrameSource, StoredDrawing } from './main-session-comparison-frame.js' */
-/** @import { CommittedCanonicalSession, LiveSettingWrite, SessionRequestProjection,
+/** @import { CommittedCanonicalSession, LiveSettingItem, LiveSettingWrite, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
@@ -4364,15 +4365,21 @@ export const getCommittedCanonicalRenderRequest = () => {
 };
 
 /**
+/**
  * Whether the committed request can show the live value of `requestPath` of
- * its drawing, the one whose artifact is displayed (`state.generatedDrawingId`;
- * `liveSettingApplies`); without a committed Session every path can. The app
- * setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
- * @param {string} requestPath
+ * its drawing, the one whose artifact is displayed (`state.generatedDrawingId`),
+ * or of its one `item` (`liveSettingNoteApplies`); the live projectors read
+ * that drawing's own Linear cards (`LiveSettingInputs`). Without a committed
+ * Session every path can. The app setup gives it to `SettingNote`
+ * (`SETTING_NOTE_APPLIES`).
+ * @param {string} requestPath @param {LiveSettingItem | null} [item]
  */
-export const committedLiveSettingApplies = (requestPath) => {
+export const committedLiveSettingApplies = (requestPath, item = null) => {
   const request = getCommittedCanonicalRenderRequest();
-  return !request || liveSettingApplies(request, requestPath, state.drawingOf(state.generatedDrawingId.value));
+  if (!request) return true;
+  const drawing = state.drawingOf(state.generatedDrawingId.value);
+  return liveSettingNoteApplies(request, requestPath, drawing, { linearSeqs: drawing.linearSeqs },
+    committedCanonicalSession?.resources, item);
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.
@@ -4385,8 +4392,9 @@ export const readCommittedCanonicalRevision = () => committedCanonicalRevision.v
 
 // R1 (c): an automatic rerender that applied live setting values commits them
 // to the committed Session, which then names what the shown Result draws
-// (Save writes them as committed, PD-OI-102). Only those request paths
-// change; the resources, the Web file record and the draft stay. The Session
+// (Save writes them as committed, PD-OI-102). Only those request paths, and
+// the Web file entries a Record names write keeps beside them (F-2), change;
+// the resources and the draft stay. The Session
 // is replaced, not edited, so a History artifact that holds the previous one
 // keeps it.
 /** @param {readonly LiveSettingWrite[]} writes */
@@ -4394,7 +4402,7 @@ export const commitLiveSettingValues = (writes) => {
   if (!committedCanonicalSession || writes.length === 0) return;
   const renderRequest = cloneJsonData(committedCanonicalSession.renderRequest);
   applyLiveSettingWrites(renderRequest, writes);
-  const next = { ...committedCanonicalSession, renderRequest };
+  const next = { ...committedCanonicalSession, renderRequest, webFiles: applyLiveWebFileWrites(committedCanonicalSession.webFiles, writes) };
   setCommittedCanonicalSession(isAdoptedCanonicalSession(committedCanonicalSession) ? adoptRuntimeCanonicalSession(next) : next, committedConservationPairs);
 };
 

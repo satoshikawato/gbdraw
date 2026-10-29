@@ -5,10 +5,12 @@
 //
 // A candidate is a list of step indices in walk order that ends with the
 // failing step. The search tries, in order: the failing step alone; each
-// earlier step with it, nearest first; then ddmin (Zeller and Hildebrandt
-// 2002) over the steps before it, with the failing step always appended. The
-// whole walk is taken to reproduce (it failed in the walk itself) and is not
-// replayed. Each predicate call is a replay; the search stops at `budget`
+// earlier step with it, nearest first, until those replays reach half the
+// budget (`pairPhaseBudget`), so ddmin always gets the other half; then ddmin
+// (Zeller and Hildebrandt 2002) over the steps before it, with the failing
+// step always appended. The whole walk is taken to reproduce (it failed in the
+// walk itself) and is not replayed. Each predicate call on a new candidate is
+// a replay; a candidate tried before costs none. The search stops at `budget`
 // replays and returns the shortest reproducing candidate found so far.
 
 /**
@@ -33,6 +35,9 @@ const split = (items, count) => {
 };
 
 const OUT_OF_BUDGET = Symbol('out of budget');
+
+/** The replays the failing step alone and the pairs may use: half the budget, rounded up. @param {number} budget */
+export const pairPhaseBudget = (budget) => Math.ceil(budget / 2);
 
 /**
  * @param {{ prefix: number[], failing: number, budget: number, reproduces: (indices: number[]) => Promise<boolean> }} options
@@ -61,7 +66,10 @@ export const shrinkWalk = async ({ prefix, failing, budget, reproduces }) => {
   const done = (finished) => ({ indices: best, replays, finished, confirmed });
   try {
     if (await test([])) return done(true);
-    for (const index of [...prefix].reverse()) if (await test([index])) return done(true);
+    for (const index of [...prefix].reverse()) {
+      if (replays >= pairPhaseBudget(budget)) break;
+      if (await test([index])) return done(true);
+    }
     // ddmin over the prefix: the whole prefix reproduces (the walk failed).
     let current = prefix;
     let granularity = 2;

@@ -45,6 +45,15 @@ const installPageErrorCollection = (page) => {
   return diagnostics;
 };
 
+// The page and console errors collected on `page` so far, which it then
+// forgets: a caller that reopens the app in the same page (a warm page, a
+// replay) takes them first, so `openApp` checks only the errors of its own open.
+/** @param {import('@playwright/test').Page} page @returns {{ pageErrors: string[], consoleErrors: string[] }} */
+const takePageErrors = (page) => {
+  const diagnostics = installPageErrorCollection(page);
+  return { pageErrors: diagnostics.pageErrors.splice(0), consoleErrors: diagnostics.consoleErrors.splice(0) };
+};
+
 const installDiagramWorkerTracking = async (page) => {
   if (workerTrackingPages.has(page)) return;
   await page.addInitScript(() => {
@@ -773,9 +782,7 @@ const returnToFreshBoot = async (page, { facts, restorePoint }) => {
   }, { ...restorePoint, generateGlobals: GENERATE_GLOBALS, openSections: facts.page.openSections });
   await page.removeAllListeners('dialog');
   await page.unrouteAll({ behavior: 'ignoreErrors' });
-  const diagnostics = installPageErrorCollection(page);
-  diagnostics.pageErrors.length = 0;
-  diagnostics.consoleErrors.length = 0;
+  takePageErrors(page);
   const brief = (value) => {
     const text = JSON.stringify(value) ?? String(value);
     return text.length > 120 ? `${text.slice(0, 117)}...` : text;
@@ -1007,6 +1014,7 @@ module.exports = {
   routeCrossOriginIsolated,
   settleLive,
   snapshotUserOwnedState,
+  takePageErrors,
   waitForAppShell,
   WARM_APP_PAGE,
   warmAppTest

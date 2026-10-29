@@ -6047,7 +6047,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: { linearSeqs: drawing.linearSeqs } });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6240,7 +6240,9 @@ export const createRunAnalysis = ({
     if (!pending || !committed) return;
     for (const path of [...pending]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path] }).length === 0) pending.delete(path);
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: { linearSeqs: drawing.linearSeqs } }).length === 0) {
+          pending.delete(path);
+        }
       } catch {
         // A value Generate would refuse stays for the rerender, which reports it.
       }

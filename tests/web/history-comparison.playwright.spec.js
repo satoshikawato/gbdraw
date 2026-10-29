@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
-const { evaluateWithRetainedPromise, openLinearFileCards } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openLinearFileCards, settleLive } = require('./helpers/app-lifecycle.cjs');
 
 test('comparison off has its own Undo step after a record definition edit', async ({ browser }) => {
   test.setTimeout(300000);
@@ -14,6 +14,11 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await definition.fill('HISTORY_RECORD_TWO');
     await definition.press('Tab');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 1);
+    // A record name is a live edit (PD-OI-103 rev 2): the Result draws it
+    // without Generate, and the comparison step starts from that Result.
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content.includes('HISTORY_RECORD_TWO')),
+      { timeout: 120000 }).toBe(true);
+    await settleLive(page);
     const before = await page.evaluate(async () => ({
       plan: (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).linearComparisonPlan,
       result: window.__GBDRAW_APP__.currentResults()[0].content

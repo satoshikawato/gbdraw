@@ -573,3 +573,30 @@ test('OV-1130: an action after Enter in a still-focused text field keeps its own
     assert.deepEqual({ prefix: h.state.prefix, mode: h.state.mode }, { prefix: 'A', mode: 'circular' });
   } finally { h.cleanup(); }
 });
+
+// OV-2243: a color input changed without a pointer first (a picker opened from
+// the keyboard, a scripted `fill`) records one step per change, as a pointer
+// pick does. The picker sends `input` while it moves and `change` when it closes.
+for (const pointer of [false, true]) {
+  test(`OV-2243: a color pick ${pointer ? 'after a pointerdown' : 'without a pointerdown'} records one step per change`, async () => {
+    const h = await createBoundaryHarness();
+    const color = { tagName: 'INPUT', type: 'color', isContentEditable: false };
+    color.closest = (selector) => (selector.startsWith('input,') ? color : null);
+    try {
+      for (const [index, values] of [['#111111', '#222222'], ['#333333']].entries()) {
+        if (pointer) await h.dispatch('pointerdown', color);
+        for (const value of values) {
+          await h.dispatch('input', color, { atTarget: () => { h.state.choice = value; } });
+        }
+        await h.dispatch('change', color);
+        await settleTasks();
+        assert.deepEqual(h.counts(), [index + 1, 0], `pick ${index + 1}`);
+      }
+      assert.equal(h.history.undoLabel(), 'Change color');
+      await h.history.undo();
+      assert.equal(h.state.choice, '#222222');
+      await h.history.undo();
+      assert.equal(h.state.choice, 'gb');
+    } finally { h.cleanup(); }
+  });
+}

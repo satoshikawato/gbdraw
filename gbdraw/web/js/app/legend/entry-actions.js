@@ -10,6 +10,11 @@
  */
 /** @typedef {EntryRecord & { caption: string, originalCaption: string }} ListedEntry A row a Result lists, under its caption and its key. */
 /**
+ * Where a rule commit puts a row it splits off: right after the row of key
+ * `after` (D-29), or right before the row of key `before` (OV-2194).
+ * @typedef {{ caption: PythonLegendKey, after: PythonLegendKey } | { caption: PythonLegendKey, before: PythonLegendKey }} LegendRowPlacement
+ */
+/**
  * The rows a Result lists (`listLegendRows`) and the keys of those that are Python's.
  * @typedef {{ entries: ListedEntry[], generatedCaptions: Set<string> }} LegendRowListing
  */
@@ -333,7 +338,8 @@ export const createLegendEntryActions = ({
   // in another color stops the commit. The rule owner runs its transition and
   // then `apply` in one History step, while `isCurrent` holds; `apply` writes
   // the rows into the intent, a row the commit splits off right after the row
-  // `placement.after` (D-29), and returns the rows the displayed Result shows
+  // `placement.after` (D-29) or right before the row `placement.before`
+  // (OV-2194), and returns the rows the displayed Result shows
   // at once until Python draws them (gaps 1 and 2; null when the rows only
   // change color). A row of `rekeyed` (old key to new key) is one row whose
   // key the commit changes: a rule row the rule table change re-allocates
@@ -345,7 +351,7 @@ export const createLegendEntryActions = ({
   /**
    * @param {(EntryRecord & { name?: string })[]} intents
    * @param {{ drawing?: DrawingState, previousFileIntents?: EntryRecord[], isCurrent?: () => boolean,
-   *   placement?: { caption: PythonLegendKey, after: PythonLegendKey } | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
+   *   placement?: LegendRowPlacement | null, rekeyed?: ReadonlyMap<PythonLegendKey, PythonLegendKey> }} [options]
    */
   const prepareFileLegendEntries = async (intents, {
     drawing = state.activeDrawing(), previousFileIntents = [], isCurrent = () => true, placement = null, rekeyed = new Map()
@@ -413,13 +419,16 @@ export const createLegendEntryActions = ({
         }
         // D-29: a row a commit splits off a row goes right after the row of
         // its name, so the editor list records the edited order Generate
-        // replays (PD-OI-063), and the Result shows it there.
+        // replays (PD-OI-063), and the Result shows it there; a row split
+        // off its own row goes right before or after it (OV-2194).
         const split = placement && added.get(placement.caption);
-        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === placement.after) : -1;
-        if (split && target >= 0) {
-          entries = [...entries.slice(0, target + 1), split, ...entries.slice(target + 1)];
+        const anchor = placement && ('before' in placement ? placement.before : placement.after);
+        const target = split ? entries.findIndex((entry) => legendEntryKey(entry) === anchor) : -1;
+        if (placement && split && target >= 0) {
+          const at = 'before' in placement ? target : target + 1;
+          entries = [...entries.slice(0, at), split, ...entries.slice(at)];
           added.delete(placement.caption);
-          const next = entries.slice(target + 2).find((entry) => !removed.has(legendEntryKey(entry)));
+          const next = entries.slice(at + 1).find((entry) => !removed.has(legendEntryKey(entry)));
           if (next) before.set(placement.caption, legendEntryKey(next));
         }
         replaceLegendRows(drawing.slices.paint, listedRowsOf([...entries.filter((entry) => !removed.has(legendEntryKey(entry))), ...added.values()]));

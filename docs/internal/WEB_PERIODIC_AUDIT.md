@@ -138,11 +138,14 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    its first step prints, so each promotion gets a new seed. The seed fixes a
    covering plan
    ([`live-random-walk-plan.mjs`](../../tests/web/helpers/live-random-walk-plan.mjs),
-   promotion level): every ordered pair of edit kinds as adjacent steps and
+   promotion level): every ordered pair of edit kinds that one fixture can run
+   (a Result switch runs only in the two-Result batch, Reset Settings and a
+   drawing switch only outside it) as adjacent steps and
    within one walk, and every fixture (a Circular Result, a Linear Result, a
    two-Result Circular batch) x kind x popup x Auto Reflow, in walks of at most
    `GBDRAW_RANDOM_WALK_STEPS` steps (default 50); about 800 steps in about 17
-   walks, one test per walk. The step arguments (feature, color, index) are
+   walks, one test per walk. A cap too small for the plan to cover every target
+   fails the spec's plan test before any walk runs. The step arguments (feature, color, index) are
    drawn from the seed as well. To replay a walk locally, rebuild the browser
    wheel first when Python under `gbdraw/` changed
    (`python tools/prepare_browser_wheel.py`):
@@ -160,11 +163,16 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    walk, the step index, the steps so far, and the differences. It then
    shrinks the first failing step: it replays the recorded steps from a fresh
    fixture (the step alone, then with each earlier step, then ddmin over the
-   steps before it) within `GBDRAW_RANDOM_WALK_SHRINK_REPLAYS` replays
+   steps before it; the step alone and the pairs take at most half the
+   replays) within `GBDRAW_RANDOM_WALK_SHRINK_REPLAYS` replays
    (default 40, 0 disables), prints the shortest sequence that still fails as
    the minimal reproduction in the job log, and stores it as
    `walk-shrunk.json` (every walk also stores `walk-steps.json`) in the
-   `promotion-audit-random-walk` artifact. Replay either file with
+   `promotion-audit-random-walk` artifact. Only the first
+   `GBDRAW_RANDOM_WALK_SHRINK_WALKS` failing walks of a run (default 2) are
+   shrunk, so a regression that fails every walk still ends inside the step's
+   limit; the others say "not shrunk: run-wide limit 2 reached" and name their
+   `walk-steps.json`. Replay either file with
    `GBDRAW_RANDOM_WALK_REPLAY=<file>` and the command above without `-g`.
    Each mismatch is a finding (OV-xx): log it, and either
    fix it or mark the matching case `test.fail` in the

@@ -20,7 +20,8 @@ const LEGEND_FONT = 'input[aria-label="Legend font size"]';
 const PLOT_TITLE = 'input[aria-label="Plot Title"]';
 const LEGEND_FONT_OVERRIDE = 'objects.legends.font_size.short';
 const DEFINITION_FONT_OVERRIDE = 'objects.definition.circular.font_size';
-const LINEAR_DEFINITION_FONT_OVERRIDE = 'objects.definition.linear.font_size.short';
+// Block stroke color stays on Generate in both modes (the Titles definition rows went live with G2).
+const BLOCK_STROKE_OVERRIDE = 'objects.features.block_stroke_color';
 // An apply takes seconds; a base without live rows fails each case at this bound.
 const APPLY_TIMEOUT = 120_000;
 
@@ -480,20 +481,20 @@ test('with an Applies on Generate value pending, a live change shows only the li
   try {
     await generateNow(page);
     const before = await facts(page);
-    const definitionFont = before.overrides[DEFINITION_FONT_OVERRIDE];
-    const draftDefinitionFont = await page.evaluate(() => {
-      const value = window.__GBDRAW_APP__.adv.def_font_size;
-      window.__GBDRAW_APP__.adv.def_font_size = 31;
+    const blockStroke = before.overrides[BLOCK_STROKE_OVERRIDE];
+    const draftBlockStroke = await page.evaluate(() => {
+      const value = window.__GBDRAW_APP__.adv.block_stroke_color;
+      window.__GBDRAW_APP__.adv.block_stroke_color = '#123456';
       return value ?? null;
     });
     const size = nextLegendFont(before.legendFontSizes);
     await commitValue(page, LEGEND_FONT, size);
     await appliedLegendFont(page, size);
     const after = await facts(page);
-    expect(after.overrides[DEFINITION_FONT_OVERRIDE], 'the pending value is not committed').toEqual(definitionFont);
+    expect(after.overrides[BLOCK_STROKE_OVERRIDE], 'the pending value is not committed').toEqual(blockStroke);
     expect(after.overrides[LEGEND_FONT_OVERRIDE]).toBe(size);
     // The Result equals a Generate of the committed Session plus the live value.
-    await page.evaluate((value) => { window.__GBDRAW_APP__.adv.def_font_size = value; }, draftDefinitionFont);
+    await page.evaluate((value) => { window.__GBDRAW_APP__.adv.block_stroke_color = value; }, draftBlockStroke);
     await expectLiveEqualsGenerate(page, { label: 'a live change with a pending value' });
   } finally {
     await page.context().close();
@@ -653,9 +654,7 @@ test('Save waits for an apply, and Save then Load gives the same Result and requ
 // OV-1070 (review F2): in Circular, Reset turns Multi-Record Canvas on (its
 // default) while the Result is single-canvas; that pending change no longer
 // holds the automatic rerender.
-for (const [name, file, definitionOverride] of [
-  ['lambda', LAMBDA, LINEAR_DEFINITION_FONT_OVERRIDE], ['tobacco', TOBACCO, DEFINITION_FONT_OVERRIDE]
-]) {
+for (const [name, file] of [['lambda', LAMBDA], ['tobacco', TOBACCO]]) {
 test(`${name}: Reset Settings applies the live rows and leaves the rest pending`, async ({ browser }) => {
   test.setTimeout(900_000);
   const page = await load(browser, file);
@@ -664,7 +663,7 @@ test(`${name}: Reset Settings applies the live rows and leaves the rest pending`
     const size = nextLegendFont((await facts(page)).legendFontSizes);
     await commitValue(page, LEGEND_FONT, size);
     await appliedLegendFont(page, size);
-    await page.evaluate(() => { window.__GBDRAW_APP__.adv.def_font_size = 31; });
+    await page.evaluate(() => { window.__GBDRAW_APP__.adv.block_stroke_color = '#123456'; });
     const before = await facts(page);
     await page.locator('button[aria-label="Reset Settings"]').click();
     await page.locator('[data-choice-prompt] [data-choice-prompt-action="reset"]').click();
@@ -674,8 +673,8 @@ test(`${name}: Reset Settings applies the live rows and leaves the rest pending`
     expect(after.generationKey).toBe(before.generationKey);
     expect(after.draftLegendFont).toBeNull();
     expect(after.overrides[LEGEND_FONT_OVERRIDE], 'the default leaves the override out').toBeUndefined();
-    expect(after.overrides[definitionOverride], 'an Applies on Generate value stays pending')
-      .toEqual(before.overrides[definitionOverride]);
+    expect(after.overrides[BLOCK_STROKE_OVERRIDE], 'an Applies on Generate value stays pending')
+      .toEqual(before.overrides[BLOCK_STROKE_OVERRIDE]);
   } finally {
     await page.context().close();
   }

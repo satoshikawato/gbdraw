@@ -35,7 +35,6 @@ const DIRECT_LABEL_TEXT = 'Loaded preview direct label';
 const DIRECT_LEGEND_COLOR = '#f43f5e';
 const DIRECT_LEGEND_STROKE = '#1d4ed8';
 const DIRECT_LEGEND_STROKE_WIDTH = 3;
-const DIRECT_REGENERATED_SPECIES = 'Loaded preview direct edit regeneration';
 const DIRECT_REGENERATED_STRAIN = 'direct edit strain';
 
 const stableValue = (value) => {
@@ -1699,9 +1698,8 @@ test('loaded current preview supports direct edits before the first Generate', a
   });
   await capturePreviewWorkerStage(page, 'after legend color', previewWorkerStages, true);
 
-  // A draft config that applies on Generate (Species and Strain; the Plot
-  // Title and its position are live edits since PD-OI-103).
-  await page.locator('#circular-species').fill(DIRECT_REGENERATED_SPECIES);
+  // A draft config that applies on Generate (Strain; the Plot Title, its
+  // position and Species are live edits since PD-OI-103, G1 and G2).
   await page.locator('input[aria-label="Strain"]').fill(DIRECT_REGENERATED_STRAIN);
   await settleMountedDom(page);
   const afterDraftConfig = await captureLoadedPreviewDirectEditState(page);
@@ -1722,7 +1720,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   )));
   const savedDraft = sessionDraft(saved.session);
   expect(savedDraft.config).toMatchObject({
-    form: { species: DIRECT_REGENERATED_SPECIES, strain: DIRECT_REGENERATED_STRAIN }
+    form: { strain: DIRECT_REGENERATED_STRAIN }
   });
   expect(savedDraft.features.featureColorOverrides?.[target.featureOverrideKey]).toBeUndefined();
   const fillType = await page.evaluate(() => window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__.feature.type);
