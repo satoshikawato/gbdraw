@@ -76,8 +76,9 @@ import { msg, tn } from '../utils/i18n.js';
  * @property {readonly string[]} notice Python's sentences for the notice bar over a drawn figure.
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
- * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room for the records not placed, in Python's
- *   order; empty unless a record has a `capacity`.
+ * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
+ *   placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS; the dialog lists them once every row is known
+ *   not to fit).
  */
 /**
  * @typedef {object} ResultLabelFit The report of one drawn Result.
