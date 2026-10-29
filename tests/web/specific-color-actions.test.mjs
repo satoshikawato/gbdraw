@@ -1001,6 +1001,15 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
     // Python's Legend order of the table, by caption: the kept table keeps alpha first (OV-2248).
     assert.deepEqual(next.legend?.map((row) => (typeof row === 'number' ? next.rules[row].cap : row)), legend, name);
   }
+  // A join that moves no rule (the renamed rules stand after the joined row's
+  // first rule) gets Python's answer too, so its rows go where Generate draws them.
+  const after = [tagRule('Z', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }, tagRule('A', 'beta')];
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...after);
+  const unmoved = await actions.reviseColorRules([after[2]], { cap: 'alpha', color: '#112233' }, 'alpha')([...after], revise,
+    () => state.extractedFeatures.value);
+  assert.ok(unmoved && !Array.isArray(unmoved), 'a join that moves no rule');
+  assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
+  assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'number' ? unmoved.rules[row].cap : row)), ['alpha', 'delta']);
 });
 
 // OV-445, OV-443: a rule commit runs once its rules are prepared, and a newer

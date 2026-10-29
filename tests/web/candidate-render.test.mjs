@@ -632,8 +632,15 @@ test('a rule commit\'s Legend rows show once on the displayed Result and never a
   }).operationsByResult[0];
   assert.deepEqual(live.legendAdds, [{ caption: 'Rule', color: '#123456', xPos: null, yPos: null, ifAbsent: true, before: 'Old' }]);
   assert.deepEqual(live.legendDeletes, [{ caption: 'Old', allowMissing: true, retire: true }]);
+  assert.deepEqual(live.legendOrder, [], 'the list keeps the default order');
+  // Python's answer in the default order, when it moves a listed row, is shown at once too.
+  const ordered = compileDirectEditorMutationPlan({
+    ...intent,
+    livePreview: { domains: ['legendOrder'], ruleRows: { ...ruleRows, order: ['Rule', 'CDS'] }, drawnTracks: [] }
+  }).operationsByResult[0];
+  assert.deepEqual(ordered.legendOrder.map(({ captions }) => [...captions]), [['Rule', 'CDS']]);
   const generated = compileDirectEditorMutationPlan(intent).operationsByResult[0];
-  assert.deepEqual([generated.legendAdds, generated.legendDeletes], [[], []]);
+  assert.deepEqual([generated.legendAdds, generated.legendDeletes, generated.legendOrder], [[], [], []]);
 });
 
 // OV-1198 (PD-OI-104): the Legend row of a drawn track the draft hides leaves

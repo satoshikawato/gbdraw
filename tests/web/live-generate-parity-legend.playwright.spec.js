@@ -11,7 +11,7 @@ const { evaluateWithRetainedPromise, generateAndWaitForResult, warmAppTest: test
 const {
   diffSemanticSnapshots, expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult
 } = require('./helpers/live-generate-parity.cjs');
-const { loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 const {
   SINGLE_FIXTURE, open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history,
@@ -2108,10 +2108,16 @@ for (const [name, beta, rename, legend] of [
 // The Legend rows a commit itself shows, by key, in the editor list and on the
 // Result (its visible rows), read in the same tick as the edit, before the automatic rerender it
 // asks for: a popup Legend name on the feature of product `product` for "This
-// feature", or a Legend editor rename of the row `from`.
-const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, async ({ product, name, from }) => {
+// feature", a popup fill `fill` on it for "This feature", or a Legend editor
+// rename of the row `from`.
+const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, async ({ product, name, from, fill }) => {
   const app = window.__GBDRAW_APP__;
-  if (from) {
+  if (fill) {
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === product), null);
+    await window.Vue.nextTick();
+    await app.updateClickedFeatureColor(fill);
+    if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+  } else if (from) {
     await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === from), name);
   } else {
     await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === product), null);
@@ -2134,6 +2140,44 @@ const rowsShownAtCommit = (page, edit) => evaluateWithRetainedPromise(page, asyn
       .map((group) => group.getAttribute('data-legend-key')))]
   };
 }, edit);
+
+// Rows a commit places where Python's answer puts them are no edit of the
+// Legend order (D-08): a popup color change that adds a row on Result 1 of a
+// batch whose Result 2 draws its tRNA first leaves each Result in its own
+// order, live = Generate on both.
+test('a popup color change that adds a row in a batch keeps each Result in its own Legend order', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const fixture = testInfo.outputPath('batch-trna-first.gb');
+  const text = readFileSync(BATCH_FIXTURE, 'utf8');
+  const strain = '                     /strain="B2"\n';
+  expect(text.includes(strain)).toBe(true);
+  writeFileSync(fixture, text.replace(strain, `${strain}     tRNA            100..170\n                     /product="tRNA-Gly"\n`));
+  await openWithGenBank(page, fixture, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.labels_mode = 'out';
+    app.form.multi_record_canvas = false;
+    app.adv.circular_grouping_intent = 'batch';
+    app.autoLabelReflowEnabled = false;
+  });
+  await generate(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(2);
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^duplicate protein$', color: '#2a9d8f', cap: 'beta' });
+  await generate(page);
+  const legendOf = async (index) => {
+    await showResult(page, index);
+    return (await semanticSnapshot(page)).legend.map((row) => row.key);
+  };
+  const second = await legendOf(1);
+  expect(second[0], 'Result 2 draws its tRNA first').toBe('tRNA');
+  await showResult(page, 0);
+  await popupEdit(page, 'TESTA_0005', { fill: '#c83366' });
+  await settleLive(page);
+  expect(await legendOf(1), 'Result 2 keeps its own order').toEqual(second);
+  for (const index of [1, 0]) {
+    await showResult(page, index);
+    await expectLiveEqualsGenerate(page, { label: `Result ${index + 1} after the color change` });
+  }
+});
 
 // OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of a row
 // whose rule of the same pattern colors only that feature splits it off; Python
@@ -2195,7 +2239,10 @@ for (const { name, genbank, rules, edit, legend } of [
     legend: ['gamma', 'beta', 'repeat_region [#e63946]', 'other proteins', 'repeat_region'] },
   { name: 'a Legend editor rename onto a row whose move would recolor a feature (OV-2248)',
     rules: [TEAL_RULE('^dup', 'beta'), { ...DELTA, val: 'beta' }, ALPHA_TEAL],
-    edit: { from: 'beta', name: 'alpha' }, legend: ['alpha', 'delta', 'repeat_region'] }
+    edit: { from: 'beta', name: 'alpha' }, legend: ['alpha', 'delta', 'repeat_region'] },
+  { name: 'a popup feature color change that adds a row',
+    rules: [ALPHA_TEAL, DELTA],
+    edit: { product: 'dup alpha', fill: '#c83366' }, legend: ['alpha', 'delta', 'dup alpha', 'other proteins', 'repeat_region'] }
 ]) {
   test(`${name} shows Generate's Legend order at once`, async ({ page }) => {
     test.setTimeout(240_000);

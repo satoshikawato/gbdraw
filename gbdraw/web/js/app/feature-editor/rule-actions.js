@@ -89,6 +89,7 @@ import {
  * The Legend rows a rule commit draws, prepared and not yet applied.
  * @typedef {object} PreparedFileLegend
  * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
+ * @property {boolean} reorders Whether Python's answer moves a listed row the commit keeps (the default order).
  * @property {() => boolean} isCurrent
  * @property {() => import('../candidate-render.js').RuleLegendRows | null} apply Writes the rows into the
  *   intent; returns the rows the displayed Result shows at once.
@@ -529,7 +530,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       legendOrder: order
     });
     if (!legend) return false;
-    const redrawsLegend = redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
+    // A commit whose answer moves a listed row asks for the rerender, so Python draws that order.
+    const redrawsLegend = legend.reorders || redrawsLegendFor(drawing, [...drawing.manualSpecificRules], candidate.rules, {
       rows: { add: legend.diff.add, retire: legend.diff.remove.map(({ caption }) => caption) },
       replaced: inPlace
     });
@@ -1077,7 +1079,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   // popup): `rows` take `patch`, each in its row. When they join the listed
   // row of key `joins`, Python moves the ones before that row's first rule
   // just before it, so the joined row keeps its place, unless that changes the
-  // rule that colors a feature (OV-2193).
+  // rule that colors a feature (OV-2193). Python answers every join, also one
+  // that moves no rule, so the joined rows go where Generate draws them.
   /**
    * @param {readonly Partial<SpecificColorRule>[]} rows
    * @param {{ cap: string, color: string }} patch
@@ -1087,7 +1090,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures) => {
     const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
     const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
-    if (!joined || !joined.rows.some((index) => index < joined.at)) return next;
+    if (!joined) return next;
     const { table, legend } = await rulePreparation.synthesizeGroup({
       scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
     }, next);

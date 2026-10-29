@@ -453,10 +453,14 @@ def _legend_order(features: list[dict], table: list[dict]) -> list[str]:
     return list(dict.fromkeys(rule["cap"] for rule in table if (rule["cap"], rule["color"]) in used))
 
 
+def _join_seqs() -> list[SeqFeature]:
+    return [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
+            _cds(3, product="dup beta")]
+
+
 def _join_case(beta: str) -> tuple[list[dict], list[dict]]:
     """A beta row of pattern `beta`, a delta row, and an alpha row of beta's color."""
-    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
-            _cds(3, product="dup beta")]
+    seqs = _join_seqs()
     current = [dict(feat="CDS", qual="product", val=beta, color=TEAL, cap="beta"),
                dict(feat="CDS", qual="product", val="^beta protein$", color="#e9c46a", cap="delta"),
                dict(feat="CDS", qual="product", val="^alpha protein$", color=TEAL, cap="alpha")]
@@ -542,29 +546,35 @@ def test_an_own_hash_row_after_the_joined_row_keeps_its_place():
     assert answer["table"] == [0, 1, {**own, "cap": "alpha"}]
 
 
-def _renderer_legend(features: list[dict], table: list[dict]) -> list[str]:
-    """The feature rows Generate's Legend owner draws from `table` for the
-    drawn `features` (prepare_legend_table, with the used rules and default
-    types its presence check finds), by name."""
+def _generate_legend(seqs: list[SeqFeature], table: list[dict]) -> list[str]:
+    """The feature rows Generate draws from `table` for a record of `seqs`, by
+    name: Generate's presence check (`feature_legend_presence`) on the record,
+    then its Legend owner (`prepare_legend_table`)."""
     from types import SimpleNamespace
 
     import pandas as pd
+    from Bio.Seq import Seq
+    from Bio.SeqRecord import SeqRecord
 
+    from gbdraw.features.colors import build_specific_color_rules
+    from gbdraw.legend.sources import FeatureLegendSource, feature_legend_presence
     from gbdraw.legend.table import prepare_legend_table
 
-    winners = _winners(features, table)
+    record = SeqRecord(Seq("A" * (max(int(f.location.end) for f in seqs) + 100)), id="rec", features=list(seqs))
+    color_table = pd.DataFrame([[r["feat"], r["qual"], r["val"], r["color"], r["cap"]] for r in table],
+                               columns=["feature_type", "qualifier_key", "value", "color", "caption"]) if table else None
+    source = FeatureLegendSource(
+        color_table=color_table,
+        default_colors=pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"]),
+        block_stroke_color="none", block_stroke_width=0,
+        selected_features=tuple(dict.fromkeys(f.type for f in seqs)), feature_visibility_rules=None,
+        specific_color_rules=build_specific_color_rules(color_table), default_color_map={"default": "#d3d3d3"},
+        record_features=())
+    present, used, default_used = feature_legend_presence([record], source)
     numeric = SimpleNamespace(dinucleotide="GC", high_fill_color="#000000", low_fill_color="#000000",
                               stroke_color="none", stroke_width=0)
-    config = SimpleNamespace(
-        color_table=pd.DataFrame([[r["feat"], r["qual"], r["val"], r["color"], r["cap"]] for r in table],
-                                 columns=["feature_type", "qualifier_key", "value", "color", "caption"]),
-        default_colors=pd.DataFrame([["default", "#d3d3d3"]], columns=["feature_type", "color"]),
-        block_stroke_color="none", block_stroke_width=0)
-    legend = prepare_legend_table(
-        numeric, numeric, config, list(dict.fromkeys(f["type"] for f in features)),
-        used_color_rules={(table[w]["cap"], table[w]["color"]) for w in winners if w >= 0 and table[w]["cap"]},
-        default_used_features={f["type"] for f, w in zip(features, winners) if w < 0},
-        show_gc=False, show_skew=False, show_depth=False)
+    legend = prepare_legend_table(numeric, numeric, source, present, used_color_rules=used,
+                                  default_used_features=default_used, show_gc=False, show_skew=False, show_depth=False)
     return [str(names.name) for names in legend.names().values()]
 
 
@@ -578,8 +588,7 @@ def test_the_answer_gives_the_legend_order_of_the_next_table_where_the_old_row_m
     # rule is re-captioned in place, first in the table, so the old row now
     # starts at its later rule, after alpha. The answer gives that order, so
     # the live Legend shows it at once.
-    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
-            _cds(3, product="dup beta")]
+    seqs = _join_seqs()
     features = [_payload(f, "rec") for f in seqs]
     current = [dict(feat="CDS", qual="product", val="^dup alpha$", color=TEAL, cap="beta"),
                dict(feat="CDS", qual="product", val="^alpha protein$", color="#e63946", cap="alpha"),
@@ -588,7 +597,7 @@ def test_the_answer_gives_the_legend_order_of_the_next_table_where_the_old_row_m
     table = _next_table(answer, current)
     assert [rule["cap"] for rule in table] == ["gamma", "alpha", "beta"]
     assert answer["legend"] == [0, 1, 2, "other proteins"]
-    assert _answer_legend(answer, table) == _renderer_legend(features, table)
+    assert _answer_legend(answer, table) == _generate_legend(seqs, table)
 
 
 def test_the_answer_gives_the_old_order_when_the_join_is_refused():
@@ -601,7 +610,7 @@ def test_the_answer_gives_the_old_order_when_the_join_is_refused():
                          drawn=[0, 1, 2, 3])
     assert answer["table"] == [0, 1, 2]
     assert answer["legend"] == [0, 1]
-    assert _answer_legend(answer, renamed) == _renderer_legend(features, renamed) == ["alpha", "delta"]
+    assert _answer_legend(answer, renamed) == _generate_legend(_join_seqs(), renamed) == ["alpha", "delta"]
 
 
 def test_the_answer_groups_the_legend_rows_by_feature_type_in_drawing_order():
@@ -617,7 +626,7 @@ def test_the_answer_groups_the_legend_rows_by_feature_type_in_drawing_order():
     answer = _synthesize(features, [2], rules=current, color=TEAL, caption="gamma", drawn=[0, 1, 2])
     table = _next_table(answer, current)
     assert answer["legend"] == [1, 2, 0]
-    assert _answer_legend(answer, table) == _renderer_legend(features, table) == ["beta", "alpha", "gamma"]
+    assert _answer_legend(answer, table) == _generate_legend(seqs, table) == ["beta", "alpha", "gamma"]
 
 
 def test_the_answer_reads_only_the_drawn_features():
@@ -626,6 +635,6 @@ def test_the_answer_reads_only_the_drawn_features():
     features, current = _join_case("^dup alpha$")
     answer = _synthesize(features, [1], rules=current, color=TEAL, caption="gamma", drawn=[1, 3])
     table = _next_table(answer, current)
-    assert _answer_legend(answer, table) == _renderer_legend([features[1], features[3]], table) == [
+    assert _answer_legend(answer, table) == _generate_legend([_join_seqs()[1], _join_seqs()[3]], table) == [
         "gamma", "other proteins"]
     assert _synthesize(features, [1], rules=current, color=TEAL, caption="gamma")["legend"] is None

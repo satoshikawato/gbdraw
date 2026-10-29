@@ -871,24 +871,40 @@ const mockLegendEntry = (caption, color, x) => {
   // takes its place too, among the places of the answer's rows.
   const listedRows = state.legendEntries.value;
   const twoNews = [{ caption: 'New', color: '#aa0000' }, { caption: 'Newer', color: '#aa0000' }];
-  for (const [name, order, before, rows] of [
-    ['a split row', ['CDS', 'Newer', 'New', 'tRNA'], 'New', ['CDS', 'Newer', 'New', 'tRNA']],
-    ['an old row that moves', ['CDS', 'Newer', 'tRNA', 'New'], 'tRNA', ['CDS', 'Newer', 'tRNA', 'New']]
+  // Rows in Python's order are no edit (D-08): the inventory takes the
+  // answer's order and the placed rows (with a deleted row it still holds), so
+  // the list stays the default order, and Generate replays no order on
+  // another Result.
+  const inventory = state.originalLegendOrder.value;
+  // An old row the answer moves is shown in the answer's order at once
+  // (`order`), and the commit asks for the rerender (`reorders`), which keeps it.
+  for (const [name, order, before, rows, nextInventory, moves] of [
+    ['a split row', ['CDS', 'Newer', 'New', 'tRNA'], 'New', ['CDS', 'Newer', 'New', 'tRNA'], ['CDS', 'Gone', 'Newer', 'New', 'tRNA'], false],
+    ['an old row that moves', ['CDS', 'Newer', 'tRNA', 'New'], 'tRNA', ['CDS', 'Newer', 'tRNA', 'New'], ['CDS', 'Gone', 'Newer', 'tRNA', 'New'], true]
   ]) {
     state.legendEntries.value = listedRows;
+    state.originalLegendOrder.value = [...inventory.slice(0, 1), 'Gone', ...inventory.slice(1)];
     const placed = await actions.prepareFileLegendEntries(twoNews, {
       previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: order
     });
-    assert.deepEqual(placed.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before }], retire: [] }, name);
+    assert.equal(placed.reorders, moves, name);
+    assert.deepEqual(placed.apply(), {
+      add: [{ caption: 'Newer', color: '#aa0000', before }], retire: [], ...(moves ? { order: rows } : {})
+    }, name);
     assert.deepEqual(listed().map(([caption]) => caption), rows, name);
+    assert.deepEqual(state.originalLegendOrder.value, nextInventory, name);
+    assert.equal(isLegendOrderEdited(state.legendEntries.value, state.originalLegendOrder.value), false, name);
   }
-  // In an edited order, which Generate replays (PD-OI-063), the old rows stay.
+  // In an edited order, which Generate replays (PD-OI-063), the old rows stay,
+  // and so does the inventory.
+  state.originalLegendOrder.value = [...inventory];
   state.legendEntries.value = [listedRows[2], listedRows[0], listedRows[1]];
   const edited = await actions.prepareFileLegendEntries(twoNews, {
     previousFileIntents: [{ caption: 'New', color: '#aa0000' }], legendOrder: ['CDS', 'Newer', 'New', 'tRNA']
   });
   assert.deepEqual(edited.apply(), { add: [{ caption: 'Newer', color: '#aa0000', before: 'tRNA' }], retire: [] });
   assert.deepEqual(listed().map(([caption]) => caption), ['Newer', 'tRNA', 'CDS', 'New']);
+  assert.deepEqual(state.originalLegendOrder.value, inventory);
   state.legendEntries.value = listedRows;
   // A rule color change draws no row; a listed row the rules do not own keeps
   // its color or stops the commit.
