@@ -1265,7 +1265,10 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
   // the joined row's first rule, so Generate keeps the joined row in place as
   // the live Legend does: the popup Legend name on the row's only feature
   // (Python's rules), and the Legend editor's rename (the row's rules,
-  // re-captioned, then moved by Python).
+  // re-captioned, then moved by Python). The fixture's rule owner is a
+  // stand-in (`reviseColorRulesOver`): this owner only chooses the build and
+  // its `joins`; specific-color-actions.test.mjs runs the rule owner's own
+  // `reviseColorRules`.
   {
     const tealRule = (val, cap) => ({ feat: 'tRNA', qual: 'product', val, color: '#2a9d8f', cap });
     const deltaRule = { feat: 'tRNA', qual: 'product', val: '^delta$', color: '#e9c46a', cap: 'delta' };
@@ -1290,8 +1293,8 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
       [['^delta$', 'delta'], ['^dup', 'alpha'], ['^alpha$', 'alpha']], 'the Legend editor join goes before the joined row');
 
     // OV-2194 (Owner 2026-10-29): a popup Legend name on one feature of the
-    // row, split off it ("This feature"), is placed next to the row, on the
-    // side where the re-captioned rule puts it in Python's Legend.
+    // row, split off it ("This feature"), is placed where Python's Legend
+    // draws it (the rule owner tells that place).
     const split = joinRows([tealRule('^dup alpha$', 'beta'), tealRule('^dup beta$', 'beta'), tealRule('^alpha$', 'alpha')], both, 'gamma');
     await split.renameActions.handleLegendNameCommit();
     assert.equal(split.legendRenameDialog.mode, 'scope');
@@ -1299,7 +1302,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Short caption');
     assert.equal(split.errorLog.value, null);
     assert.deepEqual(split.committed.at(-1).map(({ val, cap }) => [val, cap]),
       [['^dup alpha$', 'gamma'], ['^dup beta$', 'beta'], ['^alpha$', 'alpha']], 'the rule is re-captioned in its place');
-    assert.deepEqual(split.commitOptions.at(-1).legendPlacement, { name: 'gamma', color: '#2a9d8f', at: 'beta', beside: true });
+    assert.deepEqual(split.commitOptions.at(-1).legendPlacement, { name: 'gamma', color: '#2a9d8f', at: 'beta', inLegendOrder: true });
   }
 
   // PD-OI-061 scenario revision 5: the dialog names what Keep both draws (the

@@ -510,3 +510,30 @@ def test_rules_renamed_onto_a_listed_row_stay_in_place_when_the_move_would_recol
     renamed = [{**current[0], "cap": "alpha"}, {**current[1], "val": "beta"}, current[2]]
     answer = _synthesize(features, [], rules=renamed, color=TEAL, caption="alpha", joins=dict(at=2, rows=[0]))
     assert answer["table"] == [0, 1, 2]
+
+
+def test_a_same_pattern_rule_after_the_joined_row_stays_in_place():
+    # Review M1 of #1467: re-captioned in its own place, the rule already keeps
+    # the joined row's place (it stands after the joined row's first rule), so
+    # the join does not move it (OV-2189).
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup alpha"), _cds(2, product="beta protein"),
+            _cds(3, product="dup beta")]
+    features = [_payload(f, "rec") for f in seqs]
+    current = [dict(feat="CDS", qual="product", val="^alpha protein$", color=TEAL, cap="alpha"),
+               dict(feat="CDS", qual="product", val="^beta protein$", color="#e9c46a", cap="delta"),
+               dict(feat="CDS", qual="product", val="^dup alpha$", color=TEAL, cap="beta"),
+               dict(feat="CDS", qual="product", val="^dup beta$", color=TEAL, cap="beta")]
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=0, rows=[]))
+    assert answer["table"] == [0, 1, {**current[2], "cap": "alpha"}, 3]
+
+
+def test_an_own_hash_row_after_the_joined_row_keeps_its_place():
+    # The same for a "This feature only" row after the joined row: the new
+    # `hash` row takes the place of the old one.
+    seqs = [_cds(0, product="alpha protein"), _cds(1, product="dup"), _cds(2, product="dup")]
+    features = [_payload(f, "rec") for f in seqs]
+    own = dict(feat="CDS", qual="hash", val=exact_value_pattern(_instance(features[1])), color=TEAL, cap="beta")
+    current = [dict(feat="CDS", qual="product", val="^alpha protein$", color=TEAL, cap="alpha"),
+               dict(feat="CDS", qual="product", val="^beta$", color="#e9c46a", cap="delta"), own]
+    answer = _synthesize(features, [1], rules=current, color=TEAL, caption="alpha", joins=dict(at=0, rows=[]))
+    assert answer["table"] == [0, 1, {**own, "cap": "alpha"}]
