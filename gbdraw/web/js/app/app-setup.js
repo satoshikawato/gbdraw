@@ -5692,7 +5692,6 @@ export const createAppSetup = () => {
         .map((/** @type {{ caption?: string, originalCaption?: string }} */ entry) => String(entry.originalCaption || entry.caption || ''))
         .filter((/** @type {string} */ key) => originalLegendOrder.value.includes(key));
       resetDrawings();
-      matchSequenceRegistry.reset();
       if (shown) {
         // A Reset that changes the palette leaves the fills to the palette watcher.
         await projectMountedEditorIntent({
@@ -5715,6 +5714,9 @@ export const createAppSetup = () => {
   const resetSettings = () => runReset((reset) => history.runProjectStep(msg('Reset settings'), reset), () => {
     resetProject(state);
     state.drawingList().forEach((drawing) => resetDrawing(drawing));
+    // As 0.14.0 Reset settings did; Reset this drawing keeps the shown
+    // Result's match sequences with the Result (OV-2203).
+    matchSequenceRegistry.reset();
   });
   // Reset this drawing is a step of the shown drawing (R17-5): the other
   // drawings, their Histories, and the Session values stay.

@@ -677,3 +677,18 @@ test('a Depth series auto label belongs to its drawing; Undo and Reset in one le
   assert.equal(shownLabel(), 'gamma', 'a label typed in A stays: B\'s undone auto label is not A\'s');
   app.drawingList.deleteDrawing(second);
 });
+
+// The match sequences are the shown Result's (its pairwise band popup reads
+// them). Reset this drawing keeps that Result, so it keeps them; Reset all
+// drawings empties them, as 0.14.0 Reset settings did.
+test('Reset this drawing keeps the shown Result\'s match sequences; Reset all drawings empties them', async () => {
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const sourceKeys = () => [...state.matchSequenceRegistry.sources.keys()];
+  state.matchSequenceRegistry.reset([{ key: 'NC_1', recordId: 'NC_1', sequence: 'ACGTACGT', recordIndex: 0, sourceIndex: 0 }]);
+  assert.deepEqual(sourceKeys(), ['NC_1']);
+  await app.resetShownDrawing();
+  assert.deepEqual(sourceKeys(), ['NC_1'], 'Reset this drawing keeps the band popup\'s sequences');
+  await app.resetSettings();
+  assert.deepEqual(sourceKeys(), [], 'Reset all drawings empties them');
+});
