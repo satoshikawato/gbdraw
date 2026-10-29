@@ -89,8 +89,10 @@ import {
 
 /**
  * The Legend rows of a rule commit until Python draws them (`prepareFileLegendEntries`):
- * the rows its rules add, each before the row it replaces, and the rows they retire.
- * @typedef {{ add: Array<{ caption: string, name?: string, color: string, before?: string }>, retire: string[] }} RuleLegendRows
+ * the rows its rules add, each before the row it replaces, the rows they retire, and, when
+ * Python's answer moves a listed row in the default order, the keys of the rows in that order.
+ * @typedef {{ add: Array<{ caption: string, name?: string, color: string, before?: string }>, retire: string[],
+ *   order?: string[] }} RuleLegendRows
  */
 
 /**
@@ -789,6 +791,9 @@ const compilePlanBundle = ({
     (ruleRows?.retire || []).forEach((caption) => {
       addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true, retire: true });
     });
+    if (ruleRows?.order) {
+      addToResults(operationsByResult, allResultIndexes, 'legendOrder', { captions: Object.freeze([...ruleRows.order]) });
+    }
     // The row of a drawn track the draft hides leaves with the track; the
     // recorded deletion returns the row once the track shows again. Generate
     // compiles none: Python draws no row for a hidden track.

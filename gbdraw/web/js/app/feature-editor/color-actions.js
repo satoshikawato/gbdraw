@@ -851,13 +851,12 @@ export const createFeatureColorActions = ({
       return commitRuleWrite(rules, msg('Rename legend item'), {
         drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
-        // A row that joins another row keeps that row's place.
-        // Features that Keep both split off go right after the target row (D-29);
-        // other features split off their row go where Python's Legend draws
-        // them, when the Web can tell that place (OV-2194, Owner 2026-10-29).
+        // Features that Keep both split off go right after the target row
+        // (D-29); other rows go where Python's answer puts them: a row split
+        // off its row, a joined row, and an old row that moves (OV-2194,
+        // OV-2247, OV-2248, Owner 2026-10-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
-          : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter }
-            : oldEntry && features.length > 0 && !joins ? { name: caption, color, at: request.sourceKey, inLegendOrder: true } : null,
+          : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter } : null,
         afterCommit: () => {
           const committedCaptionOf = effectiveLegendCaptions();
           for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);
