@@ -458,6 +458,11 @@ def synthesize_color_rules(request: SynthesizeColorRulesRequest) -> SynthesizedC
     in_place = {candidates[c]: first_of[candidates[c]] for c in usable
                 if candidates[c] in first_of and rules[first_of[candidates[c]]]["color"].lower() == color.lower()
                 and all(old_winners[i] == first_of[candidates[c]] for i in hits[c])}
+    # Such a condition comes first among those with as many hits, so another
+    # condition that hits the same features (the product of a gene or label
+    # row) does not take them and leave the old rule in place (OV-2191). The
+    # sort is stable: without `in_place` the order is as before.
+    usable.sort(key=lambda c: (-len(hits[c]), candidates[c] not in in_place))
 
     retired: dict[HashTarget, list[int]] = {}
     for position, rule in enumerate(rules):

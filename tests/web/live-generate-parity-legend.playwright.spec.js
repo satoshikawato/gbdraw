@@ -1996,3 +1996,27 @@ test('a popup Legend name on the only feature of a rule row shows the Legend ord
   expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
 });
+
+// OV-2191: the same edit on a gene rule row. The feature's product hits the
+// same feature, and Python used to take the product condition first: the gene
+// rule stayed and the new product rule went ahead of its family, so Generate
+// drew the row first while the live Legend kept it in place.
+test('a popup Legend name on the only feature of a gene rule row keeps the row in place, live = Generate (OV-2191)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="dup alpha"', '/gene="dupA"\n                     /product="dup alpha"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await addColorRule(page, { feat: 'CDS', qual: 'gene', val: '^dupA$', color: '#2a9d8f', cap: 'beta' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, val, cap, color }) => [qual, val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['product', '^alpha protein$', 'alpha', '#e63946'], ['gene', '^dupA$', 'gamma', '#2a9d8f']], undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a gene rule row' });
+});
