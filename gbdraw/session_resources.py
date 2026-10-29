@@ -13,9 +13,10 @@ import hashlib
 import mimetypes
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Callable, Collection, Mapping
+from typing import Callable, Collection, Mapping
 
 from gbdraw import session_io
+from gbdraw.session_io import SessionResourceDescriptor
 from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.session_contract import SESSION_ID_RE
 from gbdraw.session_request_codec import (
@@ -53,7 +54,7 @@ _RESOURCE_ID_LIST_FIELDS = ("conservationLosatFastaSources", "conservationSequen
 _DRAWING_RESOURCE_FIELDS = ("renderRequest", "webFiles", "results")
 
 
-def drawing_resource_ids(fields: Mapping[str, Any]) -> set[str]:
+def drawing_resource_ids(fields: Mapping[str, object]) -> set[str]:
     """The resource IDs a drawing names: its request, Web files and Results.
 
     ``fields`` is a Session 50 drawing or a one-drawing view; both name these
@@ -76,7 +77,7 @@ class _HeldResource:
 
     size: int
     name: str
-    descriptor: Mapping[str, Any] | None = None
+    descriptor: SessionResourceDescriptor | None = None
     resource: CanonicalRequestResource | None = None
     digest: str | None = None
 
@@ -94,10 +95,10 @@ class SessionResourceTable:
     gets alone.
     """
 
-    def __init__(self, resources: Mapping[str, Mapping[str, Any]] | None = None) -> None:
+    def __init__(self, resources: Mapping[str, SessionResourceDescriptor] | None = None) -> None:
         self._held: dict[str, _HeldResource] = {}
         self._names: set[str] = set()
-        self._payloads: dict[tuple[Any, Any], str] = {}
+        self._payloads: dict[tuple[int, str], str] = {}
         self._next_number = 1
         for resource_id, descriptor in (resources or {}).items():
             self._hold_descriptor(resource_id, descriptor)
@@ -107,7 +108,7 @@ class SessionResourceTable:
 
         return RequestResources(self)
 
-    def bind(self, entry: Mapping[str, Any], *, preferred_id: str = "") -> str:
+    def bind(self, entry: SessionResourceDescriptor, *, preferred_id: str = "") -> str:
         """The resource of one Web file's bytes; a binding carries its own name.
 
         A held resource with equal bytes is shared. A new resource keeps
@@ -125,15 +126,16 @@ class SessionResourceTable:
 
         held = self._held.get(preferred_id)
         existing = held.descriptor if held is not None else None
-        if entry.get("checksum") and entry is not existing and entry.get("checksum") != (existing or {}).get("checksum"):
+        existing_checksum = existing.get("checksum") if existing is not None else None
+        if entry.get("checksum") and entry is not existing and entry.get("checksum") != existing_checksum:
             read()
         if existing is not None and all(
             entry.get(field) == existing.get(field) for field in ("encoding", "data", "size")
         ):
             return preferred_id
-        size = entry.get("size")
-        if entry.get("encoding") == "base64":
-            shared = self._payloads.get((size, entry["data"]))
+        size, data = entry["size"], entry["data"]
+        if entry.get("encoding") == "base64" and isinstance(data, str):
+            shared = self._payloads.get((size, data))
             if shared is not None:
                 return shared
         digest: list[str] = []
@@ -146,7 +148,7 @@ class SessionResourceTable:
         shared = self._find_equal(size, entry_digest, preferred_id=preferred_id)
         if shared is not None:
             return shared
-        data = read()
+        content_bytes = read()
         safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
         if (SESSION_ID_RE.fullmatch(preferred_id) and preferred_id not in self._held
                 and safe_name == entry.get("name") and safe_name not in self._names):
@@ -162,18 +164,18 @@ class SessionResourceTable:
             resource_id,
             {
                 **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
-                "size": len(data),
+                "size": len(content_bytes),
                 "type": str(entry.get("type") or "application/octet-stream"),
                 "encoding": "base64", "data": (
                     entry["data"] if entry.get("encoding") != session_io.DEPTH_FILE_ENCODING
-                    else base64.b64encode(data).decode("ascii")
+                    else base64.b64encode(content_bytes).decode("ascii")
                 ),
             },
             digest=digest[0] if digest else None,
         )
         return resource_id
 
-    def descriptors(self) -> dict[str, Mapping[str, Any]]:
+    def descriptors(self) -> dict[str, SessionResourceDescriptor]:
         """Every held resource as a Session resource descriptor, in table order."""
 
         return {
@@ -229,7 +231,7 @@ class SessionResourceTable:
     def _hold_descriptor(
         self,
         resource_id: str,
-        descriptor: Mapping[str, Any],
+        descriptor: SessionResourceDescriptor,
         *,
         digest: str | None = None,
     ) -> None:
@@ -238,8 +240,9 @@ class SessionResourceTable:
             size=descriptor["size"], name=name, descriptor=descriptor, digest=digest,
         )
         self._names.add(name)
-        if descriptor.get("encoding") == "base64":
-            self._payloads.setdefault((descriptor["size"], descriptor["data"]), resource_id)
+        data = descriptor["data"]
+        if descriptor.get("encoding") == "base64" and isinstance(data, str):
+            self._payloads.setdefault((descriptor["size"], data), resource_id)
 
     def _hold_resource(self, resource: CanonicalRequestResource, *, size: int) -> None:
         name = safe_embedded_filename(resource.name)
@@ -360,7 +363,7 @@ def _resource_bytes(resource: CanonicalRequestResource) -> bytes:
         ) from exc
 
 
-def _resource_descriptor(resource: CanonicalRequestResource) -> dict[str, Any]:
+def _resource_descriptor(resource: CanonicalRequestResource) -> SessionResourceDescriptor:
     content = _resource_bytes(resource)
     last_modified = 0
     if resource.source_path is not None:

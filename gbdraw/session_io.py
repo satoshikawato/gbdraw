@@ -31,6 +31,7 @@ from typing import (
     Sequence,
     TextIO,
     TypedDict,
+    TypeGuard,
     cast,
 )
 
@@ -5370,7 +5371,17 @@ class SessionResourceDescriptor(_SessionResourceDescriptorRequired, total=False)
     checksum: str | None
 
 
-def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
+def is_session_resource_descriptor(value: Mapping[str, object]) -> TypeGuard[SessionResourceDescriptor]:
+    """Whether ``value`` has the required fields of a resource descriptor.
+
+    Its bytes are checked against them where they are read
+    (:func:`_embedded_resource_bytes`).
+    """
+
+    return isinstance(value.get("size"), int) and isinstance(value.get("data"), (str, Mapping))
+
+
+def _embedded_entry_bytes(entry: Mapping[str, object]) -> bytes | None:
     encoding = entry.get("encoding")
     data = entry.get("data")
     if encoding != DEPTH_FILE_ENCODING and isinstance(data, str):
@@ -5386,7 +5397,7 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     return None
 
 
-def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
+def _embedded_resource_bytes(entry: Mapping[str, object]) -> bytes:
     """The bytes of a resource descriptor, checked against its size and checksum.
 
     The one check of a declared ``checksum``: the SHA-256 hex digest of the
@@ -5459,7 +5470,9 @@ def _attach_current_web_file_bindings(
             raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
     table = SessionResourceTable(resources)
 
-    def allocate_file(entry: Mapping[str, Any], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
+    def allocate_file(entry: Mapping[str, object], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
+        if not is_session_resource_descriptor(entry):
+            raise ValidationError("Invalid embedded resource bytes or byte size.")
         return {
             "resourceId": table.bind(entry, preferred_id=preferred_id),
             "name": str(metadata.get("name", "file")),
