@@ -847,6 +847,32 @@ test('non-maintainers and incomplete changed-requirement acknowledgements are in
   assert.match(second.currentDecisionIssues.join(' '), /acknowledgement is incomplete/);
 });
 
+test('a GitHub App author and a full-size GitHub body parse, and the bot gains no authority', () => {
+  // Dependabot fills a grouped update body to GitHub's 65,536-character limit; with
+  // multibyte characters that is more than 64 KiB.
+  const parsed = parseCurrentProductImpactDecisions({
+    body: `${'​'.repeat(1000)}${'x'.repeat(64536)}`,
+    eventHeadSha: HEAD_SHA,
+    eventAuthorLogin: 'dependabot[bot]'
+  });
+  assert.deepEqual(parsed.errors, []);
+  assert.equal(parsed.present, false);
+  assert.equal(parsed.metadata.eventAuthorLogin, 'dependabot[bot]');
+  ['[bot]', 'dependabot[bot]x', 'dependabot[app]', '-dependabot[bot]'].forEach((login) => {
+    const malformed = parseCurrentProductImpactDecisions({
+      body: '',
+      eventHeadSha: HEAD_SHA,
+      eventAuthorLogin: login
+    });
+    assert.ok(malformed.errors.some(({ code }) => code === 'invalid-event-author'), login);
+  });
+  const bot = parseDecisions([currentDecision()], { eventAuthorLogin: 'dependabot[bot]' });
+  assert.equal(bot.valid, true);
+  const result = evaluate({ map: transitionMap(), current: bot })[0];
+  assert.equal(result.observation, 'UNRESOLVED_DECISION');
+  assert.match(result.currentDecisionIssues.join(' '), /not an eligible Product Decision Owner/);
+});
+
 test('incompatible durable and current selections produce authority conflict', () => {
   const map = transitionMap();
   const durable = decisionAuthority({
