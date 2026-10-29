@@ -377,6 +377,12 @@ def add_capture_contract_validation(
         if as_text(capture.get("source")).lower() not in {"webapp", "web-app", "app"}:
             result.errors.append(f"{context.label}: capture.replayThrough needs a webapp capture.")
 
+    if "freshPage" in capture:
+        if capture.get("freshPage") is not True or as_text(capture.get("source")).lower() not in {"webapp", "web-app", "app"}:
+            result.errors.append(f"{context.label}: capture.freshPage must be true on a webapp capture.")
+        if "replayThrough" in capture or as_text(capture.get("session")):
+            result.errors.append(f"{context.label}: capture.freshPage excludes session and replayThrough.")
+
     if assert_app_state is not None and not isinstance(assert_app_state, dict):
         result.errors.append(f"{context.label}: capture.assertAppState must be an object.")
     elif isinstance(assert_app_state, dict):
@@ -1327,7 +1333,10 @@ def prepare_capture_page(page, base_url: str, sample: dict[str, Any], capture: d
     elif source in {"webapp", "web-app", "app"}:
         page.goto(f"{base_url}/", wait_until="domcontentloaded")
         wait_for_app_shell(page)
-        session_ref = as_text(capture.get("session")) or as_text(sample.get("session"))
+        # capture.freshPage: a reader's new page, before any example is loaded.
+        session_ref = "" if capture.get("freshPage") is True else (
+            as_text(capture.get("session")) or as_text(sample.get("session"))
+        )
         session_path = resolve_gallery_reference(session_ref)
         if session_path is not None and session_path.exists():
             load_web_app_session(page, session_path)
