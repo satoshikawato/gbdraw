@@ -1077,12 +1077,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     return { rules: synthesizedRuleTable(table, current), legend };
   };
 
-  // The rename of a Legend row's rules (the Legend editor, or "All" in the
-  // popup): `rows` take `patch`, each in its row. When they join the listed
-  // row of key `joins`, Python moves the ones before that row's first rule
-  // just before it, so the joined row keeps its place, unless that changes the
-  // rule that colors a feature (OV-2193). Python answers every join, also one
-  // that moves no rule, so the joined rows go where Generate draws them.
+  // The revision of rules in their rows (the Legend editor's rename, "All" in
+  // the popup, the popup's "rule" scope): `rows` take `patch`, each in its row.
+  // When they join the listed row of key `joins`, Python moves the ones before
+  // that row's first rule just before it, so the joined row keeps its place,
+  // unless that changes the rule that colors a feature (OV-2193). Python
+  // answers every revision, also one that joins or moves no row, so a row it
+  // re-keys goes where Generate draws it (OV-2264).
   /**
    * @param {readonly Partial<SpecificColorRule>[]} rows
    * @param {{ cap: string, color: string }} patch
@@ -1092,7 +1093,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
   const reviseColorRules = (rows, patch, joins) => async (current, revise, drawnFeatures) => {
     const next = current.map((rule) => (rows.includes(rule) ? revise(rule, patch) : rule));
     const joined = joins === null ? null : joinedLegendRow(getLegendRowRules(joins), current, rows);
-    if (!joined) return next;
     const { table, legend } = await rulePreparation.synthesizeGroup({
       scope: 'group', features: [], labels: [], color: patch.color, caption: patch.cap, joins: joined, drawn: drawnFeatures()
     }, next);

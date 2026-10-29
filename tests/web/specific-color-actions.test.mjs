@@ -1011,6 +1011,16 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.ok(unmoved && !Array.isArray(unmoved), 'a join that moves no rule');
   assert.deepEqual(unmoved.rules.map(({ val, cap }) => [val, cap]), [['^(Z)$', 'alpha'], ['^(B)$', 'delta'], ['^(A)$', 'alpha']]);
   assert.deepEqual(unmoved.legend?.map((row) => (typeof row === 'number' ? unmoved.rules[row].cap : row)), ['alpha', 'delta']);
+  // OV-2264: a revision that joins no row (the popup's "rule" scope recolors
+  // one rule) gets Python's answer as well, so a row re-keyed by the recolor
+  // goes where Generate draws it; the table keeps its rows.
+  const recolored = [tagRule('A', 'alpha'), { ...tagRule('B', 'delta'), color: '#445566' }];
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...recolored);
+  const recolor = await actions.reviseColorRules([recolored[0]], { cap: 'alpha', color: '#abcdef' }, null)([...recolored], revise,
+    () => state.extractedFeatures.value);
+  assert.ok(recolor && !Array.isArray(recolor), 'a revision that joins no row');
+  assert.deepEqual(recolor.rules.map(({ val, color }) => [val, color]), [['^(A)$', '#abcdef'], ['^(B)$', '#445566']]);
+  assert.deepEqual(recolor.legend?.map((row) => (typeof row === 'number' ? recolor.rules[row].cap : row)), ['alpha', 'delta']);
 });
 
 // Review round 2 of #1474: a commit whose answer moves a listed row writes the
