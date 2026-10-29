@@ -27,8 +27,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   do. **Redraw** figures that show LOSATP comparisons of circular records with a
   CDS across the origin, which is typical of complete bacterial genomes from
   RefSeq. Records without such a CDS draw the same bytes as before.
-- **Similarity alignment centre.** A Similarity alignment anchored on such a CDS
-  placed the record's middle at the shared centre. It now places the CDS
+- **Similarity alignment center.** A Similarity alignment anchored on such a CDS
+  placed the record's middle at the shared center. It now places the CDS
   itself, in the command line, the Python API, and the Web app alike.
 - The Circular legend lists only the similarity rings a slot draws; a ring of a
   disabled `sequence_conservation` slot no longer appears.
