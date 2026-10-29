@@ -261,7 +261,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
     expect(saved.modes[saved.ui.mode].config.form.strain).toBe('Y2');
-    expect(saved.modes[saved.ui.mode].config.adv.plot_title_font_size).toBe(30);
+    expect(saved.modes[saved.ui.mode].config.adv.keep_full_definition_with_plot_title).toBe(true);
 
     await generate(page);
     const applied = await svgFacts(page, await resultContent(page));
@@ -269,6 +269,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     expect(applied.definition).toContain('8,001 bp');
     expect(applied.definition).toContain('44.41');
     expect(applied.plotTitle).toContain('Audit title');
+    expect((await snapshot(page)).request.diagramOptions.strain).toBe('Y2');
     await page.screenshot({ path: testInfo.outputPath('definition-applied.png') });
   } finally { await page.context().close(); }
 });
