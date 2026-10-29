@@ -7,34 +7,33 @@
 // hashes them in node). Reset Settings and Session Load change every drawing
 // by design (PD-OI-090), so the isolation check skips those steps.
 //
-// Two specs run it: the PR spec tests/web/live-generate-random-walk.playwright.spec.js
-// (fixed seed, 10 steps per fixture) and the promotion spec
-// tests/web/live-generate-random-walk.promotion.spec.js (20 steps, seed
-// 20261006 by default). Each fixture opens both drawings with a Result, so a
-// drawing switch arrives at a Result. The kinds are stratified: `planWalk`
-// gives every kind at least one step over the three fixtures, and draws the
-// popup state (a feature popup opened and closed before the step, which binds
-// the labels) and Auto Reflow for every step. A failure names the seed, the
-// fixture, the step index, the steps so far, and the difference; the same seed
-// and budget replay the same walk.
+// The kind schedule is the plan of tests/web/helpers/live-random-walk-plan.mjs
+// (its targets: every ordered pair of kinds, and every kind in each popup and
+// Auto Reflow state; at promotion also adjacent pairs and every fixture). Each
+// walk of the plan is one test that opens its fixture (both drawings with a
+// Result, so a drawing switch arrives at a Result) and draws the step
+// arguments from its own generator, so a walk replays alone with the same
+// seed. Two specs run it: the PR spec
+// tests/web/live-generate-random-walk.playwright.spec.js (fixed seed) and the
+// promotion spec tests/web/live-generate-random-walk.promotion.spec.js (the
+// run ID as the seed).
+//
+// Every walk attaches the steps it ran as data (`walk-steps.json`). When a
+// step differs from Generate or changes a drawing it did not edit, the walk
+// replays the recorded steps from a fresh fixture to find a short sequence
+// that still fails (tests/web/helpers/live-random-walk-shrink.mjs; budget
+// GBDRAW_RANDOM_WALK_SHRINK_REPLAYS), reports it as the minimal reproduction,
+// and attaches it as `walk-shrunk.json`. GBDRAW_RANDOM_WALK_REPLAY=<file>
+// makes the promotion spec replay such a file.
 import { expect, test } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { evaluateWithRetainedPromise } from './app-lifecycle.cjs';
 import { showDrawing } from './drawing-bar.cjs';
 import { expectLiveEqualsGenerate, settleLive, showResult } from './live-generate-parity.cjs';
 import { download } from './mode-transition.cjs';
 import { SINGLE_FIXTURE, generate, open } from './live-generate-parity-steps.cjs';
-
-// The step kinds. Each run draws every kind at least once.
-export const WALK_KINDS = Object.freeze([
-  'fill', 'stroke', 'featureVisibility', 'labelText', 'labelVisibility',
-  'visibilityRuleAdd', 'visibilityRuleEdit', 'visibilityRuleRemove', 'colorRuleAdd', 'colorRuleEdit', 'colorRuleRemove',
-  'reflow', 'legendRename', 'legendColor', 'legendSort', 'legendSortDefault', 'legendDelete', 'legendRestore', 'legendAdd',
-  'trackData', 'palette', 'undo', 'undoRedo', 'resultSwitch', 'reset', 'load', 'drawingSwitch'
-]);
-
-// The kinds that change every drawing by design (PD-OI-090 Reset, Save and Load).
-const ALL_DRAWINGS_KINDS = Object.freeze(['reset', 'load']);
+import { BARRIER_KINDS, FIXTURES, createRandom, planWalk } from './live-random-walk-plan.mjs';
+import { shrinkWalk } from './live-random-walk-shrink.mjs';
 
 // The step kind that walks the path of each row of the R3 work allowlist
 // (tests/web/helpers/live-work-allowlist.mjs), or null for a row whose path
@@ -81,94 +80,8 @@ export const ALLOWLIST_WALK_KINDS = Object.freeze({
 /** @type {Readonly<Record<string, { id: string, matches: (line: string) => boolean }>>} */
 const KNOWN_MISMATCHES = Object.freeze({});
 
-// The fixtures: the shown drawing with its Result, and the other drawing's
-// Result (Linear always draws the one-record file).
-export const FIXTURES = Object.freeze([
-  { name: 'Circular, one Result', mode: 'circular', results: 'single' },
-  { name: 'Linear, one Result', mode: 'linear', results: 'single' },
-  { name: 'Circular, two-Result batch', mode: 'circular', results: 'batch' }
-]);
 // The records of each file, for a Depth file over them.
 const FILE_RECORDS = { single: ['FORCEDLBL'], batch: ['TESTA', 'TESTB'] };
-
-// mulberry32: a 32-bit seeded generator; the same seed gives the same walk.
-const createRandom = (seed) => {
-  let state = seed >>> 0;
-  const next = () => {
-    state = (state + 0x6D2B79F5) >>> 0;
-    let value = state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
-  const int = (count) => Math.floor(next() * count);
-  const pick = (items) => items[int(items.length)];
-  const weighted = (entries) => {
-    const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
-    let point = next() * total;
-    for (const [value, weight] of entries) {
-      point -= weight;
-      if (point < 0) return value;
-    }
-    return entries[entries.length - 1][0];
-  };
-  const shuffle = (items) => {
-    const copy = [...items];
-    for (let index = copy.length - 1; index > 0; index -= 1) {
-      const other = int(index + 1);
-      [copy[index], copy[other]] = [copy[other], copy[index]];
-    }
-    return copy;
-  };
-  return { next, int, pick, weighted, shuffle };
-};
-
-// The steps after the kinds every run draws: the edits, weighted as the
-// promotion walk drew them. A Result switch, a drawing switch, Reset, and
-// Load are drawn once.
-const FILLER_KINDS = [
-  ['fill', 5], ['stroke', 2], ['featureVisibility', 2], ['labelText', 3], ['labelVisibility', 3],
-  ['visibilityRuleAdd', 2], ['visibilityRuleEdit', 2], ['visibilityRuleRemove', 2],
-  ['colorRuleAdd', 2], ['colorRuleEdit', 2], ['colorRuleRemove', 1], ['reflow', 1],
-  ['legendRename', 2], ['legendColor', 2], ['legendSort', 2], ['legendSortDefault', 1],
-  ['legendDelete', 1], ['legendRestore', 1], ['legendAdd', 1], ['trackData', 1], ['palette', 1],
-  ['undo', 2], ['undoRedo', 2]
-];
-// Only the batch has two Results to switch between. Reset clears its batch
-// settings and its drawing switch would leave it, so neither runs there.
-const allowedIn = (kind, fixture) => {
-  if (kind === 'resultSwitch') return fixture.results === 'batch';
-  if (kind === 'reset' || kind === 'drawingSwitch') return fixture.results !== 'batch';
-  return true;
-};
-
-/**
- * The kind schedule of a walk: per fixture, `steps` entries of
- * `{ kind, popup, reflow }`. Every kind of WALK_KINDS has at least one step.
- * @param {number} seed
- * @param {number} steps
- */
-export const planWalk = (seed, steps) => {
-  if (steps * FIXTURES.length < WALK_KINDS.length) {
-    throw new Error(`a walk of ${steps} steps per fixture cannot draw all ${WALK_KINDS.length} kinds`);
-  }
-  const random = createRandom(seed ^ 0x5EED5EED);
-  const slots = FIXTURES.map(() => /** @type {string[]} */ ([]));
-  const fixturesOf = (kind) => FIXTURES.flatMap((fixture, index) => (allowedIn(kind, fixture) ? [index] : []));
-  // The kinds with the fewest fixtures are placed first; each goes to an
-  // allowed fixture with the fewest kinds.
-  const kinds = random.shuffle(WALK_KINDS).sort((left, right) => fixturesOf(left).length - fixturesOf(right).length);
-  for (const kind of kinds) {
-    const open = fixturesOf(kind).filter((index) => slots[index].length < steps);
-    if (!open.length) throw new Error(`no fixture has a step left for ${kind}`);
-    const fewest = Math.min(...open.map((index) => slots[index].length));
-    slots[random.pick(open.filter((index) => slots[index].length === fewest))].push(kind);
-  }
-  return slots.map((kindsOfFixture) => {
-    while (kindsOfFixture.length < steps) kindsOfFixture.push(random.weighted(FILLER_KINDS));
-    return random.shuffle(kindsOfFixture).map((kind) => ({ kind, popup: random.next() < 0.5, reflow: random.next() < 0.5 }));
-  });
-};
 
 const COLORS = ['#c83366', '#123456', '#2a9d8f', '#e63946', '#7b2cbf', '#f4a261', '#264653'];
 const LABEL_TEXTS = [
@@ -684,111 +597,381 @@ const bindLabels = (page, key) => evaluateWithRetainedPromise(page, async (targe
   app.clickedFeature = null;
 }, key).then(() => settleLive(page));
 
-const describeStep = (index, { kind, popup, reflow }, step, notes = []) => {
-  const { picks, ...rest } = step || { kind };
+/**
+ * A step as a walk ran it: the data a replay applies again.
+ * @typedef {object} RecordedStep
+ * @property {number} index the step's position in its run (1-based)
+ * @property {string} kind
+ * @property {boolean} popup a feature popup was opened and closed before the step
+ * @property {boolean} reflow Auto Reflow before the step
+ * @property {string} drawing the drawing shown before the step
+ * @property {string | null} popupFeature the key of the feature whose popup was opened
+ * @property {Record<string, unknown> & { kind: string }} step the concrete step, with its `picks` and `prepare`
+ * @property {string[]} notes what the run answered and did besides the step
+ */
+/**
+ * The steps of one run, as `walk-steps.json` and `walk-shrunk.json` hold them.
+ * @typedef {{ seed: number, title: string, fixture: string, reflow: boolean, steps: RecordedStep[], shrink?: object }} WalkRecord
+ */
+/** @typedef {{ phase: string, drawing: string, slices: string[] }} IsolationChange */
+/** @typedef {{ index: number, kind: string, differences: string[], isolation: IsolationChange[] }} StepResult */
+/**
+ * Where the steps of a run come from: the walk draws them, a replay reads
+ * them. Each returns null when the step cannot apply in `state`.
+ * @typedef {{
+ *   popupFeature: (offset: number, state: Awaited<ReturnType<typeof readState>>) => string | null,
+ *   step: (offset: number, state: Awaited<ReturnType<typeof readState>>, context: { fixture: object, canUndo: boolean }) => { step: RecordedStep['step'] | null, reason: string }
+ * }} StepSource
+ */
+
+// The walk draws the popup feature and the step arguments from its generator.
+/** @returns {StepSource} */
+const drawnSource = (random, planned) => ({
+  popupFeature: (offset, state) => random.pick(state.features).key,
+  step: (offset, state, context) => ({ step: nextStep(random, state, planned[offset].kind, context), reason: '' })
+});
+
+// Why a recorded step cannot apply in `state` (its subject is gone), or ''.
+const whyNotApplicable = (step, state, { canUndo }) => {
+  if (step.prepare) {
+    const reason = whyNotApplicable(step.prepare, state, { canUndo });
+    if (reason) return `its prepare step: ${reason}`;
+  }
+  const feature = () => (state.features.some(({ key }) => key === step.feature) ? '' : `no feature ${step.feature}`);
+  const legendRow = () => (step.index < state.legend.length ? '' : `no Legend row ${step.index}`);
+  switch (step.kind) {
+    case 'fill': case 'featureVisibility': case 'labelText': case 'labelVisibility': case 'legendAdd': return feature();
+    case 'stroke': return step.target === 'popup' ? feature() : legendRow();
+    case 'legendRename': case 'legendColor': case 'legendDelete': return legendRow();
+    case 'visibilityRuleEdit': case 'visibilityRuleRemove':
+      return step.prepare || step.index < state.visibilityRules ? '' : `no visibility rule ${step.index}`;
+    case 'colorRuleEdit': case 'colorRuleRemove': return step.prepare || step.index < state.colorRules ? '' : `no color rule ${step.index}`;
+    case 'legendRestore': return step.prepare || state.deletedLegend ? '' : 'no deleted Legend row';
+    case 'trackData': return step.prepare || state.depth ? '' : 'no Depth file';
+    case 'palette': return state.palettes.includes(step.palette) ? '' : `palette ${step.palette} is selected`;
+    case 'undo': case 'undoRedo': return step.prepare || canUndo ? '' : 'Undo is at its floor';
+    case 'resultSwitch':
+      return step.index < state.resultCount && step.index !== state.resultIndex ? '' : `Result ${step.index} is shown or absent`;
+    case 'drawingSwitch': return step.drawing !== state.drawing ? '' : `the ${step.drawing} drawing is shown`;
+    default: return '';
+  }
+};
+
+// A replay applies the recorded steps, drawing nothing new.
+/** @param {RecordedStep[]} recorded @returns {StepSource} */
+const recordedSource = (recorded) => ({
+  popupFeature: (offset, state) => (state.features.some(({ key }) => key === recorded[offset].popupFeature) ? recorded[offset].popupFeature : null),
+  step: (offset, state, context) => {
+    const { drawing, step } = recorded[offset];
+    const reason = drawing === state.drawing ? whyNotApplicable(step, state, context) : `the ${state.drawing} drawing is shown, not ${drawing}`;
+    return reason ? { step: null, reason } : { step, reason: '' };
+  }
+});
+
+// The slices of the drawings a phase must leave as they were that changed.
+/** @returns {IsolationChange[]} */
+const isolationChanges = (phase, before, after, drawings) => drawings
+  .map((drawing) => ({ phase, drawing, slices: changedSlices(before, after, drawing) }))
+  .filter(({ slices }) => slices.length);
+
+/**
+ * Opens the fixture and runs the planned steps from `source`, with the oracle
+ * (one Generate) after each step. Returns the recorded steps, each step's
+ * differences and isolation changes, and the step error or the step that could
+ * not apply, if any; it stops there.
+ * @param {import('@playwright/test').Page} page
+ * @param {{ fixture: typeof FIXTURES[number], reflow: boolean, planned: readonly { kind: string, popup: boolean, reflow: boolean }[],
+ *   source: StepSource, sessionPath: (index: number) => string, log?: (record: RecordedStep) => void }} options
+ * @returns {Promise<{ records: RecordedStep[], results: StepResult[], error?: { index: number, message: string },
+ *   inapplicable?: { index: number, reason: string } }>}
+ */
+const runWalk = async (page, { fixture, reflow, planned, source, sessionPath, log = () => {} }) => {
+  /** @type {RecordedStep[]} */
+  const records = [];
+  /** @type {StepResult[]} */
+  const results = [];
+  /** @type {Record<string, number>} */
+  const floors = await openFixture(page, fixture, reflow);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(fixture.results === 'batch' ? 2 : 1);
+  for (const [offset, { kind, popup, reflow: stepReflow }] of planned.entries()) {
+    const index = offset + 1;
+    /** @type {RecordedStep} */
+    const record = { index, kind, popup, reflow: stepReflow, drawing: '', popupFeature: null, step: { kind }, notes: [] };
+    let before;
+    let afterStep;
+    try {
+      await page.evaluate((enabled) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = enabled; }, stepReflow);
+      await settleLive(page);
+      let state = await readState(page);
+      floors[state.drawing] ??= state.undoDepth;
+      record.drawing = state.drawing;
+      if (popup) {
+        record.popupFeature = source.popupFeature(offset, state);
+        if (record.popupFeature === null) return { records, results, inapplicable: { index, reason: 'the popup feature is gone' } };
+        await bindLabels(page, record.popupFeature);
+        state = await readState(page);
+      }
+      const { step, reason } = source.step(offset, state, { fixture, canUndo: state.canUndo && state.undoDepth > floors[state.drawing] });
+      if (!step) return { records, results, inapplicable: { index, reason } };
+      record.step = step;
+      before = await sliceHashes(page);
+      record.notes = await runStep(page, step, sessionPath(index));
+      await settleLive(page);
+      afterStep = await sliceHashes(page);
+    } catch (error) {
+      records.push(record);
+      return { records, results, error: { index, message: error?.message || String(error) } };
+    }
+    records.push(record);
+    log(record);
+    const isolation = BARRIER_KINDS.includes(record.step.kind) ? [] : isolationChanges('the step', before, afterStep,
+      Object.keys(before.drawings).filter((drawingId) => record.step.kind === 'drawingSwitch' || drawingId !== before.active));
+    if (record.step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
+    let differences = [];
+    try {
+      await expectLiveEqualsGenerate(page, { label: `step ${index} (${record.step.kind})` });
+    } catch (error) {
+      // expectLiveEqualsGenerate fails with the unexpected differences as `actual`.
+      if (!Array.isArray(error?.matcherResult?.actual)) {
+        return { records, results, error: { index, message: `the comparison failed: ${error?.message || error}` } };
+      }
+      differences = error.matcherResult.actual;
+      // Generate has drawn the draft; the walk goes on from that state.
+    }
+    // Generate draws the shown drawing only.
+    const afterGenerate = await sliceHashes(page);
+    isolation.push(...isolationChanges('Generate', afterStep, afterGenerate,
+      Object.keys(afterStep.drawings).filter((drawingId) => drawingId !== afterStep.active)));
+    results.push({ index, kind: record.step.kind, differences, isolation });
+  }
+  return { records, results };
+};
+
+/** @param {RecordedStep} record */
+const describeRecord = ({ index, popup, reflow, step, notes }) => {
+  const { picks, ...rest } = step;
   return `#${index} popup ${popup ? 'opened' : 'not'}, Auto Reflow ${reflow ? 'on' : 'off'}: ${JSON.stringify(rest)}`
     + `${notes.length ? ` (${notes.join('; ')})` : ''}`;
 };
 
-/**
- * The walk tests, one per fixture, for the spec to declare (`test(title, body)`).
- * @param {{ seed: number, steps: number }} options
- */
-export const randomWalkTests = ({ seed, steps }) => {
-  const schedule = planWalk(seed, steps);
-  return FIXTURES.map((fixture, fixtureIndex) => ({
-    title: `random walk (seed ${seed}): ${fixture.name}`,
-    body: async ({ page }) => {
-      test.setTimeout(300_000 + steps * 240_000);
-      // One generator per fixture, so a fixture replays alone with the same seed.
-      const random = createRandom(seed + Math.imul(fixtureIndex + 1, 0x9E3779B1));
-      const sequence = [];
-      const mismatches = [];
-      const isolation = [];
-      const report = (index, difference) => (
-        `seed ${seed}, fixture "${fixture.name}", step ${index}\n`
-        + `steps so far:\n${sequence.map((line) => `  ${line}`).join('\n')}\n${difference}`
-      );
-      // The drawings a step must leave as they were: the other drawing, or both for a switch.
-      const checkIsolation = (index, phase, before, after, drawings) => {
-        for (const drawingId of drawings) {
-          const changed = changedSlices(before, after, drawingId);
-          if (changed.length) isolation.push(report(index, `${phase} changed the ${drawingId} drawing's slices: ${changed.join(', ')}`));
-        }
-      };
-
-      const reflow = random.next() < 0.5;
-      sequence.push(`#init ${fixture.mode} shown, Auto Reflow ${reflow ? 'on' : 'off'}`);
-      // eslint-disable-next-line no-console
-      console.log(`seed ${seed}, fixture "${fixture.name}": kinds ${schedule[fixtureIndex].map(({ kind }) => kind).join(', ')}`);
-      /** @type {Record<string, number>} */
-      const floors = await openFixture(page, fixture, reflow);
-      expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(fixture.results === 'batch' ? 2 : 1);
-
-      for (const [offset, planned] of schedule[fixtureIndex].entries()) {
-        const index = offset + 1;
-        let step = null;
-        let notes = [];
-        let before;
-        let afterStep;
-        try {
-          await page.evaluate((enabled) => { window.__GBDRAW_APP__.autoLabelReflowEnabled = enabled; }, planned.reflow);
-          await settleLive(page);
-          let state = await readState(page);
-          floors[state.drawing] ??= state.undoDepth;
-          if (planned.popup) {
-            await bindLabels(page, random.pick(state.features).key);
-            state = await readState(page);
-          }
-          step = nextStep(random, state, planned.kind, { fixture, canUndo: state.canUndo && state.undoDepth > floors[state.drawing] });
-          before = await sliceHashes(page);
-          notes = await runStep(page, step, test.info().outputPath(`walk-step-${index}.gbdraw-session.json`));
-          await settleLive(page);
-          afterStep = await sliceHashes(page);
-        } catch (error) {
-          sequence.push(describeStep(index, planned, step));
-          throw new Error(`${report(index, `the step failed: ${error?.message || error}`)}`
-            + `${mismatches.length ? `\nmismatches before it:\n${mismatches.join('\n')}` : ''}`
-            + `${isolation.length ? `\nisolation failures before it:\n${isolation.join('\n')}` : ''}`);
-        }
-        sequence.push(describeStep(index, planned, step, notes));
-        // eslint-disable-next-line no-console
-        console.log(`  ${sequence[sequence.length - 1]}`);
-        if (!ALL_DRAWINGS_KINDS.includes(step.kind)) {
-          checkIsolation(index, 'the step', before, afterStep, Object.keys(before.drawings)
-            .filter((drawingId) => step.kind === 'drawingSwitch' || drawingId !== before.active));
-        }
-        if (step.kind === 'load') for (const drawingId of Object.keys(floors)) delete floors[drawingId];
-        const known = KNOWN_MISMATCHES[step.kind];
-        let differences = [];
-        try {
-          await expectLiveEqualsGenerate(page, { label: `step ${index} (${step.kind})` });
-        } catch (error) {
-          // expectLiveEqualsGenerate fails with the unexpected differences as `actual`.
-          if (!Array.isArray(error?.matcherResult?.actual)) throw error;
-          differences = error.matcherResult.actual;
-          // Generate has drawn the draft; the walk goes on from that state.
-        }
-        if (known) {
-          // A known mismatch is expected, as test.fail expects it: the step
-          // fails when the mismatch no longer reproduces.
-          if (!differences.some(known.matches)) mismatches.push(report(index, `${known.id} no longer reproduces; remove its mark`));
-          else test.info().annotations.push({ type: 'known mismatch', description: `${known.id}: step ${index} (${step.kind})` });
-          differences = differences.filter((line) => !known.matches(line));
-        }
-        if (differences.length) {
-          mismatches.push(report(index, `differences:\n${differences.map((line) => `  ${line}`).join('\n')}`));
-        }
-        // Generate draws the shown drawing only.
-        const afterGenerate = await sliceHashes(page);
-        checkIsolation(index, 'Generate', afterStep, afterGenerate, Object.keys(afterStep.drawings)
-          .filter((drawingId) => drawingId !== afterStep.active));
-      }
-      const failures = [
-        ...(mismatches.length ? [`${mismatches.length} of ${steps} steps differ from Generate:\n\n${mismatches.join('\n\n')}`] : []),
-        ...(isolation.length ? [`${isolation.length} changes of a drawing a step did not edit:\n\n${isolation.join('\n\n')}`] : [])
-      ];
-      expect(failures.length, `${failures.join('\n\n')}\n`).toBe(0);
-    }
-  }));
+// A step result without the known mismatches of its kind; a known mismatch
+// that no longer reproduces is a difference of its own.
+/** @param {StepResult} result */
+const unknownDifferences = (result) => {
+  const known = KNOWN_MISMATCHES[result.kind];
+  if (!known) return result.differences;
+  if (!result.differences.some(known.matches)) return [`${known.id} no longer reproduces; remove its mark`];
+  return result.differences.filter((line) => !known.matches(line));
 };
+// The lines that identify a failure: a candidate reproduces it when it shows one of them.
+/** @param {StepResult} result */
+const failureLines = (result) => [
+  ...unknownDifferences(result).map((line) => `difference: ${line}`),
+  ...result.isolation.flatMap(({ phase, drawing, slices }) => slices.map((slice) => `isolation: ${phase} changed ${drawing}.${slice}`))
+];
+
+const attachJson = async (name, value) => {
+  const path = test.info().outputPath(name);
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+  await test.info().attach(name, { path, contentType: 'application/json' });
+  return path;
+};
+
+/** The replay budget of the shrink: GBDRAW_RANDOM_WALK_SHRINK_REPLAYS, or `fallback`. */
+export const shrinkReplaysFromEnv = (fallback) => {
+  const value = Number.parseInt(process.env.GBDRAW_RANDOM_WALK_SHRINK_REPLAYS ?? `${fallback}`, 10);
+  if (!Number.isInteger(value) || value < 0) throw new Error('GBDRAW_RANDOM_WALK_SHRINK_REPLAYS must be a non-negative integer');
+  return value;
+};
+
+// The test time a run of `steps` steps may take, and the shrink replays after it.
+const STEP_ALLOWANCE_MS = 240_000;
+const OPEN_ALLOWANCE_MS = 300_000;
+const runAllowance = (steps, shrinkReplays) => (OPEN_ALLOWANCE_MS + steps * STEP_ALLOWANCE_MS) * (1 + shrinkReplays);
+
+/**
+ * Fails the test with the run's step error, or with its differences and
+ * isolation changes after shrinking the first failing step to a minimal
+ * reproduction (`walk-shrunk.json`).
+ * @param {import('@playwright/test').Page} page
+ * @param {WalkRecord} walk
+ * @param {Awaited<ReturnType<typeof runWalk>>} run
+ * @param {{ header: string, shrinkReplays: number }} options
+ */
+const reportRun = async (page, walk, run, { header, shrinkReplays }) => {
+  const sequence = [`#init ${FIXTURES.find(({ name }) => name === walk.fixture).mode} shown, Auto Reflow ${walk.reflow ? 'on' : 'off'}`,
+    ...run.records.map(describeRecord)];
+  const report = (index, difference) => `${header}, step ${index}\nsteps so far:\n`
+    + `${sequence.slice(0, index + 1).map((line) => `  ${line}`).join('\n')}\n${difference}`;
+  const failing = run.results.map((result) => ({ result, lines: failureLines(result) })).filter(({ lines }) => lines.length);
+  const mismatches = failing.filter(({ lines }) => lines.some((line) => line.startsWith('difference: ')))
+    .map(({ result }) => report(result.index, `differences:\n${unknownDifferences(result).map((line) => `  ${line}`).join('\n')}`));
+  const isolation = failing.flatMap(({ result }) => result.isolation.map(({ phase, drawing, slices }) => (
+    report(result.index, `${phase} changed the ${drawing} drawing's slices: ${slices.join(', ')}`))));
+  if (run.error || run.inapplicable) {
+    const { index } = run.error || run.inapplicable;
+    const cause = run.error ? `the step failed: ${run.error.message}` : `the recorded step cannot apply: ${run.inapplicable.reason}`;
+    throw new Error(`${report(index, cause)}`
+      + `${mismatches.length ? `\nmismatches before it:\n${mismatches.join('\n')}` : ''}`
+      + `${isolation.length ? `\nisolation failures before it:\n${isolation.join('\n')}` : ''}`);
+  }
+  for (const result of run.results) {
+    const known = KNOWN_MISMATCHES[result.kind];
+    if (known && result.differences.some(known.matches)) {
+      test.info().annotations.push({ type: 'known mismatch', description: `${known.id}: step ${result.index} (${result.kind})` });
+    }
+  }
+  if (!failing.length) return;
+
+  // The first failing step, cut down to the steps it needs.
+  const { result: first, lines } = failing[0];
+  const original = new Set(lines);
+  const fixture = FIXTURES.find(({ name }) => name === walk.fixture);
+  let replay = 0;
+  const reproduces = async (indices) => {
+    replay += 1;
+    const steps = indices.map((index) => walk.steps[index - 1]);
+    try {
+      const rerun = await runWalk(page, {
+        fixture, reflow: walk.reflow, planned: steps, source: recordedSource(steps),
+        sessionPath: (index) => test.info().outputPath(`shrink-${replay}-step-${index}.gbdraw-session.json`)
+      });
+      const last = rerun.results[steps.length - 1];
+      const reproduced = Boolean(!rerun.error && !rerun.inapplicable && last && failureLines(last).some((line) => original.has(line)));
+      // eslint-disable-next-line no-console
+      console.log(`  shrink replay ${replay} [${indices}]: ${reproduced ? 'reproduces'
+        : rerun.inapplicable ? `step ${rerun.inapplicable.index} cannot apply (${rerun.inapplicable.reason})`
+          : rerun.error ? `step ${rerun.error.index} failed` : 'does not reproduce'}`);
+      return reproduced;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(`  shrink replay ${replay} [${indices}] failed to run: ${error?.message || error}`);
+      return false;
+    }
+  };
+  let shrinkReport = '';
+  if (shrinkReplays > 0) {
+    const shrunk = await shrinkWalk({
+      prefix: walk.steps.slice(0, first.index - 1).map(({ index }) => index), failing: first.index, budget: shrinkReplays, reproduces
+    });
+    const steps = shrunk.indices.map((index) => walk.steps[index - 1]);
+    const path = await attachJson('walk-shrunk.json', {
+      ...walk, steps, shrink: { failingStep: first.index, replays: shrunk.replays, budget: shrinkReplays, finished: shrunk.finished, confirmed: shrunk.confirmed }
+    });
+    shrinkReport = `minimal reproduction of step ${first.index}: ${steps.length} of ${first.index} steps, ${shrunk.replays} replays, `
+      + `${shrunk.finished ? 'search finished' : `search stopped at the budget of ${shrinkReplays} replays`}, `
+      + `${shrunk.confirmed ? 'reproduced in a replay' : 'no shorter sequence reproduced in a replay'}:\n`
+      + `${steps.map((step) => `  ${JSON.stringify(step)}`).join('\n')}\n`
+      + `replay: GBDRAW_RANDOM_WALK_REPLAY=${path} npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1\n\n`;
+  }
+  const failures = [
+    ...(mismatches.length ? [`${mismatches.length} of ${run.results.length} steps differ from Generate:\n\n${mismatches.join('\n\n')}`] : []),
+    ...(isolation.length ? [`${isolation.length} changes of a drawing a step did not edit:\n\n${isolation.join('\n\n')}`] : [])
+  ];
+  expect(failures.length, `${shrinkReport}${failures.join('\n\n')}\n`).toBe(0);
+};
+
+/**
+ * The walk tests of a plan, one per walk, for the spec to declare
+ * (`test(title, body)`).
+ * @param {{ seed: number, level: import('./live-random-walk-plan.mjs').PlanLevel, walkLength?: number,
+ *   required?: readonly import('./live-random-walk-plan.mjs').RequiredStep[], shrinkReplays: number }} options
+ */
+export const randomWalkTests = ({ seed, level, walkLength, required = [], shrinkReplays }) => {
+  const { walks } = planWalk(seed, { level, walkLength, required });
+  return walks.map(({ fixtureIndex, steps }, walkIndex) => {
+    const fixture = FIXTURES[fixtureIndex];
+    const title = `random walk (seed ${seed}): ${fixture.name}, walk ${walkIndex + 1} of ${walks.length}`;
+    return {
+      title,
+      body: async ({ page }) => {
+        test.setTimeout(runAllowance(steps.length, shrinkReplays));
+        // One generator per walk, so a walk replays alone with the same seed.
+        const random = createRandom(seed + Math.imul(walkIndex + 1, 0x9E3779B1));
+        const reflow = random.next() < 0.5;
+        // eslint-disable-next-line no-console
+        console.log(`seed ${seed}, ${fixture.name}, walk ${walkIndex + 1}: kinds ${steps.map(({ kind }) => kind).join(', ')}`);
+        const run = await runWalk(page, {
+          fixture, reflow, planned: steps, source: drawnSource(random, steps),
+          sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`),
+          // eslint-disable-next-line no-console
+          log: (record) => console.log(`  ${describeRecord(record)}`)
+        });
+        const walk = { seed, title, fixture: fixture.name, reflow, steps: run.records };
+        await attachJson('walk-steps.json', walk);
+        await reportRun(page, walk, run, { header: `seed ${seed}, fixture "${fixture.name}", walk ${walkIndex + 1}`, shrinkReplays });
+      }
+    };
+  });
+};
+
+/** @param {string} path @returns {WalkRecord} */
+const readWalkRecord = (path) => {
+  const walk = JSON.parse(readFileSync(path, 'utf8'));
+  if (!FIXTURES.some(({ name }) => name === walk.fixture) || !Array.isArray(walk.steps)) {
+    throw new Error(`${path} is not a walk-steps.json or walk-shrunk.json file`);
+  }
+  return walk;
+};
+// Replays a recorded run: the same fixture, the same concrete steps, the oracle after every step.
+const replayRun = (page, walk, log = () => {}) => runWalk(page, {
+  fixture: FIXTURES.find(({ name }) => name === walk.fixture), reflow: walk.reflow, planned: walk.steps, source: recordedSource(walk.steps),
+  sessionPath: (index) => test.info().outputPath(`replay-step-${index}.gbdraw-session.json`), log
+});
+
+/**
+ * The test that replays a `walk-steps.json` or `walk-shrunk.json` file
+ * (GBDRAW_RANDOM_WALK_REPLAY in the promotion spec).
+ * @param {string} path
+ * @param {{ shrinkReplays: number }} options
+ */
+export const replayWalkTest = (path, { shrinkReplays }) => {
+  const walk = readWalkRecord(path);
+  return {
+    title: `random walk replay of ${path}: ${walk.fixture}, ${walk.steps.length} steps`,
+    body: async ({ page }) => {
+      test.setTimeout(runAllowance(walk.steps.length, shrinkReplays));
+      // eslint-disable-next-line no-console
+      const run = await replayRun(page, walk, (record) => console.log(`  ${describeRecord(record)}`));
+      const replayed = { ...walk, steps: run.records };
+      delete replayed.shrink;
+      await attachJson('walk-steps.json', replayed);
+      await reportRun(page, replayed, run, { header: `replay of ${path}`, shrinkReplays });
+    }
+  };
+};
+
+// The steps of the record-and-replay test: a popup edit with its dialogs, a
+// rule, and Undo, on the Circular fixture.
+const RECORD_REPLAY_STEPS = Object.freeze([
+  { kind: 'fill', popup: true, reflow: false },
+  { kind: 'colorRuleAdd', popup: false, reflow: true },
+  { kind: 'undo', popup: false, reflow: false }
+]);
+
+/**
+ * The test that keeps the replay path working on every pull request: it runs a
+ * short walk, attaches its steps, replays them from the attached file, and
+ * expects the same steps and no failure in either run.
+ * @param {{ seed: number }} options
+ */
+export const recordReplayTest = ({ seed }) => ({
+  title: `random walk (seed ${seed}): a recorded walk replays from its walk-steps.json`,
+  body: async ({ page }) => {
+    test.setTimeout(2 * runAllowance(RECORD_REPLAY_STEPS.length, 0));
+    const fixture = FIXTURES[0];
+    const random = createRandom(seed);
+    const reflow = random.next() < 0.5;
+    const run = await runWalk(page, {
+      fixture, reflow, planned: RECORD_REPLAY_STEPS, source: drawnSource(random, RECORD_REPLAY_STEPS),
+      sessionPath: (index) => test.info().outputPath(`walk-step-${index}.gbdraw-session.json`)
+    });
+    const walk = { seed, title: test.info().title, fixture: fixture.name, reflow, steps: run.records };
+    const path = await attachJson('walk-steps.json', walk);
+    await reportRun(page, walk, run, { header: `seed ${seed}, recorded walk`, shrinkReplays: 0 });
+    const recorded = readWalkRecord(path);
+    const replay = await replayRun(page, recorded);
+    await reportRun(page, { ...recorded, steps: replay.records }, replay, { header: `replay of ${path}`, shrinkReplays: 0 });
+    expect(replay.records.map(describeRecord)).toEqual(run.records.map(describeRecord));
+  }
+});
