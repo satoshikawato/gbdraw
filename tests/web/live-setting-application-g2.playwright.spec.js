@@ -45,12 +45,11 @@ const commitValue = async (locator, value) => {
   await locator.press('Tab');
 };
 
-// A color as a pointer user picks it: the press on the swatch opens the step
-// (History begins a color input's step on pointerdown), then the picked value.
+// A color picked without a pointer (a keyboard-opened picker): `fill` sends
+// input and change, which open and close one History step (OV-2243).
 const commitColor = async (locator, value) => {
   await reveal(locator);
   await locator.scrollIntoViewIfNeeded();
-  await locator.dispatchEvent('pointerdown');
   await locator.fill(value);
 };
 
