@@ -141,10 +141,10 @@ test('Circular Palette Explorer recolors one semantic SVG across all built-in pa
   await expect(ncRnaSwatch.locator('code')).toHaveText('#d3d3d3');
 
   await page.setViewportSize({ width: 390, height: 844 });
-  const hasHorizontalOverflow = await page.evaluate(
+  // The header takes its two-row layout in the page's resize event, which can run after setViewportSize returns.
+  await expect.poll(() => page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
-  );
-  expect(hasHorizontalOverflow).toBe(false);
+  )).toBe(false);
 });
 
 test('Gallery routes a sample path and tab hash while preserving Preview defaults', async ({ page }) => {

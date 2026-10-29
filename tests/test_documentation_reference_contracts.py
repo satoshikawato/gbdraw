@@ -52,6 +52,7 @@ DOCUMENTATION_PAGES = (
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md",
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.1.md",
     REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.2.md",
+    REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.3.md",
     REPO_ROOT / "docs" / "FAQ.md",
     REPO_ROOT / "docs" / "GALLERY.md",
 )
@@ -90,10 +91,10 @@ def test_session_reference_matches_current_implementation_constants() -> None:
     assert f"session version {CURRENT_SESSION_VERSION}" in source
     assert f"`renderRequest` schema {CANONICAL_REQUEST_SCHEMA}" in source
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49}
     )
     assert SUPPORTED_CANONICAL_REQUEST_SCHEMAS == frozenset({1, 2, 5, 6, 7, 8, 9})
-    assert "27–33, 39–42, 44, and 46–48" in source
+    assert "27–33, 39–42, 44, and 46–49" in source
     assert "1, 2, 5, 6, 7, 8, and 9" in source
 
 

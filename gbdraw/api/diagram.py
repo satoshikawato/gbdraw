@@ -16,7 +16,7 @@ import math
 import re
 import time
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional, Sequence, cast
 
@@ -155,6 +155,7 @@ from gbdraw.io.colors import (
     read_color_table,
     resolve_color_to_hex,
 )
+from gbdraw.labels.circular_capacity import label_capacity_unchecked
 from gbdraw.labels.circular_fit import (
     CircularLabelFitSearch,
     CircularLabelLayout,
@@ -229,7 +230,11 @@ from gbdraw.render.group_content import (
     place_content,
 )
 from gbdraw.render.groups.circular import CircularDefinitionStyle, DefinitionGroup
-from gbdraw.render.groups.circular.definition import CircularDefinitionProfile, definition_record_facts
+from gbdraw.render.groups.circular.definition import (
+    CircularDefinitionProfile,
+    DefinitionNameLines,
+    definition_record_facts,
+)
 from gbdraw.render.groups.circular.legend import circular_legend_content
 from gbdraw.render_stages import render_stage
 from gbdraw.svg.elements import Group
@@ -1060,10 +1065,8 @@ def _pack_circular_record_bounds(
 
 def _strip_nested_composition_roles(element: object) -> None:
     """Remove single-record role markers before nesting them in a grid."""
-    for child in _walk_svgwrite_elements(element):
-        attribs = getattr(child, "attribs", None)
-        if isinstance(attribs, dict):
-            attribs.pop(COMPOSITION_ROLE_ATTRIBUTE, None)
+    for attribs in _walk_attributes(element):
+        attribs.pop(COMPOSITION_ROLE_ATTRIBUTE, None)
 
 
 def _require_circular_assembly_result(drawing: Drawing) -> CircularAssemblyResult:
@@ -1076,119 +1079,214 @@ def _require_circular_assembly_result(drawing: Drawing) -> CircularAssemblyResul
     return result
 
 
+def _record_suffixed_id(group_id: object, record_index: int, *, top_level: bool) -> object:
+    """The id a record's merge gives a placed group (``top_level``) or one of its direct children."""
+    if top_level and group_id in _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS:
+        return f"{group_id}_{record_index}"
+    if isinstance(group_id, str) and group_id.startswith("depth_"):
+        if group_id.endswith("_axis"):
+            return f"{group_id[:-5]}_record_{record_index + 1}_axis"
+        return f"{group_id}_record_{record_index + 1}"
+    return group_id
+
+
 def _suffix_fixed_top_level_group_id(element: object, record_index: int) -> None:
     """Suffix selected top-level group IDs to avoid collisions on merged canvas."""
     attribs = getattr(element, "attribs", None)
     if not isinstance(attribs, dict):
         return
-    group_id = attribs.get("id")
-    if group_id in _MULTI_RECORD_SUFFIXED_TOP_LEVEL_IDS:
-        attribs["id"] = f"{group_id}_{record_index}"
-    elif isinstance(group_id, str) and group_id.startswith("depth_"):
-        if group_id.endswith("_axis"):
-            attribs["id"] = f"{group_id[:-5]}_record_{record_index + 1}_axis"
-        else:
-            attribs["id"] = f"{group_id}_record_{record_index + 1}"
+    if "id" in attribs:
+        attribs["id"] = _record_suffixed_id(attribs["id"], record_index, top_level=True)
     for child in getattr(element, "elements", []) or []:
         child_attribs = getattr(child, "attribs", None)
-        if not isinstance(child_attribs, dict):
-            continue
-        child_id = child_attribs.get("id")
-        if isinstance(child_id, str) and child_id.startswith("depth_"):
-            if child_id.endswith("_axis"):
-                child_attribs["id"] = f"{child_id[:-5]}_record_{record_index + 1}_axis"
-            else:
-                child_attribs["id"] = f"{child_id}_record_{record_index + 1}"
+        if isinstance(child_attribs, dict) and "id" in child_attribs:
+            child_attribs["id"] = _record_suffixed_id(child_attribs["id"], record_index, top_level=False)
 
 
 _SVG_URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
 
 
-def _walk_svgwrite_elements(element: object):
+def _walk_svgwrite_elements(element: object) -> Iterator[object]:
     yield element
     for child in getattr(element, "elements", []) or []:
         yield from _walk_svgwrite_elements(child)
 
 
-def _uniquify_copied_subtrees_ids(
-    elements: Sequence[object],
-    *,
-    record_index: int,
-    used_ids: set[str],
-    bind_record_identity: bool = False,
-) -> None:
-    """Repair copied multi-record subtrees with one shared reference namespace."""
-
-    renamed: dict[str, str] = {}
-    for element in elements:
-        for child in _walk_svgwrite_elements(element):
-            attribs = getattr(child, "attribs", None)
-            if not isinstance(attribs, dict):
-                continue
-            if bind_record_identity and attribs.get("data-gbdraw-feature-id"):
-                stable_id = attribs["data-gbdraw-feature-id"]
-                rendered_id = attribs.get("data-gbdraw-rendered-feature-id") or stable_id
-                attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{record_index + 1}")
-                attribs["data-gbdraw-stable-feature-id"] = stable_id
-                attribs["data-gbdraw-record-index"] = str(record_index)
-            if bind_record_identity and attribs.get("data-label-feature-id"):
-                attribs["data-label-feature-id"] = instance_svg_id(
-                    attribs["data-label-feature-id"], f"record_{record_index + 1}"
-                )
-            raw_id = attribs.get("id")
-            if not isinstance(raw_id, str) or not raw_id:
-                continue
-            candidate = raw_id
-            if candidate in used_ids:
-                base = f"{raw_id}__record_{record_index + 1}"
-                candidate = base
-                duplicate_index = 2
-                while candidate in used_ids:
-                    candidate = f"{base}_{duplicate_index}"
-                    duplicate_index += 1
-                attribs["id"] = candidate
-                renamed.setdefault(raw_id, candidate)
-            used_ids.add(candidate)
-
-    if not renamed:
-        return
-
-    def replace_url_reference(match: re.Match[str]) -> str:
-        referenced_id = match.group(1)
-        return f"url(#{renamed.get(referenced_id, referenced_id)})"
-
-    for element in elements:
-        for child in _walk_svgwrite_elements(element):
-            attribs = getattr(child, "attribs", None)
-            if not isinstance(attribs, dict):
-                continue
-            for name, value in tuple(attribs.items()):
-                if not isinstance(value, str):
-                    continue
-                rewritten = _SVG_URL_REFERENCE_RE.sub(replace_url_reference, value)
-                if (
-                    name in {"href", "xlink:href"}
-                    or str(name).rsplit("}", 1)[-1] == "href"
-                ) and rewritten.startswith("#"):
-                    rewritten = f"#{renamed.get(rewritten[1:], rewritten[1:])}"
-                if rewritten != value:
-                    attribs[name] = rewritten
+def _walk_attributes(element: object) -> Iterator[dict[str, object]]:
+    """The attribute dicts of ``element`` and its descendants, in walk order."""
+    for child in _walk_svgwrite_elements(element):
+        attribs = getattr(child, "attribs", None)
+        if isinstance(attribs, dict):
+            yield attribs
 
 
-# One placed top-level group of a record drawing: its content and its attributes in document order.
-PlacedRecordContent = tuple[GroupContent, tuple[tuple[str, object], ...]]
+def _element_id(attribs: dict[str, object]) -> str | None:
+    """The id a record's merge names: a non-empty string ``id``, else ``None``."""
+    raw_id = attribs.get("id")
+    return raw_id if isinstance(raw_id, str) and raw_id else None
+
+
+def _record_element_ids(element: object) -> Iterator[str]:
+    """The ids a record's merge names, in walk order (the order ``_apply_record_ids`` counts)."""
+    for attribs in _walk_attributes(element):
+        element_id = _element_id(attribs)
+        if element_id is not None:
+            yield element_id
+
+
+def _placed_record_ids(
+    content: GroupContent, attributes: tuple[tuple[str, object], ...], record_index: int
+) -> tuple[str, ...]:
+    """The ids of one placed content as its ``record_part`` copy holds them before renaming.
+
+    The copy's walk order after ``_suffix_fixed_top_level_group_id``: the
+    placed group's suffixed id, then each child's suffixed id followed by its
+    descendants' ids. ``merge_circular_record_part`` checks the copy against it.
+    """
+    ids: list[str] = []
+    group_id = _record_suffixed_id(dict(attributes).get("id"), record_index, top_level=True)
+    if isinstance(group_id, str) and group_id:
+        ids.append(group_id)
+    for child in content.children:
+        child_attribs = getattr(child, "attribs", None)
+        if isinstance(child_attribs, dict):
+            child_id = _record_suffixed_id(child_attribs.get("id"), record_index, top_level=False)
+            if isinstance(child_id, str) and child_id:
+                ids.append(child_id)
+        for grandchild in getattr(child, "elements", []) or []:
+            ids.extend(_record_element_ids(grandchild))
+    return tuple(ids)
+
+
+# The renames of one copied tree: (ordinal among its named elements, new id).
+_IdRenames = tuple[tuple[int, str], ...]
 
 
 @dataclass(frozen=True)
-class MergedCircularRecord:
-    """Result of the ``record_merge`` stage: one record's ``record_<i>`` group content.
+class CircularRecordIdPlan:
+    """How one record's merge names its ids, decided from the ids alone.
 
-    ``used_ids`` holds the ids of this record and of every earlier one; the next
-    record's merge takes this result, so its ids depend on all earlier records.
+    An id that an earlier record, an earlier tree of this record or an earlier
+    element already uses is renamed ``<id>__record_<i+1>`` (then ``_2``, ...).
+    ``definition_renames`` and ``part_renames`` hold each tree's renames;
+    ``renamed`` is the record's first new name of each renamed id, which every
+    ``url(#..)`` and ``href`` reference in the record follows.
     """
 
-    content: GroupContent
-    used_ids: frozenset[str]
+    definition_renames: tuple[_IdRenames, ...]
+    part_renames: tuple[_IdRenames, ...]
+    renamed: tuple[tuple[str, str], ...]
+
+
+# Per record: the ids of its copied definitions and of its placed contents, each tree in walk order.
+_RecordIds = tuple[tuple[tuple[str, ...], ...], tuple[tuple[str, ...], ...]]
+
+
+def plan_circular_record_ids(records: Sequence[_RecordIds]) -> tuple[CircularRecordIdPlan, ...]:
+    """The id plan of each record of a Multi-Record Canvas.
+
+    Records in order, and in each record its definitions before its placed
+    contents, are named against one set of used ids, which holds
+    ``record_<i>`` from the start of record ``i``.
+    """
+
+    used_ids: set[str] = set()
+    plans: list[CircularRecordIdPlan] = []
+    for record_index, (definition_ids, part_ids) in enumerate(records):
+        used_ids.add(f"record_{record_index}")
+        renamed: dict[str, str] = {}
+
+        def assign(ids: Sequence[str]) -> _IdRenames:
+            renames: list[tuple[int, str]] = []
+            for ordinal, raw_id in enumerate(ids):
+                candidate = raw_id
+                if candidate in used_ids:
+                    base = f"{raw_id}__record_{record_index + 1}"
+                    candidate = base
+                    duplicate_index = 2
+                    while candidate in used_ids:
+                        candidate = f"{base}_{duplicate_index}"
+                        duplicate_index += 1
+                    renames.append((ordinal, candidate))
+                    renamed.setdefault(raw_id, candidate)
+                used_ids.add(candidate)
+            return tuple(renames)
+
+        definition_renames = tuple(assign(ids) for ids in definition_ids)
+        part_renames = tuple(assign(ids) for ids in part_ids)
+        plans.append(CircularRecordIdPlan(definition_renames, part_renames, tuple(renamed.items())))
+    return tuple(plans)
+
+
+def _require_planned_ids(element: object, planned_ids: tuple[str, ...]) -> None:
+    """Fail when a copied tree's ids, in walk order, are not the ids its plan named."""
+
+    actual = tuple(_record_element_ids(element))
+    if actual != planned_ids:
+        first = next(
+            (index for index, (copied, planned) in enumerate(zip(actual, planned_ids)) if copied != planned),
+            min(len(actual), len(planned_ids)),
+        )
+        raise RuntimeError(
+            f"the record id plan does not match the copied tree at id {first} "
+            f"({len(planned_ids)} planned, {len(actual)} copied)"
+        )
+
+
+def _apply_record_ids(
+    element: object,
+    renames: _IdRenames,
+    *,
+    record_index: int,
+    renamed: tuple[tuple[str, str], ...],
+    bind_record_identity: bool,
+) -> None:
+    """Name the ids of one copied tree by its plan, rewrite the references to
+    renamed ids, and bind feature identities to the record."""
+
+    new_ids = dict(renames)
+    ordinal = 0
+    for attribs in _walk_attributes(element):
+        if bind_record_identity and attribs.get("data-gbdraw-feature-id"):
+            stable_id = attribs["data-gbdraw-feature-id"]
+            rendered_id = attribs.get("data-gbdraw-rendered-feature-id") or stable_id
+            attribs["data-gbdraw-rendered-feature-id"] = instance_svg_id(rendered_id, f"record_{record_index + 1}")
+            attribs["data-gbdraw-stable-feature-id"] = stable_id
+            attribs["data-gbdraw-record-index"] = str(record_index)
+        if bind_record_identity and attribs.get("data-label-feature-id"):
+            attribs["data-label-feature-id"] = instance_svg_id(
+                attribs["data-label-feature-id"], f"record_{record_index + 1}"
+            )
+        if _element_id(attribs) is None:
+            continue
+        if ordinal in new_ids:
+            attribs["id"] = new_ids[ordinal]
+        ordinal += 1
+
+    if not renamed:
+        return
+    names = dict(renamed)
+
+    def replace_url_reference(match: re.Match[str]) -> str:
+        referenced_id = match.group(1)
+        return f"url(#{names.get(referenced_id, referenced_id)})"
+
+    for attribs in _walk_attributes(element):
+        for name, value in tuple(attribs.items()):
+            if not isinstance(value, str):
+                continue
+            rewritten = _SVG_URL_REFERENCE_RE.sub(replace_url_reference, value)
+            if (
+                name in {"href", "xlink:href"}
+                or str(name).rsplit("}", 1)[-1] == "href"
+            ) and rewritten.startswith("#"):
+                rewritten = f"#{names.get(rewritten[1:], rewritten[1:])}"
+            if rewritten != value:
+                attribs[name] = rewritten
+
+
+# One placed top-level group of a record drawing: its content, its attributes in document order, and its key.
+PlacedRecordContent = tuple[GroupContent, tuple[tuple[str, object], ...], GroupKey]
 
 
 def placed_record_contents(
@@ -1207,10 +1305,10 @@ def placed_record_contents(
             continue
         if not isinstance(element, ContentGroup):
             raise RuntimeError(f"a Circular record drawing holds a group that is not a content: {element!r}")
-        placed.append((element.content, tuple(element.attribs.items())))
+        placed.append((element.content, tuple(element.attribs.items()), element.key))
     owners = {
         id(definition): (content_index, definition_index)
-        for content_index, (content, _attributes) in enumerate(placed)
+        for content_index, (content, _attributes, _key) in enumerate(placed)
         for definition_index, definition in enumerate(content.definitions)
     }
     try:
@@ -1220,58 +1318,79 @@ def placed_record_contents(
     return tuple(placed), positions
 
 
+def merge_circular_record_part(
+    content: GroupContent,
+    attributes: tuple[tuple[str, object], ...],
+    *,
+    record_index: int,
+    bind_record_identity: bool,
+    planned_ids: tuple[str, ...],
+    renames: _IdRenames,
+    renamed: tuple[tuple[str, str], ...],
+) -> GroupContent:
+    """The ``record_part`` stage: one placed content of a record, copied for its ``record_<i>`` group.
+
+    The copy drops the single-record composition roles and suffixes the fixed
+    top-level ids; its ids must then be ``planned_ids``, which the record's id
+    plan named (``renames``, ``renamed``). The stored content is not changed:
+    its children are copies (``copy_element_tree``; perf-0140 D-07 keeps the
+    copy).
+    """
+
+    group = Group(debug=False)
+    if content.parameter is not None:
+        group._parameter = content.parameter
+    group.attribs = dict(attributes)
+    group.elements = list(content.children)
+    copied = cast(Group, copy_element_tree(group))
+    _strip_nested_composition_roles(copied)
+    _suffix_fixed_top_level_group_id(copied, record_index)
+    _require_planned_ids(copied, planned_ids)
+    _apply_record_ids(
+        copied, renames, record_index=record_index, renamed=renamed, bind_record_identity=bind_record_identity
+    )
+    return GroupContent.of(copied)
+
+
 def merge_circular_record(
-    placed: tuple[PlacedRecordContent, ...],
-    definition_positions: tuple[tuple[int, int], ...],
+    parts: tuple[tuple[GroupContent, GroupKey], ...],
+    definition_sources: tuple[tuple[GroupContent, int], ...],
     *,
     record_index: int,
     record_id: str,
     bind_record_identity: bool,
-    previous: MergedCircularRecord | None,
-) -> MergedCircularRecord:
-    """The ``record_merge`` stage: copy one record's groups into its ``record_<i>`` group.
+    definition_ids: tuple[tuple[str, ...], ...],
+    plan: CircularRecordIdPlan,
+) -> GroupContent:
+    """The ``record_merge`` stage: one record's ``record_<i>`` group over its copied parts.
 
-    The copies drop the single-record composition roles, suffix the fixed
-    top-level ids, and rename ids that an earlier record (``previous``) or this
-    one already uses, with the references to them. The stored contents are not
-    changed: their children are copies (``copy_element_tree``; perf-0140 D-07
-    keeps the copy).
+    Each part (``record_part``) is placed as a content, so the record's text
+    is its parts' stored texts joined and an unchanged part keeps its copy.
+    The definitions (content, index in its definitions) are copied here, each
+    checked against the ids the plan named (``definition_ids``).
     """
 
-    used_ids = set(previous.used_ids) if previous is not None else set()
-    used_ids.add(f"record_{record_index}")
-    copied_definitions: list[BaseElement] = [
-        copy_element_tree(placed[content_index][0].definitions[definition_index])
-        for content_index, definition_index in definition_positions
-    ]
-    copied_elements: list[Group] = []
-    for content, attributes in placed:
-        group = Group(debug=False)
-        if content.parameter is not None:
-            group._parameter = content.parameter
-        group.attribs = dict(attributes)
-        group.elements = list(content.children)
-        copied = cast(Group, copy_element_tree(group))
-        _strip_nested_composition_roles(copied)
-        _suffix_fixed_top_level_group_id(copied, record_index)
-        copied_elements.append(copied)
-    for definition in copied_definitions:
+    copied_definitions: list[BaseElement] = []
+    for (content, definition_index), planned_ids, renames in zip(
+        definition_sources, definition_ids, plan.definition_renames, strict=True
+    ):
+        definition = copy_element_tree(content.definitions[definition_index])
         _strip_nested_composition_roles(definition)
-    _uniquify_copied_subtrees_ids(
-        (*copied_definitions, *copied_elements),
-        record_index=record_index,
-        used_ids=used_ids,
-        bind_record_identity=bind_record_identity,
-    )
+        _require_planned_ids(definition, planned_ids)
+        _apply_record_ids(
+            definition,
+            renames,
+            record_index=record_index,
+            renamed=plan.renamed,
+            bind_record_identity=bind_record_identity,
+        )
+        copied_definitions.append(definition)
     record_group = Group(id=f"record_{record_index}")
     record_group.attribs["data-gbdraw-record-id"] = record_id
     record_group.attribs["data-gbdraw-record-index"] = str(record_index)
-    for copied in copied_elements:
-        record_group.add(copied)
-    return MergedCircularRecord(
-        content=GroupContent.of(record_group, tuple(copied_definitions)),
-        used_ids=frozenset(used_ids),
-    )
+    for part, key in parts:
+        record_group.add(ContentGroup(part, key))
+    return GroupContent.of(record_group, tuple(copied_definitions))
 
 
 def _is_defs_element(element: object) -> bool:
@@ -1394,18 +1513,24 @@ def _circular_plot_title_content(
         legend="none",
         gb_record=gb_record,
     )
+    facts = definition_record_facts(gb_record, gc_percent=False)
     return painted_title_content(render_stage(
         "circular_plot_title_content",
         build_group_content,
         DefinitionGroup,
-        definition_record_facts(gb_record, gc_percent=False),
+        facts,
         plot_title_canvas_config.geometry(),
         style=CircularDefinitionStyle.of(cfg, "shared_common"),
-        species=species,
-        strain=strain,
-        plot_title=plot_title,
+        # A typed title replaces the name, so the species and strain do not key it (OV-2110).
+        names=DefinitionNameLines.of(
+            facts.metadata,
+            "shared_common",
+            species=species,
+            strain=strain,
+            plot_title=plot_title,
+            record_presentation=record_presentation,
+        ),
         definition_group_id="plot_title",
-        record_presentation=record_presentation,
     ))
 
 
@@ -3449,23 +3574,56 @@ def assemble_circular_diagram_from_records(
             and any(transform.start_coordinate is not None for transform in _record_transforms)
         )
     )
-    merged_record: MergedCircularRecord | None = None
+    record_placements = [placed_record_contents(result.drawing) for result in record_results]
+    # The plan's input, per record: the ids of its copied definitions and of its placed contents.
+    record_ids: list[_RecordIds] = [
+        (
+            tuple(
+                tuple(_record_element_ids(placed[content_index][0].definitions[definition_index]))
+                for content_index, definition_index in definition_positions
+            ),
+            tuple(_placed_record_ids(content, attributes, record_index) for content, attributes, _key in placed),
+        )
+        for record_index, (placed, definition_positions) in enumerate(record_placements)
+    ]
+    id_plans = plan_circular_record_ids(record_ids)
 
-    for record_index, result in enumerate(record_results):
-        placed, definition_positions = placed_record_contents(result.drawing)
-        merged_record = render_stage(
+    for record_index, (result, (placed, definition_positions), (definition_ids, part_ids), id_plan) in enumerate(
+        zip(record_results, record_placements, record_ids, id_plans, strict=True)
+    ):
+        parts = tuple(
+            (
+                render_stage(
+                    "record_part",
+                    merge_circular_record_part,
+                    content,
+                    attributes,
+                    record_index=record_index,
+                    bind_record_identity=bind_record_identity,
+                    planned_ids=planned_ids,
+                    renames=renames,
+                    renamed=id_plan.renamed,
+                ),
+                key,
+            )
+            for (content, attributes, key), planned_ids, renames in zip(
+                placed, part_ids, id_plan.part_renames, strict=True
+            )
+        )
+        merged_content = render_stage(
             "record_merge",
             merge_circular_record,
-            placed,
-            definition_positions,
+            parts,
+            tuple((placed[content_index][0], definition_index) for content_index, definition_index in definition_positions),
             record_index=record_index,
             record_id=str(records[record_index].id),
             bind_record_identity=bind_record_identity,
-            previous=merged_record,
+            definition_ids=definition_ids,
+            plan=id_plan,
         )
         record_group = place_content(
             merged_canvas,
-            merged_record.content,
+            merged_content,
             GroupKey(record_key_at(records[record_index], record_index), GroupKind.RECORD),
         )
         record_dx, record_dy = grid_layout.translations[record_index]
@@ -3615,7 +3773,9 @@ def _checked_circular_drawing(
 
     def verify(overrides: Mapping[str, LabelFitValue]) -> LabelFitVerification:
         try:
-            verified = assemble(overrides)
+            # A row is verified with the full placement and no capacity check, so the rows stay as they were.
+            with label_capacity_unchecked():
+                verified = assemble(overrides)
         except ValidationError as error:
             unfit = _unfit_row_verification(error)
             if unfit is None:

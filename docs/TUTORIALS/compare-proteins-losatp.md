@@ -42,7 +42,9 @@ Each interface creates these files:
 | Python | `bgc_losatp_groups.py`, the program from Step 2 | `python_bgc_losatp_groups.svg` | [`python_bgc_losatp_groups.svg`](../images/t-py-05/python_bgc_losatp_groups.svg) |
 
 For the command line and Python, install gbdraw so that `gbdraw -h` succeeds
-and start in an empty working directory.
+and start in an empty working directory. These steps run native LOSAT: run
+`gbdraw setup-losat` once, or put `losat` on `PATH` (a conda environment with
+the `losat` package provides it).
 
 ## In the web app
 
@@ -304,7 +306,7 @@ gbdraw linear \
 ```
 <!-- executable:T-CLI-08:end -->
 
-Expected output: the bundled LOSAT runtime performs four adjacent searches and
+Expected output: LOSAT performs four adjacent searches and
 writes `bgc_losatp_groups.svg` in the working directory.
 
 Open `bgc_losatp_groups.svg` and compare its record order and link layout with

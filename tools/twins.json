@@ -1212,6 +1212,96 @@
       "reason": "Both test suites read only its sha256 to prove the frozen Session is unchanged; it holds no expected values. Registered because the detector sees it; classification awaits the Owner.",
       "retireWhen": "never: a frozen historical fixture keeps its readers",
       "source": "OV-1665 (tests/fixtures subfolders; twin.unregistered.v1 on origin/dev f0b23d4ac)"
+    },
+    {
+      "id": "vector:tests/fixtures/sessions/drawings-vectors.json",
+      "concern": "Drawing IDs and the move of a Session 46-48 to the list of drawings (Session 49)",
+      "pythonOwner": [
+        "gbdraw/session_drawings.py:allocate_drawing_id",
+        "gbdraw/session_drawings.py:drawings_document_from_mode_scoped"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/drawing-view.js:allocateDrawingId",
+        "gbdraw/web/js/services/session-drawings-upgrade.js:upgradeModeScopedSession"
+      ],
+      "vector": "tests/fixtures/sessions/drawings-vectors.json",
+      "reason": "The Web allocates a new drawing's ID and moves a Session 46-48 to drawings without Python (PD-OI-090); Python reads and re-saves the same files. The ids and upgrades vectors pin both sides.",
+      "retireWhen": "Session 46-48 is no longer read and drawing IDs are allocated on one side only",
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
+      "pending": true
+    },
+    {
+      "id": "function:migratedDrawingModes",
+      "concern": "Which modes of a Session 46-48 become drawings, and their order",
+      "pythonOwner": [
+        "gbdraw/session_drawings.py:_migrated_drawing_modes"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/session-drawings-upgrade.js:migratedDrawingModes"
+      ],
+      "vector": "tests/fixtures/sessions/drawings-vectors.json",
+      "reason": "The Web fast path and Python Load of a Session 46-48 must make the same drawings in the same order (R17-1, R17-2, R17-7); the upgrades vectors pin both.",
+      "retireWhen": "Session 46-48 is no longer read",
+      "source": "twin.unregistered.v1 on feat/web-drawings-b e83a60a06 (DRAWINGS-B; P0e)",
+      "pending": true
+    },
+    {
+      "id": "concern:feature-instance-record-key",
+      "concern": "Feature instance text (<biological feature ID>@<record key>) and the CLI record key of a record input (record-<n>, record-<n>:<k> for an input that expands to several records)",
+      "pythonOwner": [
+        "gbdraw/features/ids.py:feature_instance",
+        "gbdraw/api/record_planning.py:resolve_record_inputs"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/feature-selector.js:namedFeatureInstance",
+        "gbdraw/web/js/services/record-draw-selection.js:expandedRecordKey"
+      ],
+      "vector": null,
+      "reason": "A \"This feature only\" hash rule names one feature instance, which Python composes and matches whole. The Web reads the record key out of a rule at the separator and composes a rule naming another record key in the same function (namedFeatureInstance: Delete settings, Run Info, and a Generate that moves a record's rows to its new key), composes the CLI key record-<n> of the n-th record input in one function (cliRecordKey in services/record-draw-selection.js, which the Circular canvas key also uses), and composes the <key>:<k> record key of an expanding input in one function (expandedRecordKey: a Linear record identity, the request split of an ALL card, and the CLI record key that Run Info writes in the Source recipe -t table). The separator and the record key prefix and expansion separator are generated constants (tools/generate_web_contracts.py: FEATURE_INSTANCE_SEPARATOR, CLI_RECORD_KEY_PREFIX, EXPANDED_RECORD_KEY_SEPARATOR); the order of the parts is copied. tests/web/run-info.test.mjs runs the CLI on the rewritten table for a plain and an expanded record and checks that it colors one copy; no shared vector.",
+      "retireWhen": "Python writes the CLI form of the specific color table for the Source recipe and names the record of an instance row, so the Web neither parses nor composes an instance",
+      "source": "PR #1395 (feature-color-leak-20261026, REVIEW-2 item 1); the detector does not see it"
+    },
+    {
+      "id": "constant:LabelCapacityRemedy",
+      "concern": "Capacity remedy ids (filter, label_text, font, linear) and their order, in a capacity stop's report",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:LabelCapacityRemedy"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_REMEDY_WORDS"
+      ],
+      "vector": null,
+      "reason": "Python names the remedies of a capacity stop by id, in its order; the Web admits a report only with ids among the keys of its words map and lists them in Python's order. The keys copy the ids by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
+      "retireWhen": "the ids are generated into contracts/schema.generated.js and the Web words map is keyed by the generated ids, so the Web keeps no hand copy",
+      "source": "PR #1402 review S1 (bigdata-perf-20261026, D-16); the detector does not see it"
+    },
+    {
+      "id": "constant:HorizontalLabelKind",
+      "concern": "Label kinds whose room a capacity check reads (circular_outer, circular_inner) and their order, in a capacity stop's report and a capacity notice",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:HorizontalLabelKind"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_KIND_WORDS"
+      ],
+      "vector": null,
+      "reason": "Python names the side of a capacity stop record, a capacity notice, and the LABEL_LAYOUT context key by label kind; the Web admits a capacity only with a kind among the keys of its words map and words the room in that kind's sentence. The keys copy the kinds by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
+      "retireWhen": "the kinds are generated into contracts/schema.generated.js and the Web words map is keyed by the generated kinds, so the Web keeps no hand copy",
+      "source": "PR #1447 review F1 (release-0143-20261027, OV-2179); the detector does not see it"
+    },
+    {
+      "id": "concern:label-fit-no-row-ways",
+      "concern": "When the ways to make room are listed: only when every label fit row is known not to fit (not_found)",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:format_label_fit_report"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/label-fit-dialog.js:createLabelFitDialog"
+      ],
+      "vector": null,
+      "reason": "Python lists the ways in the CLI text (the elif missing branch of format_label_fit_report, through _room_lines) when every row is not_found; the Web dialog computes its rows after Python's report arrives, so its listRemedies, a closure inside createLabelFitDialog that a path:name owner cannot name, decides again when to list the ways that Python sends for any report whose rows have no value. No vector file: tests/test_web_label_fit.py and tests/web/label-fit.test.mjs each pin the same three cases (every row not_found: listed; one row found: not listed; one row still to compute: not listed).",
+      "retireWhen": "the report carries whether to list the ways once the rows settle and the Web reads it, or one side is deleted",
+      "source": "PR #1447 review round 3 F1 (release-0143-20261027, OV-2180); the detector does not see it"
     }
   ]
 }

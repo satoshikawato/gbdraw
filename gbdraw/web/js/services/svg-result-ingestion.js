@@ -28,6 +28,8 @@ import {
   pythonLegendKey,
   pythonLegendRow,
   pythonLegendRows,
+  pythonOrderedLegendRows,
+  recordedGroupOrder,
   setsFeatureStroke,
   SPECIFIC_COLOR_FILE_OWNER
 } from './legend-svg.js';
@@ -1068,7 +1070,8 @@ const applyLegendOperations = (index, operations, {
   let changed = false;
   // Python never draws a row the Legend editor added, so the row is added first and
   // a fill or stroke on it then finds it like a generated row (OV-86). An added row
-  // copies Python's first row as Python drew it, before this pass styles that row.
+  // copies Python's first row as Python drew it, before this pass styles that row,
+  // whatever row a user order shows first (OV-2188).
   // A rule commit's row (`ifAbsent`) is added only where the Result lacks it,
   // before the row it replaces, and owned by the rules; a row of that caption
   // the Result has stays as it is, shown again if a commit retired it.
@@ -1101,8 +1104,12 @@ const applyLegendOperations = (index, operations, {
     }
     entries.set(caption, groups.map((group) => {
       const rows = Array.from(group.querySelectorAll('g[data-legend-key]'));
-      const template = rows.find((entry) => !isEditorRow(entry));
-      const row = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
+      // The template is Python's first row, whatever row a user order shows
+      // first (OV-2188): its own row when it has one, since a rule commit's row
+      // an older build saved may carry a copied GC row's "no line".
+      const pythonRows = pythonOrderedLegendRows(group);
+      const template = pythonRows.find((pythonRow) => !pythonRow.hasAttribute('data-legend-owner')) ?? pythonRows[0];
+      const row = /** @type {Element | null} */ (template?.cloneNode(true) || null);
       if (!row) throw new Error('Current SVG has no Legend entry template.');
       // The copy is of Python's row as drawn, not of that row's edits (OV-121);
       // Python draws no hidden row.
@@ -1180,8 +1187,7 @@ const applyLegendOperations = (index, operations, {
 // of a group's order records Python's order of its rows (their Python keys).
 /** @param {Element} group @param {readonly string[]} captions @param {boolean} keepFollowed */
 const orderLegendGroup = (group, captions, keepFollowed) => {
-  const pythonOrder = JSON.stringify(Array.from(group.querySelectorAll('g[data-legend-key]'))
-    .filter((entry) => !isEditorRow(entry)).map(pythonLegendKey));
+  const pythonOrder = JSON.stringify(pythonOrderedLegendRows(group).map(pythonLegendKey));
   const moved = orderLegendEntries(group, captions, { keepFollowed });
   if (moved && !group.hasAttribute(LEGEND_ORDER_RECORD)) group.setAttribute(LEGEND_ORDER_RECORD, pythonOrder);
   return moved;
@@ -1209,12 +1215,9 @@ const restoreLegendStructure = (index, operations, domains) => {
   }
   if (domains.includes('legendOrder') && operations.legendOrder.length === 0) {
     groups.forEach((group) => {
-      const recorded = group.getAttribute(LEGEND_ORDER_RECORD);
-      if (recorded === null) return;
-      /** @type {unknown} */
-      let order = null;
-      try { order = JSON.parse(recorded); } catch { order = null; }
-      if (Array.isArray(order)) changed = orderLegendGroup(group, order.map(text), false) || changed;
+      if (!group.hasAttribute(LEGEND_ORDER_RECORD)) return;
+      const order = recordedGroupOrder(group);
+      if (order) changed = orderLegendGroup(group, order.map(text), false) || changed;
       // The record's removal is a change, so the stored Result loses it too.
       group.removeAttribute(LEGEND_ORDER_RECORD);
       changed = true;

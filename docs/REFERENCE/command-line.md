@@ -42,9 +42,8 @@ Searches never download. Automatic native selection uses this order:
 1. `--losat_bin` or an explicit `--ncbi_blast_bin`;
 2. lowercase `bin/losat` in the running Python's conda prefix;
 3. the verified managed cache;
-4. a source-checkout bundled binary;
-5. `losat` on `PATH`;
-6. the NCBI BLAST+ program of the search (`blastn`, `tblastx`, or `blastp`) on `PATH`.
+4. `losat` on `PATH`;
+5. the NCBI BLAST+ program of the search (`blastn`, `tblastx`, or `blastp`) on `PATH`.
 
 gbdraw recognizes a conda prefix only when `Path(sys.prefix) / "conda-meta"` is a
 directory. It does not use `CONDA_PREFIX`, `PATH`, or
@@ -63,14 +62,17 @@ gbdraw never treats an interrupted temporary download as an installation.
 Later setup runs and searches reuse a valid cache offline. `INSTALL.json` records the URL,
 version, target, source commit, archive hash and binary hash.
 
-Explicit native LOSAT executables must support CLI v2 (`-max_hsps`,
-`-max_target_seqs`, and `-num_threads`).
+Every native LOSAT executable must support CLI v2, the released v0.1.0
+spelling (`-query_gencode`, `-db_gencode`, `-max_hsps`, `-max_target_seqs`,
+and `-num_threads`).
 
 Native executables are excluded from the platform-independent wheel and sdist.
 Conda installs executables under its environment's `bin` directory;
-gbdraw's PyPI metadata has no native LOSAT dependency. A binary bundled in a
-source checkout is still found. The web app's Wasm execution and assets are
-unchanged.
+gbdraw's PyPI metadata has no native LOSAT dependency. A source checkout has
+no LOSAT binary either; run `gbdraw setup-losat` there too. The run log has one
+`INFO` line per search that names the backend (`losat` or `ncbi-blast`), its
+source (`explicit`, `conda`, `managed`, or `path`), and the executable. The web
+app's Wasm execution and assets are unchanged.
 
 
 ## Shared input rules
@@ -255,7 +257,7 @@ With `--session`, only output and format overrides, session-output options,
 `--font_file`, `--no_font_embedding`, `--drawing`, and `--overwrite` are accepted; other diagram flags would mix
 persisted and new settings.
 
-A Session holds one or more drawings, one per diagram. Session 48 holds at most
+A Session holds one or more drawings, one per diagram. Session 49 holds at most
 a Circular drawing (ID `circular`) and a Linear drawing (ID `linear`).
 `gbdraw render --session FILE` renders every drawing with a committed render
 and skips a drawing without one (a settings-only Session) with a notice.

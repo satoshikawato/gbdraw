@@ -12,6 +12,102 @@ breaking change enters `main`; a later breaking change made before that version
 reaches `main` goes into its entry
 ([Persisted contract co-change](./WEB_CHANGE_POLICY.md#persisted-contract-co-change)).
 
+## Unreleased: Session 49 stores whether a Circular slice shows the centre definition
+
+Session version 49 adds `adv.show_definition` (boolean, Circular **Show
+Definition**, PD-OI-109) to the Circular slice (`modes.circular.config.adv`),
+an `own` row of the mode-scoped registry
+(`gbdraw/web_support/mode_scoped_settings.py`). The mode-slice `adv` shape is
+closed and Session 48 reached `main` with 0.14.0, whose reader refuses the key,
+so the key needs a new version. The canonical request carries the setting as
+the config override `objects.definition.circular.show` only when it is `false`
+(the Web writer, `--hide_definition`, or a Python `config_overrides`); a
+request that shows the definition is the request an earlier writer wrote, and
+Gallery publication compares it unchanged. A Session up to 48 has no key and
+loads with the definition shown (`trueUnlessFalse` in
+`services/config-field-readers.js`); no reader converts it. Load projects a
+request's `false` into the slice (`projectCanonicalSessionRequest`).
+
+The checks that listed each Web-draft version by hand (the settings-only form
+and Web binding schema 2, in `gbdraw/session_io.py` and
+`services/session-authority.js`) now accept every version from 46 to the
+current one, so Session 48 keeps its settings-only form. The Gallery and
+test-input Sessions were refreshed to 49 (`tools/refresh_gallery_sessions.py`).
+Positive fixtures of Session 48: `tests/fixtures/sessions/*.v48.*`.
+
+## Unreleased: LOSAT runtime records without `cli` or `bundled`
+
+No Session or request version changes. The source tree no longer holds a LOSAT
+build, so new CLI and Python writers no longer write the `cli` dialect field in
+a `losatCache` entry's `runtime` record and cannot write `source: "bundled"`.
+A new record is `{kind, version, source, path, program}` with `source` one of
+`explicit`, `conda`, `managed`, or `path` (`LosatRuntimeRecord` in
+`gbdraw/comparisons/losat_runtime.py`). Older records still load unchanged:
+Python copies `runtime` as stored (`LosatRawCache._add_loaded_entry` and
+`_add_search_entry`), and the Web run information reads only `source` and
+`path` (`gbdraw/web/js/app/run-info.js`). The positive fixture is
+`gbdraw/web/gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz`,
+whose 12 records are `{source: "bundled", path: "gbdraw/bin/linux-x86_64/losat",
+cli: "v1"}`; `tests/web/run-info.test.mjs` and `tests/web/losat-cache.test.mjs`
+pin how the Web reads them.
+
+## Unreleased: the palette `hearbal_garden` reads as `herbal_garden`
+
+No Session or request version changes. Releases through v0.14.2 shipped the
+packaged palette as `hearbal_garden` (`gbdraw/data/color_palettes.toml`). A
+Session names a palette in `config.palette` (Web), `ui.appliedPaletteName` and
+`ui.pendingPaletteName` (Web), and
+`renderRequest.diagramOptions.colors.defaultColorsPalette`. The table is now
+`herbal_garden`; `PALETTE_NAME_ALIASES` (`gbdraw/io/colors.py`, written to
+`js/contracts/schema.generated.js` by `tools/generate_web_contracts.py`) maps
+the former name to it, through `current_palette_name` in Python and
+`currentPaletteName` in the Web.
+
+- Python: `packaged_color_palettes()` looks a former name up and lists only
+  current names (render, `require_palette_name`, the Session mode split).
+  `ColorOptions` stores the current name, so every request (CLI, Python API, a
+  decoded Session or request) draws it and a Session written from it names it.
+  A CLI Session's `cliInvocation.args` keeps the command line as typed.
+- Web: the palette slice (`services/drawing/palette.js`) stores the current
+  name of the drawing's palette and of a queued palette, from Load, History,
+  and every switch. `normalizePaletteDefinitions` adds the former name as a
+  non-enumerable lookup key, so the raw-name lookups of Load (the mode split)
+  find it and the palette list shows only `herbal_garden`. Load copies
+  `ui.appliedPaletteName` and passes `renderRequest` through as saved
+  (`services/config.js`), so a Web Save keeps the former name there until the
+  next Generate; `app/results.js` compares the applied palette by its current
+  name, and Python reads the request through `ColorOptions`.
+
+Fixture: `tests/fixtures/sessions/HmmtDNA-hearbal-garden-cli.v48`, written by
+v0.14.2.
+
+## Unreleased: per-feature rows follow their record to a new key
+
+No Session or request version changes, and no reader changes. A per-feature
+row (`featureOverrides`, `featurePlacementOverrides`, `featureStrokeOverrides`,
+an annotation's `featureIdentity`, and a `hash` color rule
+`<feature id>@<record key>`) is still keyed by the request record key of the
+view it was last drawn in: Circular `record-<k>` on the Multi-Record Canvas and
+`circular-<record id>-#<k>` for a record drawn alone, Linear `<uid>:<k>` for a
+File card that draws several records and `<uid>` for one record. Each
+successful Web Generate moves the rows of a record whose key changed to its new
+key (`recordKeyMoves` in `js/services/record-draw-selection.js`; the rows are
+written by `pruneUnmatchedFeatureOverrides`, the `hash` rules by the
+Generate's rule commit), and the rows of a record that the request does not
+draw wait under its identity (`record-<k>`, or `<uid>:<k>` in a multi-record
+File). Each Generate also brings the rows a drawn record has under its other
+keys (Circular: its key drawn alone or on the canvas; Linear: its
+identity) into its key,
+field by field: the row moved from its previous key, or else the row already
+under its key, wins; of two `hash` rules that then name one feature instance,
+that record's own rule stays and the other is dropped. A Session of 48 or earlier is read as before; its rows move
+at its first Generate. Limit: edits made on a Linear card that draws every
+record of its file (written by gbdraw 0.13.0) do not follow its records after
+the first Generate splits the card into one card per record. The only request-key change: a Circular record drawn
+alone no longer keeps a stored `record-<n>` key that names another record.
+Fixture: `tests/fixtures/sessions/record-identity-circular-single.v48`, written
+by `v0.14.2`.
+
 ## Unreleased: one comparison-match attribute in saved Results
 
 No Session or request version changes. On the first-parent line of `main`,
@@ -483,9 +579,11 @@ compared record pair with the raw search-frame rows, and one schema 2
 `losatCache` entry per pair with the web raw key and the non-key `runtime`
 record. Entries that the web app searches carry `runtime` too, as
 `{kind: "losat", source: "wasm", version: null, program}`. A CLI or Python
-runtime outside the package records only its executable's name as `path` (for
-example `losat` or `blastn`), so the runtime record carries no local directory;
-the bundled runtime records `gbdraw/bin/<platform>/losat`. A CLI Session's
+runtime records only its executable's name as `path` (for example `losat`,
+`LOSAT`, or `blastn`), so the runtime record carries no local directory. The
+runtime once bundled in a source checkout recorded
+`gbdraw/bin/<platform>/losat` (see "LOSAT runtime records without `cli` or
+`bundled`" above). A CLI Session's
 `cliInvocation.args` still hold `--losat_bin` and the input and output paths
 as typed. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the

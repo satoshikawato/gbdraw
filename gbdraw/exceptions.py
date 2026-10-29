@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Mapping
 
 if TYPE_CHECKING:
-    from gbdraw.labels.fit import LabelFitReport, LabelFitRows
+    from gbdraw.labels.fit import HorizontalLabelKind, LabelCapacityRecord, LabelFitReport, LabelFitRows
 
 
 class GbdrawError(Exception):
@@ -76,10 +76,31 @@ class ExportError(GbdrawError):
     """Raised when an explicitly requested library export cannot be generated."""
 
 
+def label_capacity_context_key(kind: HorizontalLabelKind) -> str:
+    """The Web error's context key of the room one side's labels need when they were not placed (CAPACITY-STOP).
+
+    One branch per kind: mypy reports a missing return when ``HorizontalLabelKind`` gains a kind.
+    """
+
+    if kind == "circular_outer":
+        return "labelCapacityOuter"
+    if kind == "circular_inner":
+        return "labelCapacityInner"
+
+
 def _label_fit_diagnostic(report: LabelFitReport) -> dict[str, object]:
     # The code alone names the failure; the shared CANNOT_FIT reason carries track wording.
-    from gbdraw.labels.fit import label_fit_error_counts
+    from gbdraw.labels.fit import label_fit_error_counts, largest_capacities, shown_capacity_ratio
 
+    largest = largest_capacities(report)
+    if largest:
+        # Labels that need much more room than the map has were not placed: there is no fix to choose (CAPACITY-STOP).
+        # The Web words the room each side needs from its value (OV-2179).
+        return {
+            "code": "LABEL_LAYOUT",
+            "reason": "LABEL_CAPACITY",
+            **{label_capacity_context_key(kind): shown_capacity_ratio(capacity) for kind, capacity in largest.items()},
+        }
     return {"code": "LABEL_LAYOUT", "labelFitCounts": label_fit_error_counts(report)}
 
 
@@ -115,6 +136,22 @@ class LabelLeadersCrossWarning(UserWarning):
         self.report = report
 
 
+class LabelsMayNotFitWarning(UserWarning):
+    """A record's Circular labels need much of the room around the map, so they may not fit and placing them can take
+    minutes (CAPACITY-WARN); warned before they are placed.
+
+    ``capacity`` is the room they need; ``record_id`` and ``label_kind`` name them.
+    """
+
+    def __init__(
+        self, message: str, *, record_id: str, label_kind: HorizontalLabelKind, capacity: LabelCapacityRecord
+    ) -> None:
+        super().__init__(message)
+        self.record_id = record_id
+        self.label_kind = label_kind
+        self.capacity = capacity
+
+
 __all__ = [
     "ComparisonIdentityError",
     "ConfigError",
@@ -123,6 +160,7 @@ __all__ = [
     "InputFileError",
     "LabelLeadersCrossWarning",
     "LabelsDoNotFitError",
+    "LabelsMayNotFitWarning",
     "ParseError",
     "ValidationError",
 ]

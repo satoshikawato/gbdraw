@@ -4,7 +4,9 @@ import base64
 import copy
 import hashlib
 import json
+from collections import OrderedDict
 from pathlib import Path
+from typing import Callable
 
 from Bio import SeqIO
 from Bio.Seq import Seq
@@ -14,11 +16,14 @@ import pandas as pd
 import pytest
 
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.analysis.depth import DEPTH_COLUMNS, _read_depth_tsv_cached, clear_depth_tsv_cache
+import gbdraw.analysis.depth as depth_module
 from gbdraw.api import (
     CircularBatchRequest,
     CircularDiagramOptions,
     CircularDiagramRequest,
     CircularOutputOptions,
+    DepthTrackInput,
     GenBankInputSource,
     GffFastaInputSource,
     LinearDiagramOptions,
@@ -913,7 +918,7 @@ def test_each_drawing_keeps_the_prepared_inputs_of_its_last_request(tmp_path: Pa
             request_id=request_id,
             # The first drawing's file has token 101, the second's 201.
             token_generation=1 if drawing == "circular" else 2,
-            retention={"drawing": drawing, "resourceTokens": list(retained)},
+            retention={"drawing": drawing, "resourceTokens": list(retained), "heldTokens": []},
         )
         return _metrics(diagnostics)
 
@@ -1568,7 +1573,7 @@ def test_request_after_a_failed_render_checks_owners_in_full_at_entry(
     assert reached_render is True
 
 
-def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_builds(
+def test_a_request_compares_each_cached_feature_once_only_when_a_record_stage_builds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1579,13 +1584,18 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     _render(tmp_path, cache, document, request_id=1)
 
     walked: list[int] = []
-    original = prepared_module._feature_stamp
+    original = prepared_module._feature_hash_bytes
 
     def counting(feature: object) -> object:
         walked.append(id(feature))
         return original(feature)
 
-    monkeypatch.setattr(prepared_module, "_feature_stamp", counting)
+    def whole_stamp(value: object, *, walk_features: bool) -> object:
+        pytest.fail("a check of a cached entry built its whole stamp")
+
+    monkeypatch.setattr(prepared_module, "_feature_hash_bytes", counting)
+    # The checks compare each part with the stored stamp; only a build stamps a value whole.
+    monkeypatch.setattr(prepared_module, "_owner_stamp", whole_stamp)
     # O-2: a warm repeat builds no record entry and no stage that takes a record.
     _result, diagnostics = _render(tmp_path, cache, document, request_id=2)
     metrics = _metrics(diagnostics)
@@ -1596,7 +1606,9 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
     assert walked == []
 
     # A feature selection change builds the feature layers, which take the
-    # record: one full walk per cached entry that holds records, at commit.
+    # record: one full check per cached entry that holds records, at commit.
+    # The parsed and resolved entries hold the same feature objects, and the
+    # commit compares each feature object once.
     _result, diagnostics = _render(
         tmp_path, cache, _document(source, title="Walk count", selected_features=("CDS",)), request_id=3
     )
@@ -1610,13 +1622,14 @@ def test_a_request_walks_each_cached_feature_once_only_when_a_record_stage_build
         if prepared_module._records_from_value(entry.value) is not None
     ]
     assert metrics["preparedInputCacheFullCheckCount"] == len(record_entries) > 0
-    cached_features = sum(
-        len(record.features)
+    cached_features = [
+        id(feature)
         for entry in record_entries
         for record in prepared_module._records_from_value(entry.value) or ()
-    )
-    assert cached_features > 0
-    assert len(walked) == cached_features
+        for feature in record.features
+    ]
+    assert len(cached_features) > len(set(cached_features)) > 0
+    assert sorted(walked) == sorted(set(cached_features))
 
 
 def test_the_full_owner_stamp_keeps_a_fixed_size_per_feature() -> None:
@@ -1673,6 +1686,438 @@ def test_a_full_check_names_the_changed_feature_and_field(
                 ("source", identity), frozenset({identity}), lambda: pytest.fail("the entry check is structural"),
             )
             _read_in_a_record_stage(records[0], "named")
+
+
+class _NoSourceFeatures:
+    captured = ()
+
+
+class _GuardedOrigin:
+    """One record's provenance item; the guard stamps it by identity."""
+
+    source_features = _NoSourceFeatures()
+
+
+class _GuardedRecords:
+    """A cached value that holds records and their provenance, as a resolved record collection does."""
+
+    def __init__(self, records: tuple[SeqRecord, ...], provenance: object) -> None:
+        self.records = records
+        self.provenance = provenance
+
+
+def _guarded_records(qualifiers: Callable[[], dict[object, object]] | None = None) -> _GuardedRecords:
+    def feature(index: int) -> SeqFeature:
+        return SeqFeature(
+            FeatureLocation(10 * index, 10 * index + 9, strand=1 if index % 2 else -1),
+            type="CDS",
+            qualifiers=(
+                qualifiers()
+                if qualifiers is not None
+                else {"locus_tag": [f"T{index}"], "product": ["p"], "note": ["a", "b"]}
+            ),
+        )
+
+    records = tuple(
+        SeqRecord(
+            Seq("ACGT" * 50),
+            id=f"r{number}",
+            name=f"R{number}",
+            annotations={"molecule_type": "DNA", "refs": [1, 2]},
+            features=[feature(index) for index in range(4)],
+        )
+        for number in range(2)
+    )
+    return _GuardedRecords(records, (_GuardedOrigin(), _GuardedOrigin()))
+
+
+def _guarded_feature(value: _GuardedRecords) -> SeqFeature:
+    return value.records[1].features[2]
+
+
+def _feature_listed_twice() -> _GuardedRecords:
+    value = _guarded_records()
+    value.records[1].features[3] = value.records[1].features[2]
+    return value
+
+
+def _nan_atoms() -> _GuardedRecords:
+    value = _guarded_records(lambda: {"locus_tag": ["T"], "score": float("nan")})
+    value.records[1].annotations["score"] = float("nan")
+    return value
+
+
+def _swap_int_key_for_its_str(value: _GuardedRecords) -> None:
+    qualifiers = _guarded_feature(value).qualifiers
+    qualifiers.pop("1")
+    qualifiers["1"] = qualifiers.pop(1)
+
+
+def _shift_location(value: _GuardedRecords, end: str, by: int) -> None:
+    location = _guarded_feature(value).location
+    position = getattr(location, end)
+    setattr(location, end, type(position)(int(position) + by))
+
+
+_QUALIFIERS = "record 1 feature 2 qualifiers"
+# (fixture, write, detail of the full check, detail of the structure check);
+# None: the check passes.
+_OWNER_WRITES = [
+    pytest.param(_guarded_records, lambda v: None, None, None, id="none"),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers["note"].append("c"), _QUALIFIERS, None,
+        id="append to a qualifier value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.__setitem__("note", ["a", "b"]), _QUALIFIERS, None,
+        id="replace a qualifier value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.__setitem__("gene", ["g"]), _QUALIFIERS, None,
+        id="add a qualifier",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _guarded_feature(v).qualifiers.pop("product"), _QUALIFIERS, None,
+        id="delete a qualifier",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: setattr(_guarded_feature(v), "qualifiers", dict(_guarded_feature(v).qualifiers)),
+        _QUALIFIERS, None, id="replace the qualifier dict by a copy",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "qualifiers", None), _QUALIFIERS, None,
+        id="qualifiers to None",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "location", _guarded_feature(v).location + 1),
+        "record 1 feature 2 location owner", None, id="move the location",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _shift_location(v, "_start", 1), "record 1 feature 2 start", None,
+        id="in-place location start",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: _shift_location(v, "_end", 1), "record 1 feature 2 end", None,
+        id="in-place location end",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v).location, "strand", 1), "record 1 feature 2 strand",
+        None, id="in-place location strand",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(_guarded_feature(v), "type", "gene"), "record 1 feature 2 type", None,
+        id="change the type",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: v.records[1].features.append(SeqFeature(FeatureLocation(0, 5), type="misc")),
+        "record 1 feature count", "record 1 feature count", id="append a feature",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: v.records[1].features.__setitem__(2, copy.copy(_guarded_feature(v))),
+        "record 1 feature 2 owner", None, id="replace a feature",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "features", list(v.records[1].features)),
+        "record 1 feature-list owner", "record 1 feature-list owner", id="replace the feature list by a copy",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "id", "zz"), "record 1 id", "record 1 id",
+        id="change the record id",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "name", "ZZ"), "record 1 name", "record 1 name",
+        id="change the record name",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v.records[1], "seq", Seq("ACGT" * 50)),
+        "record 1 sequence owner", "record 1 sequence owner", id="replace the sequence",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", v.records[:1] + (copy.copy(v.records[1]),)),
+        "record 1 owner", "record 1 owner", id="replace a record object",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.__setitem__("topology", "circular"),
+        "record 1 annotations", "record 1 annotations", id="add an annotation",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations["refs"].append(3),
+        "record 1 annotations", "record 1 annotations", id="append to an annotation list",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.__setitem__("refs", [1, 2]),
+        "record 1 annotations", "record 1 annotations", id="replace an annotation value",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: v.records[1].annotations.pop("molecule_type"),
+        "record 1 annotations", "record 1 annotations", id="delete an annotation",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", (v.provenance[0], _GuardedOrigin())),
+        "record provenance", "record provenance", id="replace a provenance item",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", v.provenance[:1]),
+        "record provenance", "record provenance", id="drop a provenance item",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "provenance", None),
+        "record provenance", "record provenance", id="provenance to None",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", v.records[:1]), "record count", "record count",
+        id="drop a record",
+    ),
+    pytest.param(
+        _guarded_records, lambda v: setattr(v, "records", ("a", "b")), "owner structure", "owner structure",
+        id="replace the records by a non-record",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: (
+            v.records[0].annotations.__setitem__("topology", "linear"),
+            setattr(_guarded_feature(v), "type", "gene"),
+        ),
+        "record 0 annotations", "record 0 annotations", id="two writes: an earlier record's annotations first",
+    ),
+    pytest.param(
+        _guarded_records,
+        lambda v: (
+            setattr(_guarded_feature(v), "type", "gene"),
+            v.records[1].annotations.__setitem__("topology", "linear"),
+        ),
+        "record 1 feature 2 type", "record 1 annotations", id="two writes in one record: features before annotations",
+    ),
+    pytest.param(_feature_listed_twice, lambda v: None, None, None, id="a feature listed twice: none"),
+    pytest.param(
+        _feature_listed_twice, lambda v: _guarded_feature(v).qualifiers["note"].append("c"), _QUALIFIERS, None,
+        id="a feature listed twice: append to its qualifier",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: OrderedDict([("locus_tag", ["T"]), ("product", ["p"])])),
+        lambda v: _guarded_feature(v).qualifiers["product"].append("q"), _QUALIFIERS, None,
+        id="OrderedDict qualifiers: append to a value",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        lambda v: None, None, None, id="two keys with one str(): none",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        lambda v: _guarded_feature(v).qualifiers.__setitem__(1, ["b"]), _QUALIFIERS, None,
+        id="two keys with one str(): replace the int key's value",
+    ),
+    pytest.param(
+        lambda: _guarded_records(lambda: {1: ["a"], "1": ["a"], "product": ["p"]}),
+        _swap_int_key_for_its_str, _QUALIFIERS, None, id="two keys with one str(): swap the int key for its str",
+    ),
+    pytest.param(_nan_atoms, lambda v: None, None, None, id="NaN atoms: none"),
+    pytest.param(
+        _nan_atoms, lambda v: v.records[1].annotations.__setitem__("score", float("nan")),
+        "record 1 annotations", "record 1 annotations", id="NaN atoms: another NaN in an annotation",
+    ),
+    pytest.param(
+        _nan_atoms, lambda v: _guarded_feature(v).qualifiers.__setitem__("score", float("nan")), _QUALIFIERS, None,
+        id="NaN atoms: another NaN in a qualifier",
+    ),
+]
+
+
+def _guarded_cache(
+    tmp_path: Path, values: dict[str, object],
+) -> tuple[PreparedBiologicalInputCache, Path, PreparedResourceIdentity]:
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        for name, value in values.items():
+            get_or_build_parsed_source(
+                (name, identity), frozenset({identity}), lambda value=value: value,
+            )
+    return cache, path, identity
+
+
+@pytest.mark.parametrize("full_check", [True, False], ids=["full", "structure"])
+@pytest.mark.parametrize(("make", "write", "full_detail", "structure_detail"), _OWNER_WRITES)
+def test_the_owner_guard_names_the_first_changed_part_of_a_cached_entry(
+    tmp_path: Path,
+    make: Callable[[], _GuardedRecords],
+    write: Callable[[_GuardedRecords], object],
+    full_detail: str | None,
+    structure_detail: str | None,
+    full_check: bool,
+) -> None:
+    """D-05: the verdict and the message of each check, for every kind of write to a cached value."""
+
+    value = make()
+    stored = prepared_module._owner_stamp(value, walk_features=full_check)
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    write(value)
+    detail = full_detail if full_check else structure_detail
+    # The verdict is the stamp's: the check passes exactly when a new stamp equals the stored one.
+    assert (detail is None) == (prepared_module._owner_stamp(value, walk_features=full_check) == stored)
+    # After a transaction that did not commit, the entry check is the full one.
+    cache._previous_transaction_failed = full_check
+    diagnostics: dict[str, object] = {"metrics": {}}
+    key = ("source", identity)
+    if detail is None:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            assert get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("rebuilt")) is value
+        assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 0
+        return
+    with pytest.raises(ValidationError) as raised:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert str(raised.value) == f"Cached parsed biological input ownership was mutated ({detail})."
+    assert _metrics(diagnostics)["preparedInputCacheMutationViolationCount"] == 1
+    assert key not in cache._layers["parsed"]
+
+
+@pytest.mark.parametrize("stale_layer", ["parsed", "resolved"])
+def test_a_commit_finds_a_write_in_either_entry_that_shares_the_feature_objects(
+    tmp_path: Path, stale_layer: str,
+) -> None:
+    """Two entries hold the same feature objects, as the parsed and resolved layers do.
+
+    The one stamped before a write fails at commit whichever layer is checked
+    first, also after the other entry compared the same features unchanged.
+    """
+
+    first = _guarded_records()
+    second = _GuardedRecords(first.records, (_GuardedOrigin(),))
+    layer_values = {"parsed": first, "resolved": second}
+    fresh_layer = "resolved" if stale_layer == "parsed" else "parsed"
+    path = tmp_path / "resource.bin"
+    path.write_bytes(b"resource")
+    identity = PreparedResourceIdentity("record-1", "render-resource-1", 8)
+    identities = frozenset({identity})
+    key = ("source", identity)
+    cache = PreparedBiologicalInputCache()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        cache.get_or_build(stale_layer, key, identities, lambda: layer_values[stale_layer])
+    _guarded_feature(first).qualifiers["note"].append("c")
+    diagnostics: dict[str, object] = {"metrics": {}}
+    with pytest.raises(ValidationError) as raised:
+        with cache.transaction(resource_paths={path: identity}, diagnostics=diagnostics):
+            # Built after the write: stamped as it is now; it takes records, so the commit checks in full.
+            cache.get_or_build(fresh_layer, key, identities, lambda: layer_values[fresh_layer])
+            assert cache.get_or_build(stale_layer, key, identities, lambda: pytest.fail("rebuilt")) is (
+                layer_values[stale_layer]
+            )
+    assert str(raised.value) == (
+        f"Cached {stale_layer} biological input ownership was mutated (record 1 feature 2 qualifiers)."
+    )
+    # The commit checks each entry up to the first failure; a failed request then
+    # checks the parsed entry it built before it keeps it.
+    assert _metrics(diagnostics)["preparedInputCacheFullCheckCount"] == (3 if stale_layer == "resolved" else 1)
+
+
+class _UnreadableLocation:
+    """A location whose start cannot be read: the feature's stamp cannot be built."""
+
+    strand = 1
+
+    @property
+    def start(self) -> int:
+        raise RuntimeError("location start cannot be read")
+
+    end = start
+
+
+class _UnsizedValue:
+    """An annotation or provenance item whose length cannot be read: its entry stamp cannot be built."""
+
+    def __len__(self) -> int:
+        raise RuntimeError("length cannot be read")
+
+
+def _unreadable_feature_after_an_earlier_record(value: _GuardedRecords) -> None:
+    value.records[0].annotations["topology"] = "linear"
+    value.records[1].features[3].location = _UnreadableLocation()
+
+
+def _unsized_annotation_after_a_feature(value: _GuardedRecords) -> None:
+    value.records[0].features[0].type = "gene"
+    value.records[0].annotations["refs"] = _UnsizedValue()
+
+
+def _unsized_provenance_after_a_feature(value: _GuardedRecords) -> None:
+    _guarded_feature(value).type = "gene"
+    value.provenance = (value.provenance[0], _UnsizedValue())
+
+
+@pytest.mark.parametrize(
+    ("write", "detail"),
+    [
+        pytest.param(_unreadable_feature_after_an_earlier_record, "record 0 annotations", id="feature"),
+        pytest.param(_unsized_annotation_after_a_feature, "record 0 feature 0 type", id="annotations"),
+        pytest.param(_unsized_provenance_after_a_feature, "record 1 feature 2 type", id="provenance"),
+    ],
+)
+def test_a_check_reports_a_write_in_an_earlier_part_before_a_stamp_it_cannot_build(
+    tmp_path: Path, write: Callable[[_GuardedRecords], None], detail: str,
+) -> None:
+    """The checks compare part by part in stamp order: record count, then each record (its head, features and
+    annotations), then the provenance.
+
+    When a part's stamp cannot be built (a feature, a record's annotations or
+    the provenance) and a part before it differs, that part is reported and
+    the entry evicted; the next request builds the entry again. (A check that
+    built the whole stamp first raised the builder's error instead, kept the
+    entry, and every later request raised it again.)
+    """
+
+    value = _guarded_records()
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    write(value)
+    cache._previous_transaction_failed = True
+    key = ("source", identity)
+    with pytest.raises(ValidationError, match=rf"ownership was mutated \({detail}\)"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert key not in cache._layers["parsed"]
+    rebuilt = _guarded_records()
+    with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+        assert get_or_build_parsed_source(key, frozenset({identity}), lambda: rebuilt) is rebuilt
+
+
+def test_a_check_raises_the_error_of_a_feature_stamp_it_cannot_build_after_an_earlier_feature_of_its_record_changed(
+    tmp_path: Path,
+) -> None:
+    """A record's features are compared together: an unreadable feature raises its builder's error, also when
+    an earlier feature of that record changed, and the entry stays."""
+
+    value = _guarded_records()
+    cache, path, identity = _guarded_cache(tmp_path, {"source": value})
+    value.records[1].features[1].type = "gene"
+    value.records[1].features[3].location = _UnreadableLocation()
+    cache._previous_transaction_failed = True
+    key = ("source", identity)
+    with pytest.raises(RuntimeError, match="location start cannot be read"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(key, frozenset({identity}), lambda: pytest.fail("a changed owner was reused"))
+    assert key in cache._layers["parsed"]
+
+
+def test_a_failed_request_keeps_the_unchanged_inputs_it_built_besides_one_it_changed(tmp_path: Path) -> None:
+    """OV-1350: the failed request's own error surfaces, the input it changed is dropped, and the other is kept."""
+
+    cache, path, identity = _guarded_cache(tmp_path, {})
+    identities = frozenset({identity})
+    first = (_record("first"),)
+    second = (_record("second"),)
+    with pytest.raises(RuntimeError, match="render failed"):
+        with cache.transaction(resource_paths={path: identity}, diagnostics=None):
+            get_or_build_parsed_source(("first", identity), identities, lambda: first)
+            get_or_build_parsed_source(("second", identity), identities, lambda: second)
+            _replace_first_feature(first)
+            raise RuntimeError("render failed")
+    assert ("first", identity) not in cache._layers["parsed"]
+    assert cache._layers["parsed"][("second", identity)].value is second
 
 
 # Step 3a: the feature catalog revision (gbdraw/web/CLAUDE.md, Runtime data
@@ -2065,7 +2510,26 @@ def test_a_single_record_title_change_reuses_the_gc_percent(
 
 def test_a_feature_stamp_has_one_entry_per_named_field() -> None:
     feature = SeqFeature(FeatureLocation(1, 9, strand=1), type="gene", qualifiers={"locus_tag": ["a"]})
-    assert len(prepared_module._feature_stamp(feature)) == len(prepared_module._FEATURE_STAMP_FIELDS)
+    assert len(prepared_module._feature_hash_bytes(feature)) == 8 * len(prepared_module._FEATURE_STAMP_FIELDS)
+
+
+def test_a_feature_hash_reads_a_qualifier_dict_without_its_sorted_stamp(monkeypatch: pytest.MonkeyPatch) -> None:
+    """OV-2087: a dict of str keys (every GenBank qualifier mapping) hashes pair by pair, in any key order."""
+
+    feature = SeqFeature(
+        FeatureLocation(1, 9, strand=1), type="CDS", qualifiers={"locus_tag": ["a"], "product": ["p"], "pseudo": ""}
+    )
+    before = prepared_module._feature_field_hashes([feature], {})
+    feature.qualifiers["locus_tag"] = feature.qualifiers.pop("locus_tag")
+
+    def sorted_stamp(value: object) -> object:
+        pytest.fail("a qualifier dict of str keys built its sorted stamp")
+
+    monkeypatch.setattr(prepared_module, "_shallow_value_stamp", sorted_stamp)
+    # As the sorted stamp, the hash does not see the key order.
+    assert prepared_module._feature_field_hashes([feature], {}) == before
+    feature.qualifiers["product"].append("q")
+    assert prepared_module._feature_field_hashes([feature], {})[-8:] != before[-8:]
 
 
 def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_never(
@@ -2112,3 +2576,598 @@ def test_a_web_render_hashes_each_source_feature_at_most_twice_and_a_warm_one_ne
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
         assert metrics.get("renderStageUncacheableCount", 0) == 0
         assert metrics.get("renderStageUndeclaredReadCount", 0) == 0
+
+
+# The catalog is kept while what it reads is unchanged: a change that rebuilds
+# a content without changing a catalog read (ids and fills) keeps the
+# ``catalog_item`` build, so the page keeps the catalog it holds, and that
+# catalog equals an empty cache's. A changed read still sends the catalog.
+
+
+def _catalog_bytes(reply: dict[str, object]) -> str:
+    return json.dumps(reply["featureCatalog"], ensure_ascii=False, separators=(",", ":"))
+
+
+def _assert_the_held_catalog_is_kept(
+    reply: dict[str, object],
+    diagnostics: dict[str, object],
+    *,
+    held: dict[str, object],
+    fresh: dict[str, object],
+) -> None:
+    """The reply keeps the held catalog, which equals an empty cache's catalog."""
+
+    assert reply["featureCatalog"] is None
+    assert reply["featureCatalogRevision"] == held["featureCatalogRevision"]
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageHit:catalog_item"] == 1
+    assert "renderStageBuild:catalog_item" not in metrics
+    assert _catalog_bytes(held) == _catalog_bytes(fresh)
+
+
+def _comparison_document(
+    sources: tuple[Path, Path, Path],
+    *,
+    overrides: dict[str, object],
+    record_gap_px: float = 24.0,
+) -> dict[str, object]:
+    """Three Linear records, the second and third in one row, one comparison from the first to the second."""
+
+    from gbdraw.api import LinearComparison, LinearMultiRecordOptions
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+
+    hits = pd.DataFrame(
+        [["kept-a", "kept-b", 99.0, 150, 0, 0, 31, 180, 31, 180, 1e-50, 300.0]],
+        columns=COMPARISON_COLUMNS,
+    )
+    request = LinearDiagramRequest(
+        records=tuple(
+            RecordInput(source=GenBankInputSource(source), record_key=f"record-{index}")
+            for index, source in enumerate(sources, start=1)
+        ),
+        options=LinearDiagramOptions(
+            linear_comparisons=(LinearComparison(0, 1, hits),), config_overrides=overrides
+        ),
+        layout=LinearMultiRecordOptions(
+            record_gap_px=record_gap_px, multi_record_positions=("#1@1", "#2@2", "#3@2")
+        ),
+        output=RenderOutputRequest(output_prefix="catalog-kept", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_change_that_keeps_every_catalog_read_keeps_the_catalog_build(tmp_path: Path) -> None:
+    """A feature stroke, a comparison height and a record gap rebuild contents, never a catalog read."""
+
+    sources = (tmp_path / "a.gbk", tmp_path / "b.gbk", tmp_path / "c.gbk")
+    for source, record_id in zip(sources, ("kept-a", "kept-b", "kept-c")):
+        _write_genbank(source, (_record(record_id),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _comparison_document(sources, overrides={}), request_id=1)
+    assert held["featureCatalog"] is not None
+    steps: tuple[tuple[str, dict[str, object], float, str], ...] = (
+        ("stroke", {"objects.features.block_stroke_width.short": 4.0}, 24.0, "record_content"),
+        (
+            "comparison height",
+            {"objects.features.block_stroke_width.short": 4.0, "canvas.linear.comparison_height": 90},
+            24.0,
+            "comparison_content",
+        ),
+        (
+            "record gap",
+            {"objects.features.block_stroke_width.short": 4.0, "canvas.linear.comparison_height": 90},
+            80.0,
+            "comparison_content",
+        ),
+    )
+    previous = held
+    for index, (name, overrides, gap, rebuilt) in enumerate(steps, start=2):
+        document = _comparison_document(sources, overrides=overrides, record_gap_px=gap)
+        reply, diagnostics = _render(
+            tmp_path, cache, document, request_id=index, held_revision=str(held["featureCatalogRevision"])
+        )
+        fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=10 + index)
+        assert reply["results"] != previous["results"], name
+        assert _metrics(diagnostics)[f"renderStageBuild:{rebuilt}"] >= 1, name
+        _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+        previous = reply
+
+
+def _merged_record_document(source: Path, *, radius: int) -> dict[str, object]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(source), record_key="records-1", cardinality=RecordCardinality.ALL
+            ),
+        ),
+        options=CircularDiagramOptions(config_overrides={"canvas.circular.radius": radius}),
+        output=RenderOutputRequest(output_prefix="catalog-kept-merged", formats=("svg",)),
+    )
+    return build_session_document(request).to_dict()
+
+
+def test_a_circular_radius_change_keeps_the_merged_record_catalog_build(tmp_path: Path) -> None:
+    """A radius change rebuilds every merged Multi-Record Circular record, not what the catalog reads."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("merged-a"), _record("merged-b")))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _merged_record_document(source, radius=390), request_id=1)
+    document = _merged_record_document(source, radius=300)
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert reply["results"] != held["results"]
+    assert _metrics(diagnostics)["renderStageBuild:record_merge"] == 2
+    _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+
+
+def _styled_annotations(fill: str) -> AnnotationOptions:
+    from gbdraw.annotations.models import RegionAnnotationStyle
+
+    return AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (
+                    RegionAnnotation(
+                        "focus",
+                        CoordinateSpan(None, 20, 80),
+                        label="Focus",
+                        mark="band",
+                        style=RegionAnnotationStyle(fill=fill),
+                    ),
+                ),
+            ),
+        )
+    )
+
+
+def test_an_annotation_style_change_keeps_the_interactive_context_and_the_catalog(tmp_path: Path) -> None:
+    """The context reads no annotation style: a fill change rebuilds only what draws it."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("styled-annotation"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, _document(source, annotations=_styled_annotations("#ff0000")), request_id=1)
+    document = _document(source, annotations=_styled_annotations("#00ff00"))
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert reply["results"] != held["results"]
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageHit:interactive_context"] == 1
+    assert "renderStageBuild:interactive_context" not in metrics
+    assert "renderStageBuild:catalog_normalization" not in metrics
+    _assert_the_held_catalog_is_kept(reply, diagnostics, held=held, fresh=fresh)
+
+
+def test_a_feature_fill_change_sends_the_catalog(tmp_path: Path) -> None:
+    """A changed read (the drawn feature fill) sends the catalog, equal to an empty cache's."""
+
+    from gbdraw.api import ColorOptions
+
+    def document(palette: str) -> dict[str, object]:
+        request = LinearDiagramRequest(
+            records=(RecordInput(source=GenBankInputSource(source), record_key="record-1"),),
+            options=LinearDiagramOptions(colors=ColorOptions(default_colors_palette=palette)),
+            output=RenderOutputRequest(output_prefix="catalog-fill", formats=("svg",)),
+        )
+        return build_session_document(request).to_dict()
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("fill-change"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(tmp_path, cache, document("default"), request_id=1)
+    reply, diagnostics = _render(
+        tmp_path, cache, document("mint"), request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document("mint"), request_id=3)
+
+    assert _metrics(diagnostics)["renderStageBuild:catalog_item"] == 1
+    assert reply["featureCatalogRevision"] not in (None, held["featureCatalogRevision"])
+    assert reply["featureCatalog"] is not None
+    assert reply["featureCatalog"] != held["featureCatalog"]
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+def _metadata_annotations(metadata: dict[str, str]) -> AnnotationOptions:
+    return AnnotationOptions(
+        sets=(
+            AnnotationSet(
+                "regions",
+                (RegionAnnotation("focus", CoordinateSpan(None, 20, 80), label="Focus", metadata=metadata),),
+            ),
+        )
+    )
+
+
+def test_an_annotation_metadata_order_change_rebuilds_the_context_and_sends_the_catalog(tmp_path: Path) -> None:
+    """OV-1346: the context payload keeps the metadata key order, so another order is another context."""
+
+    source = tmp_path / "records.gbk"
+    _write_genbank(source, (_record("metadata-order"),))
+    cache = PreparedBiologicalInputCache()
+    held, _ = _render(
+        tmp_path, cache, _document(source, annotations=_metadata_annotations({"a": "2", "b": "1"})), request_id=1
+    )
+    document = _document(source, annotations=_metadata_annotations({"b": "1", "a": "2"}))
+    reply, diagnostics = _render(
+        tmp_path, cache, document, request_id=2, held_revision=str(held["featureCatalogRevision"])
+    )
+    fresh, _ = _render(tmp_path, PreparedBiologicalInputCache(), document, request_id=3)
+
+    assert _catalog_bytes(fresh) != _catalog_bytes(held)
+    assert _metrics(diagnostics)["renderStageBuild:interactive_context"] == 1
+    assert reply["featureCatalog"] is not None
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+# Depth part 1 (OV-1226..OV-1228): in the Worker, the decoded layer owns a
+# Depth file's parsed table, one per resource identity, shared read-only by
+# every record; each record selects its rows without copying the table.
+
+_DEPTH_RESOURCE = "depth-tracks-1-source"
+# Two records with no crop and no reverse complement.
+_PLAIN_PRESENTATIONS: tuple[tuple[str | None, bool], ...] = ((None, False), (None, False))
+
+
+def _depth_documents(
+    tmp_path: Path,
+    presentations: tuple[tuple[str | None, bool], ...] = _PLAIN_PRESENTATIONS,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """A Circular document of one record per (region, reverse) with Show Depth on, and the request the page sends with it off.
+
+    One Depth file holds the rows of every record.
+    """
+
+    inputs = []
+    rows = []
+    for index, (region, reverse) in enumerate(presentations, start=1):
+        record_id = f"record-{index}"
+        source = tmp_path / f"depth-source-{index}.gb"
+        _write_genbank(source, (_record(record_id),))
+        inputs.append(
+            RecordInput(
+                source=GenBankInputSource(source),
+                region=parse_region_spec(region) if region else None,
+                presentation=RecordPresentation(reverse_complement=reverse),
+                record_key=record_id,
+            )
+        )
+        rows += [f"{record_id}\t{position}\t{(position * index) % 17}\n" for position in range(1, 721)]
+    depth_path = tmp_path / "depth.tsv"
+    depth_path.write_text("".join(rows), encoding="utf-8")
+    request = CircularDiagramRequest(
+        records=tuple(inputs),
+        options=CircularDiagramOptions(
+            depth_tracks=(DepthTrackInput(source=str(depth_path), label="Depth"),),
+        ),
+        output=RenderOutputRequest(output_prefix="prepared-depth", formats=("svg",)),
+    )
+    shown = build_session_document(request).to_dict()
+    assert _DEPTH_RESOURCE in shown["resources"]
+    hidden = copy.deepcopy(shown)
+    del hidden["resources"][_DEPTH_RESOURCE]
+    del hidden["renderRequest"]["diagramOptions"]["depthTracks"]
+    return shown, hidden
+
+
+def _depth_entries(cache: PreparedBiologicalInputCache) -> list[object]:
+    return [
+        entry.value
+        for key, entry in cache._layers["decoded"].items()
+        if any(identity.resource_id == _DEPTH_RESOURCE for identity in entry.resource_identities)
+    ]
+
+
+def test_worker_depth_table_skips_the_process_cache(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    _render(tmp_path, cache, shown, request_id=1)
+    _render(tmp_path, cache, hidden, request_id=2)
+    # The page sends the file again under a new token after a hide.
+    _render(tmp_path, cache, shown, request_id=3, token_numbers={_DEPTH_RESOURCE: 900})
+
+    info = _read_depth_tsv_cached.cache_info()
+    assert (info.currsize, info.misses) == (0, 0)
+    assert len(_depth_entries(cache)) == 1
+
+
+def test_hiding_depth_releases_its_parsed_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    import gc
+    import weakref
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    parsed: list[weakref.ref[pd.DataFrame]] = []
+    real_read_csv = depth_module.pd.read_csv
+
+    def recording_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        table = real_read_csv(*args, **kwargs)
+        if list(table.columns) == DEPTH_COLUMNS:
+            parsed.append(weakref.ref(table))
+        return table
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", recording_read_csv)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    _render(tmp_path, cache, shown, request_id=1)
+    assert len(parsed) == 1 and parsed[0]() is not None
+    _render(tmp_path, cache, hidden, request_id=2)
+    gc.collect()
+
+    assert parsed[0]() is None
+
+
+def test_a_shown_depth_render_copies_no_depth_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """The first render parses once and copies nothing; a repeat neither parses nor copies.
+
+    Before, the first render copied the table once from the process cache and
+    once more for each record (OV-1227, OV-1228), and a repeat copied it again.
+    """
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, _hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    counts = {"parse": 0, "copy": 0}
+    real_read_csv = depth_module.pd.read_csv
+    real_copy = pd.DataFrame.copy
+
+    def counting_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        counts["parse"] += 1
+        return real_read_csv(*args, **kwargs)
+
+    def counting_copy(self: pd.DataFrame, *args: object, **kwargs: object) -> pd.DataFrame:
+        if len(self) > 1 and list(self.columns) == DEPTH_COLUMNS:
+            counts["copy"] += 1
+        return real_copy(self, *args, **kwargs)
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", counting_read_csv)
+    monkeypatch.setattr(pd.DataFrame, "copy", counting_copy)
+
+    _render(tmp_path, cache, shown, request_id=1)
+    assert counts == {"parse": 1, "copy": 0}
+    _render(tmp_path, cache, shown, request_id=2)
+    assert counts == {"parse": 1, "copy": 0}
+
+
+def test_the_shared_depth_table_is_unchanged_by_the_renders_that_select_from_it(tmp_path: Path) -> None:
+    """A crop and a reverse complement select from the one table; it stays equal to a fresh parse."""
+
+    from gbdraw.analysis.depth import parse_depth_tsv
+
+    plain, _hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    depth_token = {_DEPTH_RESOURCE: 900}
+    _render(tmp_path, cache, plain, request_id=1, token_numbers=depth_token)
+    [table] = _depth_entries(cache)
+    # The Session holds each cropped record's own GenBank bytes; the Depth file is the same resource.
+    transformed, _hidden = _depth_documents(tmp_path, (("101-600", True), ("201-500", False)))
+
+    _, diagnostics = _render(
+        tmp_path, cache, transformed, request_id=2, token_generation=2, token_numbers=depth_token
+    )
+
+    metrics = _metrics(diagnostics)
+    assert metrics["renderStageBuild:depth_frame"] == 2
+    assert _depth_entries(cache) == [table]
+    assert isinstance(table, pd.DataFrame)
+    pd.testing.assert_frame_equal(table, parse_depth_tsv(str(tmp_path / "depth.tsv")))
+
+
+# The Depth file's token in the held-resource tests; the GenBank files keep theirs.
+_HELD_DEPTH = {_DEPTH_RESOURCE: 900}
+_HELD_DEPTH_TOKEN = _token(900)
+# The Depth stages whose keys name the file. ``depth_track_config`` (style, window and
+# step) names none, so it is no held entry; it builds once per style on the show.
+_DEPTH_STAGES = ("depth_frame", "depth_content")
+
+
+def _drawing_retention(
+    drawing: str = "circular",
+    *,
+    retained: tuple[str, ...] = (),
+    held: tuple[str, ...] = (),
+) -> dict[str, object]:
+    """The retention the Worker sends: ``held`` are the drawing's hidden files, also retained."""
+
+    return {"drawing": drawing, "resourceTokens": list(retained + held), "heldTokens": list(held)}
+
+
+def _depth_parse_counter(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    counts = {"parse": 0}
+    real_read_csv = depth_module.pd.read_csv
+
+    def counting_read_csv(*args: object, **kwargs: object) -> pd.DataFrame:
+        table = real_read_csv(*args, **kwargs)
+        if list(table.columns) == DEPTH_COLUMNS:
+            counts["parse"] += 1
+        return table
+
+    monkeypatch.setattr(depth_module.pd, "read_csv", counting_read_csv)
+    return counts
+
+
+def _entries_naming(cache: PreparedBiologicalInputCache, token: str) -> set[tuple[str, object]]:
+    return {
+        (layer, key)
+        for layer, entries in cache._layers.items()
+        for key, entry in entries.items()
+        if any(identity.cache_token == token for identity in entry.resource_identities)
+    }
+
+
+def _svg(reply: dict[str, object]) -> str:
+    (result,) = reply["results"]
+    return str(result["content"])
+
+
+def _with_block_stroke(document: dict[str, object]) -> dict[str, object]:
+    edited = copy.deepcopy(document)
+    edited["renderRequest"]["diagramOptions"]["configOverrides"]["objects.features.block_stroke_width.short"] = 1.0
+    return edited
+
+
+def test_a_held_depth_resource_keeps_its_table_and_stages_across_a_hidden_render(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Show Depth after a hide reuses the parsed table and every Depth stage of the last show."""
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    counts = _depth_parse_counter(monkeypatch)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+
+    first, _ = _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    again, diagnostics = _render(
+        tmp_path, cache, shown, request_id=3, token_numbers=_HELD_DEPTH, retention=_drawing_retention()
+    )
+
+    metrics = _metrics(diagnostics)
+    assert counts["parse"] == 1
+    assert {stage: metrics.get(f"renderStageBuild:{stage}", 0) for stage in _DEPTH_STAGES} == dict.fromkeys(
+        _DEPTH_STAGES, 0
+    )
+    assert metrics["renderStageHit:depth_frame"] == 2
+    assert _svg(again) == _svg(first)
+
+
+def test_show_depth_after_a_hidden_edit_matches_a_fresh_generate(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    held = _drawing_retention(held=(_HELD_DEPTH_TOKEN,))
+
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=held)
+    _render(tmp_path, cache, _with_block_stroke(hidden), request_id=3, retention=held)
+    reply, diagnostics = _render(
+        tmp_path, cache, _with_block_stroke(shown), request_id=4, token_numbers=_HELD_DEPTH,
+        retention=_drawing_retention(),
+    )
+    fresh, _ = _render(
+        tmp_path, PreparedBiologicalInputCache(), _with_block_stroke(shown), request_id=5,
+        token_numbers=_HELD_DEPTH, retention=_drawing_retention(),
+    )
+
+    assert _metrics(diagnostics).get("renderStageBuild:depth_frame", 0) == 0
+    assert hashlib.sha256(_svg(reply).encode()).hexdigest() == hashlib.sha256(_svg(fresh).encode()).hexdigest()
+    assert _catalog_bytes(reply) == _catalog_bytes(fresh)
+
+
+def test_held_entries_are_bounded_by_the_last_render_that_used_them(tmp_path: Path) -> None:
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    held = _drawing_retention(held=(_HELD_DEPTH_TOKEN,))
+    shown_entries: list[set[tuple[str, object]]] = []
+    hidden_entries: list[set[tuple[str, object]]] = []
+    retained_bytes: dict[str, list[int]] = {"shown": [], "hidden": []}
+
+    request_id = 0
+    for _cycle in range(4):
+        request_id += 1
+        _, diagnostics = _render(
+            tmp_path, cache, shown, request_id=request_id, token_numbers=_HELD_DEPTH, retention=_drawing_retention()
+        )
+        shown_entries.append(_entries_naming(cache, _HELD_DEPTH_TOKEN))
+        retained_bytes["shown"].append(_metrics(diagnostics)["preparedInputCacheRetainedBytes"])
+        request_id += 1
+        _, diagnostics = _render(tmp_path, cache, hidden, request_id=request_id, retention=held)
+        hidden_entries.append(_entries_naming(cache, _HELD_DEPTH_TOKEN))
+        retained_bytes["hidden"].append(_metrics(diagnostics)["preparedInputCacheRetainedBytes"])
+    _render(tmp_path, cache, _with_block_stroke(hidden), request_id=request_id + 1, retention=held)
+
+    assert shown_entries[0]
+    # Every entry naming the file is one the last show used, and each later cycle holds the same ones.
+    assert shown_entries == [shown_entries[0]] * 4
+    assert hidden_entries == [shown_entries[0]] * 4
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == shown_entries[0]
+    assert len(set(retained_bytes["shown"])) == 1
+    assert len(set(retained_bytes["hidden"])) == 1
+
+
+def test_dropping_a_held_token_releases_its_entries(tmp_path: Path) -> None:
+    shown, hidden = _depth_documents(tmp_path)
+    cache = PreparedBiologicalInputCache()
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN)
+
+    _, diagnostics = _render(tmp_path, cache, hidden, request_id=3, retention=_drawing_retention())
+    _, fresh = _render(tmp_path, PreparedBiologicalInputCache(), hidden, request_id=4, retention=_drawing_retention())
+
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == set()
+    assert (
+        _metrics(diagnostics)["preparedInputCacheRetainedBytes"]
+        == _metrics(fresh)["preparedInputCacheRetainedBytes"]
+    )
+
+
+@pytest.mark.parametrize(
+    "retention",
+    [
+        {"drawing": "circular", "resourceTokens": [], "heldTokens": [_HELD_DEPTH_TOKEN]},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN], "heldTokens": _HELD_DEPTH_TOKEN},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN], "heldTokens": [[_HELD_DEPTH_TOKEN]]},
+        {"drawing": "circular", "resourceTokens": [_HELD_DEPTH_TOKEN]},
+    ],
+)
+def test_a_held_token_outside_the_retained_set_is_rejected(
+    tmp_path: Path,
+    retention: dict[str, object],
+) -> None:
+    _shown, hidden = _depth_documents(tmp_path)
+    with pytest.raises(ValidationError, match="retention"):
+        _render(tmp_path, PreparedBiologicalInputCache(), hidden, request_id=1, retention=retention)
+
+
+def test_another_drawings_render_releases_held_tables_and_stages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Held entries are the rendering drawing's: another drawing's render keeps the file's bytes only."""
+
+    clear_depth_tsv_cache()
+    request.addfinalizer(clear_depth_tsv_cache)
+    counts = _depth_parse_counter(monkeypatch)
+    shown, hidden = _depth_documents(tmp_path)
+    other = tmp_path / "other.gbk"
+    _write_genbank(other, (_record("other-record"),))
+    cache = PreparedBiologicalInputCache()
+    circular_tokens = (_token(101), _token(102))
+
+    _render(tmp_path, cache, shown, request_id=1, token_numbers=_HELD_DEPTH, retention=_drawing_retention())
+    _render(tmp_path, cache, hidden, request_id=2, retention=_drawing_retention(held=(_HELD_DEPTH_TOKEN,)))
+    # The page retains the circular drawing's files and its held Depth file for the other drawing's render.
+    _render(
+        tmp_path, cache, _document(other), request_id=3, token_generation=2,
+        retention=_drawing_retention("linear", retained=circular_tokens + (_HELD_DEPTH_TOKEN,)),
+    )
+
+    assert _entries_naming(cache, _HELD_DEPTH_TOKEN) == set()
+    _, diagnostics = _render(
+        tmp_path, cache, shown, request_id=4, token_numbers=_HELD_DEPTH,
+        retention=_drawing_retention(retained=(_token(201),)),
+    )
+    assert counts["parse"] == 2
+    assert _metrics(diagnostics)["renderStageBuild:depth_frame"] == 2

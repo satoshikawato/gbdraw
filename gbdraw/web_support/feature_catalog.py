@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
 import copy
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields as dataclass_fields, replace
+import json
 import math
 import re
 from types import MappingProxyType
@@ -15,7 +16,7 @@ from typing import Any, Iterable, TypeVar, cast
 from svgwrite import Drawing
 
 from gbdraw.core.numeric import JS_MAX_SAFE_INTEGER, ascii_float, parse_ascii_nonnegative_integer
-from gbdraw.render.group_content import ContentGroup, GroupContent, GroupKind
+from gbdraw.render.group_content import GroupContent, GroupKind, held_group, leaf_groups
 from gbdraw.render_stages import render_stage
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -396,14 +397,35 @@ class _SvgCatalogCandidate:
 
 @dataclass(frozen=True)
 class _RenderedSvgCatalogIndex:
-    """Read-only catalog state collected in one complete SVG traversal."""
+    """Read-only catalog state of the trees the catalog reads, in document order."""
 
     rendered_features: Mapping[str, _RenderedFeatureEntry]
     match_candidates: tuple[_SvgCatalogCandidate, ...]
     annotation_candidates: tuple[_SvgCatalogCandidate, ...]
+    record_source_spans: Mapping[int, tuple[int, int, int]]
+
+
+@dataclass(frozen=True)
+class _CatalogElementReads:
+    """What the catalog reads from the elements of one tree, each list in document order.
+
+    Equal reads give an equal catalog item: the item reads nothing else of the
+    SVG (no position, path, box or stroke).
+    """
+
+    record_source_spans: tuple[tuple[int, tuple[int, int, int]], ...]
+    feature_entries: tuple[_RenderedFeatureEntry, ...]
+    match_attributes: tuple[Mapping[str, str], ...]
+    annotation_attributes: tuple[Mapping[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _CatalogTraversal:
+    """One traversal of one parsed tree: its reads and what it counted."""
+
+    reads: _CatalogElementReads
     dom_element_count: int
     feature_candidate_count: int
-    record_source_spans: Mapping[int, tuple[int, int, int]]
 
 
 @dataclass(frozen=True)
@@ -437,14 +459,23 @@ def _snapshot_attributes(
     )
 
 
-def _catalog_index_metrics(index: _RenderedSvgCatalogIndex) -> dict[str, int]:
+def _catalog_read_metrics(traversal: _CatalogTraversal) -> dict[str, int]:
+    """The metrics of one parse and traversal (one per ``catalog_snapshot`` build)."""
+
     return {
         "featureCatalogSvgParseCount": 1,
         "featureCatalogFullDomTraversalCount": 1,
+        "featureCatalogDomElementCount": traversal.dom_element_count,
+        "featureCatalogFeatureCandidateCount": traversal.feature_candidate_count,
+    }
+
+
+def _catalog_index_metrics(index: _RenderedSvgCatalogIndex) -> dict[str, int]:
+    """The metrics of one index (one per ``catalog_item`` build)."""
+
+    return {
         "featureCatalogRenderedFeatureCollectionCount": 1,
         "featureCatalogCatalogOnlyDomMutationCount": 0,
-        "featureCatalogDomElementCount": index.dom_element_count,
-        "featureCatalogFeatureCandidateCount": index.feature_candidate_count,
         "featureCatalogUniqueRenderedFeatureCount": len(
             index.rendered_features
         ),
@@ -455,16 +486,16 @@ def _catalog_index_metrics(index: _RenderedSvgCatalogIndex) -> dict[str, int]:
     }
 
 
-def _record_catalog_index_metrics(
+def _record_catalog_metrics(
     diagnostics: MutableMapping[str, Any] | None,
-    index: _RenderedSvgCatalogIndex,
+    values: Mapping[str, int],
 ) -> None:
     if diagnostics is None:
         return
     metrics = diagnostics.setdefault("metrics", {})
     if not isinstance(metrics, MutableMapping):
         raise GbdrawError("Feature catalog diagnostics metrics must be a mapping.")
-    for name, value in _catalog_index_metrics(index).items():
+    for name, value in values.items():
         metrics[name] = int(metrics.get(name, 0)) + value
 
 
@@ -480,48 +511,104 @@ def _parse_catalog_svg(svg_source: str) -> ET.Element:
     return root
 
 
-def _build_rendered_svg_catalog_index(root: ET.Element) -> _RenderedSvgCatalogIndex:
-    """Collect the catalog state of one SVG tree in document order."""
+def _catalog_element_reads(root: ET.Element) -> _CatalogTraversal:
+    """Read every element of one SVG tree once, in document order."""
 
-    rendered_features: dict[str, _RenderedFeatureEntry] = {}
-    match_candidates: list[_SvgCatalogCandidate] = []
-    annotation_candidates: list[_SvgCatalogCandidate] = []
-    record_source_spans: dict[int, tuple[int, int, int]] = {}
+    spans: list[tuple[int, tuple[int, int, int]]] = []
+    entries: list[_RenderedFeatureEntry] = []
+    matches: list[Mapping[str, str]] = []
+    annotations: list[Mapping[str, str]] = []
     dom_element_count = 0
     feature_candidate_count = 0
     for element in root.iter():
         dom_element_count += 1
         span = _record_source_span(element)
         if span is not None:
-            record_source_spans[span[0]] = span[1]
+            spans.append(span)
         if _is_feature_candidate(element):
             feature_candidate_count += 1
             entry = _rendered_feature_entry(element)
             if entry is not None:
-                _merge_rendered_feature_entry(rendered_features, entry)
+                entries.append(entry)
         if _is_match_candidate(element):
-            match_candidates.append(
-                _SvgCatalogCandidate(
-                    _snapshot_attributes(element, _MATCH_SNAPSHOT_ATTRIBUTES)
-                )
-            )
+            matches.append(_snapshot_attributes(element, _MATCH_SNAPSHOT_ATTRIBUTES))
         if element.get("data-gbdraw-annotation-id"):
-            annotation_candidates.append(
-                _SvgCatalogCandidate(
-                    _snapshot_attributes(
-                        element,
-                        _ANNOTATION_SNAPSHOT_ATTRIBUTES,
-                    )
-                )
-            )
-
-    return _RenderedSvgCatalogIndex(
-        rendered_features=MappingProxyType(rendered_features),
-        match_candidates=tuple(match_candidates),
-        annotation_candidates=tuple(annotation_candidates),
+            annotations.append(_snapshot_attributes(element, _ANNOTATION_SNAPSHOT_ATTRIBUTES))
+    return _CatalogTraversal(
+        _CatalogElementReads(tuple(spans), tuple(entries), tuple(matches), tuple(annotations)),
         dom_element_count=dom_element_count,
         feature_candidate_count=feature_candidate_count,
+    )
+
+
+def _rendered_svg_catalog_index(reads: Sequence[_CatalogElementReads]) -> _RenderedSvgCatalogIndex:
+    """The catalog state of trees read in document order.
+
+    Spans and candidates join in order; features merge in order (the first
+    entry of an id wins), so reading sibling trees one by one gives the index
+    of one traversal over all of them.
+    """
+
+    rendered_features: dict[str, _RenderedFeatureEntry] = {}
+    record_source_spans: dict[int, tuple[int, int, int]] = {}
+    for part in reads:
+        record_source_spans.update(part.record_source_spans)
+        for entry in part.feature_entries:
+            _merge_rendered_feature_entry(rendered_features, entry)
+    return _RenderedSvgCatalogIndex(
+        rendered_features=MappingProxyType(rendered_features),
+        match_candidates=tuple(
+            _SvgCatalogCandidate(attributes) for part in reads for attributes in part.match_attributes
+        ),
+        annotation_candidates=tuple(
+            _SvgCatalogCandidate(attributes) for part in reads for attributes in part.annotation_attributes
+        ),
         record_source_spans=MappingProxyType(record_source_spans),
+    )
+
+
+# One ``_RenderedFeatureEntry`` as ``_catalog_reads_text`` writes it: its field values in this order.
+_ENTRY_FIELDS = tuple(field.name for field in dataclass_fields(_RenderedFeatureEntry))
+
+
+def _catalog_reads_text(reads: _CatalogElementReads) -> str:
+    """The reads of one tree as canonical JSON: equal text, equal reads.
+
+    ``catalog_item`` is keyed by these texts by value (``_catalog_reads_from_text``
+    reverses it exactly).
+    """
+
+    return json.dumps(
+        [
+            [[index, list(span)] for index, span in reads.record_source_spans],
+            [[getattr(entry, name) for name in _ENTRY_FIELDS] for entry in reads.feature_entries],
+            [dict(attributes) for attributes in reads.match_attributes],
+            [dict(attributes) for attributes in reads.annotation_attributes],
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+# The text of a content the catalog reads nothing from.
+_NO_READS_TEXT = _catalog_reads_text(_CatalogElementReads((), (), (), ()))
+
+
+def _catalog_reads_from_text(text: str) -> _CatalogElementReads:
+    # Only ``_catalog_reads_text`` writes the text, in this shape.
+    spans, entries, matches, annotations = cast(
+        "tuple[list[tuple[int, tuple[int, int, int]]], list[list[object]], list[dict[str, str]], list[dict[str, str]]]",
+        json.loads(text),
+    )
+    return _CatalogElementReads(
+        tuple((int(index), (int(span[0]), int(span[1]), int(span[2]))) for index, span in spans),
+        # By field name: ``_RenderedFeatureEntry`` alone owns the field types.
+        tuple(
+            _RenderedFeatureEntry(**cast("dict[str, Any]", dict(zip(_ENTRY_FIELDS, values, strict=True))))
+            for values in entries
+        ),
+        tuple(MappingProxyType(attributes) for attributes in matches),
+        tuple(MappingProxyType(attributes) for attributes in annotations),
     )
 
 
@@ -2102,7 +2189,9 @@ def _reference_reconstructible_nucleotide_sequences(
 # groups, with the record source span), comparison ribbons and annotations.
 # The Circular axis circle (AXIS_CIRCLE) holds neither.
 # A Circular conservation ring carries the hits the catalog binds to features.
-# RECORD: a Multi-Record Circular record, all its groups merged into one content.
+# RECORD: a Multi-Record Circular record whose parts are not all placed
+# contents; otherwise each part is read by its own kind, as at the top level
+# (a definition, tick or GC part reads nothing, OV-2108).
 _CATALOG_GROUP_KINDS = frozenset(
     {
         GroupKind.AXIS,
@@ -2123,40 +2212,61 @@ _CATALOG_CONTENTS_ROOT = (
 def _catalog_contents(drawing: Drawing) -> tuple[GroupContent, ...] | None:
     """The contents whose elements the catalog reads, in document order.
 
-    ``None`` when a top-level element other than ``defs`` is not a placed
-    content: the catalog then reads the SVG.
+    A record group adds no reads of its own: its parts (``leaf_groups``) are
+    read, each when its kind is one the catalog reads. ``None`` when a
+    top-level element other than ``defs`` is not a placed content: the catalog
+    then reads the SVG.
     """
 
     contents: list[GroupContent] = []
     for element in drawing.elements:
         if element is drawing.defs:
             continue
-        if not isinstance(element, ContentGroup) or not element.holds_content_children():
+        group = held_group(element)
+        if group is None:
             return None
-        if element.key.kind in _CATALOG_GROUP_KINDS:
-            contents.append(element.content)
+        contents.extend(leaf.content for leaf in leaf_groups(group) if leaf.key.kind in _CATALOG_GROUP_KINDS)
     return tuple(contents)
 
 
-def feature_catalog_item_from_contents(
-    contents: tuple[GroupContent, ...],
+def catalog_content_snapshot(content: GroupContent) -> str:
+    """The ``catalog_snapshot`` stage: what the catalog reads from one content.
+
+    A content rebuilt with other geometry or strokes gives the same text, so
+    the ``catalog_item`` keyed by the texts is reused.
+    """
+
+    from gbdraw.api.prepared import record_prepared_input_metric
+
+    traversal = _catalog_element_reads(
+        _parse_catalog_svg(_CATALOG_CONTENTS_ROOT + content.text + "</svg>")
+    )
+    for name, value in _catalog_read_metrics(traversal).items():
+        record_prepared_input_metric(name, value)
+    return _catalog_reads_text(traversal.reads)
+
+
+def feature_catalog_item_from_snapshots(
+    snapshots: tuple[str, ...],
     context: InteractiveSvgContext,
     *,
     result_index: int,
     result_name: str,
 ) -> dict[str, Any]:
-    """The ``catalog_item`` stage: one catalog item from the contents it reads.
+    """The ``catalog_item`` stage: one catalog item from the reads of its contents.
 
-    No other group of the drawing holds a feature, match, annotation or record
-    source span, so a change elsewhere (a title, a legend, a position) reuses it.
+    Keyed by the reads (``catalog_snapshot``), not by the contents: a change
+    that moves or restyles a feature, match or annotation without changing
+    what the catalog reads (identity attributes and fill) reuses the item and
+    its revision. No other group of the drawing holds a feature, match,
+    annotation or record source span.
     """
 
     from gbdraw.api.prepared import record_prepared_input_metric
 
-    root = _parse_catalog_svg(
-        _CATALOG_CONTENTS_ROOT + "".join(content.text for content in contents) + "</svg>"
+    svg_index = _rendered_svg_catalog_index(
+        [_catalog_reads_from_text(text) for text in snapshots]
     )
-    svg_index = _build_rendered_svg_catalog_index(root)
     for name, value in _catalog_index_metrics(svg_index).items():
         record_prepared_input_metric(name, value)
     return _feature_catalog_item(
@@ -2176,8 +2286,9 @@ def build_feature_catalog_item(
     """Normalize one prepared render context without reading source files.
 
     In a cache transaction, a ``drawing`` whose groups are all placed contents
-    gives the ``catalog_item`` stage, keyed by the contents it reads; otherwise
-    the catalog reads ``svg_source``.
+    gives one ``catalog_snapshot`` stage per content it reads and the
+    ``catalog_item`` stage keyed by their texts; otherwise the catalog reads
+    ``svg_source``.
     """
 
     from gbdraw.api.prepared import prepared_input_cache_active
@@ -2190,16 +2301,28 @@ def build_feature_catalog_item(
         else None
     )
     if contents is not None:
+        # A content the catalog reads nothing from adds nothing to the item, so it does not key it.
+        snapshots = tuple(
+            snapshot
+            for snapshot in (
+                render_stage("catalog_snapshot", catalog_content_snapshot, content)
+                for content in contents
+            )
+            if snapshot != _NO_READS_TEXT
+        )
         return render_stage(
             "catalog_item",
-            feature_catalog_item_from_contents,
-            contents,
+            feature_catalog_item_from_snapshots,
+            snapshots,
             context,
             result_index=int(result_index),
             result_name=str(result_name),
         )
-    svg_index = _build_rendered_svg_catalog_index(_parse_catalog_svg(svg_source))
-    _record_catalog_index_metrics(_diagnostics, svg_index)
+    traversal = _catalog_element_reads(_parse_catalog_svg(svg_source))
+    svg_index = _rendered_svg_catalog_index((traversal.reads,))
+    _record_catalog_metrics(
+        _diagnostics, {**_catalog_read_metrics(traversal), **_catalog_index_metrics(svg_index)}
+    )
     return _feature_catalog_item(
         svg_index, context, result_index=result_index, result_name=result_name
     )

@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Union, get_args
+from typing import Literal, Protocol, Union, get_args
 from unittest import mock
 
 import numpy as np
@@ -49,7 +49,13 @@ from gbdraw.api.request_render import (
     RequestRenderResult,
 )
 from gbdraw.exceptions import LabelsDoNotFitError, ValidationError
-from gbdraw.io.cli_tables import read_comparisons_table
+from gbdraw.io.cli_tables import (
+    TablePathDependency,
+    read_circular_track_table,
+    read_comparisons_table,
+    read_conservation_table,
+    read_records_table,
+)
 from gbdraw.legend.row_facts import collect_legend_row_facts
 from svgwrite import Drawing
 
@@ -159,21 +165,48 @@ def capture_cli_request(mode: Mode, argv: Sequence[str]) -> CapturedRequest:
     )
 
 
+class _NamesFiles(Protocol):
+    @property
+    def path_dependencies(self) -> tuple[TablePathDependency, ...]: ...
+
+
+# The table options whose tables name other input files, each with its reader;
+# the reader's ``path_dependencies`` lists those files. A Worker stages them, so
+# the harness does too: otherwise every stage that reads them is uncacheable.
+TABLE_FILE_READERS: Mapping[str, Callable[[str], _NamesFiles]] = {
+    "--records_table": read_records_table,
+    "--comparisons_table": read_comparisons_table,
+    "--conservation_table": read_conservation_table,
+    "--circular_track_table": read_circular_track_table,
+}
+# The table options whose tables hold values only and name no other file.
+VALUE_TABLE_OPTIONS = frozenset(
+    {
+        "--annotation_table",
+        "--feature_override_table",
+        "--feature_placement_table",
+        "--feature_visibility_table",
+        "--label_table",
+    }
+)
+
+
 def input_files(argv: Sequence[str]) -> tuple[Path, ...]:
-    """Every command-line token that names an existing file, and the comparison
-    files a ``--comparisons_table`` names (a Worker stages both), once, in order."""
+    """Every command-line token that names an existing file, and the files a
+    table option's table names (``TABLE_FILE_READERS``), once, in order."""
 
     paths: dict[Path, None] = {}
     for previous, token in zip(("", *argv), argv):
         if token.startswith("-"):
             continue
         path = Path(token)
-        if path.is_file():
-            paths[path.resolve()] = None
-            if previous == "--comparisons_table":
-                for row in read_comparisons_table(str(path)).rows:
-                    if row.blast and Path(row.blast).is_file():
-                        paths[Path(row.blast).resolve()] = None
+        if not path.is_file():
+            continue
+        paths[path.resolve()] = None
+        reader = TABLE_FILE_READERS.get(previous)
+        for dependency in reader(str(path)).path_dependencies if reader is not None else ():
+            if Path(dependency.path).is_file():
+                paths[Path(dependency.path).resolve()] = None
     return tuple(paths)
 
 

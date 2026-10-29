@@ -26,7 +26,12 @@ from gbdraw.web_support.stored_protein_frames import stored_protein_results_to_s
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 from gbdraw.web_support.ring_search_frame import circular_ring_tables_in_search_frame_json
-from gbdraw.web_support.label_fit import LabelFitRowSearches, label_fit_failure, label_fit_mode
+from gbdraw.web_support.label_fit import (
+    LabelFitRowSearches,
+    label_capacity_notices,
+    label_fit_failure,
+    label_fit_mode,
+)
 from gbdraw.web_support.export_fonts import pdf_fonts_json, svg_font_embedding_json
 from gbdraw.web_support.worker_cancel import WorkerCancelRequest
 
@@ -180,6 +185,7 @@ def run_canonical_request_wrapper(
     held_feature_catalog_revision=None,
     held_segments_json=None,
     retention_json=None,
+    notice=None,
 ):
     try:
         with web_error_stage("request-validation"):
@@ -199,22 +205,26 @@ def run_canonical_request_wrapper(
             # A4b: the drawing it renders and the tokens the page retains ("null": none).
             retention = None if _is_blank_or_js_nullish(retention_json) else json.loads(str(retention_json))
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
-        result = render_staged_canonical_web_request(
-            payload,
-            resource_paths=resource_paths,
-            workspace=str(workspace),
-            _diagnostics=diagnostics,
-            _prepared_input_cache=(
-                _WEB_PREPARED_INPUT_CACHE
-                if resource_identities is not None
-                else None
-            ),
-            _resource_identities=resource_identities,
-            _prepared_input_retention=retention,
-            _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
-            _held_feature_catalog_revision=held_revision,
-            _held_segments=held_segments,
-        )
+        # Labels near the room around the map: the Worker relays their values (JSON) while the render runs.
+        with label_capacity_notices(
+            (lambda sentence: None) if _is_blank_or_js_nullish(notice) else notice
+        ):
+            result = render_staged_canonical_web_request(
+                payload,
+                resource_paths=resource_paths,
+                workspace=str(workspace),
+                _diagnostics=diagnostics,
+                _prepared_input_cache=(
+                    _WEB_PREPARED_INPUT_CACHE
+                    if resource_identities is not None
+                    else None
+                ),
+                _resource_identities=resource_identities,
+                _prepared_input_retention=retention,
+                _label_fit_searches=_WEB_LABEL_FIT_SEARCHES,
+                _held_feature_catalog_revision=held_revision,
+                _held_segments=held_segments,
+            )
         if diagnostics is not None:
             for name in (
                 "decode",

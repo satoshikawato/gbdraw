@@ -14,8 +14,10 @@ replace an existing file by default. Pass `--overwrite` to replace existing
 regular files selected by the current command. Directories, special files,
 dangling symlinks, and invalid parents are rejected even with that flag. Each
 diagram writes its formats all or nothing: when a conversion fails, no existing
-file changes and no new file is left. Without CairoSVG, PNG, PDF, EPS, and PS
-are skipped with a warning and the SVG formats are still written. A Circular
+file changes and no new file is left. A requested PNG, PDF, EPS, or PS that
+CairoSVG cannot make, because it is not installed, stops the run before any
+file is written: the error names those formats and the install command, no file is
+written, and the command exits with status 1. A Circular
 batch writes record by record, so the records before a failing one stay
 written. Overwrite permission applies only to the current invocation and is
 not restored from a saved session.
@@ -39,7 +41,7 @@ rewritten, see [Retired inputs](./REFERENCE/session-and-request-compatibility.md
 ## Main command
 
 ```text
-gbdraw v. 0.14.2: A diagram generator for small genomes
+gbdraw v. 0.14.3: A diagram generator for small genomes
 
 Usage:
   gbdraw <subcommand> [options]
@@ -113,7 +115,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--line_stroke_color LINE_STROKE_COLOR]
               [--line_stroke_width LINE_STROKE_WIDTH]
               [--definition_font_size DEFINITION_FONT_SIZE]
-              [--plot_title PLOT_TITLE]
+              [--hide_definition] [--plot_title PLOT_TITLE]
               [--plot_title_font_size PLOT_TITLE_FONT_SIZE]
               [--keep_full_definition_with_plot_title]
               [--center_reserved_radius CENTER_RESERVED_RADIUS]
@@ -276,6 +278,10 @@ options:
                         genomes < 75 kb, 1 pt for genomes >= 75 kb)
   --definition_font_size DEFINITION_FONT_SIZE
                         Definition font size (optional; default: 18)
+  --hide_definition     Draw no center definition for any record (name,
+                        strain, replicon, accession, length, GC); the inside
+                        tracks keep no room for it. A plot title
+                        (--plot_title_position) is still drawn.
   --plot_title PLOT_TITLE
                         Circular plot title shown when plot_title_position is
                         top or bottom (optional; defaults to species +
@@ -645,6 +651,13 @@ GC-content and Depth axes and ticks are unaffected. User-explicit
 `--circular_track_table` inputs are authoritative. An enabled `ticks` slot
 remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
+
+`--hide_definition` draws no center definition for any record, on one map or
+on a Multi-Record Canvas: no name, strain, replicon, accession, length, or GC
+line. The inside tracks keep no room for it (a `--center_reserved_radius` you
+set still applies), and no definition-fit warning is printed. A plot title (`--plot_title_position top` or `bottom`) is still
+drawn, and `--keep_full_definition_with_plot_title` has no effect. The config
+key is `objects.definition.circular.show` (default `true`).
 
 A `--circular_track_slot` takes only the parameters its renderer reads:
 `features` takes `lane_direction` (alias `lanes`) and `stack_preset` (alias

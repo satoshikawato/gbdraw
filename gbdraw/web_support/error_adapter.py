@@ -9,14 +9,16 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import json
 import logging
 import re
-from typing import Iterator, Protocol, cast
+from typing import Iterator, Protocol, cast, get_args
 
 from Bio.Seq import UndefinedSequenceError
 
 from gbdraw.diagrams.circular.radial_layout import SWITCHED_TRACK_IDS
 from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
+    label_capacity_context_key,
 )
+from gbdraw.labels.fit import HorizontalLabelKind
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules embedFonts pdfFonts
 buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame convertRingTablesToSearchFrame convertStoredProteinResultFrames
@@ -60,7 +62,14 @@ DINUCLEOTIDE CANNOT_FIT CENTER_RESERVED THREE_COLUMNS DEPTH_VALUES FILENAME FILE
 REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEAR_ANCHOR_MODE COLLINEAR_COLOR_MODE COLOR SEARCH_FRAME
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES ANNOTATION_LANE_CONFLICT CIRCULAR_SETTING LINEAR_SETTING
-ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER""".split())
+ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK GZIP_INPUT GENBANK_PARSE SEQUENCE_UNDEFINED GFF_NO_FEATURES FASTA_NO_ENTRIES RECORD_ID UNIQUE_IDS OUTFMT7_FIELDS FEATURES_COUNT FONT_FILE FONT_EMBEDDING FONT_RASTER LABEL_CAPACITY""".split())
+# The room each side's labels need when they were not placed (CAPACITY-STOP): bounded numbers, by the key the producer
+# derives from the label kind.
+_LABEL_CAPACITY_KEYS = frozenset(label_capacity_context_key(kind) for kind in get_args(HorizontalLabelKind))
+
+
+def _is_label_capacity(key: str, value: object) -> bool:
+    return key in _LABEL_CAPACITY_KEYS and type(value) is float and 0.0 < value <= 1_000_000.0
 _DIAGNOSTIC_INTEGER_KEYS = frozenset(
     "row column columnCount seriesIndex slotIndex innerPx outerPx keptInsidePx placementIndex queryRecordIndex "
     "subjectRecordIndex".split()
@@ -233,6 +242,10 @@ def _diagnostic(error: BaseException) -> tuple[str, dict] | None:
     counts = diagnostic.get("labelFitCounts")
     if diagnostic["code"] == "LABEL_LAYOUT" and isinstance(counts, str):
         context["labelFitCounts"] = counts
+    # The room each side's labels need when they were not placed (CAPACITY-STOP); the Web words it (OV-2179).
+    for key in sorted(_LABEL_CAPACITY_KEYS & diagnostic.keys()):
+        if diagnostic["code"] == "LABEL_LAYOUT" and _is_label_capacity(key, diagnostic[key]):
+            context[key] = diagnostic[key]
     return diagnostic["code"], context
 
 
@@ -339,7 +352,8 @@ def serialize_web_error(error: BaseException, *, operation: str, stage: str) -> 
     context = {key: value for key, value in context.items()
                if (isinstance(value, str) and len(value) <= 80 and
                    (key != "reason" or value in {"EMPTY_ENDPOINT", "INDEX_ALIGNMENT", "SOURCE_INDEX", "SOURCE_VIEW_CONFLICT"} or code != "COMPARISON_IDENTITY"))
-               or (type(value) is int and 0 <= value <= 10_000_000)}
+               or (type(value) is int and 0 <= value <= 10_000_000)
+               or _is_label_capacity(key, value)}
     payload = {"code": code, "operation": operation, "stage": stage, "context": context}
     secondary = getattr(error, "_web_error_secondary", None)
     if isinstance(secondary, list) and secondary:

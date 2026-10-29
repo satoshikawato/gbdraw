@@ -1814,3 +1814,255 @@ test('legend names: Undo and Redo of a color rule commit keep the name of the ru
   await expectNamesLiveAndGenerated(page, two.map(([, , text]) => text), 'after Undo and Redo');
   expect(await rows(), 'Generate writes the same keys and names').toEqual(two);
 });
+
+// OV-1985 (release-tier random walk, seed 40634318370): a caption-scope stroke
+// on a rule row whose key a later rule edit changes. The fill of FL2 "Use
+// existing color" writes a CDS rule in the palette color, and a second CDS rule
+// in another color makes Python draw the row as `CDS [#54bcf8]`; the stroke is
+// stored under that key. A caption edit of the second rule leaves CDS in one
+// color, so the commit moves the row and its stroke to the key `CDS` (OV-660);
+// after Generate, the caption written back moves them to `CDS [#54bcf8]`
+// again. Each time the live Result shows the stroke on the moved row, as
+// Generate draws it.
+for (const { name, generateBetween } of [
+  { name: 'the row leaves its color ID', generateBetween: false },
+  { name: 'the row takes its color ID back after Generate', generateBetween: true }
+]) {
+  test(`a Legend row stroke moves with its row when a rule caption edit re-keys it, live = Generate: ${name} (OV-1985)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'on' });
+    await popupEdit(page, { type: 'CDS', start: 2000, end: 2600 }, { fill: '#e63946', scope: 'useExisting' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#e63946', cap: 'CDS' });
+    await popupEdit(page, { type: 'CDS', start: 2850, end: 2900 }, { stroke: '#123456', scope: 'caption' });
+    const setCaption = async (value) => {
+      await evaluateWithRetainedPromise(page, (caption) => {
+        const app = window.__GBDRAW_APP__;
+        return app.setSpecificRuleField(app.manualSpecificRules.findIndex((rule) => rule.val === '^FL2$'), 'cap', caption);
+      }, value);
+      await settleLive(page);
+    };
+    await setCaption('transfer RNA');
+    if (generateBetween) {
+      await generate(page);
+      await setCaption('CDS');
+    }
+    const cdsRow = (snapshot) => snapshot.legend.find((row) => row.caption === 'CDS');
+    expect(cdsRow(await semanticSnapshot(page))?.stroke, 'the live CDS row shows the stroke').toBe('#123456');
+    await expectLiveEqualsGenerate(page, { label: `a rule caption edit after a caption-scope stroke: ${name}` });
+  });
+}
+
+// OV-1986: a Legend row's stroke reaches the features drawn in the row's color,
+// so a rule commit that changes which features a stroked row reaches shows the
+// strokes too, live and on Undo and Redo, as Generate draws them. (A) The rule
+// of a stroked row is removed: its feature leaves the row and its stroke. (B)
+// A pattern edit moves FL2 from the stroked row `other proteins` to the rule
+// row `Other`; no Legend row is added or removed. On dev before the fix both
+// commits already asked for the automatic rerender, which redrew the strokes,
+// so these cases pin the result rather than fail first.
+const ruleIndexOf = (page, cap) => page.evaluate((caption) => (
+  window.__GBDRAW_APP__.manualSpecificRules.findIndex((rule) => rule.cap === caption)
+), cap);
+test('a stroked rule row whose rule is removed leaves its feature unstroked, live = Generate (OV-1986)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2266aa', cap: 'Special' });
+  await legendRowStrokeColor(page, 'Special', '#123456');
+  const index = await ruleIndexOf(page, 'Special');
+  await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.removeSpecificRule(rule), index);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'the rule of a stroked row removed' });
+});
+for (const { name, history: steps } of [
+  { name: 'the pattern edit', history: [] },
+  { name: 'the pattern edit, then Undo and Redo', history: ['undo', 'redo'] }
+]) {
+  test(`a rule pattern edit that moves a feature out of a stroked row takes the row's stroke from it, live = Generate: ${name} (OV-1986)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+    await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#2266aa', cap: 'Other' });
+    await legendRowStrokeColor(page, 'other proteins', '#123456');
+    const index = await ruleIndexOf(page, 'Other');
+    await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.setSpecificRuleField(rule, 'val', '^FL[12]$'), index);
+    await settleLive(page);
+    for (const step of steps) await history(page, step);
+    await expectLiveEqualsGenerate(page, { label: `a pattern edit after a Legend row stroke: ${name}` });
+  });
+}
+
+// OV-1987: a rule that takes a CDS feature under another caption makes Python
+// name the CDS palette row "other proteins", so the stroke edit of row `CDS`
+// names a row the Result no longer draws, and Generate strokes no feature with
+// it. A later rule edit shows the strokes live; the row it names is absent, so
+// it reaches no feature either, although the draft still gives the key `CDS`
+// its palette color.
+test('a stroke on a Legend row the Result no longer draws reaches no feature after a rule edit, live = Generate (OV-1987)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await legendRowStrokeColor(page, 'CDS', '#7b2cbf');
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: 'FL2$', color: '#f4a261', cap: 'transfer RNA' });
+  const index = await ruleIndexOf(page, 'transfer RNA');
+  await evaluateWithRetainedPromise(page, (rule) => window.__GBDRAW_APP__.setSpecificRuleField(rule, 'color', '#123456'), index);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'a rule edit after the stroked row left the Result' });
+});
+
+// OV-1988 (release-tier random walk, seed 40655413787): "Use existing color"
+// on a feature that a visibility rule hides writes a CDS rule in the CDS
+// palette color. The rule colors no drawn feature, so Python draws no row for
+// it, and the `CDS` row stays the palette's row. After a palette switch the
+// live `CDS` row takes the new palette color, as Generate draws it; before the
+// fix it kept the rule's (the old palette's) color until Generate.
+test('a palette switch recolors the CDS row a rule of a hidden feature names, live = Generate (OV-1988)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^FL2$', action: 'off' });
+  await popupEdit(page, 'FL2', { fill: '#123456', scope: 'useExisting' });
+  const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
+  expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
+  await switchPalette(page, 'earthtones');
+  const earthtonesCds = await page.evaluate(() => window.__GBDRAW_APP__.paletteDefinitions.earthtones.CDS);
+  const cdsRow = (await semanticSnapshot(page)).legend.find((row) => row.key === 'CDS');
+  expect(cdsRow?.fill, 'the live CDS row shows the new palette color').toBe(earthtonesCds);
+  await expectLiveEqualsGenerate(page, { label: 'a palette switch after a rule of a hidden feature' });
+});
+
+// OV-2188 (release-tier random walk, seeds 20261102 and 20261106): a Legend
+// name given in the popup, or a Legend rename of a feature type's row, shows
+// the rule's row at once. The row copies Python's first row; once the user
+// order puts a GC row first, the copy took that row's stroke (`none`), while
+// Python draws a rule row with the block stroke (`gray`).
+for (const [name, edit] of [
+  ['a popup Legend name', (page) => popupEdit(page, { type: 'repeat_region' }, { legendName: 'Walk group' })],
+  ['a Legend rename', (page) => renameRow(page, 'repeat_region', 'Walk group').then(() => settleLive(page))]
+]) {
+  test(`${name} shows its row with the block stroke after a GC row was moved first, live = Generate (OV-2188)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    const gcContent = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.findIndex((entry) => entry.caption === 'GC content'));
+    await appAction(page, 'moveLegendEntry', gcContent, 0);
+    await edit(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.caption === 'Walk group');
+    expect(row?.stroke, 'the new row is drawn with the block stroke').toBe('#808080');
+    await expectLiveEqualsGenerate(page, { label: `${name} after a GC row was moved first` });
+  });
+}
+
+// OV-2187 (release-tier random walk, seed 20261101): "Use existing color" on
+// a CDS of the first batch Result writes a rule named CDS in the CDS palette
+// color, which colors no feature the second Result draws. There Python draws
+// the palette's CDS row, not the rule's. A rule edit while the second Result
+// is shown took that row for the rule's (same name, same color) and hid it;
+// Generate draws it.
+for (const [name, field, value] of [
+  ['the same name entered again', 'cap', 'CDS'],
+  ['a new color', 'color', '#7b2cbf']
+]) {
+  test(`a rule edit (${name}) on a batch Result the rule does not color keeps its CDS row, live = Generate (OV-2187)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    await popupEdit(page, 'TESTA_0006', { fill: '#123456', scope: 'useExisting' });
+    const rules = await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ feat, cap }) => ({ feat, cap })));
+    expect(rules, 'Use existing color writes a CDS rule named CDS').toEqual([{ feat: 'CDS', cap: 'CDS' }]);
+    await showResult(page, 1);
+    await evaluateWithRetainedPromise(page, ({ field, value }) => window.__GBDRAW_APP__.setSpecificRuleField(0, field, value), { field, value });
+    await settleLive(page);
+    const row = (await semanticSnapshot(page)).legend.find((entry) => entry.key === 'CDS');
+    expect(row, 'the second Result still shows its CDS row').toBeTruthy();
+    await expectLiveEqualsGenerate(page, { label: `a rule edit (${name}) on the Result the rule does not color` });
+  });
+}
+
+// OV-2189 (release-tier random walk, seed 20261108): a popup Legend name on
+// the only feature of a rule row renames the row in its place (OV-158). The
+// rule Python writes for it only re-captions the rule the feature took, so it
+// takes that rule's place in the table, and Generate draws the row there too.
+// The edit is one History step (PD-OI-088).
+test('a popup Legend name on the only feature of a rule row shows the Legend order Generate draws (OV-2189)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#2a9d8f', cap: 'beta' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ val, cap, color }) => [val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['^alpha protein$', 'alpha', '#e63946'], ['^dup alpha$', 'gamma', '#2a9d8f']], undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
+});
+
+// OV-2191: the same edit on a gene rule row, first in the table. The
+// feature's product hits the same feature, and Python used to take the product
+// condition first; it lost to the gene rule, so the feature took a hash rule
+// appended last: Generate drew the row last while the live Legend kept it
+// first. The rule table is a soft check, so the Legend order is checked too.
+test('a popup Legend name on the only feature of a gene rule row keeps the row in place, live = Generate (OV-2191)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="dup alpha"', '/gene="dupA"\n                     /product="dup alpha"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'gene', val: '^dupA$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
+  expect.soft(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, val, cap, color }) => [qual, val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['gene', '^dupA$', 'gamma', '#2a9d8f'], ['product', '^alpha protein$', 'alpha', '#e63946']], undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['gamma', 'alpha', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a gene rule row' });
+});
+
+// OV-2192 (Owner 2026-10-29): the same edit on a locus_tag rule row
+// whose feature shares its product, so Python writes a hash rule for it. The
+// Web says the edit takes the row whole, and the hash rule goes at the place of
+// the locus_tag rule, which stays; Generate used to append it last.
+test('a popup Legend name on the only feature of a locus_tag rule row keeps the row in place, live = Generate (OV-2192)', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await generate(page);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await popupEdit(page, 'FL2', { legendName: 'gamma' });
+  expect(await page.evaluate(() => ({
+    rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, val, cap, color }) => [qual, qual === 'hash' ? '<instance>' : val, cap, color]),
+    undo: window.__GBDRAW_HISTORY__.getUndoCount()
+  })), 'the rule table of the edit and its History step').toEqual({
+    rules: [['hash', '<instance>', 'gamma', '#2a9d8f'], ['locus_tag', '^FL2$', 'beta', '#2a9d8f'],
+      ['product', '^alpha protein$', 'alpha', '#e63946']],
+    undo: undoCount + 1
+  });
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['gamma', 'alpha', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a locus_tag rule row' });
+});
+
+// A popup Legend name that joins another listed row of the same color: the
+// joined row keeps its place live, and Python writes the feature's rule as for
+// any group edit (last), so Generate keeps it there too.
+test('a popup Legend name that joins another row keeps that row in place, live = Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#e9c46a', cap: 'delta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#2a9d8f', cap: 'alpha' });
+  await generate(page);
+  await popupEdit(page, 'FL2', { legendName: 'alpha' });
+  expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, cap }) => [qual, cap])),
+    'the rule table of the join').toEqual([['locus_tag', 'beta'], ['product', 'delta'], ['product', 'alpha'], ['hash', 'alpha']]);
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['delta', 'alpha', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name that joins another row' });
+});

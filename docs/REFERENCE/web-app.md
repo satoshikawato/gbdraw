@@ -57,7 +57,7 @@ restores both. The Circular inputs (**GenBank/DDBJ File**, or **GFF3 File** and
 **FASTA File**) and the Linear **File** cards are separate inputs: a Circular
 upload does not appear in Linear, and a mode switch keeps both. LOSAT run settings (run mode and threads) and the rich
 feature popup are shared. A saved Session keeps each mode's settings
-(Session 48, [compatibility](session-and-request-compatibility.md)).
+(Session 49, [compatibility](session-and-request-compatibility.md)).
 
 A Circular GenBank upload uses **GenBank/DDBJ File**. Each Linear **File** card
 starts with its **GenBank / DDBJ File** uploader, or its matched GFF3 and FASTA
@@ -230,7 +230,22 @@ the loaded Session; **Reset Settings** and a switch between Circular and Linear
 clear it. Popups open below the notice while it is in the upper half of the window, so it stays readable. On gbdraw.app, **Load example** in the header
 and **Load an example** in the empty Preview list the Gallery examples and load
 the chosen one's Session, asking first when the current work has unsaved
-changes. The local `gbdraw gui` ships no Gallery and shows neither button.
+changes. The local `gbdraw gui` ships no Gallery and shows neither button. On gbdraw.app the empty Preview also shows a **Learn with tutorials** card,
+each row of the example list has a **Tutorial** link, and the notice of an
+example loaded with **Load example** links to that example's tutorial; each
+opens the Interactive Gallery's tutorial, which is in English, in a new tab.
+**Gallery & tutorials** in the header opens the Interactive Gallery at
+gbdraw.app in every build, the local `gbdraw gui` included. Where the one-row
+header lacks room, the button shows only its icon, and where even that would
+narrow the Session title, **Reset Settings**, **Save Session**, **Load
+Session**, and **Load example** show only their icons too and the header's
+groups move closer together; where the title would still narrow, the
+**Session** caption before it is hidden, and then the closed **Language** menu
+is only as wide as the shown language's name (in browsers with CSS
+`field-sizing`, such as Chrome and Edge). Where the Session title would still be
+narrower than 5rem (80 px), the header takes the two-row layout it has in a
+window 768 px wide or narrower. In the two-row header, the button shows only
+its icon, at the end of the logo's row.
 
 While **Saving session…** or **Loading session…** is shown, the operation works
 on one consistent document. **Generate Diagram**, file inputs, mode, settings,
@@ -700,6 +715,14 @@ Plot-title text, position, and size share the **Plot Title** subsection.
 Like every setting, the plot-title text, plot-title **Font size**, and
 **Record Labels** **Default font size** are kept per mode. Record label defaults and the per-line **Style** disclosures share
 **Record Labels**.
+In Circular mode, **Show Definition** under **Record Labels** (on by default)
+turns the center definition of every record on or off, on one map and on a
+Multi-Record Canvas: off draws no name, strain, replicon, accession, length, or
+GC line, the inside tracks keep no room for it (a **Center Reserved Radius**
+you set still applies), and no definition-fit warning appears. The plot title is still drawn, and **Keep Full Definition with Plot
+Title** is hidden while **Show Definition** is off. It applies on **Generate**,
+is saved with the Session, and appears in Run info as `--hide_definition`
+(config `objects.definition.circular.show`).
 The separate **Legend · position** section sets legend position, swatch size,
 and font size. Opening or closing these native disclosures is not saved.
 
@@ -1244,10 +1267,16 @@ record only, also when two records share a record ID or the same file is drawn
 twice, live and after Generate. The feature ID comes from the feature's hash in
 its source record, so the rule keeps matching the feature when the region or
 orientation of its Linear record changes. Like the other per-feature edits,
-the rule belongs to the record key: it does not apply while the record is
-drawn under another key (a Circular record drawn alone or on the
+the rule follows the record when the view changes: a Generate that draws the
+record under another key (a Circular record drawn alone or on the
 **Multi-record canvas**, a Linear File card that draws all of its records or
-one of them), and it applies again when that key returns. Resetting **This feature only** on
+one of them) moves the rule, the label, visibility, and stroke edits, the
+Feature placements, and the annotation targets of that record to its new key,
+and a record that the Generate does not draw keeps them until it is drawn
+again. A Generate that also replaces or removes the record's file moves none of
+its edits. **Undo** of that Generate puts them back. Edits made on an "all
+records" card of a gbdraw 0.13.0 Session do not follow its records after the
+first Generate splits the card. Resetting **This feature only** on
 one copy leaves the other copies as they are: a rule that names the shared
 hash is narrowed to the copies it still colors. **Delete settings** of a record
 that is turned off removes the `hash` rules that name its feature instances;

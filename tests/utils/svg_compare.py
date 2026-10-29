@@ -24,6 +24,27 @@ from gbdraw.svg.path_data import PATH_DECIMALS
 PATH_ROUNDING = 10.0 ** -PATH_DECIMALS
 
 
+def assert_nested_approx(actual, expected, **tolerance) -> None:
+    """Compare nested lists, tuples, and dicts leaf by leaf, numbers with ``pytest.approx(**tolerance)``.
+
+    ``pytest.approx`` 9.2 rejects nested data, so structures of numbers go through here.
+    """
+    import pytest
+
+    if isinstance(expected, dict):
+        assert isinstance(actual, dict) and actual.keys() == expected.keys(), (actual, expected)
+        for key, value in expected.items():
+            assert_nested_approx(actual[key], value, **tolerance)
+    elif isinstance(expected, (list, tuple)):
+        assert isinstance(actual, (list, tuple)) and len(actual) == len(expected), (actual, expected)
+        for actual_item, expected_item in zip(actual, expected):
+            assert_nested_approx(actual_item, expected_item, **tolerance)
+    elif isinstance(expected, (int, float)) and not isinstance(expected, bool):
+        assert actual == pytest.approx(expected, **tolerance)
+    else:
+        assert actual == expected
+
+
 BASIC_CSS_COLORS = {
     "aqua": "#00ffff",
     "black": "#000000",

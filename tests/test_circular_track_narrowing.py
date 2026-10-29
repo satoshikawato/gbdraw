@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 from Bio import SeqIO
+from tests.utils.svg_compare import assert_nested_approx
 
 import gbdraw.diagrams.circular.assemble as circular_assemble_module
 from gbdraw.api.diagram import assemble_circular_diagram_from_record
@@ -169,7 +170,7 @@ def test_auto_widths_narrow_to_clear_the_band_and_stay_at_or_above_the_floor() -
 def test_widths_stay_when_narrowing_to_the_floor_cannot_clear_the_band() -> None:
     natural = _layout(None)
     over = _layout(260.0)
-    assert _geometry(over) == pytest.approx(_geometry(natural))
+    assert_nested_approx(_geometry(over), _geometry(natural))
     assert not any(slot.compressed for slot in over.slots)
     assert _inner_edge(over) < 260.0
     assert over.definition_reserved_band_px is not None
@@ -179,7 +180,7 @@ def test_widths_stay_when_narrowing_to_the_floor_cannot_clear_the_band() -> None
 def test_turning_narrowing_off_keeps_the_widths() -> None:
     natural = _layout(None)
     kept = _layout(200.0, overrides={"canvas.circular.track_narrowing": False})
-    assert _geometry(kept) == pytest.approx(_geometry(natural))
+    assert_nested_approx(_geometry(kept), _geometry(natural))
     assert not any(slot.compressed for slot in kept.slots)
 
 
@@ -200,7 +201,7 @@ def test_a_track_narrower_than_the_floor_keeps_its_width() -> None:
     # A floor above the 74 px rows: a band that a few px of narrowing would clear leaves them as they are.
     natural = _layout(None)
     kept = _layout(170.0, overrides={"canvas.circular.track_narrowing_min_px": 100.0})
-    assert _geometry(kept) == pytest.approx(_geometry(natural))
+    assert_nested_approx(_geometry(kept), _geometry(natural))
     assert not any(slot.compressed for slot in kept.slots)
 
 
@@ -253,7 +254,7 @@ def test_turning_narrowing_off_keeps_the_auto_widths_of_a_custom_stack() -> None
     narrowed = _by_id(_layout(180.0, slot_specs=CUSTOM_STACK_SLOTS))
     assert all(narrowed[slot_id].compressed for slot_id in ("gc_content", "gc_skew", "at"))
     kept = _layout(180.0, slot_specs=CUSTOM_STACK_SLOTS, overrides={"canvas.circular.track_narrowing": False})
-    assert _geometry(kept) == pytest.approx(_geometry(natural))
+    assert_nested_approx(_geometry(kept), _geometry(natural))
     assert not any(slot.compressed for slot in kept.slots)
 
 

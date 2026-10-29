@@ -9,6 +9,10 @@ from ..exceptions import ValidationError
 from ..layout.text_geometry import AabbTuple, Point
 
 CircularLabelPlacement: TypeAlias = Literal["horizontal", "radial"]
+# The margins of a horizontal label's box in the fit count, in px: the box is this much wider and taller than the
+# label (half on each side). The capacity check reads the same box.
+LABEL_FIT_X_MARGIN_PX = 1.0
+LABEL_FIT_Y_MARGIN_PX = 0.1
 
 
 def normalize_circular_label_placement(value: object) -> CircularLabelPlacement:

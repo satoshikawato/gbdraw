@@ -1449,10 +1449,9 @@
            aria-label and title. The tagline gives way before the toolbar, so the
            longer button labels of es, fr and pt keep the Session title and the
            Language menu in view; the logo keeps its size, and the Session title
-           narrows when the labels still do not fit. Below 769px, where the toolbar
-           wraps, the closed Language select shrinks and clips the longer names
-           (at 390px, those longer than English) before it pushes its row to wrap;
-           the open list still shows every name in full. OV-1495: at 1440px and wider the
+           narrows when the labels still do not fit, down to 5rem, below which the
+           header takes its two-row layout (OV-2178), as it always does below 769px.
+           OV-1495: at 1440px and wider the
            tagline takes only the room the toolbar leaves, cut with an ellipsis,
            and is hidden when that room is under 10rem; so the Session title and
            the Language menu stay in view there too in es, fr and pt. */
@@ -1468,6 +1467,135 @@
            ends with an ellipsis or shows nothing; the title button clips its own pencil and title. */
         .app-session-label { flex: none; min-width: 0; max-width: calc(100% - 2rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .app-session-button { overflow: hidden; }
+        /* The mode buttons animate their colors only: a size that eases between the one-row and the two-row
+           header would give app/header-fit.js the widths of a frame in between. */
+        .app-header .app-mode-button { transition-property: color, background-color, box-shadow; }
+        /* #1383 (PD-OI-108): the way to the Gallery's tutorials stands out: the header link, the link in the notice
+           of a loaded example, and the card of the empty Preview share one accent-filled style. */
+        .app-gallery-link {
+            display: inline-flex; flex: none; align-items: center; gap: 0.375rem; padding: 0.25rem 0.625rem;
+            border: 1px solid var(--ui-accent); border-radius: 0.375rem; background-color: var(--ui-accent); color: #fff;
+            font-size: 0.8125rem; font-weight: 600; line-height: 1.25rem; white-space: nowrap; text-decoration: none;
+        }
+        .app-gallery-link:hover { background-color: #1d4ed8; border-color: #1d4ed8; }
+        .app-gallery-link:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+        .app-file-actions .app-gallery-link { padding: 0.25rem 0.5rem; }
+        .app-gallery-link-label { display: inline-flex; align-items: center; gap: 0.375rem; }
+        /* The states of the one-row header (app/header-fit.js): the Gallery link shows its cap alone, the file
+           buttons show their icons alone as they do below 1280 px, and with both, the toolbar's groups close up
+           (vi and th at 1024 px keep the Session title and the mode names on one line); where even that narrows the
+           Session title, its "Session" caption hides, as in the two-row header, and the groups close up to 2 px
+           (TL-D06). OV-2177, OV-2178: where the title still narrows, the closed Language menu takes the width of the
+           shown name, not of the longest one (a browser without field-sizing keeps the longest and so takes two rows
+           sooner), and a mode name keeps one line (vi and th split theirs from 769 to about 930 px), so the title,
+           which header-fit.js measures, takes the whole shortfall; where it would be under 5rem, the header takes
+           its two-row layout below. */
+        @media (min-width: 769px) {
+            .app-header[data-gallery-icon] .app-gallery-link-label { display: none; }
+            .app-header[data-file-icons] .app-file-actions .app-config-button {
+                width: 2rem !important; height: 2rem !important; padding: 0 !important;
+                justify-content: center !important; font-size: 0 !important;
+            }
+            .app-header[data-file-icons] .app-file-actions .app-config-button i { font-size: 0.95rem !important; }
+            .app-header[data-file-icons][data-gallery-icon] .app-toolbar { gap: 0.25rem; }
+            .app-header[data-file-icons][data-gallery-icon] .app-file-actions { margin-left: 0.25rem; padding-left: 0.25rem; }
+            .app-header[data-session-title-alone] .app-session-label { display: none; }
+            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-toolbar { gap: 0.125rem; }
+            .app-header[data-file-icons][data-gallery-icon][data-session-title-alone] .app-file-actions { margin-left: 0.125rem; padding-left: 0.125rem; }
+            .app-header:not([data-header-wrapped]) .app-mode-button { white-space: nowrap; }
+            .app-header[data-language-narrow] .app-language-select { field-sizing: content; }
+        }
+        /* The two-row header (`data-header-wrapped`, app/header-fit.js): always at 768 px and below, where the
+           stylesheet sets the `--app-header-two-row` marker, and from 769 px where the one-row header cannot keep
+           the Session title 5rem wide (OV-2177, OV-2178). The logo's row ends with the Gallery cap alone, which has
+           room there, so the toolbar's rows stay as they are without the link (with its words, or in the toolbar's
+           row, it would add a row). Below 769 px the closed Language select shrinks and clips the longer names
+           (at 390 px, those longer than English) before it pushes its row to wrap; the open list still shows every
+           name in full. */
+        .app-header[data-header-wrapped] {
+            height: auto !important;
+        }
+
+        .app-header[data-header-wrapped] .app-header-inner {
+            position: relative;
+            height: auto !important;
+            min-height: 3.5rem !important;
+            padding: 0.5rem 0.75rem !important;
+            flex-wrap: wrap !important;
+            gap: 0.5rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-file-actions .app-gallery-link { position: absolute; top: 0.5rem; right: 0.75rem; height: 2rem; }
+        .app-header[data-header-wrapped] .app-gallery-link-label { display: none; }
+
+        .app-header[data-header-wrapped] .app-brand {
+            flex: 1 1 auto !important;
+        }
+
+        .app-header[data-header-wrapped] .app-logo-title {
+            height: 2rem !important;
+            max-width: 8.5rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-label {
+            display: none !important;
+        }
+
+        .app-header[data-header-wrapped] .app-toolbar {
+            width: 100% !important;
+            flex-wrap: wrap !important;
+            justify-content: space-between !important;
+            gap: 0.4rem !important;
+        }
+
+        .app-header[data-header-wrapped] .app-file-actions {
+            flex-wrap: wrap !important;
+            gap: 0.25rem !important;
+            order: 2 !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-actions {
+            flex: 1 1 8rem !important;
+            order: 3 !important;
+        }
+
+        .app-header[data-header-wrapped] .app-session-button {
+            width: min(100%, 10rem) !important;
+            height: 2rem !important;
+        }
+
+        .app-header[data-header-wrapped] .mode-switch {
+            order: 1 !important;
+            margin-left: auto !important;
+        }
+
+        .app-header[data-header-wrapped] .app-language {
+            order: 1 !important;
+            flex: 1 1 4.5rem;
+            min-width: 0;
+            max-width: max-content;
+        }
+
+        .app-header[data-header-wrapped] .app-language-select {
+            min-width: 0;
+        }
+
+        .app-header[data-header-wrapped] .app-mode-button {
+            padding: 0.35rem 0.55rem !important;
+            font-size: 0.75rem !important;
+        }
+        .app-notice-link { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; margin-top: 0.375rem; font-weight: 500; }
+        .tutorial-card {
+            margin-top: 1.5rem; max-width: 30rem; padding: 1rem 1.25rem; border: 1px solid #bfdbfe; border-radius: 0.75rem;
+            background-color: var(--ui-accent-soft); color: #1e3a8a; text-align: left;
+        }
+        .tutorial-card-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; font-weight: 700; }
+        .tutorial-card-text { margin: 0.25rem 0 0.75rem; font-size: 0.8125rem; line-height: 1.45; color: #1e40af; }
+        .example-tutorial-link {
+            display: inline-flex; flex: none; align-items: center; gap: 0.25rem; padding: 0.5rem 0.75rem;
+            font-size: 0.75rem; font-weight: 600; color: #1d4ed8; white-space: nowrap;
+        }
+        .example-tutorial-link:hover { text-decoration: underline; }
         @media (max-width: 1439px) {
             .app-tagline {
                 display: none !important;
@@ -1499,73 +1627,9 @@
                 min-height: 100dvh !important;
             }
 
+            /* The header takes its two-row layout (app/header-fit.js reads this marker). */
             .app-header {
-                height: auto !important;
-            }
-
-            .app-header-inner {
-                height: auto !important;
-                min-height: 3.5rem !important;
-                padding: 0.5rem 0.75rem !important;
-                flex-wrap: wrap !important;
-                gap: 0.5rem !important;
-            }
-
-            .app-brand {
-                flex: 1 1 auto !important;
-            }
-
-            .app-logo-title {
-                height: 2rem !important;
-                max-width: 8.5rem !important;
-            }
-
-            .app-session-label {
-                display: none !important;
-            }
-
-            .app-toolbar {
-                width: 100% !important;
-                flex-wrap: wrap !important;
-                justify-content: space-between !important;
-                gap: 0.4rem !important;
-            }
-
-            .app-file-actions {
-                flex-wrap: wrap !important;
-                gap: 0.25rem !important;
-                order: 2 !important;
-            }
-
-            .app-session-actions {
-                flex: 1 1 8rem !important;
-                order: 3 !important;
-            }
-
-            .app-session-button {
-                width: min(100%, 10rem) !important;
-                height: 2rem !important;
-            }
-
-            .mode-switch {
-                order: 1 !important;
-                margin-left: auto !important;
-            }
-
-            .app-language {
-                order: 1 !important;
-                flex: 1 1 4.5rem;
-                min-width: 0;
-                max-width: max-content;
-            }
-
-            .app-language-select {
-                min-width: 0;
-            }
-
-            .app-mode-button {
-                padding: 0.35rem 0.55rem !important;
-                font-size: 0.75rem !important;
+                --app-header-two-row: 1;
             }
 
             .app-main {
@@ -2125,6 +2189,12 @@
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
+        <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
+        <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
+             class="mt-3 mx-4 max-w-md rounded border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-900">
+            <p class="font-semibold">{{ t('Labels may not fit') }}</p>
+            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ labelCapacityNoticeText(notice) }}</p>
+        </div>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
@@ -2133,7 +2203,7 @@
         </button>
     </div>
 
-    <header class="app-header border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
+    <header v-header-fit class="app-header border-b border-slate-200 sticky top-0 z-40 shadow-sm/50 backdrop-blur-md bg-white/90 h-14 shrink-0">
         <div class="app-header-inner px-4 h-full flex items-center justify-between">
             <div class="app-brand flex items-center gap-3 min-w-0">
                 <img src="./assets/gbdraw-logo-title-outlined.svg" alt="gbdraw" class="app-logo-title h-9 w-auto shrink-0">
@@ -2164,6 +2234,10 @@
                     <button v-if="galleryExamples.length" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" :title="t('Open a finished Gallery example as a Session')" :aria-label="t('Load example')" aria-haspopup="dialog">
                         <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load example') }}
                     </button>
+                    <!-- #1383 (PD-OI-108): the Gallery and its tutorials, in every build; the pip GUI opens gbdraw.app's. -->
+                    <a data-gallery-link :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link" :title="t('Gallery & tutorials')" :aria-label="t('Gallery & tutorials')">
+                        <i class="ph ph-graduation-cap" aria-hidden="true"></i><span class="app-gallery-link-label">{{ t('Gallery & tutorials') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></span>
+                    </a>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
                     <span v-if="sessionSavePending" data-session-save-status role="status" aria-live="polite" class="text-[10px] font-semibold text-blue-700 whitespace-nowrap">{{ t('Saving session…') }}</span>
@@ -4714,7 +4788,7 @@
                                     </div>
                                 </div>
                                 </div>
-                                <div v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="flex items-center text-xs">
+                                <div v-if="mode === 'circular' && adv.plot_title_position !== 'none' && adv.show_definition !== false" class="flex items-center text-xs">
                                     <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
                                         <input type="checkbox" v-model="adv.keep_full_definition_with_plot_title" aria-describedby="help-title-keep-full-definition-with-plot-title" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                         <span>{{ t('Keep Full Definition with Plot Title') }}</span>
@@ -4725,6 +4799,13 @@
 
                             <section aria-labelledby="record-label-settings-heading" class="space-y-2 border-t border-slate-200 pt-3">
                                 <h4 id="record-label-settings-heading" class="group-heading">{{ t('Record Labels') }}</h4>
+                                <div v-if="mode === 'circular'" class="flex items-center text-xs">
+                                    <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                                        <input type="checkbox" v-model="adv.show_definition" aria-describedby="help-record-labels-show-definition" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                        <span>{{ t('Show Definition') }}</span>
+                                    </label>
+                                    <help-tip id="help-record-labels-show-definition" :text="t('Circular only. Off draws no center definition for any record (name, strain, replicon, accession, length, GC), and the inside tracks keep no room for it. The plot title is kept.')"></help-tip>
+                                </div>
                                 <div>
                                     <span class="input-label text-[10px] mb-0">{{ t('Default font size') }} <help-tip id="help-title-default-font-size" :text="t('Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear).')"></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
@@ -5846,6 +5927,11 @@
                     <ul v-if="notice.items.length" class="mt-1 list-disc space-y-0.5 pl-4">
                         <li v-for="(item, index) in notice.items" :key="index">{{ item }}</li>
                     </ul>
+                    <!-- #1383 (PD-OI-108): a loaded Gallery example offers its tutorial. -->
+                    <p v-if="notice.link" data-app-notice-link class="app-notice-link">
+                        <span><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ notice.link.text }}</span>
+                        <a :href="notice.link.href" target="_blank" rel="noopener noreferrer" class="app-gallery-link">{{ notice.link.label }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+                    </p>
                 </div>
                 <button type="button" data-history-ignore @click="$event.currentTarget.closest('.result-pane')?.focus({ preventScroll: true }); dismissNotice()" class="app-notice-dismiss" :title="t('Dismiss')" :aria-label="t('Dismiss notice')">
                     <i class="ph ph-x" aria-hidden="true"></i>
@@ -8424,6 +8510,12 @@
                         <gbdraw-loader v-if="exampleSessionPending"></gbdraw-loader><i v-else class="ph ph-play-circle" aria-hidden="true"></i> {{ t('Load an example') }}
                     </button>
                     <p id="example-session-help" class="ui-hint mt-2">{{ t('Opens a finished Gallery example as a Session.') }}</p>
+                    <!-- #1383 (PD-OI-108): the tutorials behind the examples. -->
+                    <div data-tutorial-card class="tutorial-card">
+                        <p class="tutorial-card-title"><i class="ph ph-graduation-cap" aria-hidden="true"></i> {{ t('Learn with tutorials') }}</p>
+                        <p class="tutorial-card-text">{{ t('Every Interactive Gallery example has a step-by-step tutorial that draws it from its input files.') }}</p>
+                        <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="app-gallery-link">{{ t('Open the Interactive Gallery') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i></a>
+                    </div>
                 </template>
             </div>
         </div>
@@ -8446,7 +8538,7 @@
         <span>
             <!-- A line breaks only between the items: each link stays whole and keeps its separator at its end (OV-1517). -->
             {{ t('License:') }} <a href="./open-source-notices.html" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Open Source Notices') }}</a>&nbsp;|
-            <a href="https://gbdraw.app/gallery/" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
+            <a :href="INTERACTIVE_GALLERY_URL" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Interactive Gallery') }}</a>&nbsp;|
             <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('MIT on GitHub') }}</a>&nbsp;|
             {{ t('Author:') }} <a href="https://researchmap.jp/satoshi_kawato?lang=en" target="_blank" rel="noopener noreferrer" class="whitespace-nowrap hover:underline hover:text-slate-700">{{ t('Satoshi Kawato') }}</a>
         </span>
@@ -8576,23 +8668,27 @@
                 <button v-else type="button" data-history-ignore :disabled="processing" @click="resolveMissingBlastTsv('generate')" class="btn btn-primary btn-sm">{{ t('Generate') }}</button>
             </div>
         </choice-dialog>
-        <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order -->
+        <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order; labels not placed for
+             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only; every row known not to
+             fit (NO-ROW-WAYS): the same ways under the rows -->
         <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing"
              :busy-status="labelFitDialog.finishing ? t('Finishing the choice being computed…') : null" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
              @cancel="resolveLabelFitChoice('cancel')" @keydown.tab="trapDialogFocus"
              class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
             <h2 id="label-fit-title" class="text-base font-bold text-slate-800">{{ t('Labels do not fit') }}</h2>
-            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.drawn
+            <p id="label-fit-description" class="mt-2 text-sm leading-relaxed text-slate-600">{{ labelFitDialog.capacity
+                ? t('Nothing was drawn. These labels need much more room than the map has, so placing them was not tried.')
+                : labelFitDialog.drawn
                 ? t('The figure is drawn. Choose a fix to Generate again, or keep it as drawn.')
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})
+                    <i18n-text v-if="record.capacity" :text="labelCapacityText(record.capacity)"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
+                    <template v-else><span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})</template>
                 </li>
             </ul>
-            <p v-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
-            <fieldset v-else class="mt-3">
+            <fieldset v-if="labelFitDialog.rows.length" class="mt-3">
                 <legend class="sr-only">{{ t('Fix') }}</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
                     <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"
@@ -8615,14 +8711,21 @@
                     </li>
                 </ul>
             </fieldset>
+            <p v-else-if="!labelFitDialog.capacity" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
+            <div v-if="labelFitDialog.remedies.length" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
+                <p class="font-semibold">{{ t('To make room:') }}</p>
+                <ul class="mt-1 list-disc pl-5 space-y-1">
+                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
+                </ul>
+            </div>
             <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
             <div v-if="labelFitDialog.definitionRecords.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
                 <button v-for="record in labelFitDialog.definitionRecords" :key="record.recordIndex" type="button" data-history-ignore
                         :data-label-fit-edit-record="record.recordIndex" @click="editLabelFitRecordText(record.recordIndex)" class="btn btn-secondary btn-sm">{{ t('Edit Species / Strain…') }}<template v-if="labelFitDialog.definitionRecords.length > 1"> ({{ record.recordId }}, #{{ record.recordIndex + 1 }})</template></button>
             </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
-                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
-                <button type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
+                <button type="button" data-history-ignore data-label-fit-keep @click="resolveLabelFitChoice('cancel')" class="btn btn-secondary btn-sm">{{ labelFitDialog.capacity ? t('Close') : labelFitDialog.drawn ? t('Keep as drawn') : t('Cancel') }}</button>
+                <button v-if="!labelFitDialog.capacity" type="button" data-history-managed :disabled="!semanticMutationAvailable || processing || !labelFitDialog.selectedKind" @click="resolveLabelFitChoice('apply')" class="btn btn-primary btn-sm">{{ t('Apply and Generate') }}</button>
             </div>
         </choice-dialog>
         <!-- Record selection (D-02, D-10): the records of one file, drawn or left out -->
@@ -8697,16 +8800,21 @@
                 {{ t('Each example opens its Gallery Session: the inputs, settings, and Result.') }}
             </p>
             <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
-                <li v-for="example in galleryExamples" :key="example.id">
+                <li v-for="example in galleryExamples" :key="example.id" class="flex items-center">
                     <button type="button" data-history-managed :data-gallery-example="example.id" @click="loadExampleSession(example)"
-                            class="flex w-full items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
+                            class="flex min-w-0 flex-1 items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
                         <img v-if="example.thumbnailUrl" :src="example.thumbnailUrl" alt="" loading="lazy"
                              class="h-14 w-20 shrink-0 rounded border border-slate-200 bg-white object-contain">
                         <span class="min-w-0">
-                            <span class="block text-sm font-medium text-slate-800"><template v-for="(part, index) in example.titleParts" :key="index"><i v-if="part.italic">{{ part.text }}</i><template v-else>{{ part.text }}</template></template></span>
+                            <span :id="`example-title-${example.id}`" class="block text-sm font-medium text-slate-800"><template v-for="(part, index) in example.titleParts" :key="index"><i v-if="part.italic">{{ part.text }}</i><template v-else>{{ part.text }}</template></template></span>
                             <span v-if="example.mode" class="block text-xs text-slate-500">{{ example.mode }}</span>
                         </span>
                     </button>
+                    <!-- #1383 (PD-OI-108): the example's tutorial in the Gallery -->
+                    <a v-if="example.tutorialUrl" data-gallery-tutorial :href="example.tutorialUrl" target="_blank" rel="noopener noreferrer"
+                       :aria-describedby="`example-title-${example.id}`" class="example-tutorial-link">
+                        <i class="ph ph-graduation-cap" aria-hidden="true"></i>{{ tx('English-only Gallery tutorial', 'Tutorial') }}<i class="ph ph-arrow-square-out" aria-hidden="true"></i>
+                    </a>
                 </li>
             </ul>
             <div class="mt-4 flex justify-end">

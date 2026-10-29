@@ -9,8 +9,9 @@ import { createResultsManager } from '../../gbdraw/web/js/app/results.js';
 import { createPaletteLoader } from '../../gbdraw/web/js/app/palettes.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
 import { createDialogChoice } from '../../gbdraw/web/js/app/history-inputs.js';
-import { normalizePaletteColors } from '../../gbdraw/web/js/utils/color-utils.js';
+import { normalizePaletteColors, normalizePaletteDefinitions } from '../../gbdraw/web/js/utils/color-utils.js';
 import { drawingStore } from './helpers/drawing-state.mjs';
+import { PALETTE_NAME_ALIASES } from '../../gbdraw/web/js/contracts/schema.generated.js';
 import {
   PALETTE_SLICE, clearQueuedPalette, queuePalette, replaceDefaultColors, restoreArtifactQueuedPalette, selectPalette, setDefaultColors
 } from '../../gbdraw/web/js/services/drawing/palette.js';
@@ -309,7 +310,7 @@ test('the palette dialog closes after the History step of its choice', async () 
 // color is derived: nothing writes it into the Legend rows, which are an input
 // of the rule preparation (a write during a Generate made it stale).
 // Edit-unify: the rows a rule draws are Python's (`draftLegendRowColors`).
-const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
+const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC', features = [] } = {}) => {
   const { draftLegendPanelColors, draftLegendRowColors } = await import('../../gbdraw/web/js/app/candidate-render.js');
   const entries = [
     { caption: 'CDS', color: '#AABBCC' }, { caption: 'other tRNAs', color: '#111111' },
@@ -322,9 +323,9 @@ const legendPanelSetup = async ({ rules = [], cdsDrawn = '#AABBCC' } = {}) => {
   ]);
   const paletteColors = { ...paletteOf('default'), CDS: '#123456', tRNA: '#333333', rRNA: '#444444' };
   const panel = draftLegendPanelColors({
-    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, paletteColors, drawnTracks: []
+    legendEntries: entries, originalLegendOrder, legendColorOverrides: { rRNA: '#121212' }, rules, pythonRows, features, paletteColors, drawnTracks: []
   });
-  const compiled = draftLegendRowColors({ rules, pythonRows, originalLegendOrder, paletteColors, drawnTracks: [] });
+  const compiled = draftLegendRowColors({ rules, pythonRows, features, originalLegendOrder, paletteColors, drawnTracks: [] });
   return { panel, compiled, entries };
 };
 
@@ -397,11 +398,31 @@ test('rules of one caption in two colors color a row each', async () => {
 // color, also when its caption names a palette key (a rule captioned CDS
 // whose color Python drew in the CDS row): the compile gives it the rule's
 // color, and the panel does not report it.
+// The drawn CDS features with the rule's match known, as the rule preparation records them.
+const drawnCdsFeatures = async (rule, matched) => {
+  const { recordRuleMatches, ruleKey } = await import('../../gbdraw/web/js/services/rule-matchers.js');
+  const features = [{ type: 'CDS', fill_color: '#00aa00' }, { type: 'CDS', fill_color: '#00aa00' }];
+  recordRuleMatches(features, [ruleKey(rule)], () => ({ matched: matched ? [0] : [], priorities: matched ? [0] : [], declined: [] }));
+  return features;
+};
 test('a palette change leaves a Legend row that a rule draws', async () => {
   const rule = { feat: 'CDS', qual: 'product', val: '.', color: '#00aa00', cap: 'CDS' };
-  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00' });
+  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, true) });
   assert.deepEqual([...panel.listed], [['other tRNAs', '#333333']]);
   assert.equal(compiled.colorOf('CDS'), '#00aa00');
+});
+
+// OV-1988: a rule captioned CDS in the CDS row's color that colors no drawn
+// feature (its feature is hidden) draws no row, so the CDS row is the
+// palette's and takes the new palette color, in the compile and the panel.
+test('a palette change recolors the CDS row a rule names when the rule colors no drawn feature', async () => {
+  const rule = { feat: 'CDS', qual: 'locus_tag', val: '^HIDDEN$', color: '#00aa00', cap: 'CDS' };
+  const { panel, compiled } = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: await drawnCdsFeatures(rule, false) });
+  assert.equal(compiled.colorOf('CDS'), '#123456');
+  assert.deepEqual([...panel.listed], [['CDS', '#123456'], ['other tRNAs', '#333333']]);
+  // The unknown-match fallback: while a drawn feature's match is unknown, live keeps the rule's color.
+  const pending = await legendPanelSetup({ rules: [rule], cdsDrawn: '#00aa00', features: [{ type: 'CDS', fill_color: '#00aa00' }] });
+  assert.equal(pending.compiled.colorOf('CDS'), '#00aa00');
 });
 
 // OV-527: a hand-edited Session may name a palette `constructor` or `__proto__`;
@@ -417,6 +438,53 @@ test('a palette named like an inherited member falls back to the default palette
     assert.equal(createPaletteLoader({ state }).applyPalettes(PALETTES), true);
     assert.equal(circular.selectedPalette.value, 'default', name);
   }
+});
+
+// `herbal_garden` was `hearbal_garden` through 0.14.2 (PALETTE_NAME_ALIASES of
+// gbdraw/io/colors.py). The palette slice stores the current name of every
+// palette it is given (Load, History, a queued palette); a lookup by the former
+// name finds the palette, and the list shows only the current name.
+test('a former palette name is stored, looked up, and listed by its current name', () => {
+  assert.deepEqual(PALETTE_NAME_ALIASES, { hearbal_garden: 'herbal_garden' });
+  const drawing = drawingOf({});
+  PALETTE_SLICE.install(drawing.slices.palette, { selectedPalette: 'hearbal_garden', pendingPaletteName: 'hearbal_garden' });
+  assert.equal(drawing.selectedPalette.value, 'herbal_garden');
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  queuePalette(drawing.slices.palette, 'hearbal_garden', { CDS: '#000000' });
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  restoreArtifactQueuedPalette(drawing.slices.palette, 'hearbal_garden', { CDS: '#000000' });
+  assert.equal(drawing.pendingPaletteName.value, 'herbal_garden');
+  selectPalette(drawing.slices.palette, 'forest');
+  assert.equal(drawing.selectedPalette.value, 'forest');
+
+  const circular = drawingOf();
+  const state = {
+    paletteDefinitions: ref({}), paletteNames: ref([]), appliedPaletteName: ref(''), appliedPaletteColors: ref({}),
+    ...drawingStore(circular, drawingOf()), activeDrawing: () => circular
+  };
+  const herbal = { CDS: '#addc7f', default: '#d3d3d3' };
+  assert.equal(createPaletteLoader({ state }).applyPalettes({ ...PALETTES, herbal_garden: herbal }), true);
+  assert.deepEqual(state.paletteNames.value, ['default', 'forest', 'herbal_garden']);
+  assert.deepEqual(Object.keys(state.paletteDefinitions.value), ['default', 'forest', 'herbal_garden']);
+  assert.equal(state.paletteDefinitions.value.hearbal_garden, state.paletteDefinitions.value.herbal_garden);
+  assert.deepEqual(state.paletteDefinitions.value.herbal_garden, normalizePaletteColors(herbal));
+});
+
+// Load copies a saved `ui.appliedPaletteName` as written (services/config.js),
+// so a 0.14.2 Result drawn with `hearbal_garden` is the applied palette under
+// its former name: choosing `herbal_garden` is switching back to it, which
+// applies live and drops the queued palette (Q5 A).
+test('the current name of a Result drawn with a former palette name is the applied palette', () => {
+  const { drawing, state, manager } = setup({ colors: paletteOf('default'), instant: false });
+  const herbal = { CDS: '#addc7f', default: '#d3d3d3' };
+  state.paletteDefinitions.value = normalizePaletteDefinitions({ ...PALETTES, herbal_garden: herbal });
+  state.appliedPaletteName.value = 'hearbal_garden';
+  queuePalette(drawing.slices.palette, 'forest', paletteOf('forest'));
+  manager.selectPalette('herbal_garden');
+  assert.equal(drawing.selectedPalette.value, 'herbal_garden');
+  assert.equal(drawing.pendingPaletteName.value, '');
+  assert.equal(state.appliedPaletteName.value, 'herbal_garden');
+  assert.deepEqual(state.appliedPaletteColors.value, normalizePaletteColors(herbal));
 });
 
 // An artifact owner set holds its queued palette colors by reference, and a

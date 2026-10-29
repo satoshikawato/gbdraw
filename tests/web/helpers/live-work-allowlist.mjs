@@ -76,23 +76,27 @@ export const WORK_ALLOWLIST = [
     }).then(() => settleLive(page))
   },
   { kind: 'Legend row stroke', stages: ['strokes'], compiles: 1, requests: [], run: (page) => legendRowStrokeColor(page, 'CDS', '#e63946') },
+  // From here the drawing holds a Legend row stroke. The stroke reaches the
+  // features drawn in the row's color, and an edit of the fills can change
+  // them or the row's key, so every display of the fills also shows the
+  // strokes (OV-1985, OV-1986).
   { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
   // The step restores the editor's Legend rows (their colors among them): Legend rows and fills.
   { kind: 'History step (Undo of a Legend row color)', stages: ['legend', 'legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
   // The rules' matches are prepared: the palette sends no request.
-  { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
+  { kind: 'palette change', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
   {
     // D-15: Apply to all on a palette row sets the type's default color and
     // adds no rule; the palette watcher shows it in one compile. The choice
     // first prepares the matches of the rules that could draw the row
     // (`withTargetRules`), one rule request.
-    kind: 'Apply to all on a palette row', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'],
+    kind: 'Apply to all on a palette row', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
     run: (page) => applyToAllOnPaletteRow(page, 'tRNA', '#5e60ce')
   },
   {
     // D-15: a palette switch asks while a user default color exists; Keep is
     // one History step, which the palette watcher shows in one compile.
-    kind: 'palette switch, Keep my colors', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [],
+    kind: 'palette switch, Keep my colors', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [],
     run: (page) => switchPaletteKeeping(page, ['default', 'arctic'])
   },
   {
@@ -114,7 +118,7 @@ export const WORK_ALLOWLIST = [
     // caption written in two colors stays as written (the Legend numbers the
     // names it draws), so no caption normalization request precedes the
     // matches.
-    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
@@ -128,7 +132,7 @@ export const WORK_ALLOWLIST = [
     // commit's rerender left the rule matches to prepare: the display's
     // preparation is discarded while the Save runs, so the repaint prepares
     // them again.
-    kind: 'Result display declined by Save, shown when Save ends', stages: ['legend', 'fills', 'rules', 'legendFills'],
+    kind: 'Result display declined by Save, shown when Save ends', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
     compiles: 2, requests: ['evaluateRules', 'evaluateRules'],
     before: async (page) => { await showResult(page, 0); await legendRowColor(page, 'tRNA', '#2a9d8f'); },
     run: (page) => displayWhileSaveHeld(page, 1)
@@ -136,7 +140,7 @@ export const WORK_ALLOWLIST = [
   {
     // U2BFIX3 review M-A: Save shows the fills the declined display left
     // behind before it writes the Result (the matches are prepared).
-    kind: 'Save while the displayed Result lacks paint', stages: ['legend', 'fills', 'rules', 'legendFills'],
+    kind: 'Save while the displayed Result lacks paint', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
     compiles: 2, requests: [],
     before: async (page) => { await showResult(page, 0); await legendRowColor(page, 'tRNA', '#e9c46a'); },
     run: async (page) => {
@@ -185,12 +189,12 @@ export const WORK_ALLOWLIST = [
   },
   {
     // The rule takes one feature of the "other proteins" row of Result 1: a split.
-    kind: 'color rule commit that splits a row', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    kind: 'color rule commit that splits a row', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^TESTA_0005$', color: '#2a9d8f', cap: 'Five' })
   },
   {
-    kind: 'Legend rename, rule row one Result draws (whole row)', stages: ['fills', 'rules', 'legendFills', 'legend'],
+    kind: 'Legend rename, rule row one Result draws (whole row)', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'],
     compiles: 1, requests: ['evaluateRules'], run: (page) => renameLegendRow(page, 'Five', 'Fifth')
   },
   // The rename's History step holds the Result before and after it: Undo and
@@ -198,11 +202,11 @@ export const WORK_ALLOWLIST = [
   { kind: 'History step (Undo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'undo') },
   { kind: 'History step (Redo of the rule row rename)', stages: [], compiles: 0, requests: [], run: (page) => history(page, 'redo') },
   {
-    kind: 'Legend row color, rule row', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'],
+    kind: 'Legend row color, rule row', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: ['evaluateRules'],
     run: (page) => legendRowColor(page, 'Fifth', '#264653')
   },
   {
-    kind: 'Rules-panel color of a captioned rule', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [],
+    kind: 'Rules-panel color of a captioned rule', stages: ['fills', 'rules', 'legendFills', 'strokes'], compiles: 1, requests: [],
     run: (page) => page.evaluate(() => {
       const app = window.__GBDRAW_APP__;
       return app.setSpecificRuleField(app.manualSpecificRules.findIndex((rule) => rule.cap === 'Fifth'), 'color', '#e76f51');
@@ -210,14 +214,14 @@ export const WORK_ALLOWLIST = [
   },
   {
     // Result 2 draws the row too: Python draws it again there.
-    kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    kind: 'Legend rename, rule row both Results draw', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['render'], run: (page) => renameLegendRow(page, 'CDS [#2266aa]', 'Two')
   },
   {
     // Python writes the rules that carry the row's features under the new
     // name (synthesizeColorRules), so their matches are a request. The rules
     // also match Result 2's tRNAs, so Python draws that Result again.
-    kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend'], compiles: 1,
+    kind: 'Legend rename, palette row with features', stages: ['fills', 'rules', 'legendFills', 'legend', 'strokes'], compiles: 1,
     requests: ['evaluateRules', 'evaluateRules', 'render', 'synthesizeColorRules'],
     run: (page) => renameLegendRow(page, 'tRNA', 'transfer RNA')
   },

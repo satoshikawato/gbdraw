@@ -345,3 +345,29 @@ Circular holds no genome, the five file cards, and hand edits made before and
 after each load. It pins the rows each card marks, the Default colors and
 Blacklist words in `config.fileImports`, and the rows a hand edit made the
 user's. The steps and inputs are in `file-card-imports.provenance.json`.
+
+`HmmtDNA-hearbal-garden-cli.v48.gbdraw-session.json.gz` is the CLI sidecar that
+release v0.14.2 wrote for `-p hearbal_garden`, the former name of the palette
+`herbal_garden`, compressed with `gzip -n -9`. Its command, input hash, and
+decompressed SHA-256 are in `HmmtDNA-hearbal-garden-cli.v48.provenance.json`;
+`tests/test_palette_name_alias.py` replays it.
+
+`record-identity-circular-single.v48.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from release tag `v0.14.2` (Session 48).
+Circular draws record 2 of a two-record GenBank File alone (Multi-Record Canvas
+off), and four features of that record carry a "This feature only" fill, a
+label edit, Feature visibility Off and a stroke, all keyed by the record key
+0.14.2 gave a record drawn alone (`circular-BGC0000709-#2`). It is the positive
+fixture of the Generate that moves a record's rows to the key of its new view
+(OV-1949): `record-identity-moves.playwright.spec.js` loads it, turns the canvas
+on, and expects the four edits on record 2. The steps, edited features
+and hashes are in `record-identity-circular-single.provenance.json`.
+
+`hidden-definition-circular.v49.gbdraw-session.json.gz` is a Web **Save
+Session** download of the current writer (Session 49, PD-OI-109), written by
+`tests/web/circular-hide-definition.playwright.spec.js` and recompressed with
+`gzip -n -9`: Circular draws `tests/test_inputs/HmmtDNA.gbk` with the plot title
+"Mitochondrial genome" at the top and **Show Definition** off, so its slice holds
+`adv.show_definition: false` and its request
+`objects.definition.circular.show: false`. Its decompressed SHA-256 is
+`5d25d11dea37f278ff2aee041d9d7c92c63c7756bc1e4291ef9a118c91e33a94`.

@@ -180,6 +180,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "tick_label_font_size"},
     {"domain": "config.adv", "key": null, "migrate": "profile", "modes": "both", "path": "plot_title_font_size"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "keep_full_definition_with_plot_title"},
+    {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "show_definition"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "center_reserved_radius"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "feature_width_circular"},
     {"domain": "config.adv", "key": null, "migrate": "own", "modes": "circular", "path": "depth_width_circular"},

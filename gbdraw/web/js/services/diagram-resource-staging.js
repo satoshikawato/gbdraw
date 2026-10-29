@@ -14,7 +14,7 @@ import {
 /** @import { DepthFilePayload } from './depth-file-codec.js' */
 /** @import { ResourceContentToken } from './file-content-cache.js' */
 /** @import { ResourcePayloadOwner } from './resource-payload-owner.js' */
-/** @import { FileLike } from './session-resource-backing.js' */
+/** @import { FileLike, RawSessionResourceDescriptor } from './session-resource-backing.js' */
 
 /**
  * A canonical render resource as a Session or request holds it: base64 text,
@@ -119,6 +119,18 @@ export const resourceIdOwnedBy = (resources, file, kind) => {
  * @callback ReadCommittedResourceSets
  * @returns {Iterable<CommittedResourceSet>}
  */
+/**
+ * The files a drawing's draft holds now while its request omits them (a hidden
+ * Depth file; `heldDepthFiles`), as the descriptors earlier requests carried.
+ * @typedef {{ drawingId: string, files: readonly RawSessionResourceDescriptor[] }} DraftHeldFiles
+ */
+/**
+ * Every drawing's draft held files, read at each staging, so a file leaves
+ * the Worker once no draft holds it (gbdraw/web/CLAUDE.md, Runtime data flow).
+ * The composition root supplies it.
+ * @callback ReadDraftHeldFiles
+ * @returns {Iterable<DraftHeldFiles>}
+ */
 
 /**
  * What names a payload's bytes until they change: the base64 text, or the
@@ -131,8 +143,8 @@ const payloadIdentityOf = (descriptor) => (
   typeof descriptor.data === 'string' ? descriptor.data : getResourcePayloadOwner(descriptor) ?? descriptor
 );
 
-/** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets }} [ports] */
-export const createDiagramResourceTransport = ({ readCommittedResourceSets = () => [] } = {}) => {
+/** @param {{ readCommittedResourceSets?: ReadCommittedResourceSets, readDraftHeldFiles?: ReadDraftHeldFiles }} [ports] */
+export const createDiagramResourceTransport = ({ readCommittedResourceSets = () => [], readDraftHeldFiles = () => [] } = {}) => {
   // The tokens the Worker holds after the last acknowledged request.
   /** @type {ReadonlySet<ResourceContentToken>} */
   let heldTokens = new Set();
@@ -148,17 +160,22 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
     workerEpoch += 1;
   };
 
-  // The held tokens a drawing's committed request names. Only tokens already
-  // known count: hashing a payload here would read bytes the Worker may not hold.
+  // Adds the token of `descriptor` when the Worker holds its bytes. Only tokens
+  // already known count: hashing a payload here would read bytes the Worker may not hold.
+  /** @param {unknown} descriptor @param {Set<ResourceContentToken>} into */
+  const addHeldToken = (descriptor, into) => {
+    if (!descriptor || typeof descriptor !== 'object') return;
+    const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
+    if (token && heldTokens.has(token)) into.add(token);
+  };
+
+  // The held tokens a drawing's committed request names.
   const committedHeldTokens = () => {
     /** @type {Set<ResourceContentToken>} */
     const retained = new Set();
     for (const { request, resources } of readCommittedResourceSets()) {
       for (const resourceId of collectCanonicalResourceIds(request)) {
-        const descriptor = resources && Object.hasOwn(resources, resourceId) ? resources[resourceId] : null;
-        if (!descriptor || typeof descriptor !== 'object') continue;
-        const token = knownTokens.get(payloadIdentityOf(/** @type {ResourceDescriptor} */ (descriptor)));
-        if (token && heldTokens.has(token)) retained.add(token);
+        addHeldToken(resources && Object.hasOwn(resources, resourceId) ? resources[resourceId] : null, retained);
       }
     }
     return retained;
@@ -167,17 +184,27 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
   // A render stages what its request names, and the Worker then holds only that.
   // A helper (`retain`) stages the resources it reads, and the Worker keeps the
   // rest for the next Generate (OV-1590), so the held tokens keep them too.
+  // The files each drawing's draft holds now while its request omits them stay
+  // too, and those of the drawing a render draws (`drawingId`) are its
+  // `heldResourceTokens`; a file the Worker never received is not held, read or staged.
   /**
    * @param {{
    *   request?: unknown,
    *   resources?: Readonly<Record<string, Partial<ResourceDescriptor> | null | undefined>> | null,
+   *   drawingId?: string | null,
    *   retain?: boolean
    * }} [payload]
    */
-  const prepare = async ({ request, resources, retain = false } = {}) => {
+  const prepare = async ({ request, resources, drawingId = null, retain = false } = {}) => {
     const previousHeldTokens = heldTokens;
     const preparedEpoch = workerEpoch;
     const retained = committedHeldTokens();
+    /** @type {Set<ResourceContentToken>} */
+    const drawingHeldTokens = new Set();
+    for (const draft of readDraftHeldFiles()) {
+      for (const descriptor of draft.files) addHeldToken(descriptor, draft.drawingId === drawingId ? drawingHeldTokens : retained);
+    }
+    for (const token of drawingHeldTokens) retained.add(token);
     const referencedIds = Array.from(collectCanonicalResourceIds(request));
     const resourceManifest = [];
     /** @type {{ resourceId: string, cacheToken: ResourceContentToken, bytes: ArrayBuffer }[]} */
@@ -253,6 +280,7 @@ export const createDiagramResourceTransport = ({ readCommittedResourceSets = () 
       stagedResources,
       // The held tokens the Worker keeps besides this request's: it releases the rest.
       retainedResourceTokens: [...retained].filter((token) => !manifestTokens.has(token)),
+      heldResourceTokens: [...drawingHeldTokens].filter((token) => !manifestTokens.has(token)),
       commit() {
         if (retain) {
           if (workerEpoch !== preparedEpoch) return false;

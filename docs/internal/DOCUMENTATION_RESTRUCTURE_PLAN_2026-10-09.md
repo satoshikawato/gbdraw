@@ -85,7 +85,7 @@ the page that receives the content. Paths are under `docs/` unless shown.
 | --- | --- | --- |
 | `README.md` (repository root) | What is gbdraw and where do I start? | keep; update links |
 | `DOCS.md` | Where is the page for my question? | keep; rewrite route table question-first; drop removed pages |
-| `QUICKSTART.md` | What is the fastest first figure? | keep (linked by the 0.13.0 README); router to the two first Tutorials |
+| `QUICKSTART.md` | What is the fastest first figure? | keep (linked by the 0.13.0 README); the web app link, the README's one executed command block on the bundled tutorial inputs (2026-10-27, codebase audit), and links to the two first Tutorials |
 | `INSTALL.md` | How do I install gbdraw? | keep |
 | `GETTING_TUTORIAL_DATA.md` | How do I download and check Tutorial inputs? | keep; receives revision-pin rules shared by all Tutorials |
 | `ABOUT.md` | How do I cite gbdraw? | keep |
@@ -169,7 +169,7 @@ interface. Generating one from the other is deferred until after 0.14.0.
 ```text
 README.md
 docs/DOCS.md                       home: four routes, supporting pages
-docs/QUICKSTART.md                 router to the two first Tutorials
+docs/QUICKSTART.md                 web app link, README command block, links to the two first Tutorials
 docs/TUTORIALS/README.md           10 projects
 docs/TUTORIALS/<slug>.md           x10, web app / command line / Python sections
 docs/REFERENCE/README.md           + 10 topic pages

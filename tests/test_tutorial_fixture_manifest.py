@@ -13,6 +13,8 @@ from urllib.parse import unquote
 import pytest
 from Bio import SeqIO
 
+from gbdraw.losat_setup import managed_losat
+
 pytestmark = pytest.mark.recipe
 
 
@@ -519,6 +521,9 @@ def test_metazoan_mtdna_fastas_match_complete_genbank_sources() -> None:
 
 
 def test_metazoan_mtdna_comparison_builder_is_byte_reproducible() -> None:
+    # The builder runs the managed LOSAT release (`gbdraw setup-losat`, as in CI).
+    if managed_losat() is None:
+        pytest.skip("No managed LOSAT is installed; run gbdraw setup-losat.")
     subprocess.run(
         [sys.executable, "tools/build_metazoan_mitochondria_comparison_fixture.py"],
         cwd=REPO_ROOT,

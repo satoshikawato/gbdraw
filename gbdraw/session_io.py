@@ -96,7 +96,7 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 48
+CURRENT_SESSION_VERSION = 49
 # Version 44 is the first with the current active-config and record-display
 # draft shapes; version 46 keeps the Web draft of each diagram mode in
 # ``modes`` (PD-OI-086) and keys per-feature edits by source identity;
@@ -105,7 +105,8 @@ CURRENT_SESSION_VERSION = 48
 # and adds each slice's ``adv.font_family`` (PD-OI-098); version 48 stores
 # the protein results of a reverse-complemented Linear record in its search
 # frame (OV-1145) and what each file card's file put into a slice, for Remove
-# on the card (OV-1280).
+# on the card (OV-1280); version 49 adds each Circular slice's
+# ``adv.show_definition`` (PD-OI-109).
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
 MODE_SCOPED_SESSION_MIN_VERSION = 46
 ROW_KEYED_LEGEND_SESSION_MIN_VERSION = 47
@@ -117,7 +118,7 @@ DISPLAY_PLACEMENT_DRAFT_SESSION_MIN_VERSION = 41
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 LOSAT_DERIVED_CACHE_SCHEMA = CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA
@@ -129,6 +130,7 @@ CURRENT_FEATURE_CATALOG_SCHEMA = 5
 # The catalog schema each current-authority Session version writes.
 FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = {
     44: 4, 46: CURRENT_FEATURE_CATALOG_SCHEMA, 47: CURRENT_FEATURE_CATALOG_SCHEMA,
+    FILE_IMPORT_ORIGIN_SESSION_MIN_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
     CURRENT_SESSION_VERSION: CURRENT_FEATURE_CATALOG_SCHEMA,
 }
 # The fields of a record display draft row (Session 41+), the two that Session
@@ -726,9 +728,20 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_settings_only_session(session)
 
 
+def _is_web_draft_version(version: object, *older: int) -> bool:
+    """Whether ``version`` is one of ``older`` or a mode-scoped version (46 to the current one)."""
+    return isinstance(version, int) and (
+        version in older or MODE_SCOPED_SESSION_MIN_VERSION <= version <= CURRENT_SESSION_VERSION
+    )
+
+
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") in (42, 44, 46, 47, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
+    return (
+        _is_web_draft_version(session.get("version"), 42, 44)
+        and "renderRequest" in session
+        and session["renderRequest"] is None
+    )
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -784,9 +797,10 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42, 44, 46, 47, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+    if current and (not _is_web_draft_version(session.get("version"), 41, 42, 44) or "c_gb" not in bindings):
         raise ValidationError(
-            f"Web binding schema 2 requires session 41, 42, 44, 46, 47, or {CURRENT_SESSION_VERSION} and c_gb."
+            f"Web binding schema 2 requires session 41, 42, 44, or {MODE_SCOPED_SESSION_MIN_VERSION}-"
+            f"{CURRENT_SESSION_VERSION} and c_gb."
         )
     resources = session.get("resources", {})
 

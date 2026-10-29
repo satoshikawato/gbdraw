@@ -17,13 +17,14 @@ import {
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
-import { normalizeLabelFitFailure } from './label-fit.js';
+import { normalizeLabelCapacityNotice, normalizeLabelFitFailure } from './label-fit.js';
+/** @import { LabelCapacityNotice } from './label-fit.js' */
 /** @import { LabelFitFailure } from './label-fit.js' */
 import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
 
 /** @import { UserFacingOptions } from '../utils/error-normalization.js' */
-/** @import { ReadCommittedResourceSets, ResourceDescriptor } from './diagram-resource-staging.js' */
+/** @import { ReadCommittedResourceSets, ReadDraftHeldFiles, ResourceDescriptor } from './diagram-resource-staging.js' */
 /** @import { CanonicalRecordSource } from '../contracts/request.generated.js' */
 /** @import { BoundedJsonValue } from './bounded-json-transport.js' */
 /** @import { WebFontEntry } from './font-store.js' */
@@ -99,8 +100,9 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 /**
- * A progress report of a request.
- * @typedef {{ requestId: number, stage: string } & Partial<RuntimePreparationStep>} RequestProgress
+ * A progress report of a request. `notice` names labels that may not fit
+ * (CAPACITY-WARN), sent while Python renders, before it places them.
+ * @typedef {{ requestId: number, stage: string, notice?: LabelCapacityNotice } & Partial<RuntimePreparationStep>} RequestProgress
  */
 
 /**
@@ -486,6 +488,8 @@ let activeRequest = null;
  * @property {unknown[]} resourceManifest
  * @property {TransferFile[]} stagedResources
  * @property {readonly string[]} retainedResourceTokens The tokens the Worker keeps besides the manifest's.
+ * @property {readonly string[]} heldResourceTokens Those of them that the rendered drawing's draft holds while
+ *   the request omits them.
  * @property {() => boolean} commit Acknowledges the staging; false when a reset
  *   or another acknowledged request superseded it.
  */
@@ -494,20 +498,26 @@ const activeFeatureRequests = new Set();
 /** @type {Set<AuxiliaryRequest>} */
 const activeHelperRequests = new Set();
 let nextRequestId = 1;
-/** @type {ReadCommittedResourceSets} */
-const NO_COMMITTED_RESOURCES = () => [];
-let readCommittedResourceSets = NO_COMMITTED_RESOURCES;
+/**
+ * What the Worker keeps besides a render's own resources: those of every drawing's committed
+ * request, and the files every drawing's draft holds while its request omits them.
+ * @typedef {{ readCommittedResourceSets: ReadCommittedResourceSets, readDraftHeldFiles: ReadDraftHeldFiles }} DiagramResourceRetainSource
+ */
+/** @type {DiagramResourceRetainSource} */
+const NOTHING_RETAINED = { readCommittedResourceSets: () => [], readDraftHeldFiles: () => [] };
+let retainSource = NOTHING_RETAINED;
 const resourceTransport = createDiagramResourceTransport({
-  readCommittedResourceSets: () => readCommittedResourceSets()
+  readCommittedResourceSets: () => retainSource.readCommittedResourceSets(),
+  readDraftHeldFiles: () => retainSource.readDraftHeldFiles()
 });
 
 /**
- * Name the committed request of every drawing, so the Worker keeps the
- * resources they name across Generates of other drawings.
- * @param {ReadCommittedResourceSets | null} read Null when the app unmounts.
+ * Name the committed request and the draft held files of every drawing, so the
+ * Worker keeps their resources across Generates of other drawings.
+ * @param {DiagramResourceRetainSource | null} source Null when the app unmounts.
  */
-export const setDiagramResourceRetainSource = (read) => {
-  readCommittedResourceSets = read || NO_COMMITTED_RESOURCES;
+export const setDiagramResourceRetainSource = (source) => {
+  retainSource = source || NOTHING_RETAINED;
 };
 
 /** @type {ReadonlySet<string>} */
@@ -851,7 +861,8 @@ const settleActiveRequest = (request, callback) => {
  *   `held`: what the page holds for the drawing it renders (selectHeldRenderState); the
  *   catalog's revision and each segment's revision and byte count are posted.
  *   `drawingId`: the drawing it renders; the Worker keeps each drawing's prepared inputs
- *   while the retain set names their resources (A4b).
+ *   while the retain set names their resources (A4b), and the files its draft holds while
+ *   the request omits them (`createDiagramResourceTransport`).
  * @returns {Promise<GenerationResponse>}
  */
 export const runDiagramGeneration = (payload = {}, { onProgress = null, held = NOTHING_HELD, drawingId = null } = {}) => {
@@ -881,10 +892,10 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
     reject: rejectRequest
   };
   activeRequest = request;
-  /** @param {string} stage @param {RuntimePreparationStep | null} [step] */
-  const reportProgress = (stage, step = null) => {
+  /** @param {string} stage @param {RuntimePreparationStep | { notice: LabelCapacityNotice } | null} [detail] */
+  const reportProgress = (stage, detail = null) => {
     if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
-      onProgress({ requestId, stage, ...(step || {}) });
+      onProgress({ requestId, stage, ...(detail || {}) });
     }
   };
 
@@ -911,13 +922,14 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
       if (request.settled || activeRequest !== request) return;
       reportProgress('preparing-resources');
       failureStage = 'resource-staging';
-      const preparedResources = await resourceTransport.prepare(payload);
+      const preparedResources = await resourceTransport.prepare({ ...payload, drawingId });
       if (request.settled || activeRequest !== request) return;
       const workerPayload = {
         request: payload.request,
         resourceManifest: preparedResources.resourceManifest,
         stagedResources: preparedResources.stagedResources,
         retainedResourceTokens: preparedResources.retainedResourceTokens,
+        heldResourceTokens: preparedResources.heldResourceTokens,
         drawingId,
         fontIdentities: requestFontIdentities(payload.request),
         heldFeatureCatalogRevision: held.catalog?.revision ?? null,
@@ -949,7 +961,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
           return;
         }
         if (data.type === 'progress' && data.requestId === requestId) {
-          reportProgress(data.stage);
+          const notice = normalizeLabelCapacityNotice(data.notice);
+          reportProgress(data.stage, notice ? { notice } : null);
           return;
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;

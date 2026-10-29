@@ -20,7 +20,7 @@ from ....core.color import (
     interpolate_default_colors,
 )
 from ....features.ids import DrawnFeatureHash, make_linear_rendered_feature_id
-from ....layout.linear_multi_record import LinearRecordPlacement
+from ....layout.linear_multi_record import LinearComparisonEndpoint
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
 from .feature_identity import LinearFeatureDomIndex
@@ -167,7 +167,6 @@ class PairWiseMatchGroup:
     Attributes:
         sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
         comparison_df (DataFrame): DataFrame containing comparison data.
-        comparison_height (float): Height of the comparison track.
         comparison_count (int): Counter for the number of comparisons.
     """
 
@@ -175,17 +174,14 @@ class PairWiseMatchGroup:
         self,
         sequence_length_dict: dict,
         comparison_df: DataFrame,
-        actual_comparison_height: float,
         comparison_count: int,
         blast_config: BlastMatchConfigurator,
         records: Sequence[SeqRecord],
         *,
-        query_y: float,
-        subject_y: float,
         feature_dom_index: LinearFeatureDomIndex | None,
         record_transforms: Sequence[RecordDisplayTransform] | None,
-        query_placement: LinearRecordPlacement,
-        subject_placement: LinearRecordPlacement,
+        query_placement: LinearComparisonEndpoint,
+        subject_placement: LinearComparisonEndpoint,
     ) -> None:
         """
         Initializes the PairWiseMatchGroup with necessary data and configurations.
@@ -193,17 +189,14 @@ class PairWiseMatchGroup:
         Args:
             sequence_length_dict (Dict[str, int]): Dictionary of sequence lengths.
             comparison_df (DataFrame): DataFrame containing comparison data.
-            comparison_height (float): Height of the comparison track.
             comparison_count (int): Counter for the number of comparisons.
-            query_y, subject_y: The y of the query and subject ends of a ribbon, unless a feature's
-                attachment band moves them (``feature_dom_index``).
             query_placement, subject_placement: Where the two records are drawn; a match end
-                at bp ``p`` sits at ``placement.x_for_position(p)``. Their ``record_index`` is
+                at bp ``p`` sits at ``placement.x_for_position(p)`` and at ``placement.anchor_y``,
+                moved by the offset of the feature it is attached to. Their ``record_index`` is
                 the comparison's query and subject record.
         """
         self.sequence_length_dict: Dict[str, int] = sequence_length_dict
         self.comparison_df: DataFrame = comparison_df
-        self.comparison_height: float = actual_comparison_height
         self.match_fill_color: str = blast_config.fill_color
         self.min_identity: float = blast_config.identity
         self.match_min_color: str = blast_config.min_color
@@ -225,8 +218,8 @@ class PairWiseMatchGroup:
         self.records = records
         self.query_placement = query_placement
         self.subject_placement = subject_placement
-        self.query_y = float(query_y)
-        self.subject_y = float(subject_y)
+        self.query_y = float(query_placement.anchor_y)
+        self.subject_y = float(subject_placement.anchor_y)
         self.feature_dom_index = feature_dom_index
         self.record_transforms = record_transforms
         self.track_id: str = "comparison" + str(self.comparison_count)
@@ -257,7 +250,7 @@ class PairWiseMatchGroup:
     def subject_record_index(self) -> int:
         return self.subject_placement.record_index
 
-    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearRecordPlacement, LinearRecordPlacement]:
+    def _placements(self, role: Literal["query", "subject"]) -> tuple[LinearComparisonEndpoint, LinearComparisonEndpoint]:
         """The ``role`` record's placement and the other record's."""
 
         if role == "query":
@@ -361,10 +354,10 @@ class PairWiseMatchGroup:
         return color
 
     def _feature_attachment_y(self, row: object, role: Literal["query", "subject"], default_y: float) -> float:
-        index = self.feature_dom_index
-        if index is None or not index.attachment_bands:
-            return default_y
         placement, other = self._placements(role)
+        offsets = placement.attachment_offsets_px
+        if not offsets:
+            return default_y
         view_id = _attribute_text(_row_value(row, f"{role}_view_feature_svg_id", "")) or _attribute_text(
             _row_value(row, f"{role}_feature_svg_id", "")
         )
@@ -372,12 +365,10 @@ class PairWiseMatchGroup:
             view_id, record_index=placement.record_index,
             feature_index_value=_row_value(row, f"{role}_feature_index", ""),
         )
-        bands = [index.attachment_bands[key] for key in rendered_ids.split(";") if key in index.attachment_bands]
-        if not bands:
+        attached = [offsets[key] for key in rendered_ids.split(";") if key in offsets]
+        if not attached:
             return default_y
-        if placement.row < other.row:
-            return default_y + (max(band.bottom_y for band in bands) - placement.comparison_bottom_y)
-        return default_y + (min(band.top_y for band in bands) - placement.comparison_top_y)
+        return default_y + (max(attached) if placement.row < other.row else min(attached))
 
     def generate_linear_match_path(self, row: DataFrame, match_index: int | None = None,
                                    endpoints: tuple[float, float, float, float] | None = None) -> Path:

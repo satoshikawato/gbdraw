@@ -471,6 +471,49 @@ Strain…** (one per record, followed by the record ID when there are several):
 it closes the dialog without applying a row and shows the field that sets
 that record's name lines.
 
+### Labels that need much more room than the map has
+
+Before it places horizontal Circular outer and inner labels, gbdraw estimates
+how much room each side of each record needs, as a multiple of the room on the
+ellipse the labels are placed on. Radial and embedded labels are not counted.
+The estimate assumes every label sits on the ellipse; a label box is counted
+with the same 1 px and 0.1 px margins as the check above.
+
+- **Over 1.5 times, and no single fix makes room:** when even 6 pt labels, both
+  outer offsets at 2 (outer labels), or all labels outside (inner labels) would
+  still need more than the room there is, gbdraw does not place the labels and
+  searches no fix. Nothing is drawn: the command line prints `ERROR:` with the
+  record, the number of labels, the font size, and about how many times the
+  room they need, then the ways to make room (label fewer features with
+  `--label_blacklist` or `--label_whitelist`, shorten the label text with
+  `--qualifier_priority`, use a smaller `--label_font_size` unless the labels
+  are already 6 pt or smaller, or draw a Linear map), and exits with status 1.
+  The other records of a multi-record figure are still placed and checked, and
+  every record that does not fit is named. Python raises `LabelsDoNotFitError`
+  with no rows (`report.rows` is empty, `row_search` is `None`); each record that
+  was not placed has `capacity`, a `LabelCapacityRecord` with the label count,
+  font size, `ratio`, and `remedies`. In the Web app the **Labels do not fit**
+  dialog lists the records and the ways to make room, with **Close** only.
+- **0.8 times or more otherwise:** gbdraw warns before it places the labels,
+  because they may not fit and placing them can take minutes, then places them
+  and checks them as described above. The command line prints the sentence
+  after `WARNING:`; Python warns with `LabelsMayNotFitWarning`, a `UserWarning`
+  with `record_id`, `label_kind`, and `capacity`; the Web app shows it in the
+  progress screen while Generate runs.
+
+When the labels of a Circular map are placed and searched and every row is
+`not_found`, gbdraw names the same ways to make room for their outer and inner
+labels (again without a smaller font at 6 pt): the command line prints
+`To make room:` and the ways after `No single change of the label settings
+fits this map.`, and the **Labels do not fit** dialog lists them under the rows
+once every row is computed. The rows, the search time, and the drawing do not
+change. In Python, `LabelFitReport.room_remedies` holds the ways for a stop,
+and for a report in which no row has a value (a row still `not_computed` may
+fit, so the command line and the dialog wait for every row to be `not_found`).
+
+The settings a row verifies are placed without this estimate, so the rows are
+the same as without it.
+
 With 50 or more outer labels, gbdraw packs the labels in rows with
 `--circular_label_spacing` between them. If those rows do not fit, the labels
 are packed 0.1 px apart, as in 0.13, so a map that fit in 0.13 still draws.

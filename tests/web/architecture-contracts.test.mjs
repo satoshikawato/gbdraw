@@ -784,8 +784,15 @@ test('each Result write allowlist admits only its own kind of operator', () => {
   ));
 });
 
+// At most these facts until multi-drawing B merges (D-15-184): a key, an import target, a path, or a count may
+// only fall, so B can delete services/gallery-session-migration.js without touching this guard file. The test-only
+// PR after B restores the exact facts.
+const assertAtMost = (observed, recorded, label) => assert.deepEqual(
+  observed.filter((item) => !recorded.includes(item)), [], `${label}: only the recorded items`
+);
+
 test('shared privileged detectors preserve the characterized current-source facts', () => {
-  assert.deepEqual(WEB_PRIVILEGED_CAPABILITY_KEYS, [
+  assertAtMost(WEB_PRIVILEGED_CAPABILITY_KEYS, [
     'Canonical editor state',
     'Diagram Worker',
     'History',
@@ -796,8 +803,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     'SVG serialization',
     'SVG/Result admission',
     'Session'
-  ]);
-  assert.deepEqual(WEB_PRIVILEGED_IMPORT_TARGETS, [
+  ], 'capability keys');
+  assertAtMost(WEB_PRIVILEGED_IMPORT_TARGETS, [
     'app/feature-editor.js',
     'app/legend.js',
     'app/preview-runtime.js',
@@ -818,7 +825,7 @@ test('shared privileged detectors preserve the characterized current-source fact
     'services/svg-sanitization.js',
     'services/svg-serialization.js',
     'workers/diagram-generation-worker.js'
-  ]);
+  ], 'import targets');
 
   const detected = detectPrivilegedWebCapabilities(productionSources);
   assert.deepEqual(
@@ -827,7 +834,7 @@ test('shared privileged detectors preserve the characterized current-source fact
       WEB_PRIVILEGED_IMPORT_TARGETS.map((target) => [target, importersOf(target)])
     )
   );
-  assert.deepEqual(detected.operatorMatchesByCapability, {
+  const recorded = {
     'Canonical editor state': [
       { path: 'app/app-setup.js', count: 8 },
       { path: 'app/feature-editor.js', count: 1 },
@@ -890,7 +897,14 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/gallery-session-migration.js', count: 3 },
       { path: 'services/session-file.js', count: 1 }
     ]
-  });
+  };
+  assertAtMost(Object.keys(detected.operatorMatchesByCapability), Object.keys(recorded), 'capabilities');
+  for (const [capability, matches] of Object.entries(detected.operatorMatchesByCapability)) {
+    const countOf = new Map(recorded[capability].map(({ path, count }) => [path, count]));
+    assertAtMost(matches.map(({ path }) => path), [...countOf.keys()], `${capability} paths`);
+    matches.forEach(({ path, count }) => assert.ok(count <= countOf.get(path),
+      `${capability}: ${path} has ${count} sites, at most ${countOf.get(path)} recorded`));
+  }
 });
 
 test('metadata validation callers cannot acquire identity or namespace access', () => {
@@ -1832,6 +1846,8 @@ test('trusted promotion uses base code for topology, exact-SHA evidence, and tre
   );
   assert.match(devPolicy, /ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(devPolicy, /fetch-depth: 0/);
+  // Commits and trees only: the blobs of every branch timed the job out (OV-2190).
+  assert.match(devPolicy, /fetch-depth: 0\n {10}filter: blob:none\n/);
   assert.match(devPolicy, /persist-credentials: false/);
   assert.match(devPolicy, /git fetch --no-tags origin "\$HEAD_SHA"/);
   assert.doesNotMatch(
@@ -5032,12 +5048,11 @@ test('persisted contract: a renamed export with the same value needs review only
 const SESSION_UNIT_KEY = Object.freeze({ ...PERSISTED_CONTRACT_KEY, sessionVersionUnit: 'main' });
 const SESSION_UNIT_FAILURE = /persisted-contract\.fold: /;
 const SESSION_UNIT_REVIEW = /the head and main both write Session /;
-const sessionVersionSchema = (version) => withContractExport(
-  withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version)),
-  'SUPPORTED_SESSION_VERSIONS',
-  `Object.freeze([${[...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
-    .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}])`
-);
+// The read list may hold `version` already (a branch reads a Session before it writes it).
+const sessionVersionSchema = (version) => withContractExport(CONTRACT_SCHEMA_SOURCE, 'SESSION_VERSION', String(version))
+  .replace(contractExportPattern('SUPPORTED_SESSION_VERSIONS'), `export const SUPPORTED_SESSION_VERSIONS = Object.freeze([${
+    [...CURRENT_SUPPORTED_SESSION_VERSIONS, NEXT_SESSION_VERSION, version]
+      .filter((item, index, items) => item <= version && items.indexOf(item) === index).join(', ')}]);`);
 // Raises the Session version from `from` to `to` with every co-change the Gate asks for.
 const sessionRaise = (from, to) => ({
   [CONTRACT_SCHEMA_PATH]: sessionVersionSchema(to),
@@ -5086,7 +5101,8 @@ test('persisted contract: a Session version above main takes later breaking chan
       [CONTRACT_SCHEMA_PATH]: CONTRACT_SCHEMA_SOURCE,
       [SESSION_HISTORY_PATH]: historyWith('Session version lowered.'),
       [COMPATIBILITY_REFERENCE_PATH]: '# Compatibility\n\nLowered.\n',
-      'tests/fixtures/sessions/lowered.json': '{}\n'
+      // The head's read list may still hold the version main writes; it then keeps a fixture of it.
+      [`tests/fixtures/sessions/lowered.v${NEXT_SESSION_VERSION}.gbdraw-session.json`]: '{}\n'
     }
   });
   assertVendorGateFailure(lowered, SESSION_UNIT_FAILURE, 'lowered below main');
@@ -5860,6 +5876,36 @@ test('the reserved PR template is guard-only', () => {
     templateAndAuthority.output,
     /architecture rule authority changes must be isolated/
   );
+});
+
+test('every file under .github/actions/ is a guard and authority path like a workflow', () => {
+  const action = '.github/actions/example/action.yml';
+  const actionYaml = 'name: Example\nruns:\n  using: composite\n  steps: []\n';
+  const actionOnly = runChangeBudgetCase((write) => write(action, actionYaml));
+  assert.equal(actionOnly.status, 0, actionOnly.output);
+  assert.match(
+    reportSection(actionOnly.output, 'Review reasons'),
+    /Governance and authority: registered governance or authority files changed \(\.github\/actions\/example\/action\.yml\)/
+  );
+  assert.equal(reportSection(actionOnly.output, 'Guard files touched').trim(), `- ${action}`);
+
+  // An action, like the workflow that runs it, does not change with Web runtime or the checker.
+  const withRuntime = runChangeBudgetCase((write) => {
+    write(action, actionYaml);
+    write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+  });
+  assert.equal(withRuntime.status, 1, withRuntime.output);
+  assert.match(withRuntime.output, /production runtime files and Web guard\/CI files changed together/);
+  const withChecker = runChangeBudgetCase((write) => {
+    write(action, actionYaml);
+    write('tools/web-architecture-evaluation.mjs', reservedPathContent('tools/web-architecture-evaluation.mjs'));
+  });
+  assert.equal(withChecker.status, 1, withChecker.output);
+  assert.match(withChecker.output, /Web checker\/source parser and authority policy\/workflow files changed together/);
+
+  // A look-alike outside the prefix stays unregistered.
+  const lookalike = runChangeBudgetCase((write) => write('.github/actions-notes.md', '# Notes\n'));
+  assert.doesNotMatch(lookalike.output, /registered governance or authority files changed/);
 });
 
 test('an unregistered path acquires no guard or authority classification', () => {

@@ -555,6 +555,8 @@ test('in every language, the link beside the menu opens the feedback form with o
   expect(await menu(page).evaluate((select) => select.nextElementSibling?.matches('a[data-translation-feedback]'))).toBe(true);
   const tags = await menu(page).locator('option').evaluateAll((options) => options.map((option) => option.value));
   expect(tags).toHaveLength(11);
+  const minTitle = await page.evaluate(async () => (await import('./js/app/header-fit.js')).SESSION_TITLE_MIN_PX);
+  expect(minTitle).toBeGreaterThan(0);
   for (const tag of tags) {
     await menu(page).selectOption(tag);
     await expect.poll(() => pageLanguage(page)).toBe(tag);
@@ -569,9 +571,27 @@ test('in every language, the link beside the menu opens the feedback form with o
     expect(href.origin + href.pathname).toBe('https://github.com/satoshikawato/gbdraw/issues/new');
     expect([...href.searchParams]).toEqual([['template', 'translation-feedback.yml'], ['language', tag], ['version', version], ['title', `[Translation] ${tag}: `]]);
     // The header keeps one row inside the window, with the menu and the link in view (OV-1495: es, fr and pt at 1440 px).
-    for (const width of [1024, 1440, 1280]) {
+    // OV-2177, OV-2178: from 769 px the header stays inside the window and keeps the Session title
+    // SESSION_TITLE_MIN_PX wide or more, on one row or, where that row cannot, on two (en overflowed at 769 px and
+    // left the title 10 px wide to 810 px). The last steps narrow the window, which the header follows too.
+    for (const width of [1024, 1440, 1280, 769, 800, 850, 800]) {
       await page.setViewportSize({ width, height: 800 });
-      const fit = await page.locator('header').evaluate((header) => {
+      // The header chooses its state in the page's resize event (app/header-fit.js), which can run after
+      // setViewportSize returns: let it settle at each width (the same state and title width in two frames), so the
+      // next, narrower width starts from that state.
+      await page.evaluate((target) => new Promise((done) => {
+        let last = '';
+        let frames = 0;
+        const step = () => {
+          const header = document.querySelector('header');
+          const now = `${innerWidth} ${header.getAttributeNames().join(' ')} ${header.querySelector('.app-session-button').getBoundingClientRect().width}`;
+          frames = now === last && innerWidth === target ? frames + 1 : 0;
+          last = now;
+          if (frames >= 2) done(); else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }), width);
+      await expect.poll(() => page.locator('header').evaluate((header, minTitle) => {
         const right = Math.max(...Array.from(header.querySelectorAll('.app-language, a[data-translation-feedback]'), (element) => element.getBoundingClientRect().right));
         // The Session caption and title button paint inside the Session block, never under the mode switch (OV-1530:
         // fr at 1280 px). A box clips what it hides: a part counts only up to the right edge of a clipping ancestor.
@@ -591,14 +611,18 @@ test('in every language, the link beside the menu opens the feedback form with o
           range.selectNodeContents(node);
           parts.push(...[...range.getClientRects()].filter((rect) => rect.width > 0.5).map((rect) => clipped(node, rect.right)));
         }
-        const limit = Math.min(block.getBoundingClientRect().right, header.querySelector('.mode-switch').getBoundingClientRect().left);
+        // The mode switch bounds the block where it follows it on its row (the two-row header puts it first).
+        const box = block.getBoundingClientRect();
+        const mode = header.querySelector('.mode-switch').getBoundingClientRect();
+        const follows = mode.left > box.left && mode.top < box.bottom && box.top < mode.bottom;
+        const limit = Math.min(box.right, follows ? mode.left : Infinity);
         return {
           inside: right <= document.documentElement.clientWidth,
           scrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          sessionInside: Math.max(...parts) <= limit + 0.5
+          sessionInside: Math.max(...parts) <= limit + 0.5,
+          titleUsable: header.querySelector('.app-session-button').getBoundingClientRect().width >= minTitle
         };
-      });
-      expect({ width, tag, ...fit }).toEqual({ width, tag, inside: true, scrolls: false, sessionInside: true });
+      }, minTitle), { message: `${tag} at ${width} px` }).toEqual({ inside: true, scrolls: false, sessionInside: true, titleUsable: true });
     }
   }
   expect(errors).toEqual([]);

@@ -72,7 +72,7 @@ import {
   isSingleCircularJourney,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
-import { circularRecordRequestKey, circularSingleRecordKey } from './record-draw-selection.js';
+import { circularRecordRequestKey, circularSingleRecordKey, expandedRecordKey } from './record-draw-selection.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -621,6 +621,7 @@ const CONFIG_OVERRIDE_PATHS = Object.freeze({
   lineStrokeColor: 'objects.features.line_stroke_color',
   circularDefinitionFontSize: 'objects.definition.circular.font_size', circularDefinitionInterval: 'objects.definition.circular.interval',
   plotTitleFontSize: 'objects.definition.circular.plot_title_font_size',
+  showDefinition: 'objects.definition.circular.show',
   showGc: 'canvas.show_gc',
   showSkew: 'canvas.show_skew',
   showDepth: 'canvas.show_depth',
@@ -747,6 +748,7 @@ const CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS = new Set([
   CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize,
   CONFIG_OVERRIDE_PATHS.circularDefinitionInterval,
   CONFIG_OVERRIDE_PATHS.plotTitleFontSize,
+  CONFIG_OVERRIDE_PATHS.showDefinition,
   CONFIG_OVERRIDE_PATHS.circularLabelSpacing,
   CONFIG_OVERRIDE_PATHS.circularLabelPlacement,
   CONFIG_OVERRIDE_PATHS.trackType,
@@ -1495,6 +1497,26 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   };
 };
 
+/**
+ * The records the next Generate's request names for a drawing (its keys,
+ * cardinalities, selectors, and regions), before the request is built: the
+ * record plan of `buildCanonicalRenderRequest`, whose descriptors hold no
+ * bytes. A Generate matches them with the committed request's records by
+ * identity before it projects the per-feature rows (`recordKeyMoves`). An
+ * ALL card of several records keeps its one record here; the request may
+ * split it into its `<uid>:<k>` records, whose features have those keys either
+ * way. Null when the drafts name no complete request (Generate then reports why).
+ * @param {{ state: RequestState, drawing: RequestDrawing, filesData: RequestFilesData }} input
+ * @returns {RequestDraftRecord[] | null}
+ */
+export const requestRecordPlan = ({ state, drawing, filesData }) => {
+  try {
+    return buildRecords({ state, drawing, filesData, resources: createResourceBuilder({ encode: false }) }).records;
+  } catch {
+    return null;
+  }
+};
+
 // The label rendering a Generate draws (OV-159): Auto while the mode shows no
 // labels or a Linear label sits above its feature. The draft keeps the
 // choice, so the control shows it again where it applies (R7).
@@ -1821,6 +1843,8 @@ const buildConfigOverrides = (
           [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionInterval, adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
             configLeaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
+          // Only a hidden definition is stated, so a request that shows it is the one an earlier writer wrote.
+          [CONFIG_OVERRIDE_PATHS.showDefinition]: adv.show_definition === false ? false : null,
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
             leaf(CONFIG_OVERRIDE_PATHS.circularLabelSpacing, adv.circular_label_spacing),
           [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
@@ -3184,7 +3208,7 @@ const projectCanonicalRenderInput = ({
       if (new Set(transforms.map((/** @type {unknown} */ transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((/** @type {RecordDisplayRow} */ row, /** @type {number} */ rowIndex) => ({ ...record,
-          recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
+          recordKey: expandedRecordKey(record.recordKey, Number(row.selector.slice(1))),
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
           presentation: { ...record.presentation,
             reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
@@ -5680,6 +5704,7 @@ export const projectCanonicalSessionRequest = ({
     linear_length_visibility: renderRequest.mode !== 'linear' ? 'auto'
       : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
+    show_definition: renderRequest.mode !== 'circular' || overrides.show_definition !== false,
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
     gc_content_max_percent: overrides.gc_content_max_percent ?? 100,
@@ -5870,7 +5895,7 @@ const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite'
 const PUBLICATION_COMPARISON_FILTER_FIELDS = new Set(['evalue', 'bitscore', 'identity', 'alignmentLength']);
 // A request key outside this table reads no default: a JSON value is never an inherited member.
 /** @type {Readonly<Record<string, JsonValue>>} */
-const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true };
+const PUBLICATION_OPTION_DEFAULTS = { dinucleotide: 'GC', keepFullDefinitionWithPlotTitle: false, conservationReference: 'auto', 'objects.features.arrow_geometry.head_length_ratio': 'auto', 'objects.features.arrow_geometry.shaft_width_ratio': 1, 'objects.scale.show': true, 'objects.definition.circular.show': true };
 /**
  * A resource of a request under comparison: the descriptor a Session stores or
  * the writer built (no reader has checked it), or a backing that reads its bytes.
@@ -6681,7 +6706,10 @@ export const projectCommittedRecordTransform = ({ committed, target, transform }
     throw new Error('A cropped record cannot be rotated from a feature.');
   }
 
-  const candidate = cloneCanonicalJsonValue(committed);
+  // The request and its metadata are cloned; the file descriptors are shared, since no
+  // transform rewrites them and each carries a file's base64.
+  const { resources, ...rest } = /** @type {CommittedCanonicalSession} */ (committed);
+  const candidate = { ...cloneCanonicalJsonValue(rest), resources: { ...resources } };
   let records = candidate.renderRequest.records;
   let targetIndex = sourceIndex;
   let materialized = false;

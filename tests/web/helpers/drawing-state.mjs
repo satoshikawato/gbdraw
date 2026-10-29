@@ -39,7 +39,7 @@ export const DRAWING_SLICES = Object.freeze({
 export const SLICE_READERS = Object.freeze([
   'CANVAS_SLICE.capture', 'GROUP_NAMES_SLICE.capture', 'ANNOTATION_SETS_SLICE.capture', 'VISIBILITY_RULES_SLICE.capture',
   'COLOR_RULES_SLICE.capture', 'PALETTE_SLICE.capture', 'LABEL_TABLES_SLICE.capture', 'FEATURE_EDITS_SLICE.capture',
-  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture',
+  'PAINT_SLICE.capture', 'SETTINGS_SLICE.capture', 'INPUTS_SLICE.capture',
   'legendEntryKey', 'fillRecordOf', 'paintOf', 'captureLegendPaint', 'captureFeatureFills', 'featureEditsOf',
   'labelTextEditsData', 'queuedPaletteData', 'createDefaultLabelFilters', 'createDefaultPaletteData'
 ]);
@@ -99,7 +99,7 @@ export const UI_KEYS = Object.freeze([
 // Never saved: progress and operation flags, input drafts, selection, search,
 // dialogs, popups, drag and view state, and views derived from the others.
 export const TRANSIENT_KEYS = Object.freeze([
-  'loadedFonts', 'processing', 'processingStatus', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
+  'loadedFonts', 'processing', 'processingStatus', 'labelCapacityNotices', 'sessionSavePending', 'sessionImportPending', 'sessionOperationAvailability',
   'generationCancelRequested', 'errorLog', 'semanticFileWatchersSuppressed', 'sessionResourceDiscoveryDeferred',
   'sessionImportRollbackInProgress', 'failedGeneratePreservedResult', 'generationFailureRecovery',
   'resultPanelTab', 'matchSequenceRegistry', 'svgContent', 'svgResultIdentity', 'zoom', 'layoutRepositionMode',

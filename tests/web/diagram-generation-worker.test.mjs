@@ -34,15 +34,28 @@ assert.deepEqual(preparedIdentities, {
 });
 assert.equal(JSON.stringify(preparedIdentities).includes('secret-name.gbk'), false);
 // A4b: Python keeps each drawing's prepared inputs while the retain set names their resources.
-assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2]), {
-  drawing: 'linear', resourceTokens: [TOKEN_1, TOKEN_2]
+assert.deepEqual(buildPreparedInputRetention('linear', [TOKEN_1, TOKEN_2], []), {
+  drawing: 'linear', resourceTokens: [TOKEN_1, TOKEN_2], heldTokens: []
 });
-assert.deepEqual(buildPreparedInputRetention('circular', undefined), { drawing: 'circular', resourceTokens: [] });
+assert.deepEqual(buildPreparedInputRetention('circular', undefined, []), { drawing: 'circular', resourceTokens: [], heldTokens: [] });
+// A render message without `heldResourceTokens` is a protocol error, not an empty list.
+assert.throws(
+  () => buildPreparedInputRetention('circular', [TOKEN_1]),
+  (error) => error.code === 'HELPER_PROTOCOL' && error.context.reason === 'retention-held'
+);
 assert.equal(buildPreparedInputRetention(null, [TOKEN_1]), null);
 assert.equal(buildPreparedInputRetention(undefined, [TOKEN_1]), null);
 for (const drawingId of ['', 'Circular', 'circular/linear', 7]) {
-  assert.throws(() => buildPreparedInputRetention(drawingId, []), (error) => error.code === 'HELPER_PROTOCOL');
+  assert.throws(() => buildPreparedInputRetention(drawingId, [], []), (error) => error.code === 'HELPER_PROTOCOL');
 }
+// Held tokens reach the prepared input retention; a held token the Worker does not keep is a protocol error.
+assert.deepEqual(buildPreparedInputRetention('circular', [TOKEN_1, TOKEN_2], [TOKEN_2]), {
+  drawing: 'circular', resourceTokens: [TOKEN_1, TOKEN_2], heldTokens: [TOKEN_2]
+});
+assert.throws(
+  () => buildPreparedInputRetention('circular', [TOKEN_1], [TOKEN_2]),
+  (error) => error.code === 'HELPER_PROTOCOL' && error.context.reason === 'retention-held'
+);
 assert.equal(JSON.stringify(preparedIdentities).includes('/temporary/workspace'), false);
 for (const cacheToken of ['bad-token', 'render-resource-1']) {
   assert.throws(
@@ -317,7 +330,8 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
   const prepared = await createDiagramResourceTransport().prepare({
     request: { records: [], diagramOptions: {} }, resources: {}, retain: true
   });
-  const stagedKeys = Object.keys(prepared).filter((key) => typeof prepared[key] !== 'function');
+  // Only a Generate sends `heldResourceTokens`: a helper keeps every file for the next Generate.
+  const stagedKeys = Object.keys(prepared).filter((key) => typeof prepared[key] !== 'function' && key !== 'heldResourceTokens');
   assert.ok(stagedKeys.includes('retainedResourceTokens'));
   assert.ok(DIAGRAM_HELPER_STAGING_OPERATIONS.includes(DIAGRAM_HELPER_OPERATIONS.EXTRACT_CDS_PROTEIN_FASTA));
   for (const operation of DIAGRAM_HELPER_STAGING_OPERATIONS) {
@@ -366,6 +380,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     const helperCalls = [];
     let interruptBuffer = null;
     let helperReply = () => 'null';
+    let wrapperNotice = null;
     const fs = new Proxy({ analyzePath: () => ({ exists: false }), readdir: () => [] }, {
       get: (target, name) => target[name] ?? (() => {})
     });
@@ -382,7 +397,11 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
             helperCalls.push(name);
             return helperReply(name, ...args);
           },
-          run_canonical_request_wrapper: () => ({ error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } })
+          // CAPACITY-WARN: Python calls its last argument with each sentence while it renders.
+          run_canonical_request_wrapper: (...args) => {
+            if (wrapperNotice) args.at(-1)(wrapperNotice);
+            return { error: { code: 'INPUT_INVALID', operation: 'generate', stage: 'render' } };
+          }
         })[name]
       }
     };
@@ -401,6 +420,21 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     run(10);
     await settle();
     assert.deepEqual(replies.filter(({ type }) => type === 'run').map(({ requestId, ok }) => [requestId, ok]), [[10, true]]);
+    // A notice Python sends while it renders goes out as a progress message of that run, before its result.
+    replies.length = 0;
+    wrapperNotice = JSON.stringify({ recordId: 'NC_1', labelKind: 'circular_outer', labelCount: 195, fontSize: 14, capacityRatio: 1.4 });
+    run(13);
+    await settle();
+    assert.deepEqual(replies.filter(({ type }) => type !== 'test-lifecycle').map(({ type, requestId, stage, notice }) => (
+      [type, requestId, stage, notice]
+    )), [
+      ['progress', 13, 'preparing-resources', undefined],
+      ['progress', 13, 'rendering', undefined],
+      ['progress', 13, 'rendering', wrapperNotice],
+      ['progress', 13, 'finalizing', undefined],
+      ['run', 13, undefined, undefined]
+    ]);
+    wrapperNotice = null;
     replies.length = 0;
     run(11);
     booted[0] = 2;

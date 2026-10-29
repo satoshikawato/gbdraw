@@ -303,8 +303,11 @@ tools/web-owner-graph.json
 .github/workflows/gallery-publication.yml
 .github/workflows/web-base-policy.yml
 .github/workflows/deploy_web.yml
+.github/actions/
 ```
 
+`.github/actions/` stands for every file under it: a local composite action
+runs as steps of the workflows that use it, so a new action is covered too.
 `docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` is also authority; see
 [Static Product Contract co-change](#static-product-contract-co-change).
 The accepted-violation file is absent when no frozen rule has accepted debt.
@@ -364,7 +367,10 @@ tests/web/web-promotion-context.test.mjs
 .github/workflows/deploy_web.yml
 .github/workflows/test.yml
 .github/workflows/web-base-policy.yml
+.github/actions/
 ```
+
+As above, `.github/actions/` covers every file under it.
 
 Mapped Product Impact contracts are classified from the trusted base map when
 an affected concern is evaluated. They do not need a duplicated static path

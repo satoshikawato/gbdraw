@@ -12,16 +12,15 @@ import logging
 import warnings
 import xml.etree.ElementTree as ET
 from types import ModuleType
-from typing import Any, List
+from typing import Any, List, Sequence
 
 from svgwrite import Drawing
 
 from gbdraw.core.text import calculate_svg_bbox_dimensions, dominant_baseline_shift_em, get_font_vertical_metrics
-from gbdraw.exceptions import GbdrawError
+from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.render.document import write_svg_document, write_text
 from gbdraw.render.font_embedding import fonts_for_cairosvg
 from gbdraw.render.formats import (
-    CAIROSVG_FORMATS,
     INTERACTIVE_SVG_FORMAT,
     SVG_FORMAT,
     classify_formats,
@@ -33,6 +32,7 @@ from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 logger = logging.getLogger(__name__)
 
 _cairosvg_module: ModuleType | None = None
+_CAIROSVG_MISSING = "CairoSVG is not installed. Install with: pip install gbdraw[export]"
 
 
 def _load_cairosvg() -> ModuleType | None:
@@ -53,8 +53,33 @@ def has_cairosvg() -> bool:
 def get_cairosvg() -> ModuleType:
     cairosvg_module = _load_cairosvg()
     if cairosvg_module is None:
-        raise ImportError("CairoSVG is not installed. Install with: pip install gbdraw[export]")
+        raise ImportError(_CAIROSVG_MISSING)
     return cairosvg_module
+
+
+def _cairosvg_missing_message(formats: Sequence[str]) -> str:
+    return f"Cannot generate {', '.join(fmt.upper() for fmt in formats)}: {_CAIROSVG_MISSING}"
+
+
+def require_cairosvg(formats: Sequence[str]) -> ModuleType | None:
+    """The CairoSVG module for the requested formats that need it.
+
+    Returns ``None`` when no format needs CairoSVG, without looking for it.
+    Raises ``ValidationError`` naming those formats and the install command
+    when CairoSVG is missing. The command line, ``save_figure_to`` and
+    ``render_to_bytes`` check here; WebAssembly is checked by each caller,
+    since the browser converts there.
+    """
+    needed = classify_formats(formats).cairosvg
+    if not needed:
+        return None
+    try:
+        return get_cairosvg()
+    except ImportError as exc:
+        raise ValidationError(
+            _cairosvg_missing_message(needed),
+            diagnostic={"code": "INPUT_INVALID"},
+        ) from exc
 
 
 _SVG_NAMESPACE = "http://www.w3.org/2000/svg"
@@ -342,20 +367,13 @@ def save_figure(
     try:
         cairosvg_module = get_cairosvg()
     except ImportError:
-        # CairoSVG not available; warn user about skipped formats
-        missing_formats = ", ".join([f.upper() for f in formats_to_process])
-        logger.warning(
-            f"⚠️  Skipping generation of: {missing_formats}\n"
-            f"   CairoSVG is not installed.\n"
-            f"   To enable PNG/PDF support, run: pip install gbdraw[export]\n"
-        )
+        # The deprecated contract skips what it cannot make (warning-and-skip).
+        logger.warning("%s; skipped.", _cairosvg_missing_message(formats_to_process))
         return
 
     try:
         svg_bytes = svg_source.encode("utf-8")
         for fmt in formats_to_process:
-            if fmt not in CAIROSVG_FORMATS:
-                continue
             out_file = resolve_format_output_path(base_filename, fmt)
 
             convert_svg_with_cairosvg(
@@ -376,6 +394,7 @@ __all__ = [
     "has_cairosvg",
     "parse_formats",
     "prepare_svg_for_cairosvg",
+    "require_cairosvg",
     "save_figure",
 ]
 

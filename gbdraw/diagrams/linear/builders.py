@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Sequence
 
 from Bio.SeqRecord import SeqRecord
@@ -15,7 +15,12 @@ from svgwrite import Drawing
 from ...canvas import LinearCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...labels.linear_types import LinearLabel
-from ...layout.linear_multi_record import LinearRecordPlacement
+from ...layout.linear_multi_record import (
+    LinearComparisonEndpoint,
+    LinearFeatureAttachment,
+    LinearRecordPlacement,
+    linear_comparison_frame,
+)
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
 from ...configurators import (
@@ -438,11 +443,8 @@ def linear_comparison_content(
     blast_config: BlastMatchConfigurator,
     records: tuple[SeqRecord, ...],
     *,
-    height: float,
-    query_placement: LinearRecordPlacement,
-    subject_placement: LinearRecordPlacement,
-    query_y: float,
-    subject_y: float,
+    query_placement: LinearComparisonEndpoint,
+    subject_placement: LinearComparisonEndpoint,
     feature_dom_index: LinearFeatureDomIndex | None,
     record_transforms: tuple[RecordDisplayTransform, ...] | None,
 ) -> GroupContent:
@@ -457,14 +459,11 @@ def linear_comparison_content(
         PairWiseMatchGroup,
         blast_config.sequence_length_dict,
         comparison.matches,
-        height,
         index + 1,
         blast_config,
         records,
         query_placement=query_placement,
         subject_placement=subject_placement,
-        query_y=query_y,
-        subject_y=subject_y,
         feature_dom_index=feature_dom_index,
         record_transforms=record_transforms,
     )
@@ -481,23 +480,18 @@ def add_explicit_comparisons_on_linear_canvas(
     record_transforms: Sequence[RecordDisplayTransform] | None = None,
     *,
     record_keys: Sequence[str],
+    feature_attachments: Mapping[int, Mapping[str, LinearFeatureAttachment]],
 ) -> Drawing:
-    """Draw comparisons using explicit endpoint placements."""
+    """Draw comparisons using explicit endpoint placements.
+
+    Each comparison draws in its own frame (``linear_comparison_frame``), and the group is placed at the frame's
+    top, so rows that move together change only where the group is placed (OV-2089).
+    """
 
     for index, comparison in enumerate(comparisons):
         query = placements[comparison.query_record_index]
         subject = placements[comparison.subject_record_index]
-        query_anchor = (
-            query.comparison_bottom_y
-            if query.row < subject.row
-            else query.comparison_top_y
-        )
-        subject_anchor = (
-            subject.comparison_bottom_y
-            if subject.row < query.row
-            else subject.comparison_top_y
-        )
-        top_y = min(query_anchor, subject_anchor)
+        frame = linear_comparison_frame(query, subject)
         content = render_stage(
             "comparison_content",
             linear_comparison_content,
@@ -505,11 +499,12 @@ def add_explicit_comparisons_on_linear_canvas(
             index,
             blast_config,
             tuple(records),
-            height=abs(subject_anchor - query_anchor),
-            query_placement=query,
-            subject_placement=subject,
-            query_y=query_anchor - top_y,
-            subject_y=subject_anchor - top_y,
+            query_placement=query.comparison_endpoint(
+                subject, anchor_y=frame.query_y, attachments=feature_attachments.get(query.record_index, {})
+            ),
+            subject_placement=subject.comparison_endpoint(
+                query, anchor_y=frame.subject_y, attachments=feature_attachments.get(subject.record_index, {})
+            ),
             feature_dom_index=feature_dom_index,
             record_transforms=tuple(record_transforms) if record_transforms is not None else None,
         )
@@ -524,7 +519,7 @@ def add_explicit_comparisons_on_linear_canvas(
                 GroupKind.COMPARISON,
             ),
         )
-        match_group.translate(canvas_config.horizontal_offset, top_y)
+        match_group.translate(canvas_config.horizontal_offset, frame.top_y)
         canvas.add(match_group)
     return canvas
 

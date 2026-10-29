@@ -31,7 +31,6 @@ import {
   OTHER_MODE_RESULT_LEGEND_FIELDS,
   OTHER_MODE_RESULT_RUN_METADATA_FIELDS,
   OTHER_MODE_RESULT_UI_FIELDS,
-  ROW_KEYED_LEGEND_SESSION_VERSION,
   SESSION_VERSION,
   SUPPORTED_SESSION_VERSIONS,
   TYPED_DRAFT_SESSION_VERSION
@@ -157,7 +156,7 @@ const ARTIFACT_FEATURE_FIELDS = Object.freeze([
 
 const SUPPORTED_SESSION_VERSION_SET = new Set(SUPPORTED_SESSION_VERSIONS);
 // The versions this reader takes, in words, for the refusal of another
-// version (OV-1253): "27–33, 39–42, 44, and 46–48".
+// version (OV-1253): "27–33, 39–42, 44, and 46–49".
 const READ_SESSION_VERSIONS = (() => {
   /** @type {[number, number][]} */
   const runs = [];
@@ -811,15 +810,22 @@ export const hasBiologicalSessionInputs = (files = {}) => (
 );
 
 /**
+ * Whether `version` is one of `older` or a mode-scoped version (46 to the current one).
+ * @param {unknown} version
+ * @param {readonly number[]} older
+ */
+const isWebDraftVersion = (version, older) => typeof version === 'number'
+  && (older.includes(version) || (version >= MODE_SCOPED_SESSION_VERSION && version <= SESSION_VERSION));
+
+/**
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => data != null && typeof data.version === 'number'
-  && [42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION].includes(data.version)
+export const isSettingsOnlySessionDocument = data => data != null && isWebDraftVersion(data.version, [42, 44])
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 /**
- * Whether a Session's version has a settings-only form (42, 44, 46, 47, 48): one
+ * Whether a Session's version has a settings-only form (42, 44, and 46 to the current one): one
  * whose request cannot be read loads as settings only (K22, C-OD07).
  * @param {SessionInput | null | undefined} data
  * @returns {boolean}
@@ -1457,10 +1463,9 @@ export const validateSessionAuthorityInventory = (sessionData, version, storedSc
       throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     }
   }
-  if (bindings?.schema === 2 && ![41, 42, 44, MODE_SCOPED_SESSION_VERSION, ROW_KEYED_LEGEND_SESSION_VERSION, SESSION_VERSION]
-    .includes(Number(version))) {
+  if (bindings?.schema === 2 && !isWebDraftVersion(Number(version), [41, 42, 44])) {
     throw new Error('Web binding schema 2 requires session version 41, 42, 44, '
-      + `${MODE_SCOPED_SESSION_VERSION}, ${ROW_KEYED_LEGEND_SESSION_VERSION}, or ${SESSION_VERSION}.`);
+      + `or ${MODE_SCOPED_SESSION_VERSION}-${SESSION_VERSION}.`);
   }
   if (Number(version) < CANONICAL_SESSION_MIN_VERSION) return;
   if (Number(version) >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {

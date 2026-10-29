@@ -3,11 +3,11 @@
 // above each constant; do not edit manually.
 
 // gbdraw/session_io.py: CURRENT_SESSION_VERSION
-export const SESSION_VERSION = 48;
+export const SESSION_VERSION = 49;
 
 // gbdraw/session_io.py: SUPPORTED_SESSION_VERSIONS
 /** @type {readonly number[]} */
-export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48]);
+export const SUPPORTED_SESSION_VERSIONS = Object.freeze([27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, 46, 47, 48, 49]);
 
 // gbdraw/session_io.py: TYPED_DRAFT_SESSION_MIN_VERSION
 export const TYPED_DRAFT_SESSION_VERSION = 44;
@@ -73,7 +73,8 @@ export const FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION = Object.freeze({
   44: 4,
   46: 5,
   47: 5,
-  48: 5
+  48: 5,
+  49: 5
 });
 
 // gbdraw/analysis/protein_colinearity.py: PROTEIN_LOSAT_CACHE_SCHEMA
@@ -158,6 +159,12 @@ export const CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = Object.freeze(['biologica
 /** @type {Readonly<Record<'data-gbdraw-pairwise-match-id', string>>} */
 export const LEGACY_SVG_ATTRIBUTE_RENAMES = Object.freeze({
   "data-gbdraw-pairwise-match-id": 'data-gbdraw-match-id'
+});
+
+// gbdraw/io/colors.py: PALETTE_NAME_ALIASES
+/** @type {Readonly<Record<'hearbal_garden', string>>} */
+export const PALETTE_NAME_ALIASES = Object.freeze({
+  hearbal_garden: 'herbal_garden'
 });
 
 // gbdraw/web_support/capabilities.py: get_web_runtime_capabilities()

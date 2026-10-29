@@ -19,19 +19,22 @@ jobs:
     name: Web base policy (trusted base)
     if: github.event.pull_request.base.ref == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
+      # The checker reads only base, head, and origin/main files, so fetch commits and trees and let Git fetch
+      # those files on demand; every blob of every branch is over 6 GB and timed the job out.
       - name: Checkout trusted base
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
 
       # pull_request.base.sha can predate a .node-version change; github.sha is the base branch tip
       # that this workflow file comes from.
       - name: Checkout trusted Node version
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.sha }}
           path: .ci-node-version
@@ -40,7 +43,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .ci-node-version/.node-version
 
@@ -63,7 +66,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout trusted main base
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
@@ -72,7 +75,7 @@ jobs:
       # pull_request.base.sha can predate a .node-version change; github.sha is the base branch tip
       # that this workflow file comes from.
       - name: Checkout trusted Node version
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           ref: ${{ github.sha }}
           path: .ci-node-version
@@ -81,7 +84,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .ci-node-version/.node-version
 

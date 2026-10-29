@@ -63,10 +63,10 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    investigate a finding.
 2. Recipe checks. `Promotion audit / recipes` runs every CLI and Python recipe
    check, one scenario at a time, including the LOSATP recipes that the
-   `recipe` pytest marker skips. The LOSATP recipes check the LOSAT runtime
-   bundled in the source checkout, so the job installs no managed runtime
-   (`gbdraw setup-losat` would take precedence). If the bundled runtime is
-   not the one selected, the job skips the scenarios with a
+   `recipe` pytest marker skips. The LOSATP recipes need the managed LOSAT
+   runtime, which the job installs with `.github/actions/managed-losat`
+   (`gbdraw setup-losat`). If the install fails or another runtime is
+   selected, the job skips the scenarios with a
    `comparison.losatp-*` capability in `docs/scenarios/manifest.json`, and the
    summary lists them as run locally rather than as findings; run them locally.
    The local commands:

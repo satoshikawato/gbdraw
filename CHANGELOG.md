@@ -12,6 +12,156 @@ write-up of a release.
 
 ## [Unreleased]
 
+## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
+
+- Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
+  cannot open; Sessions saved by 0.14.2 open as before.
+  See the [full release notes](./docs/RELEASE_NOTES_0.14.3.md).
+- Fixed: per-feature edits in the Web app (a "This feature only" color, label
+  text and visibility, Feature visibility, stroke, Feature placements, and
+  annotations of selected features) keep applying when the view of their
+  record changes: a Circular record drawn alone or on the Multi-record canvas,
+  a Linear File card that draws all of its records or one of them. Before,
+  they stopped applying after a Generate that drew the record under another
+  key. Undo of that Generate puts them back; the fix does not change Session files
+  (OV-1949, #1417). Edits made on an "all records" card of a 0.13.0 Session do not
+  follow its records after the first Generate splits the card.
+- Fixed: label text and Label visibility typed in the Web feature popup and
+  not yet applied stay when the labels are placed again while the popup is
+  open (OV-1984, #1417).
+- Fixed: in the Web app, a Legend row's stroke stays on the Result when a color rule edit gives the row
+  another key (for example a caption edit of another rule that leaves
+  the row's caption in one color), as
+  Generate draws it. Before, the row showed the default line until the next Generate (OV-1985, #1433).
+- Fixed: in the Web app, a Legend row stroke whose row the Result no longer draws (for example the `CDS`
+  row that Python renames "other proteins" once a color rule takes a CDS feature under another caption)
+  strokes no feature by its color after a later edit, as Generate draws it. Before, a later Legend delete
+  stroked the features of the row's old color again until the next Generate (OV-1987, #1438).
+- Fixed: in the Web app, after a palette switch or a Default colors change, a Legend row whose name a color rule
+  also uses takes its new color while the rule colors no drawn feature (for example **Use the "CDS" Legend color** on a CDS
+  feature that a visibility rule hides), as Generate draws it. Before, the row kept the rule's color until the next
+  Generate (OV-1988, #1441).
+- Fixed: in the Web app, a Legend row that a popup Legend name or a Legend rename adds at once is drawn with the
+  feature line, as Generate draws it, also when a Legend sort or move has put a GC content, GC skew, or Depth row
+  first. Before, it took that row's lack of a line until the next Generate (OV-2188, #1445).
+- Fixed: in the Web app, a color rule edit made while a batch Result is shown on which the rule colors no feature
+  keeps that Result's Legend row of the rule's name and color (for example the CDS row after **Use the "CDS" Legend
+  color** on a CDS of the other Result), as Generate draws it; the same holds on one Result when the rule colors only
+  features that Feature visibility hides. Before, the row disappeared until the next Generate (OV-2187, #1445).
+- Fixed: in the Web app, a popup Legend name on the only feature of a color rule's Legend row keeps the row in its
+  place at Generate, as the live Legend shows it: when the new rule only gives that rule's condition a new name, it
+  takes that rule's place in the color rule table. Before, it was written ahead of the other rules on the same
+  qualifier, and Generate drew the row ahead of rows it followed live (OV-2189, #1445).
+- Fixed: in the Web app, a popup Legend name that takes a color rule's Legend row whole now keeps the row's place in
+  Generate for every rule row, as the live Legend shows it: a gene or label-qualifier rule is re-captioned in place
+  (OV-2191), and for a locus_tag row or a rule that also colors a hidden feature the new rule goes at the old rule's
+  place while the old rule keeps its other features (OV-2192, #1449).
+- Fixed: the Web app's header from 769 to about 970 px stays inside the window and keeps the Session title in view.
+  Before, it ran past the right edge by up to 32 px (French; English, Spanish, Portuguese, and Indonesian by up to
+  8 px at 769 to 776 px), cutting off the translation feedback link, and narrowed the Session title to nothing below
+  about 810 px. Where the title still narrows, the closed Language menu takes the width of the shown language's name
+  (browsers with CSS `field-sizing`); where the title would be narrower than 5rem, the header takes the two-row layout
+  it has at 768 px and below. The Circular and Linear names stay on one line (OV-2177, OV-2178, #1446; 0.14.2 had
+  both).
+- Fixed: in the Web app, the room that Circular labels need (the record line of the "Labels do not fit" dialog, the
+  Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language, and a whole
+  ratio reads "3", not "3.0". Before, those sentences stayed English in every language (OV-2179, #1447).
+- Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
+  `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
+  only `herbal_garden`, and new requests name it (#1407).
+- Fixed: with no LOSAT or BLAST+ runtime, the error points to `gbdraw setup-losat` and no longer says that macOS
+  and Windows have no LOSAT binary (#1406).
+- Changed: Circular horizontal labels that need more than 1.5 times the room around the map, when no single
+  fix makes room, now stop at once with the ways to make room instead of after minutes of placing and searching
+  (AP027078 `--labels out` at 8 pt: about 1.4 s instead of 28 s; MG1655 `--labels out`: about 8 s instead of about
+  37 min); labels that need 0.8 times or more warn before they are placed
+  (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs, and after a stop the **Labels do not fit**
+  dialog lists the ways to make room). Python raises `LabelsDoNotFitError` with no rows and a `capacity`
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). Labels that are
+  placed and searched and that no fix makes fit get the same ways to make room in the **Labels do not fit** dialog
+  and after `No single change of the label settings fits this map.` on the command line (OV-2180, #1447). See
+  [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
+- Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
+  the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
+  Before, they wrote only the SVG with a warning and exited 0 (#1404).
+- Changed: each LOSAT or BLAST+ search logs one `INFO: Running ...` line that names the backend, its source, the
+  executable, and its version. New Session runtime records no longer carry the `cli` field; older records still
+  load (#1406).
+- Changed: building gbdraw from source needs setuptools 77 or newer. The package lists Python 3.13, which the
+  `dev` CI tier tests. CI actions are pinned to commits, and Dependabot proposes grouped monthly updates (#1403).
+- Changed: the installation notes state what CI and each release check instead of a 0.14.0 claim (#1407).
+- Changed: in the one-row header from 769 to 1000 px, where every button already shows only its icon and the
+  Session title would still narrow, the Session block hides its "Session" caption and the toolbar gaps close up
+  to 2 px, so the title is wider (PD-OI-108, #1415).
+- Removed: the LOSAT development build tracked at `gbdraw/bin/linux-x86_64/losat`, and the resolver step that
+  preferred it over `losat` on `PATH`. In a source checkout, run `gbdraw setup-losat` or put `losat` on `PATH`.
+  The automatic order is now: the explicit option, conda, the managed install (`gbdraw setup-losat`), `losat` on
+  `PATH`, then NCBI BLAST+ on `PATH` (#1406).
+- Added: the Web app leads to the Interactive Gallery's tutorials. The header has a **Gallery & tutorials**
+  button (also in the local `gbdraw gui`, which opens gbdraw.app); on gbdraw.app the empty Preview shows a
+  **Learn with tutorials** card, each example in **Load example** has a **Tutorial** link, and the notice of a
+  loaded example links to that example's tutorial. Where the one-row header lacks room, the button and then the
+  four file buttons show only their icons; the two-row header of a window 768 px wide or narrower shows the
+  button's icon beside the logo (PD-OI-108, #1409).
+- Added: a Circular "Show Definition" setting in the Web app's Record Labels (default on), `gbdraw circular
+  --hide_definition`, and the config key `objects.definition.circular.show`. Off draws no center definition for any
+  record and reserves no center room for it; the plot title stays. Session files rise to version 49 to store it
+  (PD-OI-109, #1435).
+- Added: `SECURITY.md` names the supported versions and how to report a vulnerability privately through GitHub
+  Security Advisories (#1403).
+- Added: the README and the Quickstart give two commands that draw a Circular map and a Linear comparison from the
+  inputs in `gbdraw/web/tutorial-data/` (the README commands find that folder in the installed package, so they work
+  after a `pip install` and in a source checkout); the Quickstart also links the web app (#1407).
+- Performance: Circular label placement and the label-fit search on large label sets
+  build far fewer pair tables, and the leader-crossing count looks for
+  candidates in the grid cells each leader passes through. The output is the
+  same. Radial labels of MG1655 take about 8 s instead of 166 s, and of NC_002745
+  about 4 s instead of 25 s, with less memory (#1396, #1400).
+- Performance (web app): turning the GC content or GC skew track on or off no longer redraws the feature
+  contents, the Linear records or the Circular ticks; only the tracks, labels and legend that move redraw. The
+  drawn bytes are unchanged (#1431).
+- Performance (web app): showing Depth again after hiding it no longer re-parses the Depth file or rebuilds its
+  tracks. While Show Depth is off, the drawing's draft still holds the file, so the page keeps its bytes in the
+  Worker, and the Worker keeps its parsed table and the Depth stages of the last render that drew it, until the
+  draft no longer holds the file, a render draws it again, or another drawing renders. The request, the Session
+  and the Result are unchanged (#1425).
+- Performance (web app): with Show Depth on, the Worker parses each Depth file once per staged file and shares
+  the table with every record and Generate without copying it; each record selects its own rows. Showing Depth
+  again after hiding it no longer leaves the earlier parsed table in the Worker, and a Depth Legend label change
+  keeps the drawn Depth paths (#1422).
+- Performance (web app): on a Multi-Record Circular canvas, a change that moves or restyles only some records
+  copies and re-reads only those records' parts; label leaders and texts no longer redraw when a definition font
+  or center radius changes, and Linear comparison ribbons no longer redraw when a definition or
+  record label changes. The drawn bytes are unchanged (#1424).
+- Performance (web app): a Generate or live redraw that only moves or restyles what is drawn (a stroke, a font,
+  a scale interval, a comparison height, a record gap, a radius, a GC toggle, or a Region Annotation style) keeps
+  the feature catalog the page holds instead of rebuilding, sending and admitting it again; the kept catalog equals
+  a fresh Generate's (#1418).
+- Performance (web app): the prepared-input cache compares cached records with their stored stamps part by part
+  and stamps each feature shared by the parsed and resolved entries once per check. In CPython the commit of a
+  warm vibrio Generate takes 155 ms of CPU instead of 331 ms; outputs are unchanged (#1420).
+- Performance (web app): beside a plot title, a Circular Species change that moves no track keeps the placed labels,
+  the record content and the catalog snapshot (tobacco: 6 stage builds to 3, about 190 ms to 70 ms in CPython).
+  A Circular Generate that changes neither the center definition nor the tracks reuses the check of the definition
+  over the tracks instead of building every track's paint again (Vnig: about 20 ms less per Generate). The commit
+  check of the cached records hashes each feature field directly (Vnig about 40-85 ms to 32-39 ms). A GC toggle or
+  another change that moves Linear rows without changing a comparison ribbon keeps the ribbons (Hepatoplasmataceae
+  orthogroup: 4 ribbon builds to 0, about 360 ms to 160 ms). The drawn bytes are unchanged on every fixture and
+  Gallery Session checked; a Linear ribbon coordinate within about 1e-9 px of a 3-decimal rounding boundary,
+  including an exact tie, could in principle move by 0.001 px (#1434).
+- Performance (web app): a change of Separate strands, Resolve overlaps, the feature overlap tolerance or Label
+  rendering rebuilds only the drawing stages that read that setting (Vnig Gallery Session, Label rendering change:
+  42 stage builds to 0). A stage result that holds the drawing settings, at any depth, is no longer reused after
+  a setting it did not declare changes (OV-2105). The drawn bytes are unchanged.
+- Performance (web app): a Circular Species change no longer rebuilds the record definitions, the plot title,
+  the feature catalog of Multi-Record record parts or the definition-over-track count where they draw the same as
+  before (a three-record canvas with a typed plot title: 11 stage builds to 0; the Vnig Gallery Session: 32 to 24). The drawn bytes and the feature catalog are unchanged (#1437).
+- Performance (web app): a repeat Generate of a Linear similarity-groups or collinear figure with a reversed
+  record no longer walks every orthogroup member to look up the cached interactive context and the Session's
+  stored result; the orthogroups moved into the drawn frame or back into each record's search frame are reused
+  from the cache. In CPython a warm majanivirus Generate takes about 40 ms instead of 180-250 ms. The drawn bytes
+  are unchanged (OV-1582).
+
 ## [0.14.2](./docs/RELEASE_NOTES_0.14.2.md) - 2026-10-27
 
 - Patch release of 0.14.1. Session files are unchanged (Session version 48).

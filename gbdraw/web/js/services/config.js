@@ -2102,7 +2102,7 @@ const readSessionResetReceipts = async (data, repairs) => {
  * new data object when a request changed (the parsed file is never changed),
  * the request schemas the file stored (RK-1), and whether the Session loads as
  * settings only because its request cannot be read (K22, C-OD07): only a
- * Session version that has a settings-only form (42, 44, 46, 47) and holds the
+ * Session version that has a settings-only form (42, 44, 46 to current) and holds the
  * settings it keeps does; any other is refused (R4, C-OD25).
  * The Comparisons notice after Load is classified on the stored top-level
  * request, as before the reader (receipt 〔今までの知らせ〕, C-OD14); it is null
@@ -3004,6 +3004,23 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
 };
 
 /**
+ * The descriptor of a Session resource view, under the name the view shows; null for any other value.
+ * @param {unknown} file
+ * @returns {RawSessionResourceDescriptor | null}
+ */
+const sessionViewDescriptor = (file) => {
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
+  if (!source?.descriptor) return null;
+  // A view: its name is read as an unvalidated value.
+  const visibleName = String(/** @type {UnvalidatedFields<'name'>} */ (file)?.name || '').trim();
+  const descriptor = visibleName && visibleName !== source.descriptor.name
+    ? { ...source.descriptor, name: visibleName }
+    : source.descriptor;
+  setResourcePayloadOwner(descriptor, file);
+  return descriptor;
+};
+
+/**
  * @param {unknown} file A file slot's value: a `File` or a Session resource view. A value without bytes
  *   (a list included) is rejected by `readFileBytes`.
  * @returns {Promise<RawSessionResourceDescriptor | null>}
@@ -3012,15 +3029,8 @@ const serializeFile = async (file) => {
   if (!file) return null;
   // A view: each member is read as an unvalidated value.
   const view = /** @type {UnvalidatedFields<'name' | 'type' | 'lastModified'>} */ (file);
-  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
-  if (source?.descriptor) {
-    const visibleName = String(view?.name || '').trim();
-    const descriptor = visibleName && visibleName !== source.descriptor.name
-      ? { ...source.descriptor, name: visibleName }
-      : source.descriptor;
-    setResourcePayloadOwner(descriptor, file);
-    return descriptor;
-  }
+  const viewDescriptor = sessionViewDescriptor(file);
+  if (viewDescriptor) return viewDescriptor;
   const cached = fileDescriptorOf(file);
   if (cached) return cached;
   const bytes = await readFileBytes(file);
@@ -3615,6 +3625,40 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
+ * The draft's Depth slot values, one owner for the request and the held set: Circular has one slot
+ * (`files.c_depth`), Linear one per drawn record (`seq.depth`, in request order). Callers gate by
+ * `draftDrawsDepth`.
+ * @param {string} mode The drawing's mode.
+ * @param {{ files?: { c_depth?: DeserializedFile } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
+ * @param {DrawingState} drawing
+ * @returns {(DeserializedFile | undefined)[]}
+ */
+const draftDepthSlots = (mode, sourceState, drawing) =>
+  mode === 'linear'
+    ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff)).map((seq) => seq.depth)
+    : [sourceState.files?.c_depth];
+
+/**
+ * The Depth files a drawing's draft holds while its request omits them (Show Depth off), as the
+ * descriptors a Session loaded or an earlier Generate encoded: the Worker keeps their bytes while
+ * the draft holds them (gbdraw/web/CLAUDE.md, Runtime data flow). Nothing is read, so a file no
+ * request carried is not held.
+ * @param {string} mode The drawing's mode.
+ * @param {{ files?: { c_depth?: DeserializedFile } | null, linearSeqs?: readonly Partial<LinearSeq>[] | null }} sourceState
+ *   The project inputs (`state`): the Circular Depth slots and the Linear record cards.
+ * @param {DrawingState} drawing
+ * @returns {RawSessionResourceDescriptor[]}
+ */
+export const heldDepthFiles = (mode, sourceState, drawing) => {
+  const linear = mode === 'linear';
+  if (draftDrawsDepth(linear ? 'linear' : 'circular', drawing)) return [];
+  return /** @type {unknown[]} */ (draftDepthSlots(mode, sourceState, drawing)).flat(Infinity).flatMap((/** @type {unknown} */ file) => {
+    const descriptor = file ? sessionViewDescriptor(file) ?? fileDescriptorOf(file) : null;
+    return descriptor ? [descriptor] : [];
+  });
+};
+
+/**
  * @param {string} mode
  * @param {Record<string, any>} sourceState The project inputs (`state`).
  * @param {DrawingState} drawing The drawing whose settings choose the inputs.
@@ -3635,13 +3679,14 @@ export const serializeActiveRenderFiles = async (
     ? normalizeLinearSeqList(drawnLinearSequences(sourceState.linearSeqs, drawing.recordsOff))
     : [];
   const depthRequested = draftDrawsDepth(mode === 'linear' ? 'linear' : 'circular', drawing);
+  const depthSlots = draftDepthSlots(mode, sourceState, drawing);
   const serializedLinearSeqs = await Promise.all(
-    normalizedLinearSeqs.map(async (seq) => ({
+    normalizedLinearSeqs.map(async (seq, index) => ({
       uid: seq.uid,
       gb: await serializeFile(seq.gb),
       gff: await serializeFile(seq.gff),
       fasta: await serializeFile(seq.fasta),
-      depth: depthRequested ? await serializeFileValue(seq.depth) : null,
+      depth: depthRequested ? await serializeFileValue(depthSlots[index]) : null,
       losat_gencode: seq.losat_gencode ?? 1,
       definition: seq.definition ?? '',
       record_subtitle: seq.record_subtitle ?? '',
@@ -3723,7 +3768,7 @@ export const serializeActiveRenderFiles = async (
     c_gff: mode === 'circular' ? await serializeFile(sourceFiles.c_gff) : null,
     c_fasta: mode === 'circular' ? await serializeFile(sourceFiles.c_fasta) : null,
     c_depth: mode === 'circular' && depthRequested
-      ? await serializeFileValue(sourceFiles.c_depth)
+      ? await serializeFileValue(depthSlots[0])
       : null,
     c_conservation_blasts: includeConservationBlasts
       ? await serializeFileValue(sourceFiles.c_conservation_blasts)

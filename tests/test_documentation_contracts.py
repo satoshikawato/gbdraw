@@ -18,7 +18,7 @@ pytestmark = pytest.mark.recipe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RELEASE_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0.md"
-PATCH_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.2.md"
+PATCH_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.3.md"
 BETA_NOTES = REPO_ROOT / "docs" / "RELEASE_NOTES_0.14.0b0.md"
 SESSION_COMPATIBILITY = (
     REPO_ROOT / "docs" / "REFERENCE" / "session-and-request-compatibility.md"
@@ -74,8 +74,9 @@ def test_release_session_history_and_acceptance_use_current_authority() -> None:
     beta_notes = BETA_NOTES.read_text(encoding="utf-8")
     acceptance_source = BROWSER_ACCEPTANCE.read_text(encoding="utf-8")
 
+    # The 0.14.0 release notes name the version that release wrote.
     assert re.search(
-        rf"saves Sessions as session version {CURRENT_SESSION_VERSION}, with\s+"
+        r"saves Sessions as session version 48, with\s+"
         rf"canonical `renderRequest`\s+schema {CANONICAL_REQUEST_SCHEMA}",
         release_notes,
     )
@@ -100,7 +101,7 @@ def test_release_navigation_retains_beta_history_and_delegates_publication_dates
             r"\[0\.14\.0 release notes\]\([^)]*RELEASE_NOTES_0\.14\.0\.md\)",
             source,
         ), relative_path
-        assert "RELEASE_NOTES_0.14.2.md" in source, relative_path
+        assert "RELEASE_NOTES_0.14.3.md" in source, relative_path
     for path in (RELEASE_NOTES, REPO_ROOT / "docs/DOCS.md", REPO_ROOT / "docs/ABOUT.md"):
         assert "RELEASE_NOTES_0.14.0b0.md" in path.read_text(encoding="utf-8")
     for source in (changelog, RELEASE_NOTES.read_text(encoding="utf-8")):

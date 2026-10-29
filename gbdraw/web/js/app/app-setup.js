@@ -35,6 +35,7 @@ import { drawnBlockStroke, drawsPythonLegendRow, legendStructureEdited } from '.
 import { legendEntryKey } from '../services/drawing/paint.js';
 import { SETTINGS_SLICE } from '../services/drawing/settings.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
+import { labelCapacityNoticeText, labelCapacityText } from '../services/label-fit.js';
 import { prefetchPyodideBootAssets } from '../services/pyodide-assets.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -83,6 +84,7 @@ import {
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
+  heldDepthFiles,
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime,
   applyLabelFitValues,
@@ -274,7 +276,7 @@ import {
   isDepthTrackAutoLabel
 } from './depth-tracks.js';
 import { comparisonProfileDefault, linearAxisRulerApplies } from '../mode-profiles.js';
-import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, uiLocale } from '../utils/i18n.js';
+import { SOURCE_LOCALE, joinSentences, listText, msg, t, tm, tn, tx, uiLocale } from '../utils/i18n.js';
 import { errorText } from '../utils/error-text.js';
 import {
   IMPORTED_COMPARISON_ACTIONS,
@@ -447,6 +449,7 @@ export const createAppSetup = () => {
   const {
     processing,
     processingStatus,
+    labelCapacityNotices,
     sessionSavePending,
     sessionImportPending,
     generationCancelRequested,
@@ -1927,6 +1930,15 @@ export const createAppSetup = () => {
   // A rule commit's Legend rows (`legendRows`) show in the same compile.
   /** @param {boolean} saving */
   const sessionBlocks = (saving) => Boolean(sessionOperationAvailability()) && !(saving && sessionSavePending.value);
+  // The domains a display of the feature fills shows. A Legend row's stroke
+  // reaches the features drawn in the row's color (`legendRowFeatureIds`), so a
+  // fill edit can change which features it reaches, and a rule commit can move
+  // the row to another key: while the drawing holds a Legend row stroke, a fill
+  // display also shows the strokes (OV-1985, OV-1986).
+  /** @param {DrawingState} drawing @returns {readonly string[]} */
+  const fillDomainsOf = (drawing) => (Object.keys(drawing.legendStrokeOverrides).length > 0
+    ? [...LIVE_EDIT_DOMAINS.fills, ...LIVE_EDIT_DOMAINS.strokes]
+    : LIVE_EDIT_DOMAINS.fills);
   /**
    * @param {{
    *   recolor?: { recolorPairwise?: boolean, recolorCollinear?: boolean }, prepareRules?: boolean, show?: boolean, saving?: boolean,
@@ -1939,9 +1951,10 @@ export const createAppSetup = () => {
       if (blocked()) return false;
       svgActions.applyPaletteToSvg(recolor);
       if (show) {
+        const fills = fillDomainsOf(state.activeDrawing());
         showEditorIntent(legendRows
-          ? { domains: [...FILL_DOMAINS, ...LIVE_EDIT_DOMAINS.legendStructure], ruleRows: legendRows }
-          : { domains: FILL_DOMAINS });
+          ? { domains: [...fills, ...LIVE_EDIT_DOMAINS.legendStructure], ruleRows: legendRows }
+          : { domains: fills });
       }
       return true;
     };
@@ -3168,12 +3181,18 @@ export const createAppSetup = () => {
   // History snapshot service; only its named operations change it.
   const { artifactSlots } = historySnapshots;
   // The diagram Worker keeps the resources of every drawing's committed
-  // request: the shown drawing's and each kept slot's.
-  setDiagramResourceRetainSource(() => [
-    getCommittedCanonicalSession(),
-    ...artifactSlots.kept().map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
-      slot.runtimeState?.canonical?.committedCanonicalSession))
-  ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])));
+  // request, the shown drawing's and each kept slot's, and the files each
+  // drawing's draft holds now while its request omits them.
+  setDiagramResourceRetainSource({
+    readCommittedResourceSets: () => [
+      getCommittedCanonicalSession(),
+      ...artifactSlots.kept().map((slot) => /** @type {ReturnType<typeof getCommittedCanonicalSession> | undefined} */ (
+        slot.runtimeState?.canonical?.committedCanonicalSession))
+    ].flatMap((committed) => (committed ? [{ request: committed.renderRequest, resources: committed.resources }] : [])),
+    readDraftHeldFiles: () => state.drawingList().map((drawing) => ({
+      drawingId: drawing.id, files: heldDepthFiles(drawing.mode, state, drawing)
+    }))
+  });
   // The Results of all drawings: the shown one's and every kept one's. The
   // per-Result caches (Legend inventories, retired Legend entries, projected
   // editor state) keep a kept Result's entries while another drawing is shown.
@@ -3449,6 +3468,20 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
+    // DESIGN A4: Generate reads its requests' record identities from the
+    // discovered record lists, awaited here (a Linear card whose list is still
+    // deferred after a Load); the Circular list is the one Generate awaited.
+    readRecordIdentitySources: async (sourceMode) => {
+      if (sourceMode === 'circular') return { mode: sourceMode, circular: circularRecordEntries() };
+      if (linearSeqs.some((seq) => linearRecordSelector.statusFor(seq) === 'deferred')) {
+        const outcome = linearRecordSelector.refresh();
+        if (outcome instanceof Promise) await outcome;
+      }
+      return {
+        mode: sourceMode,
+        linear: new Map(linearSeqs.map((seq) => [String(seq.uid), buildDisambiguatedRecordEntries(linearRecordSelector.recordsFor(seq))]))
+      };
+    },
     recordDisplayRows: recordDisplayControls.allRows,
     assertDrawingInputs,
     readDraftSignature: () => history.getCurrentIntentSignature(),
@@ -3456,6 +3489,7 @@ export const createAppSetup = () => {
     adoptDrawnWrite: (write, request) => history.adoptDrawnWrite(write, request),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    moveDrawnLabelVisibility: featureActions.moveDrawnLabelVisibility,
     askChoice,
     showNotice,
     canonicalSessionVersion: SESSION_VERSION,
@@ -3827,6 +3861,14 @@ export const createAppSetup = () => {
         // The import resolves after the shown Result's preview is mounted.
         const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
         if (status === 'ok' || status === 'legacy') {
+          // #1383 (PD-OI-108): the notice of the loaded example offers its tutorial, found by the example's Gallery id.
+          if (example.tutorialUrl) {
+            noticeBanner.addLink({
+              text: t('This diagram has a step-by-step tutorial.'),
+              label: tx('English-only Gallery tutorial', 'Open the tutorial'),
+              href: example.tutorialUrl
+            });
+          }
           await nextTick();
           fitPreviewToViewport();
         }
@@ -3970,7 +4012,7 @@ export const createAppSetup = () => {
     // one label request.
     if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
     if (labels && !visibility) reconcileLabelOverrides();
-    const shown = [...new Set([...(colors ? FILL_DOMAINS : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
+    const shown = [...new Set([...(colors ? fillDomainsOf(state.activeDrawing()) : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
     if (show && shown.length > 0) showEditorIntent({ domains: shown });
     return shown;
   };
@@ -4184,7 +4226,7 @@ export const createAppSetup = () => {
   };
   // The paint domains each edit kind shows, live and on Undo and Redo.
   const {
-    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, fills: FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
+    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
   } = LIVE_EDIT_DOMAINS;
   /**
    * The one transition of a live edit of the paint intent (design §5.8): the
@@ -6907,6 +6949,8 @@ export const createAppSetup = () => {
     sessionSaveNeedsGenerate,
     processing,
     processingStatus,
+    labelCapacityNotices,
+    labelCapacityNoticeText,
     sessionImportPending,
     sessionSavePending,
     semanticMutationAvailable,
@@ -6918,6 +6962,7 @@ export const createAppSetup = () => {
     runLinearComparisonIssueAction,
     resolveMissingBlastTsv,
     labelFitDialog,
+    labelCapacityText,
     labelFitNotice,
     openLabelFitNotice,
     resolveLabelFitChoice,

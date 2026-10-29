@@ -22,6 +22,9 @@ test('every shipped catalog entry is an example, in catalog order, with its Sess
     assert.equal(example.sessionName, entry.session.split('/').pop());
     assert.equal(example.thumbnailUrl, new URL(entry.thumbnail, CATALOG_URL).href);
     assert.equal(example.mode, entry.tags.includes('Linear') ? 'Linear' : 'Circular');
+    // #1383 (PD-OI-108): every shipped example links to the Tutorial tab of its Gallery page.
+    assert.equal(entry.tutorialStatus, 'ready');
+    assert.equal(example.tutorialUrl, `https://gbdraw.app/gallery/${encodeURIComponent(entry.id)}#Tutorial`);
   }
   assert.ok(examples.some((example) => example.sessionName.endsWith('.json.gz')));
 });
@@ -34,6 +37,26 @@ test('a title shows its <i> runs as italics and every other character as text', 
     { text: ' collinearity', italic: false }
   ]);
   assert.deepEqual(galleryTitleParts('<b>x</b> & <img src=x>'), [{ text: '<b>x</b> & <img src=x>', italic: false }]);
+});
+
+// #1383 (PD-OI-108): only a tutorial the Gallery publishes (named and ready) is
+// linked, under the catalog's own Gallery path.
+test('an example links to its tutorial only when the Gallery publishes it', () => {
+  const valid = { id: 'a b', title: 'A', session: './sessions/a.gbdraw-session.json', tags: [] };
+  const tutorial = './tutorials/a.json';
+  const examples = galleryExamplesFromCatalog([
+    { ...valid, tutorial, tutorialStatus: 'ready' },
+    { ...valid, tutorial },
+    { ...valid, tutorial, tutorialStatus: 'draft' },
+    { ...valid, tutorial, tutorialStatus: 'planned' },
+    { ...valid, tutorialStatus: 'ready' },
+    valid
+  ], new URL('http://127.0.0.1:4173/gbdraw/web/gallery/examples.json'));
+  assert.deepEqual(examples.map((example) => example.tutorialUrl), [
+    'http://127.0.0.1:4173/gbdraw/web/gallery/a%20b#Tutorial',
+    'http://127.0.0.1:4173/gbdraw/web/gallery/a%20b#Tutorial',
+    '', '', '', ''
+  ]);
 });
 
 test('an unusable catalog or entry gives no example', () => {

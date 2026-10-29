@@ -8,16 +8,22 @@ import {
   featureIdentityKeyOf,
   featureOverrideValue,
   parseFeatureIdentityKey,
+  recordKeyBelongsToRequest,
   rowBelongsToRequest,
   updateFeatureOverride
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
+import { cloneJsonData } from './json-clone.js';
 import { pythonLegendRows } from './legend-svg.js';
 import { featureEditsOf, setFeatureOverrideRow, setFeaturePlacementRow } from './drawing/feature-edits.js';
 import { paintOf, setFeatureStroke } from './drawing/paint.js';
+import { replaceAnnotationTarget } from './drawing/annotation-sets.js';
+import { featureOverrideKey } from './feature-override-identity.js';
 import { createRuleLegendCaptions } from './specific-color-rules.js';
 /** @import { PaintSlice } from './drawing/paint.js' */
 /** @import { FeatureEditsSlice } from './drawing/feature-edits.js' */
+/** @import { AnnotationRow, AnnotationSetRow, AnnotationSetsSlice } from './drawing/annotation-sets.js' */
+/** @import { AnnotationTarget } from './annotation-state.js' */
 /** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 /** @import { RuleMatcher } from './rule-matchers.js' */
 /** @import { LegendRowContext, SpecificColorRule } from './specific-color-rules.js' */
@@ -400,6 +406,147 @@ const removeFeatureEdits = ({
   return removed;
 };
 
+// Record key moves (DESIGN 2-3, OV-1949): a Generate moves the per-feature
+// rows of each record whose key changes (`recordKeyMoves` in
+// services/record-draw-selection.js) to its new key. The moves apply together
+// from one snapshot. Where rows meet under one key, the row of the earlier
+// move wins field by field over a later one (an alias), and a row that stays
+// at its key comes last; a field the winner leaves null keeps the other value.
+
+/**
+ * @param {unknown} winner
+ * @param {unknown} other
+ */
+const mergeRowFields = (winner, other) => {
+  if (!winner || typeof winner !== 'object' || !other || typeof other !== 'object') return winner ?? other;
+  const merged = { .../** @type {Record<string, unknown>} */ (other) };
+  Object.entries(/** @type {Record<string, unknown>} */ (winner)).forEach(([field, value]) => {
+    if (value !== null && value !== undefined) merged[field] = value;
+  });
+  return merged;
+};
+
+/**
+ * The rows of `rows` under their moved keys.
+ * @template T
+ * @param {Readonly<Record<string, T>>} rows
+ * @param {ReadonlyMap<string, string>} moves
+ * @param {(key: string) => { recordKey: string, biologicalFeatureId: string } | null} identityOf
+ * @param {(recordKey: string, biologicalFeatureId: string, row: T) => [string, T]} rekey
+ * @returns {Record<string, T>}
+ */
+const movedRows = (rows, moves, identityOf, rekey) => {
+  if (moves.size === 0) return { ...rows };
+  const priorities = new Map([...moves.keys()].map((key, index) => [key, index]));
+  /** @type {Map<string, { priority: number, row: T }[]>} */
+  const byKey = new Map();
+  Object.entries(rows).forEach(([key, row]) => {
+    const identity = identityOf(key);
+    const to = identity ? moves.get(identity.recordKey) : undefined;
+    const [nextKey, nextRow] = identity && to !== undefined && to !== identity.recordKey
+      ? rekey(to, identity.biologicalFeatureId, row) : [key, row];
+    const priority = identity && to !== undefined ? Number(priorities.get(identity.recordKey)) : Infinity;
+    byKey.set(nextKey, [...(byKey.get(nextKey) || []), { priority, row: nextRow }]);
+  });
+  return Object.fromEntries([...byKey].map(([key, entries]) => [key, /** @type {T} */ (entries
+    .sort((left, right) => left.priority - right.priority)
+    .map(({ row }) => row)
+    .reduce((winner, other) => /** @type {T} */ (mergeRowFields(winner, other))))]));
+};
+
+/** @param {string} key A draft key (`featureIdentityKey`). */
+const draftIdentityOf = (key) => parseFeatureIdentityKey(key);
+/** @param {string} key A stroke or fill key (`featureOverrideKey`): `<recordKey>\0<biologicalFeatureId>`. */
+const strokeIdentityOf = (key) => {
+  const at = key.indexOf('\0');
+  return at > 0 ? { recordKey: key.slice(0, at), biologicalFeatureId: key.slice(at + 1) } : null;
+};
+
+/**
+ * @template {{ recordKey: string }} T
+ * @param {string} recordKey
+ * @param {string} biologicalFeatureId
+ * @param {T} row
+ * @returns {[string, T]}
+ */
+const rekeyDraftRow = (recordKey, biologicalFeatureId, row) => [
+  featureIdentityKey(recordKey, biologicalFeatureId), { ...row, recordKey }
+];
+/**
+ * @template T
+ * @param {string} recordKey
+ * @param {string} biologicalFeatureId
+ * @param {T} value
+ * @returns {[string, T]}
+ */
+const rekeyStroke = (recordKey, biologicalFeatureId, value) => [
+  featureOverrideKey({ recordKey, biologicalFeatureId }), value
+];
+
+/**
+ * The identity-keyed values of `values` (`bulkLabelText` of a label
+ * projection) under their moved keys.
+ * @template T
+ * @param {Readonly<Record<string, T>>} values
+ * @param {ReadonlyMap<string, string>} moves
+ */
+export const movedIdentityValues = (values, moves) => movedRows(values, moves, draftIdentityOf,
+  (recordKey, biologicalFeatureId, value) => [featureIdentityKey(recordKey, biologicalFeatureId), value]);
+
+/**
+ * The per-feature edits a request of this Generate reads: the drawing's rows
+ * with the record key moves applied, without writing the drawing (the
+ * drawing takes the moves when the Generate succeeds,
+ * `pruneUnmatchedFeatureOverrides`). Feature fills are a cache the Generate
+ * rebuilds from these.
+ * @template {{ readonly recordKey: string }} O
+ * @template {{ readonly recordKey: string }} P
+ * @template S, F
+ * @param {{ featureOverrides: Readonly<Record<string, O>>, featurePlacementOverrides: Readonly<Record<string, P>>,
+ *   featureStrokeOverrides: Readonly<Record<string, S>>, featureColorOverrides: Readonly<Record<string, F>>,
+ *   annotationSets: readonly AnnotationSetRow[] }} edits
+ * @param {ReadonlyMap<string, string>} moves
+ */
+export const movedRecordEdits = (edits, moves) => ({
+  featureOverrides: movedRows(edits.featureOverrides, moves, draftIdentityOf, rekeyDraftRow),
+  featurePlacementOverrides: movedRows(edits.featurePlacementOverrides, moves, draftIdentityOf, rekeyDraftRow),
+  // Copies: the request reads them, the drawing keeps its own.
+  featureStrokeOverrides: movedRows(cloneJsonData({ ...edits.featureStrokeOverrides }), moves, strokeIdentityOf, rekeyStroke),
+  featureColorOverrides: movedRows(cloneJsonData({ ...edits.featureColorOverrides }), moves, strokeIdentityOf, rekeyStroke),
+  annotationSets: moves.size === 0 ? edits.annotationSets : edits.annotationSets.map((set) => ({
+    ...set,
+    annotations: set.annotations.map((item) => {
+      const target = movedAnnotationTarget(item.target, moves);
+      return target ? { ...item, target } : item;
+    })
+  }))
+});
+
+/**
+ * A selected-feature annotation target under its record's moved key, or null
+ * when it does not move.
+ * @param {AnnotationRow['target']} target
+ * @param {ReadonlyMap<string, string>} moves
+ * @returns {AnnotationTarget | null}
+ */
+const movedAnnotationTarget = (target, moves) => {
+  const to = target.kind === 'featureIdentity' && typeof target.recordKey === 'string' ? moves.get(target.recordKey) : undefined;
+  // A copy of a readonly target with one field replaced: the same target type.
+  return to === undefined ? null : /** @type {AnnotationTarget} */ ({ ...target, recordKey: to });
+};
+
+/**
+ * Writes `after` over `before` key by key through `write` (null removes a key).
+ * @template T
+ * @param {Readonly<Record<string, T>>} before
+ * @param {Readonly<Record<string, T>>} after
+ * @param {(key: string, row: T | null) => void} write
+ */
+const replaceRows = (before, after, write) => {
+  Object.keys(before).filter((key) => !Object.hasOwn(after, key)).forEach((key) => write(key, null));
+  Object.entries(after).filter(([key, row]) => before[key] !== row).forEach(([key, row]) => write(key, row));
+};
+
 // Owner decision Q3 = A (design Q4 3.4, 6.3). A successful Generate that
 // replaced a source removes the edits Python reported `unresolved` for a
 // replaced record (Feature placement rows included), and every edit of a
@@ -408,35 +555,62 @@ const removeFeatureEdits = ({
 // a per-feature stroke (OV-84, Owner-delegated 2026-10-07): a stroke of a
 // feature the replaced source still has stays. Edits of features outside the
 // crop or display stay dormant; the drafts are those of the request's drawing,
-// so the other mode's edits are not read (R2). Returns the count of removed edits.
+// so the other mode's edits are not read (R2).
+// Then every successful Generate moves the rows of the records whose key
+// changed (`moves`, `recordKeyMoves`; DESIGN A5): the removal reads the keys
+// before the move, so a row whose record is drawn under another key is not
+// gone, and a record that no request draws keeps its rows under its identity.
+// Returns the count of removed edits.
 /**
  * @param {{
  *   featureEdits: FeatureEditsSlice,
  *   paint?: PaintSlice,
+ *   annotationSets?: AnnotationSetsSlice,
+ *   annotationSetRows?: readonly AnnotationSetRow[],
  *   notices?: UnresolvedNotice[],
  *   replacedRecordKeys?: string[],
- *   previousRecords?: Record<string, any>[],
- *   currentRecords?: Record<string, any>[],
- *   retainedRecordKeys?: Iterable<string>,
- *   biologicalFeatures?: Record<string, any>[]
- * }} options `retainedRecordKeys`: the request keys of OFF records, which the
- *   request leaves out without dropping them (record selection D-05).
+ *   previousRecords?: FeatureRequestRecord[],
+ *   currentRecords?: FeatureRequestRecord[],
+ *   retainedRecords?: FeatureRequestRecord[],
+ *   biologicalFeatures?: Record<string, any>[],
+ *   moves?: ReadonlyMap<string, string>
+ * }} options `retainedRecords`: the records of OFF records, which the request
+ *   leaves out without dropping their rows (record selection D-05), with their
+ *   identities (`offRecordRequestRecords`).
  */
 export const pruneUnmatchedFeatureOverrides = ({
   featureEdits,
   paint,
+  annotationSets,
+  annotationSetRows = [],
   notices = [],
   replacedRecordKeys = [],
   previousRecords = [],
   currentRecords = [],
-  retainedRecordKeys = [],
-  biologicalFeatures = []
+  retainedRecords = [],
+  biologicalFeatures = [],
+  moves = new Map()
 }) => {
-  const retained = new Set(retainedRecordKeys);
-  const replaced = new Set(replacedRecordKeys.filter((recordKey) => !retained.has(recordKey)));
+  /** @param {string} recordKey */
+  const movedKey = (recordKey) => moves.get(recordKey) ?? recordKey;
+  /** @param {string} recordKey */
+  const isRetained = (recordKey) => recordKeyBelongsToRequest(recordKey, retainedRecords)
+    || recordKeyBelongsToRequest(movedKey(recordKey), retainedRecords);
+  const replaced = new Set(replacedRecordKeys.filter((recordKey) => !isRetained(recordKey)));
+  // The keys before the move of each key the new catalog and Python's notices name.
+  /** @type {Map<string, string[]>} */
+  const sourcesOf = new Map();
+  moves.forEach((to, from) => sourcesOf.set(to, [...(sourcesOf.get(to) || []), from]));
+  /** @param {string} recordKey */
+  const keysBeforeMove = (recordKey) => [recordKey, ...(sourcesOf.get(recordKey) || [])];
   const presentFeatures = Array.isArray(biologicalFeatures) ? biologicalFeatures : [];
-  const present = new Set(presentFeatures.map(featureIdentityKeyOf).filter(Boolean));
-  const presentStrokeKeys = new Set(presentFeatures.map(stableKeyOf).filter(Boolean));
+  const presentIdentities = presentFeatures.flatMap((feature) => {
+    const recordKey = String(feature?.record_key ?? feature?.recordKey ?? '');
+    const biologicalFeatureId = String(feature?.biological_feature_id ?? feature?.biologicalFeatureId ?? '');
+    return keysBeforeMove(recordKey).map((key) => ({ recordKey: key, biologicalFeatureId }));
+  });
+  const present = new Set(presentIdentities.map(featureIdentityKeyOf).filter(Boolean));
+  const presentStrokeKeys = new Set(presentIdentities.map(stableKeyOf).filter(Boolean));
   let removedStrokes = 0;
   Object.keys(paint ? paintOf(paint).featureStrokeOverrides : {}).forEach((key) => {
     const recordKey = key.split('\0')[0];
@@ -444,15 +618,34 @@ export const pruneUnmatchedFeatureOverrides = ({
     setFeatureStroke(paint, key, null);
     removedStrokes += 1;
   });
-  return removedStrokes + removeFeatureEdits({
+  const removed = removedStrokes + removeFeatureEdits({
     featureEdits,
-    unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
-    // The records are those of canonical render requests, which all carry `recordKey`.
-    dropped: (row) => rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (previousRecords))
-      && !rowBelongsToRequest(row, /** @type {FeatureRequestRecord[]} */ (currentRecords))
-      && !retained.has(row?.recordKey),
+    unresolved: unresolvedNoticeKinds(
+      (Array.isArray(notices) ? notices : []).flatMap((notice) => keysBeforeMove(String(notice?.recordKey ?? ''))
+        .map((recordKey) => ({ ...notice, recordKey }))),
+      (recordKey) => replaced.has(recordKey)
+    ),
+    dropped: (row) => rowBelongsToRequest(row, previousRecords)
+      && !recordKeyBelongsToRequest(movedKey(row.recordKey), currentRecords)
+      && !isRetained(row.recordKey),
     sourceGone: (key, row) => replaced.has(row?.recordKey) && !present.has(key)
   });
+  if (moves.size === 0) return removed;
+  const { featureOverrides, featurePlacementOverrides } = featureEditsOf(featureEdits);
+  replaceRows(featureOverrides, movedRows(featureOverrides, moves, draftIdentityOf, rekeyDraftRow),
+    (key, row) => setFeatureOverrideRow(featureEdits, key, row));
+  replaceRows(featurePlacementOverrides, movedRows(featurePlacementOverrides, moves, draftIdentityOf, rekeyDraftRow),
+    (key, row) => setFeaturePlacementRow(featureEdits, key, row));
+  if (paint) {
+    const strokes = paintOf(paint).featureStrokeOverrides;
+    replaceRows(strokes, movedRows(strokes, moves, strokeIdentityOf, rekeyStroke),
+      (key, stroke) => setFeatureStroke(paint, key, stroke));
+  }
+  annotationSetRows.forEach((set) => set.annotations.forEach((item) => {
+    const target = movedAnnotationTarget(item.target, moves);
+    if (annotationSets && target) replaceAnnotationTarget(annotationSets, set, item, target);
+  }));
+  return removed;
 };
 
 // The unresolved edits the drafts still hold after a Generate that replaced no

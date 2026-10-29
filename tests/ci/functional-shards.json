@@ -112,6 +112,7 @@
   "shards": [
     [
       "tests/web/annotation-resolution.playwright.spec.js",
+      "tests/web/circular-hide-definition.playwright.spec.js",
       "tests/web/circular-multi-record-default.playwright.spec.js",
       "tests/web/circular-track-measure-input.playwright.spec.js",
       "tests/web/feature-catalog-reuse.playwright.spec.js",
@@ -121,6 +122,7 @@
       "tests/web/live-setting-application.playwright.spec.js",
       "tests/web/multipart-label-regeneration.playwright.spec.js",
       "tests/web/python-rule-parity.playwright.spec.js",
+      "tests/web/record-identity-moves.playwright.spec.js",
       "tests/web/settings-only-session.playwright.spec.js",
       "tests/web/settings-pane-rail.playwright.spec.js",
       "tests/web/track-layout-transition.playwright.spec.js"

@@ -61,6 +61,55 @@ class LinearRecordMeasurement:
         object.__setattr__(self, "collision_bands", tuple(self.collision_bands))
 
 
+def _x_for_position(x: float, px_per_bp: float, position: float) -> float:
+    return x + (float(position) * px_per_bp)
+
+
+# A comparison's ends and attachment offsets are kept to this many decimals of a px: far below the 3 that path data
+# writes (``PATH_DECIMALS``), far above the float noise (about 1e-13 px) that two equal ribbon heights reached by
+# different sums of canvas ys carry. Rows that move without changing a ribbon then leave its key equal (OV-2089).
+COMPARISON_FRAME_DECIMALS = 9
+
+
+def comparison_frame_px(value: float) -> float:
+    """``value`` on the comparison frame grid (``COMPARISON_FRAME_DECIMALS``)."""
+
+    return round(float(value), COMPARISON_FRAME_DECIMALS) + 0.0
+
+
+@dataclass(frozen=True)
+class LinearFeatureAttachment:
+    """How far a drawn feature's attachment band lies from its record's comparison anchors, in px (positive is
+    down): a ribbon end on that feature moves by this much from the anchor it would meet."""
+
+    top_offset_px: float
+    bottom_offset_px: float
+
+
+@dataclass(frozen=True)
+class LinearComparisonEndpoint:
+    """What a comparison reads of one record's placement (the ``comparison_content`` key).
+
+    The record, its row, its X scale, the y of the anchor that faces the other
+    record in the comparison's own frame (0 at the comparison's top), and the
+    offset of each attached feature from that anchor. Rows that move together
+    leave all of these unchanged (OV-2089); the record's own extents and axis
+    do not reach the ribbons.
+    """
+
+    record_index: int
+    row: int
+    x: float
+    px_per_bp: float
+    anchor_y: float
+    attachment_offsets_px: Mapping[str, float]
+
+    def x_for_position(self, position: float) -> float:
+        """Return the canvas-local X coordinate for a display-local bp position."""
+
+        return _x_for_position(self.x, self.px_per_bp, position)
+
+
 @dataclass(frozen=True)
 class LinearRecordPlacement:
     """Resolved geometry for one displayed Linear record."""
@@ -83,7 +132,65 @@ class LinearRecordPlacement:
     def x_for_position(self, position: float) -> float:
         """Return the canvas-local X coordinate for a display-local bp position."""
 
-        return self.x + (float(position) * self.px_per_bp)
+        return _x_for_position(self.x, self.px_per_bp, position)
+
+    def faces_bottom(self, other: LinearRecordPlacement) -> bool:
+        """Whether a comparison with ``other`` meets this record at its bottom anchor (it lies on a higher row)."""
+
+        return self.row < other.row
+
+    def facing_comparison_anchor_y(self, other: LinearRecordPlacement) -> float:
+        """The canvas y where a comparison with ``other`` meets this record."""
+
+        return self.comparison_bottom_y if self.faces_bottom(other) else self.comparison_top_y
+
+    def comparison_endpoint(
+        self,
+        other: LinearRecordPlacement,
+        *,
+        anchor_y: float,
+        attachments: Mapping[str, LinearFeatureAttachment],
+    ) -> LinearComparisonEndpoint:
+        """This record's end of a comparison with ``other``, at ``anchor_y`` in the comparison's frame."""
+
+        faces_bottom = self.faces_bottom(other)
+        return LinearComparisonEndpoint(
+            self.record_index,
+            self.row,
+            self.x,
+            self.px_per_bp,
+            anchor_y,
+            {
+                feature_id: attachment.bottom_offset_px if faces_bottom else attachment.top_offset_px
+                for feature_id, attachment in attachments.items()
+            },
+        )
+
+
+@dataclass(frozen=True)
+class LinearComparisonFrame:
+    """Where one comparison draws: the canvas y of its top, and the y of its query and subject ends below it."""
+
+    top_y: float
+    query_y: float
+    subject_y: float
+
+
+def linear_comparison_frame(query: LinearRecordPlacement, subject: LinearRecordPlacement) -> LinearComparisonFrame:
+    """The frame of a comparison between ``query`` and ``subject``: the one owner of where its ribbons end.
+
+    The top is the higher facing anchor on the canvas, where the group is
+    placed; the ends lie below it on the ``comparison_frame_px`` grid.
+    """
+
+    query_anchor = query.facing_comparison_anchor_y(subject)
+    subject_anchor = subject.facing_comparison_anchor_y(query)
+    top_y = min(query_anchor, subject_anchor)
+    return LinearComparisonFrame(
+        top_y=top_y,
+        query_y=comparison_frame_px(query_anchor - top_y),
+        subject_y=comparison_frame_px(subject_anchor - top_y),
+    )
 
 
 @dataclass(frozen=True)
@@ -464,12 +571,18 @@ def solve_linear_layout(
 
 
 __all__ = [
+    "LinearComparisonEndpoint",
+    "LinearComparisonFrame",
+    "LinearFeatureAttachment",
     "LinearHorizontalLayout",
     "LinearLayoutPlan",
     "LinearRecordMeasurement",
     "LinearRecordPlacement",
     "RecordKey",
     "parse_record_row_position",
+    "COMPARISON_FRAME_DECIMALS",
+    "comparison_frame_px",
+    "linear_comparison_frame",
     "place_record_vertically",
     "resolve_record_row_positions",
     "solve_linear_horizontal_layout",

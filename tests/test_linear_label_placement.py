@@ -37,7 +37,7 @@ from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors
 from gbdraw.labels.filtering import preprocess_label_filtering
-from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb_pairs
+from gbdraw.layout.spatial import Aabb, AabbIndex, IntervalIndex, candidate_aabb_partners
 from gbdraw.labels.linear import (
     _find_lowest_available_track_indexed,
     _insert_external_label_index,
@@ -54,6 +54,7 @@ from gbdraw.labels.linear import (
 from gbdraw.core.text import TEXT_ANCHOR_SHARE, calculate_svg_bbox_dimensions, drawn_text_box, text_ink_offsets
 from gbdraw.exceptions import LabelLeadersCrossWarning
 from gbdraw.render.drawers.linear.labels import LabelDrawer
+from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.linear_render_context import alone_sequence_widths, make_linear_record_render_context
 
 _P = ParamSpec("_P")
@@ -1006,7 +1007,10 @@ def test_linear_above_feature_resolves_overlaps_above_300_labels(
 
     overlapping = [
         (left, right)
-        for left, right in candidate_aabb_pairs([_row_label_aabb(label) for label in labels], bucket_size=64.0)
+        for left, partners in enumerate(
+            candidate_aabb_partners([_row_label_aabb(label) for label in labels], bucket_size=64.0)
+        )
+        for right in partners
         if _rotated_label_rects_intersect(labels[left], labels[right])
     ]
     assert overlapping == []
@@ -1158,7 +1162,7 @@ def test_linear_precalculated_labels_match_final_alignment_width_positions() -> 
 
     assert precalculated_tuples
     assert len(precalculated_tuples) == len(expected_tuples)
-    assert precalculated_tuples == pytest.approx(expected_tuples)
+    assert_nested_approx(precalculated_tuples, expected_tuples)
 
 
 @pytest.mark.linear

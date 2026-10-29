@@ -43,6 +43,7 @@ from gbdraw.auto_sizes import DrawnExtent, adapt_explicit_settings, auto_setting
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
 from gbdraw.io.record_select import RecordSelector
+from tests.utils.svg_compare import assert_nested_approx
 from tests.utils.two_mode_session import two_mode_session
 
 REPO = Path(__file__).resolve().parents[1]
@@ -82,7 +83,7 @@ def test_size_rule_vectors(cfg, case: dict[str, Any]) -> None:
         }
         for item in adaptation.reset
     ]
-    assert reset == pytest.approx(case["expected"]["reset"], abs=1e-9)
+    assert_nested_approx(reset, case["expected"]["reset"], abs=1e-9)
 
 
 @pytest.fixture

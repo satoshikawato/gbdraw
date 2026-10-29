@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shlex
+import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -44,15 +48,48 @@ def _canonical_destinations_by_source() -> dict[Path, set[Path]]:
     return destinations
 
 
-def test_migrated_legacy_pages_are_short_non_runnable_routers() -> None:
+def test_migrated_legacy_pages_are_short_routers() -> None:
     for path in LEGACY_ROUTERS:
         source = path.read_text(encoding="utf-8")
         assert len(source.splitlines()) <= 80, path.relative_to(REPO_ROOT)
-        assert "```bash" not in source
         assert "```python" not in source
         assert "<!-- executable:" not in source
         assert "tests/test_inputs" not in source
         assert "wget " not in source
+
+
+def _first_figures_block(path: Path) -> str:
+    blocks = re.findall(r"```bash\n(.*?)```", path.read_text(encoding="utf-8"), re.S)
+    blocks = [block for block in blocks if block.startswith("data=$(python -c ")]
+    assert len(blocks) == 1, path.relative_to(REPO_ROOT)
+    return blocks[0]
+
+
+def test_readme_and_quickstart_first_figures_run_from_a_clean_directory(tmp_path: Path) -> None:
+    """The README and the Quickstart give one block; it runs as written from an empty directory."""
+
+    block = _first_figures_block(REPO_ROOT / "README.md")
+    # The Quickstart's only code block is this one, so no unexecuted command slips in.
+    quickstart = (DOCS_ROOT / "QUICKSTART.md").read_text(encoding="utf-8")
+    assert re.findall(r"```([^\n]*)\n(.*?)```", quickstart, re.S) == [("bash", block)]
+    # The documented `python` and `gbdraw` commands import gbdraw from this checkout, not an installed gbdraw.
+    env = {**os.environ, "PYTHONPATH": str(REPO_ROOT)}
+    python = shlex.quote(sys.executable)
+    shim = f"python() {{ {python} \"$@\"; }}\n"
+    shim += f"gbdraw() {{ {python} -c 'from gbdraw.cli import main; main()' \"$@\"; }}\n"
+    imported = subprocess.run(
+        ["bash", "-e", "-c", f"{python} -c 'import gbdraw; print(gbdraw.__file__)'"],
+        cwd=tmp_path, env=env, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert Path(imported) == REPO_ROOT / "gbdraw" / "__init__.py"
+    result = subprocess.run(
+        ["bash", "-e", "-c", shim + block], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["human_mitochondrion.svg", "lambda_de3.svg"]
+    linear = (tmp_path / "lambda_de3.svg").read_text(encoding="utf-8")
+    assert linear.count('data-gbdraw-match-id="comparison1_match') == 6
+    assert "NC_012920.1" in (tmp_path / "human_mitochondrion.svg").read_text(encoding="utf-8")
 
 
 def test_legacy_routers_link_every_manifest_owned_replacement() -> None:

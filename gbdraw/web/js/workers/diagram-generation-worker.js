@@ -84,15 +84,26 @@ export const buildPreparedResourceIdentityMap = (resourceManifest) => {
 /**
  * What Python's prepared input cache keeps besides this request's inputs
  * (A4b): the inputs of each drawing's last request, while the resources they
- * name are requested or retained. No drawing: only this request's.
+ * name are requested or retained, and, for this drawing, the entries of the
+ * files its draft holds while the request omits them (`heldResourceTokens`,
+ * which the Worker retains). No drawing: only this request's.
  */
-export const buildPreparedInputRetention = (drawingId, retainedResourceTokens) => {
+export const buildPreparedInputRetention = (drawingId, retainedResourceTokens, heldResourceTokens) => {
   if (drawingId === null || drawingId === undefined) return null;
   // A drawing ID has the form of a resource ID.
   if (typeof drawingId !== 'string' || !RENDER_RESOURCE_ID_RE.test(drawingId)) {
     throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-drawing' });
   }
-  return { drawing: drawingId, resourceTokens: [...(retainedResourceTokens ?? [])] };
+  // A render message always names the held tokens (empty when none); only helpers omit them.
+  if (!Array.isArray(heldResourceTokens)) {
+    throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-held' });
+  }
+  const resourceTokens = [...(retainedResourceTokens ?? [])];
+  const heldTokens = [...heldResourceTokens];
+  if (!heldTokens.every((token) => resourceTokens.includes(token))) {
+    throw diagnosticError('HELPER_PROTOCOL', { reason: 'retention-held' });
+  }
+  return { drawing: drawingId, resourceTokens, heldTokens };
 };
 
 const emitTestLifecycle = (enabled, requestId, name, detail = {}) => {
@@ -1114,6 +1125,7 @@ const runGeneration = async ({
   resourceManifest,
   stagedResources,
   retainedResourceTokens,
+  heldResourceTokens,
   drawingId = null,
   fontIdentities = [],
   heldFeatureCatalogRevision = null,
@@ -1193,7 +1205,7 @@ const runGeneration = async ({
       buildPreparedResourceIdentityMap(resourceManifest)
     );
     const preparedInputRetentionJson = JSON.stringify(
-      buildPreparedInputRetention(drawingId, retainedResourceTokens)
+      buildPreparedInputRetention(drawingId, retainedResourceTokens, heldResourceTokens)
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'worker-resource-manifest-json-end', {
       characters: resourcePathsJson.length,
@@ -1216,7 +1228,12 @@ const runGeneration = async ({
       preparedResourceIdentitiesJson,
       held?.revision ?? null,
       JSON.stringify(heldSegments.map(({ revision }) => revision)),
-      preparedInputRetentionJson
+      preparedInputRetentionJson,
+      // CAPACITY-WARN: Python calls this with the JSON text of labels that may not fit, before it places them;
+      // the page words it while the render goes on. Pyodide passes the function as a JsProxy for the call.
+      (/** @type {unknown} */ notice) => {
+        self.postMessage({ type: 'progress', requestId, stage: 'rendering', notice: String(notice) });
+      }
     );
     emitTestLifecycle(testLifecycleEnabled, requestId, 'python-wrapper-end');
     self.postMessage({ type: 'progress', requestId, stage: 'finalizing' });

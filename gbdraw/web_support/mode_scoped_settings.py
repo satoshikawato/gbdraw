@@ -201,6 +201,7 @@ _ADV_ROWS = _rows(
     ("tick_label_font_size", "circular", "own"),
     ("plot_title_font_size", "both", "profile"),
     ("keep_full_definition_with_plot_title", "circular", "own"),
+    ("show_definition", "circular", "own"),
     ("center_reserved_radius", "circular", "own"),
     ("feature_width_circular", "circular", "own"),
     ("depth_width_circular", "circular", "own"),

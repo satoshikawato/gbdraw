@@ -4,7 +4,7 @@
 /** @import { CurrentResultsPort, SvgResultEntry } from '../../services/svg-result-ingestion.js' */
 import { RULE_INPUT_CHANGE_WORDS, diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride, movedIdentityValues } from '../../services/feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { replaceBulkLabelEdits } from '../../services/drawing/label-tables.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
@@ -881,6 +881,16 @@ export const createFeatureLabelActions = ({
     if (!drawn) drawnLabelVisibility.set(svg, intent);
     return Array.from(drawn?.keys() || []).some((key) => !intent.has(key));
   };
+  // A Generate that moves a record's rows to its new key (OV-1949) moves them
+  // after its Result was bound: the visibility that Result was drawn with
+  // follows them, so the moved rows ask for no rerender (OV-1983).
+  /** @param {ReadonlyMap<string, string>} moves */
+  const moveDrawnLabelVisibility = (moves) => {
+    const svg = svgContainer.value?.querySelector?.('svg');
+    const drawn = svg ? drawnLabelVisibility.get(svg) : null;
+    if (!svg || !drawn || moves.size === 0) return;
+    drawnLabelVisibility.set(svg, new Map(Object.entries(movedIdentityValues(Object.fromEntries(drawn), moves))));
+  };
 
   /** @param {DrawingState} drawing @param {Element} svg */
   const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
@@ -948,6 +958,11 @@ export const createFeatureLabelActions = ({
     );
   };
 
+  // The label text and visibility each popup was last given by the sync below.
+  // A value the user changed since, and has not applied, stays when a label
+  // rerender or another projection syncs the popup again (OV-1984).
+  /** @type {WeakMap<object, { featureId: string, labelText: string, labelVisibility: string }>} */
+  const syncedPopupLabels = new WeakMap();
   const syncClickedFeatureLabelState = () => {
     const drawing = state.activeDrawing();
     if (!clickedFeature.value) return;
@@ -960,10 +975,21 @@ export const createFeatureLabelActions = ({
     // Per-feature edits name the feature by source identity, which a Result
     // committed before feature catalogs existed does not carry.
     const editable = Boolean(featureId && featureIdentityKeyOf(clickedFeature.value.feat));
+    const shown = { featureId, labelText: entry?.text ?? fallbackText, labelVisibility: normalizeVisibilityMode(row?.labelVisibility) };
+    const synced = syncedPopupLabels.get(clickedFeature.value);
+    /** @param {'labelText' | 'labelVisibility'} field */
+    const typed = (field) => Boolean(synced && synced.featureId === featureId
+      && clickedFeature.value[field] !== synced[field] && clickedFeature.value[field] !== shown[field]);
+    const keep = { labelText: typed('labelText'), labelVisibility: typed('labelVisibility') };
     clickedFeature.value.labelKey = entry?.key || '';
-    clickedFeature.value.labelText = entry?.text ?? fallbackText;
+    if (!keep.labelText) clickedFeature.value.labelText = shown.labelText;
     clickedFeature.value.labelSourceText = entry?.sourceText ?? fallbackSource;
-    clickedFeature.value.labelVisibility = normalizeVisibilityMode(row?.labelVisibility);
+    if (!keep.labelVisibility) clickedFeature.value.labelVisibility = shown.labelVisibility;
+    syncedPopupLabels.set(clickedFeature.value, {
+      featureId,
+      labelText: keep.labelText && synced ? synced.labelText : shown.labelText,
+      labelVisibility: keep.labelVisibility && synced ? synced.labelVisibility : shown.labelVisibility
+    });
     clickedFeature.value.hasEditableLabel = editable;
     clickedFeature.value.labelUnavailableReason = editable
       ? ''
@@ -1838,6 +1864,7 @@ export const createFeatureLabelActions = ({
     closeHiddenLabelTextDialog,
     closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
+    moveDrawnLabelVisibility,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,

@@ -5,7 +5,12 @@
 // row changes by config path and by request track option, the canvas sizes,
 // and the reasons (LP-D43, LP-D48). Nothing here places labels or searches values; a row that was not
 // computed is computed by the Worker (`computeLabelFitRow`, OD-F14).
+// The exceptions are the Web's own words for labels that need much more room
+// than the map has: the ways to make room (CAPACITY-STOP), which Python names
+// by id while the Web names its controls, and the room such labels need
+// (CAPACITY-STOP, CAPACITY-WARN), which Python sends as values (OV-2179).
 import { diagnosticError } from '../utils/error-normalization.js';
+import { msg, tn } from '../utils/i18n.js';
 /** @import { CanonicalCircularTrackOptions } from '../contracts/request.generated.js' */
 
 /**
@@ -56,6 +61,9 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {number} definitionOverlaps
  * @property {number} regionOverlaps Region labels over other labels or lines (Linear).
  * @property {boolean} refused Radial labels that could not be placed (counts may be 0).
+ * @property {LabelCapacity | null} capacity The room the labels need, when they were not placed (CAPACITY-STOP; from
+ *   Python's `capacityRatio` and the record's kind, count and font size), worded by `labelCapacityText`; null
+ *   otherwise.
  * @property {string} counts Python's counts, or why the labels were refused.
  */
 /**
@@ -68,6 +76,9 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {readonly string[]} notice Python's sentences for the notice bar over a drawn figure.
  * @property {readonly LabelFitRecord[]} records
  * @property {readonly LabelFitRow[]} rows In the dialog order.
+ * @property {readonly LabelCapacityRemedy[]} remedies The ways to make room, in Python's order: for the records not
+ *   placed (CAPACITY-STOP), or when no row has a value (NO-ROW-WAYS; the dialog lists them once every row is known
+ *   not to fit).
  */
 /**
  * @typedef {object} ResultLabelFit The report of one drawn Result.
@@ -81,6 +92,86 @@ import { diagnosticError } from '../utils/error-normalization.js';
  * @property {LabelFitReport} report
  * @property {LabelFitRowToken | null} rowToken Names the failure whose rows the Worker computes.
  */
+
+/**
+ * The ways to make room for labels that were not placed (CAPACITY-STOP), by
+ * Python's id (`LabelCapacityRemedy` in gbdraw/labels/fit.py, in its order),
+ * each worded with the Web's controls; the CLI words the same ids with its
+ * options. A report naming another id is invalid.
+ */
+export const LABEL_CAPACITY_REMEDY_WORDS = Object.freeze({
+  filter: msg('Label fewer features: Blacklist or Whitelist under LABEL FILTERING.'),
+  label_text: msg('Shorten the label text: a priority rule, for example gene before product.'),
+  font: msg('Use a smaller Label Font Size.'),
+  linear: msg('Draw a Linear map.')
+});
+/** @typedef {keyof typeof LABEL_CAPACITY_REMEDY_WORDS} LabelCapacityRemedy */
+
+/**
+ * The Web's words for the room each kind of label needs (CAPACITY-STOP, CAPACITY-WARN), by Python's label kind id:
+ * its keys are the kinds whose room Python reads before placing them (`HorizontalLabelKind` in
+ * gbdraw/labels/fit.py, in its order). `line` is the dialog's record line, whose `{record}` stays in the
+ * text for the dialog's `<i18n-text>` slot (the record ID in bold); `notice` is the processing overlay's sentence. A
+ * report or notice naming another kind is invalid. Each form is a whole sentence per kind and count (OV-2179).
+ */
+const LABEL_CAPACITY_KIND_WORDS = Object.freeze({
+  circular_outer: {
+    /** @param {number} count @param {Record<string, string | number>} params */
+    line: (count, params) => tn(count,
+      '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map',
+      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map', params),
+    /** @param {number} count @param {Record<string, string | number>} params */
+    notice: (count, params) => tn(count,
+      '{record}: {count} outer label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
+      '{record}: {count} outer labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
+      params)
+  },
+  circular_inner: {
+    /** @param {number} count @param {Record<string, string | number>} params */
+    line: (count, params) => tn(count,
+      '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map',
+      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map', params),
+    /** @param {number} count @param {Record<string, string | number>} params */
+    notice: (count, params) => tn(count,
+      '{record}: {count} inner label at {size} pt needs about {ratio} times the room around the map, so it may not fit. Placing it can take minutes.',
+      '{record}: {count} inner labels at {size} pt need about {ratio} times the room around the map, so they may not fit. Placing them can take minutes.',
+      params)
+  }
+});
+/** @typedef {keyof typeof LABEL_CAPACITY_KIND_WORDS} LabelCapacityKind */
+/** The label kinds whose room Python reads, in its order (`HorizontalLabelKind`). */
+export const LABEL_CAPACITY_KINDS = Object.freeze(/** @type {LabelCapacityKind[]} */ (Object.keys(LABEL_CAPACITY_KIND_WORDS)));
+/**
+ * @typedef {object} LabelCapacity The room one side of a record's labels needs.
+ * @property {LabelCapacityKind} labelKind
+ * @property {number} labelCount
+ * @property {number} fontSize
+ * @property {number} capacityRatio As a multiple of the room around the map, to one decimal place as Python rounds it.
+ */
+/**
+ * @typedef {LabelCapacity & { recordId: string }} LabelCapacityNotice A record's labels that may not fit, sent while
+ * the render runs (CAPACITY-WARN; `LabelCapacityNoticePayload` in gbdraw/web_support/label_fit.py).
+ */
+/** @param {unknown} value @returns {value is LabelCapacityKind} */
+const isCapacityKind = (value) => typeof value === 'string' && Object.hasOwn(LABEL_CAPACITY_KIND_WORDS, value);
+
+/**
+ * The dialog's line for a record's labels that were not placed (CAPACITY-STOP), with `{record}` left for its slot.
+ * @param {LabelCapacity} capacity
+ * @returns {string}
+ */
+export const labelCapacityText = ({ labelKind, labelCount, fontSize, capacityRatio }) => (
+  LABEL_CAPACITY_KIND_WORDS[labelKind].line(labelCount, { size: fontSize, ratio: capacityRatio })
+);
+
+/**
+ * The sentence the processing overlay shows for labels that may not fit (CAPACITY-WARN).
+ * @param {LabelCapacityNotice} notice
+ * @returns {string}
+ */
+export const labelCapacityNoticeText = ({ recordId, labelKind, labelCount, fontSize, capacityRatio }) => (
+  LABEL_CAPACITY_KIND_WORDS[labelKind].notice(labelCount, { record: recordId, size: fontSize, ratio: capacityRatio })
+);
 
 const ROW_STATUSES = new Set(['found', 'found_with_notice', 'not_found', 'not_computed']);
 const OFFERED_STATUSES = new Set(['found', 'found_with_notice']);
@@ -106,6 +197,10 @@ const isShown = (value) => isNumber(value) || (typeof value === 'string' && valu
 const isValue = (value) => isShown(value) || typeof value === 'boolean';
 /** @param {unknown} value @returns {value is LabelFitRowToken | null} */
 const isToken = (value) => value === null || (typeof value === 'string' && value !== '');
+/** @param {unknown} value @returns {value is LabelCapacityRemedy} */
+const isRemedy = (value) => typeof value === 'string' && Object.hasOwn(LABEL_CAPACITY_REMEDY_WORDS, value);
+/** @param {unknown} value @returns {value is number} */
+const isRatio = (value) => isNumber(value) && value > 0;
 /** @param {unknown} value @returns {value is string | null} */
 const isOptionalText = (value) => value === null || value === undefined || typeof value === 'string';
 
@@ -159,14 +254,24 @@ const normalizeLabelFitReport = (parsed) => {
     || !isCount(parsed.overlapPairs) || !isCount(parsed.crossingPairs) || !isCount(parsed.definitionOverlaps)
     || !isCount(parsed.regionOverlaps)
     || !Array.isArray(parsed.notice) || !parsed.notice.every((sentence) => typeof sentence === 'string')
-    || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)) throw invalid();
+    || !Array.isArray(parsed.records) || !Array.isArray(parsed.rows)
+    || !Array.isArray(parsed.remedies) || !parsed.remedies.every(isRemedy)) throw invalid();
   const records = parsed.records.map((record) => {
     if (!isObject(record) || typeof record.recordId !== 'string'
       || !(record.recordIndex === null || isCount(record.recordIndex)) || typeof record.labelKind !== 'string'
       || typeof record.labelKindTitle !== 'string' || !isCount(record.labelCount)
       || !isNumber(record.fontSize) || !isCount(record.overlapPairs) || !isCount(record.crossingPairs)
-      || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean' || typeof record.counts !== 'string') {
+      || !isCount(record.definitionOverlaps) || !isCount(record.regionOverlaps) || typeof record.refused !== 'boolean'
+      || typeof record.counts !== 'string') {
       throw invalid();
+    }
+    // Only the kinds whose room Python reads carry a ratio.
+    const { labelKind, capacityRatio } = record;
+    /** @type {LabelCapacity | null} */
+    let capacity = null;
+    if (capacityRatio !== null) {
+      if (!isRatio(capacityRatio) || !isCapacityKind(labelKind)) throw invalid();
+      capacity = Object.freeze({ labelKind, labelCount: record.labelCount, fontSize: record.fontSize, capacityRatio });
     }
     return Object.freeze({
       recordId: record.recordId,
@@ -180,6 +285,7 @@ const normalizeLabelFitReport = (parsed) => {
       definitionOverlaps: record.definitionOverlaps,
       regionOverlaps: record.regionOverlaps,
       refused: record.refused,
+      capacity,
       counts: record.counts
     });
   });
@@ -191,7 +297,29 @@ const normalizeLabelFitReport = (parsed) => {
     regionOverlaps: parsed.regionOverlaps,
     notice: Object.freeze([...parsed.notice]),
     records: Object.freeze(records),
-    rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow))
+    rows: Object.freeze(parsed.rows.map(normalizeLabelFitRow)),
+    remedies: Object.freeze([...parsed.remedies])
+  });
+};
+
+/**
+ * A notice the Worker relays while the render runs: the JSON text of Python's
+ * `LabelCapacityNoticePayload`. Text of another shape is no notice (null).
+ * @param {unknown} value
+ * @returns {LabelCapacityNotice | null}
+ */
+export const normalizeLabelCapacityNotice = (value) => {
+  if (typeof value !== 'string') return null;
+  let parsed;
+  try { parsed = JSON.parse(value); } catch (_) { return null; }
+  if (!isObject(parsed) || typeof parsed.recordId !== 'string' || !isCapacityKind(parsed.labelKind)
+    || !isCount(parsed.labelCount) || !isNumber(parsed.fontSize) || !isRatio(parsed.capacityRatio)) return null;
+  return Object.freeze({
+    recordId: parsed.recordId,
+    labelKind: parsed.labelKind,
+    labelCount: parsed.labelCount,
+    fontSize: parsed.fontSize,
+    capacityRatio: parsed.capacityRatio
   });
 };
 

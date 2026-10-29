@@ -217,7 +217,8 @@ const {
   afterTask,
   buildLosatCachePayload,
   createRunAnalysis,
-  executeCanonicalRenderCandidate
+  executeCanonicalRenderCandidate,
+  showDiagramProgress
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
@@ -362,6 +363,7 @@ const generatedArtifactHandleOptions = {
   // The label owner's ports (R13); these tests do not open the label dialog.
   closeLabelTextScopeDialog: () => {},
   clearLabelBuildNotices: () => {},
+  moveDrawnLabelVisibility: () => {},
   nextTick: window.Vue.nextTick,
   waitForAfterPaint: async () => {}
 };
@@ -531,6 +533,31 @@ test('afterPaint crosses one completed frame before resolving', async () => {
   frames.shift()();
   await painted;
   assert.equal(resolved, true);
+});
+
+// CAPACITY-WARN: the labels that may not fit stay under the status line until
+// the run ends; the next Generate starts without them.
+test('the processing overlay keeps each label notice Python sends while it renders', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const overlay = { processingStatus: { value: '' }, labelCapacityNotices: { value: [] } };
+  showDiagramProgress({ requestId: 1, stage: 'rendering' }, overlay);
+  assert.deepEqual([overlay.processingStatus.value, overlay.labelCapacityNotices.value], ['Rendering diagram...', []]);
+  const first = Object.freeze({ recordId: 'NC_1', labelKind: 'circular_outer', labelCount: 195, fontSize: 14, capacityRatio: 1.4 });
+  const second = Object.freeze({ recordId: 'NC_2', labelKind: 'circular_inner', labelCount: 90, fontSize: 14, capacityRatio: 0.9 });
+  showDiagramProgress({ requestId: 1, stage: 'rendering', notice: first }, overlay);
+  showDiagramProgress({ requestId: 1, stage: 'rendering', notice: second }, overlay);
+  showDiagramProgress({ requestId: 1, stage: 'finalizing' }, overlay);
+  assert.deepEqual([overlay.processingStatus.value, overlay.labelCapacityNotices.value],
+    ['Finalizing diagram results...', [first, second]]);
+  // Both runs that show the overlay start it without the last run's notices.
+  const source = await readFile(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
+  assert.equal(source.match(/processing\.value = true;\n\s*labelCapacityNotices\.value = \[\];/g)?.length, 2);
+  assert.equal(source.match(/processing\.value = true;/g)?.length, 2);
+  // The overlay shows the heading and each notice in the UI language (OV-2179), beside Cancel.
+  const html = await readFile(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const start = html.indexOf('<div v-if="processing"');
+  const markup = html.slice(start, html.indexOf('@click="cancelGeneration"', start));
+  assert.match(markup, /<div v-if="labelCapacityNotices\.length"[^>]*data-generation-notice[^>]*>\s*<p[^>]*>\{\{ t\('Labels may not fit'\) \}\}<\/p>\s*<p v-for="\(notice, index\) in labelCapacityNotices" :key="index">\{\{ labelCapacityNoticeText\(notice\) \}\}<\/p>/);
 });
 
 test('afterFrame crosses one post-bind frame before resolving', async () => {

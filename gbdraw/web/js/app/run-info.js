@@ -17,9 +17,10 @@ import { msg, t } from '../utils/i18n.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 import { recordKeyBelongsToRequest } from '../services/feature-placement.js';
-import { exactRegexValue, namedFeatureInstance } from '../services/feature-selector.js';
+import { namedFeatureInstance } from '../services/feature-selector.js';
+import { cliRecordKey, expandedRecordKey, recordKeyExpansion } from '../services/record-draw-selection.js';
 import { parseSpecificRules, serializeSpecificRules } from '../services/file-imports.js';
-import { CLI_RECORD_KEY_PREFIX, FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
+import { FEATURE_INSTANCE_SEPARATOR } from '../contracts/schema.generated.js';
 /** @import { CanonicalCircularLayout, CanonicalCircularTrackOptions, CanonicalCircularTrackSlot, CanonicalColorOptions, CanonicalFeatureOverride, CanonicalLinearDepthTrack, CanonicalLinearLayout, CanonicalLinearTrackOptions, CanonicalLinearTrackSlot, CanonicalNucleotideBlastComparison, CanonicalRecord, CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { LinearTrackSlot } from '../services/linear-track-slot-model.js' */
 /** @import { LosatCacheRuntime, RawLosatCacheEntry } from '../services/losat-cache.js' */
@@ -284,7 +285,7 @@ const identityTableUnavailable = (text) => Object.assign(new SourceRecipeUnavail
  * inputs: the position n (an identity table's `#n`, the CLI record key
  * `CLI_RECORD_KEY_PREFIX` n) and the `:<k>` of a record that an ALL input
  * expands to (empty otherwise; `recordKeyBelongsToRequest`).
- * @typedef {{ position: number, expansion: string }} RequestRecordPosition
+ * @typedef {{ position: number, expansion: number | null }} RequestRecordPosition
  */
 /**
  * @param {CanonicalRenderRequest} renderRequest
@@ -296,7 +297,7 @@ const requestRecordsOf = (renderRequest, recordKey, anyCase = false) => {
   const fold = (/** @type {string} */ key) => (anyCase ? key.toLowerCase() : key);
   return renderRequest.records.flatMap((record, index) => (
     recordKeyBelongsToRequest(fold(recordKey), [{ ...record, recordKey: fold(record.recordKey) }])
-      ? [{ position: index + 1, expansion: recordKey.slice(record.recordKey.length) }]
+      ? [{ position: index + 1, expansion: recordKeyExpansion(fold(recordKey), fold(record.recordKey)) }]
       : []
   ));
 };
@@ -313,7 +314,7 @@ const requestRecordsOf = (renderRequest, recordKey, anyCase = false) => {
 const identityTableCells = (renderRequest, row, kind) => {
   const [record] = requestRecordsOf(renderRequest, row.recordKey);
   const id = row.biologicalFeatureId;
-  if (!record || record.expansion || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
+  if (!record || record.expansion !== null || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
     throw identityTableUnavailable(kind === 'placement'
       ? msg('a placement names a feature identity that no table row can carry.')
       : msg('a feature edit names a feature identity that no table row can carry.'));
@@ -324,12 +325,14 @@ const identityTableCells = (renderRequest, row, kind) => {
 // PD-OI-069 revision 2: a "This feature only" `hash` row names one feature
 // instance, `<feature id>` and `<record key>` joined by
 // FEATURE_INSTANCE_SEPARATOR, which Python matches whole whether the row is
-// written bare or as an exact pattern (`namedFeatureInstance`). The CLI keys
-// its n-th record input CLI_RECORD_KEY_PREFIX n (gbdraw/api/record_planning.py),
-// so the recipe's table names that key. A row whose record this render does
-// not draw colors nothing and stays out of the table. The order of the parts
-// copies Python's (a twin: feature_instance, resolve_record_inputs); the CLI
-// runs in tests/web/run-info.test.mjs pin it. Another `hash` pattern
+// written bare or as an exact pattern (`namedFeatureInstance`, which also
+// composes the new value). The CLI keys its n-th record input
+// CLI_RECORD_KEY_PREFIX n, and `<that key>:<k>` for the k-th record of an input
+// that expands (gbdraw/api/record_planning.py), as `cliRecordKey` and
+// `expandedRecordKey` compose them, so the recipe's table names that key. A row
+// whose record this render does not draw colors nothing and stays out of the
+// table. The order of the parts copies Python's (a twin: feature_instance,
+// resolve_record_inputs); the CLI runs in tests/web/run-info.test.mjs pin it. Another `hash` pattern
 // with the separator matches instances by the Web's record keys, which the CLI
 // does not have (R12).
 /**
@@ -354,7 +357,7 @@ const cliSpecificColorTable = (renderRequest, text) => {
     changed = true;
     return records.map(({ position, expansion }) => ({
       ...rule,
-      val: exactRegexValue(`${named.featureId}${FEATURE_INSTANCE_SEPARATOR}${CLI_RECORD_KEY_PREFIX}${position}${expansion}`)
+      val: named.renamed(expandedRecordKey(cliRecordKey(position), expansion), 'exact')
     }));
   });
   return changed ? serializeSpecificRules(rules) : null;
@@ -1303,6 +1306,7 @@ const appendConfigOverrides = (args, request) => {
 
   if (request.mode === 'circular') {
     appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
+    appendBooleanOption(args, take('objects.definition.circular.show'), '', '--hide_definition');
     const definitionInterval = take('objects.definition.circular.interval');
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];

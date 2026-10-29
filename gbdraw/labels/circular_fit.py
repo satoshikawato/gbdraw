@@ -55,7 +55,9 @@ from .fit import (
     DEFINITION_FONT_PATH,
     DEFINITION_ROW_KINDS,
     FITS,
+    FONT_LIMIT_PT,
     FONT_SIZE_PATHS,
+    LabelCapacityRecord,
     PLACEMENT_PATH,
     RADIAL_PLACEMENT,
     SCOPE_PATH,
@@ -83,7 +85,6 @@ from .fit import (
 OFFSET_STEP = 0.025
 OFFSET_LIMIT = 2.0
 FONT_STEP_PT = 0.5
-FONT_LIMIT_PT = 6.0
 TIGHTER_ROW_GRID_PX = (2.5, 2.0, 1.5, 1.0, 0.5, 0.25, 0.1)
 
 # The dialog order of the rows; a report has the rows that apply to its records.
@@ -144,7 +145,9 @@ class CircularLabelLayout:
     """One record's drawn labels: their fit by kind, and a probe for the outer rows.
 
     ``refused`` marks radial labels that could not be placed in the room the
-    tracks leave; ``features_separated`` that overlapping features already
+    tracks leave; ``capacity`` the sides whose horizontal labels need much more
+    room than the map has, so the record's labels were not placed
+    (CAPACITY-STOP); ``features_separated`` that overlapping features already
     have their own tracks (``--resolve_overlaps``). ``probe`` (horizontal records with outer labels) places the
     record's labels again with config overrides and returns the outer labels'
     fit; it may stop early on a layout that cannot fit, so its answer is a
@@ -162,6 +165,7 @@ class CircularLabelLayout:
     y_radius_offset: float
     label_spacing: float
     refused: bool = False
+    capacity: Mapping[LabelKind, LabelCapacityRecord] = field(default_factory=dict)
     features_separated: bool = False
     probe: CircularLabelFitProbe | None = field(default=None, compare=False, repr=False)
     # The largest font of the record's region labels, when some are cut or lie on another track (``circular_region``).
@@ -180,13 +184,14 @@ class CircularLabelLayout:
 
     @property
     def fits(self) -> bool:
-        return not self.refused and self.fit.fits
+        return not self.refused and not self.capacity and self.fit.fits
 
     @property
     def failing_kinds(self) -> tuple[LabelKind, ...]:
         """The sides that do not fit; a refused radial record names its inner or outer side."""
 
         failing = tuple(kind for kind, fit in self.kind_fits.items() if not fit.fits)
+        failing += tuple(kind for kind in self.capacity if kind not in failing)
         if any(kind not in _UNMOVED_LABEL_KINDS for kind in failing) or not self.refused:
             return failing
         return (
@@ -223,10 +228,11 @@ CircularLabelFitVerifier: TypeAlias = Callable[[Mapping[str, LabelFitValue]], La
 
 
 def circular_label_outcome(layouts: Sequence[CircularLabelLayout]) -> LabelFitOutcome:
-    """The decision point over a figure's records; refused radial labels stop."""
+    """The decision point over a figure's records; refused radial labels and labels over capacity stop."""
 
     return label_fit_outcome(
-        [layout.fit for layout in layouts], refused=any(layout.refused for layout in layouts)
+        [layout.fit for layout in layouts],
+        refused=any(layout.refused or layout.capacity for layout in layouts),
     )
 
 
@@ -759,6 +765,7 @@ def _fit_records(layouts: Sequence[CircularLabelLayout]) -> tuple[LabelFitRecord
             fit=layout.kind_fits.get(kind, FITS),
             refused=layout.refused and kind not in _UNMOVED_LABEL_KINDS,
             record_index=layout.record_index,
+            capacity=layout.capacity.get(kind),
         )
         for layout in layouts
         for kind in layout.failing_kinds
@@ -783,13 +790,17 @@ def check_circular_label_fit(
     report (rows searched for ``warn_search_seconds``; 0 leaves every row
     ``not_computed``) and the search that computes the other rows.
     ``assembly_seconds`` is the time of one full assembly, so a verification
-    that would overrun a deadline is not started.
+    that would overrun a deadline is not started. A record whose labels need
+    much more room than the map has (CAPACITY-STOP) raises at once: the report
+    lists every failing record, has no rows, and no row is searched.
     """
 
     outcome = circular_label_outcome(layouts)
     if outcome == "fits":
         return None
     failing = tuple(layout for layout in layouts if not layout.fits)
+    if any(layout.capacity for layout in failing):
+        raise_or_warn(LabelFitReport(records=_fit_records(failing), rows=(), drawn=False))
     drawn = outcome == "warn"
     search = CircularLabelFitSearch(
         failing, verify, offer_notice_rows=not drawn, assembly_seconds=assembly_seconds
