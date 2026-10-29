@@ -71,6 +71,10 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   Chrome and Edge); where the title would be narrower than 5rem, the header
   takes the two-row layout it has in a window 768 px wide or narrower. 0.14.2
   had both problems.
+- When Circular labels need much more room than the map has, the Web app
+  states the room they need in the chosen UI language: the record line of the
+  **Labels do not fit** dialog, the Generate error, and the **Labels may not
+  fit** note while Generate runs. Before, those sentences stayed English.
 - The packaged palette `hearbal_garden` is spelled `herbal_garden`. The old
   name still works in `-p/--palette`, `FeatureOptions`, `ColorOptions`,
   Sessions, and requests, and draws the same colors; lists show only
@@ -90,7 +94,9 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   runs, and after a stop the **Labels do not fit** dialog lists the ways to make
   room. Python raises `LabelsDoNotFitError` with no rows and a `capacity`
   (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was
-  not placed, and warns with `LabelsMayNotFitWarning`.
+  not placed, and warns with `LabelsMayNotFitWarning`. Labels that are placed
+  and searched and that no fix makes fit get the same ways to make room, in the
+  **Labels do not fit** dialog and on the command line.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
   write no file, and print one error that names the formats and the install

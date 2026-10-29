@@ -417,6 +417,14 @@ test('the label fit counts are Python\'s sentence; the wording owner holds no co
   assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'x'.repeat(81) } }).context.labelFitCounts, undefined);
 });
 
+test('the room labels not placed need is a positive finite number per side, or dropped (OV-2179)', () => {
+  const context = roundtrip({ code: 'LABEL_LAYOUT', context: { reason: 'LABEL_CAPACITY', labelCapacityOuter: 2.5, labelCapacityInner: 1.8 } }).context;
+  assert.deepEqual([context.labelCapacityOuter, context.labelCapacityInner], [2.5, 1.8]);
+  for (const room of ['2.5', 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1e7, null, true]) {
+    assert.equal(roundtrip({ code: 'LABEL_LAYOUT', context: { labelCapacityOuter: room } }).context.labelCapacityOuter, undefined, String(room));
+  }
+});
+
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
     [diagnosticError('INPUT_REQUIRED', { inputOrdinal: 2 }), /^Supply GenBank input or matching GFF3 and FASTA inputs\. Sequence 2\.$/],
@@ -431,8 +439,9 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [{ code: 'LABEL_LAYOUT', context: { labelFitCounts: 'Overlapping label pairs: 20. Crossing leader pairs: 21.' } },
       // Every label kind and both modes (SCOPE-ALL-LABELS), not only Circular outer labels (OV-723).
       /^Labels do not fit\. Generate again to choose a fix, or change the label settings\. Overlapping label pairs: 20\. Crossing leader pairs: 21\.$/],
-    // CAPACITY-STOP: no fix to choose, so the guidance names the ways to make room; the counts stay Python's.
-    [{ code: 'LABEL_LAYOUT', context: { reason: 'LABEL_CAPACITY', labelFitCounts: 'Outer labels need about 2.5 times the room around the map.' } },
+    // CAPACITY-STOP: no fix to choose, so the guidance names the ways to make room; the room each side needs is
+    // Python's value in the Web's words (OV-2179).
+    [{ code: 'LABEL_LAYOUT', context: { reason: 'LABEL_CAPACITY', labelCapacityOuter: 2.5 } },
       /^Labels do not fit\. Label fewer features, use a smaller Label Font Size, or draw a Linear map\. Outer labels need about 2\.5 times the room around the map\.$/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);

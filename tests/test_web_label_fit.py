@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 import warnings
@@ -35,6 +36,8 @@ from gbdraw.labels.fit import (
     LabelFitReport,
     LabelFitRow,
     LabelFitRowKind,
+    LabelKind,
+    format_label_fit_report,
 )
 from gbdraw.session import build_session_document
 from gbdraw.web_support.label_fit import (
@@ -102,18 +105,65 @@ def test_labels_over_capacity_carry_their_ratio_the_remedies_and_their_own_reaso
     payload = label_fit_report_payload(report, "circular")
 
     (record,) = payload["records"]
-    assert record["capacityRatio"] == 2.49
-    assert record["counts"] == "need about 2.5 times the room around the map"
+    # OV-2179: the ratio as shown (one decimal place, Python's rounding); the Web words the record from its values.
+    assert record["capacityRatio"] == 2.5
+    assert (record["labelKind"], record["labelCount"], record["fontSize"]) == ("circular_outer", 562, 6.0)
     assert payload["rows"] == [] and payload["remedies"] == ["filter", "label_text", "linear"]
     error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=report), operation="generate", stage="render")
-    assert error["context"] == {
-        "reason": "LABEL_CAPACITY",
-        "labelFitCounts": "Outer labels need about 2.5 times the room around the map.",
-    }
+    assert error["context"] == {"reason": "LABEL_CAPACITY", "labelCapacityOuter": 2.5}
+    # Both sides: the largest room of each.
+    inner = LabelCapacityRecord(40, 6.0, 1.84, ("filter", "label_text", "linear"))
+    both = LabelFitReport(
+        records=(
+            *report.records,
+            LabelFitRecord("AP027078.1", "circular_inner", 40, 6.0, LabelFit(0, 0), capacity=inner),
+        ),
+        rows=(),
+        drawn=False,
+    )
+    error = serialize_web_error(LabelsDoNotFitError("PRIVATE", report=both), operation="generate", stage="render")
+    assert error["context"] == {"reason": "LABEL_CAPACITY", "labelCapacityInner": 1.8, "labelCapacityOuter": 2.5}
     # Nothing to compute: the failure keeps no row token.
     searches = LabelFitRowSearches()
     failure = LabelsDoNotFitError("PRIVATE", report=report)
     assert searches.retain_failure("circular", failure) is None
+
+
+def test_a_report_with_no_fitting_row_lists_the_ways_to_make_room() -> None:
+    """NO-ROW-WAYS (OV-2180, PD-OI-097): when every row is known not to fit, the report names the ways to make room the
+    capacity stop names (the same owner, so a smaller font is left out at the 6 pt floor), and the CLI text lists them."""
+
+    not_found = (
+        LabelFitRow("outward_both", "not_found", reason="Does not fit up to 2 Outer X and Y Offset"),
+        LabelFitRow("smaller_font", "not_found", reason="Does not fit down to 6 pt"),
+    )
+
+    def report(font_size: float, rows: tuple[LabelFitRow, ...] = not_found, kind: LabelKind = "circular_outer") -> LabelFitReport:
+        record = LabelFitRecord("AP027078.1", kind, 562, font_size, LabelFit(30, 2))
+        return LabelFitReport(records=(record,), rows=rows, drawn=False)
+
+    at_floor = report(6.0)
+    assert at_floor.room_remedies == ("filter", "label_text", "linear")
+    assert label_fit_report_payload(at_floor, "circular")["remedies"] == ["filter", "label_text", "linear"]
+    assert report(8.0).room_remedies == ("filter", "label_text", "font", "linear")
+    assert format_label_fit_report(at_floor).splitlines()[1:] == [
+        "No single change of the label settings fits this map.",
+        "To make room:",
+        "  - label fewer features with --label_blacklist or --label_whitelist;",
+        "  - shorten the label text with --qualifier_priority (for example gene names only);",
+        "  - or draw a Linear map (gbdraw linear).",
+    ]
+    # A row that fits: no ways.
+    found = report(6.0, (*not_found, LabelFitRow("outward_vertical", "found", {Y_OFFSET_PATH: 1.5}, (1.0, 1.0))))
+    assert found.room_remedies == () and "To make room:" not in format_label_fit_report(found)
+    assert label_fit_report_payload(found, "circular")["remedies"] == []
+    # Rows not computed yet may fit: the report carries the ways for the dialog, which shows them once every row is
+    # known not to fit; the CLI text names the rows not searched and lists no ways.
+    pending = report(6.0, (not_found[0], LabelFitRow("combination", "not_computed")))
+    assert pending.room_remedies == ("filter", "label_text", "linear")
+    assert "To make room:" not in format_label_fit_report(pending)
+    # Only the labels the capacity check reads (outer and inner Circular labels) have these ways.
+    assert report(6.0, kind="linear").room_remedies == ()
 
 
 def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> None:
@@ -127,7 +177,12 @@ def test_capacity_warnings_reach_the_notice_while_other_warnings_pass_on() -> No
             )
             warnings.warn(LabelsMayNotFitWarning("AGAIN", record_id="r", label_kind="circular_inner", capacity=capacity))
             warnings.warn(UserWarning("other"))
-    assert notices == ["SENTENCE", "AGAIN"]
+    # OV-2179: the values, not Python's English sentence, so the Web words them in the UI language.
+    assert [json.loads(notice) for notice in notices] == [
+        {"recordId": "NC_005859.1", "labelKind": "circular_outer", "labelCount": 195, "fontSize": 14.0,
+         "capacityRatio": 1.4},
+        {"recordId": "r", "labelKind": "circular_inner", "labelCount": 195, "fontSize": 14.0, "capacityRatio": 1.4},
+    ]
     assert [str(item.message) for item in caught] == ["other"]
 
 

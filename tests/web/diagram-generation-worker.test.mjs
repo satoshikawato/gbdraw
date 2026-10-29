@@ -422,7 +422,7 @@ assert.throws(() => resolveGenerationCleanupOutcome({ result: { results: [] }, w
     assert.deepEqual(replies.filter(({ type }) => type === 'run').map(({ requestId, ok }) => [requestId, ok]), [[10, true]]);
     // A notice Python sends while it renders goes out as a progress message of that run, before its result.
     replies.length = 0;
-    wrapperNotice = 'NC_1: 195 outer labels at 14 pt need about 1.4 times the room around the map, so they may not fit.';
+    wrapperNotice = JSON.stringify({ recordId: 'NC_1', labelKind: 'circular_outer', labelCount: 195, fontSize: 14, capacityRatio: 1.4 });
     run(13);
     await settle();
     assert.deepEqual(replies.filter(({ type }) => type !== 'test-lifecycle').map(({ type, requestId, stage, notice }) => (

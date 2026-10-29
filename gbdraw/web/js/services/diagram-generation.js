@@ -17,7 +17,8 @@ import {
 } from './runtime-test-hooks.js';
 import { createDiagramResourceTransport } from './diagram-resource-staging.js';
 import { markCurrentWorkerGenerationResponse, SEGMENTS } from './current-worker-result-source.js';
-import { normalizeLabelFitFailure } from './label-fit.js';
+import { normalizeLabelCapacityNotice, normalizeLabelFitFailure } from './label-fit.js';
+/** @import { LabelCapacityNotice } from './label-fit.js' */
 /** @import { LabelFitFailure } from './label-fit.js' */
 import { requestFontFamily, webFontIdentitiesFor } from './font-store.js';
 import { toRaw } from '../utils/vue-raw.js';
@@ -99,9 +100,9 @@ import { toRaw } from '../utils/vue-raw.js';
  */
 
 /**
- * A progress report of a request. `notice` is Python's sentence about labels
- * that may not fit (CAPACITY-WARN), sent while it renders, before it places them.
- * @typedef {{ requestId: number, stage: string, notice?: string } & Partial<RuntimePreparationStep>} RequestProgress
+ * A progress report of a request. `notice` names labels that may not fit
+ * (CAPACITY-WARN), sent while Python renders, before it places them.
+ * @typedef {{ requestId: number, stage: string, notice?: LabelCapacityNotice } & Partial<RuntimePreparationStep>} RequestProgress
  */
 
 /**
@@ -891,7 +892,7 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
     reject: rejectRequest
   };
   activeRequest = request;
-  /** @param {string} stage @param {RuntimePreparationStep | { notice: string } | null} [detail] */
+  /** @param {string} stage @param {RuntimePreparationStep | { notice: LabelCapacityNotice } | null} [detail] */
   const reportProgress = (stage, detail = null) => {
     if (!request.settled && activeRequest === request && typeof onProgress === 'function') {
       onProgress({ requestId, stage, ...(detail || {}) });
@@ -960,7 +961,8 @@ export const runDiagramGeneration = (payload = {}, { onProgress = null, held = N
           return;
         }
         if (data.type === 'progress' && data.requestId === requestId) {
-          reportProgress(data.stage, typeof data.notice === 'string' && data.notice ? { notice: data.notice } : null);
+          const notice = normalizeLabelCapacityNotice(data.notice);
+          reportProgress(data.stage, notice ? { notice } : null);
           return;
         }
         if (data.type !== 'run' || data.requestId !== requestId) return;

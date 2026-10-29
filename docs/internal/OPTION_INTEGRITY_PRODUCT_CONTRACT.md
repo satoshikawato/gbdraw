@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `96`
+- Contract revision: `97`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -3499,6 +3499,42 @@ Status: active Product authority
   - No other record is amended or retired. `PD-OI-078` (concern
     `diagram-generation.circular-definition-fit`) keeps governing a drawn
     Circular definition.
+  - This change is a static Product Contract co-change: the runtime, tests, and
+    documentation that implement it are in the same pull request, and the
+    Review is `REQUIRED`.
+- Revision 97 changes: `PD-OI-097` gains scenario revision `21` (concern
+  `product.circular-outer-label-fit`; it adds `NO-ROW-WAYS` and
+  `FONT-LISTED`). When labels are placed and searched and no fix row fits,
+  the "Labels do not fit" dialog and the command line also name the ways to
+  make room that a capacity stop names; the stop keeps "Use a smaller Label
+  Font Size". The replies come from the Product Decision Owner
+  `satoshikawato` of `2026-10-29` in the Claude Code session of the campaign
+  `release-0143-20261027` (decisions D-13 and D-15), given to questions the
+  session relayed because the choices are the Product Decision Owner's. Each
+  reply is quoted as written.
+  - D-13 (`2026-10-29`). The session showed a decision packet for OV-2180 (a
+    map at 6 pt that the capacity check warns about is placed and searched,
+    and the dialog then shows only rows that do not fit): Q1, what the dialog
+    shows when no row fits (A `NO-ROW-AS-TODAY`, B `NO-ROW-WAYS`), and Q2,
+    whether the stop dialog still offers a smaller Label Font Size (A
+    `FONT-LISTED`, B `FONT-WITH-OTHERS`, C `FONT-DROPPED-AT-STOP`). The reply
+    answered these and other questions of the session:
+    「header: b、2189: A/A′、2180: Q1 B / Q2 A、2186: A、#1447 twins 行: 承認、#1448: CI失敗してるからそれ直したらadmin merge」
+  - D-15 (`2026-10-29`). The session showed the receipt below as a change to
+    scenario revision `20`: the Choice, Rationale, Must preserve, and May
+    retire with the shown text appended, one sentence of the Accepted residual
+    risk replaced, and the Decision date `2026-10-29`. Reply:
+    「この受領文で承認」
+  - The receipt and JSON reproduce the approved fields without translation or
+    additional terms. The `PD-OI-097` scenario revision `7` to `20` receipts
+    and JSON are kept as they were approved.
+  - New receipt SHA-256: `PD-OI-097` scenario revision `21`
+    `38a477d5f434d5638054e393b0ba9a12f08148114567533903495797e76b6c41`.
+  - `PD-OI-097` scenario revision `21` keeps every outcome of scenario
+    revision `20` and adds `NO-ROW-WAYS` and `FONT-LISTED`; it appends to the
+    Choice, the Rationale, the Must preserve, and the May retire of scenario
+    revision `20`, and replaces one sentence of its Accepted residual risk.
+  - No other record is amended or retired.
   - This change is a static Product Contract co-change: the runtime, tests, and
     documentation that implement it are in the same pull request, and the
     Review is `REQUIRED`.
@@ -8561,8 +8597,12 @@ Decision date: 2026-10-16
 ### PD-OI-097: Labels that do not fit
 
 - Concern key: `product.circular-outer-label-fit`
-- Scenario revision: `20`
-- Supersedes: `PD-OI-097`, scenario revision `19`. Scenario revision `20`
+- Scenario revision: `21`
+- Supersedes: `PD-OI-097`, scenario revision `20`. Scenario revision `21`
+  keeps every outcome of scenario revision `20` and adds `NO-ROW-WAYS` and
+  `FONT-LISTED`; D-15 of the Revision 97 entry approves its additions to the
+  Choice, the Rationale, the Must preserve, and the May retire, and the
+  sentence it replaces in the Accepted residual risk. Scenario revision `20`
   keeps every outcome of scenario revision `19` and adds `CAPACITY-STOP` and
   `CAPACITY-WARN`; D-12 of the Revision 93 entry approves its additions to the
   Choice, the Rationale, the Must preserve, the May retire, and the Accepted
@@ -8617,10 +8657,10 @@ Decision date: 2026-10-16
   the Revision 66 entry appends the exception for Linear region labels. Scenario revision `8` kept every outcome
   and field of scenario revision `7` and added `YIELD-REPAIRED-ONLY`.
 - Status: `ACCEPTED`
-- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN`
-- Normative outcome: exactly the complete approved scenario revision `20`
+- Selected outcome: `DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED`
+- Normative outcome: exactly the complete approved scenario revision `21`
   `PRODUCT_DECISION` receipt and its JSON representation below. The
-  scenario revision `7` to `19` receipts are kept as they were approved.
+  scenario revision `7` to `20` receipts are kept as they were approved.
 - Decision source (scenario revision `7`): the Owner replies quoted verbatim in
   the Revision 50 entry above. The receipt reproduces the approved field texts
   without translation or additional terms. Dependent runtime requires this
@@ -8739,6 +8779,14 @@ Decision date: 2026-10-16
   acceptance evidence.
 - Receipt SHA-256 (scenario revision `20`; UTF-8, excluding the final newline):
   `82264534eddf0f033ef3e54432836d82880c8b30e67a76a2a566733026601f6d`.
+- Decision source (scenario revision `21`): the Owner replies of `2026-10-29`
+  quoted in the Revision 97 entry above (D-13 and D-15); D-15 approves the
+  fifteenth receipt and JSON below, without translation or additional terms.
+  The runtime, tests, and documentation that implement it merge with it
+  (static Product Contract co-change); this record supplies no runtime
+  acceptance evidence.
+- Receipt SHA-256 (scenario revision `21`; UTF-8, excluding the final newline):
+  `38a477d5f434d5638054e393b0ba9a12f08148114567533903495797e76b6c41`.
 
 ```text
 PRODUCT_DECISION
@@ -9141,6 +9189,33 @@ Decision date: 2026-10-27
   "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-27"
+}
+```
+
+```text
+PRODUCT_DECISION
+Concern: product.circular-outer-label-fit
+Scenario revision: 21
+Choice: DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED
+Rationale: ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。ただし Circular の外側・内側の水平ラベルが、地図のまわりの場所の 1.5 倍を超えて要り、しかも 1 つの値を変える直し方（文字を 6 pt まで小さくする、Outer の X と Y の Offset を 2 まで広げる、内側のラベルを外側へ出す）のどれでも場所が足りないと見積もれるときは、ラベルを置くことも直し方を探すこともせず、すぐに描かずに止める。ラベルの数、文字の大きさ、場所の何倍が要るかと、場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く）を示す（CAPACITY-STOP、D-03）。場所の 0.8 倍以上が要るほかの図は、置く前に「収まらないかもしれない。置くのに数分かかることがある」と知らせ、今と同じに置いて、今と同じ直し方を示す（CAPACITY-WARN）。放射ラベルと埋め込みラベルは数えない。置いて探したあとで、どの直し方の行でも収まらないとわかったときは、止めたときと同じ場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く。文字が 6 pt のときは文字を小さくするを除く）も示す（NO-ROW-WAYS）。止めたときに示す方法には、今と同じく文字を小さくするを含める（FONT-LISTED）。
+Must preserve: 今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。止める境は、今描ける図と、今 1 つの値を変える直し方が見つかる図が、どれも止まらない値にする（調べた 195 件の描ける図で、場所の見積もりは最大 0.87 倍、直し方を入れた見積もりは最大 0.36 倍。直し方が見つかる図では最大 0.63 倍）。知らせが出る図も、知らせのほかは今と同じに置き、同じ直し方を示す。直し方の行、探す時間、描く図、Session、History、書き出しは変えない（NO-ROW-WAYS）。
+May retire: ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。場所が明らかに足りない Circular の図で、ラベルを置いて直し方を探してから止めること（AP027078 で CLI 60〜78 秒・Web 170〜185 秒、MG1655 と NC_010162 は 20 分を超えても終わらない）。どの直し方の行でも収まらないときに、閉じる以外の次の手を示さないダイアログ。
+Accepted residual risk: 微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。止まったあとは、場所を空ける方法を示す。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。
+Owner: satoshikawato
+Decision date: 2026-10-29
+```
+
+```json
+{
+  "concern": "product.circular-outer-label-fit",
+  "scenarioRevision": 21,
+  "choice": "DEF-CROSS ; DO-ASK ; TIGHT-FIX-FIRST ; SHOW-ALL ; REL-0140 ; CROSS-WARN ; ROWS-OPEN ; WARN-NOTICE ; SEARCH-BOUNDED-5S ; SCOPE-ALL-LABELS ; INNER-3 ; SAME-RULES ; SWITCHES-FIRST ; RADIAL-JOIN ; DEF-WARN ; E-ROW ; REPAIR-100 ; CROSS-LEFT-ROW ; YIELD-REPAIRED-ONLY ; REGION-WARN ; RGN-FRONT ; RGN-YIELD-ROW ; RGN-CUT-WARN ; LBL-HALO ; LIN-UNDER ; CIR-NO-UNDER ; GAP-STOP ; LEADER-007 ; LBL-OPTS-2 ; LBL-0140 ; HALO-008 ; OPT-NAMES ; SESS-NEXT-GEN ; WEBPDF-NO-HALO ; UNDER-NOT-IN-ROW ; UNDER-CASING ; UNDER-TRIM ; ROW-GAP-025 ; LIN-BOX-080 ; RGN-ROOM-WARN ; CIR-NO-HALO ; TURNED-NO-UNDER ; CIR-ANGLE-ORDER ; LEADERLESS-BOX ; AF-AUTO-ROW ; AF-ROW-PITCH ; DEF-TRACK-WARN ; DEF-TRIGGER-INK ; DEF-ROW-NARROW-CRR ; DEF-EDIT-TEXT-BUTTON ; DEF-KEEP-AS-DRAWN ; CAPACITY-STOP ; CAPACITY-WARN ; NO-ROW-WAYS ; FONT-LISTED",
+  "rationale": "ラベルが重なった図を黙って出さない。重なるときは描かずに直し方を選ばせ、引き出し線の交差や定義文へのかぶりだけなら描いたうえで知らせる。ただし Linear の領域ラベルの重なりは、図を描いたうえで警告する（LP-D68）。Circular の領域ラベルが円に収まらないときは、収まる分を曲線で描いたうえで警告する（LP-D87）。Linear のフィーチャーラベルは、後ろを通るリーダー線から守る。文字の後ろに白い背景（不透明度 0.8、文字の外 0.18 em）を敷く（LP-D98、LP-D106）。リーダー線なしでフィーチャーの上に置いた斜めのラベルにも敷き、フィーチャー側は文字の所で止める（LP-D119）。Linear の above_feature の水平のラベルは、auto と同じく 1 段目の間をフィーチャーから取り、リーダー線・下線・白い背景を auto と同じに描く。2 段目から上も auto と同じ段の間隔（いちばん高いラベルの高さ＋labels.spacing.linear）で、フィーチャーから数えた段に置く（AF-ROW-PITCH）。斜めのラベルは今まで通りフィーチャーの上に置く（LP-D120）。ラベルは定義文を、ほかのラベルと同じく段を上げてよける（OV-1395）。Circular は既定では守らない。文字の形の白いハロー（0.08 em）は黒い背景で汚く見えるので、選んだときだけ描く（LP-D110）。Linear は下線をリーダー線につなぎ、下線に白い縁を付けて、ほかのラベルのリーダー線を下線の所で途切れさせる。下線の両端は 0.12 em ずつ短くする。Circular は下線を引かない。斜めのラベル（Linear で回したラベル、Circular の放射ラベル）には下線を引かず、リーダー線は下線がないときと同じに引く。Linear のリーダー線は、水平のラベルと同じく常に垂直にする（LP-D112、LP-D113）。文字の上から来て下線につながるリーダー線は、文字の 0.20 em 上で止める。リーダー線と下線は同じ太さ max(1.0 px, 0.07 × 文字の大きさ) で描く。下線（label_line）と守り（label_protection：なし、ハロー、白い背景）はモードごとに選べる（LP-D98、LP-D100、LP-D103）。Linear の下線と白い背景はラベルの段の高さに数えず、領域ラベルだけがそれをよける（LP-D102）。Linear の同じ段のラベルは 0.25 em 以上離す（LP-D104）。Circular で半径を明示した結果、領域ラベルを置く場所がなくなるときは、明示した半径のまま描いたうえで警告する（LP-D86）。Circular のラベル（外側も内側も）は、原点をまたぐ所でもフィーチャーの角度の順に並べる（OV-1366）。Circular の中央の定義文が内側のトラックの描画に触れるときは、図はそのまま描いたうえで警告し、定義文の文字を小さくする直し方を示す（OV-1606）。Circular の中央の定義文が描いたトラックの線や面に触れるときは、図をそのまま描いて警告し、直し方として、定義文の文字を小さくする（1 行がトラックに触れない大きさ）、内側のトラックを縮める（1 行の定義文の帯の半径を center_reserved_radius に書く。自動の縮小の下限より細くなることがある）、Species と Strain を書き直す（ボタンで入力欄を開くだけで、Apply はしない）を示す。Cancel ボタンは「Keep as drawn」と呼び、描いた図を残す（DF-D14、DF-D16、DF-D25、DF-D36）。ただし Circular の外側・内側の水平ラベルが、地図のまわりの場所の 1.5 倍を超えて要り、しかも 1 つの値を変える直し方（文字を 6 pt まで小さくする、Outer の X と Y の Offset を 2 まで広げる、内側のラベルを外側へ出す）のどれでも場所が足りないと見積もれるときは、ラベルを置くことも直し方を探すこともせず、すぐに描かずに止める。ラベルの数、文字の大きさ、場所の何倍が要るかと、場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く）を示す（CAPACITY-STOP、D-03）。場所の 0.8 倍以上が要るほかの図は、置く前に「収まらないかもしれない。置くのに数分かかることがある」と知らせ、今と同じに置いて、今と同じ直し方を示す（CAPACITY-WARN）。放射ラベルと埋め込みラベルは数えない。置いて探したあとで、どの直し方の行でも収まらないとわかったときは、止めたときと同じ場所を空ける方法（ラベルを減らす、ラベルの文字を短くする、文字を小さくする、Linear で描く。文字が 6 pt のときは文字を小さくするを除く）も示す（NO-ROW-WAYS）。止めたときに示す方法には、今と同じく文字を小さくするを含める（FONT-LISTED）。",
+  "mustPreserve": "今まで重ならずに描けていた図は今まで通り描く（rev 2 の『今まで描けてたものは今まで通り描けるべき』）。重なりも交差もない図は 0.13.0 と同じ位置にラベルを描く。ただし Linear の above_feature の水平のラベルは、auto と同じ段に置く：1 段目はフィーチャーから auto の 1 段目と同じ間を取り、2 段目から上も auto と同じ段の間隔で積む（LP-D120、AF-ROW-PITCH）。斜めのラベルの積み方は変えない。ただし Circular でラベルがフィーチャーの角度の順と違う所は、角度の順に並べ直す（OV-1366）。ただし Linear で同じ段の隣のラベルとの間が 0.25 em に満たないときは、そのラベルを別の段に移す。Linear の領域ラベルは、フィーチャーラベルの下線と白い背景を文字と同じによける。よけられないときは、文字にかかるときと同じく、そのフィーチャーラベルを同じ側の別の段へ移す（RGN-YIELD-ROW）。移しても解消しないときは、そのまま描いて警告する。領域ラベルの背景は、リーダー線の上には出るが、下線と白い背景は覆わない（RGN-FRONT）。フィーチャーラベルの守りは、Linear は白い背景、Circular はなしを既定とする（LP-D106、LP-D110）。下線とその白い縁、リーダー線の太さと止め方は LP-D98 と LP-D106 の既定で描く。ただし斜めのラベルには下線を引かず、Linear のリーダー線は常に垂直に引く（LP-D113）。Linear の白い背景は、ほかのラベルの文字と下線を覆わない。ダイアログでの選択は History の 1 ステップ、Cancel は記録しない、適用中は操作を受け付けない（PD-OI-088）。定義文がトラックに触れるかどうかは、描いたトラックの線と面で判断する。定義文の警告は図を変えず、利用者が決めた文字の大きさは変えずに小さい値を示すだけにする。トラックを縮める直し方は、すでにある center_reserved_radius だけを書き、Session に新しい項目を作らない。止める境は、今描ける図と、今 1 つの値を変える直し方が見つかる図が、どれも止まらない値にする（調べた 195 件の描ける図で、場所の見積もりは最大 0.87 倍、直し方を入れた見積もりは最大 0.36 倍。直し方が見つかる図では最大 0.63 倍）。知らせが出る図も、知らせのほかは今と同じに置き、同じ直し方を示す。直し方の行、探す時間、描く図、Session、History、書き出しは変えない（NO-ROW-WAYS）。",
+  "mayRetire": "ラベルが重なったまま図を出す動作。（Linear の領域ラベルの重なりを除く）0.13.0 のフィーチャーラベルの見た目（細いリーダー線、守りと下線なし）を既定で出すこと。labels.stroke_width の設定（Python の config_overrides で指定するとエラーになる）。Linear で同じ段のラベルをすき間なしで並べること。Linear の above_feature で、水平のラベルをフィーチャーのすぐ上に、リーダー線・下線・白い背景なしで置くこと。Linear の above_feature で、水平のラベルを、よけるラベルのすぐ上（いちばん高いラベルの高さの 5%、最低 1 px の間）の段の途中に積むこと。場所が明らかに足りない Circular の図で、ラベルを置いて直し方を探してから止めること（AP027078 で CLI 60〜78 秒・Web 170〜185 秒、MG1655 と NC_010162 は 20 分を超えても終わらない）。どの直し方の行でも収まらないときに、閉じる以外の次の手を示さないダイアログ。",
+  "acceptedResidualRisk": "微調整で全部直る重なり・交差・定義文へのかぶり（欠陥 100 組まで）は、自動で直して描く。直しきれないもの（極の内側ラベルの積み重なり、長い線のもつれ、MjeNMV など）は、重なりなら描かずに直し方を選ばせ、交差やかぶりだけなら描いて帯で知らせる。直し方の候補は、帯のボタンを押したときに計算する。この結果は Session に保存しない。CLI と Python は、描けた図なら 5 秒まで探す。すぐに止める図（CAPACITY-STOP）は探さないので、直し方の候補を示さない。描けない図は、外側ラベルだけの重なりなら値が出るまで探し、内側・埋め込み・放射ラベルの重なりなら 30 秒まで探す。間に合わない候補は『未計算』と示す。Web の候補は 1 つ 30 秒まで探し、見つからなければそう示す。Circular の既定では、後ろを通るリーダー線がラベルの文字にかかることがある（0.13.0 と同じ）。Circular でハローを選ぶと、PDF と EPS はその分だけ大きくなる（タバコ葉緑体の PDF は 56 KB から 235 KB、EPS は 1.32 MB から 1.59 MB）。Linear の白い背景では PDF はほとんど変わらず（lambda Linear 24 pt で 17.6 KB から 27 KB）、EPS は半透明の背景を画像で描くので大きくなる（65 KB から 664 KB）。Web の PDF には Circular のハローを描かない（Linear の白い背景、下線とその白い縁は描く。LP-D102）。Web の PDF は文字をカーニングせずに描くので、ラベルが SVG より最大 0.1 em ほど広くなることがある（中心の位置は同じ）。保存済みの Session は次の Generate で新しい見た目になる（それまでは保存した図のまま）。Linear の詰まった段では、ラベルが別の段に移る（lambda 24 pt で 73 のうち 21、タバコ IR 5 pt で 143 のうち 22）。Linear のリーダー線がいくつものラベルの後ろを通ると、ラベルの中だけ薄くなり、点線のように見える（OV-1361）。Linear の above_feature で水平のラベルの図は、1 段目の間の分だけ高くなる（lambda 24 pt で 747 px から 763 px、--separate_strands では 1135 px から 1167 px）。2 段目から上も auto の段の間隔になるので、段の多い図は高くなる（lambda 24 pt で 770 px から 772 px、12 pt で 329 px から 338 px、--separate_strands では 1167 px から 1225 px）。段の途中に止まるラベルがなくなるので、低い段に入るラベルが増え、図が低くなることもある（HmmtDNA で 394 px から 378 px）。定義文がトラックに触れる図では、直し方を探す分だけ CLI と Python で描く時間が延びる（AP027131 で約 0.2 秒）。知らせが出る図は、調べた 175 件の描画で 2 件（自動の縮小の下限が 30 px のとき）で、同じ方法で数えた今の 8 件より減る（今出ている AP027131 の CLI と Web、MG1655 の Web は名前の 2 行の分け方で、残りの 3 件は定義文の帯を文字の箱の角から測るので出なくなる）。既定の設定では MERS-CoV（CLI と Web）にだけ出る（今も出ている）。定義文の帯と知らせは同じ文字の箱の角から測るので、自動で縮めた図に知らせは出ない（OV-1854）。トラックを縮める直し方も同じ角から帯を測るので、ふつうは知らせが残らない。残るときは、通知が残る候補として示す。Multi-Record Canvas では center_reserved_radius が全レコード共通なので、ほかのレコードのトラックも縮む。場所の見積もりは、ラベルが楕円の上にあるとしたときの下限で、直しでラベルが楕円の外へ動く分（調べた図で最大 1.2 倍）を 1.5 倍の境で見込む。0.8 倍以上の知らせは、描ける図にも出ることがある（調べた 195 件のうち 4 件：plasmid153 の 9 pt と 14 pt でずらした図、T5 14 pt の Outer Y Offset 1.65）。止めない図のうち、直し方が見つからない図（AP027078 の 4 pt から 6 pt など）は、今と同じく置いて探してから止まる（数分かかる）。止まったあとは、場所を空ける方法を示す。内側のラベルを放射にする直し方は見積もれないので、すぐに止めた内側のラベルにはその候補を示さない（調べた図では、どれも放射でも収まらない）。0.8 倍未満で重なる図（極の近くだけが混む図など）は、知らせなしに今と同じく止まる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-29"
 }
 ```
 

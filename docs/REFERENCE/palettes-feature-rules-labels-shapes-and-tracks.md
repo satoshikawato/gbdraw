@@ -501,6 +501,16 @@ with the same 1 px and 0.1 px margins as the check above.
   with `record_id`, `label_kind`, and `capacity`; the Web app shows it in the
   progress screen while Generate runs.
 
+When the labels of a Circular map are placed and searched and every row is
+`not_found`, gbdraw names the same ways to make room for their outer and inner
+labels (again without a smaller font at 6 pt): the command line prints
+`To make room:` and the ways after `No single change of the label settings
+fits this map.`, and the **Labels do not fit** dialog lists them under the rows
+once every row is computed. The rows, the search time, and the drawing do not
+change. In Python, `LabelFitReport.room_remedies` holds the ways for a stop,
+and for a report in which no row has a value (a row still `not_computed` may
+fit, so the command line and the dialog wait for every row to be `not_found`).
+
 The settings a row verifies are placed without this estimate, so the rows are
 the same as without it.
 

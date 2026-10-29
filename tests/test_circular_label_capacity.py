@@ -178,11 +178,8 @@ def test_ap027078_stops_at_once_without_placing_or_searching(
         "AP027078.1", "circular_outer", 562, 8.0
     )
     assert 2.4 < record.capacity.ratio < 2.6
-    assert error.diagnostic == {
-        "code": "LABEL_LAYOUT",
-        "labelFitCounts": "Outer labels need about 2.5 times the room around the map.",
-        "reason": "LABEL_CAPACITY",
-    }
+    # OV-2179: the room as a value the Web words in the UI language, not an English sentence.
+    assert error.diagnostic == {"code": "LABEL_LAYOUT", "reason": "LABEL_CAPACITY", "labelCapacityOuter": 2.5}
 
 
 def _capacities(monkeypatch: pytest.MonkeyPatch) -> list[tuple[CircularLabelCapacity, ...]]:

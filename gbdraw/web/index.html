@@ -2189,11 +2189,11 @@
         <gbdraw-loader class="w-16 h-16 mb-6"></gbdraw-loader>
         <h3 class="text-xl font-bold text-slate-800 animate-pulse">{{ t('Generating Diagram...') }}</h3>
         <p data-generation-progress role="status" aria-live="polite" aria-atomic="true" class="text-xs text-slate-500 mt-3 font-mono" v-text="processingStatus"></p>
-        <!-- CAPACITY-WARN: Python's sentences about labels that may not fit, as sent, while the render goes on -->
+        <!-- CAPACITY-WARN: the labels that may not fit, worded from Python's values (OV-2179), while the render goes on -->
         <div v-if="labelCapacityNotices.length" role="status" aria-live="polite" data-generation-notice
              class="mt-3 mx-4 max-w-md rounded border border-amber-300 bg-amber-50 px-3 py-2 text-center text-sm text-amber-900">
             <p class="font-semibold">{{ t('Labels may not fit') }}</p>
-            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ notice }}</p>
+            <p v-for="(notice, index) in labelCapacityNotices" :key="index">{{ labelCapacityNoticeText(notice) }}</p>
         </div>
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
@@ -8669,7 +8669,8 @@
             </div>
         </choice-dialog>
         <!-- Labels that do not fit (LP-D43, LP-D45): every row of Python's report, in its order; labels not placed for
-             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only -->
+             lack of room (CAPACITY-STOP): the ways to make room Python names, and Close only; every row known not to
+             fit (NO-ROW-WAYS): the same ways under the rows -->
         <choice-dialog v-if="labelFitDialog.show" :busy="dialogChoicePending || labelFitDialog.finishing"
              :busy-status="labelFitDialog.finishing ? t('Finishing the choice being computed…') : null" labelledby="label-fit-title" describedby="label-fit-description"
              data-label-fit-dialog
@@ -8683,17 +8684,11 @@
                 : t('Nothing was drawn. Choose a fix to Generate again.') }}</p>
             <ul class="mt-2 text-xs text-slate-500" data-label-fit-records>
                 <li v-for="record in labelFitDialog.records" :key="`${record.recordIndex}:${record.recordId}:${record.labelKindTitle}`">
-                    <span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt <template v-if="record.capacity">{{ record.counts }}</template><template v-else>({{ record.counts }})</template>
+                    <i18n-text v-if="record.capacity" :text="labelCapacityText(record.capacity)"><template #record><span class="font-semibold text-slate-700">{{ record.recordId }}</span></template></i18n-text>
+                    <template v-else><span class="font-semibold text-slate-700">{{ record.recordId }}</span>: {{ record.labelCount }} {{ record.labelKindTitle }} at {{ record.fontSize }} pt ({{ record.counts }})</template>
                 </li>
             </ul>
-            <div v-if="labelFitDialog.capacity" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
-                <p class="font-semibold">{{ t('To make room:') }}</p>
-                <ul class="mt-1 list-disc pl-5 space-y-1">
-                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
-                </ul>
-            </div>
-            <p v-else-if="!labelFitDialog.rows.length" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
-            <fieldset v-else class="mt-3">
+            <fieldset v-if="labelFitDialog.rows.length" class="mt-3">
                 <legend class="sr-only">{{ t('Fix') }}</legend>
                 <ul class="divide-y divide-slate-200 rounded border border-slate-200" data-label-fit-rows>
                     <li v-for="row in labelFitDialog.rows" :key="row.kind" :data-label-fit-row="row.kind" :data-label-fit-status="row.status"
@@ -8716,6 +8711,13 @@
                     </li>
                 </ul>
             </fieldset>
+            <p v-else-if="!labelFitDialog.capacity" class="mt-3 text-sm text-slate-600">{{ t('No setting in this dialog makes these labels fit.') }}</p>
+            <div v-if="labelFitDialog.remedies.length" class="mt-3 text-sm text-slate-700" data-label-fit-remedies>
+                <p class="font-semibold">{{ t('To make room:') }}</p>
+                <ul class="mt-1 list-disc pl-5 space-y-1">
+                    <li v-for="remedy in labelFitDialog.remedies" :key="remedy">{{ tm(remedy) }}</li>
+                </ul>
+            </div>
             <!-- PD-OI-097: the centre definition's own text; shows the field, applies nothing -->
             <div v-if="labelFitDialog.definitionRecords.length" class="mt-2 flex flex-wrap gap-2" data-label-fit-edit-text>
                 <button v-for="record in labelFitDialog.definitionRecords" :key="record.recordIndex" type="button" data-history-ignore

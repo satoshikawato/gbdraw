@@ -59,6 +59,9 @@ write-up of a release.
   (browsers with CSS `field-sizing`); where the title would be narrower than 5rem, the header takes the two-row layout
   it has at 768 px and below. The Circular and Linear names stay on one line (OV-2177, OV-2178, #1446; 0.14.2 had
   both).
+- Fixed: in the Web app, the room that Circular labels need (the record line of the "Labels do not fit" dialog, the
+  Generate error, and the "Labels may not fit" note while Generate runs) reads in the chosen UI language, and a whole
+  ratio reads "3", not "3.0". Before, those sentences stayed English in every language (OV-2179, #1447).
 - Fixed: the packaged palette `hearbal_garden` is spelled `herbal_garden`. The old name still works in
   `-p/--palette`, `FeatureOptions`, `ColorOptions`, Sessions, and requests, and draws the same colors; lists show
   only `herbal_garden`, and new requests name it (#1407).
@@ -70,7 +73,9 @@ write-up of a release.
   37 min); labels that need 0.8 times or more warn before they are placed
   (`LabelsMayNotFitWarning`; the Web app shows it while Generate runs, and after a stop the **Labels do not fit**
   dialog lists the ways to make room). Python raises `LabelsDoNotFitError` with no rows and a `capacity`
-  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). See
+  (`LabelCapacityRecord`, exported from `gbdraw.api`) for each record that was not placed (#1402). Labels that are
+  placed and searched and that no fix makes fit get the same ways to make room in the **Labels do not fit** dialog
+  and after `No single change of the label settings fits this map.` on the command line (OV-2180, #1447). See
   [Labels that do not fit](./docs/REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
 - Changed: `gbdraw circular` and `gbdraw linear` exit with status 1, write no file, and print one error that names
   the formats and the install command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not installed.
