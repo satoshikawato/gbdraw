@@ -1193,7 +1193,6 @@ state.plotTitleAutoTransform.value = { x: 17, y: 18 };
 state.featureListScrollTop.value = 144;
 state.semanticFileWatchersSuppressed.value = true;
 
-const depthTrackUiCounts = { circular: 2 };
 const keptDepthSeries = (label, color) => ({
   label, color, height: null, large_tick_interval: null, small_tick_interval: null, tick_font_size: null
 });
@@ -1231,7 +1230,6 @@ const sessionImportRollbackState = createSessionImportRollbackState({
     installedArtifacts.push(slot);
     artifactPort.installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) });
   },
-  depthTrackUiCounts,
   featureListScrollTop: state.featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId
@@ -1302,7 +1300,6 @@ const rollbackState = () => ({
   plotTitleDragging: state.plotTitleDragging.value,
   plotTitleDragStart: { ...state.plotTitleDragStart },
   plotTitleAutoTransform: structuredClone(state.plotTitleAutoTransform.value),
-  circularDepthTrackUiCount: depthTrackUiCounts.circular,
   featureListScrollTop: state.featureListScrollTop.value,
   featureListElementScrollTop: featureListScrollRef.value.scrollTop,
   selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
@@ -1357,7 +1354,6 @@ try {
         // The pane closes its popup while the load shows no Result.
         returnSettingsSection(state);
         artifactSlots.replaceLoaded([]);
-        depthTrackUiCounts.circular = 5;
         state.featureListScrollTop.value = 0;
         featureListScrollRef.value.scrollTop = 0;
         selectedPairwiseBlockOrthogroupId.value = '';

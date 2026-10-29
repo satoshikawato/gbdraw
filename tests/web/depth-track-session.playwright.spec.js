@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { showDrawing, showPhonePane } = require('./helpers/drawing-bar.cjs');
+const { showDrawing, showPhonePane, newDrawingFromMenu, drawingTab, shownDrawing } = require('./helpers/drawing-bar.cjs');
 const { savedDrawing, shownSavedDrawing } = require('./helpers/saved-session.cjs');
 const {
   CURRENT_SESSION_VERSION,
@@ -3698,6 +3698,44 @@ test('a Load takes the loaded Session\'s Depth series, not the previous document
   await expectSessionLoadedWithoutWarnings(page);
   await page.evaluate(() => window.Vue.nextTick());
   expect(await depthState()).toEqual({ series: 1, panel: 1 });
+});
+
+// OV-2200: each Circular drawing's Depth panel shows its own series, and Reset
+// this drawing keeps the other drawing's (R17-5, D-15-78). Before: one count for
+// the Circular mode, so drawing B showed A's three rows and B's reset set A's to one.
+test('each Circular drawing keeps its own Depth series count, and Reset this drawing keeps the other (OV-2200)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const panel = () => page.evaluate(() => window.__GBDRAW_APP__.circularDepthTrackRows.length);
+  /** @param {string} id */
+  const showById = async (id) => {
+    await drawingTab(page, id).click();
+    await expect.poll(async () => (await shownDrawing(page)).id).toBe(id);
+  };
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.addCircularDepthTrack();
+    window.__GBDRAW_APP__.addCircularDepthTrack();
+    await window.Vue.nextTick();
+  });
+  expect(await panel()).toBe(3);
+  const drawingB = await newDrawingFromMenu(page, 'circular');
+  expect(await panel(), 'a new Circular drawing shows its own one series').toBe(1);
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.addCircularDepthTrack();
+    await window.Vue.nextTick();
+  });
+  expect(await panel()).toBe(2);
+  await showById('circular');
+  expect(await panel(), 'drawing A keeps its three series').toBe(3);
+  await showById(drawingB);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.resetShownDrawing());
+  await page.evaluate(() => window.Vue.nextTick());
+  expect(await panel(), 'Reset this drawing returns B to one series').toBe(1);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await page.evaluate(() => window.Vue.nextTick());
+  expect(await panel(), 'its Undo gives B its two series back').toBe(2);
+  await showById('circular');
+  expect(await panel(), 'Reset this drawing on B keeps A').toBe(3);
 });
 
 test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {

@@ -370,7 +370,6 @@ const loadExportService = () => {
  *   of the shown drawing.
  * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
  *   Installs a captured slot after the import rollback restored the document.
- * @property {{ circular: number }} depthTrackUiCounts
  * @property {{ value: number }} featureListScrollTop
  * @property {{ value: HTMLElement | null }} featureListScrollRef
  * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
@@ -384,7 +383,6 @@ const loadExportService = () => {
  * @property {ArtifactSlotSnapshot} artifactSlots
  * @property {ReturnType<HistoryRouter['captureMembers']>} historyMembers
  * @property {Readonly<ArtifactSlot>} displayedArtifact
- * @property {number} circularDepthTrackUiCount
  * @property {number} featureListScrollTop
  * @property {string} selectedPairwiseBlockOrthogroupId
  * @property {unknown} [specificRulePatternDrafts] The unsaved rule pattern drafts, as the feature editor captured them; handed back as they are.
@@ -398,7 +396,6 @@ export const createSessionImportRollbackState = ({
   restoreHistoryMembers,
   captureDisplayedArtifact,
   installDisplayedArtifact,
-  depthTrackUiCounts,
   featureListScrollTop,
   featureListScrollRef,
   selectedPairwiseBlockOrthogroupId,
@@ -411,7 +408,6 @@ export const createSessionImportRollbackState = ({
     // The displayed artifact's parts outside state: its transport identity,
     // match-sequence owner, committed Session and CLI helper files.
     displayedArtifact: captureDisplayedArtifact(),
-    circularDepthTrackUiCount: depthTrackUiCounts.circular,
     featureListScrollTop: featureListScrollTop.value,
     selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
@@ -426,8 +422,7 @@ export const createSessionImportRollbackState = ({
   restore: async (/** @type {SessionImportRollbackSnapshot} */ snapshot) => {
     artifactSlots.restore(snapshot.artifactSlots);
     installDisplayedArtifact(snapshot.displayedArtifact);
-    // The restored document holds each drawing's Depth series (OV-1165).
-    depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
+    // The restored document holds each drawing's Depth series, and so its Depth panel count (OV-1165, OV-2200).
     await nextTick();
     featureListScrollTop.value = snapshot.featureListScrollTop;
     if (featureListScrollRef.value) {
@@ -2407,9 +2402,6 @@ export const createAppSetup = () => {
   ));
   /** @param {LinearSeq | null | undefined} seq */
   const hasLinearDepthFiles = (seq) => depthFileCount(seq?.depth) > 0;
-  const depthTrackUiCounts = reactive({
-    circular: 1
-  });
   /** @param {DrawingState} drawing */
   const circularDepthRecordCount = (drawing) => {
     const discoveredCount = drawing.circularRecordList.value.length;
@@ -2432,6 +2424,11 @@ export const createAppSetup = () => {
     Number(uiCount) || 1,
     representativeDepthFiles(slots).length
   );
+  // A Circular drawing's Depth panel count: its stored series (`adv.depth_tracks`,
+  // which Add Depth track and a Load grow) or its Depth files, whichever is more.
+  // Each drawing has its own, and Undo and Reset restore it with the series (OV-2200).
+  /** @param {DrawingState} drawing */
+  const circularDepthTrackCount = (drawing) => sourceDepthTrackCount(drawing.files.c_depth, drawing.adv.depth_tracks.length);
   // The Depth panels read the drawing's series and never write them (OV-109):
   // the Depth transitions and the Session reconcile grow, trim and label the
   // list, and a series it does not hold yet shows its defaults.
@@ -2477,7 +2474,7 @@ export const createAppSetup = () => {
     if (drawing.mode === 'linear') {
       return linearDepthTrackUiCount(drawing);
     }
-    return sourceDepthTrackCount(drawing.files.c_depth, depthTrackUiCounts.circular);
+    return circularDepthTrackCount(drawing);
   };
   /** @param {DrawingState} drawing */
   const ensureDepthTrackConfigCount = (drawing, count = activeDepthTrackCount(drawing)) => {
@@ -2492,10 +2489,7 @@ export const createAppSetup = () => {
   const circularDepthTrackRows = computed(() => {
     const drawing = shownDrawingOfMode('circular');
     if (!drawing) return [];
-    return rowsForDepthTrackCount(
-      drawing,
-      sourceDepthTrackCount(drawing.files.c_depth, depthTrackUiCounts.circular)
-    );
+    return rowsForDepthTrackCount(drawing, circularDepthTrackCount(drawing));
   });
   const linearDepthTrackRows = () => {
     const drawing = shownDrawingOfMode('linear');
@@ -2865,7 +2859,6 @@ export const createAppSetup = () => {
     const idx = Math.max(0, Number(index) || 0);
     const ref = state.inputFiles.registerFile(file);
     ensureDepthTrackConfigCount(drawing, idx + 1);
-    depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
     const rows = circularDepthRows(drawing);
     const previousFile = circularDepthRepresentatives(drawing)[idx] || null;
     // A new file can rename an auto-labeled series, so the label follows in the same retirement.
@@ -2938,8 +2931,7 @@ export const createAppSetup = () => {
     () => setLinearSourceDepthFile(source, index, null)
   );
   const addCircularDepthTrack = () => shownAction('circular', (drawing) => {
-    depthTrackUiCounts.circular = sourceDepthTrackCount(drawing.files.c_depth, depthTrackUiCounts.circular) + 1;
-    ensureDepthTrackConfigCount(drawing, depthTrackUiCounts.circular);
+    ensureDepthTrackConfigCount(drawing, circularDepthTrackCount(drawing) + 1);
     retireLegendStylesOfUnnamedCaptions(() => { if (circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
   });
   const addLinearDepthTrack = () => shownAction('linear', (drawing) => {
@@ -2954,14 +2946,12 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(() => {
-      const count = sourceDepthTrackCount(drawing.files.c_depth, depthTrackUiCounts.circular);
       const previousFiles = circularDepthRepresentatives(drawing);
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', removeDepthTrackColumnAt(circularDepthRows(drawing), idx)
         .map((row) => compactDepthFileSlots(row)));
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       // Show Depth goes off with the drawing's last Depth source (OV-82).
       if (!circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = false;
-      depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(drawing), idx);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
       const activeFileCount = circularDepthRepresentatives(drawing).length;
@@ -3870,7 +3860,6 @@ export const createAppSetup = () => {
     installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
       drawing: state.drawingOf(slot.drawingId), ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
     }),
-    depthTrackUiCounts,
     featureListScrollTop,
     featureListScrollRef,
     selectedPairwiseBlockOrthogroupId,
@@ -3895,9 +3884,6 @@ export const createAppSetup = () => {
     // Load the user canceled changed nothing, the notice included.
     if (name && !['canceled', 'skipped', 'stale'].includes(String(result?.status))) noticeBanner.dismiss();
     if (result?.status === 'ok') {
-      // The Depth panel shows each loaded Circular series, with or without a Depth file (BA-OD94);
-      // the count is the Circular mode's until it is kept per drawing.
-      depthTrackUiCounts.circular = Math.max(1, ...circularDrawings().map((drawing) => drawing.adv.depth_tracks.length));
       showNotice({ text: name ? t('Session loaded: {file}', { file: name }) : t('Session loaded.'), items: result.notices || [] });
     } else if (result?.status === 'legacy') {
       showNotice({ text: t('Configuration loaded from an older gbdraw. Save Session to keep it in the current format.') });
@@ -5637,10 +5623,9 @@ export const createAppSetup = () => {
   /** @type {Readonly<Record<DiagramMode, (drawing: DrawingState) => void>>} */
   const RESET_FOLLOW_UPS = Object.freeze({
     circular: (drawing) => {
-      // The track menu's new-track choice and the Depth control's count are
-      // one per mode; they return to a new drawing's with the drawing.
+      // The track menu's new-track choice is one per mode; it returns to a
+      // new drawing's with the drawing.
       circularTrackNewRenderer.value = 'dinucleotide_skew';
-      depthTrackUiCounts.circular = 1;
       // OV-1249: the loaded Circular records keep a Record Order row each, at
       // their defaults; Reset resets settings, not the records.
       drawing.adv.multi_record_positions.push(...buildDefaultCircularRecordPositions(drawing));
