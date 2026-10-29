@@ -9,6 +9,7 @@ import {
   requestFeaturePlacements
 } from './feature-placement.js';
 import { resultRenderedFeatures } from './feature-catalog.js';
+import { resourceIdOwnedBy } from './diagram-resource-staging.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
@@ -379,7 +380,8 @@ export { CANONICAL_REQUEST_SCHEMA };
 /**
  * @import {
  *   CanonicalAlignmentAnchorIdentity, CanonicalAlignmentRecordDecision, CanonicalCircularDiagramOptions,
- *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalRecord, CanonicalRenderRequest,
+ *   CanonicalCircularLayout, CanonicalComparison, CanonicalFileRef, CanonicalLinearRenderRequest, CanonicalLinearTrackSlot, CanonicalRecord,
+ *   CanonicalRenderRequest,
  *   CanonicalSimilarityAlignmentPlan, CanonicalTableRef
  * } from '../contracts/request.generated.js'
  */
@@ -1719,7 +1721,17 @@ const LIVE_WEB_FILES_ROOT = 'webFiles';
  * @typedef {{ readonly linearSeqs: readonly RequestLinearSeq[] }} LiveSettingInputs
  */
 /**
- * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>> }} LiveSettingContext
+ * The committed Session's resources, which name the files each committed
+ * record was drawn from.
+ * @typedef {Readonly<Record<string, unknown>> | null | undefined} LiveSettingResources
+ */
+/**
+ * The identity of one item whose live value a setting note states: an
+ * annotation item by its set and item id, a Linear row by its slot id.
+ * @typedef {{ readonly setId: string, readonly itemId: string } | { readonly slotId: string }} LiveSettingItem
+ */
+/**
+ * @typedef {{ inputs: LiveSettingInputs, webFiles: Readonly<Record<string, unknown>>, resources: LiveSettingResources }} LiveSettingContext
  * @typedef {(drawing: RequestDrawing, request: CanonicalRenderRequest, context: LiveSettingContext) => LiveSettingWrite[]} LiveSettingProjector
  */
 /** @param {string} path @param {unknown} value @returns {LiveSettingWrite[]} */
@@ -1731,23 +1743,34 @@ const configWrites = (path, value) => {
 const configWrite = (key, value) => [['diagramOptions', 'configOverrides', key], value ?? undefined];
 
 /**
+ * Whether a draft card still holds the files a committed record was drawn
+ * from: the committed resource the record's source names holds the card's
+ * File (`resourceIdOwnedBy`, by payload identity). A replaced File does not,
+ * whatever its definition says.
+ * @param {RequestLinearSeq} seq @param {CanonicalRecord['source']} source
+ * @param {LiveSettingResources} resources
+ */
+const cardHoldsRecordSource = (seq, source, resources) => (source.kind === 'genbank'
+  ? resourceIdOwnedBy(resources, seq.gb, 'genbank') === source.resourceId
+  : resourceIdOwnedBy(resources, seq.gff, 'gff3') === source.gffResourceId
+    && resourceIdOwnedBy(resources, seq.fasta, 'fasta') === source.fastaResourceId);
+/**
  * The draft card index of each committed Linear record: the card whose
  * Generate key is the record's key or expands to it (a split member, F-18).
- * Null when a committed record has no card, the cards were moved, or a
- * card's File default is not the one the record was drawn with (a replaced
- * File): then the record names wait for Generate.
+ * Null when a committed record has no card, the cards were moved, or a card
+ * no longer holds the File the record was drawn from (a replaced File): then
+ * the record names wait for Generate.
  * @param {CanonicalRenderRequest} request @param {LiveSettingInputs} inputs
- * @param {Readonly<Record<string, unknown>>} webFiles
+ * @param {LiveSettingResources} resources
  * @returns {number[] | null}
  */
-const linearRecordCardIndexes = (request, inputs, webFiles) => {
+const linearRecordCardIndexes = (request, inputs, resources) => {
   const cards = inputs.linearSeqs.map((seq, index) => linearSeqRecordKey(seq, index));
   const indexes = request.records.map(({ recordKey }) => cards.findIndex(
     (key) => key === recordKey || recordKeyExpansion(recordKey, key) !== null
   ));
-  const entries = linearRecordMetadataOf(request, webFiles);
   return indexes.every((index, position) => index >= 0 && (position === 0 || index >= indexes[position - 1])
-    && (!entries || String(entries[position].fileDefinition || '') === linearRecordDefinitionLine(inputs.linearSeqs[index]).file))
+    && cardHoldsRecordSource(inputs.linearSeqs[index], request.records[position].source, resources))
     ? indexes : null;
 };
 /**
@@ -1759,6 +1782,44 @@ const linearRecordCardIndexes = (request, inputs, webFiles) => {
 const linearRecordMetadataOf = (request, webFiles) => {
   const entries = webFiles?.linearRecordMetadata;
   return Array.isArray(entries) && entries.length === request.records.length ? entries : null;
+};
+
+const ANNOTATION_SETS_REQUEST_PATH = 'diagramOptions.annotations.sets';
+const LINEAR_TRACK_SLOTS_REQUEST_PATH = 'diagramOptions.tracks.linearTrackSlots';
+/**
+ * Whether the draft Fill and Stroke color of a committed annotation item draw
+ * live: not while the item or its set has a Legend label, which draws the
+ * colors in a Legend row (O-8). An item the committed request lacks waits
+ * (its targets and the omitted record keys stay committed, F-11).
+ * @param {{ legendLabel?: string | null }} set @param {{ legendLabel?: string | null }} item
+ */
+const annotationItemColorsLive = (set, item) => !set.legendLabel && !item.legendLabel;
+/**
+ * Whether the draft Height of a committed Linear row draws live: not for a
+ * row a Python request states as a spec string, a features row, which
+ * reserves the record layout, or a Depth row, whose Height also writes the
+ * Depth track height (F-15).
+ * @param {string | CanonicalLinearTrackSlot} slot @returns {slot is CanonicalLinearTrackSlot}
+ */
+const linearSlotHeightLive = (slot) => typeof slot !== 'string' && slot.renderer !== 'features' && slot.renderer !== 'depth';
+/**
+ * Whether the committed request draws the live value of one item: the
+ * committed set and item of that id whose colors are live, or the committed
+ * row of that slot id whose Height is live. Any other path or item applies
+ * as its path does.
+ * @param {CanonicalRenderRequest} request @param {string} requestPath @param {LiveSettingItem} item
+ */
+const liveSettingItemApplies = (request, requestPath, item) => {
+  if (requestPath === ANNOTATION_SETS_REQUEST_PATH && 'setId' in item) {
+    const set = request.diagramOptions.annotations?.sets?.find((candidate) => candidate.id === item.setId);
+    const committed = set?.annotations.find((candidate) => candidate.id === item.itemId);
+    return Boolean(set && committed && annotationItemColorsLive(set, committed));
+  }
+  if (requestPath === LINEAR_TRACK_SLOTS_REQUEST_PATH && 'slotId' in item) {
+    const slots = request.diagramOptions.tracks?.linearTrackSlots;
+    return Array.isArray(slots) && slots.some((slot) => linearSlotHeightLive(slot) && slot.id === item.slotId);
+  }
+  return true;
 };
 
 /**
@@ -1823,21 +1884,20 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   'diagramOptions.tracks.centerReservedRadius': (drawing) => [
     [['diagramOptions', 'tracks', 'centerReservedRadius'], requestCenterReservedRadius(drawing.adv)]
   ],
-  // The Fill and Stroke color of each committed item, matched by set and
-  // item id. An item the request lacks waits (its targets and the omitted
-  // record keys stay committed, F-11), and so does an item whose Legend label
-  // draws its colors in a Legend row (O-8). A draft item without its own
-  // style follows the committed set's Default, whose change is not live.
-  'diagramOptions.annotations.sets': (drawing, request) => {
+  // The Fill and Stroke color of each committed item whose colors are live
+  // (`annotationItemColorsLive`), matched by set and item id. A draft item
+  // without its own style follows the committed set's Default, whose change
+  // is not live.
+  [ANNOTATION_SETS_REQUEST_PATH]: (drawing, request) => {
     const committedSets = request.diagramOptions.annotations?.sets;
     if (!Array.isArray(committedSets)) return [];
     const draftSets = normalizeAnnotationSets(drawing.annotationSets);
     return [[['diagramOptions', 'annotations', 'sets'], committedSets.map((set) => {
       const draftSet = draftSets.find((candidate) => candidate.id === set.id);
-      if (!draftSet || set.legendLabel) return set;
+      if (!draftSet) return set;
       return { ...set, annotations: set.annotations.map((item) => {
         const draftItem = draftSet.annotations.find((candidate) => candidate.id === item.id);
-        if (!draftItem || item.legendLabel) return item;
+        if (!draftItem || !annotationItemColorsLive(set, item)) return item;
         const drawn = item.style ?? createDefaultAnnotationStyle(set.defaultStyle);
         const draft = draftItem.style ?? createDefaultAnnotationStyle(set.defaultStyle);
         return drawn.fill === draft.fill && drawn.stroke === draft.stroke
@@ -1845,11 +1905,9 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
       }) };
     })]];
   },
-  // The Height of each committed Linear row, matched by slot id (a row a
-  // Python request states as a spec string keeps it). A features
-  // row reserves the record layout and a Depth row's Height also writes the
-  // Depth track height (F-15): both wait, as a new row does.
-  'diagramOptions.tracks.linearTrackSlots': (drawing, request) => {
+  // The Height of each committed Linear row whose Height is live
+  // (`linearSlotHeightLive`), matched by slot id; a new row waits.
+  [LINEAR_TRACK_SLOTS_REQUEST_PATH]: (drawing, request) => {
     const slots = request.diagramOptions.tracks?.linearTrackSlots;
     if (!Array.isArray(slots)) return [];
     const draft = Array.isArray(drawing.adv.linear_track_slots) ? drawing.adv.linear_track_slots : [];
@@ -1864,8 +1922,7 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
       }
     }
     return [[['diagramOptions', 'tracks', 'linearTrackSlots'], slots.map((slot) => (
-      typeof slot === 'string' || slot.renderer === 'features' || slot.renderer === 'depth' || !heights.has(slot.id)
-        ? slot : { ...slot, height: heights.get(slot.id) ?? null }
+      linearSlotHeightLive(slot) && heights.has(slot.id) ? { ...slot, height: heights.get(slot.id) ?? null } : slot
     ))]];
   },
   // Record names write the label fields only: Reverse, the Linear subtitle,
@@ -1873,12 +1930,12 @@ const LIVE_SETTING_PROJECTORS = Object.freeze({
   // takes its card's label, each split member too, with the definition
   // fields of its `webFiles` entry (F-2); a Circular single record its Record
   // label and Subtitle.
-  records: (drawing, request, { inputs, webFiles }) => {
+  records: (drawing, request, { inputs, webFiles, resources }) => {
     if (request.mode === 'circular') {
       const labels = circularRecordLabels(drawing.form);
       return [[['records'], request.records.map((record) => ({ ...record, presentation: { ...record.presentation, ...labels } }))]];
     }
-    const indexes = /** @type {number[]} */ (linearRecordCardIndexes(request, inputs, webFiles));
+    const indexes = /** @type {number[]} */ (linearRecordCardIndexes(request, inputs, resources));
     const cards = indexes.map((index) => inputs.linearSeqs[index]);
     /** @type {LiveSettingWrite[]} */
     const writes = [[['records'], request.records.map((record, position) => ({
@@ -1906,7 +1963,7 @@ const LIVE_SETTING_MODES = Object.freeze({
   [`diagramOptions.configOverrides.${CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned}`]: 'linear',
   'diagramOptions.configOverrides.objects.definition.linear.line_styles': 'linear',
   [COMPARISON_HEIGHT_REQUEST_PATH]: 'linear',
-  'diagramOptions.tracks.linearTrackSlots': 'linear',
+  [LINEAR_TRACK_SLOTS_REQUEST_PATH]: 'linear',
   'diagramOptions.species': 'circular',
   'diagramOptions.tracks.centerReservedRadius': 'circular'
 });
@@ -1922,12 +1979,16 @@ const LIVE_SETTING_MODES = Object.freeze({
  * omits a default style but carries its pairs); Circular record names only a
  * single record draws (a batch or grid of one draws no record presentation),
  * Linear ones only while the committed records follow the draft cards
- * (`linearRecordCardIndexes`). Otherwise the value applies on Generate
- * (PD-OI-103), and the setting note says so (`SettingNote`).
+ * (`linearRecordCardIndexes`). With an `item`, the value of that one item
+ * only (`liveSettingItemApplies`): the projector writes the items it admits.
+ * Otherwise the value applies on Generate (PD-OI-103), and the setting note
+ * says so (`SettingNote`).
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
- * @param {LiveSettingInputs} inputs @param {Readonly<Record<string, unknown>>} [webFiles]
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @param {LiveSettingItem | null} [item]
  */
-export const liveSettingApplies = (request, requestPath, drawing, inputs, webFiles = {}) => {
+export const liveSettingApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
+  if (item && !liveSettingItemApplies(request, requestPath, item)) return false;
   const grid = request.grouping === 'grid';
   const mode = LIVE_SETTING_MODES[requestPath];
   if (mode) {
@@ -1939,7 +2000,7 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, webFil
   if (requestPath === 'records') {
     return request.mode === 'circular'
       ? request.grouping === 'single'
-      : linearRecordCardIndexes(request, inputs, webFiles) !== null;
+      : linearRecordCardIndexes(request, inputs, resources) !== null;
   }
   return !CANVAS_POSITION_REQUEST_PATHS.has(requestPath) || request.mode !== 'circular'
     || Boolean(drawing.form.multi_record_canvas) === grid;
@@ -1949,11 +2010,12 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, webFil
  * other mode draws nothing in this Result and waits for nothing, so a row
  * with paths of both modes shows its note by the shown mode's paths alone.
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
- * @param {LiveSettingInputs} inputs @param {Readonly<Record<string, unknown>>} [webFiles]
+ * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @param {LiveSettingItem | null} [item]
  */
-export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, webFiles = {}) => {
+export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
   const mode = LIVE_SETTING_MODES[requestPath];
-  return (Boolean(mode) && request.mode !== mode) || liveSettingApplies(request, requestPath, drawing, inputs, webFiles);
+  return (Boolean(mode) && request.mode !== mode) || liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
 
 /** @param {unknown} root @param {readonly string[]} path */
@@ -1970,11 +2032,12 @@ const valueAtPath = (root, path) => path.reduce(
 export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs }) => {
   const request = requireCurrentCommittedRequest(committed);
   const webFiles = committed.webFiles || {};
+  const { resources } = committed;
   return [...new Set(requestPaths)].flatMap((requestPath) => {
     const project = LIVE_SETTING_PROJECTORS[requestPath];
     if (!project) throw diagnosticError('INPUT_INVALID', { field: requestPath, reason: 'UNKNOWN_CONFIG_PATH' });
-    if (!liveSettingApplies(request, requestPath, drawing, inputs, webFiles)) return [];
-    return project(drawing, request, { inputs, webFiles }).filter(([path, value]) => (
+    if (!liveSettingApplies(request, requestPath, drawing, inputs, resources)) return [];
+    return project(drawing, request, { inputs, webFiles, resources }).filter(([path, value]) => (
       JSON.stringify(valueAtPath(path[0] === LIVE_WEB_FILES_ROOT ? { webFiles } : request, path)) !== JSON.stringify(value)
     ));
   });

@@ -345,17 +345,22 @@ test('Linear record names follow the draft records in order; a removed or moved 
   try {
     const committed = generate('linear');
     const applies = (seqs) => request.liveSettingApplies(committed.renderRequest, RECORDS, modeDrawing(state, 'linear'),
-      { linearSeqs: seqs }, committed.webFiles);
+      { linearSeqs: seqs }, committed.resources);
     const [first, second] = inputs.linearSeqs;
     assert.equal(applies([first, second]), true);
     assert.equal(applies([first, second, seq('record-3', 'LIVE3')]), true, 'an added record leaves the drawn ones in order');
     assert.equal(applies([second, first]), false, 'moved');
     assert.equal(applies([first]), false, 'removed');
-    // A replaced File: its file definition is not the one the Result drew.
-    assert.equal(applies([first, { ...second, file_definition: 'Another file' }]), false, 'replaced');
+    // A replaced File: the committed resource of the record does not hold it,
+    // whatever its definition says (D-193 D).
+    assert.equal(applies([first, { ...second, gb: genbank(['LIVE2']) }]), false, 'replaced by a File of the same definition');
+    assert.equal(applies([first, { ...second, file_definition: 'Another file' }]), true, 'the same File');
+    assert.equal(request.liveSettingApplies(committed.renderRequest, RECORDS, modeDrawing(state, 'linear'), inputs), false,
+      'no committed resources name the File');
     // F-18: Generate splits a card into `<uid>:<k>` members, each with its own
     // metadata entry; each takes the card's label.
-    const split = structuredClone(committed);
+    // The resources keep their payload identity (a clone would not).
+    const split = { ...structuredClone({ renderRequest: committed.renderRequest, webFiles: committed.webFiles }), resources: committed.resources };
     const card = split.renderRequest.records[1];
     split.renderRequest.records.splice(1, 1, { ...card, recordKey: 'record-2:1' }, { ...card, recordKey: 'record-2:2' });
     const entry = split.webFiles.linearRecordMetadata[1];
@@ -392,6 +397,48 @@ test('a row with paths of the other mode shows Live edit in each mode', () => {
   assert.equal(note('comparison-height', linear).application, 'generate', 'no committed comparison');
   // The other mode's path is still not applied.
   assert.equal(request.liveSettingApplies(circular, STYLES, modeDrawing(state, 'circular'), inputs), false);
+});
+
+test('an annotation item\'s and a Linear row\'s note read the condition their apply reads (D-193 A2)', () => {
+  try {
+    fixtures('linear');
+    const drawing = modeDrawing(state, 'linear');
+    const items = drawing.annotationSets[0].annotations;
+    const committed = generate('linear');
+    // r4 is new since the Generate.
+    items.push({ id: 'r4', target: { kind: 'coordinateSpan', start: 4, end: 6 } });
+    restore.push(() => items.pop());
+    const note = (id, item, shown = committed) => owner.settingApplicationNote(id, (path) => request.liveSettingNoteApplies(
+      shown.renderRequest, path, modeDrawing(state, shown.renderRequest.mode), inputs, shown.resources, item)).text;
+    // Without an item the rows say Live edit; each item says what its apply does.
+    assert.equal(note('annotation-style', null), 'Live edit');
+    assert.equal(note('track-geometry', null), 'Live edit');
+    for (const [itemId, text] of Object.entries({ r1: 'Live edit', r2: 'Applies on Generate', r4: 'Applies on Generate' })) {
+      assert.equal(note('annotation-style', { setId: 'islands', itemId }), text, itemId);
+      // The note says Live edit exactly when the apply writes the item's new colors.
+      const item = items.find((candidate) => candidate.id === itemId);
+      const style = item.style;
+      item.style = { fill: '#ff0000', stroke: '#00ff00' };
+      assert.equal(project(committed, 'linear', [ANNOTATIONS]).length, text === 'Live edit' ? 1 : 0, itemId);
+      item.style = style;
+    }
+    assert.equal(note('annotation-style', { setId: 'another', itemId: 'r1' }), 'Applies on Generate', 'a set the Result lacks');
+    // A set Legend label draws every item of the set in a Legend row (O-8).
+    const labelled = structuredClone(committed);
+    labelled.renderRequest.diagramOptions.annotations.sets[0].legendLabel = 'Islands';
+    assert.equal(note('annotation-style', { setId: 'islands', itemId: 'r1' }, labelled), 'Applies on Generate');
+    // A Linear row: the GC Height is live; the features row and a new or renamed row wait.
+    for (const [slotId, text] of Object.entries({ gc_content: 'Live edit', features: 'Applies on Generate', new_row: 'Applies on Generate' })) {
+      assert.equal(note('track-geometry', { slotId }), text, slotId);
+    }
+    const stringSlots = structuredClone(committed);
+    stringSlots.renderRequest.diagramOptions.tracks.linearTrackSlots = ['gc_content:dinucleotide_content'];
+    assert.equal(note('track-geometry', { slotId: 'gc_content' }, stringSlots), 'Applies on Generate', 'a spec string row');
+    // A Circular Result draws no Linear row and waits for none (the row rule).
+    assert.equal(note('track-geometry', { slotId: 'features' }, { renderRequest: { mode: 'circular', grouping: 'single', records: [] } }), 'Live edit');
+  } finally {
+    undoAll();
+  }
 });
 
 test('the record popup fields name their setting row and its draft path', () => {

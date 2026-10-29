@@ -307,7 +307,7 @@ export const buildLosatExecutionData = () => cloneJsonData(Object.fromEntries(
 /** @import { LegendEditsUnread, StrokeOverrideLosses } from './style-overrides.js' */
 /** @import { CanonicalRenderRequest } from '../contracts/request.generated.js' */
 /** @import { StoredDrawing } from './main-session-comparison-frame.js' */
-/** @import { CommittedCanonicalSession, LiveSettingInputs, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
+/** @import { CommittedCanonicalSession, LiveSettingInputs, LiveSettingItem, LiveSettingWrite, RequestCanonicalComparison, SessionRequestProjection,
  *   SettingsOnlyProjectionInput } from './session-request.js' */
 /** @import { ImportedComparisonIntent } from './imported-comparison-intent.js' */
 /** @import { FeatureCatalog, FeatureCatalogResult } from './feature-catalog.js' */
@@ -3938,14 +3938,15 @@ export const liveSettingInputs = () => ({ linearSeqs: state.linearSeqs });
 
 /**
  * Whether the committed request can show the live value of `requestPath` of
- * its mode's drawing (`liveSettingNoteApplies`); without a committed Session
- * every path can. The app setup gives it to `SettingNote` (`SETTING_NOTE_APPLIES`).
- * @param {string} requestPath
+ * its mode's drawing, or of its one `item` (`liveSettingNoteApplies`);
+ * without a committed Session every path can. The app setup gives it to
+ * `SettingNote` (`SETTING_NOTE_APPLIES`).
+ * @param {string} requestPath @param {LiveSettingItem | null} [item]
  */
-export const committedLiveSettingApplies = (requestPath) => {
+export const committedLiveSettingApplies = (requestPath, item = null) => {
   const request = getCommittedCanonicalRenderRequest();
   return !request || liveSettingNoteApplies(request, requestPath, state.drawingOfMode(request.mode), liveSettingInputs(),
-    committedCanonicalSession?.webFiles);
+    committedCanonicalSession?.resources, item);
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.

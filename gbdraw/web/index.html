@@ -2353,7 +2353,7 @@
                                 <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? t('Available when Multi-Record Canvas is off and one record is selected.') : t('Available when one record is selected.') }}</p>
                                 <div class="grid grid-cols-1 gap-2">
                                     <div data-setting="record-names" class="grid grid-cols-1 gap-2">
-                                    <setting-note setting="record-names"></setting-note>
+                                    <setting-note setting="record-names" class="justify-self-start"></setting-note>
                                     <div>
                                         <span class="input-label text-[10px]">{{ t('Record label') }} <help-tip id="help-circular-record-label" :text="t('Overrides the inferred organism line for this Circular record. Leave empty to keep inference.')"></help-tip></span>
                                         <input
@@ -3618,7 +3618,10 @@
                                             <input :value="item.target.selectors[0].value" @input="setAnnotationField(set, item, 'selectorValue', $event.target.value)" @change="$event.target.value = $event.target.value.trim()" :aria-label="t('Annotation qualifier value')" class="form-input px-1 py-0.5 text-[10px]" :placeholder="t('Value')" :disabled="!semanticMutationAvailable">
                                         </template>
                                         <p v-else class="min-w-0 truncate text-[10px] text-slate-600" data-annotation-feature-identity :title="annotationFeatureCaption(item)">{{ annotationFeatureCaption(item) }}</p>
+                                        <div data-setting="annotation-style" class="contents">
                                         <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-6 w-6 p-0" :title="t('Fill color')" :aria-label="t('Annotation fill color')" :disabled="!semanticMutationAvailable">
+                                        <setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }" class="col-span-full row-start-2 justify-self-start"></setting-note>
+                                        </div>
                                         <button :aria-label="t('Delete annotation')" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" :title="t('Delete annotation')" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                     <div class="flex min-w-0 items-center gap-2">
@@ -3661,7 +3664,7 @@
                                                     <input type="number" min="0" :value="item.lane" @input="setAnnotationField(set, item, 'lane', $event.target.value)" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" :placeholder="t('Auto')" :aria-label="t('Annotation lane')" :aria-describedby="`help-annotation-lane-${item.id}`">
                                                     <help-tip :id="`help-annotation-lane-${item.id}`" :label="t('Help: Annotation lane')" :text="t('Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band.')"></help-tip>
                                                 </div>
-                                                <label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label>
+                                                <div data-setting="annotation-style" class="flex items-center gap-1"><label class="flex items-center gap-1 text-[10px] text-slate-600">{{ t('Line color') }} <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-6 w-8 p-0" :disabled="!semanticMutationAvailable"></label><setting-note setting="annotation-style" :item="{ setId: set.id, itemId: item.id }"></setting-note></div>
                                                 <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> {{ t('Hatch') }}</label>
                                             </div>
                                         </div>
@@ -4059,7 +4062,7 @@
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
-                                                        <div class="track-slot-field">
+                                                        <div class="track-slot-field" data-setting="track-geometry">
                                                             <span class="track-slot-field-label">h <help-tip :id="`help-linear-slot-height-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Minimum reserved height for the measured feature band, in pixels (px optional; positive). The actual reservation is max(measured, configured); this does not change feature glyph thickness, which is controlled by Feature Height (--feature_height). Auto values vary by record.') : t('Linear track height in pixels (px optional; positive). Leave blank for the automatic height.')"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
@@ -4074,6 +4077,7 @@
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
+                                                            <setting-note setting="track-geometry" :item="{ slotId: entry.slot.id }" class="mt-0.5 max-w-full whitespace-normal"></setting-note>
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">{{ t('spacing') }} <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? t('Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.') : t('Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.')"></help-tip></span>
@@ -6988,7 +6992,7 @@
                                         </button>
                                     </div>
                                 </div>
-                                <!-- Record definition: what the Result draws, then the settings the sidebar edits (they apply on Generate). -->
+                                <!-- Record definition: what the Result draws, then the settings the sidebar edits (each applies as its setting does: RECORD_POPUP_FIELDS). -->
                                 <div v-else-if="previewItemView && previewItemView.kind === 'record-definition'" :key="`record-popup-${previewItemView.identity}`" v-dialog-focus class="space-y-3" data-preview-item-popup="record-definition">
                                     <dl class="match-detail-rows" tabindex="-1" data-dialog-initial-focus :aria-label="t('Record facts')">
                                         <template v-for="fact in previewItemView.facts" :key="fact.label">
@@ -6996,27 +7000,27 @@
                                             <dd>{{ fact.value }}</dd>
                                         </template>
                                     </dl>
-                                    <section v-if="previewItemView.draft" data-setting="inputs" class="space-y-2 border-t border-slate-100 pt-3">
-                                        <h3 class="feature-popup-heading">{{ t('Definition text') }} <setting-note setting="inputs" class="normal-case tracking-normal"></setting-note></h3>
-                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }}
+                                    <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
+                                        <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
+                                        <label :data-setting="previewItemView.draft.fields.name.setting" class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }} <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
                                             <input type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
-                                        <label class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }}
+                                        <label :data-setting="previewItemView.draft.fields.subtitle.setting" class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }} <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
                                             <input type="text" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
                                         </label>
-                                        <label class="flex items-center gap-2 text-xs text-slate-700">
+                                        <label :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
                                             <input type="checkbox" :checked="previewItemView.draft.reverse"
                                                    @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
                                                    :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
-                                                   class="form-checkbox"> {{ t('Reverse complement') }}
+                                                   class="form-checkbox"> {{ t('Reverse complement') }} <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
                                         </label>
                                     </section>
                                     <div v-if="previewItemView.draft" class="match-actions">
@@ -9007,7 +9011,8 @@
 
 <script type="text/x-template" id="linear-record-names-template">
   <div class="min-w-0 space-y-2" :data-linear-record-names="seq.uid">
-    <div>
+    <div data-setting="record-names">
+      <setting-note setting="record-names"></setting-note>
       <div class="flex items-center justify-between gap-2 text-[10px] text-slate-500 font-bold mb-1">
         <span>{{ t('Organism / strain (optional)') }}</span>
         <span v-if="!seq.definition && getLinearSourceDefaultDefinition(source)" class="shrink-0 whitespace-nowrap text-[9px] font-normal text-blue-600 bg-blue-50 px-1 rounded">{{ t('Using file default') }}</span>
