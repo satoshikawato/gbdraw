@@ -304,3 +304,25 @@ test('the slot, owner-set and checkpoint captures read the Results through curre
   assert.deepEqual(checkpoint.results, [{ name: 'shown.svg', content: '<svg id="written"></svg>' }]);
   assert.equal(reads, 3);
 });
+
+// OV-2210: the project's LOSAT cache-info rows sit in every drawing's owner set,
+// and the transport identity names them by reference. A pass over them that
+// changes no row (another drawing's Linear file change filters its pairs out
+// of an empty list) keeps the array, so the shown drawing's Result keeps its
+// fingerprint and an unchanged Generate there records no step.
+test('a pass over the LOSAT rows that changes none keeps the shown artifact\'s transport identity', async () => {
+  const { writeLosatCacheInfo } = await import('../../gbdraw/web/js/services/config.js');
+  await fillCircularArtifact();
+  state.losatCacheInfo.value = [{ key: 'k', filename: 'pair.tsv', display: true }];
+  snapshots.setGeneratedArtifactIdentity({ schema: 1, algorithm: 'SHA-256', fingerprint: 'b'.repeat(64), retainedBytes: 10 },
+    { results: state.results.value });
+  const fingerprint = () => snapshots.captureGeneratedArtifactHandle(state.activeDrawing()).identity.fingerprint;
+  assert.equal(fingerprint(), 'b'.repeat(64));
+  const rows = state.losatCacheInfo.value;
+  writeLosatCacheInfo(rows.filter((entry) => !entry?.edgeKey));
+  assert.strictEqual(state.losatCacheInfo.value, rows, 'no row changed: the array stays');
+  assert.equal(fingerprint(), 'b'.repeat(64), 'the Result keeps its identity');
+  writeLosatCacheInfo([]);
+  assert.deepEqual(state.losatCacheInfo.value, [], 'a pass that drops a row writes');
+  assert.equal(fingerprint(), '', 'the changed rows are another artifact');
+});

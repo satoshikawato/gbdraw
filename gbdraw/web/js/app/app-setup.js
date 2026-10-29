@@ -95,7 +95,8 @@ import {
   setHeldPreviewViewportReader,
   installShownDrawing,
   duplicateDrawingState,
-  applyDrawingStyle
+  applyDrawingStyle,
+  writeLosatCacheInfo
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
@@ -704,7 +705,7 @@ export const createAppSetup = () => {
     const resolvedByEdgeKey = new Map(
       drawing.linearComparisonResolution.value.edges.map((/** @type {LinearComparisonResolvedEdge} */ edge) => [edge.edgeKey, edge])
     );
-    losatCacheInfo.value = losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
+    writeLosatCacheInfo(losatCacheInfo.value.flatMap((/** @type {LosatCacheInfoEntry} */ entry) => {
       const edgeKey = String(entry?.edgeKey || '');
       if (!edgeKey) return [entry];
       const resolved = resolvedByEdgeKey.get(edgeKey);
@@ -724,7 +725,7 @@ export const createAppSetup = () => {
           ? Number(resolved?.ordinal)
           : entry.ordinal
       }];
-    });
+    }));
   };
 
   /** @param {DrawingState} drawing */
@@ -732,7 +733,7 @@ export const createAppSetup = () => {
     bindDrawingCanonicalComparisons(state.inputFiles, drawing.slices.inputs, []);
     if (Array.isArray(losatCacheInfo.value)) {
       if (preserveLosatCacheInfo) reindexLinearLosatCacheInfo(drawing);
-      else losatCacheInfo.value = losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey);
+      else writeLosatCacheInfo(losatCacheInfo.value.filter((/** @type {LosatCacheInfoEntry} */ entry) => !entry?.edgeKey));
     }
   };
 
@@ -3063,7 +3064,7 @@ export const createAppSetup = () => {
       clearDerivedCircularConservationBlasts(drawing);
       bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas', nextFiles);
     }
-    losatCacheInfo.value = [];
+    writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
   };
   /**
@@ -3085,7 +3086,7 @@ export const createAppSetup = () => {
     bindDrawingInputFileList(state.inputFiles, drawing.slices.inputs, 'c_conservation_blasts', nextFiles);
     setConservationBlastsSource(drawing.slices.inputs, null);
     bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', []);
-    losatCacheInfo.value = [];
+    writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
   });
   // The comparison rings of a Circular drawing follow their source files: the
@@ -3212,7 +3213,7 @@ export const createAppSetup = () => {
     clearDerivedCircularConservationBlasts(drawing);
     bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_fastas',
       [...normalizeFileList(drawing.files.c_conservation_fastas), selectedRef]);
-    losatCacheInfo.value = [];
+    writeLosatCacheInfo([]);
     reconcileCircularConservation(drawing);
     if (target) target.value = '';
     return step;
@@ -3258,7 +3259,7 @@ export const createAppSetup = () => {
       bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_conservation_sequence_sources', kept.sequenceSources);
       setConservationBlastsSource(drawing.slices.inputs, kept.blasts.length > 0 ? 'losat-cache' : null);
       drawing.circularConservation.enabled = kept.enabled;
-      losatCacheInfo.value = [];
+      writeLosatCacheInfo([]);
       refreshCircularConservationSlots(drawing);
       return;
     }
