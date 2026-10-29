@@ -673,6 +673,13 @@ test(`${name}: Reset Settings applies the live rows and leaves the rest pending`
     expect(after.overrides[LEGEND_FONT_OVERRIDE], 'the default leaves the override out').toBeUndefined();
     expect(after.overrides[BLOCK_STROKE_OVERRIDE], 'an Applies on Generate value stays pending')
       .toEqual(before.overrides[BLOCK_STROKE_OVERRIDE]);
+    // Reset turns Use custom stack off and removes the Region Annotation sets,
+    // which wait for Generate; the switch waits with them, so the stack stays
+    // drawn (D-214 (f)) while the Legend font size applies.
+    if (name === 'tobacco') {
+      expect(JSON.parse(after.diagramOptions).tracks.circularTrackSlots, 'the custom stack stays drawn').not.toBeNull();
+      expect(after.reflowError).toBeNull();
+    }
   } finally {
     await page.context().close();
   }

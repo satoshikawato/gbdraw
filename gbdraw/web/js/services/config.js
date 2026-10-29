@@ -101,7 +101,7 @@ import {
   featureEditsOverProjection,
   linearDefinitionVisibilityOf,
   liveSettingNoteApplies,
-  liveTrackApplyRefused,
+  liveTrackHideDrawing,
   applyLiveResourceWrites,
   applyLiveWebFileWrites,
   carryKeptTrackParts,
@@ -3965,16 +3965,14 @@ export const committedSettingNotePredicate = (item = null) => {
 };
 
 /**
- * Whether the live track apply of the drawing onto the committed request is
- * refused, as Generate refuses the same draft (`liveTrackApplyRefused`): the
- * Result keeps every track it draws. False without a committed request.
+ * The drawing whose hides the live track apply of `drawing` applies to the
+ * committed request (`liveTrackHideDrawing`); null while nothing applies (a
+ * refused apply) and without a committed request.
  * @param {DrawingState} drawing
- * @returns {boolean}
  */
-export const committedTrackApplyRefused = (drawing) => {
+export const committedTrackHideDrawing = (drawing) => {
   const request = getCommittedCanonicalRenderRequest();
-  return Boolean(request) && liveTrackApplyRefused(/** @type {CanonicalRenderRequest} */ (request), drawing,
-    liveSettingInputsOf(state), committedCanonicalSession?.resources);
+  return request ? liveTrackHideDrawing(request, drawing, liveSettingInputsOf(state), committedCanonicalSession?.resources) : null;
 };
 
 // The cast states what every writer of the variable establishes (see the typedef); it claims no leaf.

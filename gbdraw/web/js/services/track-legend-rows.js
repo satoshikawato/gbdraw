@@ -398,9 +398,11 @@ export const drawnTrackHidden = (track, request, drawing) => {
  * (`drawnTrackHidden`): each leaves the Legend list with its track and
  * returns with it (OV-1198, OV-1215, PD-OI-104). The live track projection
  * applies every hide this answer gives to a track the request draws (D-212),
- * so while that apply succeeds a row leaves only with a track it removes
- * from the Result. None while the apply is refused (`refused`, as Generate
- * refuses the draft: the Result keeps its tracks), and none for a Result
+ * read with the drawing it judges hides with (the draft, or the draft with
+ * the drawn Use custom stack switch while that switch waits), so while that
+ * apply succeeds a row leaves only with a track it removes from the Result.
+ * None while nothing applies (`drawing` null: a refused apply, as Generate
+ * refuses the draft, keeps the Result's tracks), and none for a Result
  * without a request (a Session 27 to 30): its tracks change only at
  * Generate, so the list keeps the rows it draws. A live redraw that fails
  * after the projection, and a Session loaded with a draft that hides a drawn
@@ -408,12 +410,12 @@ export const drawnTrackHidden = (track, request, drawing) => {
  * the Result draws its track.
  * @param {TrackLegendRows} rows `trackLegendRows` of the displayed Result.
  * @param {unknown} request The request that drew the displayed Result, or null.
- * @param {TrackVisibilityDrawing} drawing
- * @param {boolean} [refused] The live track apply of `drawing` is refused.
+ * @param {TrackVisibilityDrawing | null} drawing The drawing the live track apply judges hides with
+ *   (`liveTrackHideDrawing`), or null.
  * @returns {PythonLegendKey[]}
  */
-export const hiddenTrackLegendKeys = (rows, request, drawing, refused = false) => (
-  request && !refused ? [...rows.values()].filter((row) => drawnTrackHidden(row, request, drawing)).map((row) => row.key) : []
+export const hiddenTrackLegendKeys = (rows, request, drawing) => (
+  request && drawing ? [...rows.values()].filter((row) => drawnTrackHidden(row, request, drawing)).map((row) => row.key) : []
 );
 
 /**

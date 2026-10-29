@@ -60,7 +60,7 @@ export const SETTING_APPLICATION = Object.freeze([
   // D-201, PD-OI-103 rev 2: the stack's structure edits apply on Generate; a
   // switch that hides or shows a GC, skew or Depth row is the track-visibility row's.
   { id: 'track-slots', application: /** @type {const} */ ('generate'),
-    note: msg('Applies on Generate, except turning a GC content, GC skew or Depth row on or off, removing one, and Use custom stack, which apply at once; turning on a row added since the last Generate, a row that was off when the Session was loaded, or a Depth row after a Depth file change, and Use custom stack after a Session load, apply on Generate') },
+    note: msg('Applies on Generate, except turning a GC content, GC skew or Depth row on or off, removing one, and Use custom stack, which apply at once; turning on a row added since the last Generate, a row that was off when the Session was loaded, or a Depth row after a Depth file change apply on Generate, and so does Use custom stack after a Session load (except turned off on a Linear Result drawn with it) or while the Region Annotation sets differ from those of the Result, with every track it would hide or show') },
   // G1 (PD-OI-103): a committed value redraws the shown Result through the
   // automatic rerender (PD-OI-102). Legend position and Plot Title position
   // are the drawing's layout preferences (`ui.layoutPreferences`, per mode and

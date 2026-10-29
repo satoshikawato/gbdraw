@@ -63,6 +63,7 @@ import {
   placeLinearStackForGenerate
 } from './linear-track-slot-model.js';
 import { draftDrawsDepth, drawnTrackHidden, requestTrackSlots } from './track-legend-rows.js';
+/** @import { TrackVisibilityDrawing } from './track-legend-rows.js' */
 import {
   activeDepthTrackIndices,
   depthFileSlotsFromValue,
@@ -1904,10 +1905,14 @@ const GT_REQUEST_PATH_SET = new Set(Object.values(GT_REQUEST_PATHS));
 /**
  * What the track projection writes, by request path, whether it leaves a
  * show pending (a track the draft draws that the kept parts cannot give),
- * and the error Generate's check gives the stack it would draw (`refused`:
- * nothing applies; only the writer, `trackPlanApplied`, throws it).
+ * the error Generate's check gives the stack it would draw (`refused`:
+ * nothing applies; only the writer, `trackPlanApplied`, throws it), and the
+ * drawing whose hides it applies (`judged`: the draft, with Use custom stack
+ * set back to the drawn switch while that switch waits; null while nothing
+ * applies).
  * @typedef {{ readonly writes: Readonly<Record<string, LiveSettingWrite[]>>, readonly complete: boolean,
- *   readonly slots: readonly TrackSlotEntry[] | null, readonly refused: Error | null }} TrackPlanProjection
+ *   readonly slots: readonly TrackSlotEntry[] | null, readonly refused: Error | null,
+ *   readonly judged: TrackVisibilityDrawing | null }} TrackPlanProjection
  */
 /** @type {WeakMap<object, { readonly request: CanonicalRenderRequest, readonly projection: TrackPlanProjection }>} */
 const trackPlanProjections = new WeakMap();
@@ -2010,7 +2015,8 @@ const TRACK_PLAN_WAITS = Object.freeze({
   writes: Object.freeze(Object.fromEntries(Object.values(GT_REQUEST_PATHS).map((path) => [path, []]))),
   complete: false,
   slots: null,
-  refused: null
+  refused: null,
+  judged: null
 });
 /**
  * The track projection the live apply writes: a refused one throws its
@@ -2047,24 +2053,34 @@ const trackPlanProjection = (request, drawing, context) => {
   const committedDepth = Array.isArray(request.diagramOptions.depthTracks);
   let complete = true;
   // 1. The base plan: the plan of the switch the request was drawn with, or
-  // the kept plan of the other one. The drawn switch is the kept parts' or
-  // what the request shows (`requestDrawnStack`), never read from the draft.
-  // When the draft's switch is the other one and no kept plan of it exists
-  // (after a Load), or the switch is unknown and nothing is kept yet (the
-  // first apply after a Load), only hides apply: each track the draft hides
-  // leaves what the committed request draws, whatever switch drew it, and a
-  // show or the switch itself waits (D-212). The parts that apply complete
-  // (the loaded plan) give back by slot id what a later live hide removes,
-  // whichever switch drew it (D-199 (ii), D-214 (e)).
+  // the plan of the other one. The drawn switch is the kept parts' or what
+  // the request shows (`requestDrawnStack`), never read from the draft. The
+  // plan of the other switch is the kept one; for a Linear request drawn with
+  // the stack, the plan without it needs no kept parts: no slots (D-214 C').
+  // When the switch is unknown and nothing is kept yet (the first apply after
+  // a Load of a Circular request with slots), only hides apply: each track
+  // the draft hides leaves what the committed request draws, and a show
+  // waits (D-212). The parts that apply completes (the loaded plan) give back
+  // by slot id what a later live hide removes (D-199 (ii), D-214 (e)).
   const drawnStack = kept ? kept.drawnStack : requestDrawnStack(request);
-  const other = drawnStack !== null && drawnStack !== draftStack;
-  const hidesOnly = (drawnStack === null && !kept) || (other && !kept?.plans.other);
-  const baseIsOther = other && !hidesOnly;
-  const base = hidesOnly || !kept ? committedPlan : baseIsOther ? /** @type {KeptPlan} */ (kept.plans.other) : kept.plans.drawn;
-  if (hidesOnly) complete = false;
+  const otherPlan = kept?.plans.other ?? (drawnStack === true && !circular ? NO_TRACK_SLOTS_PLAN : null);
+  // Use custom stack set the other way cannot apply alone without a plan of
+  // that switch, or while the draft's Region Annotation sets are not the
+  // committed ones (the plan places the draft's sets, Generate-only values):
+  // it waits whole, with every hide or show it brings, and the rest applies
+  // as the drawn switch would draw it (D-214 (f)).
+  const switchWaits = drawnStack !== null && drawnStack !== draftStack
+    && (!otherPlan || !sameAnnotationSetIds(drawing.annotationSets, request));
+  const stackOn = switchWaits ? Boolean(drawnStack) : draftStack;
+  const judged = { form: drawing.form, adv: switchWaits ? { ...drawing.adv, [stackKey]: stackOn } : drawing.adv };
+  const other = drawnStack !== null && drawnStack !== stackOn;
+  const hidesOnly = drawnStack === null && !kept;
+  const baseIsOther = other;
+  const base = hidesOnly ? committedPlan : baseIsOther ? /** @type {KeptPlan} */ (otherPlan) : kept ? kept.plans.drawn : committedPlan;
+  if (hidesOnly || switchWaits) complete = false;
   const depthShowable = !hidesOnly && Boolean(kept?.depth && depthSourcesKept(kept.depth, request, inputs, resources));
   /** @param {'content' | 'skew' | 'depth'} kind @param {string | null} slotId @param {string | null} slotNt */
-  const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, { form: drawing.form, adv: drawing.adv });
+  const hidden = (kind, slotId, slotNt) => drawnTrackHidden({ slotId, kind, nt: slotNt }, request, judged);
   const waiting = new Set(kept?.waiting || []);
   /** @type {TrackSlotEntry[] | null} */
   let slots = null;
@@ -2097,7 +2113,7 @@ const trackPlanProjection = (request, drawing, context) => {
     }
     // A GC, skew or Depth row the draft draws that the base lacks waits.
     const baseIds = new Set(base.slots.map((slot) => slot.id));
-    if (draftStack) {
+    if (stackOn) {
       const rows = Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : [];
       if (/** @type {readonly ({ id?: unknown, renderer?: unknown } | null)[]} */ (rows).some((row) => row && trackSlotRowEnabled(row)
         && trackKindOf(row.renderer) && !baseIds.has(String(row.id)))) complete = false;
@@ -2105,7 +2121,7 @@ const trackPlanProjection = (request, drawing, context) => {
       for (const kind of /** @type {const} */ (['content', 'skew'])) {
         if (!hidden(kind, null, nt) && !present.some((slot) => trackKindOf(slot.renderer) === kind)) complete = false;
       }
-      if (draftDrawsDepth('circular', { form: drawing.form, adv: drawing.adv }) && !present.some((slot) => slot.renderer === 'depth')) complete = false;
+      if (draftDrawsDepth('circular', judged) && !present.some((slot) => slot.renderer === 'depth')) complete = false;
     }
     if ([...committedIds].some((id) => !baseIds.has(id)) && !baseIsOther) complete = false;
     // Generate's Overlay check (`overlayReferenceIssues`) reads the stack the
@@ -2114,7 +2130,7 @@ const trackPlanProjection = (request, drawing, context) => {
     // the draft does not draw that row either (`trackSlotRowEnabled`), and
     // one the draft draws refuses the apply with the issue Generate gives
     // that draft row.
-    const draftRows = /** @type {readonly unknown[]} */ (draftStack && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
+    const draftRows = /** @type {readonly unknown[]} */ (stackOn && Array.isArray(drawing.adv[slotsKey]) ? drawing.adv[slotsKey] : []);
     const issues = overlayReferenceIssues(present.map((slot) => slot.read), request.mode, (read) => draftRows.findIndex((row) => (
       trackSlotRowEnabled(row) && String(/** @type {{ id?: unknown }} */ (row).id) === String(read.id))));
     const refused = issues.filter(({ issue }) => issue.rowIndex >= 0).map(({ issue }) => issue);
@@ -2161,8 +2177,8 @@ const trackPlanProjection = (request, drawing, context) => {
   };
   /** @param {string} key */
   const committedFlag = (key) => (Object.hasOwn(committedOverrides, key) ? Boolean(committedOverrides[key]) : drawnFlags[key]);
-  // Only hides: a GC or skew flag turns off for a default track the draft hides, and stays otherwise.
-  const flags = hidesOnly ? {
+  // Only hides, or a switch that waits: a GC or skew flag turns off for a default track the draft hides, and stays otherwise.
+  const flags = hidesOnly || switchWaits ? {
     [CONFIG_OVERRIDE_PATHS.showGc]: committedFlag(CONFIG_OVERRIDE_PATHS.showGc) && !hidden('content', null, nt),
     [CONFIG_OVERRIDE_PATHS.showSkew]: committedFlag(CONFIG_OVERRIDE_PATHS.showSkew) && !hidden('skew', null, nt),
     [CONFIG_OVERRIDE_PATHS.showDepth]: depthPresent
@@ -2191,7 +2207,8 @@ const trackPlanProjection = (request, drawing, context) => {
     },
     complete,
     slots,
-    refused: null
+    refused: null,
+    judged
   };
 };
 /**
@@ -2424,15 +2441,18 @@ export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, re
   return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
 /**
- * Whether the live track apply of the drawing is refused (the track
- * projection's `refused`, as Generate refuses the same draft): nothing
- * applies, so the Result keeps every track it draws and the Legend list
- * keeps their rows (`hiddenTrackLegendKeys`).
+ * The drawing whose hides the live track apply applies to the committed
+ * request (the track projection's `judged`), which the Legend list reads
+ * (`hiddenTrackLegendKeys`): the draft, or, while Use custom stack waits, the
+ * draft with the drawn switch (D-214 (f)). Null while nothing applies (a
+ * refused apply, as Generate refuses the same draft): the Result keeps every
+ * track it draws.
  * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing
  * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
+ * @returns {TrackVisibilityDrawing | null}
  */
-export const liveTrackApplyRefused = (request, drawing, inputs, resources = null) => (
-  projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).refused !== null
+export const liveTrackHideDrawing = (request, drawing, inputs, resources = null) => (
+  projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).judged
 );
 
 /** @param {unknown} root @param {readonly string[]} path */
@@ -4020,6 +4040,19 @@ const builtPlanOf = (tracks, circular) => {
     circular ? tracks.circularTrackSlots : tracks.linearTrackSlots);
   return keptPlanOf(slots, slots || [], circular ? tracks.circularTrackAxisIndex : tracks.linearTrackAxisIndex);
 };
+/** The plan without explicit slots (the default tracks). @type {KeptPlan} */
+const NO_TRACK_SLOTS_PLAN = Object.freeze({ slots: null, axisNull: true });
+/**
+ * Whether the draft's Region Annotation sets are those the committed request
+ * draws, by set id (`normalizeAnnotationSets`, the reader Generate uses).
+ * @param {unknown} draftSets @param {CanonicalRenderRequest} request
+ */
+const sameAnnotationSetIds = (draftSets, request) => {
+  const committed = request.diagramOptions.annotations?.sets;
+  const ids = (/** @type {readonly { id: string }[]} */ sets) => JSON.stringify(sets.map((set) => set.id));
+  return ids(normalizeAnnotationSets(/** @type {Parameters<typeof normalizeAnnotationSets>[0]} */ (draftSets)))
+    === ids(Array.isArray(committed) ? committed : []);
+};
 /**
  * The plan of a committed request: its slot entries as it states them, read
  * by the slot parser (`requestTrackSlots`), so a spec string keeps its id.
@@ -4031,7 +4064,7 @@ const committedPlanOf = (request) => {
   const parsed = requestTrackSlots(request);
   const tracks = request.diagramOptions.tracks;
   const axis = request.mode === 'circular' ? tracks?.circularTrackAxisIndex : tracks?.linearTrackAxisIndex;
-  if (!parsed) return { slots: null, axisNull: true };
+  if (!parsed) return NO_TRACK_SLOTS_PLAN;
   return parsed.slots ? keptPlanOf(/** @type {readonly TrackSlotEntry[]} */ (parsed.entries), parsed.slots, axis) : null;
 };
 /**

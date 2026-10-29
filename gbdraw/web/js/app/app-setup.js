@@ -75,7 +75,7 @@ import {
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
   committedSettingNotePredicate,
-  committedTrackApplyRefused,
+  committedTrackHideDrawing,
   commitLiveSettingValues,
   readCommittedCanonicalRevision,
   getLoadedTrackSettings,
@@ -1899,7 +1899,7 @@ export const createAppSetup = () => {
   // is refused, keeps every row until Generate.
   /** @param {DrawingState} drawing @returns {string[]} */
   const hiddenTrackLegendRows = (drawing) => hiddenTrackLegendKeys(
-    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), drawing, committedTrackApplyRefused(drawing)
+    displayedTrackLegendRows(drawing), getCommittedCanonicalRenderRequest(), committedTrackHideDrawing(drawing)
   );
   const svgActions = createSvgStyles({
     state,

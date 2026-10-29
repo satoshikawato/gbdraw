@@ -18,7 +18,8 @@ write-up of a release.
   a track the Result does not draw yet, as **Generate Diagram** would draw it. The track comes
   back as the last Generate built it; other changed values of its row apply on Generate. A
   note names the cases that wait for Generate (a track the Result did not draw when its Session
-  was loaded, a Depth file change, a row added since the last Generate).
+  was loaded, a Depth file change, a row added since the last Generate, **Use custom stack**
+  after a Session load or while Region Annotation sets wait for Generate).
 - Fixed: on a Result loaded from a Session saved without a render request (Session versions 27
   to 30), settings no longer say **Live edit** while nothing applies until Generate.
 - Fixed: after a Legend name edit, a feature color change, or a feature color reset that
