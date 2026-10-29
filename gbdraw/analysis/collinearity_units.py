@@ -11,6 +11,7 @@ from typing import Literal, Sequence, cast, get_args
 
 from Bio.SeqRecord import SeqRecord
 
+from gbdraw.analysis.origin_arcs import cover_arcs
 from gbdraw.analysis.protein_colinearity import CdsProtein, ProteinExtractionResult
 from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.exceptions import ValidationError
@@ -224,8 +225,16 @@ def build_collinearity_unit_index(
             global_unit_index += 1
             unit_id = f"gbd_r{record_index + 1:04d}_unit{global_unit_index:06d}"
             display_name = str(locus_id or representative.label or representative.protein_id)
-            start = min(int(protein.start) for protein in members)
-            end = max(int(protein.end) for protein in members)
+            strand = _unit_strand(members)
+            # (start, end) is the arc that covers the unit's CDSs, start > end
+            # across the record origin (gbdraw.analysis.origin_arcs); order
+            # follows the linear extents. Only a stranded unit can cross the
+            # origin: its link endpoints tell it by disagreeing with the strand.
+            arc = cover_arcs([protein.arc for protein in members]) if strand is not None else None
+            start, end = arc or (
+                min(int(protein.start) for protein in members),
+                max(int(protein.end) for protein in members),
+            )
             unit = CollinearityUnit(
                 unit_id=unit_id,
                 unit_kind=unit_kind,
@@ -236,7 +245,7 @@ def build_collinearity_unit_index(
                 representative_feature_svg_id=str(representative.feature_svg_id or ""),
                 start=start,
                 end=end,
-                strand=_unit_strand(members),
+                strand=strand,
                 locus_id=locus_id,
                 display_name=display_name,
                 # Each group is a subsequence of sorted_proteins.

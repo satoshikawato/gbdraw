@@ -39,6 +39,7 @@ from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature
 from pandas import DataFrame
 
+from gbdraw.analysis.origin_arcs import Arc, LinkSide, directed_arc, location_origin_arc, rows_inside_records
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
 from gbdraw.contract_shapes import Spellings, read_spelling
 from gbdraw.comparisons.losat_jobs import (
@@ -219,7 +220,14 @@ _RECORD_LOCAL_CORE_COMPETITION_RATIO = 1.10
 
 @dataclass(frozen=True)
 class CdsProtein:
-    """A protein sequence and its genomic CDS coordinates."""
+    """A protein sequence and its genomic CDS coordinates.
+
+    ``start`` and ``end`` are the location's linear extent, which identity and
+    order keys read. ``origin_arc`` is set only for a location across the
+    record origin: its arc ``(start, end)`` with ``start > end``
+    (``gbdraw.analysis.origin_arcs``). ``record_length`` is the length of the
+    record the coordinates belong to.
+    """
 
     protein_id: str
     record_index: int
@@ -261,6 +269,14 @@ class CdsProtein:
     runtime_binding_hash: str | None = None
     display_binding_hash: str | None = None
     view_feature_svg_id: str | None = None
+    origin_arc: Arc | None = None
+    record_length: int | None = None
+
+    @property
+    def arc(self) -> Arc:
+        """The CDS's arc: ``origin_arc`` across the origin, else its linear extent."""
+
+        return self.origin_arc if self.origin_arc is not None else (int(self.start), int(self.end))
 
 
 def _refuse_change(self: object, *_args: object, **_kwargs: object) -> NoReturn:
@@ -913,6 +929,8 @@ class _CdsProteinCandidate:
     feature_hash_parts: tuple[tuple[int, int, int | None], ...]
     location_operator: str
     source_feature_position: int
+    origin_arc: Arc | None
+    record_length: int
 
 
 LosatpRunner = Callable[[str, str], DataFrame]
@@ -3344,6 +3362,8 @@ def extract_cds_proteins(
                     feature_hash_parts=hash_parts,
                     location_operator=str(getattr(feature.location, "operator", None) or ""),
                     source_feature_position=feature_index,
+                    origin_arc=location_origin_arc(view_hash_parts),
+                    record_length=len(record),
                 )
             )
 
@@ -3394,6 +3414,8 @@ def extract_cds_proteins(
                 feature_hash_parts=candidate.feature_hash_parts,
                 location_operator=candidate.location_operator,
                 source_feature_position=candidate.source_feature_position,
+                origin_arc=candidate.origin_arc,
+                record_length=candidate.record_length,
             )
             record_proteins.append(cds_protein)
             protein_map[protein_id] = cds_protein
@@ -5716,9 +5738,16 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
 
 
 def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
+    start, end = protein.arc
     if protein.strand == -1:
-        return protein.end, protein.start + 1
-    return protein.start + 1, protein.end
+        return end, start + 1
+    return start + 1, end
+
+
+def _protein_link_side(protein: CdsProtein) -> LinkSide:
+    start, end = _genomic_link_coordinates(protein)
+    crosses = directed_arc(start, end, protein.strand, protein.record_length)[1]
+    return LinkSide(start, end, crosses, int(protein.record_length or 0))
 
 
 def convert_protein_hits_to_genomic_links(
@@ -5853,8 +5882,9 @@ def convert_pair_protein_hits_to_genomic_links(
         if query_protein is None or subject_protein is None:
             continue
 
-        qstart, qend = _genomic_link_coordinates(query_protein)
-        sstart, send = _genomic_link_coordinates(subject_protein)
+        query_side = _protein_link_side(query_protein)
+        subject_side = _protein_link_side(subject_protein)
+        qstart, qend, sstart, send = query_side.start, query_side.end, subject_side.start, subject_side.end
         query_member = (
             orthogroups.member_by_protein_id.get(query_id)
             if orthogroups is not None
@@ -5882,7 +5912,7 @@ def convert_pair_protein_hits_to_genomic_links(
                 cast("OrthogroupResult | OrthogroupGraphResult", orthogroups).orthogroups.get(orthogroup_id, [])
             )
         counts = member_counts.get(orthogroup_id, {})
-        rows.append(
+        rows.extend(rows_inside_records(
             {
                 "query": query_protein.record_id,
                 "subject": subject_protein.record_id,
@@ -5947,8 +5977,10 @@ def convert_pair_protein_hits_to_genomic_links(
                 "subject_orthogroup_assignment_reason": (
                     str(subject_member.assignment_reason) if subject_member is not None else ""
                 ),
-            }
-        )
+            },
+            query_side,
+            subject_side,
+        ))
 
     if missing_ids:
         raise ParseError(
