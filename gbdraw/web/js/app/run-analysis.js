@@ -9,6 +9,7 @@
 /** @import { AlignmentResetCanonical, AlignmentResetPlannedCanonical } from '../services/session-active-config-contract.js' */
 /** @import { LosatSourceBatch } from '../services/linear-sources.js' */
 /** @import { CommittedCanonicalSession } from '../services/session-request.js' */
+/** @import { LiveRedrawLegend } from './legend/entry-actions.js' */
 /** @import { LabelCapacityNotice } from '../services/label-fit.js' */
 /** @import { ConvertedResource } from '../services/main-session-comparison-frame.js' */
 /** @import { RedrawnArtifact } from '../services/history-snapshot.js' */
@@ -1483,6 +1484,9 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => number} [readCommittedCanonicalRevision] The Session owner's count of committed Session replacements.
  * @property {(writes: readonly LiveSettingWrite[]) => void} [commitLiveSettingValues]
  *   The Session owner's commit of the live setting values an automatic rerender drew (R1 (c)).
+ * @property {(drawing: DrawingState) => LiveRedrawLegend} [readLiveRedrawLegend]
+ *   The Legend owner's rows of the displayed Result's inventory that an automatic rerender requested now keeps
+ *   though it stops drawing them (`liveRedrawLegend`).
  * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any, drawing: Record<string, any>) => any} [captureDecorationContinuity]
  *   The Legend layout owner's capture of the decoration positions a rerender of the drawing keeps.
  * @property {(drawing: DrawingState) => HistoryArtifactHandle | Promise<HistoryArtifactHandle>} captureGeneratedArtifactHandle History's capture of the current generated artifact, with the edits of `drawing`.
@@ -1543,6 +1547,7 @@ export const createRunAnalysis = ({
   getCommittedCanonicalSession = null,
   readCommittedCanonicalRevision = () => 0,
   commitLiveSettingValues = () => {},
+  readLiveRedrawLegend = () => ({ keep: [] }),
   captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   displayedArtifactDrawing,
@@ -5922,8 +5927,9 @@ export const createRunAnalysis = ({
    * @param {LabelDiagramOptions | null | undefined} diagramOptions The `diagramOptions` of the request the rerender drew.
    * @param {EditorPaintState} drawnPaint
    * @param {number} historyRequestedAt The History step serial its request was made at.
+   * @param {LiveRedrawLegend} liveRedrawLegend The Legend inventory rule read when it was requested.
    */
-  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt) => {
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions, drawnPaint, historyRequestedAt, liveRedrawLegend) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
@@ -5944,6 +5950,7 @@ export const createRunAnalysis = ({
         replaceGeneratedLegend: true,
         drawnPaint,
         historyRequestedAt,
+        liveRedrawLegend,
         ...(featureIds.length === 0 ? {} : {
           reportedLabelBinding: Object.freeze({
             featureIds,
@@ -5991,6 +5998,9 @@ export const createRunAnalysis = ({
     }
     // Values equal to the committed ones (a Generate applied them) draw nothing.
     if (!editor && liveSettingWrites.length === 0) return { status: 'skipped' };
+    // The Legend rows the redraw keeps, read while the request that drew the
+    // displayed Result is committed.
+    const liveRedrawLegend = readLiveRedrawLegend(drawing);
     // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
     const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
@@ -6095,7 +6105,7 @@ export const createRunAnalysis = ({
       }
       expectReflowBindings(
         execution.commit, nextSelectedResultIndex, isShownReflow, canonical.renderRequest.diagramOptions, drawnPaint,
-        historyRequestedAt
+        historyRequestedAt, liveRedrawLegend
       );
       logPostGbdrawTimings(timingEntries);
       return { status: 'ok' };

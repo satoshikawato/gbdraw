@@ -1217,3 +1217,58 @@ const mockLegendEntry = (caption, color, x) => {
   deletedSwatch.removeAttribute('stroke-width');
   assert.deepEqual(keepBoth(), { keepBothName: 'Beta', targetNameAfter: null, restores: true }, 'one swatch: one row, restored');
 }
+
+{
+  // GT review 1 M1: a live redraw keeps in the inventory only the rows of a
+  // drawn track the draft hides (and those an earlier live redraw kept); a
+  // row it stops drawing for another reason (a color rule's row retired live)
+  // leaves it, so a row the editor adds under that caption is the editor's.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  // The rows of a drawn track the draft hides (`hiddenTrackLegendKeys` of the committed request).
+  let hidden = [];
+  const actions = createLegendEntryActions({
+    state: withDrawings(state), commitActiveResultEdit: () => true, readActiveResultIdentity: () => 'result-1',
+    readHiddenTrackRows: () => hidden
+  });
+  render('CDS', 'Rule', 'GC content', 'GC skew');
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveResultIdentities: ['result-1'] });
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS', 'Rule', 'GC content', 'GC skew']);
+  // The draft hides GC content; the live redraw requested now stops drawing it
+  // and the retired Rule row. Once it commits, its request draws no GC content.
+  hidden = ['GC content'];
+  const keep = ['GC content'];
+  if (actions.liveRedrawLegend) assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, keep);
+  hidden = [];
+  render('CDS', 'GC skew');
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveRedraw: { keep }, liveResultIdentities: ['result-1'] });
+  assert.ok(state.originalLegendOrder.value.includes('GC content'), 'the hidden track row stays');
+  assert.ok(!state.originalLegendOrder.value.includes('Rule'), 'the retired row leaves the inventory');
+  // The next live redraw (the skew hidden too) keeps the row the last one kept.
+  hidden = ['GC skew'];
+  assert.deepEqual(actions.liveRedrawLegend(state.activeDrawing()).keep, ['GC content', 'GC skew']);
+}

@@ -3329,7 +3329,7 @@ export const createAppSetup = () => {
         // mode's Results only.
         legendActions.extractLegendEntries({
           replaceGeneratedInventory: !selecting && drawn,
-          liveRedraw: context.phase === 'label-reflow',
+          liveRedraw: context.bindingOptions.liveRedrawLegend ?? null,
           liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
         });
       };
@@ -3497,6 +3497,7 @@ export const createAppSetup = () => {
     getCommittedCanonicalSession,
     readCommittedCanonicalRevision,
     commitLiveSettingValues,
+    readLiveRedrawLegend: legendActions.liveRedrawLegend,
     captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     displayedArtifactDrawing: historySnapshots.displayedArtifactDrawing,
