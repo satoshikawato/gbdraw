@@ -121,7 +121,7 @@ test('a History step names the live request paths of the shown drawing it change
   assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'multi_record_canvas'])),
     ['diagramOptions.output.legend', 'diagramOptions.output.plotTitlePosition']);
   // Settings that apply on Generate name none.
-  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'species'], ['config', 'adv', 'def_font_size'])), []);
+  assert.deepEqual(owner.liveSettingRequestPaths(step(['config', 'form', 'track_type'], ['config', 'adv', 'label_font_size'])), []);
   // A step that replaced the whole drawing config names every live config field.
   assert.ok(owner.liveSettingRequestPaths(step(['config'])).includes('diagramOptions.plotTitle'));
 });
@@ -130,7 +130,7 @@ test('a Linear live apply draws the G1 values as Generate does and keeps every o
   const drawing = modeDrawing(state, 'linear');
   const committed = generate('linear');
   drawing.form.legend = 'top';
-  Object.assign(drawing.adv, { legend_font_size: 21, legend_box_size: 13, plot_title_font_size: 27, def_font_size: 30 });
+  Object.assign(drawing.adv, { legend_font_size: 21, legend_box_size: 13, plot_title_font_size: 27, label_font_size: 30 });
   drawing.adv.plot_title_position = 'top';
   drawing.form.plot_title = '  Live title  ';
   drawing.form.align_center = !drawing.form.align_center;

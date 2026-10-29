@@ -24,7 +24,8 @@ test.describe.configure({ retries: 0 });
 // draws. A Depth source History step restores files, which suppresses the
 // track-visibility watcher, so the step projects the visibility itself.
 // OV-1198 (PD-OI-104): the Legend row of the hidden track leaves the Result and
-// the Legend list at once, and Undo, Redo, and adding the file again follow.
+// the Legend list at once, and Undo and Redo follow at once. Adding the file
+// again after a removal shows on Generate (PD-OI-104 rev 3).
 const BATCH_DEPTH_TSV = ['TESTA', 'TESTB']
   .flatMap((id) => [0, 1, 2, 3].map((index) => `${id}\t${index * 700 + 1}\t${10 + index}`)).join('\n');
 const DEPTH_CASES = {
@@ -91,8 +92,11 @@ for (const [name, { mode, results = 'single', shown = null, tsv = DEPTH_TSV, add
     await history(page, 'redo');
     await expectDepthRow('Redo', false);
     await inStep('Change uploaded file', add, tsv);
-    await expectDepthRow('added again', true);
-    await expectLiveEqualsGenerate(page, { label: `${name}: added again` });
+    // PD-OI-104 rev 3: a Depth file added after a removal shows on Generate.
+    await generate(page);
+    if (shown !== null) await showResult(page, shown);
+    await expectDepthRow('added again, after Generate', true);
+    await expectLiveEqualsGenerate(page, { label: `${name}: added again, after Generate` });
     await inStep('Remove Depth', remove, null);
     await expectDepthRow('removed after Generate', false);
     await expectLiveEqualsGenerate(page, { label: `${name}: Remove` });
