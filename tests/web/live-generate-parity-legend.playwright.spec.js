@@ -1997,31 +1997,32 @@ test('a popup Legend name on the only feature of a rule row shows the Legend ord
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a rule row' });
 });
 
-// OV-2191: the same edit on a gene rule row. The feature's product hits the
-// same feature, and Python used to take the product condition first: the gene
-// rule stayed and the new product rule went ahead of its family, so Generate
-// drew the row first while the live Legend kept it in place.
+// OV-2191: the same edit on a gene rule row, first in the table. The
+// feature's product hits the same feature, and Python used to take the product
+// condition first; it lost to the gene rule, so the feature took a hash rule
+// appended last: Generate drew the row last while the live Legend kept it
+// first. The rule table is a soft check, so the Legend order is checked too.
 test('a popup Legend name on the only feature of a gene rule row keeps the row in place, live = Generate (OV-2191)', async ({ page }) => {
   test.setTimeout(240_000);
   const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="dup alpha"', '/gene="dupA"\n                     /product="dup alpha"');
   await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
-  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await addColorRule(page, { feat: 'CDS', qual: 'gene', val: '^dupA$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
   await generate(page);
   const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   await popupEdit(page, { product: 'dup alpha' }, { legendName: 'gamma' });
-  expect(await page.evaluate(() => ({
+  expect.soft(await page.evaluate(() => ({
     rules: window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, val, cap, color }) => [qual, val, cap, color]),
     undo: window.__GBDRAW_HISTORY__.getUndoCount()
   })), 'the rule table of the edit and its History step').toEqual({
-    rules: [['product', '^alpha protein$', 'alpha', '#e63946'], ['gene', '^dupA$', 'gamma', '#2a9d8f']], undo: undoCount + 1
+    rules: [['gene', '^dupA$', 'gamma', '#2a9d8f'], ['product', '^alpha protein$', 'alpha', '#e63946']], undo: undoCount + 1
   });
   const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
-  expect(live, 'the live Legend order').toEqual(['alpha', 'gamma', 'other proteins', 'repeat_region']);
+  expect(live, 'the live Legend order').toEqual(['gamma', 'alpha', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a gene rule row' });
 });
 
-// OV-2192 (Owner 2026-10-29, D-19 a): the same edit on a locus_tag rule row
+// OV-2192 (Owner 2026-10-29): the same edit on a locus_tag rule row
 // whose feature shares its product, so Python writes a hash rule for it. The
 // Web says the edit takes the row whole, and the hash rule goes at the place of
 // the locus_tag rule, which stays; Generate used to append it last.
@@ -2045,4 +2046,23 @@ test('a popup Legend name on the only feature of a locus_tag rule row keeps the 
   const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
   expect(live, 'the live Legend order').toEqual(['gamma', 'alpha', 'other proteins', 'repeat_region']);
   await expectLiveEqualsGenerate(page, { label: 'a popup Legend name on the only feature of a locus_tag rule row' });
+});
+
+// A popup Legend name that joins another listed row of the same color: the
+// joined row keeps its place live, and Python writes the feature's rule as for
+// any group edit (last), so Generate keeps it there too.
+test('a popup Legend name that joins another row keeps that row in place, live = Generate', async ({ page }) => {
+  test.setTimeout(240_000);
+  const genbank = readFileSync(SINGLE_FIXTURE, 'utf8').replace('/product="beta protein"', '/product="dup beta"');
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off', genbank });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup alpha$', color: '#e9c46a', cap: 'delta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#2a9d8f', cap: 'alpha' });
+  await generate(page);
+  await popupEdit(page, 'FL2', { legendName: 'alpha' });
+  expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.map(({ qual, cap }) => [qual, cap])),
+    'the rule table of the join').toEqual([['locus_tag', 'beta'], ['product', 'delta'], ['product', 'alpha'], ['hash', 'alpha']]);
+  const live = (await semanticSnapshot(page)).legend.map((row) => row.caption);
+  expect(live, 'the live Legend order').toEqual(['delta', 'alpha', 'other proteins', 'repeat_region']);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name that joins another row' });
 });
