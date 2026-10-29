@@ -10,8 +10,9 @@ import { PAINT_SLICE } from '../../gbdraw/web/js/services/drawing/paint.js';
 
 // A drawing whose paint is these members (the fixture's own objects).
 const paintDrawing = (members) => ({ slices: { paint: PAINT_SLICE.create(members).handle } });
-import { getDepthTrackFileBaseName, isDepthTrackAutoLabel } from '../../gbdraw/web/js/app/depth-tracks.js';
-import { depthSeriesLegendCaptions, ensureDepthTrackConfigCount } from '../../gbdraw/web/js/services/depth-track-state.js';
+import {
+  depthSeriesLegendCaptions, ensureDepthTrackConfigCount, getDepthTrackFileBaseName, isDepthTrackAutoLabel
+} from '../../gbdraw/web/js/services/depth-track-state.js';
 
 test('track data names the legend labels of annotation sets and the sourced Depth series (OV-65)', () => {
   const captions = trackDataLegendCaptions({
