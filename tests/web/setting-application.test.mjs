@@ -307,7 +307,7 @@ test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1
   const note = settingApplicationNote('track-visibility');
   assert.equal(note.application, 'live');
   assert.equal(note.text, 'Live edit');
-  assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate after a Session load/);
+  assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate if the Result did not draw it when its Session was loaded/);
 });
 
 test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {

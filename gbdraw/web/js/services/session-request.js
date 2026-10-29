@@ -1987,9 +1987,12 @@ const depthSourcesKept = (depth, request, inputs, resources) => {
  * are the kept ones). Kept payloads hold the values of the last Generate, so
  * no pending row value rides along (PD-OI-103 rev 2). A show the parts cannot
  * give waits (`complete` false), and a hide always applies. When the drawn
- * switch is unknown, or the draft's Use custom stack is the other one without
- * a kept plan of it (after a Load), only the hides apply, from what the
- * committed request draws; a show and the switch wait (D-212). Committed
+ * switch is unknown and nothing is kept yet, or the draft's Use custom stack
+ * is the other one without a kept plan of it (after a Load), only the hides
+ * apply, from what the committed request draws; a show and the switch wait
+ * (D-212). The parts such an apply completes give back what a later hide
+ * removes (D-214 (e)). A stack Generate's Overlay check refuses is
+ * returned as `refused`, with nothing written. Committed
  * slots the slot parser does not read wait whole: nothing is written (the
  * Legend list knows no track of them either, `drawnTracks`).
  * @param {CanonicalRenderRequest} request @param {RequestDrawing} drawing @param {LiveSettingContext} context
@@ -2046,13 +2049,16 @@ const trackPlanProjection = (request, drawing, context) => {
   // 1. The base plan: the plan of the switch the request was drawn with, or
   // the kept plan of the other one. The drawn switch is the kept parts' or
   // what the request shows (`requestDrawnStack`), never read from the draft.
-  // When it is unknown, or the draft's switch is the other one and no kept
-  // plan of it exists (after a Load), only hides apply: each track the draft
-  // hides leaves what the committed request draws, whatever switch drew it,
-  // and a show or the switch itself waits (D-212).
+  // When the draft's switch is the other one and no kept plan of it exists
+  // (after a Load), or the switch is unknown and nothing is kept yet (the
+  // first apply after a Load), only hides apply: each track the draft hides
+  // leaves what the committed request draws, whatever switch drew it, and a
+  // show or the switch itself waits (D-212). The parts that apply complete
+  // (the loaded plan) give back by slot id what a later live hide removes,
+  // whichever switch drew it (D-199 (ii), D-214 (e)).
   const drawnStack = kept ? kept.drawnStack : requestDrawnStack(request);
   const other = drawnStack !== null && drawnStack !== draftStack;
-  const hidesOnly = drawnStack === null || (other && !kept?.plans.other);
+  const hidesOnly = (drawnStack === null && !kept) || (other && !kept?.plans.other);
   const baseIsOther = other && !hidesOnly;
   const base = hidesOnly || !kept ? committedPlan : baseIsOther ? /** @type {KeptPlan} */ (kept.plans.other) : kept.plans.drawn;
   if (hidesOnly) complete = false;
@@ -2165,7 +2171,7 @@ const trackPlanProjection = (request, drawing, context) => {
   const flagWrite = (key) => (!Object.hasOwn(committedOverrides, key) && flags[key] === drawnFlags[key]
     ? [] : [configWrite(key, flags[key])]);
   // 3. The kept parts after this apply: completed after a Load, with the rows a live suppress removed.
-  const keptAfter = !kept ? committedTrackParts(request, committedPlan, resources, webFiles)
+  const keptAfter = !kept ? { ...committedTrackParts(request, committedPlan, resources, webFiles), waiting }
     : waiting.size !== kept.waiting.size ? { ...kept, waiting } : kept;
   /** @type {LiveSettingWrite[]} */
   const slotWrites = [
