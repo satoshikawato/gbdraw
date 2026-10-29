@@ -43,9 +43,10 @@ this skill, they win.
 
 - Follow `.claude/skills/write-clear-pull-request/SKILL.md` and choose the
   change class in the PR template.
-- Keep the body under about 60 KB. "Web base policy (trusted base)" fails above
-  64 KiB (`DEFAULT_MAX_BODY_BYTES`), counted after screenshot URLs expand.
-  Move long tables into a PR comment.
+- Keep the body under about 60,000 characters. GitHub refuses a body over
+  65,536 characters, and "Web base policy (trusted base)" accepts any body
+  GitHub accepts (`DEFAULT_MAX_BODY_BYTES`). Move long tables into a PR
+  comment.
 - In a bundled PR, list the bug IDs and the former PRs it contains.
 - Run `node tools/check-pr-language.mjs --title "<title>" --body-file <file>`
   once, then `gh pr create --base dev`.

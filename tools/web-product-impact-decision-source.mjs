@@ -1,7 +1,8 @@
 const SCHEMA_VERSION = 1;
 const START_MARKER = '<!-- gbdraw-product-impact-decision:start -->';
 const END_MARKER = '<!-- gbdraw-product-impact-decision:end -->';
-const DEFAULT_MAX_BODY_BYTES = 64 * 1024;
+// GitHub caps a pull request body at 65,536 characters of at most 4 UTF-8 bytes each.
+const DEFAULT_MAX_BODY_BYTES = 4 * 65536;
 const DEFAULT_MAX_DECISION_COUNT = 8;
 const MAXIMUM_BODY_BOUND = 1024 * 1024;
 const MAXIMUM_DECISION_BOUND = 100;
@@ -31,7 +32,8 @@ const CONCERN_KEY_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const OPTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const REQUIREMENT_ID_PATTERN = /^REQ-[A-Z0-9]+(?:-[A-Z0-9]+)*$/;
 const HEAD_SHA_PATTERN = /^[0-9a-f]{40}$/;
-const LOGIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$/;
+// A GitHub App author such as Dependabot logs in as `<app>[bot]`.
+const LOGIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?(?:\[bot\])?$/;
 
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 const isRecord = (value) => value !== null

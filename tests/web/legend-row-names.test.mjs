@@ -9,9 +9,12 @@ import { drawnLegendNames, keepBothNames, legendSwatch } from '../../gbdraw/web/
 const { cases } = JSON.parse(readFileSync(new URL('../fixtures/legend_names.json', import.meta.url), 'utf8'));
 
 /** The fixture's swatch (Python's legend entry fields) as the Web app reads a row's paint. */
-const paintOf = (swatch) => (swatch.type === 'gradient'
-  ? { type: 'gradient', minColor: swatch.min_color, maxColor: swatch.max_color }
-  : { type: 'solid', fill: swatch.fill, stroke: swatch.stroke, width: swatch.width });
+const paintOf = (swatch) => {
+  if (swatch.type === 'ring') return { type: 'ring', trackIndex: Number(swatch.track_index) };
+  return swatch.type === 'gradient'
+    ? { type: 'gradient', minColor: swatch.min_color, maxColor: swatch.max_color }
+    : { type: 'solid', fill: swatch.fill, stroke: swatch.stroke, width: swatch.width };
+};
 
 for (const { name, rows, drawn } of cases) {
   test(`drawn Legend names: ${name}`, () => {

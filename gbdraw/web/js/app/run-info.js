@@ -1307,6 +1307,7 @@ const appendConfigOverrides = (args, request) => {
   if (request.mode === 'circular') {
     appendBooleanOption(args, take('canvas.circular.track_narrowing'), '', '--no_track_narrowing');
     appendBooleanOption(args, take('objects.definition.circular.show'), '', '--hide_definition');
+    appendOption(args, '--conservation_color_scheme', take('objects.conservation.color_scheme'));
     const definitionInterval = take('objects.definition.circular.interval');
     if (definitionInterval !== undefined) {
       const fontSize = overrides['objects.definition.circular.font_size'];
@@ -1695,7 +1696,11 @@ const appendComparisonOptions = (args, request, files) => {
       );
     }
     if (labels.length > 0) args.push('--conservation_labels', ...labels.map(String));
-    if (colors.length > 0) args.push('--conservation_colors', ...colors.map(String));
+    // A ring without a color of its own ('') is `auto` (gbdraw/circular.py conservation_colors_from_cli);
+    // with no ring colored the flag is left out.
+    if (colors.some((color) => String(color) !== '')) {
+      args.push('--conservation_colors', ...colors.map((color) => String(color) || 'auto'));
+    }
     appendOption(args, '--conservation_reference', options.conservationReference);
     appendOption(args, '--conservation_ring_width', options.conservationRingWidth);
     appendOption(args, '--conservation_ring_gap', options.conservationRingGap);

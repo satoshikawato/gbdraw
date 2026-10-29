@@ -25,6 +25,20 @@ write-up of a release.
   Sessions saved by 0.14.x (46 to 49) open as before.
 - Changed: the drawing bar replaces the Circular and Linear mode buttons.
 
+- Added: similarity-ring color schemes. `--conservation_color_scheme`
+  (`same`, the default; `ten`; `per_five`), the config key
+  `objects.conservation.color_scheme`, and `ComparisonRingOptions.color_scheme`
+  (`None` keeps the config's scheme) color the rings without a color of their
+  own by drawn position from the outermost ring. `--conservation_colors`
+  accepts `auto` for such a ring, and a Python ring track with `color=None` no
+  longer requires every ring to leave its color unset.
+- Changed: the Circular legend lists the drawn similarity rings by name from
+  `outer` to `inner` above one `identity` band, with a swatch per ring when the
+  ring colors differ. It replaces the `Conservation identity` row and the
+  per-ring gradient rows.
+- Fixed: the Circular legend lists only the similarity rings a slot draws; a
+  ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
+
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2

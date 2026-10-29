@@ -2498,7 +2498,7 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
   ).toString('utf8');
   const draft = {
     ...oneSourceState,
-    form: { ...oneSourceState.form, species: 'Draft species', show_labels_linear: 'all' },
+    form: { ...oneSourceState.form, align_center: !oneSourceState.form.align_center, show_labels_linear: 'all' },
     adv: { ...oneSourceState.adv, block_stroke_width: 7 },
     manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: '^alpha$', color: '#445566', cap: 'Alpha' }],
     featureVisibilityRules: ref([{

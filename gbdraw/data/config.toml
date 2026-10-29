@@ -92,6 +92,7 @@ show_background = true
 ring_width = "auto"
 ring_gap = "auto"
 reference = "auto"
+color_scheme = "same"
 
 [objects.sliding_window]
 up10m = [100000, 10000]

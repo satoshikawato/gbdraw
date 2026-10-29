@@ -97,10 +97,10 @@ test('the diagram Worker restores the served Pyodide snapshot and boots cold whe
   }
 });
 
-// The repository on `python3 -m http.server` (the test server when no snapshot
-// is served) at a free port, every file fresh for an hour so that no response
-// depends on a file's modification time: its origin, and a function that stops
-// it. Rejects when the server exits or stays silent for 10 s.
+// The repository on a plain `python3 -m http.server` at a free port, every
+// file fresh for an hour so that no response depends on a file's modification
+// time: its origin, and a function that stops it. Rejects when the server
+// exits or stays silent for 10 s.
 const PLAIN_SERVER = [
   'import http.server',
   'class Handler(http.server.SimpleHTTPRequestHandler):',

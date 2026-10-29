@@ -447,9 +447,9 @@ with WebAssembly JSPI (`WebAssembly.Suspending`), as Chromium has, such as the
 version in `.node-version`: without JSPI Pyodide's function table starts one
 entry shorter, Chromium cannot restore the snapshot, and the builder refuses
 to run. With
-`GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR` set, `playwright.config.js` serves the
-repository with `tools/serve_pyodide_snapshot.py`, which serves that directory
-at `/__pyodide-snapshot__/`
+`GBDRAW_TEST_PYODIDE_SNAPSHOT_DIR` set, `playwright.config.js` starts its
+test server `tools/serve_web_tests.py` with the snapshot, so it also serves
+that directory at `/__pyodide-snapshot__/`
 (`tests/web/helpers/pyodide-snapshot-test-server.cjs`) and `config.js` with
 `PYODIDE_SNAPSHOT_URL` pointing at it. The Worker then restores the snapshot
 (about 0.5 seconds) instead of installing its packages (about 5 seconds

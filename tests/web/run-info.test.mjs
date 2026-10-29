@@ -1220,6 +1220,29 @@ test('a hidden Circular definition has its CLI flag in the Source recipe', async
   }
 });
 
+// PD-OI-110: a ring without a color of its own ('') is written `auto`, which the CLI reads back as '';
+// with no ring colored the flag is left out. The ring color scheme override has its CLI flag.
+test('ring colors and the ring color scheme read back from the Source recipe', async () => {
+  for (const [colors, scheme] of [[['', '#123456'], 'ten'], [['', ''], undefined]]) {
+    const session = structuredClone(circularCanonical);
+    const options = session.renderRequest.diagramOptions;
+    options.conservationBlastFiles = colors.map((_, index) => ({ resourceId: `ring-${index}`, representation: 'file' }));
+    options.conservationColors = colors;
+    colors.forEach((_, index) => { session.resources[`ring-${index}`] = resource('conservation-blast-file', `ring${index}.tsv`, ''); });
+    if (scheme) options.configOverrides = { ...(options.configOverrides || {}), 'objects.conservation.color_scheme': scheme };
+    const recipe = await buildSourceRecipe(session);
+    assert.equal(recipe.available, true, recipe.unavailableReason);
+    await assertCliParserAccepts(recipe);
+    const visibleArgs = recipe.args.map((token) => recipe.fileMetadata.get(token)?.name || token);
+    const readBack = await evaluatePython([
+      'from gbdraw.circular import _get_args, conservation_colors_from_cli',
+      'args = _get_args(payload["args"])',
+      'result = {"colors": conservation_colors_from_cli(args.conservation_colors), "scheme": args.conservation_color_scheme}'
+    ].join('\n'), { args: visibleArgs });
+    assert.deepEqual(readBack, { colors: colors.some(Boolean) ? colors : null, scheme: scheme ?? null }, JSON.stringify(recipe.args));
+  }
+});
+
 test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
   const session = structuredClone(linearGallerySession);
   Object.assign(session.renderRequest.diagramOptions.configOverrides, {

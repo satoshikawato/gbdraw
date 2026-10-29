@@ -69,9 +69,12 @@ def legend_swatch(entry: LegendEntry) -> tuple[object, ...]:
 
     A solid row is its fill and its stroke (color and width; a stroke of no
     width or no color is no stroke); a hatch is part of the fill (its pattern
-    paint). A gradient row is its two end colors.
+    paint). A gradient row is its two end colors. A similarity-ring row is its
+    ring (``track_index``), so every drawn ring keeps a row of its own.
     """
 
+    if entry.get("type") == "ring":
+        return ("ring", int(str(entry.get("track_index"))))
     if entry.get("type") == "gradient":
         return (
             "gradient",
@@ -218,12 +221,12 @@ class LegendTable(Mapping[LegendRowKey, LegendEntry]):
         """Each row's name and drawn name, by key.
 
         The names are numbered in the order the legends draw the rows: the
-        solid rows, then the gradient rows (the block beside or below them),
-        each in table order. The Web app numbers the rows of a Result in the
+        solid rows, then the gradient and ring rows (the block beside or below
+        them), each in table order. The Web app numbers the rows of a Result in the
         order it shows them, so both give one answer.
         """
 
-        solid_first = sorted(self._rows.items(), key=lambda item: item[1].swatch[0] == "gradient")
+        solid_first = sorted(self._rows.items(), key=lambda item: item[1].swatch[0] != "solid")
         drawn = drawn_legend_names([(row.name, row.swatch) for _, row in solid_first])
         texts = {key: text for (key, _), text in zip(solid_first, drawn)}
         return {key: LegendRowNames(row.name, texts[key]) for key, row in self._rows.items()}
