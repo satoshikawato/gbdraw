@@ -466,6 +466,8 @@ test('New drawing with this style copies no record selection, crop, or record di
   drawing.form.circular_region_start = 1000;
   drawing.form.circular_region_end = 5000;
   drawing.form.circular_record_label = 'Chr1';
+  drawing.form.circular_record_subtitle = 'Main chromosome';
+  drawing.form.circular_reverse = true;
   drawing.adv.label_font_size = circularDefaults.adv.label_font_size + 3;
   drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, { selector: 'NC_000001', row: 2 });
   drawing.recordsOff.splice(0, drawing.recordsOff.length, 'circular-1');
@@ -477,7 +479,8 @@ test('New drawing with this style copies no record selection, crop, or record di
   const { drawingId } = app.drawingList.newDrawingWithStyle(source, 'circular');
   const styled = state.drawingOf(drawingId);
   assert.equal(styled.adv.label_font_size, circularDefaults.adv.label_font_size + 3, 'a style row is copied');
-  for (const field of ['circular_record_selector', 'circular_region_start', 'circular_region_end', 'circular_record_label']) {
+  for (const field of ['circular_record_selector', 'circular_region_start', 'circular_region_end', 'circular_record_label',
+    'circular_record_subtitle', 'circular_reverse']) {
     assert.equal(styled.form[field], circularDefaults.form[field], `${field} keeps the new drawing's default`);
   }
   const plain = (/** @type {unknown} */ value) => JSON.parse(JSON.stringify(value));

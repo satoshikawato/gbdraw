@@ -242,7 +242,8 @@ import {
   holdsCliWriterConfig,
   requireActiveConfigContainers,
   validateCurrentWriterActiveConfig,
-  draftFeatureOverlapTolerance
+  draftFeatureOverlapTolerance,
+  createDefaultForm
 } from './session-active-config-contract.js';
 import {
   IMPORTED_COMPARISON_DISPOSITIONS,
@@ -5380,15 +5381,32 @@ export const duplicateDrawingState = (source, copyId) => {
   return copy;
 };
 
+/**
+ * The Circular form fields that name a record of the drawing's files, at
+ * their defaults: the record selector, the crop, the reverse, and the record
+ * label and subtitle. A style copy leaves them at the new drawing's
+ * (D-15-182), and a source replacement that retires the record presentation
+ * (D-32, app-setup.js) writes these values.
+ * @typedef {{ circular_record_selector: string, circular_region_start: number | null,
+ *   circular_region_end: number | null, circular_reverse: boolean, circular_record_label: string,
+ *   circular_record_subtitle: string }} CircularRecordForm
+ */
+/** @type {Readonly<CircularRecordForm>} */
+export const CIRCULAR_RECORD_FORM_DEFAULTS = Object.freeze((({
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
+  circular_record_subtitle
+}) => ({
+  circular_record_selector, circular_region_start, circular_region_end, circular_reverse, circular_record_label,
+  circular_record_subtitle
+}))(createDefaultForm()));
 // The registry rows that name records of the drawing's files (R17-4, D-15-182):
-// the records it draws (the record selector, the OFF records), the Circular
-// crop and record label, the Multi-Record Canvas rows, and the per-record
-// display drafts. The registry has no column for this, so the list is here.
+// the Circular record form fields, the OFF records, the Multi-Record Canvas
+// rows, and the per-record display drafts. The registry has no column for
+// this, so the list is here.
 /** @type {readonly string[]} */
 const RECORD_BOUND_ROWS = Object.freeze([
-  'config.form.circular_record_selector', 'config.form.circular_region_start', 'config.form.circular_region_end',
-  'config.form.circular_record_label', 'config.adv.multi_record_positions', 'config.recordsOff',
-  'config.recordDisplayDrafts'
+  ...Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => `config.form.${field}`),
+  'config.adv.multi_record_positions', 'config.recordsOff', 'config.recordDisplayDrafts'
 ]);
 // The registry rows a style copy leaves out (PD-OI-090 〔作成〕(3), R17-4):
 // files (the card files and the comparison plans, which name their files),

@@ -96,7 +96,8 @@ import {
   installShownDrawing,
   duplicateDrawingState,
   applyDrawingStyle,
-  writeLosatCacheInfo
+  writeLosatCacheInfo,
+  CIRCULAR_RECORD_FORM_DEFAULTS
 } from '../services/config.js';
 import { artifactSlotAs } from '../services/artifact-slot.js';
 import {
@@ -6474,15 +6475,12 @@ export const createAppSetup = () => {
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
     if (recordsOff.length) recordsOff.splice(0);
   };
+  // The whole record presentation: the record form fields return to their
+  // defaults (the one list a style copy leaves out too).
   /** @param {DrawingState} drawing */
   const retireCircularRecordPresentation = (drawing) => {
-    const { form } = drawing;
     retireCircularRecordSelector(drawing);
-    form.circular_region_start = null;
-    form.circular_region_end = null;
-    form.circular_reverse = false;
-    form.circular_record_label = '';
-    form.circular_record_subtitle = '';
+    Object.assign(drawing.form, CIRCULAR_RECORD_FORM_DEFAULTS);
   };
   // D-32: one record replacing one record (a new version of the same genome)
   // keeps its crop and titles; a removed file or a replaced multi-record file
