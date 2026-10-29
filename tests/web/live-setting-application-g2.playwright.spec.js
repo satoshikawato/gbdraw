@@ -15,6 +15,7 @@ const SESSIONS = 'gbdraw/web/gallery/sessions';
 const TOBACCO = `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`;
 const LAMBDA = `${SESSIONS}/lambda_basic_linear.gbdraw-session.json`;
 const BGC = `${SESSIONS}/BGC0000708-BGC0000713.gbdraw-session.json`;
+const VIBRIO = `${SESSIONS}/vibrio-harveyi-group-collinear.gbdraw-session.json.gz`;
 // An apply takes seconds; a base without the G2 rows fails each live case at this bound.
 const APPLY_TIMEOUT = 120_000;
 // How long a waiting value is given to (wrongly) redraw the Result.
@@ -134,6 +135,16 @@ run('definition-text linear: a Default font size change is live and equals a Gen
   await expectLiveUnit(page, 'Linear definition font size', () => commitValue(input, size),
     (request) => request.diagramOptions.configOverrides?.['objects.definition.linear.font_size.short'] === size);
 });
+
+// A Linear row's Size input stores its text; the live apply sends the number a
+// Generate sends (OV-2244: it sent the text and the apply failed validation).
+run('definition-text linear: a Name / Species font size change is live and equals a Generate', VIBRIO, async (page) => {
+  const input = page.locator('input[aria-label="Name / Species font size"]');
+  await reveal(input);
+  const size = numberAfter(await input.inputValue(), 20, 4);
+  await expectLiveUnit(page, 'Linear Name / Species font size', () => commitValue(input, size),
+    (request) => request.diagramOptions.configOverrides?.['objects.definition.linear.line_styles.name.font_size'] === size);
+}, 900_000);
 
 run('species circular: a Species change is live and equals a Generate', TOBACCO, async (page) => {
   const input = page.locator('#circular-species');

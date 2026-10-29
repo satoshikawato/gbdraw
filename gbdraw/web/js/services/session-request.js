@@ -101,6 +101,7 @@ import { diagnosticError, normalizeCaughtError } from '../utils/error-normalizat
 import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
+import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -211,6 +212,7 @@ import { bindRecordDisplayDrafts, recordDisplayKey, requestedRecordTransform } f
 /** @import { OrderedConservationSource } from './conservation-series.js' */
 /** @import { LinearComparisonResolution, LinearComparisonResolvedEdge } from './linear-comparisons.js' */
 /** @import { LinearTrackSlot } from './linear-track-slot-model.js' */
+/** @import { DefinitionLineStyle } from './definition-line-style-state.js' */
 /** @import { LabelFitTrackOptions } from './label-fit.js' */
 /**
  * @import { FileLike, RawSessionResourceDescriptor, SessionResourceFileMetadata, SessionResourceTable, WebFileBindingRow,
@@ -738,12 +740,13 @@ const labelBlacklistOverride = (drawing) => (drawing.filterMode.value === 'Black
 
 const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   Object.fromEntries(
-    ['name', 'subtitle', 'replicon', 'accession', 'length'].map((kind) => [
+    DEFINITION_LINE_STYLE_KINDS.map((kind) => [
       kind,
       `objects.definition.linear.line_styles.${kind}`
     ])
   )
 );
+/** @type {readonly (keyof DefinitionLineStyle)[]} */
 const LINEAR_DEFINITION_STYLE_FIELDS = Object.freeze(['font_size', 'font_weight', 'fill']);
 const LINEAR_DEFINITION_WEIGHT_PATHS = new Set(
   Object.values(LINEAR_DEFINITION_STYLE_PATHS).map((prefix) => `${prefix}.font_weight`)
@@ -1667,15 +1670,24 @@ const requestComparisonHeight = (adv) => {
 /**
  * The Linear definition row styles as config overrides: each of the 15
  * leaves (five rows, three fields), null where the row does not set it.
+ * The draft holds what the row inputs store (the Size input stores its text);
+ * each font size is the number `requireDefinitionLineFontSizes` reads, for
+ * Generate and the live apply alike, and a font size the engine refuses fails
+ * here (PD-OI-081, OV-1270, OV-2244). Weight and Color go as stored: a lifted
+ * legacy request keeps its `normal` weight (legacy-request-load record).
  * @param {Record<string, unknown>} adv
  * @returns {Record<string, unknown>}
  */
 const linearDefinitionStyleOverrides = (adv) => {
-  const styles = /** @type {Record<string, unknown> | null | undefined} */ (adv.linear_definition_line_styles);
-  return Object.fromEntries(Object.entries(LINEAR_DEFINITION_STYLE_PATHS).flatMap(([kind, prefix]) => {
-    const style = styles?.[kind];
+  const stored = adv.linear_definition_line_styles;
+  const sizes = requireDefinitionLineFontSizes(stored);
+  return Object.fromEntries(DEFINITION_LINE_STYLE_KINDS.flatMap((kind) => {
+    const style = isPlainObject(stored) ? stored[kind] : undefined;
     const fields = isPlainObject(style) ? style : {};
-    return LINEAR_DEFINITION_STYLE_FIELDS.map((field) => [`${prefix}.${field}`, fields[field] ?? null]);
+    return LINEAR_DEFINITION_STYLE_FIELDS.map((field) => [
+      `${LINEAR_DEFINITION_STYLE_PATHS[kind]}.${field}`,
+      field === 'font_size' ? sizes[kind].font_size : fields[field] ?? null
+    ]);
   }));
 };
 /**
