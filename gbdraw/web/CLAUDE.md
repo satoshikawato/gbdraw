@@ -129,19 +129,18 @@ in the same change.
 | Vue mount and exports | `js/app.js` |
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
-| The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`, and `drawingOfMode` until B; R15) |
+| The drawings by ID and the shown drawing (settings, editor edits, derived values) | `js/state.js` (`drawingOf`, `drawingList`, `activeDrawingId`, `activeDrawing`; R15) |
 | The slices of a drawing's editor edits and settings, their only writers, and their install, capture, and reset for Session Load, History, and Reset | `js/services/drawing/` (R15) |
 | Typed Vue reactivity for drawing members (`ref`, `reactive`, `computed`) | `js/utils/reactivity.js` (R14) |
 | Registry of what a drawing holds in a Session, by mode | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
-| Session 46 mode slices and the split of a Session 27–44 draft into them; once the Session format holds a list of drawings, Python alone converts a Session 27–44, once at Load | `js/services/mode-scoped-migration.js` until then (Python: `split_draft_into_modes` in `gbdraw/session_io.py`) |
+| Session 46 mode slices (the registry's slice shape); Python alone converts a Session 27–44, once at Load (`split_draft_into_modes`) | `js/services/mode-scoped-migration.js` (the conversion: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | The displayed Result's text: marking its mounted root changed, the one write of the root into the Result, and the reader of the Results (R1) | `js/app/preview-runtime.js` (`commitActiveResultEdit`, `currentResults`) |
 | When each setting reaches the Result: the application class and note of every settings control (R1) | `js/services/setting-application.js` (`SETTING_APPLICATION`; `SettingNote` in `js/components.js` renders the note) |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
-| Historical Gallery session migration; its Session 27–44 conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/gallery-session-migration.js` until then |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows; `hash=` annotation targets of Sessions 40–44 (R-7); drawn-hash `hash` color rules of Sessions 44 and older, renamed to source hashes; this conversion holds until the Session format holds a list of drawings; then Python alone converts a Session 27–44, once at Load | `js/services/feature-edit-migration.js` until then (Python twins in `gbdraw/session_io.py`: `migrate_session_feature_edits`, `migrate_session_annotation_targets`, `migrate_session_hash_rules`; the CLI replay of a request also uses their mapper `source_hash_selector_value`) |
+| Feature placement rows of a Session 41–44, read per mode by Load's first pass (Main rows both, a lane row its side's) | `js/services/feature-edit-migration.js` (`migrateSessionFeaturePlacements`; Python `_migrate_session_feature_placements`); Python alone converts the rest of a Session 27–44 |
 | Check of scoped Feature placements in the current writer's config (`validateScopedFeaturePlacements`; not a migration, so it stays when the migrations go) | `js/services/feature-edit-migration.js` (imported by `services/session-active-config-contract.js`) |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
@@ -689,8 +688,7 @@ or Reset Settings).
   Session-level values it also changes are part of its entry and are restored
   with it where they are still as it left them. A project step is one of:
   an operation on the drawing list (adding, duplicating, renaming, moving, or
-  deleting a drawing); Reset all drawings (until the Reset dialog offers Reset
-  this drawing, Reset Settings resets all drawings); until each drawing binds
+  deleting a drawing); Reset all drawings; until each drawing binds
   its own auxiliary file cards, a card's import, Remove, and Retry (R10); once
   a genome input file can be replaced for every drawing that uses it, that
   replacement (PD-OI-090); or a step that changes only Session-level values
@@ -1001,8 +999,7 @@ nothing else.
 
 A project has one or more drawings, held by ID in the drawing store of
 `state.js`, a `ReadonlyMap` that `createDrawingState` fills and only
-`state.drawingList()`, `state.drawingOf(id)`, and, until the Session format holds
-a list of drawings, `state.drawingOfMode(mode)` read. `state.activeDrawingId` names the shown
+`state.drawingList()` and `state.drawingOf(id)` read. `state.activeDrawingId` names the shown
 drawing, and `state.activeDrawing()` returns it. A drawing's ID (`DrawingId`)
 comes from the kind it is created as (`circular`, `linear`, `linear-2`, …) and never
 changes, and its `mode` is fixed at creation; once the Session format holds a list of
@@ -1044,10 +1041,7 @@ one drawing never reaches another (PD-OI-090).
   reads (Session Save and the legacy configuration Load take it as
   `shownDrawing` from their caller). An owner resolves `state.activeDrawing()`
   once per action, or the drawing its action is about by its `DrawingId`
-  (`state.drawingOf`), and passes it down. No helper resolves it again. Until
-  the Session format holds a list of drawings, a site about the drawing of one
-  mode resolves it through `state.drawingOfMode(mode)`, the one lookup by mode,
-  whose callers may only decrease. Generate resolves its
+  (`state.drawingOf`), and passes it down. No helper resolves it again. Generate resolves its
   drawing once, at the entry of `runAnalysis`; its request, validation, and
   commit use that drawing only. A reflow or rerender of a committed Result uses
   the drawing that Result belongs to, and installs through that drawing's
@@ -1068,11 +1062,7 @@ one drawing never reaches another (PD-OI-090).
   slot, and History restores it through its slot port (R11); none of them
   writes it to the shown Result.
 - Each drawing has its own History (R11).
-- Until the Session format holds a list of drawings, the store holds exactly
-  the drawings `circular` and `linear` (read through `state.drawingList()`,
-  `state.drawingOf(id)`, and `state.drawingOfMode(mode)`), and Save writes them as
-  `modes.circular` and `modes.linear`.
-- Once the Session format holds a list of drawings (Session 49), a new Session starts with
+- Once the Session format holds a list of drawings (Session 50), a new Session starts with
   one Circular drawing. Save Session writes, as one document, every drawing that has a
   file, a changed setting, an edit, or a Result, the drawing that is shown, and only the
   files a saved drawing uses. Load installs every drawing or changes nothing, shows each
@@ -1084,10 +1074,8 @@ one drawing never reaches another (PD-OI-090).
   `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
   rebuilds each drawing from the projection of its committed request,
   then its stored values, then its mode's defaults.
-  Until the Session format holds a list of drawings, `services/mode-scoped-migration.js`
-  splits a Session 27–44 draft into the two slices, and `split_draft_into_modes` in
-  `gbdraw/session_io.py` is its Python twin; then Python alone converts a Session 27–44,
-  once at Load. Once the Session format holds a list of drawings, a Session 46, 47, or 48
+  Python alone converts a Session 27–44, once at Load (`split_draft_into_modes` in
+  `gbdraw/session_io.py`). Once the Session format holds a list of drawings, a Session 46 to 49
   moves to the list without Python, and Load makes the drawing of a mode that has no
   Result only when the Session shows that mode was used
   (its input files, a Save while it was shown, or a setting that differs from the default
@@ -1110,7 +1098,7 @@ values); `tests/web/mode-scoped-session.test.mjs` (Save and Load of each drawing
 the current format, a Session 46 read into its drawings, and a Session 45 or a field
 outside the registry rejected);
 `tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
-(the Web Load of a Session 27–44 and Python's split agree on shared vectors);
+(the Web Load installs Python's split of a Session 27–44 as it loads that Session 50);
 `tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
 equal to its Python source); and
 `tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
@@ -1158,9 +1146,8 @@ concerns: normalize supported old data once, then use the current model. Do not
 write retired fields into new sessions.
 
 `services/session-active-config-contract.js` is the DOM-free current writer
-contract used by normal restore and Gallery publication. Historical Gallery
-migration stays in `services/gallery-session-migration.js` until the Session format holds a
-list of drawings, then Python alone converts a Session 27–44, once at Load; it does not clean up
+contract used by normal restore and Gallery publication. Python alone converts a
+historical Gallery Session (27–44), once at Load; Gallery publication admits Sessions 46–50. The conversion does not clean up
 current sessions. `services/gallery-session-publication.js` may align an admitted
 Gallery draft with its committed render intent, but ordinary import keeps its
 saved Result and active draft separate.

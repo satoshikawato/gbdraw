@@ -18,6 +18,7 @@ const baseState = (mode, adv = {}) => ({
   mode: ref(mode),
   cInputType: ref('gb'),
   lInputType: ref('gb'),
+  inputType: ref('gb'),
   circularRecordList: ref([]),
   form: {
     prefix: 'web-session', species: '', strain: '', plot_title: '', legend: 'right',
