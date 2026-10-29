@@ -101,7 +101,7 @@ import { diagnosticError, normalizeCaughtError } from '../utils/error-normalizat
 import { loadRepair } from '../utils/load-repairs.js';
 import { repairByDescription } from '../utils/contract-repair.js';
 import { isPlainObject } from '../utils/contract-shape.js';
-import { DEFINITION_LINE_STYLE_KINDS, readDefinitionLineStyles, refusedDefinitionLineFontSizePath } from './definition-line-style-state.js';
+import { DEFINITION_LINE_STYLE_KINDS, requireDefinitionLineFontSizes } from './definition-line-style-state.js';
 import { CANONICAL_REQUEST_DESCRIPTION } from '../contracts/request-shape.generated.js';
 import { DEFAULT_LINEAR_RECORD_GAP_PX, draftLinearRecordGap } from './config-field-readers.js';
 import { ownEntry } from '../utils/own-entry.js';
@@ -1670,15 +1670,13 @@ const requestComparisonHeight = (adv) => {
  * The Linear definition row styles as config overrides: each of the 15
  * leaves (five rows, three fields), null where the row does not set it.
  * The draft holds what the row inputs store (the Size input stores its text);
- * `readDefinitionLineStyles` reads it for Generate and the live apply alike,
+ * `requireDefinitionLineFontSizes` reads it for Generate and the live apply alike,
  * and a font size the engine refuses fails here (PD-OI-081, OV-1270, OV-2244).
  * @param {Record<string, unknown>} adv
  * @returns {Record<string, string | number | null>}
  */
 const linearDefinitionStyleOverrides = (adv) => {
-  const refused = refusedDefinitionLineFontSizePath(adv.linear_definition_line_styles);
-  if (refused) throw diagnosticError('INPUT_INVALID', { configPath: refused, reason: 'POSITIVE' });
-  const styles = readDefinitionLineStyles(adv.linear_definition_line_styles).value;
+  const styles = requireDefinitionLineFontSizes(adv.linear_definition_line_styles);
   return Object.fromEntries(DEFINITION_LINE_STYLE_KINDS.flatMap((kind) => LINEAR_DEFINITION_STYLE_FIELDS.map((field) => (
     [`${LINEAR_DEFINITION_STYLE_PATHS[kind]}.${field}`, styles[kind][field]]
   ))));
