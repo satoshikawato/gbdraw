@@ -68,7 +68,7 @@ const generate = (mode) => {
 };
 const liveRows = () => owner.SETTING_APPLICATION.filter((row) => row.requestPaths);
 // The Linear cards the live projectors read: none here, so no record name applies (the G2 file tests them).
-const inputs = { linearSeqs: [] };
+const inputs = request.liveSettingInputsOf({ linearSeqs: [] });
 const allPaths = () => owner.allLiveSettingRequestPaths();
 // The automatic rerender's request from `committed` with the live values of `drawing`.
 const liveCandidate = (committed, drawing) => request.projectCommittedEditorIntent({
@@ -83,7 +83,8 @@ const pick = (object, keys) => Object.fromEntries(keys.filter((key) => Object.ha
 
 test('the G1 rows are the live setting rows, and each request path has its projector', () => {
   assert.deepEqual(liveRows().map((row) => row.id), ['legend', 'plot-title', 'multi-record-layout', 'definition-column',
-    'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'comparison-height', 'track-geometry', 'record-names']);
+    'definition-text', 'species', 'dinucleotide-window', 'annotation-style', 'comparison-height', 'track-geometry', 'record-names',
+    'track-visibility']);
   for (const row of liveRows()) assert.equal(row.application, 'live', row.id);
   for (const id of ['colors', 'feature-visibility', 'legend-editor', 'features-editor', 'feature-appearance']) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);
@@ -404,7 +405,7 @@ test('a live setting row the shown Result cannot draw says Applies on Generate',
   assert.deepEqual(note('plot-title', { mode: 'circular', grouping: 'grid' }, false), partial);
   assert.equal(note('legend', { mode: 'linear', grouping: 'single' }, false).text, 'Live edit');
   // A row without request paths keeps its own note.
-  assert.equal(owner.settingApplicationNote('track-visibility', () => false).qualified, true);
+  assert.equal(owner.settingApplicationNote('depth-sources', () => false).qualified, true);
 });
 
 test('no live note text is written outside the owner', async () => {

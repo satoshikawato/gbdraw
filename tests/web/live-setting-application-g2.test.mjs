@@ -202,7 +202,7 @@ test('the G2 rows are live, and each request path has its projector', () => {
   for (const id of g2) {
     const row = owner.SETTING_APPLICATION.find((candidate) => candidate.id === id);
     assert.equal(row?.application, 'live', id);
-    for (const path of Object.values(row.requestPaths)) assert.ok(request.LIVE_SETTING_REQUEST_PATHS.includes(path), path);
+    for (const path of Object.values(row.requestPaths).flat()) assert.ok(request.LIVE_SETTING_REQUEST_PATHS.includes(path), path);
   }
   const paths = (id) => owner.SETTING_APPLICATION.find((row) => row.id === id).requestPaths;
   assert.deepEqual(paths('record-names'), {
@@ -213,7 +213,10 @@ test('the G2 rows are live, and each request path has its projector', () => {
   // record's definition requests the unit (`*` matches an index).
   const step = (...path) => owner.liveSettingRequestPaths([{ path }]);
   assert.deepEqual(step('config', 'annotationSets', 0, 'annotations', 2, 'style', 'fill'), [ANNOTATIONS]);
-  assert.deepEqual(step('config', 'adv', 'linear_track_slots', 3, 'height'), [SLOTS]);
+  // A Linear slot step also requests the track visibility keys (a row switch shares the prefix).
+  assert.deepEqual(step('config', 'adv', 'linear_track_slots', 3, 'height').sort(), [SLOTS,
+    'diagramOptions.configOverrides.canvas.show_gc', 'diagramOptions.configOverrides.canvas.show_skew',
+    'diagramOptions.depthTracks', 'diagramOptions.tracks.circularTrackSlots'].sort());
   assert.deepEqual(step('files', 'linearSeqs', 1, 'definition'), [RECORDS]);
   assert.deepEqual(step('config', 'form', 'strain'), []);
   assert.deepEqual(step('config', 'adv', 'step_size'), []);

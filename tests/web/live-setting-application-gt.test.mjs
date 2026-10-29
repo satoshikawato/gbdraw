@@ -24,10 +24,10 @@ const config = await import('../../gbdraw/web/js/services/config.js');
 const request = await import('../../gbdraw/web/js/services/session-request.js');
 const owner = await import('../../gbdraw/web/js/services/setting-application.js');
 const legendRows = await import('../../gbdraw/web/js/services/track-legend-rows.js');
-const { resourceIdOwnedBy } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
+const { getResourcePayloadOwner, resourceIdOwnedBy, setResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const { createDefaultLinearTrackSlots } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
-const { createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
+const { applyCircularSuppressControlsToSlots, createDefaultCircularTrackSlots } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 // The request projections a Generate runs (`canonicalRequestProjectionCount`).
 let projections = 0;
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: ({ name }) => { if (name === 'canonicalRequestProjectionCount') projections += 1; } };
@@ -202,6 +202,14 @@ const linearStack = ({ depthSeries = 2 } = {}) => {
   set(drawing.adv, 'depth_tracks', Array.from({ length: depthSeries }, (_, index) => ({ label: `Depth ${index + 1}` })));
   return drawing;
 };
+// Hide GC Content / Hide GC Skew as their control sets them: the form, and in
+// a Circular stack the rows it marks (`applyCircularSuppressControlsToSlots`).
+const setSuppress = (drawing, key, value) => {
+  set(drawing.form, key, value);
+  if (drawing.adv.circular_track_slots_enabled) {
+    set(drawing.adv, 'circular_track_slots', applyCircularSuppressControlsToSlots(drawing.adv.circular_track_slots, drawing.form, drawing.adv.nt));
+  }
+};
 const rowOf = (drawing, mode, predicate) => (mode === 'circular' ? drawing.adv.circular_track_slots : drawing.adv.linear_track_slots)
   .find(predicate);
 
@@ -368,10 +376,10 @@ test('N9/N10: a GC row\'s own switch hides and shows live in a Circular and a Li
 test('N3 (PQ-4 A): in a Circular stack Hide GC off after a live hide waits; the flag still writes', () => {
   const drawing = circularStack();
   const committed = generate('circular');
-  set(drawing.form, 'suppress_gc', true);
+  setSuppress(drawing, 'suppress_gc', true);
   const hidden = live(committed, 'circular');
   assert.ok(!hidden.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'));
-  drawing.form.suppress_gc = false;
+  setSuppress(drawing, 'suppress_gc', false);
   const waits = live(hidden, 'circular');
   assert.equal(waits.renderRequest.diagramOptions.configOverrides['canvas.show_gc'], true);
   assert.ok(!waits.renderRequest.diagramOptions.tracks.circularTrackSlots.some((slot) => slot.renderer === 'dinucleotide_content'));
@@ -459,7 +467,7 @@ test('N2 (one hide owner): Hide GC Skew removes the GC-nt skew row and keeps an 
   const at = { id: 'at_skew', renderer: 'dinucleotide_skew', enabled: true, params: { nt: 'AT' } };
   const drawing = circularStack({ extra: [at] });
   const committed = generate('circular');
-  set(drawing.form, 'suppress_skew', true);
+  setSuppress(drawing, 'suppress_skew', true);
   const hidden = withPending('circular', () => live(committed, 'circular'));
   const slots = hidden.next.renderRequest.diagramOptions.tracks.circularTrackSlots;
   assert.ok(slots.some((slot) => slot.id === 'at_skew'), 'the AT row stays');
@@ -492,5 +500,138 @@ test('M1: a Linear Height item note keeps G2\'s answer while a GT projection is 
   const gcRow = committed.renderRequest.diagramOptions.tracks.linearTrackSlots.find((slot) => slot.renderer === 'dinucleotide_content');
   assert.equal(request.liveSettingNoteApplies(committed.renderRequest, K.LSLOTS, drawing, inputs, committed.resources, { slotId: gcRow.id }), true);
   assert.equal(request.liveSettingNoteApplies(committed.renderRequest, K.LSLOTS, drawing, inputs, committed.resources), false);
+  undoAll();
+});
+
+test('N18 (request-less Results): a Result shown without a committed request says Applies on Generate', () => {
+  config.canonicalRenderArtifactOwner.restore(null);
+  const shown = state.results.value;
+  state.results.value = [{ name: 'loaded' }];
+  try {
+    for (const key of [...GT, 'diagramOptions.output.legend', 'diagramOptions.plotTitle']) {
+      assert.equal(config.committedLiveSettingApplies(key), false, key);
+    }
+    assert.notEqual(owner.settingApplicationNote('track-visibility', config.committedLiveSettingApplies).text,
+      owner.LIVE_NOTE?.text ?? 'Live edit');
+  } finally {
+    state.results.value = shown;
+  }
+});
+
+test('N7: after a Load a live Depth hide completes the kept parts, and its Undo shows live', () => {
+  for (const [mode, setup] of [['circular', circularStack], ['linear', linearStack]]) {
+    const drawing = setup({ depthSeries: 1 });
+    const generated = generate(mode);
+    const loaded = structuredClone(generated);
+    // A Load gives the draft the files its resources hold: each loaded
+    // descriptor stands for the draft File.
+    Object.keys(loaded.resources).forEach((id) => setResourcePayloadOwner(loaded.resources[id], getResourcePayloadOwner(generated.resources[id])));
+    assert.equal(request.keptTrackPartsOf(loaded.renderRequest), null);
+    set(drawing.form, 'show_depth', false);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = false;
+    const hidden = live(loaded, mode);
+    assert.ok(request.keptTrackPartsOf(hidden.renderRequest)?.depth, `${mode}: the hide completes the kept parts`);
+    rowOf(drawing, mode, (row) => row.renderer === 'depth').enabled = true;
+    set(drawing.form, 'show_depth', true);
+    assert.equal(request.liveSettingNoteApplies(hidden.renderRequest, K.DEPTH, drawing, inputs, hidden.resources), true);
+    const undone = withPending(mode, () => live(hidden, mode));
+    assertLiveEqualsGenerate(undone.next, mode, undone.revert, `${mode}: Undo of the hide after a Load`);
+    undoAll();
+  }
+});
+
+test('N17: the shortcut plan with Depth forced, then filtered, equals Generate with Show Depth off', () => {
+  for (const trackType of ['tuckin', 'middle', 'spreadout']) {
+    for (const series of [1, 2]) {
+      const drawing = circularPlain();
+      set(drawing.form, 'track_type', trackType);
+      set(inputs, 'circularDepth', [DEPTH_A, DEPTH_B].slice(0, series));
+      set(drawing.adv, 'depth_tracks', Array.from({ length: series }, (_, index) => ({ label: `Depth ${index + 1}` })));
+      const off = generate('circular');
+      assert.deepEqual(project(off, 'circular'), [], `${trackType}/${series}: the kept plan filtered is the Generate`);
+      set(drawing.form, 'show_depth', true);
+      const shown = live(off, 'circular');
+      assertLiveEqualsGenerate(shown, 'circular', () => {}, `${trackType}/${series}: Depth shown`);
+      set(drawing.form, 'show_depth', false);
+      assertLiveEqualsGenerate(live(shown, 'circular'), 'circular', () => {}, `${trackType}/${series}: hidden again`);
+      undoAll();
+    }
+  }
+});
+
+test('N19: the placement owners write what the Generate placement wrote', async () => {
+  const { placeCircularStackForGenerate } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
+  const { placeLinearStackForGenerate } = await import('../../gbdraw/web/js/services/linear-track-slot-model.js');
+  const circular = placeCircularStackForGenerate({
+    slots: [
+      { id: 'features', renderer: 'features', enabled: true, params: {} },
+      { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, params: {} },
+      { id: 'depth_off', renderer: 'depth', enabled: false, params: {} },
+      { id: 'depth_a', renderer: 'depth', enabled: true, params: {} },
+      { id: 'depth_b', renderer: 'depth', enabled: true, params: {} }
+    ],
+    nt: 'GC', trackType: 'tuckin', axisIndex: 99, form: { suppress_gc: true, suppress_skew: false }
+  });
+  const byId = new Map(circular.slots.map((slot) => [slot.id, slot]));
+  assert.equal(byId.get('depth_off').params.track_index, undefined, 'a Depth row off takes no ordinal');
+  assert.deepEqual([byId.get('depth_a').params.track_index, byId.get('depth_b').params.track_index], [0, 1]);
+  assert.equal(byId.get('gc_content').enabled, false, 'Hide GC Content marks the GC row');
+  assert.ok(circular.axisIndex >= 0 && circular.axisIndex <= circular.slots.length, 'the Axis boundary is clamped');
+  const linear = placeLinearStackForGenerate({
+    slots: [
+      { id: 'features', renderer: 'features', enabled: true, params: {} },
+      { id: 'depth_a', renderer: 'depth', enabled: true, params: {} },
+      { id: 'depth_err', renderer: 'depth', enabled: false, depth_binding_error: 'x', params: { track_index: 4 } },
+      { id: 'depth_b', renderer: 'depth', enabled: true, params: { track_index: 1 } }
+    ],
+    nt: 'GC', trackLayout: 'middle', axisIndex: 99,
+    depthTracks: [{ label: 'A', height: '27' }, { label: 'B' }], depthSeriesCount: 2
+  });
+  const lin = new Map(linear.slots.map((slot) => [slot.id, slot]));
+  assert.deepEqual([lin.get('depth_a').params.track_index, lin.get('depth_b').params.track_index], [0, 1]);
+  assert.equal(lin.get('depth_err').params.track_index, undefined, 'a row with a binding error loses its index');
+  assert.equal(lin.get('depth_a').height, '27px', 'the Depth height comes from its series');
+  assert.ok(linear.axisIndex >= 0 && linear.axisIndex <= linear.slots.length);
+});
+
+test('N20 (F1): Generate serializes the hidden Depth files only when the draft draws no Depth, each File read once', async () => {
+  let reads = 0;
+  const bytes = new TextEncoder().encode(depthText('GT1', 3));
+  const fileLike = { name: 'depth.tsv', type: 'text/plain', lastModified: 0, arrayBuffer: async () => { reads += 1; return bytes.buffer.slice(0); } };
+  const drawing = circularPlain();
+  const source = { files: { c_depth: [fileLike] }, linearSeqs: [] };
+  set(drawing.form, 'show_depth', true);
+  const on = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null, hiddenDepth: true });
+  assert.equal(on.hiddenDepth, undefined, 'a draft that draws Depth sends it as c_depth');
+  assert.ok(on.c_depth);
+  set(drawing.form, 'show_depth', false);
+  const off = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null, hiddenDepth: true });
+  assert.equal(off.c_depth, null);
+  assert.equal(off.hiddenDepth.length, 1);
+  assert.deepEqual(off.hiddenDepth[0], on.c_depth);
+  const plain = await config.serializeActiveRenderFiles('circular', source, drawing, { comparisonPlan: null });
+  assert.equal(plain.hiddenDepth, undefined, 'only Generate asks for them');
+  assert.equal(reads, 1, 'the File is read once');
+  undoAll();
+});
+
+test('N13b: a commit that changes the resources rebuilds the adopted resource table', async () => {
+  const { adoptCurrentSessionResources, adoptedSessionResourceDescriptor } = await import('../../gbdraw/web/js/services/session-resource-backing.js');
+  const drawing = circularStack({ depthSeries: 1 });
+  const committed = generate('circular');
+  const table = adoptCurrentSessionResources(committed.resources);
+  config.canonicalRenderArtifactOwner.restore({ committedCanonicalSession: committed, activeSessionResourceTable: table });
+  set(drawing.form, 'show_depth', false);
+  rowOf(drawing, 'circular', (row) => row.renderer === 'depth').enabled = false;
+  config.commitLiveSettingValues(project(committed, 'circular'));
+  const afterHide = config.canonicalRenderArtifactOwner.capture().activeSessionResourceTable;
+  assert.notEqual(afterHide, table);
+  assert.throws(() => adoptedSessionResourceDescriptor(afterHide, 'depth-tracks-1-source'), /Missing canonical resource/);
+  set(drawing.form, 'show_depth', true);
+  rowOf(drawing, 'circular', (row) => row.renderer === 'depth').enabled = true;
+  config.commitLiveSettingValues(project(config.getCommittedCanonicalSession(), 'circular'));
+  const afterShow = config.canonicalRenderArtifactOwner.capture().activeSessionResourceTable;
+  assert.ok(adoptedSessionResourceDescriptor(afterShow, 'depth-tracks-1-source'));
+  config.canonicalRenderArtifactOwner.restore(null);
   undoAll();
 });

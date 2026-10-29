@@ -56,6 +56,7 @@ import {
   projectCommittedEditorIntent,
   projectCommittedRecordTransform,
   projectLiveSettingWrites,
+  liveSettingInputsOf,
   projectCommittedSimilarityAlignment,
   readCanonicalResourceRecordCount,
   readCanonicalResourceText,
@@ -4888,7 +4889,8 @@ export const createRunAnalysis = ({
         resolvedCircularConservation: canonicalCircularConservation,
         omittedAnnotationRecordKeys: requestDrawing.annotationSets.length > 0
           ? (omittedAnnotationRecordKeys?.() || [])
-          : []
+          : [],
+        keepTrackParts: true
       });
       if (useCommittedComparison) {
         if (typeof getCommittedCanonicalSession !== 'function') {
@@ -5981,7 +5983,7 @@ export const createRunAnalysis = ({
     /** @type {LiveSettingWrite[]} */
     let liveSettingWrites;
     try {
-      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: { linearSeqs: allLinearSeqs } });
+      liveSettingWrites = projectLiveSettingWrites({ committed, drawing, requestPaths: settings, inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) });
     } catch (e) {
       const error = formatError(e, 'generate', 'render');
       labelReflowLastError.value = liveEditFailure(error);
@@ -6075,7 +6077,15 @@ export const createRunAnalysis = ({
       }, { requestedAt: historyRequestedAt });
       // The committed Session names what the new Results draw (PD-OI-102); the
       // binder reports for these Results while that Session stays committed.
+      // A live Depth show or hide replaces its resources; their records stay,
+      // and so do the record identities Generate read from them.
+      const resourcesBefore = getCommittedCanonicalSession?.()?.resources;
       commitLiveSettingValues(liveSettingWrites);
+      const resourcesAfter = getCommittedCanonicalSession?.()?.resources;
+      const identities = resourcesBefore && committedRecordIdentities.get(resourcesBefore);
+      if (identities && resourcesAfter && resourcesAfter !== resourcesBefore) {
+        committedRecordIdentities.set(resourcesAfter, identities);
+      }
       const drawnRevision = readCommittedCanonicalRevision();
       const isShownReflow = () => isRequested() && readCommittedCanonicalRevision() === drawnRevision;
       if (canonical.renderRequest.mode === 'circular') {
@@ -6174,7 +6184,7 @@ export const createRunAnalysis = ({
     if (!pending || !committed) return;
     for (const path of [...pending]) {
       try {
-        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: { linearSeqs: allLinearSeqs } }).length === 0) {
+        if (projectLiveSettingWrites({ committed, drawing, requestPaths: [path], inputs: liveSettingInputsOf({ linearSeqs: allLinearSeqs, files }) }).length === 0) {
           pending.delete(path);
         }
       } catch {

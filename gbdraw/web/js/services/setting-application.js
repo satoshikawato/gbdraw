@@ -19,10 +19,11 @@ import { msg, t, tm } from '../utils/i18n.js';
  * `*` matches one key) -> a request path that `services/session-request.js`
  * projects. A field that decides whether a request path applies to the shown
  * Result (`liveSettingApplies`) names it too, so a change of that field
- * requests it again (OV-1078). Only the rows with these paths are the live
- * setting rows the automatic rerender applies from the draft (R1 (c),
- * PD-OI-102/103); the other live rows are editor intent.
- * @typedef {Readonly<Record<string, string>>} SettingRequestPaths
+ * requests it again (OV-1078). A draft path may request several request paths
+ * that one projection writes together (the GT set). Only the rows with these
+ * paths are the live setting rows the automatic rerender applies from the
+ * draft (R1 (c), PD-OI-102/103/104); the other live rows are editor intent.
+ * @typedef {Readonly<Record<string, string | readonly string[]>>} SettingRequestPaths
  */
 /**
  * One setting, or a group of settings with one application. `note` replaces
@@ -36,14 +37,30 @@ import { msg, t, tm } from '../utils/i18n.js';
 /** @param {SettingApplicationClass} application @param {SettingApplicationId[]} ids @returns {SettingApplicationRow[]} */
 const rows = (application, ids) => ids.map((id) => ({ id, application }));
 const CANVAS_CHANGE_NOTE = msg('Live edit; the position applies on Generate after the Multi-Record Canvas change');
+// The GT set (PD-OI-104 rev 5): one projection (`projectTrackPlan`,
+// services/session-request.js) writes these request paths together, so every
+// draft input of a drawn GC, skew or Depth track requests all of them.
+const TRACK_VISIBILITY_REQUEST_PATHS = Object.freeze([
+  'diagramOptions.configOverrides.canvas.show_gc',
+  'diagramOptions.configOverrides.canvas.show_skew',
+  'diagramOptions.depthTracks',
+  'diagramOptions.tracks.circularTrackSlots',
+  'diagramOptions.tracks.linearTrackSlots'
+]);
+/** @param {readonly string[]} draftPaths @returns {SettingRequestPaths} */
+const trackVisibilityPaths = (draftPaths) => Object.fromEntries(draftPaths.map((path) => [path, TRACK_VISIBILITY_REQUEST_PATHS]));
 
 /** @type {readonly Readonly<SettingApplicationRow>[]} */
 export const SETTING_APPLICATION = Object.freeze([
   // OV-1042: `output-prefix` names the Results at Generate, and exports take
   // their file names from the Result (export.js `getDownloadName`).
   ...rows('generate', ['output-prefix', 'inputs', 'comparison', 'species-strain', 'advanced-comparison', 'region-annotations',
-    'pairwise-comparisons', 'preserved-settings', 'layout', 'track-slots', 'font', 'titles', 'features',
+    'pairwise-comparisons', 'preserved-settings', 'layout', 'font', 'titles', 'features',
     'stroke', 'labels', 'axis-scale', 'dinucleotide', 'feature-placement']),
+  // D-201, PD-OI-103 rev 2: the stack's structure edits apply on Generate; a
+  // switch that hides or shows a GC, skew or Depth row is the track-visibility row's.
+  { id: 'track-slots', application: /** @type {const} */ ('generate'),
+    note: msg('Applies on Generate, except turning a GC content, GC skew or Depth row on or off, removing one, and Use custom stack, which apply at once; after a Session load or a Depth file change, and for a row added since the last Generate, they apply on Generate') },
   // G1 (PD-OI-103): a committed value redraws the shown Result through the
   // automatic rerender (PD-OI-102). Legend position and Plot Title position
   // are the drawing's layout preferences (`ui.layoutPreferences`, per mode and
@@ -111,18 +128,27 @@ export const SETTING_APPLICATION = Object.freeze([
     'config.form.circular_record_label': 'records',
     'config.form.circular_record_subtitle': 'records'
   } },
-  // OV-1036: `applyTrackVisibility` (app/svg-styles.js) hides or shows a drawn
-  // group at once; a track the Result lacks and the layout wait for Generate.
-  { id: 'track-visibility', application: /** @type {const} */ ('generate'),
-    note: msg('Hiding or showing a drawn track applies at once; a new track and the layout apply on Generate') },
+  // PD-OI-104 rev 5, D-199..D-202, D-207: the GC content, GC skew and Depth
+  // toggles, the slot switches that hide or show one of those tracks, and Use
+  // custom stack redraw the Result through the automatic rerender. A show
+  // returns the parts the last Generate built (the kept track parts); it waits
+  // for Generate where they cannot give it (`partialNote`).
+  { id: 'track-visibility', application: /** @type {const} */ ('live'),
+    partialNote: msg('Live edit. Showing a track applies on Generate after a Session load, a Depth file or series change, or a change of the records the Depth files map to; for a custom stack row added since the last Generate or a stack the last Generate could not build; and, with a Circular custom track stack or Circular track widths or radii, for Hide GC Content and Hide GC Skew turned off'),
+    requestPaths: trackVisibilityPaths([
+      'config.form.show_gc', 'config.form.show_skew', 'config.form.suppress_gc', 'config.form.suppress_skew',
+      'config.form.show_depth', 'files.c_depth', 'files.linearSeqs.*.depth', 'config.adv.depth_tracks',
+      'config.adv.circular_track_slots', 'config.adv.circular_track_slots_enabled',
+      'config.adv.linear_track_slots', 'config.adv.linear_track_slots_enabled'
+    ]) },
   // Show Depth follows the Depth files: adding one, or a series while one is
   // loaded (`addCircularDepthTrack`, `addLinearDepthTrack`), turns it on;
   // removing the last one, also with its Linear File, turns it off (OV-82,
-  // OV-1041); `applyTrackVisibility` shows or hides the drawn Depth track at
-  // once. A Legend title change retires the old caption, which clears a Legend
-  // tab rename of it at once (`buildLegendStyleRetirement`, OV-1043).
+  // OV-1041), and the track-visibility row redraws the Result. A Legend title
+  // change retires the old caption, which clears a Legend tab rename of it at
+  // once (`buildLegendStyleRetirement`, OV-1043).
   { id: 'depth-sources', application: /** @type {const} */ ('generate'),
-    note: msg('Adding a Depth file, or a series while one is loaded, turns Show Depth on, and removing the last Depth file or the File that holds it turns it off; the drawn Depth track shows or hides at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest applies on Generate') },
+    note: msg('Adding a Depth file, or a series while one is loaded, turns Show Depth on, and removing the last Depth file or the File that holds it turns it off; turning it off hides the drawn Depth track at once. A changed Legend title clears a Legend tab rename of the old title at once. The rest, and a Depth track from changed files, applies on Generate') },
   ...rows('live', ['colors']),
   // Editor intent the Result shows at once (the Legend and Features tabs of
   // the editor, the feature popup's Appearance).
@@ -168,7 +194,7 @@ export const SETTING_NOTE_APPLIES = Symbol('setting-note-applies');
  */
 export const settingApplicationNote = (id, applies = () => true) => {
   const row = rowOf(id);
-  const paths = [...new Set(Object.values(row.requestPaths || {}))];
+  const paths = [...new Set(Object.values(row.requestPaths || {}).flat())];
   const drawn = paths.filter((path) => applies(path)).length;
   if (drawn === paths.length) {
     return { application: row.application, text: tm(row.note || TEXT[row.application]), qualified: Boolean(row.note) };
@@ -200,10 +226,12 @@ export const liveSettingRequestPaths = (changes) => {
   for (const change of Array.isArray(changes) ? changes : []) {
     const path = Array.isArray(change?.path) ? change.path.map(String) : [];
     for (const row of SETTING_APPLICATION) {
-      Object.entries(row.requestPaths || {}).forEach(([draftPath, requestPath]) => {
+      Object.entries(row.requestPaths || {}).forEach(([draftPath, requestPaths]) => {
         const keys = draftPath.split('.');
         const overlap = Math.min(keys.length, path.length);
-        if (keys.slice(0, overlap).every((key, index) => key === '*' || key === path[index])) paths.add(requestPath);
+        if (keys.slice(0, overlap).every((key, index) => key === '*' || key === path[index])) {
+          [requestPaths].flat().forEach((requestPath) => paths.add(requestPath));
+        }
       });
     }
   }
@@ -211,4 +239,4 @@ export const liveSettingRequestPaths = (changes) => {
 };
 
 /** Every request path a live setting row applies, as Reset Settings and an artifact restore request them. */
-export const allLiveSettingRequestPaths = () => [...new Set(SETTING_APPLICATION.flatMap((row) => Object.values(row.requestPaths || {})))];
+export const allLiveSettingRequestPaths = () => [...new Set(SETTING_APPLICATION.flatMap((row) => Object.values(row.requestPaths || {}).flat()))];

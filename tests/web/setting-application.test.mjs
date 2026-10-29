@@ -299,12 +299,15 @@ test('every row renders its note or its class text', () => {
   assert.match(component[1], /\{\{ note\.text \}\}/);
 });
 
-test('the GC, skew and Depth toggles state today\'s split timing (OV-1036)', () => {
+test('the GC, skew and Depth toggles are live, and the waits name Generate (OV-1036, PD-OI-104 rev 5)', () => {
   const toggles = settingsControls.filter((element) => /show_gc|show_skew|setTrackShown|setCircularGcSuppressed|setCircularSkewSuppressed/
     .test(`${element.attributes.get('v-model') || ''} ${element.attributes.get('@change') || ''}`));
   assert.equal(toggles.length, 6, toggles.map(describe).join('\n'));
   for (const toggle of toggles) assert.equal(scopeOf(toggle).attributes.get('data-setting'), 'track-visibility', describe(toggle));
-  assert.match(settingApplicationNote('track-visibility').text, /at once.*Generate/);
+  const note = settingApplicationNote('track-visibility');
+  assert.equal(note.application, 'live');
+  assert.equal(note.text, 'Live edit');
+  assert.match(SETTING_APPLICATION.find((row) => row.id === 'track-visibility').partialNote, /^Live edit\. Showing a track applies on Generate after a Session load/);
 });
 
 test('adding a Depth file or series shows and removing the last Depth file or its File hides the drawn Depth track at once, and the Depth blocks and the removal dialog say so (OV-1041, OV-1043)', () => {

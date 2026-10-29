@@ -1226,10 +1226,7 @@ const collectCustomTrackIssues = ({
   }
   const emittedAxisIndex = resolvedAxisIndex === null
     ? null
-    : draftSlots
-        .slice(0, resolvedAxisIndex)
-        .filter((slot) => slot && typeof slot === 'object' && slot.enabled !== false)
-        .length;
+    : emittedCustomTrackAxisIndex(draftSlots, resolvedAxisIndex);
 
   /** @type {Map<string, number[]>} */
   const idsToIndexes = new Map();
@@ -1747,6 +1744,18 @@ const collectCustomTrackIssues = ({
     globalIssues
   };
 };
+
+/**
+ * The Axis boundary a request carries for a stack: the rows before the
+ * draft's boundary that the request draws (enabled ones). The live track
+ * projection reads it with its own presence answer.
+ * @param {readonly unknown[]} slots @param {number} axisIndex
+ * @returns {number}
+ */
+export const emittedCustomTrackAxisIndex = (slots, axisIndex) => slots
+  .slice(0, axisIndex)
+  .filter((slot) => slot && typeof slot === 'object' && /** @type {{ enabled?: unknown }} */ (slot).enabled !== false)
+  .length;
 
 /**
  * Validate the Web Custom Track draft without mutating it or throwing.

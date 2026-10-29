@@ -3457,7 +3457,8 @@ export const createAppSetup = () => {
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
       serializeActiveRenderFiles(state.mode.value, state, drawing, {
         comparisonPlan: comparisonPlanSnapshot,
-        linearRecordCatalog
+        linearRecordCatalog,
+        hiddenDepth: true
       })
     ),
     prepareLinearRecordCatalog,
