@@ -31,6 +31,22 @@ write-up of a release.
   Legend name apart from the rest of its row now shows its new row at once where
   Generate draws it, instead of last, when every named color rule is of one
   feature type.
+- Changed: in the Web app, these settings are live edits that rerender the
+  shown Result, which equals a Generate: **Species**, **Default font size** and
+  the Linear definition row **Size**, **Weight**, and **Color**; record names
+  (Linear **Organism / strain**, Circular **Record label** and **Subtitle**,
+  and the record popup's name fields); the **Dinucleotide content/skew**
+  **Window**; Region Annotation **Fill color** and **Line color**; Comparison
+  **Match height**; **Center Reserved Radius**; and a Linear custom-stack row's
+  **Height**. **Strain**, **Keep Full Definition**, and the Linear subtitle
+  still apply on Generate.
+- Changed: Region Annotation colors, a Linear custom-stack row's **Height**,
+  and each record popup and File card name field show their own **Live edit**
+  or **Applies on Generate** note: an item with a Legend label, an item added
+  since the last Generate, and a features or Depth row apply on Generate.
+- Fixed: in the Web app, a color picked without a pointer first (a picker
+  opened from the keyboard) is now one **Undo** step and applies as its
+  setting does; before, Undo skipped it (OV-2243).
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
