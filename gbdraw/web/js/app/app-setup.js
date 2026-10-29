@@ -3329,6 +3329,7 @@ export const createAppSetup = () => {
         // mode's Results only.
         legendActions.extractLegendEntries({
           replaceGeneratedInventory: !selecting && drawn,
+          liveRedraw: context.phase === 'label-reflow',
           liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
         });
       };

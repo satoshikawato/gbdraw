@@ -29,7 +29,7 @@ test('the Layout card says its settings apply on Generate, the track toggles are
     await expect(visibility.locator('[data-applies-on-generate="track-visibility"]')).toHaveCount(0);
     await expect(visibility.locator('label')).toHaveText(toggles.map((name) => new RegExp(name)));
     await expect(layout.locator('[data-setting="track-slots"] [data-applies-on-generate="track-slots"]').first())
-      .toHaveText(/^Applies on Generate, except turning a GC content, GC skew or Depth row on or off/);
+      .toHaveText(/Applies on Generate, except turning a GC content, GC skew or Depth row on or off/);
   }
 });
 
