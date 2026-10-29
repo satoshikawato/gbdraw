@@ -17,9 +17,11 @@ import { resolveColorToHex } from '../utils/color-utils.js';
 
 /**
  * The paint of a Legend row's swatch as it is drawn: a solid swatch's fill
- * and stroke, or a gradient's two end colors.
+ * and stroke, a gradient's two end colors, or a similarity ring's identity
+ * (its `data-track-index`), so every drawn ring keeps a row of its own.
  * @typedef {{ type?: 'solid', fill?: unknown, stroke?: unknown, width?: unknown }
- *   | { type: 'gradient', minColor?: unknown, maxColor?: unknown }} LegendSwatchPaint
+ *   | { type: 'gradient', minColor?: unknown, maxColor?: unknown }
+ *   | { type: 'ring', trackIndex: number }} LegendSwatchPaint
  */
 
 /**
@@ -39,9 +41,12 @@ export const legendColorIdentity = (value) => {
 
 // Python's `legend_swatch`: a solid row is its fill and its stroke (color and
 // width; a stroke of no width or no color is no stroke), a hatch being part of
-// the fill; a gradient row is its two end colors.
+// the fill; a gradient row is its two end colors; a ring row is its ring.
 /** @param {LegendSwatchPaint} paint @returns {LegendSwatchIdentity} */
 export const legendSwatch = (paint) => {
+  if (paint.type === 'ring') {
+    return /** @type {LegendSwatchIdentity} */ (JSON.stringify(['ring', paint.trackIndex]));
+  }
   if (paint.type === 'gradient') {
     return /** @type {LegendSwatchIdentity} */ (JSON.stringify(['gradient', legendColorIdentity(paint.minColor), legendColorIdentity(paint.maxColor)]));
   }

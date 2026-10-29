@@ -6,19 +6,21 @@ import hashlib
 import io
 import logging
 import os
-from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence, TypeAlias, cast
+from dataclasses import dataclass, replace
+from typing import Iterable, Literal, Mapping, Sequence, TypeAlias, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.config.models.objects import ConservationColorScheme
 from gbdraw.core.color import normalize_hex_color, tint_color
 from gbdraw.annotations.resolve import _source_interval_to_local
 from gbdraw.core.record_metadata import _read_coord_map, _record_source_start
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.colors import resolve_color_to_hex
 from gbdraw.io.comparison_sequences import comparison_file_stem
+from gbdraw.tracks.circular import CircularTrackSlot
 from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     ComparisonFilter,
@@ -167,16 +169,24 @@ class ConservationTrack:
 
 @dataclass(frozen=True)
 class ConservationLegendSource:
-    """What a legend reads from one conservation track: its label and color."""
+    """What a legend reads from one drawn conservation track: its label, color, and identity."""
 
     track_label: str
     track_color: str | None
+    source_index: int
+    track_index: int
+
+    @classmethod
+    def of(cls, track: ConservationTrack, color: str | None) -> ConservationLegendSource:
+        return cls(track.track_label, color, int(track.source_index), int(track.track_index))
 
 
 def conservation_legend_sources(
     tracks: Sequence[ConservationTrack] | None,
 ) -> tuple[ConservationLegendSource, ...]:
-    return tuple(ConservationLegendSource(track.track_label, track.track_color) for track in tracks or ())
+    """The legend's rings: the resolved drawn tracks (``resolve_conservation_track_colors``), outermost first."""
+
+    return tuple(ConservationLegendSource.of(track, track.track_color) for track in tracks or ())
 
 
 @dataclass(frozen=True)
@@ -248,6 +258,82 @@ def conservation_track_gradient_colors(
             _default_conservation_color(default_max_color, "max_color"),
         )
     return tint_color(normalized_track_color), normalized_track_color
+
+
+# The legend's identity band when the drawn rings differ in colour: a neutral grey with the OKLab lightness of the
+# default ring colour, drawn with the ring gradient rule (PD-OI-110, D-07).
+CONSERVATION_MIXED_BAND_COLOR = "#9c9c9c"
+# The colours of the rings without a colour of their own, by drawn position (outermost first), repeating
+# (PD-OI-110). ``same`` draws the configured default gradient (``objects.conservation`` min/max colours).
+_PER_FIVE_HUES = ("#8b9cc1", "#c88890", "#62ad9a", "#bf89ab", "#7caa7e", "#bc9464")
+CONSERVATION_COLOR_SCHEMES: Mapping[ConservationColorScheme, tuple[str, ...]] = {
+    "same": (),
+    "ten": (
+        "#6e91b7", "#f4a251", "#8fc4c0", "#e67577", "#c6bebb",
+        "#77b26f", "#be92b2", "#f0d369", "#ae8e7c", "#ffafb7",
+    ),
+    "per_five": tuple(hue for hue in _PER_FIVE_HUES for _ in range(5)),
+}
+
+
+def conservation_slot_track(
+    params: Mapping[str, object] | None, tracks: Sequence[ConservationTrack] | None
+) -> ConservationTrack | None:
+    """The track a ``sequence_conservation`` slot draws: the one its ``track_index`` names."""
+
+    track_index = int(cast("int | str", (params or {}).get("track_index", 0) or 0))
+    return next((track for track in (tracks or ()) if int(track.track_index) == track_index), None)
+
+
+def _drawn_ring_colors(
+    scheme: ConservationColorScheme | str,
+    slots: Sequence[CircularTrackSlot] | None,
+    tracks: Sequence[ConservationTrack],
+) -> tuple[tuple[ConservationTrack, str | None], ...]:
+    """The drawn rings, outermost first, each with the colour it draws.
+
+    ``slots`` is the final slot list (stacked outermost first). A ring keeps its own colour; a ring without one
+    takes the scheme colour of its drawn position (``None`` under ``same``). Rings no enabled slot draws are left
+    out, so the ring groups and the legend read one list.
+    """
+
+    cycle = CONSERVATION_COLOR_SCHEMES[cast(ConservationColorScheme, scheme)]
+    drawn: list[tuple[ConservationTrack, str | None]] = []
+    drawn_indexes: set[int] = set()
+    for slot in slots or ():
+        if not slot.enabled or str(slot.renderer) != "sequence_conservation":
+            continue
+        track = conservation_slot_track(slot.params, tracks)
+        if track is None or int(track.track_index) in drawn_indexes:
+            continue
+        drawn_indexes.add(int(track.track_index))
+        drawn.append((track, track.track_color or (cycle[len(drawn) % len(cycle)] if cycle else None)))
+    return tuple(drawn)
+
+
+def resolve_conservation_track_colors(
+    scheme: ConservationColorScheme | str,
+    slots: Sequence[CircularTrackSlot] | None,
+    tracks: Sequence[ConservationTrack],
+) -> tuple[ConservationTrack, ...]:
+    """The drawn rings (``_drawn_ring_colors``), each with its colour on the track and on its hits."""
+
+    return tuple(
+        track
+        if color == track.track_color
+        else replace(track, track_color=color, hits=track.hits.assign(track_color=color))
+        for track, color in _drawn_ring_colors(scheme, slots, tracks)
+    )
+
+
+def resolve_conservation_legend_sources(
+    scheme: ConservationColorScheme | str,
+    slots: Sequence[CircularTrackSlot] | None,
+    tracks: Sequence[ConservationTrack],
+) -> tuple[ConservationLegendSource, ...]:
+    """The legend's rings from the same drawn order and colours, without copying any hit table."""
+
+    return tuple(ConservationLegendSource.of(track, color) for track, color in _drawn_ring_colors(scheme, slots, tracks))
 
 
 def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: ComparisonFilter) -> DataFrame:
@@ -598,6 +684,8 @@ def normalize_conservation_tracks_for_record(
 
 
 __all__ = [
+    "CONSERVATION_COLOR_SCHEMES",
+    "CONSERVATION_MIXED_BAND_COLOR",
     "ConservationInput",
     "ConservationLegendSource",
     "ConservationLoadResult",
@@ -609,6 +697,7 @@ __all__ = [
     "ConservationTrack",
     "NORMALIZED_CONSERVATION_COLUMNS",
     "conservation_legend_sources",
+    "conservation_slot_track",
     "conservation_track_gradient_colors",
     "empty_normalized_conservation_hits",
     "load_conservation_sources",
@@ -617,4 +706,6 @@ __all__ = [
     "normalize_conservation_tracks_for_record",
     "read_conservation_inputs",
     "resolve_conservation_reference_side",
+    "resolve_conservation_legend_sources",
+    "resolve_conservation_track_colors",
 ]

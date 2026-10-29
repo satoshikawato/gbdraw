@@ -28,12 +28,12 @@
       "read_genbank",
       "read_gff"
     ],
-    "contract_sha256": "2f23259fe4e479c768b9031d556604d8d3e45d5c53534508fb6c908dac2df74d"
+    "contract_sha256": "cb2b58ad03d22e1e96c01cf6e0bee4cb41c47911a3bfb4ae5c277776282132e4"
   },
   "circular_cli": {
-    "actions_sha256": "9a9a48404692d9cd28c4323fad522ac1de0951592bb4f05e2436ac661678b6c7",
-    "defaults_sha256": "3e3a790708a7307bf0fde79e76bae495e1ce8dfd24aa31b99832ee21d9536271",
-    "representative_sha256": "28d7c473d9ca44655505dc3844eb25aeb00da53706c20c97e2e9b075e2c695bf"
+    "actions_sha256": "959bf8e95aa569046197f6491e204b58054237a2422c8b7ce45b9d54f60d8e65",
+    "defaults_sha256": "ce8c052b6f2e34d1ae4a2eb8d6814379bae2d4e7e5b058e8d49e1b0a46b0aa2a",
+    "representative_sha256": "6c3b2fb551fcce22b6d67154a85558e14f6fde3b78da6c186c2526c7b7b67a0f"
   },
   "linear_cli": {
     "actions_sha256": "a0385c645e403fa40fe5b97673cd0c04032740663d54ece0591f8994f0c8d6cd",

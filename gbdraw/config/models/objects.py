@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from numbers import Real
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional, get_args
 
 from gbdraw.definition_line_styles import (
     normalize_definition_line_fill,
@@ -298,6 +298,25 @@ def _normalize_conservation_reference(value: Any) -> str:
     return normalized
 
 
+CONSERVATION_COLOR_SCHEME_PATH = "objects.conservation.color_scheme"
+# The colour schemes of the rings without a colour of their own (PD-OI-110): the one owner of their names. The
+# colours are ``gbdraw.analysis.conservation.CONSERVATION_COLOR_SCHEMES``; the CLI choices are these names.
+ConservationColorScheme = Literal["same", "ten", "per_five"]
+CONSERVATION_COLOR_SCHEME_NAMES: tuple[ConservationColorScheme, ...] = get_args(ConservationColorScheme)
+
+
+def _normalize_conservation_color_scheme(value: Any) -> ConservationColorScheme:
+    """The colour scheme of the rings without a colour of their own (PD-OI-110)."""
+
+    for scheme in CONSERVATION_COLOR_SCHEME_NAMES:
+        if value == scheme:
+            return scheme
+    raise ValidationError(
+        f"{CONSERVATION_COLOR_SCHEME_PATH} must be one of: {', '.join(CONSERVATION_COLOR_SCHEME_NAMES)}",
+        diagnostic={"code": "INPUT_INVALID", "configPath": CONSERVATION_COLOR_SCHEME_PATH},
+    )
+
+
 @dataclass(frozen=True)
 class ObjectsConservationConfig:
     fill_opacity: float
@@ -311,6 +330,10 @@ class ObjectsConservationConfig:
     ring_width: float | None
     ring_gap: float | None
     reference: str
+    color_scheme: ConservationColorScheme = "same"
+
+    def __post_init__(self) -> None:
+        _normalize_conservation_color_scheme(self.color_scheme)
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> "ObjectsConservationConfig":
@@ -326,6 +349,7 @@ class ObjectsConservationConfig:
             ring_width=_optional_auto_positive_float(d.get("ring_width", None), field_name="conservation ring_width"),
             ring_gap=_optional_auto_positive_float(d.get("ring_gap", None), field_name="conservation ring_gap"),
             reference=_normalize_conservation_reference(d.get("reference", "auto")),
+            color_scheme=_normalize_conservation_color_scheme(d.get("color_scheme", "same")),
         )
 
 

@@ -60,6 +60,25 @@ def _legend_table() -> dict[str, dict[str, object]]:
     }
 
 
+def _circular_legend_table() -> dict[str, dict[str, object]]:
+    """A feature row and one similarity-ring row, as the Circular assembler writes them."""
+
+    return {
+        "CDS": _legend_table()["CDS"],
+        "Reference A": {
+            "type": "ring",
+            "source_index": 0,
+            "track_index": 1,
+            "fill": None,
+            "stroke": "none",
+            "width": 0,
+            "min_color": "#f0f1f5",
+            "max_color": "#8b9cc1",
+            "min_value": 70,
+        },
+    }
+
+
 def test_circular_legend_measurement_carries_the_render_layout() -> None:
     profile = CircularRenderProfile(_config())
     canvas_config = CircularCanvasConfigurator(
@@ -72,7 +91,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
 
     measurement = measure_legend(
         configurator,
-        _legend_table(),
+        _circular_legend_table(),
         placement=canvas_config.legend_position,
         wrap_width=canvas_config.total_width,
     )
@@ -94,7 +113,7 @@ def test_circular_legend_measurement_carries_the_render_layout() -> None:
     assert measurement.has_gradient is True
     assert not hasattr(configurator, "legend_width")
 
-    group = CircularLegendGroup(measurement, _legend_table())
+    group = CircularLegendGroup(measurement, _circular_legend_table())
     assert group.layout is measurement.circular_layout
 
 
@@ -196,15 +215,13 @@ def test_linear_legend_measurement_is_the_renderer_geometry_authority(
 
 @pytest.mark.parametrize("feature_row", [False, True], ids=["gradient-only", "with-feature-row"])
 @pytest.mark.parametrize("legend_position", ["left", "right", "top", "bottom"])
-@pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_single_gradient_title_wider_than_its_bar_stays_inside_the_legend(
-    mode: str, legend_position: str, feature_row: bool
+    legend_position: str, feature_row: bool
 ) -> None:
-    """The block is as wide as its title, with the bar centred under it, in both modes.
+    """The Linear block is as wide as its title, with the bar centred under it (OV-1640).
 
-    OV-1640 (Linear), OV-1611 (a top or bottom Circular Legend reserved only the
-    bar), OV-1612 (a top or bottom Circular Legend without feature rows started
-    the gradient after an empty feature column).
+    The Circular similarity-ring block has no gradient title; its long names are
+    tested in ``tests/test_circular_conservation.py`` (OV-1261, OV-1611, OV-1612).
     """
     font_size = 32.0
     cfg = apply_config_overrides(
@@ -225,38 +242,23 @@ def test_single_gradient_title_wider_than_its_bar_stays_inside_the_legend(
             "min_value": 70,
         },
     }
-    if mode == "circular":
-        profile: CircularRenderProfile | LinearRenderProfile = CircularRenderProfile(cfg)
-        canvas_config: CircularCanvasConfigurator | LinearCanvasConfigurator = (
-            CircularCanvasConfigurator(
-                output_prefix="out", profile=profile, legend=legend_position, gb_record=_record()
-            )
-        )
-    else:
-        profile = LinearRenderProfile(cfg)
-        canvas_config = LinearCanvasConfigurator(
-            num_of_entries=1, longest_genome=1_000, profile=profile, legend=legend_position
-        )
+    profile = LinearRenderProfile(cfg)
+    canvas_config = LinearCanvasConfigurator(
+        num_of_entries=1, longest_genome=1_000, profile=profile, legend=legend_position
+    )
     configurator = _configurator(profile, canvas_config)
     measurement = measure_legend(
         configurator, table, placement=canvas_config.legend_position, wrap_width=canvas_config.total_width
     )
     title_width = drawn_text_box("Pairwise match identity", configurator.font_family, font_size)[0]
-    if measurement.circular_layout is not None:
-        gradient = measurement.circular_layout.gradient
-        assert gradient is not None
-        entry_x = measurement.circular_layout.gradient_x
-        (single,) = gradient.single_entries
-        title_x, bar_x = single.title_x, single.bar_x
-    else:
-        assert measurement.linear_layout is not None
-        active = measurement.linear_layout.active
-        gradient = active.gradient
-        assert gradient is not None
-        entry_x = active.gradient_x
-        (single,) = gradient.entries
-        title_x, bar_x = single.title_x, single.bar_x
-        assert (gradient.min_label_x, gradient.max_label_x) == (bar_x, bar_x + gradient.bar_width)
+    assert measurement.linear_layout is not None
+    active = measurement.linear_layout.active
+    gradient = active.gradient
+    assert gradient is not None
+    entry_x = active.gradient_x
+    (single,) = gradient.entries
+    title_x, bar_x = single.title_x, single.bar_x
+    assert (gradient.min_label_x, gradient.max_label_x) == (bar_x, bar_x + gradient.bar_width)
     assert title_width > gradient.bar_width
     assert gradient.width == title_width
     assert bar_x == (title_width - gradient.bar_width) / 2.0

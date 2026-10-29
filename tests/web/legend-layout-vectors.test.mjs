@@ -88,6 +88,10 @@ const circularResult = (layout) => ({
   numColumns: layout.numColumns,
   numItemsPerLine: layout.numItemsPerLine,
   entries: entries(layout.entries),
+  rings: layout.rings && {
+    ...layout.rings,
+    rows: layout.rings.rows.map(({ key, swatchX, textX, y }) => ({ key, swatchX, textX, y }))
+  },
   gradient: layout.gradient && {
     compact: layout.gradient.compact,
     width: layout.gradient.width,
