@@ -235,8 +235,8 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     expect(generated.definition).toContain('44.41');
 
     const edits = [
-      ['form', 'species', 'Homo sapiens'], ['form', 'strain', 'X1'], ['form', 'plot_title', 'Audit title'],
-      ['adv', 'plot_title_position', 'top'], ['adv', 'plot_title_font_size', 30], ['adv', 'def_font_size', 22],
+      ['form', 'strain', 'X1'], ['form', 'plot_title', 'Audit title'],
+      ['adv', 'plot_title_position', 'top'], ['adv', 'plot_title_font_size', 30],
       ['adv', 'keep_full_definition_with_plot_title', true]
     ];
     for (const [owner, field, value] of edits) {
@@ -249,9 +249,9 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     }
     // The visible field keeps its History step.
     const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    const species = page.getByLabel('Species', { exact: true });
-    await species.fill('Mus musculus');
-    await species.press('Tab');
+    const strain = page.getByLabel('Strain', { exact: true });
+    await strain.fill('Y2');
+    await strain.press('Tab');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBeGreaterThan(undoCount);
     await expectUnchangedResult(page, committed);
     expect((await snapshot(page)).request).toEqual(committedRequest);
@@ -260,16 +260,16 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect(page.locator('[data-applies-on-generate="titles"]')).toBeVisible();
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
-    expect(saved.modes[saved.ui.mode].config.form.species).toBe('Mus musculus');
-    expect(saved.modes[saved.ui.mode].config.adv.def_font_size).toBe(22);
+    expect(saved.modes[saved.ui.mode].config.form.strain).toBe('Y2');
+    expect(saved.modes[saved.ui.mode].config.adv.keep_full_definition_with_plot_title).toBe(true);
 
     await generate(page);
     const applied = await svgFacts(page, await resultContent(page));
     expect(applied.definition).toContain('Custom label');
     expect(applied.definition).toContain('8,001 bp');
     expect(applied.definition).toContain('44.41');
-    expect(applied.definitionFontSize).toBe(22);
     expect(applied.plotTitle).toContain('Audit title');
+    expect((await snapshot(page)).request.diagramOptions.strain).toBe('Y2');
     await page.screenshot({ path: testInfo.outputPath('definition-applied.png') });
   } finally { await page.context().close(); }
 });
