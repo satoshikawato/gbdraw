@@ -26,7 +26,6 @@ export const sessionRollbackPort = async (state, history = null) => {
     restoreHistoryMembers: (members) => { history?.restoreMembers(members); },
     captureDisplayedArtifact: () => artifactPort.captureArtifactSlot(),
     installDisplayedArtifact: (slot) => artifactPort.installArtifactSlot(slot, { drawing: state.drawingOf(slot.drawingId) }),
-    depthTrackUiCounts: { circular: 0 },
     featureListScrollTop: { value: 0 },
     featureListScrollRef: { value: null },
     selectedPairwiseBlockOrthogroupId: { value: '' }
