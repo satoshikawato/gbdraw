@@ -6955,8 +6955,9 @@ export const createAppSetup = () => {
     askScope: async (previous, otherDrawingIds) => {
       const choice = await askChoice({
         title: t('Replace input file?'),
-        description: t('{name} is also used in other drawings ({count}).', {
-          name: previous.name, count: otherDrawingIds.length
+        description: t('{name} is also used in {drawings}.', {
+          name: previous.name,
+          drawings: listText(state.drawingTabs.value.filter((tab) => otherDrawingIds.includes(tab.id)).map((tab) => tab.name))
         }),
         actions: [
           { id: 'drawing', label: t('This drawing only'), tone: 'secondary' },

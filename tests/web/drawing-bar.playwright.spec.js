@@ -383,6 +383,7 @@ test('replacing a genome file that a Duplicate also uses asks for this drawing o
 
   const dialog = page.getByRole('dialog', { name: 'Replace input file?' });
   await uploader.setInputFiles('tests/test_inputs/NC_005856.1.gb');
+  await expect(dialog, 'the dialog names the other drawing').toContainText(`NC_001416.gb is also used in ${await tabName(page, source)}.`);
   await dialog.getByRole('button', { name: 'Every drawing that uses this file', exact: true }).click();
   await expect.poll(() => fileName(copy)).toBe('NC_005856.1.gb');
   expect(await fileName(source), 'both drawings bind the new file').toBe('NC_005856.1.gb');
