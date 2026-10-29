@@ -26,9 +26,11 @@ write-up of a release.
 - Fixed: the Circular legend lists only the similarity rings a slot draws; a
   ring of a disabled `sequence_conservation` slot no longer appears (OV-2167).
 - Fixed: in the Web app, a Legend name that joins another Legend row of the
-  same color now keeps that row where it was after Generate as well, and a
-  feature given a new Legend name apart from the rest of its row shows its new
-  row at once where Generate draws it, instead of last.
+  same color now keeps that row where it was after Generate as well, unless
+  moving the renamed rules would recolor another feature. A feature given a new
+  Legend name apart from the rest of its row now shows its new row at once where
+  Generate draws it, instead of last, when every named color rule is of one
+  feature type.
 
 ## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 

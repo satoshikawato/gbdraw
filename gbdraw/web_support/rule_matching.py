@@ -310,18 +310,19 @@ def _next_table(
     whose Legend row the edit takes whole, a condition not in `in_place` and a
     `hash` row without an anchor or a place go before the kept rows from it on
     instead. With `joins`, the Legend row the edit joins, its first rule is
-    that place for every new row (a `hash` row with an anchor still goes before
-    its anchor), and the `joins.rows` before it go there first, in their order,
-    so the joined row keeps its place (OV-2193)."""
+    that place for every new row that would stand before it (a `hash` row with
+    an anchor still goes before its anchor), and the `joins.rows` before it go
+    there first, in their order, so the joined row keeps its place (OV-2193);
+    a row placed at or after that rule keeps its place."""
     join_at = joins["at"] if joins is not None else len(rules)
     if joins is not None:
-        in_place, row_at = {}, join_at
+        in_place, row_at = {key: at for key, at in in_place.items() if at >= join_at}, join_at
     joined = {position for position in joins["rows"] if position < join_at} if joins is not None else set()
     same_condition = {(row["feat"], row["qual"], row["val"]) for row in conditions}
     placed_at = {in_place[key]: row for row in conditions
                  if (key := (row["feat"], row["qual"], row["val"])) in in_place}
     retired_at = {retired[key][0]: key for key in hash_rows
-                  if joins is None and retired.get(key) and anchors.get(key, len(rules)) > retired[key][0]}
+                  if retired.get(key) and anchors.get(key, len(rules)) > retired[key][0] >= (0 if joins is None else join_at)}
     dropped = {position for rows in retired.values() for position in rows}
     placed_hashes = set(retired_at.values())
     table: list[int | ColorRuleRow] = []

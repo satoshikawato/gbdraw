@@ -948,17 +948,54 @@ test('a whole-row Legend rename asks no rerender, an appended or partial one ask
   assert.equal(rerenders, first + 1, 'Undo and Redo of the rename ask no rerender');
   assert.equal(await actions.commitSpecificRules(() => [tagRule('A', 'gamma'), tagRule('B', 'beta')]), true);
   assert.equal(rerenders, first + 2, 'a rename of part of the row asks Python');
-  // OV-2194: a row split off its row goes right before it when the next
-  // table draws its first rule before the old row's, else right after it.
-  for (const [name, next, placement] of [
-    ['first rule', [tagRule('A', 'delta'), tagRule('B', 'beta')], { caption: 'delta', before: 'beta' }],
-    ['later rule', [tagRule('A', 'beta'), tagRule('B', 'delta')], { caption: 'delta', after: 'beta' }]
+  // OV-2194: a row split off its row goes where Python's Legend draws it
+  // among the listed rule rows: before the first one whose first rule comes
+  // after its own in the next table, else after the last one before it. With
+  // named rules of several feature types (Python groups rule rows by type) the
+  // Web cannot tell, and the commit adds the row.
+  const trnaRule = { feat: 'tRNA', qual: 'product', val: '^tRNA-Gly$', color: '#112233', cap: 'beta' };
+  for (const [name, listed, next, placement] of [
+    ['first rule', ['beta'], [tagRule('A', 'delta'), tagRule('B', 'beta')], { caption: 'delta', before: 'beta' }],
+    ['later rule', ['beta'], [tagRule('A', 'beta'), tagRule('B', 'delta')], { caption: 'delta', after: 'beta' }],
+    ['before another row', ['gamma', 'beta'], [tagRule('A', 'delta'), tagRule('B', 'gamma'), tagRule('A|B', 'beta')],
+      { caption: 'delta', before: 'gamma' }],
+    ['rule rows of two types', ['beta'], [trnaRule, tagRule('A', 'delta'), tagRule('B', 'beta')], null]
   ]) {
     state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A', 'beta'), tagRule('B', 'beta'));
-    state.legendEntries.value = [{ caption: 'beta', color: '#112233' }];
+    state.legendEntries.value = listed.map((caption) => ({ caption, color: '#112233' }));
     assert.equal(await actions.commitSpecificRules(() => next, 'Rename legend item',
-      { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', beside: true } }), true, name);
+      { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', inLegendOrder: true } }), true, name);
     assert.deepEqual(placements.at(-1), placement, name);
+  }
+  // A rule captioned like a renderer row of another color (Python's row
+  // `CDS [#ff0000]` beside the drawn `CDS` row of B) is a row
+  // `legendRuleOrder` does not key, so the Web cannot tell where Python draws
+  // the split row, and the commit adds it (review N1 of #1468).
+  const redCds = { feat: 'CDS', qual: 'locus_tag', val: '^(Q)$', color: '#ff0000', cap: 'CDS' };
+  state.manualSpecificRules.splice(0, state.manualSpecificRules.length, tagRule('A|Y', 'beta'), redCds);
+  state.legendEntries.value = [{ caption: 'beta', color: '#112233' }, { caption: 'CDS [#ff0000]', color: '#ff0000' },
+    { caption: 'CDS', originalCaption: 'CDS', color: '#808080' }];
+  const shownSvg = state.svgContainer;
+  state.originalLegendOrder = { value: ['beta', 'CDS [#ff0000]', 'CDS'] };
+  state.svgContainer = mounted([['beta', '#112233'], ['CDS [#ff0000]', '#ff0000'], ['CDS', '#808080']]);
+  assert.equal(await actions.commitSpecificRules(() => [tagRule('Y', 'beta'), redCds, tagRule('A', 'delta')], 'Rename legend item',
+    { legendPlacement: { name: 'delta', color: '#112233', at: 'beta', inLegendOrder: true } }), true, 'renderer row');
+  assert.deepEqual(placements.at(-1), null, 'a rule row keyed apart from the renderer row');
+  state.svgContainer = shownSvg;
+  delete state.originalLegendOrder;
+  // OV-2193 (review L3 of #1467): the rule owner's `reviseColorRules`, the
+  // Legend editor's rename. Rules renamed onto a listed row move just before
+  // its first rule; a move that would change the rule coloring a feature
+  // leaves them in place (OV-2248, for the Owner).
+  const revise = (row, patch) => ({ ...row, ...patch });
+  for (const [name, delta, table] of [
+    ['moved', '^(B)$', [['^(B)$', 'delta'], ['^(A)$', 'alpha'], ['^(Z)$', 'alpha']]],
+    ['kept in place (OV-2248)', '^(A|B)$', [['^(A)$', 'alpha'], ['^(A|B)$', 'delta'], ['^(Z)$', 'alpha']]]
+  ]) {
+    const rows = [tagRule('A', 'beta'), { ...tagRule('B', 'delta'), val: delta, color: '#445566' }, tagRule('Z', 'alpha')];
+    state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...rows);
+    const next = await actions.reviseColorRules([rows[0]], { cap: 'alpha', color: '#112233' }, 'alpha')([...rows], revise);
+    assert.deepEqual(next.map(({ val, cap }) => [val, cap]), table, name);
   }
 });
 

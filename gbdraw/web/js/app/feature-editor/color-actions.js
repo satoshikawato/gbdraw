@@ -853,11 +853,11 @@ export const createFeatureColorActions = ({
         previousLegendIntents: retireOld && oldEntry ? [{ caption: request.sourceKey, color: listedRowColor(drawing, oldEntry) }] : [],
         // A row that joins another row keeps that row's place.
         // Features that Keep both split off go right after the target row (D-29);
-        // other features split off their row go next to it, on the side where
-        // Python draws them (OV-2194, Owner 2026-10-29).
+        // other features split off their row go where Python's Legend draws
+        // them, when the Web can tell that place (OV-2194, Owner 2026-10-29).
         legendPlacement: retireOld && oldEntry ? { name: caption, color, at: request.sourceKey, replaces: true }
           : request.keepBothAfter ? { name: caption, color, at: request.keepBothAfter }
-            : oldEntry && features.length > 0 && !joins ? { name: caption, color, at: request.sourceKey, beside: true } : null,
+            : oldEntry && features.length > 0 && !joins ? { name: caption, color, at: request.sourceKey, inLegendOrder: true } : null,
         afterCommit: () => {
           const committedCaptionOf = effectiveLegendCaptions();
           for (const feature of features) updateClickedFeatureLegendState(feature, committedCaptionOf(feature), color);

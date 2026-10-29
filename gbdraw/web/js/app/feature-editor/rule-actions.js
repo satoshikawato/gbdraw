@@ -78,12 +78,12 @@ import {
  * A Legend row a rule commit draws, named by its name and color (the commit
  * allocates its key), and where it goes: with `replaces`, in the place of the
  * row of key `at`, which it replaces with every record stored under that key
- * (a whole row renamed, OV-158); with `beside`, right before the row of key
- * `at` when the next rule table draws the row's first rule before that row's,
- * else right after it, as Python's Legend draws it (a row split off its row
- * `at`, OV-2194); else right after the row of key `at` (a row split off by
- * Keep both, D-29).
- * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean, beside?: boolean }} LegendPlacement
+ * (a whole row renamed, OV-158); with `inLegendOrder`, where Python's Legend
+ * draws it among the listed rule rows, when the Web can tell that place (a row
+ * split off its row `at`, OV-2194; `splitRowPlacement`), else where the commit
+ * adds it; else right after the row of key `at` (a row split off by Keep both,
+ * D-29).
+ * @typedef {{ name: string, color: string, at: PythonLegendKey, replaces?: boolean, inLegendOrder?: boolean }} LegendPlacement
  */
 
 /**
@@ -225,7 +225,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
       previousIntents: [...drawnRuleRows, ...takenRows, ...retiredLegendIntents],
       ownedCaptions: new Set([...ruleRows, ...takenRows, ...retiredLegendIntents].map(intent => intent.caption)),
       removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption)),
-      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows)
+      rekeyed: rekeyedRuleRows(drawing.manualSpecificRules, candidateRules, rendererRows),
+      rendererRows
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A), narrowed by R14-8 (U3a 1d):
@@ -484,6 +485,41 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
         || (state.labelReflowProcessing?.value ? rerenderIdle().then(prepare) : prepare())];
     }, commit, () => (appliedWrites !== writes ? runWithRuleMatches(rules, commit) : undefined));
   };
+  // OV-2194: where Python's Legend draws a row split off its row, among the
+  // listed rule rows: before the first one it draws after it, else after the
+  // last one it draws before it; null where the Web cannot tell, and the
+  // commit adds the row. The place is read from `legendRuleOrder`, the Web's
+  // twin of `prepare_legend_table`'s rule-row order (the first rule of each
+  // row in table order). Python groups rule rows by feature type, which the
+  // twin does not, so it is read only when every named rule of the next
+  // table is of one feature type, and only when the twin keys every rule row
+  // as the commit does (not a rule captioned like a renderer row of another
+  // color, which the commit keys `X [#fill]`).
+  /**
+   * @param {DrawingState} drawing
+   * @param {readonly Partial<SpecificColorRule>[]} rules The next table.
+   * @param {PythonLegendKey} key The split row's key.
+   * @param {ReadonlyMap<PythonLegendKey, PythonLegendKey>} rekeyed Listed rows the commit gives a new key.
+   * @param {import('../../services/specific-color-rules.js').RendererLegendRow[]} rendererRows The rows the commit keys rule rows beside.
+   * @returns {import('../legend/entry-actions.js').LegendRowPlacement | null}
+   */
+  const splitRowPlacement = (drawing, rules, key, rekeyed, rendererRows) => {
+    const captioned = rules.filter((rule) => String(rule.cap ?? '').trim());
+    const types = new Set(captioned.map((rule) => rule.feat));
+    if (types.size !== 1 || types.has('*')) return null;
+    const order = legendRuleOrder(rules);
+    const commitKey = createRuleLegendCaptions(rules, rendererRows);
+    if (captioned.some((rule) => order(commitKey(rule)) < 0)) return null;
+    const at = order(key);
+    if (at < 0) return null;
+    const listed = (drawing.legendEntries.value || [])
+      .map((/** @type {KeptLegendRow} */ entry) => rekeyed.get(legendEntryKey(entry)) ?? legendEntryKey(entry))
+      .filter((listedKey) => listedKey !== key && order(listedKey) >= 0);
+    const after = listed.find((listedKey) => order(listedKey) > at);
+    if (after) return { caption: key, before: after };
+    const before = listed.filter((listedKey) => order(listedKey) < at).at(-1);
+    return before ? { caption: key, after: before } : null;
+  };
   /**
    * @param {DrawingState} drawing
    * @param {Partial<SpecificColorRule>[]} rules
@@ -497,7 +533,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const current = () => !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, ownedCaptions, removedRuleRows, rekeyed, rendererRows } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     // The placed row is the intent of its name and color, by the key the
     // commit allocates to it (`X [<fill>]` while another row shows `X`).
     /** @type {PythonLegendKey | undefined} */
@@ -507,16 +543,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, move
     const replaced = new Map(placedKey && legendPlacement?.replaces && placedKey !== legendPlacement.at ? [[legendPlacement.at, placedKey]] : []);
     // The rows the Legend owner keeps in their place under a new key (OV-645, OV-1235).
     const inPlace = new Map([...rekeyed, ...replaced]);
-    // A row split off goes on the side of its old row where the next table's
-    // rules put it in Python's Legend (`legendRuleOrder`); a row without a rule there
-    // goes where the commit adds it.
-    const ruleOrder = legendPlacement?.beside ? legendRuleOrder(candidate.rules) : null;
-    const [splitAt, oldAt] = ruleOrder && placedKey && legendPlacement
-      ? [ruleOrder(placedKey), ruleOrder(rekeyed.get(legendPlacement.at) ?? legendPlacement.at)] : [-1, -1];
     const placement = !placedKey || !legendPlacement || legendPlacement.replaces ? null
-      : !legendPlacement.beside ? { caption: placedKey, after: legendPlacement.at }
-        : splitAt < 0 || oldAt < 0 ? null
-          : splitAt < oldAt ? { caption: placedKey, before: legendPlacement.at } : { caption: placedKey, after: legendPlacement.at };
+      : legendPlacement.inLegendOrder ? splitRowPlacement(drawing, candidate.rules, placedKey, rekeyed, rendererRows)
+        : { caption: placedKey, after: legendPlacement.at };
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some((/** @type {KeptLegendRow} */ entry) => (entry.originalCaption || entry.caption) === intent.caption)), {
       drawing,

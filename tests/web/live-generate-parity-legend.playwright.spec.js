@@ -2144,3 +2144,33 @@ for (const [name, rules, legend] of [
     await expectLiveEqualsGenerate(page, { label: `a popup Legend name split off a row through ${name}` });
   });
 }
+
+// The same split off a row of a broader pattern: Python writes the feature's
+// exact condition before the first rule of its type and qualifier, so Generate
+// draws the new row first; the commit shows it there too (review L1 of #1467).
+test('a popup Legend name split off a row of a broader pattern shows the new row in Generate\'s place (OV-2194)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'linear', results: 'single', reflow: 'off' });
+  await addColorRule(page, DELTA);
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^dup', color: '#2a9d8f', cap: 'beta' });
+  await addColorRule(page, { feat: 'CDS', qual: 'product', val: '^alpha protein$', color: '#e63946', cap: 'alpha' });
+  await generate(page);
+  const legend = ['gamma', 'delta', 'beta', 'alpha', 'repeat_region'];
+  const shown = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.product === 'dup alpha'), null);
+    await window.Vue.nextTick();
+    app.clickedFeature.legendName = 'gamma';
+    await app.handleLegendNameCommit();
+    await app.handleLegendRenameChoice('single');
+    const svg = app.svgContainer.querySelector('svg');
+    return {
+      editor: app.legendEntries.map((entry) => entry.caption),
+      drawn: [...new Set([...svg.querySelectorAll('g[data-legend-key]')].map((group) => group.getAttribute('data-legend-key')))]
+    };
+  });
+  expect(shown, 'the rows the commit shows before Python redraws them').toEqual({ editor: legend, drawn: legend });
+  await settleLive(page);
+  expect((await semanticSnapshot(page)).legend.map((row) => row.caption), 'the live Legend order').toEqual(legend);
+  await expectLiveEqualsGenerate(page, { label: 'a popup Legend name split off a row of a broader pattern' });
+});
