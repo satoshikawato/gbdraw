@@ -1670,16 +1670,24 @@ const requestComparisonHeight = (adv) => {
  * The Linear definition row styles as config overrides: each of the 15
  * leaves (five rows, three fields), null where the row does not set it.
  * The draft holds what the row inputs store (the Size input stores its text);
- * `requireDefinitionLineFontSizes` reads it for Generate and the live apply alike,
- * and a font size the engine refuses fails here (PD-OI-081, OV-1270, OV-2244).
+ * each font size is the number `requireDefinitionLineFontSizes` reads, for
+ * Generate and the live apply alike, and a font size the engine refuses fails
+ * here (PD-OI-081, OV-1270, OV-2244). Weight and Color go as stored: a lifted
+ * legacy request keeps its `normal` weight (legacy-request-load record).
  * @param {Record<string, unknown>} adv
- * @returns {Record<string, string | number | null>}
+ * @returns {Record<string, unknown>}
  */
 const linearDefinitionStyleOverrides = (adv) => {
-  const styles = requireDefinitionLineFontSizes(adv.linear_definition_line_styles);
-  return Object.fromEntries(DEFINITION_LINE_STYLE_KINDS.flatMap((kind) => LINEAR_DEFINITION_STYLE_FIELDS.map((field) => (
-    [`${LINEAR_DEFINITION_STYLE_PATHS[kind]}.${field}`, styles[kind][field]]
-  ))));
+  const stored = adv.linear_definition_line_styles;
+  const sizes = requireDefinitionLineFontSizes(stored);
+  return Object.fromEntries(DEFINITION_LINE_STYLE_KINDS.flatMap((kind) => {
+    const style = isPlainObject(stored) ? stored[kind] : undefined;
+    const fields = isPlainObject(style) ? style : {};
+    return LINEAR_DEFINITION_STYLE_FIELDS.map((field) => [
+      `${LINEAR_DEFINITION_STYLE_PATHS[kind]}.${field}`,
+      field === 'font_size' ? sizes[kind].font_size : fields[field] ?? null
+    ]);
+  }));
 };
 /**
  * The Circular multi-record canvas layout, field by field. The draft keys each

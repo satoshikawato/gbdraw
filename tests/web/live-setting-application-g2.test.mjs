@@ -298,7 +298,11 @@ test('a Linear row style the inputs store as text applies as Generate sends it (
     const sizes = { name: ['22', 22], subtitle: ['9.5', 9.5], replicon: ['11', 11], accession: [' 8.25 ', 8.25], length: ['30', 30] };
     assert.deepEqual(Object.keys(sizes), [...DEFINITION_LINE_STYLE_KINDS]);
     set(drawing.adv, 'linear_definition_line_styles', Object.fromEntries(
-      DEFINITION_LINE_STYLE_KINDS.map((kind) => [kind, { font_size: sizes[kind][0], font_weight: kind === 'subtitle' ? 'bold' : null, fill: kind === 'subtitle' ? '#123456' : null }])
+      DEFINITION_LINE_STYLE_KINDS.map((kind) => [kind, {
+        font_size: sizes[kind][0],
+        font_weight: { subtitle: 'bold', replicon: 'normal' }[kind] ?? null,
+        fill: kind === 'subtitle' ? '#123456' : null
+      }])
     ));
     const live = applied(committed, project(committed, 'linear', [STYLES])).renderRequest.diagramOptions.configOverrides;
     const key = (kind, field) => `objects.definition.linear.line_styles.${kind}.${field}`;
@@ -307,6 +311,8 @@ test('a Linear row style the inputs store as text applies as Generate sends it (
     }
     assert.equal(live[key('subtitle', 'font_weight')], 'bold');
     assert.equal(live[key('subtitle', 'fill')], '#123456');
+    // Only the size is read: a stored weight goes as stored, as a lifted legacy request holds it.
+    assert.equal(live[key('replicon', 'font_weight')], 'normal');
     set(drawing.adv, 'linear_definition_line_styles', { name: { font_size: '-1', font_weight: null, fill: null } });
     assert.throws(() => project(committed, 'linear', [STYLES]), (error) => (
       error.code === 'INPUT_INVALID' && error.context?.configPath === key('name', 'font_size')
