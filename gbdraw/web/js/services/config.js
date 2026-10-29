@@ -3518,6 +3518,17 @@ export const setPreviewRuntime = (ports) => {
  * @property {number} [subjectIndex]
  */
 /**
+ * The one write of the project's cache-info rows from a pass over them (a filter, a reindex, a clear). Rows equal
+ * one by one keep the array: every drawing's generated artifact names it by reference in its transport identity
+ * (`currentArtifactMatchesIdentity`), so replacing it unchanged would drop that identity in every drawing (OV-2210).
+ * @param {LosatCacheInfoEntry[]} next
+ */
+export const writeLosatCacheInfo = (next) => {
+  const current = state.losatCacheInfo.value;
+  if (Array.isArray(current) && current.length === next.length && next.every((entry, index) => entry === current[index])) return;
+  state.losatCacheInfo.value = next;
+};
+/**
  * The fields of a cache-info row that name a linear pair's comparison edge.
  * @typedef {Omit<LosatCacheInfoEntry, 'key' | 'filename' | 'display'>} LosatCacheInfoIdentity
  */
