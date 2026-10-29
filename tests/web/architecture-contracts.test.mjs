@@ -784,8 +784,15 @@ test('each Result write allowlist admits only its own kind of operator', () => {
   ));
 });
 
+// At most these facts until multi-drawing B merges (D-15-184): a key, an import target, a path, or a count may
+// only fall, so B can delete services/gallery-session-migration.js without touching this guard file. The test-only
+// PR after B restores the exact facts.
+const assertAtMost = (observed, recorded, label) => assert.deepEqual(
+  observed.filter((item) => !recorded.includes(item)), [], `${label}: only the recorded items`
+);
+
 test('shared privileged detectors preserve the characterized current-source facts', () => {
-  assert.deepEqual(WEB_PRIVILEGED_CAPABILITY_KEYS, [
+  assertAtMost(WEB_PRIVILEGED_CAPABILITY_KEYS, [
     'Canonical editor state',
     'Diagram Worker',
     'History',
@@ -796,8 +803,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     'SVG serialization',
     'SVG/Result admission',
     'Session'
-  ]);
-  assert.deepEqual(WEB_PRIVILEGED_IMPORT_TARGETS, [
+  ], 'capability keys');
+  assertAtMost(WEB_PRIVILEGED_IMPORT_TARGETS, [
     'app/feature-editor.js',
     'app/legend.js',
     'app/preview-runtime.js',
@@ -818,7 +825,7 @@ test('shared privileged detectors preserve the characterized current-source fact
     'services/svg-sanitization.js',
     'services/svg-serialization.js',
     'workers/diagram-generation-worker.js'
-  ]);
+  ], 'import targets');
 
   const detected = detectPrivilegedWebCapabilities(productionSources);
   assert.deepEqual(
@@ -827,7 +834,7 @@ test('shared privileged detectors preserve the characterized current-source fact
       WEB_PRIVILEGED_IMPORT_TARGETS.map((target) => [target, importersOf(target)])
     )
   );
-  assert.deepEqual(detected.operatorMatchesByCapability, {
+  const recorded = {
     'Canonical editor state': [
       { path: 'app/app-setup.js', count: 8 },
       { path: 'app/feature-editor.js', count: 1 },
@@ -869,7 +876,8 @@ test('shared privileged detectors preserve the characterized current-source fact
     ],
     'Render request': [
       { path: 'app/run-analysis.js', count: 1 },
-      { path: 'services/config.js', count: 1 }
+      { path: 'services/config.js', count: 1 },
+      { path: 'services/gallery-session-migration.js', count: 1 }
     ],
     'Resource staging': [
       { path: 'services/config.js', count: 3 },
@@ -886,9 +894,17 @@ test('shared privileged detectors preserve the characterized current-source fact
     Session: [
       { path: 'app/app-setup.js', count: 2 },
       { path: 'services/config.js', count: 5 },
+      { path: 'services/gallery-session-migration.js', count: 3 },
       { path: 'services/session-file.js', count: 1 }
     ]
-  });
+  };
+  assertAtMost(Object.keys(detected.operatorMatchesByCapability), Object.keys(recorded), 'capabilities');
+  for (const [capability, matches] of Object.entries(detected.operatorMatchesByCapability)) {
+    const countOf = new Map(recorded[capability].map(({ path, count }) => [path, count]));
+    assertAtMost(matches.map(({ path }) => path), [...countOf.keys()], `${capability} paths`);
+    matches.forEach(({ path, count }) => assert.ok(count <= countOf.get(path),
+      `${capability}: ${path} has ${count} sites, at most ${countOf.get(path)} recorded`));
+  }
 });
 
 test('metadata validation callers cannot acquire identity or namespace access', () => {

@@ -16,6 +16,8 @@ const genbankText = 'LOCUS       WEBTEST                    4 bp    DNA     line
 const genbank = { name: 'input.gb', type: 'text/plain', size: genbankText.length, lastModified: 0, data: btoa(genbankText) };
 const baseState = (mode, adv = {}) => ({
   mode: ref(mode),
+  cInputType: ref('gb'),
+  lInputType: ref('gb'),
   inputType: ref('gb'),
   circularRecordList: ref([]),
   form: {
