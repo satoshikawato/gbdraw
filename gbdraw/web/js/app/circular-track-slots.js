@@ -11,9 +11,11 @@ import {
   safeConservationSlotId
 } from '../services/conservation-series.js';
 import {
+  DEPTH_FILES_CHANGE,
   isDefaultManagedDepthSlot,
   reconcileManagedDepthSlots,
-  representativeDepthFiles
+  representativeDepthFiles,
+  showDepthAfterSourceChange
 } from '../services/depth-track-state.js';
 import { MODE_PROFILE_DATA } from '../mode-profiles.generated.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -1010,13 +1012,18 @@ export const createCircularTrackSlotEditor = ({
   // another drawing keeps that drawing's Show Depth (PD-OI-090, D-15-183).
   // The other mode's drawing is not touched (OV-101).
   /** @param {DrawingState} drawing @param {() => unknown} mutate @param {DepthSourceChange} [change] */
-  const changeCircularDepthSources = (drawing, mutate, { setsFile } = { setsFile: false }) => {
+  const changeCircularDepthSources = (drawing, mutate, change = DEPTH_FILES_CHANGE) => {
     const previousSourced = circularSourcedDepthTrackIndexes(drawing);
     mutate();
-    reconcileCircularDepthSlots(drawing, previousSourced);
-    const sourced = circularSourcedDepthTrackIndexes(drawing).length > 0;
-    if (previousSourced.length > 0 !== sourced) drawing.form.show_depth = sourced;
-    else if (sourced && setsFile && drawing.id === state.activeDrawing().id) drawing.form.show_depth = true;
+    // Adding or removing a series reindexes the stack in its own `mutate`.
+    if (change.series === 'same') reconcileCircularDepthSlots(drawing, previousSourced);
+    const show = showDepthAfterSourceChange({
+      wasSourced: previousSourced.length > 0,
+      isSourced: circularSourcedDepthTrackIndexes(drawing).length > 0,
+      inShownDrawing: drawing.id === state.activeDrawing().id,
+      change
+    });
+    if (show !== null) drawing.form.show_depth = show;
   };
 
   /** @param {DrawingState} drawing */

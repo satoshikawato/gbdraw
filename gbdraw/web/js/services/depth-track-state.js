@@ -28,10 +28,29 @@ import { normalizeOptionalText } from './track-slot-display.js';
 /**
  * What a Depth source change does, as its writer states it: `setsFile` when
  * it puts a file into a slot (an upload or a replacement), not when it clears
- * one or changes the records. The Depth source change owner of each editor
- * reads it to decide Show Depth.
- * @typedef {{ readonly setsFile: boolean }} DepthSourceChange
+ * one or changes the records; `series` when the change adds or removes a
+ * Depth series (its writer reindexes the track stack itself). The Depth
+ * source change owner of each editor reads it to decide Show Depth.
+ * @typedef {{ readonly setsFile: boolean, readonly series: 'same' | 'added' | 'removed' }} DepthSourceChange
  */
+
+/** A change of files or records that adds or removes no series. @type {DepthSourceChange} */
+export const DEPTH_FILES_CHANGE = Object.freeze({ setsFile: false, series: 'same' });
+
+/**
+ * The drawing's Show Depth after a Depth source change, or null to keep it:
+ * on with the first file, off with the last (OV-82), on when a series is
+ * added while files exist, off when a series is removed and no file is left,
+ * and on when the change sets a file in the shown drawing. The one rule of
+ * both editors' Depth source change owners.
+ * @param {{ wasSourced: boolean, isSourced: boolean, inShownDrawing: boolean, change: DepthSourceChange }} input
+ * @returns {boolean | null}
+ */
+export const showDepthAfterSourceChange = ({ wasSourced, isSourced, inShownDrawing, change }) => {
+  if (wasSourced !== isSourced) return isSourced;
+  if (!isSourced) return change.series === 'removed' ? false : null;
+  return change.series === 'added' || (change.setsFile && inShownDrawing) ? true : null;
+};
 
 /**
  * A Depth series config as a draft or a Session holds it: every field is unvalidated.

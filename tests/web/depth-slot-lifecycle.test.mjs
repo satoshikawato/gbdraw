@@ -241,14 +241,45 @@ for (const [mode, adapter] of Object.entries(MODES)) {
   test(`${mode}: a Depth file set in the shown drawing turns Show Depth on; another drawing keeps it off`, () => {
     const shown = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
     shown.state.form.show_depth = false;
-    shown.change([0], 1, { setsFile: true });
+    shown.change([0], 1, { setsFile: true, series: 'same' });
     assert.equal(shown.state.form.show_depth, true, 'the shown drawing\'s own upload into slot 0 again');
 
     const copy = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
     copy.state.form.show_depth = false;
     Object.defineProperty(copy.state, 'activeDrawing', { value: () => ({ id: 'circular-c', mode }), configurable: true });
-    copy.change([0], 1, { setsFile: true });
+    copy.change([0], 1, { setsFile: true, series: 'same' });
     assert.equal(copy.state.form.show_depth, false, '"C copy" written by the replacement from C');
+  });
+}
+
+// Adding or removing a series states `series` in the change; the Depth source
+// change owner alone sets Show Depth from it (no writer outside the owners).
+for (const [mode, adapter] of Object.entries(MODES)) {
+  test(`${mode}: adding a series while files exist turns Show Depth on; with none it stays off`, () => {
+    const withFile = adapter.create([{ id: 'depth', track: 0 }], [0], 1);
+    withFile.state.form.show_depth = false;
+    withFile.change([0], 1, { setsFile: false, series: 'added' });
+    assert.equal(withFile.state.form.show_depth, true);
+
+    const none = adapter.create([], [], 1);
+    none.state.form.show_depth = false;
+    none.change([], 2, { setsFile: false, series: 'added' });
+    assert.equal(none.state.form.show_depth, false);
+  });
+
+  test(`${mode}: removing a series turns Show Depth off when no file is left, and keeps it with files`, () => {
+    const emptied = adapter.create([], [], 1);
+    emptied.state.form.show_depth = true;
+    emptied.change([], 1, { setsFile: false, series: 'removed' });
+    assert.equal(emptied.state.form.show_depth, false, 'no file left, with or without a transition');
+
+    const kept = adapter.create([{ id: 'depth', track: 0 }], [0, 1], 2);
+    kept.state.form.show_depth = true;
+    kept.change([0], 1, { setsFile: false, series: 'removed' });
+    assert.equal(kept.state.form.show_depth, true);
+    kept.state.form.show_depth = false;
+    kept.change([0], 1, { setsFile: false, series: 'removed' });
+    assert.equal(kept.state.form.show_depth, false, 'a removal does not turn it on');
   });
 }
 

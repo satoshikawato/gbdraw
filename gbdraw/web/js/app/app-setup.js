@@ -2867,7 +2867,7 @@ export const createAppSetup = () => {
           row[idx] = ref;
         });
         bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', rows.map((row) => compactDepthFileSlots(row)));
-      }, { setsFile: ref !== null });
+      }, { setsFile: ref !== null, series: 'same' });
       if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };
@@ -2901,7 +2901,7 @@ export const createAppSetup = () => {
             seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
           }
         });
-      }, { setsFile: ref !== null });
+      }, { setsFile: ref !== null, series: 'same' });
       if (ref) updateDepthTrackLabelFromFile(drawing, idx, ref, previousFiles);
     });
   };
@@ -2925,13 +2925,13 @@ export const createAppSetup = () => {
   );
   const addCircularDepthTrack = () => shownAction('circular', (drawing) => {
     ensureDepthTrackConfigCount(drawing, circularDepthTrackCount(drawing) + 1);
-    retireLegendStylesOfUnnamedCaptions(drawing, () => { if (circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
+    retireLegendStylesOfUnnamedCaptions(drawing, () => circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {}, { setsFile: false, series: 'added' }));
   });
   const addLinearDepthTrack = () => shownAction('linear', (drawing) => {
     const nextCount = linearDepthTrackUiCount(drawing) + 1;
     padLinearDepthRows(drawing, nextCount);
     ensureDepthTrackConfigCount(drawing, nextCount);
-    retireLegendStylesOfUnnamedCaptions(drawing, () => { if (linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = true; });
+    retireLegendStylesOfUnnamedCaptions(drawing, () => linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {}, { setsFile: false, series: 'added' }));
   });
   /** @param {number} index */
   const removeCircularDepthTrack = (index) => shownAction('circular', (drawing) => {
@@ -2939,35 +2939,35 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(drawing, () => {
-      const previousFiles = circularDepthRepresentatives(drawing);
-      bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', removeDepthTrackColumnAt(circularDepthRows(drawing), idx)
-        .map((row) => compactDepthFileSlots(row)));
-      if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
-      // Show Depth goes off with the drawing's last Depth source (OV-82).
-      if (!circularDrawingHasDepthFiles(drawing)) drawing.form.show_depth = false;
-      refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(drawing), idx);
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
-      const activeFileCount = circularDepthRepresentatives(drawing).length;
-      // The removed series' rows before the Axis lower its index, as in Linear,
-      // so no other row crosses the Axis (R10).
-      const axis = drawing.adv.circular_track_slots_axis_index;
-      const removedBeforeAxis = Number.isInteger(axis)
-        ? drawing.adv.circular_track_slots.slice(0, axis)
-          .filter((/** @type {CircularTrackSlot} */ slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
-        : 0;
-      drawing.adv.circular_track_slots.splice(
-        0,
-        drawing.adv.circular_track_slots.length,
-        ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
-          slots: drawing.adv.circular_track_slots,
-          removedIndex: idx,
-          activeCount: activeFileCount,
-          managedPredicate: isDefaultManagedDepthSlot
-        }))
-      );
-      if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
-      syncDepthTrackSlotLabelsForTrack(drawing, idx);
-      circularTrackSlotEditor.normalizeCircularTrackSlots(drawing);
+      circularTrackSlotEditor.changeCircularDepthSources(drawing, () => {
+        const previousFiles = circularDepthRepresentatives(drawing);
+        bindDrawingInputFileTree(state.inputFiles, drawing.slices.inputs, 'c_depth', removeDepthTrackColumnAt(circularDepthRows(drawing), idx)
+          .map((row) => compactDepthFileSlots(row)));
+        if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
+        refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(drawing), idx);
+        ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
+        const activeFileCount = circularDepthRepresentatives(drawing).length;
+        // The removed series' rows before the Axis lower its index, as in Linear,
+        // so no other row crosses the Axis (R10).
+        const axis = drawing.adv.circular_track_slots_axis_index;
+        const removedBeforeAxis = Number.isInteger(axis)
+          ? drawing.adv.circular_track_slots.slice(0, axis)
+            .filter((/** @type {CircularTrackSlot} */ slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
+          : 0;
+        drawing.adv.circular_track_slots.splice(
+          0,
+          drawing.adv.circular_track_slots.length,
+          ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
+            slots: drawing.adv.circular_track_slots,
+            removedIndex: idx,
+            activeCount: activeFileCount,
+            managedPredicate: isDefaultManagedDepthSlot
+          }))
+        );
+        if (removedBeforeAxis) drawing.adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+        syncDepthTrackSlotLabelsForTrack(drawing, idx);
+        circularTrackSlotEditor.normalizeCircularTrackSlots(drawing);
+      }, { setsFile: false, series: 'removed' });
     });
   });
   /** @param {number} index */
@@ -2978,40 +2978,40 @@ export const createAppSetup = () => {
     if (idx >= logicalWidth) return;
     // Removing a series retires the Legend styles of its rows (OV-65).
     retireLegendStylesOfUnnamedCaptions(drawing, () => {
-      const nextRows = removeDepthTrackColumnAt(linearDepthRows(drawing), idx);
-      drawing.linearSeqs.forEach((seq, recordIndex) => {
-        seq.depth = nextRows[recordIndex] || [];
-      });
-      if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
-      // Show Depth goes off with the drawing's last Depth source (OV-82).
-      if (!linearDrawingHasDepthFiles(drawing)) drawing.form.show_depth = false;
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
-      const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
-      const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
-        ? drawing.adv.linear_track_slots.reduce((/** @type {number} */ count, /** @type {LinearTrackSlot} */ slot, /** @type {number} */ slotIndex) => {
-            if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
-            return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
-          }, 0)
-        : 0;
-      drawing.adv.linear_track_slots.splice(
-        0,
-        drawing.adv.linear_track_slots.length,
-        ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
-          slots: drawing.adv.linear_track_slots,
-          removedIndex: idx,
-          activeCount: Math.max(0, logicalWidth - 1),
-          managedPredicate: isDefaultManagedDepthSlot
-        }))
-      );
-      if (Number.isInteger(previousAxisIndex)) {
-        drawing.adv.linear_track_slots_axis_index = Math.max(
+      linearTrackSlotEditor.changeLinearDepthSources(drawing, () => {
+        const nextRows = removeDepthTrackColumnAt(linearDepthRows(drawing), idx);
+        drawing.linearSeqs.forEach((seq, recordIndex) => {
+          seq.depth = nextRows[recordIndex] || [];
+        });
+        if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
+        ensureDepthTrackConfigCount(drawing, activeDepthTrackCount(drawing));
+        const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
+        const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
+          ? drawing.adv.linear_track_slots.reduce((/** @type {number} */ count, /** @type {LinearTrackSlot} */ slot, /** @type {number} */ slotIndex) => {
+              if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
+              return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
+            }, 0)
+          : 0;
+        drawing.adv.linear_track_slots.splice(
           0,
-          previousAxisIndex - removedManagedSlotCountBeforeAxis
+          drawing.adv.linear_track_slots.length,
+          ...reindexDepthSlots(/** @type {ReindexDepthSlotsOptions} */ ({
+            slots: drawing.adv.linear_track_slots,
+            removedIndex: idx,
+            activeCount: Math.max(0, logicalWidth - 1),
+            managedPredicate: isDefaultManagedDepthSlot
+          }))
         );
-      }
-      syncDepthTrackSlotLabelsForTrack(drawing, 0);
-      linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
-      linearTrackSlotEditor.normalizeLinearTrackSlots();
+        if (Number.isInteger(previousAxisIndex)) {
+          drawing.adv.linear_track_slots_axis_index = Math.max(
+            0,
+            previousAxisIndex - removedManagedSlotCountBeforeAxis
+          );
+        }
+        syncDepthTrackSlotLabelsForTrack(drawing, 0);
+        linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
+        linearTrackSlotEditor.normalizeLinearTrackSlots();
+      }, { setsFile: false, series: 'removed' });
     });
   });
   // Each drawing holds a series for each of its own mode's Depth sources. A
