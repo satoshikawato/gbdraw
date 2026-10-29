@@ -165,8 +165,9 @@ const changedSlices = (before, after, drawingId) => Object.keys(before.drawings[
 // What the next step may use: the features of the displayed Result, each by
 // an identity that survives a reboot (`key`: `walkFeatureKey`, the record's
 // position and the biological feature ID; two features with the same span and
-// qualifiers have two), sorted by a readable `label`; the Legend rows by their
-// key (`legendEntryKey`, Python's key of the row); the editor lists; and the
+// qualifiers have two), sorted by a readable `label`; the listed and the deleted
+// Legend rows by their key (`legendEntryKey`, Python's key of the row); the
+// editor lists; and the
 // History and Result state. Undo is
 // available above the drawing's floor, its History depth after its first
 // Generate (or after a Load): Undo of that Generate leaves no Result to compare.
@@ -193,7 +194,7 @@ const readState = (page) => page.evaluate(async () => {
     visibilityRules: app.featureVisibilityManualRules.length,
     colorRules: app.manualSpecificRules.length,
     legend: app.legendEntries.map(legendEntryKey),
-    deletedLegend: app.deletedLegendEntries.length,
+    deletedLegend: app.deletedLegendEntries.map(legendEntryKey),
     palettes: app.paletteNames.filter((name) => name !== app.selectedPalette),
     depth: app.mode === 'linear' ? Boolean(app.linearSeqs[0]?.depth?.[0]) : Boolean(app.files.c_depth?.[0]?.[0]),
     undoDepth: history.getUndoCount(),
@@ -205,7 +206,7 @@ const readState = (page) => page.evaluate(async () => {
 // { kind, ...arguments }. `picks` answers the dialogs the edit opens, in the
 // order they open. A kind whose subject is missing first runs the step that
 // makes one (`prepare`), in the same step.
-const nextStep = (random, state, kind, { fixture, canUndo }) => {
+export const nextStep = (random, state, kind, { fixture, canUndo }) => {
   const features = state.features;
   const tagged = features.filter((feature) => feature.tag);
   const feature = () => random.pick(features).key;
@@ -214,7 +215,13 @@ const nextStep = (random, state, kind, { fixture, canUndo }) => {
     return { target, value: random.next() < 0.5 ? `^${escapeRegex(target.tag)}$` : `${escapeRegex(target.tag.slice(-3))}$` };
   };
   const index = (count) => random.int(count);
-  const row = () => state.legend[index(state.legend.length)];
+  // The row a Legend-row step names. On an empty Legend the step first
+  // restores the deleted rows (Restore restores all) and names one of them.
+  const row = () => {
+    if (state.legend.length) return { row: state.legend[index(state.legend.length)] };
+    if (!state.deletedLegend.length) throw new Error(`a ${kind} step needs a Legend row; the Legend lists no row and has none deleted`);
+    return { prepare: { kind: 'legendRestore' }, row: random.pick(state.deletedLegend) };
+  };
   const picks = [random.int(1000), random.int(1000), random.int(1000)];
   const visibilityRuleAdd = () => {
     const { target, value } = rulePattern();
@@ -235,7 +242,7 @@ const nextStep = (random, state, kind, { fixture, canUndo }) => {
     case 'fill': return fill();
     case 'stroke': return random.next() < 0.5
       ? { kind, target: 'popup', feature: feature(), color: random.pick(COLORS), picks }
-      : { kind, target: 'legend', row: row(), color: random.pick(COLORS), picks };
+      : { kind, target: 'legend', ...row(), color: random.pick(COLORS), picks };
     case 'featureVisibility': return { kind, feature: feature(), value: random.pick(['on', 'off']), picks };
     case 'labelText': {
       const target = random.pick(features);
@@ -262,13 +269,13 @@ const nextStep = (random, state, kind, { fixture, canUndo }) => {
     case 'colorRuleRemove':
       return state.colorRules ? { kind, index: index(state.colorRules) } : { kind, prepare: colorRuleAdd(), index: 0 };
     case 'reflow': return { kind, enabled: !state.reflow };
-    case 'legendRename': return { kind, row: row(), caption: random.pick(CAPTIONS), picks };
-    case 'legendColor': return { kind, row: row(), color: random.pick(COLORS) };
+    case 'legendRename': return { kind, ...row(), caption: random.pick(CAPTIONS), picks };
+    case 'legendColor': return { kind, ...row(), color: random.pick(COLORS) };
     case 'legendSort': return { kind, direction: random.pick(['asc', 'desc']) };
     case 'legendSortDefault': return { kind };
-    case 'legendDelete': return { kind, row: row(), picks };
+    case 'legendDelete': return { kind, ...row(), picks };
     case 'legendRestore':
-      return state.deletedLegend ? { kind, picks } : { kind, prepare: { kind: 'legendDelete', row: row(), picks }, picks };
+      return state.deletedLegend.length ? { kind, picks } : { kind, prepare: { kind: 'legendDelete', ...row(), picks }, picks };
     case 'legendAdd': return { kind, feature: feature(), caption: random.pick(ADDED_CAPTIONS), picks };
     case 'trackData': {
       // A track the Result lacks applies on Generate (R1), so a drawing
@@ -651,13 +658,14 @@ const drawnSource = (random, planned) => ({
 });
 
 // Why a recorded step cannot apply in `state` (its subject is gone), or ''.
-const whyNotApplicable = (step, state, { canUndo }) => {
+export const whyNotApplicable = (step, state, { canUndo }) => {
   if (step.prepare) {
     const reason = whyNotApplicable(step.prepare, state, { canUndo });
     if (reason) return `its prepare step: ${reason}`;
   }
   const feature = () => (state.features.some(({ key }) => key === step.feature) ? '' : `no feature ${step.feature}`);
-  const legendRow = () => (state.legend.includes(step.row) ? '' : `no Legend row ${step.row}`);
+  // A step that restores the deleted rows first names a row its prepare brings back.
+  const legendRow = () => (step.prepare || state.legend.includes(step.row) ? '' : `no Legend row ${step.row}`);
   switch (step.kind) {
     case 'fill': case 'featureVisibility': case 'labelText': case 'labelVisibility': case 'legendAdd': return feature();
     case 'stroke': return step.target === 'popup' ? feature() : legendRow();
@@ -665,7 +673,7 @@ const whyNotApplicable = (step, state, { canUndo }) => {
     case 'visibilityRuleEdit': case 'visibilityRuleRemove':
       return step.prepare || step.index < state.visibilityRules ? '' : `no visibility rule ${step.index}`;
     case 'colorRuleEdit': case 'colorRuleRemove': return step.prepare || step.index < state.colorRules ? '' : `no color rule ${step.index}`;
-    case 'legendRestore': return step.prepare || state.deletedLegend ? '' : 'no deleted Legend row';
+    case 'legendRestore': return step.prepare || state.deletedLegend.length ? '' : 'no deleted Legend row';
     case 'trackData': return step.prepare || state.depth ? '' : 'no Depth file';
     case 'palette': return state.palettes.includes(step.palette) ? '' : `palette ${step.palette} is selected`;
     case 'undo': case 'undoRedo': return step.prepare || canUndo ? '' : 'Undo is at its floor';
