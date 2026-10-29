@@ -2861,6 +2861,8 @@ export const createRunAnalysis = ({
         filesData: { linearSeqs: [...linearSeqs], c_gb: files.c_gb, c_gff: files.c_gff, c_fasta: files.c_fasta }
       }) : null;
       if (identitySources && nextRecordPlan) {
+        // A committed request without kept identities reads them again from the current files.
+        if (!previousRecordIdentities && previousRequestRecords.length > 0) recordStructuralMetric('recordIdentityFallbackCount');
         recordMoves = recordKeyMoves(
           previousRecordIdentities ?? drawnRecordIdentities(previousRequestRecords, identitySources),
           drawnRecordIdentities(nextRecordPlan, identitySources),
