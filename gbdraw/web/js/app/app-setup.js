@@ -6463,16 +6463,23 @@ export const createAppSetup = () => {
   // The OFF records name records of the old file too (record selection).
   /** @param {DrawingState} drawing */
   const retireCircularRecordSelector = ({ form, adv, recordsOff }) => {
-    form.circular_record_selector = '';
+    form.circular_record_selector = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_selector;
     if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
     if (recordsOff.length) recordsOff.splice(0);
   };
   // The whole record presentation: the record form fields return to their
-  // defaults (the one list a style copy leaves out too).
+  // defaults (the one list a style copy leaves out too). Each field is written
+  // by name, so the track-layout writer guard reads no whole-form write; a
+  // node case pins that every field of the list is written.
   /** @param {DrawingState} drawing */
   const retireCircularRecordPresentation = (drawing) => {
+    const { form } = drawing;
     retireCircularRecordSelector(drawing);
-    Object.assign(drawing.form, CIRCULAR_RECORD_FORM_DEFAULTS);
+    form.circular_region_start = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_start;
+    form.circular_region_end = CIRCULAR_RECORD_FORM_DEFAULTS.circular_region_end;
+    form.circular_reverse = CIRCULAR_RECORD_FORM_DEFAULTS.circular_reverse;
+    form.circular_record_label = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_label;
+    form.circular_record_subtitle = CIRCULAR_RECORD_FORM_DEFAULTS.circular_record_subtitle;
   };
   // D-32: one record replacing one record (a new version of the same genome)
   // keeps its crop and titles; a removed file or a replaced multi-record file

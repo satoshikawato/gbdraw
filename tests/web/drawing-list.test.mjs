@@ -692,3 +692,22 @@ test('Reset this drawing keeps the shown Result\'s match sequences; Reset all dr
   await app.resetSettings();
   assert.deepEqual(sourceKeys(), [], 'Reset all drawings empties them');
 });
+
+// D-32: removing a Circular drawing's source retires its record presentation:
+// every record-bound form field returns to its value in the one list
+// (`CIRCULAR_RECORD_FORM_DEFAULTS`), which a style copy also leaves out. The
+// retire writes the fields by name, so this pins that it names each of them.
+test('removing the Circular source returns every record-bound form field to its default', async () => {
+  const { CIRCULAR_RECORD_FORM_DEFAULTS } = await import('../../gbdraw/web/js/services/config.js');
+  const app = createAppSetup();
+  app.selectDrawing('circular');
+  const drawing = state.activeDrawing();
+  app.setCircularSourceFile('c_gb', new File(['LOCUS'], 'record.gb'));
+  const edited = Object.fromEntries(Object.entries(CIRCULAR_RECORD_FORM_DEFAULTS).map(([field, value]) => [
+    field, typeof value === 'boolean' ? !value : typeof value === 'string' ? 'edited' : 7
+  ]));
+  Object.assign(drawing.form, edited);
+  app.setCircularSourceFile('c_gb', null);
+  assert.deepEqual(Object.fromEntries(Object.keys(CIRCULAR_RECORD_FORM_DEFAULTS).map((field) => [field, drawing.form[field]])),
+    { ...CIRCULAR_RECORD_FORM_DEFAULTS });
+});
