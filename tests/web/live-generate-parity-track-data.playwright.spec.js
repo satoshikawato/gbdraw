@@ -385,6 +385,8 @@ for (const [name, { mode, rows, groups, setup, edit }] of Object.entries(SLOT_ED
     };
     await expectRows('generated', true);
     await inHistoryStep(page, 'Edit track slot', edit);
+    // The hide is a live redraw from the kept track parts (PD-OI-104 rev 5): wait for it.
+    await settleLive(page);
     await expectRows('slot edit', false);
     // One Undo returns the track and its row; the parity Generate comes last, as it is a History step of its own.
     await history(page, 'undo');

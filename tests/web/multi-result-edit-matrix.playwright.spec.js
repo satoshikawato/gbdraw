@@ -517,7 +517,10 @@ const SWITCH_EDITS = [
     app.setPaletteInstantPreview(true);
     app.editDefaultColor('CDS', '#457b9d');
   })],
-  ['track visibility', onApp(() => { window.__GBDRAW_APP__.form.suppress_gc = true; })]
+  // A track toggle applies through its History step, as the checkbox does (R1 (c), PD-OI-104 rev 5).
+  ['track visibility', onApp(() => window.__GBDRAW_HISTORY__.runUndoable('Hide GC Content', () => {
+    window.__GBDRAW_APP__.form.suppress_gc = true;
+  }))]
 ];
 
 test('Circular batch: each editor edit kind is in the current Result when made, not by the Result switch', async ({ page }) => {
