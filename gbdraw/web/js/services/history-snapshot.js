@@ -1168,6 +1168,46 @@ export const createHistorySnapshotService = ({
     currentGeneratedArtifactRetainedBytes = slot?.retainedBytes ?? 0;
   };
 
+  // OV-2212: the shown artifact is still the one the fingerprint names while
+  // the drawing's own artifact values are the ones its Generate committed: these
+  // artifact slot values and the match-sequence owner, by reference. The project
+  // LOSAT and protein values and the alignment draft are not the drawing's (each
+  // Generate installs its own, so a Generate in another drawing replaces them):
+  // the fingerprint covers what of them the Result drew, and the compact
+  // signature covers the alignment plan and record translations, by value.
+  /** @type {readonly (typeof ARTIFACT_SLOT_KEYS)[number][]} */
+  const TRANSPORT_IDENTITY_SLOT_KEYS = Object.freeze([
+    'results',
+    'featureCatalog',
+    'extractedFeatures',
+    'biologicalFeatures',
+    'featureRecordIds',
+    'orthogroups',
+    'featureOrthogroupIndex',
+    'collinearGroups',
+    'similarityAlignmentResetReceipt',
+    'trackSlotResolvedGeometry',
+    'annotationWarnings',
+    'featureIdentityNotices',
+    'comparisonWarnings',
+    'labelFitReports',
+    'lastRunInfo',
+    'pairwiseMatchFactors',
+    'editableLabels',
+    'generatedLegendPosition',
+    'generatedMultiRecordCanvas',
+    'generatedCircularPlotTitlePosition'
+  ]);
+  /**
+   * The references the transport identity holds and compares: only these, so it
+   * keeps no project cache alive.
+   * @param {Readonly<Record<string, unknown>>} ownerSet
+   */
+  const transportIdentityReferences = (ownerSet) => Object.freeze(Object.fromEntries([
+    ...TRANSPORT_IDENTITY_SLOT_KEYS.map((key) => [key, ownerSet[key]]),
+    ['matchSequenceOwner', ownerSet.matchSequenceOwner]
+  ]));
+
   /**
    * @param {any} identity
    * @param {{ results?: any[] | null }} [options]
@@ -1189,7 +1229,7 @@ export const createHistorySnapshotService = ({
       schema: 1,
       algorithm: 'SHA-256',
       fingerprint,
-      ownerReferences: Object.freeze({
+      ownerReferences: transportIdentityReferences({
         ...ownerReferences,
         results: toRaw(committedResults)
       })
@@ -1212,37 +1252,9 @@ export const createHistorySnapshotService = ({
    */
   const currentArtifactMatchesIdentity = (ownerSet, identity) => {
     const expected = identity?.ownerReferences;
-    if (!expected || expected.results !== ownerSet.results) return false;
-    return [
-      'featureCatalog',
-      'extractedFeatures',
-      'biologicalFeatures',
-      'featureRecordIds',
-      'orthogroups',
-      'featureOrthogroupIndex',
-      'collinearGroups',
-      'similarityAlignmentResetReceipt',
-      'similarityAlignmentPlan',
-      'linearRecordTranslations',
-      'trackSlotResolvedGeometry',
-      'annotationWarnings',
-      'featureIdentityNotices',
-      'comparisonWarnings',
-      'labelFitReports',
-      'proteinIdentityManifest',
-      'legacyProteinRawCandidates',
-      'legacyProteinDerivedEvidence',
-      'losatCache',
-      'losatDerivedCache',
-      'losatCacheInfo',
-      'matchSequenceOwner',
-      'lastRunInfo',
-      'pairwiseMatchFactors',
-      'editableLabels',
-      'generatedLegendPosition',
-      'generatedMultiRecordCanvas',
-      'generatedCircularPlotTitlePosition'
-    ].every((key) => expected[key] === ownerSet[key]);
+    if (!expected) return false;
+    const current = transportIdentityReferences(ownerSet);
+    return Object.keys(current).every((key) => expected[key] === current[key]);
   };
 
   /** @param {GeneratedArtifactIntent} mutableIntent */

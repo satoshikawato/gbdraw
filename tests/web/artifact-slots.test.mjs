@@ -6,6 +6,7 @@
 // alignment plan and record translations, and every editor intent.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createHash } from 'node:crypto';
 import { savedDrawingView } from './helpers/saved-drawing-view.mjs';
 import { modeDrawing } from './helpers/drawing-state.mjs';
 
@@ -324,5 +325,64 @@ test('a pass over the LOSAT rows that changes none keeps the shown artifact\'s t
   assert.equal(fingerprint(), 'b'.repeat(64), 'the Result keeps its identity');
   writeLosatCacheInfo([]);
   assert.deepEqual(state.losatCacheInfo.value, [], 'a pass that drops a row writes');
-  assert.equal(fingerprint(), '', 'the changed rows are another artifact');
+  // OV-2212: the rows are project state, not the drawing's Result.
+  assert.equal(fingerprint(), 'b'.repeat(64), 'changed project rows leave the Result its identity');
+});
+
+// OV-2212: a drawing's transport identity matches only what its Result is: its
+// artifact slot values. Each Generate installs its own project LOSAT and protein
+// values (new objects), so a Generate in another drawing replaces them; the
+// Result's fingerprint covers what of them it drew, and the compact signature
+// covers the alignment plan and record translations by value. So an unchanged
+// Generate after a Generate in another drawing is the same artifact (no step),
+// and a Generate whose Result differs is still a step.
+test('an unchanged Generate in a drawing records no step after a Generate in another drawing', async () => {
+  const { createHistoryManager } = await import('../../gbdraw/web/js/services/history.js');
+  await fillCircularArtifact();
+  installShownDrawing('circular');
+  const histories = Object.fromEntries(['circular', 'linear'].map((id) => [id, createHistoryManager({
+    ...snapshots.drawingHistory(id),
+    captureGeneratedArtifactHandle: () => snapshots.captureGeneratedArtifactHandle(modeDrawing(state, id)),
+    restoreGeneratedArtifactHandle: snapshots.restoreGeneratedArtifactHandle,
+    compareGeneratedArtifactHandles: snapshots.compareGeneratedArtifactHandles
+  })]));
+  const slots = new Map();
+  const baselines = new Set();
+  /** @param {'circular' | 'linear'} id */
+  const show = async (id) => {
+    slots.set(state.generatedDrawingId.value, snapshots.captureArtifactSlot());
+    installShownDrawing(id);
+    snapshots.installArtifactSlot(slots.get(id) ?? null, { drawing: modeDrawing(state, id) });
+    if (!baselines.has(id)) await histories[id].initializeIntentBaseline();
+    baselines.add(id);
+  };
+  /** @param {'circular' | 'linear'} id @param {string} content */
+  const generate = (id, content) => histories[id].runUndoableArtifactReplacement('Generate diagram', () => {
+    const drawing = modeDrawing(state, id);
+    const results = [{ name: `${id}.svg`, content }];
+    snapshots.installGeneratedArtifactOwnerSet({
+      ...snapshots.captureGeneratedArtifactOwnerSet(drawing),
+      results,
+      losatCache: new Map(state.losatCache.value),
+      losatDerivedCache: new Map(state.losatDerivedCache.value),
+      losatCacheInfo: [...state.losatCacheInfo.value],
+      proteinIdentityManifest: { ...state.proteinIdentityManifest.value }
+    }, { drawing, installResults: (next) => { state.results.value = next; } });
+    snapshots.setGeneratedArtifactIdentity({
+      schema: 1, algorithm: 'SHA-256', fingerprint: createHash('sha256').update(content).digest('hex'), retainedBytes: 10
+    }, { results });
+  });
+
+  await show('circular');
+  await generate('circular', '<svg id="c1"/>');
+  assert.equal(histories.circular.getUndoCount(), 1);
+  await show('linear');
+  await generate('linear', '<svg id="l1"/>');
+  assert.equal(histories.linear.getUndoCount(), 1);
+  await show('circular');
+  await generate('circular', '<svg id="c1"/>');
+  assert.equal(histories.circular.getUndoCount(), 1, 'the unchanged Generate is the same artifact');
+  await generate('circular', '<svg id="c2"/>');
+  assert.equal(histories.circular.getUndoCount(), 2, 'a changed Result is a step');
+  assert.equal(histories.linear.getUndoCount(), 1);
 });
