@@ -416,11 +416,12 @@ test('the similarity-group copy feedback clears when a Generate replaces the sho
     expect(await label()).toBe('Copied!');
 
     // Undo of a reused Generate step replaces the shown Results: the label
-    // clears. Once the GC track is drawn, its window applies on Generate and
-    // keeps the catalog (the Plot Title used before is a live edit).
+    // clears. Once the GC track is drawn, its Step applies on Generate and
+    // keeps the catalog (the Plot Title and the window used before are live
+    // edits).
     await undoable(page, 'Show GC content', { fields: { 'form.show_gc': true } });
     await observeGenerate(page);
-    await setWindow(page, 2000);
+    await setStep(page, 200);
     const retitled = await observeGenerate(page);
     expect(retitled.transports).toEqual([KEPT]);
     expect(retitled.undo).toBe(1);
@@ -498,10 +499,10 @@ const namedDocumentElementCount = (page) => page.evaluate(() =>
   document.querySelectorAll('embed[name], form[name], iframe[name], img[name], object[name], object[id]').length);
 
 const undoCount = (page) => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-// A render-only change that applies on Generate (the Plot Title is live).
-// A render-only change that applies on Generate and keeps the catalog (the
-// Plot Title, which these cases used before, is a live edit since PD-OI-103).
-const setWindow = (page, size) => undoable(page, 'Set the GC window', { fields: { 'adv.window_size': size } });
+// A render-only change that applies on Generate and keeps the catalog: the GC
+// Step. The Plot Title and the GC window, which these cases used before, are
+// live edits since PD-OI-103 (G1, G2).
+const setStep = (page, size) => undoable(page, 'Set the GC step', { fields: { 'adv.step_size': size } });
 // A live palette edit rewrites the mounted Result (hazard 6); the draft keeps the color.
 const livePalette = (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('./js/state.js');
@@ -583,11 +584,11 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     expect(await namedDocumentElementCount(page)).toBe(0);
 
     console.log('STEP S-3', Date.now());
-    // S-3 (live-edit residue): a live palette edit and a GC window change; the
+    // S-3 (live-edit residue): a live palette edit and a GC Step change; the
     // Generate sanitizes only the groups whose children changed, and its Result
     // equals a fresh page's that drew the same draft from nothing.
     await livePalette(page);
-    await setWindow(page, 2000);
+    await setStep(page, 200);
     const edited = await generatePieces(page);
     expect(edited.sanitized).toBeGreaterThan(0);
     expect(edited.reused).toBeGreaterThan(0);
@@ -595,7 +596,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     expect(counts(edited)).toEqual(shownOnce);
     await loadSession(fresh, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
     await livePalette(fresh);
-    await setWindow(fresh, 2000);
+    await setStep(fresh, 200);
     const freshEdited = await generatePieces(fresh);
     expect(freshEdited.reused).toBe(0);
     expect(edited.content).toBe(freshEdited.content);
@@ -617,7 +618,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     const restoredContent = () => page.evaluate(() => window.__GBDRAW_APP__.currentResults()[0].content);
     const allHeld = async () => ({ sanitized: 0, reused: await contentPieceCount(page) });
     const beforeB = await undoCount(page);
-    await setWindow(page, 3000);
+    await setStep(page, 300);
     const second = await generatePieces(page);
     expect(second.content).not.toBe(restarted.content);
     const steps = (await undoCount(page)) - beforeB;
@@ -638,7 +639,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     console.log('STEP S-6', Date.now());
     // S-6 (cancel after the reply, before the commit): nothing is committed;
     // the next request names the same segments.
-    await setWindow(page, 4000);
+    await setStep(page, 400);
     await page.evaluate(() => {
       window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
         delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
@@ -661,7 +662,7 @@ test('a Generate sanitizes each changed SVG group once and admits what a fresh p
     // the next request names them.
     const heldShown = await heldSegmentCount(page);
     expect(heldShown).toBeGreaterThan(0);
-    await setWindow(page, 5000);
+    await setStep(page, 500);
     await page.evaluate(() => {
       window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = async () => {
         delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse;
@@ -709,7 +710,7 @@ test('Cancel during render keeps the warm Worker', async ({ browser }) => {
     expect(await page.evaluate(() => globalThis.crossOriginIsolated)).toBe(true);
     await loadSession(page, `${SESSIONS}/tobacco-chloroplast.gbdraw-session.json`);
     await generate(page);
-    await setWindow(page, 2000);
+    await setStep(page, 200);
     await page.evaluate(() => {
       const hooks = window.__GBDRAW_TEST_HOOKS__;
       const record = hooks.onSessionLifecycleEvent;

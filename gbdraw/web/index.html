@@ -7002,26 +7002,28 @@
                                     </dl>
                                     <section v-if="previewItemView.draft" class="space-y-2 border-t border-slate-100 pt-3">
                                         <h3 class="feature-popup-heading">{{ t('Definition text') }}</h3>
-                                        <label :data-setting="previewItemView.draft.fields.name.setting" class="block text-xs text-slate-600">{{ previewItemView.draft.nameLabel }} <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
-                                            <input type="text" :value="previewItemView.draft.name"
+                                        <div :data-setting="previewItemView.draft.fields.name.setting" class="text-xs text-slate-600">
+                                            <label for="preview-record-name">{{ previewItemView.draft.nameLabel }}</label> <setting-note :setting="previewItemView.draft.fields.name.setting"></setting-note>
+                                            <input id="preview-record-name" type="text" :value="previewItemView.draft.name"
                                                    @change="setPreviewRecordField(previewItemView, 'name', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
-                                        </label>
-                                        <label :data-setting="previewItemView.draft.fields.subtitle.setting" class="block text-xs text-slate-600">{{ previewItemView.draft.subtitleLabel }} <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
-                                            <input type="text" :value="previewItemView.draft.subtitle"
+                                        </div>
+                                        <div :data-setting="previewItemView.draft.fields.subtitle.setting" class="text-xs text-slate-600">
+                                            <label for="preview-record-subtitle">{{ previewItemView.draft.subtitleLabel }}</label> <setting-note :setting="previewItemView.draft.fields.subtitle.setting"></setting-note>
+                                            <input id="preview-record-subtitle" type="text" :value="previewItemView.draft.subtitle"
                                                    @change="setPreviewRecordField(previewItemView, 'subtitle', $event.target.value)"
                                                    @keydown.enter.prevent="commitPreviewItemField"
                                                    :disabled="!semanticMutationAvailable"
                                                    class="form-input mt-0.5 w-full text-xs">
-                                        </label>
-                                        <label :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
-                                            <input type="checkbox" :checked="previewItemView.draft.reverse"
+                                        </div>
+                                        <div :data-setting="previewItemView.draft.fields.reverse.setting" class="flex items-center gap-2 text-xs text-slate-700">
+                                            <label class="flex items-center gap-2"><input type="checkbox" :checked="previewItemView.draft.reverse"
                                                    @change="setPreviewRecordField(previewItemView, 'reverse', $event.target.checked)"
                                                    :disabled="!semanticMutationAvailable || !previewItemView.draft.reverseAvailable"
-                                                   class="form-checkbox"> {{ t('Reverse complement') }} <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
-                                        </label>
+                                                   class="form-checkbox"> {{ t('Reverse complement') }}</label> <setting-note :setting="previewItemView.draft.fields.reverse.setting"></setting-note>
+                                        </div>
                                     </section>
                                     <div v-if="previewItemView.draft" class="match-actions">
                                         <button type="button" class="match-link" @click="showPreviewRecordSettings(previewItemView)">

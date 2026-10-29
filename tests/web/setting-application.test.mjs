@@ -211,6 +211,18 @@ test('every scope and note names a row, and every row is used', () => {
   }
 });
 
+// A note inside a <label> joins the name of the control the label names (the
+// record popup's "Reverse complement" was read as "Reverse complement Applies
+// on Generate"): a label that holds a note holds no control named by it.
+test('a timing note never joins the accessible name of a control', () => {
+  const named = allElements.filter((element) => element.tag === 'label'
+    && [...descendants(element)].some((inside) => inside.tag === 'setting-note'))
+    .flatMap((label) => [...descendants(label)].filter((element) => ['input', 'select', 'textarea'].includes(element.tag)
+      && !element.attributes.has('aria-label') && !element.attributes.has(':aria-label')))
+    .map(describe);
+  assert.deepEqual(named, []);
+});
+
 test('every scope that applies on Generate shows its note, and a nested scope that differs shows its own', () => {
   const missing = [];
   for (const scope of scopes) {
