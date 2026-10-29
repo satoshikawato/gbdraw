@@ -15,6 +15,13 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.analysis.origin_arcs import (
+    LinkSide,
+    arc_link_endpoints,
+    cover_arcs,
+    directed_arc,
+    rows_inside_records,
+)
 from gbdraw.analysis.collinearity_units import (
     CollinearityUnit,
     CollinearityUnitIndex,
@@ -30,6 +37,7 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
     _OrthogroupEdgeIndex,
     _edge_metadata_for_protein_pair,
+    _genomic_link_coordinates,
     _orthogroup_member_counts,
     ProteinExtractionResult,
     _consecutive_display_filenames,
@@ -277,16 +285,8 @@ def _int_from_row(row: object, column: str, default: int = 0) -> int:
         return int(default)
 
 
-def _genomic_link_coordinates(protein: CdsProtein) -> tuple[int, int]:
-    if protein.strand == -1:
-        return int(protein.end), int(protein.start) + 1
-    return int(protein.start) + 1, int(protein.end)
-
-
 def _unit_genomic_link_coordinates(unit: CollinearityUnit) -> tuple[int, int]:
-    if unit.strand == -1:
-        return int(unit.end), int(unit.start) + 1
-    return int(unit.start) + 1, int(unit.end)
+    return arc_link_endpoints((int(unit.start), int(unit.end)), unit.strand != -1)
 
 
 def _normalized_strand(value: object) -> int | None:
@@ -1526,15 +1526,33 @@ def _record_ids(
     return []
 
 
-def _coordinate_span(anchors: Sequence[CollinearityAnchor], start_attr: str, end_attr: str) -> tuple[int, int]:
-    starts: list[int] = []
-    ends: list[int] = []
-    for anchor in anchors:
-        a = int(getattr(anchor, start_attr))
-        b = int(getattr(anchor, end_attr))
-        starts.append(min(a, b))
-        ends.append(max(a, b))
-    return min(starts), max(ends)
+def _block_link_side(
+    anchors: Sequence[CollinearityAnchor],
+    role: Literal["query", "subject"],
+    *,
+    forward: bool,
+    record_length: int | None,
+) -> LinkSide:
+    """One side of a block: the arc that covers its anchors, as directed endpoints.
+
+    An anchor's endpoints disagree with its strand when its unit crosses the
+    record origin (``gbdraw.analysis.origin_arcs``); the block then covers the
+    origin too. Without the record length no anchor crosses it.
+    """
+
+    arcs = [
+        directed_arc(
+            int(getattr(anchor, f"{role}_start")),
+            int(getattr(anchor, f"{role}_end")),
+            getattr(anchor, f"{role}_strand"),
+            record_length,
+        )[0]
+        for anchor in anchors
+    ]
+    # No cover: the arcs, one across the origin (so the length is known), cover the record.
+    cover = cover_arcs(arcs) or (0, int(record_length or 0))
+    start, end = arc_link_endpoints(cover, forward)
+    return LinkSide(start, end, cover[0] > cover[1], int(record_length or 0))
 
 
 def _weighted_identity(anchors: Sequence[CollinearityAnchor]) -> float:
@@ -1622,6 +1640,7 @@ def convert_collinearity_blocks_to_pair_comparisons(
     if record_count < 2:
         return {}
 
+    record_lengths = [len(record) for record in records] if records is not None else None
     rows_by_pair: dict[tuple[int, int], list[dict[str, object]]] = {}
     for block in result.blocks:
         pair = (int(block.query_record_index), int(block.subject_record_index))
@@ -1640,12 +1659,14 @@ def convert_collinearity_blocks_to_pair_comparisons(
             if first_anchor.subject_record_index < len(resolved_record_ids)
             else str(first_anchor.subject_record_index + 1)
         )
-        query_start, query_end = _coordinate_span(block.anchors, "query_start", "query_end")
-        subject_min, subject_max = _coordinate_span(block.anchors, "subject_start", "subject_end")
-        if block.orientation == "minus":
-            subject_start, subject_end = subject_max, subject_min
-        else:
-            subject_start, subject_end = subject_min, subject_max
+        query_side = _block_link_side(
+            block.anchors, "query", forward=True,
+            record_length=record_lengths[pair[0]] if record_lengths is not None else None,
+        )
+        subject_side = _block_link_side(
+            block.anchors, "subject", forward=block.orientation != "minus",
+            record_length=record_lengths[pair[1]] if record_lengths is not None else None,
+        )
         (
             query_feature_svg_ids,
             query_feature_indexes,
@@ -1656,7 +1677,7 @@ def convert_collinearity_blocks_to_pair_comparisons(
             subject_feature_indexes,
             subject_view_feature_svg_ids,
         ) = _joined_anchor_endpoint_values(block.anchors, "subject")
-        rows_by_pair.setdefault(pair, []).append(
+        rows_by_pair.setdefault(pair, []).extend(rows_inside_records(
             {
                 "query": query_name,
                 "subject": subject_name,
@@ -1664,10 +1685,10 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "alignment_length": sum(max(0, int(anchor.alignment_length)) for anchor in block.anchors),
                 "mismatches": 0,
                 "gap_opens": 0,
-                "qstart": query_start,
-                "qend": query_end,
-                "sstart": subject_start,
-                "send": subject_end,
+                "qstart": query_side.start,
+                "qend": query_side.end,
+                "sstart": subject_side.start,
+                "send": subject_side.end,
                 "evalue": min(float(anchor.evalue) for anchor in block.anchors),
                 "bitscore": _anchor_bitscore_total(block.anchors),
                 "collinearity_block_id": block.block_id,
@@ -1703,8 +1724,10 @@ def convert_collinearity_blocks_to_pair_comparisons(
                 "subject_orthogroup_representative": _joined_anchor_values(block.anchors, "subject_orthogroup_representative"),
                 "query_orthogroup_member_count": _joined_anchor_values(block.anchors, "query_orthogroup_member_count"),
                 "subject_orthogroup_member_count": _joined_anchor_values(block.anchors, "subject_orthogroup_member_count"),
-            }
-        )
+            },
+            query_side,
+            subject_side,
+        ))
 
     comparisons = {
         pair: pd.DataFrame.from_records(rows, columns=COLLINEARITY_COMPARISON_COLUMNS)
