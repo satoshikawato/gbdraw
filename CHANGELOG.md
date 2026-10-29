@@ -12,7 +12,7 @@ write-up of a release.
 
 ## [Unreleased]
 
-## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-28
+## [0.14.3](./docs/RELEASE_NOTES_0.14.3.md) - 2026-10-29
 
 - Patch release of 0.14.2. Sessions are saved as Session version 49, which gbdraw 0.14.0 to 0.14.2
   cannot open; Sessions saved by 0.14.2 open as before.
@@ -52,6 +52,10 @@ write-up of a release.
   place at Generate, as the live Legend shows it: when the new rule only gives that rule's condition a new name, it
   takes that rule's place in the color rule table. Before, it was written ahead of the other rules on the same
   qualifier, and Generate drew the row ahead of rows it followed live (OV-2189, #1445).
+- Fixed: in the Web app, a popup Legend name that takes a color rule's Legend row whole now keeps the row's place in
+  Generate for every rule row, as the live Legend shows it: a gene or label-qualifier rule is re-captioned in place
+  (OV-2191), and for a locus_tag row or a rule that also colors a hidden feature the new rule goes at the old rule's
+  place while the old rule keeps its other features (OV-2192, #1449).
 - Fixed: the Web app's header from 769 to about 970 px stays inside the window and keeps the Session title in view.
   Before, it ran past the right edge by up to 32 px (French; English, Spanish, Portuguese, and Indonesian by up to
   8 px at 769 to 776 px), cutting off the translation feedback link, and narrowed the Session title to nothing below

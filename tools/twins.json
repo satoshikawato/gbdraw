@@ -1160,6 +1160,34 @@
       "reason": "Python names the remedies of a capacity stop by id, in its order; the Web admits a report only with ids among the keys of its words map and lists them in Python's order. The keys copy the ids by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
       "retireWhen": "the ids are generated into contracts/schema.generated.js and the Web words map is keyed by the generated ids, so the Web keeps no hand copy",
       "source": "PR #1402 review S1 (bigdata-perf-20261026, D-16); the detector does not see it"
+    },
+    {
+      "id": "constant:HorizontalLabelKind",
+      "concern": "Label kinds whose room a capacity check reads (circular_outer, circular_inner) and their order, in a capacity stop's report and a capacity notice",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:HorizontalLabelKind"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/services/label-fit.js:LABEL_CAPACITY_KIND_WORDS"
+      ],
+      "vector": null,
+      "reason": "Python names the side of a capacity stop record, a capacity notice, and the LABEL_LAYOUT context key by label kind; the Web admits a capacity only with a kind among the keys of its words map and words the room in that kind's sentence. The keys copy the kinds by hand. tests/web/label-fit.test.mjs reads the Literal in fit.py and checks that the keys equal it in order; no generated constant.",
+      "retireWhen": "the kinds are generated into contracts/schema.generated.js and the Web words map is keyed by the generated kinds, so the Web keeps no hand copy",
+      "source": "PR #1447 review F1 (release-0143-20261027, OV-2179); the detector does not see it"
+    },
+    {
+      "id": "concern:label-fit-no-row-ways",
+      "concern": "When the ways to make room are listed: only when every label fit row is known not to fit (not_found)",
+      "pythonOwner": [
+        "gbdraw/labels/fit.py:format_label_fit_report"
+      ],
+      "jsOwner": [
+        "gbdraw/web/js/app/label-fit-dialog.js:createLabelFitDialog"
+      ],
+      "vector": null,
+      "reason": "Python lists the ways in the CLI text (the elif missing branch of format_label_fit_report, through _room_lines) when every row is not_found; the Web dialog computes its rows after Python's report arrives, so its listRemedies, a closure inside createLabelFitDialog that a path:name owner cannot name, decides again when to list the ways that Python sends for any report whose rows have no value. No vector file: tests/test_web_label_fit.py and tests/web/label-fit.test.mjs each pin the same three cases (every row not_found: listed; one row found: not listed; one row still to compute: not listed).",
+      "retireWhen": "the report carries whether to list the ways once the rows settle and the Web reads it, or one side is deleted",
+      "source": "PR #1447 review round 3 F1 (release-0143-20261027, OV-2180); the detector does not see it"
     }
   ]
 }

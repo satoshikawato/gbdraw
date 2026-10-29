@@ -53,14 +53,19 @@ packages, and [Installation](./INSTALL.md) explains each install route.
 - A color rule edit in the Web app, made while a batch Result is shown on
   which the rule colors no feature, keeps that Result's Legend row of the
   rule's name and color (for example the CDS row after **Use the "CDS"
-  Legend color** on a CDS of the other Result). The same holds on one Result when the rule
-  colors only features that Feature visibility hides. Before, the row
-  disappeared until the next **Generate Diagram**.
+  Legend color** on a CDS of the other Result). The same holds on one Result
+  when the rule colors only features that Feature visibility hides. Before,
+  the row disappeared until the next **Generate Diagram**.
 - A popup Legend name in the Web app on the only feature of a color
   rule's Legend row keeps the row in its place at **Generate Diagram**, as
   the live Legend shows it: when the new rule only gives that rule's
   condition a new name, it takes that rule's place in the color rule table.
   Before, Generate could draw the row ahead of rows it followed live.
+- A popup Legend name in the Web app that takes a color rule's Legend row whole
+  keeps the row's place at **Generate Diagram** for every rule row, as the live
+  Legend shows it. A gene or label-qualifier rule is re-captioned in place. For
+  a `locus_tag` row, or a rule that also colors a hidden feature, the new rule
+  goes at the old rule's place while the old rule keeps its other features.
 - The Web app's header from 769 to about 970 px stays inside the window and
   keeps the Session title in view. Before, it ran past the right edge by up to
   32 px in French (and up to 8 px in English, Spanish, Portuguese, and
@@ -98,8 +103,8 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   and searched and that no fix makes fit get the same ways to make room, in the
   **Labels do not fit** dialog and on the command line.
   See [Labels that do not fit](./REFERENCE/palettes-feature-rules-labels-shapes-and-tracks.md#labels-that-need-much-more-room-than-the-map-has).
-- **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status 1,
-  write no file, and print one error that names the formats and the install
+- **Missing CairoSVG.** `gbdraw circular` and `gbdraw linear` exit with status
+  1, write no file, and print one error that names the formats and the install
   command when `-f` asks for PNG, PDF, EPS, or PS and CairoSVG is not
   installed. Before, they wrote only the SVG with a warning and exited 0.
 - **LOSAT and BLAST+.** The LOSAT development build tracked in the source tree
@@ -147,20 +152,21 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   what is drawn keeps the feature catalog the page holds instead of rebuilding
   it. On a Multi-record Circular canvas, a change to some records copies and
   re-reads only those records' parts. Circular labels no longer redraw when a
-  definition font or the center radius changes, and Linear comparison ribbons
-  no longer redraw when a definition or record label changes. The Worker
-  parses each Depth file once and keeps it while **Show Depth** is off, so
-  showing Depth again does not parse the file again. A Circular Species change
-  that moves no track keeps the placed labels, and keeps the record definitions
-  and the plot title where they do not draw the species (for example a typed
-  plot title or the record-summary profile), and a Linear change that moves rows without changing a comparison keeps its
-  ribbons. Turning the GC content or GC skew track on or off no longer redraws
-  the feature contents, the Linear records, or the Circular ticks, and a Depth
-  Legend label change keeps the drawn Depth paths. In a warm Generate of the
-  vibrio Gallery Session, the prepared-input check takes 155 ms of CPU instead
-  of 331 ms in CPython. A change of Separate strands, Resolve overlaps, or
-  Label rendering rebuilds fewer render stages, and a warm Generate of a Linear
-  similarity-groups or collinear figure with a reversed record is faster.
+  definition font or the center radius changes, and Linear comparison ribbons no
+  longer redraw when a definition or record label changes. The Worker parses
+  each Depth file once and keeps it while **Show Depth** is off, so showing
+  Depth again does not parse the file again. A Circular Species change that
+  moves no track keeps the placed labels, and keeps the record definitions and
+  the plot title where they do not draw the species (for example a typed plot
+  title or the record-summary profile), and a Linear change that moves rows
+  without changing a comparison keeps its ribbons. Turning the GC content or GC
+  skew track on or off no longer redraws the feature contents, the Linear
+  records, or the Circular ticks, and a Depth Legend label change keeps the
+  drawn Depth paths. In a warm Generate of the vibrio Gallery Session, the
+  prepared-input check takes 155 ms of CPU instead of 331 ms in CPython. A
+  change of Separate strands, Resolve overlaps, or Label rendering rebuilds
+  fewer render stages, and a warm Generate of a Linear similarity-groups or
+  collinear figure with a reversed record is faster.
 
 The drawn figures are the same as before, except where listed under
 [Changed behavior](#changed-behavior).
