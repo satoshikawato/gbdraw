@@ -395,8 +395,8 @@ test('New drawing with this style copies the settings its mode has and the user 
   const { drawingId: source } = app.drawingList.newDrawing('circular');
   const drawing = state.drawingOf(source);
   const linearDefaults = withNewDrawingDefaults(state, createDrawingState('linear-9', 'linear'));
-  drawing.form.plot_title = 'Source title';
-  drawing.adv.def_font_size = 31;
+  drawing.form.show_scale = !linearDefaults.form.show_scale;
+  drawing.adv.legend_font_size = 31;
   drawing.adv.feature_width_circular = linearDefaults.adv.feature_width_circular + 7;
   drawing.manualPriorityRules.splice(0, drawing.manualPriorityRules.length,
     { feat: 'CDS', order: 'gene' }, { feat: 'tRNA', order: 'product', importedFrom: 'qualifier_priority' });
@@ -411,8 +411,8 @@ test('New drawing with this style copies the settings its mode has and the user 
   assert.equal(state.activeDrawingId.value, drawingId, 'it is shown');
   const styled = state.drawingOf(drawingId);
   assert.equal(styled.mode, 'linear');
-  assert.equal(styled.form.plot_title, 'Source title', 'a setting both modes have');
-  assert.equal(styled.adv.def_font_size, 31, 'a style both modes have');
+  assert.equal(styled.form.show_scale, !linearDefaults.form.show_scale, 'a setting both modes have');
+  assert.equal(styled.adv.legend_font_size, 31, 'a style both modes have');
   assert.equal(styled.adv.feature_width_circular, linearDefaults.adv.feature_width_circular,
     'a Circular-only setting keeps the Linear default');
   assert.deepEqual(JSON.parse(JSON.stringify(styled.manualPriorityRules)), [{ feat: 'CDS', order: 'gene' }],
@@ -428,6 +428,65 @@ test('New drawing with this style copies the settings its mode has and the user 
   await history.redo();
   assert.equal(state.activeDrawingId.value, drawingId, 'Redo shows the new drawing');
   assert.equal(state.drawingOf(drawingId), styled);
+});
+
+// OV-2215 (D-15-182): across modes the copy follows the registry's `migrate`
+// rule, the owner Python's mode split uses: a row both modes share is copied,
+// and a `profile` row or a row only the target mode has takes the target
+// mode's profile.
+test('New drawing with this style in the other mode takes that mode\'s profile rows and own rows', () => {
+  const app = createAppSetup();
+  const { drawingId: source } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(source);
+  const linearDefaults = withNewDrawingDefaults(state, createDrawingState('linear-9', 'linear'));
+  drawing.adv.label_font_size = linearDefaults.adv.label_font_size + 3;
+  drawing.form.plot_title = 'Source title';
+  drawing.adv.def_font_size = linearDefaults.adv.def_font_size + 5;
+
+  const { drawingId } = app.drawingList.newDrawingWithStyle(source, 'linear');
+  const styled = state.drawingOf(drawingId);
+  assert.equal(styled.adv.label_font_size, linearDefaults.adv.label_font_size + 3, 'a `copy` row both modes share');
+  assert.equal(styled.adv.pairwise_match_style, 'curve', 'a Linear-only row takes the Linear default');
+  for (const field of ['pairwise_match_style', 'min_bitscore', 'evalue', 'identity', 'alignment_length', 'def_font_size',
+    'axis_stroke_color', 'plot_title_font_size']) {
+    assert.deepEqual(styled.adv[field], linearDefaults.adv[field], `${field} takes the Linear profile`);
+  }
+  assert.equal(styled.form.plot_title, linearDefaults.form.plot_title, 'plot_title takes the Linear profile');
+});
+
+// OV-2215 (D-15-182, R17-4): the records a drawing draws, its crop, and their
+// display name records of files the copy does not bind, so a style copy in
+// any mode leaves them at the new drawing's defaults.
+test('New drawing with this style copies no record selection, crop, or record display', () => {
+  const app = createAppSetup();
+  const { drawingId: source } = app.drawingList.newDrawing('circular');
+  const drawing = state.drawingOf(source);
+  const circularDefaults = withNewDrawingDefaults(state, createDrawingState('circular-9', 'circular'));
+  drawing.form.circular_record_selector = 'NC_000001';
+  drawing.form.circular_region_start = 1000;
+  drawing.form.circular_region_end = 5000;
+  drawing.form.circular_record_label = 'Chr1';
+  drawing.form.circular_record_subtitle = 'Main chromosome';
+  drawing.form.circular_reverse = true;
+  drawing.adv.label_font_size = circularDefaults.adv.label_font_size + 3;
+  drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, { selector: 'NC_000001', row: 2 });
+  drawing.recordsOff.splice(0, drawing.recordsOff.length, 'circular-1');
+  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, {
+    scope: 'circular', sourceUid: 'circular', selector: '#1', recordId: 'NC_000001', topologyOverride: null,
+    startCoordinate: 25, reverseComplementOverride: null, anchorIntent: null
+  });
+
+  const { drawingId } = app.drawingList.newDrawingWithStyle(source, 'circular');
+  const styled = state.drawingOf(drawingId);
+  assert.equal(styled.adv.label_font_size, circularDefaults.adv.label_font_size + 3, 'a style row is copied');
+  for (const field of ['circular_record_selector', 'circular_region_start', 'circular_region_end', 'circular_record_label',
+    'circular_record_subtitle', 'circular_reverse']) {
+    assert.equal(styled.form[field], circularDefaults.form[field], `${field} keeps the new drawing's default`);
+  }
+  const plain = (/** @type {unknown} */ value) => JSON.parse(JSON.stringify(value));
+  assert.deepEqual(plain(styled.adv.multi_record_positions), plain(circularDefaults.adv.multi_record_positions));
+  assert.deepEqual(plain(styled.recordsOff), plain(circularDefaults.recordsOff));
+  assert.deepEqual(plain(styled.recordDisplayDrafts), plain(circularDefaults.recordDisplayDrafts));
 });
 
 test('evicting the Delete step ends its Undo and releases the files only the deleted drawing binds', async () => {
