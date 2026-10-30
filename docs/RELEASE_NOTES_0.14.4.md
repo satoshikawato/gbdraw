@@ -110,7 +110,6 @@ packages, and [Installation](./INSTALL.md) explains each install route.
   only once; only files with equal bytes, kind, and original file name are
   merged. Such a Session file is smaller. Sessions are still saved as version
   49 and the file format does not change.
-
 - **Partial feature ends.** A feature end that its location marks as partial
   is drawn open in Linear and Circular diagrams: no arrowhead and no stroke on
   that edge, the way a record's display-start seam is already drawn. This covers
