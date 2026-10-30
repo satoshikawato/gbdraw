@@ -245,14 +245,14 @@ export const liveSettingRequestPaths = (changes) => {
 /** @type {Readonly<Record<string, UndoneTrackHide>>} */
 const HIDE_CONTROL_TRACKS = Object.freeze({ 'config.form.suppress_gc': 'content', 'config.form.suppress_skew': 'skew' });
 /**
- * The hides a History step's Undo takes back: their rows stop waiting for
- * Generate and return from the kept parts of the last Generate, as the track
- * projection in `services/session-request.js` gives them. A row whose hide is
- * still on stays hidden: the projection reads the hide first.
+ * The hides a History step changed. Its Undo takes them back: their rows stop
+ * waiting for Generate and return from the kept parts of the last Generate, as
+ * the track projection in `services/session-request.js` gives them. A row whose
+ * hide is still on stays hidden: the projection reads the hide first.
  * @param {readonly { readonly path: readonly unknown[] }[]} changes The step's changes.
  * @returns {Set<UndoneTrackHide>}
  */
-export const undoneTrackHides = (changes) => new Set(changes.flatMap(({ path }) => HIDE_CONTROL_TRACKS[path.join('.')] ?? []));
+export const changedTrackHides = (changes) => new Set(changes.flatMap(({ path }) => HIDE_CONTROL_TRACKS[path.join('.')] ?? []));
 
 /** Every request path a live setting row applies, as Reset Settings and an artifact restore request them. */
 export const allLiveSettingRequestPaths = () => [...new Set(SETTING_APPLICATION.flatMap((row) => Object.values(row.requestPaths || {}).flat()))];

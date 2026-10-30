@@ -475,6 +475,10 @@ const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowLastError = ref(null);
+// The GC and skew hides an Undo took back, per drawing id: the automatic rerender
+// (run-analysis.js) keeps them; its track projection and the note read them.
+/** @import { UndoneTrackHide } from './services/setting-application.js' */
+const undoneTrackHides = ref(/** @type {Map<string, ReadonlySet<UndoneTrackHide>>} */ (new Map()));
 
 // SVG Feature Click state
 const svgContainer = ref(null);
@@ -1291,6 +1295,7 @@ export const state = Object.freeze({
   labelReflowRequestSeq,
   labelReflowForceRequestSeq,
   labelReflowLastError,
+  undoneTrackHides,
   svgContainer,
   clickedFeature,
   clickedFeaturePos,

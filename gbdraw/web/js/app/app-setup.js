@@ -129,7 +129,7 @@ import { toRaw } from '../utils/vue-raw.js';
 import { readHostedBuild } from '../utils/hosted-build.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from '../services/reset.js';
-import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, undoneTrackHides } from '../services/setting-application.js';
+import { allLiveSettingRequestPaths, liveSettingRequestPaths, SETTING_NOTE_APPLIES, changedTrackHides } from '../services/setting-application.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   disposeDiagramGenerationWorker,
@@ -3546,7 +3546,7 @@ export const createAppSetup = () => {
   // the shown drawing's steps only).
   history.setSettingsStepListener((changes, direction) => {
     requestLiveSettingApply(changes ? liveSettingRequestPaths(changes) : allLiveSettingRequestPaths(), mode.value,
-      changes && direction === 'undo' ? undoneTrackHides(changes) : undefined);
+      changes ? changedTrackHides(changes) : undefined, direction === 'undo');
   });
   /** @param {{ recordKey: string, biologicalFeatureId: string }} identity */
   const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {

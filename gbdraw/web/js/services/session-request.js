@@ -2435,12 +2435,12 @@ export const liveSettingApplies = (request, requestPath, drawing, inputs, resour
 // once for its five keys.
 /** @type {WeakMap<LiveSettingInputs, LiveSettingContext>} */
 const noteContexts = new WeakMap();
-/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @returns {LiveSettingContext} */
-const noteContextOf = (inputs, resources) => {
+/** @param {LiveSettingInputs} inputs @param {LiveSettingResources} resources @param {ReadonlySet<UndoneTrackHide>} [undoneHides] @returns {LiveSettingContext} */
+const noteContextOf = (inputs, resources, undoneHides) => {
   const memo = noteContexts.get(inputs);
-  if (memo && memo.resources === resources) return memo;
+  if (memo && memo.resources === resources && memo.undoneHides === undoneHides) return memo;
   /** @type {LiveSettingContext} */
-  const context = { inputs, webFiles: {}, resources };
+  const context = { inputs, webFiles: {}, resources, undoneHides };
   noteContexts.set(inputs, context);
   return context;
 };
@@ -2452,14 +2452,15 @@ const noteContextOf = (inputs, resources) => {
  * @param {CanonicalRenderRequest} request @param {string} requestPath @param {RequestDrawing} drawing
  * @param {LiveSettingInputs} inputs @param {LiveSettingResources} [resources]
  * @param {LiveSettingItem | null} [item]
+ * @param {ReadonlySet<UndoneTrackHide>} [undoneHides] The hides an Undo took back, as its rerender projects them.
  */
-export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null) => {
+export const liveSettingNoteApplies = (request, requestPath, drawing, inputs, resources = null, item = null, undoneHides = undefined) => {
   const mode = LIVE_SETTING_MODES[requestPath];
   if (Boolean(mode) && request.mode !== mode) return true;
   // A GT key applies while its projection leaves no show pending and is not
   // refused; a Linear row's Height note keeps its own answer (G2).
   if (GT_REQUEST_PATH_SET.has(requestPath) && !item) {
-    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources)).complete;
+    return projectTrackPlan(request, drawing, noteContextOf(inputs, resources, undoneHides)).complete;
   }
   return liveSettingApplies(request, requestPath, drawing, inputs, resources, item);
 };
@@ -2487,7 +2488,7 @@ const valueAtPath = (root, path) => path.reduce(
  * Session, without those already equal to it. Throws `INPUT_INVALID` for a
  * value Generate would refuse.
  * @param {{ committed: CommittedCanonicalSession, drawing: RequestDrawing, requestPaths: Iterable<string>, inputs: LiveSettingInputs, undoneHides?: ReadonlySet<UndoneTrackHide> }} input
- *   `undoneHides`: the hides an Undo took back (`undoneTrackHides`).
+ *   `undoneHides`: the hides an Undo took back (`state.undoneTrackHides`).
  * @returns {LiveSettingWrite[]}
  */
 export const projectLiveSettingWrites = ({ committed, drawing, requestPaths, inputs, undoneHides }) => {
@@ -4001,7 +4002,7 @@ export const buildCanonicalRequestState = ({ session, projection, config }) => {
  * @property {KeptDepth | null} depth
  * @property {ReadonlySet<string>} waiting The Circular rows a live Hide GC Content or Hide GC Skew removed: they
  *   wait for Generate when the hide is turned off by hand (PQ-4 A); an Undo of a step that changed the hide
- *   takes them out (`undoneTrackHides`), so it returns them at once.
+ *   takes them out (`state.undoneTrackHides`), so it returns them at once.
  */
 /** @type {WeakMap<object, KeptTrackParts>} */
 const keptTrackParts = new WeakMap();
