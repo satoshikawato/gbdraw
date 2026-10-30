@@ -1,9 +1,15 @@
 // @ts-check
 import { diagnosticError } from '../utils/error-normalization.js';
+import { testExpandedSessionByteCap } from './runtime-test-hooks.js';
 
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
-const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
+// The most JSON a Session may expand to: Load stops reading past it, and Save
+// refuses to write more (OV-2240). Load also refuses a compressed file over
+// MAX_SESSION_FILE_BYTES, which Save does not check (OV-2245).
+export const MAX_EXPANDED_SESSION_BYTES = 512 * 1024 * 1024;
+const LARGEST_INPUT_COUNT = 3;
+const LARGEST_INPUT_NAME_CHARS = 80;
 const JSON_CHUNK_TARGET_BYTES = 256 * 1024;
 const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
@@ -279,15 +285,60 @@ function* jsonFragments(value, ancestors = new Set(), container = 'root') {
 }
 
 /**
- * @param {unknown} data
+ * The file names of the Session's largest inputs, largest first: the names the
+ * files were uploaded under (`webFiles.resourceOriginalNames`), else the
+ * stored resource name.
+ * @param {Record<string, unknown>} data The Session document.
+ * @returns {string}
+ */
+const largestInputNames = (data) => {
+  const { resources, webFiles } = data;
+  if (!isPlainObject(resources)) return '';
+  const uploadedNames = isPlainObject(webFiles) && isPlainObject(webFiles.resourceOriginalNames)
+    ? webFiles.resourceOriginalNames
+    : {};
+  /** @type {{ name: string, size: number }[]} */
+  const inputs = [];
+  for (const [id, entry] of Object.entries(resources)) {
+    if (!isPlainObject(entry)) continue;
+    const name = uploadedNames[id] ?? entry.name;
+    if (typeof name !== 'string' || !name) continue;
+    inputs.push({
+      name: name.slice(0, LARGEST_INPUT_NAME_CHARS),
+      size: Number.isSafeInteger(entry.size) ? /** @type {number} */ (entry.size) : 0
+    });
+  }
+  return inputs.sort((a, b) => b.size - a.size).slice(0, LARGEST_INPUT_COUNT)
+    .map((input) => input.name).join(', ');
+};
+
+/**
+ * @param {Record<string, unknown>} data The Session document.
+ * @param {number} sessionBytes Its expanded JSON size.
+ * @param {number} sessionByteLimit The cap it exceeds.
+ */
+const sessionSaveSizeLimit = (data, sessionBytes, sessionByteLimit) => diagnosticError(
+  'SESSION_SIZE_LIMIT',
+  { sessionBytes, sessionByteLimit, largestInputs: largestInputNames(data) },
+  { stage: 'write', operation: 'session-save' }
+);
+
+/**
+ * The Session's JSON as bytes. Past `maxBytes` it writes nothing more, counts
+ * the rest, and fails with the whole size; `refused.error` holds that error as
+ * well, because a browser's body reader may replace the stream's error.
+ * @param {Record<string, unknown>} data
+ * @param {number} maxBytes
+ * @param {{ error: Error | null }} refused
  * @returns {ReadableStream<Uint8Array<ArrayBuffer>>}
  */
-const jsonByteStream = (data) => {
+const jsonByteStream = (data, maxBytes, refused) => {
   const fragments = jsonFragments(data);
   const encoder = new TextEncoder();
   let fragment = '';
   let fragmentOffset = 0;
   let complete = false;
+  let writtenBytes = 0;
   let taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
 
   return new ReadableStream({
@@ -318,9 +369,23 @@ const jsonByteStream = (data) => {
         fragmentOffset += encoded.read;
         byteLength += encoded.written;
       }
+      writtenBytes += byteLength;
+      if (writtenBytes > maxBytes) {
+        let totalBytes = writtenBytes + encoder.encode(fragment.slice(fragmentOffset)).byteLength;
+        for (let next = fragments.next(); !next.done; next = fragments.next()) {
+          totalBytes += encoder.encode(next.value).byteLength;
+          if (performance.now() >= taskDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            taskDeadline = performance.now() + JSON_TASK_BUDGET_MS;
+          }
+        }
+        complete = true;
+        refused.error = sessionSaveSizeLimit(data, totalBytes, maxBytes);
+        controller.error(refused.error);
+        return;
+      }
       if (byteLength > 0) {
         controller.enqueue(chunk.subarray(0, byteLength));
-
       }
       if (complete) controller.close();
     },
@@ -335,17 +400,22 @@ const jsonByteStream = (data) => {
 
 /**
  * @param {Record<string, any>} data The Session document.
- * @returns {Promise<Blob>}
+ * @returns {Promise<Blob>} The gzip Session; it rejects with `SESSION_SIZE_LIMIT` (stage `write`)
+ *   when the JSON is over the cap.
  */
 export const compressSessionData = async (data) => {
   if (typeof CompressionStream !== 'function') {
     throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'transport' });
   }
-  const compressedStream = jsonByteStream(data)
+  /** @type {{ error: Error | null }} */
+  const refused = { error: null };
+  const compressedStream = jsonByteStream(data, testExpandedSessionByteCap() ?? MAX_EXPANDED_SESSION_BYTES, refused)
     .pipeThrough(new CompressionStream('gzip'));
   return new Response(compressedStream, {
     headers: { 'Content-Type': 'application/gzip' }
-  }).blob();
+  }).blob().catch((error) => {
+    throw refused.error ?? error;
+  });
 };
 
 /**

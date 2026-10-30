@@ -12,6 +12,8 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Fixed: in the Web app, **Save Session** refuses, before downloading anything, a Session that would expand beyond the 512 MiB that **Load Session** opens, and names its size and its largest inputs (OV-2240).
+
 ## [0.14.4](./docs/RELEASE_NOTES_0.14.4.md) - 2026-10-30
 
 - Patch release of 0.14.3. Sessions are still saved as Session version 49; Sessions saved by

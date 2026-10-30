@@ -44,6 +44,18 @@ assert.match(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVers
 assert.doesNotMatch(versionRefusal({ reason: 'SESSION_TOO_NEW', sessionVersion: 99, latestSessionVersion: 48 }), /Check the required fields/);
 // A context word list that is not a version list is dropped, not shown.
 assert.doesNotMatch(versionRefusal({ reason: 'SESSION_VERSION_UNSUPPORTED', sessionVersion: 34, readSessionVersions: '<b>27</b>' }), /<b>/);
+// OV-2240: a Save over the Load cap names its size, the cap, and the largest
+// inputs, and offers no Retry (it would fail the same way). The same code on
+// Load keeps its own text.
+const saveTooLarge = normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {
+  sessionBytes: 600 * 1024 * 1024, sessionByteLimit: 512 * 1024 * 1024, largestInputs: 'depth-a.tsv, depth\u0007b.tsv, ' + 'x'.repeat(400)
+}, { stage: 'write', operation: 'session-save' }), { operation: 'session-save' });
+assert.equal(saveTooLarge.stage, 'write');
+assert.match(saveTooLarge.summary, /^The Session was not saved: it is 600\.0 MB expanded, and the browser loads at most 512 MB\. Largest inputs: depth-a\.tsv, depth b\.tsv, x{1,200}\. /);
+assert.doesNotMatch(saveTooLarge.summary, /smaller Session file|\u0007|x{201}/);
+assert.deepEqual(saveTooLarge.actions, ['select-input']);
+assert.match(normalizeUserFacingError(diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' }), { operation: 'session-load' }).summary,
+  /^The Session exceeds the browser size limit\. Use a smaller Session file\.$/);
 // The LOSATP-mode reason is true with and without an Upload pair: a Selected
 // plan whose pairs all run LOSAT raises it too.
 const selectedPairs = normalizeUserFacingError({ code: 'COMPARISON_INPUT', stage: 'request-validation',
